@@ -25,12 +25,13 @@ vLLM Agentic Stack provides the stateful APIs needed for real-world agentic appl
 
 ## Responses API
 
-Our first milestone is implementing the [Responses API](https://platform.openai.com/docs/api-reference/responses), bringing stateful, agentic capabilities to vLLM:
+Our first milestone is implementing the [Responses API](https://platform.openai.com/docs/api-reference/responses), bringing stateful, agentic capabilities to vLLM. We validate our implementation against the [Open Responses](https://www.openresponses.org/) compatibility test suite.
 
 - **Stateful conversations** — The server manages conversation history via `previous_response_id`, eliminating client-side message tracking
 - **Built-in tool use** — Web search, file search, and function calling handled within the API, with the model automatically executing multi-step tool chains
 - **Streaming** — Server-sent events for real-time token streaming with structured lifecycle events
 - **Background execution** — Fire-and-forget requests that continue processing server-side
+- **Compatibility tested** — Validated against the open Responses API compatibility test suite
 
 ## Why Agentic Stack?
 
