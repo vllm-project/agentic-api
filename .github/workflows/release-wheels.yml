@@ -1,0 +1,130 @@
+name: Release Wheels (GitHub Releases)
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing git tag to release (for example v0.2.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release_linux_x86_64:
+    name: Build + publish Linux wheels/sdist
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        id: meta
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+            git fetch --tags --force
+            git rev-parse "refs/tags/${TAG}" >/dev/null
+            git checkout "refs/tags/${TAG}"
+          elif [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+            git fetch --tags --force
+            git rev-parse "refs/tags/${TAG}" >/dev/null
+            git checkout "refs/tags/${TAG}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+
+      - name: Ensure release tag commit is on main
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.tag }}"
+          git fetch origin main --depth=1
+          TAG_SHA="$(git rev-list -n1 "refs/tags/${TAG}")"
+          if ! git merge-base --is-ancestor "${TAG_SHA}" origin/main; then
+            echo "Tag ${TAG} (${TAG_SHA}) is not on origin/main; refusing release build."
+            exit 1
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install cibuildwheel==2.21.3 build==1.3.0
+
+      - name: Build code interpreter binary (host)
+        run: |
+          bash scripts/ci/prebuild_code_interpreter_linux_x86_64.sh responses
+
+      - name: Build wheels (cibuildwheel)
+        working-directory: responses
+        env:
+          CIBW_BUILD: "cp312-manylinux_x86_64"
+          CIBW_ARCHS_LINUX: "x86_64"
+          CIBW_REPAIR_WHEEL_COMMAND: ""
+        run: |
+          python -m cibuildwheel --output-dir wheelhouse
+
+      - name: Build sdist
+        working-directory: responses
+        run: |
+          python -m build --sdist --outdir dist
+
+      - name: Artifact inspection (forbidden paths)
+        working-directory: responses
+        run: |
+          set -euo pipefail
+          echo "[inspect] wheels:"
+          python -m zipfile -l wheelhouse/*.whl | grep -E "vllm_responses/tools/code_interpreter/(node_modules/|pyodide-.*\\.tar\\.bz2)" && exit 1 || true
+          echo "[inspect] sdist:"
+          tar -tzf dist/*.tar.gz | grep -E "vllm_responses/tools/code_interpreter/(node_modules/|pyodide-.*\\.tar\\.bz2)" && exit 1 || true
+
+      - name: Minimal container smoke test (tar missing is actionable)
+        working-directory: responses
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$(pwd)/wheelhouse:/wheels:ro" \
+            -v "$(pwd)/../scripts/ci:/scripts:ro" \
+            python:3.12-slim \
+            sh -lc 'python -m venv /tmp/venv && . /tmp/venv/bin/activate && pip install /wheels/*.whl && python /scripts/container_smoke_test.py'
+
+      - name: Generate checksums
+        working-directory: responses
+        run: |
+          set -euo pipefail
+          sha256sum wheelhouse/*.whl dist/*.tar.gz > dist/SHA256SUMS.txt
+          cat dist/SHA256SUMS.txt
+
+      - name: Upload build artifacts (workflow)
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-${{ steps.meta.outputs.tag }}
+          path: |
+            responses/wheelhouse/*.whl
+            responses/dist/*.tar.gz
+            responses/dist/SHA256SUMS.txt
+
+      - name: Publish GitHub Release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            responses/wheelhouse/*.whl
+            responses/dist/*.tar.gz
+            responses/dist/SHA256SUMS.txt

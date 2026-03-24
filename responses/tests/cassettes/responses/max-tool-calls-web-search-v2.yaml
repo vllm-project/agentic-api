@@ -1,0 +1,753 @@
+filename: 2026-02-22-019c84b3-4dca-73d1-88ea-cd8c970ba645
+request:
+  body:
+    input:
+      - content: "Use web_search to do three separate searches before answering. Search 1: latest inflation rate in US. Search 2: current 10-year treasury yield. Search 3: current federal funds rate target range. After all three searches, summarize in 3 bullet points."
+        role: user
+    max_tool_calls: 2
+    model: gpt-5-mini
+    store: false
+    stream: true
+    tool_choice: required
+    tools:
+      - type: web_search
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "415"
+    content-type: application/json
+    user-agent: OpenAI/Python 2.16.0
+    x-run-id: max-tool-calls-20260222-websearch-v2
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019c84b3-4dca-73d1-88ea-cd8c970ba645
+response:
+  headers:
+    connection: keep-alive
+    content-type: text/event-stream; charset=utf-8
+  sse:
+    - "event: response.created
+
+      "
+    - 'data: {"type":"response.created","response":{"id":"resp_03f821eff5acab3d01699acda57028819abbfc00e2747b8606","object":"response","created_at":1771752869,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":2,"model":"gpt-5-mini-2025-08-07","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"required","tools":[{"type":"web_search","filters":null,"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - "
+
+      "
+    - "event: response.in_progress
+
+      "
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_03f821eff5acab3d01699acda57028819abbfc00e2747b8606","object":"response","created_at":1771752869,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":2,"model":"gpt-5-mini-2025-08-07","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"required","tools":[{"type":"web_search","filters":null,"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_03f821eff5acab3d01699acda623c4819a997784058e17e865","type":"reasoning","summary":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_03f821eff5acab3d01699acda623c4819a997784058e17e865","type":"reasoning","summary":[]},"output_index":0,"sequence_number":3}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"ws_03f821eff5acab3d01699acdaacdfc819abc4e2ed00d7d501a","type":"web_search_call","status":"in_progress"},"output_index":1,"sequence_number":4}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.in_progress
+
+      "
+    - 'data: {"type":"response.web_search_call.in_progress","item_id":"ws_03f821eff5acab3d01699acdaacdfc819abc4e2ed00d7d501a","output_index":1,"sequence_number":5}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.searching
+
+      "
+    - 'data: {"type":"response.web_search_call.searching","item_id":"ws_03f821eff5acab3d01699acdaacdfc819abc4e2ed00d7d501a","output_index":1,"sequence_number":6}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.completed
+
+      "
+    - 'data: {"type":"response.web_search_call.completed","item_id":"ws_03f821eff5acab3d01699acdaacdfc819abc4e2ed00d7d501a","output_index":1,"sequence_number":7}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"ws_03f821eff5acab3d01699acdaacdfc819abc4e2ed00d7d501a","type":"web_search_call","status":"completed","action":{"type":"search","queries":["latest US inflation rate February 2026 CPI inflation rate United States Bureau of Labor Statistics","current 10-year Treasury yield today February 22 2026 10-year Treasury rate","current federal funds rate target range February 2026 Federal Reserve FOMC target range"],"query":"latest US inflation rate February 2026 CPI inflation rate United States Bureau of Labor Statistics"}},"output_index":1,"sequence_number":8}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_03f821eff5acab3d01699acdad31f8819abf48d28c772b0dd4","type":"reasoning","summary":[]},"output_index":2,"sequence_number":9}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_03f821eff5acab3d01699acdad31f8819abf48d28c772b0dd4","type":"reasoning","summary":[]},"output_index":2,"sequence_number":10}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"ws_03f821eff5acab3d01699acdb127fc819a944fbbd1d3ba2bcd","type":"web_search_call","status":"in_progress"},"output_index":3,"sequence_number":11}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.in_progress
+
+      "
+    - 'data: {"type":"response.web_search_call.in_progress","item_id":"ws_03f821eff5acab3d01699acdb127fc819a944fbbd1d3ba2bcd","output_index":3,"sequence_number":12}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.searching
+
+      "
+    - 'data: {"type":"response.web_search_call.searching","item_id":"ws_03f821eff5acab3d01699acdb127fc819a944fbbd1d3ba2bcd","output_index":3,"sequence_number":13}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.completed
+
+      "
+    - 'data: {"type":"response.web_search_call.completed","item_id":"ws_03f821eff5acab3d01699acdb127fc819a944fbbd1d3ba2bcd","output_index":3,"sequence_number":14}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"ws_03f821eff5acab3d01699acdb127fc819a944fbbd1d3ba2bcd","type":"web_search_call","status":"completed","action":{"type":"search","queries":["Bureau of Labor Statistics CPI January 2026 release January 2026 CPI U.S. city average","BLS CPI-U January 2026 percent change 12-month percent change January 2026 press release \"Consumer Price Index\" \"January 2026\""],"query":"Bureau of Labor Statistics CPI January 2026 release January 2026 CPI U.S. city average"}},"output_index":3,"sequence_number":15}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_03f821eff5acab3d01699acdb393c8819ab97ed9356d89d275","type":"reasoning","summary":[]},"output_index":4,"sequence_number":16}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_03f821eff5acab3d01699acdb393c8819ab97ed9356d89d275","type":"reasoning","summary":[]},"output_index":4,"sequence_number":17}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"ws_03f821eff5acab3d01699acdb58ffc819a9899565fe4b61d6b","type":"web_search_call","status":"in_progress"},"output_index":5,"sequence_number":18}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.in_progress
+
+      "
+    - 'data: {"type":"response.web_search_call.in_progress","item_id":"ws_03f821eff5acab3d01699acdb58ffc819a9899565fe4b61d6b","output_index":5,"sequence_number":19}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.searching
+
+      "
+    - 'data: {"type":"response.web_search_call.searching","item_id":"ws_03f821eff5acab3d01699acdb58ffc819a9899565fe4b61d6b","output_index":5,"sequence_number":20}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.completed
+
+      "
+    - 'data: {"type":"response.web_search_call.completed","item_id":"ws_03f821eff5acab3d01699acdb58ffc819a9899565fe4b61d6b","output_index":5,"sequence_number":21}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"ws_03f821eff5acab3d01699acdb58ffc819a9899565fe4b61d6b","type":"web_search_call","status":"completed","action":{"type":"search","queries":["Daily Treasury Yield Curve Rates Feb 22 2026 10-year Treasury rate treasury.gov","10-year Treasury yield current Feb 22 2026 \"10-year\" yield Feb 22 2026 market data"],"query":"Daily Treasury Yield Curve Rates Feb 22 2026 10-year Treasury rate treasury.gov"}},"output_index":5,"sequence_number":22}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_03f821eff5acab3d01699acdb6ed94819a9f9eeab9931ec495","type":"reasoning","summary":[]},"output_index":6,"sequence_number":23}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_03f821eff5acab3d01699acdb6ed94819a9f9eeab9931ec495","type":"reasoning","summary":[]},"output_index":6,"sequence_number":24}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":7,"sequence_number":25}
+
+      '
+    - "
+
+      "
+    - "event: response.content_part.added
+
+      "
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","output_index":7,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":26}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"I ran the requested web searches","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"","output_index":7,"sequence_number":27}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":". Summary (each item","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"fXBnmA5oOMfo","output_index":7,"sequence_number":28}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" shows the date/period","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"mJh3tuuyNJ","output_index":7,"sequence_number":29}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" the source reports):\n\n","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"0F2HKMhho","output_index":7,"sequence_number":30}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"- US inflation (C","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"MCvviTIdZzRLscu","output_index":7,"sequence_number":31}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"PI, 12‑","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"L89KBO7mm","output_index":7,"sequence_number":32}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"month): 2.","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"BtxUZQ","output_index":7,"sequence_number":33}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"4% for the ","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"rLP2n","output_index":7,"sequence_number":34}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"12 months ending January ","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"7ISJaqM","output_index":7,"sequence_number":35}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"2026 (BLS","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"02R6pOi","output_index":7,"sequence_number":36}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" CPI news release, Feb","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"KD407S8an3","output_index":7,"sequence_number":37}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" 13, 202","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"bfWY0yAT","output_index":7,"sequence_number":38}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"6). ","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"5TbxMCajrPBS","output_index":7,"sequence_number":39}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"([bls.gov](https://www.bls.gov/news.release/archives/cpi_02132026.htm?utm_source=openai))  \n- ","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"mL","output_index":7,"sequence_number":40}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.annotation.added
+
+      "
+    - 'data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","end_index":299,"start_index":210,"title":"Consumer Price Index News Release - 2026 M01 Results","url":"https://www.bls.gov/news.release/archives/cpi_02132026.htm?utm_source=openai"},"annotation_index":0,"content_index":0,"item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","output_index":7,"sequence_number":41}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"10‑year","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"jIyE3CdHY","output_index":7,"sequence_number":42}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" Treasury yield:","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"","output_index":7,"sequence_number":43}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" about 4.02% (10‑year yield fell to 4.017% intraday,","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"fKUd4NcvVGlB","output_index":7,"sequence_number":44}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" reported Feb 18","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"","output_index":7,"sequence_number":45}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":", 2026).","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"Gl1N5FLw","output_index":7,"sequence_number":46}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" ","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"Diu8xta7WEZbTSo","output_index":7,"sequence_number":47}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"([barrons.com](https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai))  ","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"544fXIQSxD","output_index":7,"sequence_number":48}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.annotation.added
+
+      "
+    - 'data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","end_index":520,"start_index":404,"title":"Treasury Yields Fall to 2026 Lows as Investors Flock to Bonds","url":"https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai"},"annotation_index":1,"content_index":0,"item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","output_index":7,"sequence_number":49}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"\n- Federal‑funds target","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"yVAzc08yR","output_index":7,"sequence_number":50}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" range: 3","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"cvUWaFc","output_index":7,"sequence_number":51}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":".50%–3","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"4sHtDQNyhJ","output_index":7,"sequence_number":52}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":".75% per the","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"VmLh","output_index":7,"sequence_number":53}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" FOMC minutes for","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"EYb911EwphFMk0M","output_index":7,"sequence_number":54}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" the Jan 27–","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"VqqB","output_index":7,"sequence_number":55}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"28, 2026","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"sdq3Z08v","output_index":7,"sequence_number":56}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" meeting (reported Feb ","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"tlyiAnfdv","output_index":7,"sequence_number":57}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"19, 2026","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"DVvVfKRZ","output_index":7,"sequence_number":58}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"). ","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"BlMbMqRFkeul5","output_index":7,"sequence_number":59}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"([ft.com](https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai))\n\nNote: I reached","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"a4","output_index":7,"sequence_number":60}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.annotation.added
+
+      "
+    - 'data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","end_index":736,"start_index":643,"title":"Federal Reserve officials warn progress towards inflation goal will be ''uneven''","url":"https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai"},"annotation_index":2,"content_index":0,"item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","output_index":7,"sequence_number":61}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" the tool-call limit after","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"kpRS0b","output_index":7,"sequence_number":62}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" these searches, so I","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"KKbnZZUce3S","output_index":7,"sequence_number":63}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" used the sources above.","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"az1pqsE1","output_index":7,"sequence_number":64}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" If you’d like,","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"M","output_index":7,"sequence_number":65}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" I can run one more","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"TuS0Q51u1YLVV","output_index":7,"sequence_number":66}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" (or fresh) web","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"O","output_index":7,"sequence_number":67}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" search to fetch a live","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"aaovqsivd","output_index":7,"sequence_number":68}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" 10‑year yield","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"f7","output_index":7,"sequence_number":69}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" from Treasury.gov or a","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"EVibX22xb","output_index":7,"sequence_number":70}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" real‑time market feed","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"6Gk3DTzu38","output_index":7,"sequence_number":71}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" and pull the Fed’s","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"PDp2BQqf7eJ8y","output_index":7,"sequence_number":72}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" official statement page — want","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"9","output_index":7,"sequence_number":73}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" me to do that now","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"QKI6MMCKaK048L","output_index":7,"sequence_number":74}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"?","item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"obfuscation":"myGFSHgEniZh7Qd","output_index":7,"sequence_number":75}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.done
+
+      "
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","logprobs":[],"output_index":7,"sequence_number":76,"text":"I ran the requested web searches. Summary (each item shows the date/period the source reports):\n\n- US inflation (CPI, 12‑month): 2.4% for the 12 months ending January 2026 (BLS CPI news release, Feb 13, 2026). ([bls.gov](https://www.bls.gov/news.release/archives/cpi_02132026.htm?utm_source=openai))  \n- 10‑year Treasury yield: about 4.02% (10‑year yield fell to 4.017% intraday, reported Feb 18, 2026). ([barrons.com](https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai))  \n- Federal‑funds target range: 3.50%–3.75% per the FOMC minutes for the Jan 27–28, 2026 meeting (reported Feb 19, 2026). ([ft.com](https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai))\n\nNote: I reached the tool-call limit after these searches, so I used the sources above. If you’d like, I can run one more (or fresh) web search to fetch a live 10‑year yield from Treasury.gov or a real‑time market feed and pull the Fed’s official statement page — want me to do that now?"}
+
+      '
+    - "
+
+      "
+    - "event: response.content_part.done
+
+      "
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","output_index":7,"part":{"type":"output_text","annotations":[{"type":"url_citation","end_index":299,"start_index":210,"title":"Consumer Price Index News Release - 2026 M01 Results","url":"https://www.bls.gov/news.release/archives/cpi_02132026.htm?utm_source=openai"},{"type":"url_citation","end_index":520,"start_index":404,"title":"Treasury Yields Fall to 2026 Lows as Investors Flock to Bonds","url":"https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai"},{"type":"url_citation","end_index":736,"start_index":643,"title":"Federal Reserve officials warn progress towards inflation goal will be ''uneven''","url":"https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai"}],"logprobs":[],"text":"I ran the requested web searches. Summary (each item shows the date/period the source reports):\n\n- US inflation (CPI, 12‑month): 2.4% for the 12 months ending January 2026 (BLS CPI news release, Feb 13, 2026). ([bls.gov](https://www.bls.gov/news.release/archives/cpi_02132026.htm?utm_source=openai))  \n- 10‑year Treasury yield: about 4.02% (10‑year yield fell to 4.017% intraday, reported Feb 18, 2026). ([barrons.com](https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai))  \n- Federal‑funds target range: 3.50%–3.75% per the FOMC minutes for the Jan 27–28, 2026 meeting (reported Feb 19, 2026). ([ft.com](https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai))\n\nNote: I reached the tool-call limit after these searches, so I used the sources above. If you’d like, I can run one more (or fresh) web search to fetch a live 10‑year yield from Treasury.gov or a real‑time market feed and pull the Fed’s official statement page — want me to do that now?"},"sequence_number":77}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":299,"start_index":210,"title":"Consumer Price Index News Release - 2026 M01 Results","url":"https://www.bls.gov/news.release/archives/cpi_02132026.htm?utm_source=openai"},{"type":"url_citation","end_index":520,"start_index":404,"title":"Treasury Yields Fall to 2026 Lows as Investors Flock to Bonds","url":"https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai"},{"type":"url_citation","end_index":736,"start_index":643,"title":"Federal Reserve officials warn progress towards inflation goal will be ''uneven''","url":"https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai"}],"logprobs":[],"text":"I ran the requested web searches. Summary (each item shows the date/period the source reports):\n\n- US inflation (CPI, 12‑month): 2.4% for the 12 months ending January 2026 (BLS CPI news release, Feb 13, 2026). ([bls.gov](https://www.bls.gov/news.release/archives/cpi_02132026.htm?utm_source=openai))  \n- 10‑year Treasury yield: about 4.02% (10‑year yield fell to 4.017% intraday, reported Feb 18, 2026). ([barrons.com](https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai))  \n- Federal‑funds target range: 3.50%–3.75% per the FOMC minutes for the Jan 27–28, 2026 meeting (reported Feb 19, 2026). ([ft.com](https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai))\n\nNote: I reached the tool-call limit after these searches, so I used the sources above. If you’d like, I can run one more (or fresh) web search to fetch a live 10‑year yield from Treasury.gov or a real‑time market feed and pull the Fed’s official statement page — want me to do that now?"}],"role":"assistant"},"output_index":7,"sequence_number":78}
+
+      '
+    - "
+
+      "
+    - "event: response.completed
+
+      "
+    - 'data: {"type":"response.completed","response":{"id":"resp_03f821eff5acab3d01699acda57028819abbfc00e2747b8606","object":"response","created_at":1771752869,"status":"completed","background":false,"completed_at":1771752915,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":2,"model":"gpt-5-mini-2025-08-07","output":[{"id":"rs_03f821eff5acab3d01699acda623c4819a997784058e17e865","type":"reasoning","summary":[]},{"id":"ws_03f821eff5acab3d01699acdaacdfc819abc4e2ed00d7d501a","type":"web_search_call","status":"completed","action":{"type":"search","queries":["latest US inflation rate February 2026 CPI inflation rate United States Bureau of Labor Statistics","current 10-year Treasury yield today February 22 2026 10-year Treasury rate","current federal funds rate target range February 2026 Federal Reserve FOMC target range"],"query":"latest US inflation rate February 2026 CPI inflation rate United States Bureau of Labor Statistics"}},{"id":"rs_03f821eff5acab3d01699acdad31f8819abf48d28c772b0dd4","type":"reasoning","summary":[]},{"id":"ws_03f821eff5acab3d01699acdb127fc819a944fbbd1d3ba2bcd","type":"web_search_call","status":"completed","action":{"type":"search","queries":["Bureau of Labor Statistics CPI January 2026 release January 2026 CPI U.S. city average","BLS CPI-U January 2026 percent change 12-month percent change January 2026 press release \"Consumer Price Index\" \"January 2026\""],"query":"Bureau of Labor Statistics CPI January 2026 release January 2026 CPI U.S. city average"}},{"id":"rs_03f821eff5acab3d01699acdb393c8819ab97ed9356d89d275","type":"reasoning","summary":[]},{"id":"ws_03f821eff5acab3d01699acdb58ffc819a9899565fe4b61d6b","type":"web_search_call","status":"completed","action":{"type":"search","queries":["Daily Treasury Yield Curve Rates Feb 22 2026 10-year Treasury rate treasury.gov","10-year Treasury yield current Feb 22 2026 \"10-year\" yield Feb 22 2026 market data"],"query":"Daily Treasury Yield Curve Rates Feb 22 2026 10-year Treasury rate treasury.gov"}},{"id":"rs_03f821eff5acab3d01699acdb6ed94819a9f9eeab9931ec495","type":"reasoning","summary":[]},{"id":"msg_03f821eff5acab3d01699acdd039e8819aa34c0a5a12ef65de","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":299,"start_index":210,"title":"Consumer Price Index News Release - 2026 M01 Results","url":"https://www.bls.gov/news.release/archives/cpi_02132026.htm?utm_source=openai"},{"type":"url_citation","end_index":520,"start_index":404,"title":"Treasury Yields Fall to 2026 Lows as Investors Flock to Bonds","url":"https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai"},{"type":"url_citation","end_index":736,"start_index":643,"title":"Federal Reserve officials warn progress towards inflation goal will be ''uneven''","url":"https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai"}],"logprobs":[],"text":"I ran the requested web searches. Summary (each item shows the date/period the source reports):\n\n- US inflation (CPI, 12‑month): 2.4% for the 12 months ending January 2026 (BLS CPI news release, Feb 13, 2026). ([bls.gov](https://www.bls.gov/news.release/archives/cpi_02132026.htm?utm_source=openai))  \n- 10‑year Treasury yield: about 4.02% (10‑year yield fell to 4.017% intraday, reported Feb 18, 2026). ([barrons.com](https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai))  \n- Federal‑funds target range: 3.50%–3.75% per the FOMC minutes for the Jan 27–28, 2026 meeting (reported Feb 19, 2026). ([ft.com](https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai))\n\nNote: I reached the tool-call limit after these searches, so I used the sources above. If you’d like, I can run one more (or fresh) web search to fetch a live 10‑year yield from Treasury.gov or a real‑time market feed and pull the Fed’s official statement page — want me to do that now?"}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"default","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"required","tools":[{"type":"web_search","filters":null,"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":13547,"input_tokens_details":{"cached_tokens":3584},"output_tokens":2733,"output_tokens_details":{"reasoning_tokens":2304},"total_tokens":16280},"user":null,"metadata":{}},"sequence_number":79}
+
+      '
+    - "
+
+      "
+  status_code: 200
+timestamp: "2026-02-22T09:34:29.322616+00:00"

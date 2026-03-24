@@ -1,0 +1,113 @@
+filename: 2026-01-19-019bd71b-066b-7fd1-8495-9061d7f198c9
+request:
+  body:
+    input:
+      - content: Call get_weather for location=Boston, MA.
+        role: user
+    model: gpt-5-nano
+    store: true
+    tool_choice:
+      name: get_weather
+      type: function
+    tools:
+      - description: Get the weather for a given location.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            location:
+              type: string
+          required:
+            - location
+          type: object
+        type: function
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "403"
+    content-type: application/json
+    user-agent: OpenAI/Python 2.15.0
+    x-run-id: 20260119-163350-openai-operational
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019bd71b-066b-7fd1-8495-9061d7f198c9
+response:
+  body:
+    background: false
+    billing:
+      payer: developer
+    completed_at: 1768840434
+    created_at: 1768840431
+    error: null
+    frequency_penalty: 0.0
+    id: resp_0e9b91731bd16bb700696e5cefc4908193a611a1f14a177cdd
+    incomplete_details: null
+    instructions: null
+    max_output_tokens: null
+    max_tool_calls: null
+    metadata: {}
+    model: gpt-5-nano-2025-08-07
+    object: response
+    output:
+      - id: rs_0e9b91731bd16bb700696e5cf03f548193a0f60bd5586a4e0c
+        summary: []
+        type: reasoning
+      - arguments: '{"location":"Boston, MA"}'
+        call_id: call_3phuilZBndrwjXPPbbJxPUsm
+        id: fc_0e9b91731bd16bb700696e5cf28adc81938713b57195abe7cf
+        name: get_weather
+        status: completed
+        type: function_call
+    parallel_tool_calls: true
+    presence_penalty: 0.0
+    previous_response_id: null
+    prompt_cache_key: null
+    prompt_cache_retention: null
+    reasoning:
+      effort: medium
+      summary: null
+    safety_identifier: null
+    service_tier: default
+    status: completed
+    store: true
+    temperature: 1.0
+    text:
+      format:
+        type: text
+      verbosity: medium
+    tool_choice:
+      name: get_weather
+      type: function
+    tools:
+      - description: Get the weather for a given location.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            location:
+              type: string
+          required:
+            - location
+          type: object
+        strict: true
+        type: function
+    top_logprobs: 0
+    top_p: 1.0
+    truncation: disabled
+    usage:
+      input_tokens: 54
+      input_tokens_details:
+        cached_tokens: 0
+      output_tokens: 278
+      output_tokens_details:
+        reasoning_tokens: 256
+      total_tokens: 332
+    user: null
+  headers:
+    connection: keep-alive
+    content-type: application/json
+  status_code: 200
+timestamp: "2026-01-19T16:33:51.211339+00:00"

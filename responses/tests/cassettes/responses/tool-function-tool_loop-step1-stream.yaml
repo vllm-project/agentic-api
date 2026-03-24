@@ -1,0 +1,179 @@
+filename: 2026-01-20-019bda5f-c526-78a3-ad16-8e9cdd9daf26
+request:
+  body:
+    input:
+      - content: Call get_weather for location=Boston, MA.
+        role: user
+    model: gpt-5-nano
+    store: true
+    stream: true
+    tool_choice:
+      name: get_weather
+      type: function
+    tools:
+      - description: Get the weather for a given location.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            location:
+              type: string
+          required:
+            - location
+          type: object
+        type: function
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "417"
+    content-type: application/json
+    user-agent: OpenAI/Python 2.15.0
+    x-run-id: 20260120-openai-tool_loop-stream
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019bda5f-c526-78a3-ad16-8e9cdd9daf26
+response:
+  headers:
+    connection: keep-alive
+    content-type: text/event-stream; charset=utf-8
+  sse:
+    - "event: response.created
+
+      "
+    - 'data: {"type":"response.created","response":{"id":"resp_0ea821c0cdc786b800696f3324643c819ba894c7777b697124","object":"response","created_at":1768895268,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-5-nano-2025-08-07","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":{"type":"function","name":"get_weather"},"tools":[{"type":"function","description":"Get the weather for a given location.","name":"get_weather","parameters":{"type":"object","properties":{"location":{"type":"string"}},"required":["location"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - "
+
+      "
+    - "event: response.in_progress
+
+      "
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0ea821c0cdc786b800696f3324643c819ba894c7777b697124","object":"response","created_at":1768895268,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-5-nano-2025-08-07","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":{"type":"function","name":"get_weather"},"tools":[{"type":"function","description":"Get the weather for a given location.","name":"get_weather","parameters":{"type":"object","properties":{"location":{"type":"string"}},"required":["location"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_0ea821c0cdc786b800696f3324e400819bb7343edcfd285398","type":"reasoning","summary":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_0ea821c0cdc786b800696f3324e400819bb7343edcfd285398","type":"reasoning","summary":[]},"output_index":0,"sequence_number":3}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"fc_0ea821c0cdc786b800696f3327ce30819b8b1f0815bb7a3509","type":"function_call","status":"in_progress","arguments":"","call_id":"call_RYBUL1i3RTzZk5fDdDPRbevp","name":"get_weather"},"output_index":1,"sequence_number":4}
+
+      '
+    - "
+
+      "
+    - "event: response.function_call_arguments.delta
+
+      "
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"{\"","item_id":"fc_0ea821c0cdc786b800696f3327ce30819b8b1f0815bb7a3509","obfuscation":"UtWyeX1gieDuF9","output_index":1,"sequence_number":5}
+
+      '
+    - "
+
+      "
+    - "event: response.function_call_arguments.delta
+
+      "
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"location","item_id":"fc_0ea821c0cdc786b800696f3327ce30819b8b1f0815bb7a3509","obfuscation":"fYyuxCA0","output_index":1,"sequence_number":6}
+
+      '
+    - "
+
+      "
+    - "event: response.function_call_arguments.delta
+
+      "
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"\":\"","item_id":"fc_0ea821c0cdc786b800696f3327ce30819b8b1f0815bb7a3509","obfuscation":"QMjpZ4Yx42s1J","output_index":1,"sequence_number":7}
+
+      '
+    - "
+
+      "
+    - "event: response.function_call_arguments.delta
+
+      "
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"Boston","item_id":"fc_0ea821c0cdc786b800696f3327ce30819b8b1f0815bb7a3509","obfuscation":"MyUr2x70wt","output_index":1,"sequence_number":8}
+
+      '
+    - "
+
+      "
+    - "event: response.function_call_arguments.delta
+
+      "
+    - 'data: {"type":"response.function_call_arguments.delta","delta":",","item_id":"fc_0ea821c0cdc786b800696f3327ce30819b8b1f0815bb7a3509","obfuscation":"ROq4zxRvQWCxmUz","output_index":1,"sequence_number":9}
+
+      '
+    - "
+
+      "
+    - "event: response.function_call_arguments.delta
+
+      "
+    - 'data: {"type":"response.function_call_arguments.delta","delta":" MA","item_id":"fc_0ea821c0cdc786b800696f3327ce30819b8b1f0815bb7a3509","obfuscation":"YhRIPVSJcn8Nm","output_index":1,"sequence_number":10}
+
+      '
+    - "
+
+      "
+    - "event: response.function_call_arguments.delta
+
+      "
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"\"}","item_id":"fc_0ea821c0cdc786b800696f3327ce30819b8b1f0815bb7a3509","obfuscation":"jr7xDnlGFYa4C2","output_index":1,"sequence_number":11}
+
+      '
+    - "
+
+      "
+    - "event: response.function_call_arguments.done
+
+      "
+    - 'data: {"type":"response.function_call_arguments.done","arguments":"{\"location\":\"Boston, MA\"}","item_id":"fc_0ea821c0cdc786b800696f3327ce30819b8b1f0815bb7a3509","output_index":1,"sequence_number":12}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"fc_0ea821c0cdc786b800696f3327ce30819b8b1f0815bb7a3509","type":"function_call","status":"completed","arguments":"{\"location\":\"Boston, MA\"}","call_id":"call_RYBUL1i3RTzZk5fDdDPRbevp","name":"get_weather"},"output_index":1,"sequence_number":13}
+
+      '
+    - "
+
+      "
+    - "event: response.completed
+
+      "
+    - 'data: {"type":"response.completed","response":{"id":"resp_0ea821c0cdc786b800696f3324643c819ba894c7777b697124","object":"response","created_at":1768895268,"status":"completed","background":false,"completed_at":1768895272,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-5-nano-2025-08-07","output":[{"id":"rs_0ea821c0cdc786b800696f3324e400819bb7343edcfd285398","type":"reasoning","summary":[]},{"id":"fc_0ea821c0cdc786b800696f3327ce30819b8b1f0815bb7a3509","type":"function_call","status":"completed","arguments":"{\"location\":\"Boston, MA\"}","call_id":"call_RYBUL1i3RTzZk5fDdDPRbevp","name":"get_weather"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":{"type":"function","name":"get_weather"},"tools":[{"type":"function","description":"Get the weather for a given location.","name":"get_weather","parameters":{"type":"object","properties":{"location":{"type":"string"}},"required":["location"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":54,"input_tokens_details":{"cached_tokens":0},"output_tokens":278,"output_tokens_details":{"reasoning_tokens":256},"total_tokens":332},"user":null,"metadata":{}},"sequence_number":14}
+
+      '
+    - "
+
+      "
+  status_code: 200
+timestamp: "2026-01-20T07:47:48.134846+00:00"

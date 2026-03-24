@@ -1,0 +1,89 @@
+site_name: vLLM Responses
+site_description: FastAPI gateway for OpenAI-style Responses API
+site_url: https://embeddedllm.github.io/vllm-responses/
+repo_url: https://github.com/EmbeddedLLM/vllm-responses
+repo_name: EmbeddedLLM/vllm-responses
+docs_dir: docs
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: lime
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+    - content.tabs.link
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
+      - Architecture: getting-started/architecture.md
+  - Usage:
+      - Running the Gateway: usage/running-the-gateway.md
+      - Command Reference: usage/command-reference.md
+      - Streaming Events: usage/streaming-events.md
+  - Features:
+      - Stateful Conversations: features/statefulness.md
+      - Built-in Tools: features/built-in-tools.md
+      - Web Search: features/web-search.md
+      - MCP Integration: features/hosted-mcp.md
+  - Deployment:
+      - Configuration Guide: deployment/configuration.md
+      - Observability: deployment/observability.md
+  - Reference:
+      - API Reference: reference/api-reference.md
+      - Configuration: reference/configuration.md
+      - Events: reference/events.md
+  - Examples:
+      - Code Interpreter: examples/code-interpreter-examples.md
+      - Web Search: examples/web-search-examples.md
+      - Custom Tools: examples/tool-loop-examples.md
+      - MCP Examples: examples/hosted-mcp-examples.md
+      - Conversations: examples/stateful-conversations.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path:
+        - docs
+        - ../docs
+      check_paths: true
+  - tables
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg

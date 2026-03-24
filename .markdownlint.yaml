@@ -1,0 +1,31 @@
+# Markdownlint configuration for MkDocs/Material documentation
+# https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+
+# List item indentation (4 spaces matches mdformat-mkdocs)
+MD007:
+  indent: 4
+
+# Disable line length limit (not enforced for docs)
+MD013: false
+
+# Allow duplicate headers at different levels (for MkDocs structure)
+MD024:
+  siblings_only: true
+
+# Allow code blocks without blank lines in lists (important for admonitions)
+MD031:
+  list_items: false
+
+# Allow inline HTML (MkDocs grids, admonitions, etc.)
+MD033: false
+
+# Allow both fenced and indented code blocks
+MD046: false
+
+# Allow reference-style links
+MD052: false
+
+# Allow relative links (MkDocs handles these)
+MD059: false
+
+MD036: true

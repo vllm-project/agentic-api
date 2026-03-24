@@ -1,0 +1,183 @@
+filename: 2026-01-08-019b9e63-337a-7d92-be90-4deaf0a647b7
+request:
+  body:
+    include:
+      - reasoning.encrypted_content
+    input:
+      - content: How much would Sam have after 5 years at 5% interest? You have access to tools to get user account number and current savings. Use Python code interpreter tool to compute future value.
+        role: user
+    model: gpt-5-nano
+    reasoning:
+      effort: medium
+      summary: detailed
+    stream: false
+    tool_choice: auto
+    tools:
+      - container:
+          type: auto
+        type: code_interpreter
+      - description: Get account number for a user.
+        name: get_account_number
+        parameters:
+          additionalProperties: false
+          properties:
+            username:
+              type: string
+          required:
+            - username
+          type: object
+        strict: true
+        type: function
+      - description: Get current savings for an account.
+        name: get_current_savings
+        parameters:
+          additionalProperties: false
+          properties:
+            account_number:
+              type: string
+          required:
+            - account_number
+          type: object
+        strict: true
+        type: function
+      - description: null
+        name: weather_forecast
+        parameters:
+          additionalProperties: false
+          properties:
+            forecast_date:
+              type: string
+            post_code:
+              type: string
+          required:
+            - post_code
+            - forecast_date
+          type: object
+        strict: true
+        type: function
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "1193"
+    content-type: application/json
+    user-agent: pydantic-ai/1.40.0
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019b9e63-337a-7d92-be90-4deaf0a647b7
+response:
+  body:
+    background: false
+    billing:
+      payer: developer
+    completed_at: 1767888875
+    created_at: 1767888860
+    error: null
+    id: resp_051ec5444865f90500695fd7dc96248195a6c911c7f789fbd4
+    incomplete_details: null
+    instructions: null
+    max_output_tokens: null
+    max_tool_calls: null
+    metadata: {}
+    model: gpt-5-nano-2025-08-07
+    object: response
+    output:
+      - encrypted_content: gAAAAABpX9fsmHXcuavE6Gm9UGXE93JOJbCuvQfxBqoBMbJ73DcjmF7rgEFfqGnHpRLBg8q881djjZQFDKBUvNS2V9wyR_3cag3aAIP9FxAWdUsi7co7eplcJHqxQNHNgavfCvArh9sEpnJqYhWJXM6ZCA_W2JthGAkjV__pAUJqkYv6OO5gck9capd-cQ4P_oVe57DmRqjsMECoVqz_t9vZ9oPjQ-qyFKkWTAJhrXp9fyHQyfeoQXpWKoJ84XPpLeTp_VsBa2tRYifCwHMnNtuZckN0gE1mjRQIR799tyWhlgKlYS-MqsFAm8YiVR9qLYUai8yquPvW-7V0-iyPSuFEL-tH-F46fEq89WIKhq_dka8k8DIaoJRgQtfugMMeAe57M3jpqd5--LCnVhrDD1FwgzYix8uN4coI1r4ioHozxpShEXkoYT1FNAUzu2TQmD5ff9UbeoOdwpq9-8443IIkKhMGKqJg_rKsidDuW7CSTxpvEk2AFlP88Il8ahSWW08QBlgOs5BrSRKWlmEA2la4LM_O4Xfmik30ehVceI84LM5N9AnT1LjsE5gzEK0MstkkUFY326WMV2_DsJfBHtAJ6wAi0pIx1_dbW1wTrZFnB0arlQvUNUNnkP58i5v5F7xoPRuGEPOKmmNud3ec3-08GdJ73kj4Uy3JN4n7sR0eFww1Y3jIb0tgr1OpszZS9hgSGTZkfVXvYi7hXzY_3Mx9qjbzZjkzff8O2B_9zJA3NEogG7icHDoht8vbyOiE1Ypq20Rc7q-TgTVZoVaHvHqf_7LXdfawplsk6LYc0W2n0Gq8a6HL78VbxcTVNXVm0T7WLa5V2CvrI5lbyuJFLPZi9WfhQJa3IQEM-AKTHysYQ4ZnKh_OTzLDoe3LylYH5iHHDZ7iuyT8SWCktugcznnVdK4XEeX5fZPvIBmnpwcpz9Q6enSAIiKA8CoGxEoprCnlhb6NaG61SmEkhXkdrgaHENp4_byZiJnNVZR5yugrzNwOAuBSG4Kvpt-5qZSKeMJiNP2yCNLSlT6qJjIpvy_HYGli4SnCMwAytvwytwCnhFR9B5aspCA1a8uRy3tIzpjkefzGR9rrVaHHq1zlVfhktdq9-oKjEgQYv4rRL-Bnb335S8MzM05Di3sUvKMPnNqIdGF1kqdfYkYtj4QjeCUgZYIdrXb47iQDlBmmF9iWFUwYFiTDFDt08i-EE1TYB-i-5j5_vVfshbzjMDd3P9ltgHB7BLs4hQBiHx6Q0ot2Ex23GrMJjGFfy7ggY9e5ji687K2HC8s26CXd5kHgEJhRXR8a-hDEPREpQgdQs3fFncOsxRoh4RM2h0QqyvgQqLZuVwC2ngTFQKghDNlxjpLU_MMzFnWcPNht6BXKdjqTm0D34aT8hPJpspQsaI5ymJH_uuCtavzPEy0hl5Kq_MV1GfMcJcumcym2sMOjVLZhNXHTHeNbUZBfXyreDsZuXbAKay-qy6cpadloyx1bV6DGv17wA4EbBURNjqlA1Nzm7YbaH5cpBg6ovQn4bNDZsCBZ7dUZygMIvoIohG7oJ5aL6ous7bS-dMnTbCZG3zW7OCYNq0KlsI-hx5EHHHrXpQTcg9nVJRDuZMkEVFEDXMkLM_8QbW-Qwca15pb5Vl5KP3mByTM-3Ft7nfE_BLQMc1Y7X8phqZJQnn2hbwIg2GW61cGLcP-rO9OlEeofMARMyCcEtET7_ZFT-gJ5Hwi1npJNF2_EFhOLqZa2zMUYBgHGfWTMbWMzyWG62mMl967gcXG-BE-T8FLD8uYbHn3q4e4J9bO5oNs-1TNGcVmn8llu77hawSZ0KQTC4DXk4rayPXQwI6cGL47J2kCY8I4UN0UoIU5jeEdSzg63rumaiA9Cvg0-UK2wWzTB5vkghcodydzeGkGTHS3cu6Ufsz77rpGig-2GoaDBReAaVKfposeMv4CvfVdlHXPE-mqh9lKm0SetNES4bHiED8DM4cLdN3uxZ7_llq7zl1aZv7QFEMXR6GNdREyGsQM1UPOo8NfkX_FxTvbaYX63_Ee7E7ssdSV2zwy3Zw0OdrPnbxR7EdjwaBkBSVJGjmIL0Uq5kY3hrR45gBYah0u0_Sdd7jLd23Fc0xwQ1vibSNYLlZYvp2s2AtRoUbmNVKOadEPm6GSfgA6G6nwSlflN4Cvc1JSvhb9oosZNb-orjMLLNZGNPLxcvM764sINuCJe18mXvZAIuKQRZouu6qxwB6loFHQikqhmFGQMVURavsHNB3o0-6uabXARUolcEDzE4kWqftba6qi5yaTd3bLWDDqQFIr4Uss1tvxwTbJmven5ndW5FFA88y6wSKPEWR1d9WdsYhrVHD5WvM5o-7wB0DTEA6mTplXyzlZw_BvshhGR_Kheh2_Fkt3lsX0BZGrkWEHdJap_v7Or5w7TNEGe2YBvUfamFKxdo_0dI949SD11mdFghttqKfRfbKJxF74EueTHudOaMXjbu3vv9rIqKAPr1lpQaW48J50sILog5OJq3N6TnYOOc9nxWKT4mwyHJwt_VDBYlq5-hwFmdYsOyEi--mnmPip9DLLD3UUcWF7GSMegojtfAdHmSg7wcF9OEUXraeFSCm_Cr9GoIssT3Hji3q4y787tQJ9RxPo2tZaPVbymFId8P9Yej8zJuYebTPf1iEStvPANXz7b0dfUtp9YPwt-Y4LgJigBnHcSKJVqPM72FXBganKvuJq5RTXcpW8cjM-QXEtuZzvDU3Y2KoLDUfL58rm2UJO8a0tYglf4zLh82g08bBfNmprNh5KM9Gp1_sgwMROKEhf5CqdCtq5MKfSCGfpXs6SmWuXMur5CN7BucIJyhaXp4oEhOg4Hg0oMlZWLjVv5tfQbBtbY69JMqeCH9WY6Ceuy6AzsDvL7kYt8yj2izBRHJh0cUhtZ7LxH7cmalIQtHjteeg63MeZr5piz3N8gtqQrVK_YPIh7kO7GJJsSHAiyq0qA4IzQrydfuYVlXJnTde3aApKqrqcGdQyjC7dWX3s8uLKLuGU6Ra14UsdM_XdVGJ2gCWXerL8qA0JE9Wn_W8EHN9Q9UJkcbgYggrc4lMiIapetJxBYN_7xYclI2QDeU70AwvYlCWt-lZa7Vk1KX5V-Omrh6Lr1V3q9g5kbJ809slgh71NuiVgmn1efDl8xZtC0thEWs3b6oq8Cb7xtMoRCrD8l-6mfdZ8O3qL9md6Vzb_sq0XQsKy2EurXsUImdbP9W2Qb3sK4TjM3N6hoZkTIIgTiMPcD35wBkcGU_vEIA7499tEuKnMgfUQsdJ5a4OzObLQ0q5WmSOMf5WQG0w7kqxHi1KlTjcLp0RRQbsL-i1FtTZGKjpfJUwEosEi5mFCMZmAWn2-wO96Rc4l6SWWk6NcC3zTaiJMBD11I92sOjpXYcmKeZ5k1lga_reAOa4WhucsD__JuKV2esGhRlX7r4bsER3aEcgA_KSF0HALNJbS6wddG04JKPjeDdBdp6nimilIbxj5GYl2Teuy2wBo-JH0nWkFwmJHUctBjn3oWQGPn6FBVLvVheYnSkYgp0_R5fA==
+        id: rs_051ec5444865f90500695fd7e318608195aac05107b9b19eae
+        summary:
+          - text: "**Using Python for calculations**
+
+
+              The user asked me to use the Python code interpreter tool to compute the future value. My plan is to call the necessary functions to gather data, starting with getting Sam's account number. Once I have that, I’ll use it to get his current savings. Then, I can compute the future value using the formula FV = P*(1+r)^n, where P is savings, r is 0.05, and n is 5. I’ll be careful to present the final result and a brief explanation without revealing too much detail."
+            type: summary_text
+          - text: "**Executing future value calculation**
+
+
+              Okay, I'm ready to compute the future value using the Python tool. My first step is to call the function that retrieves the account number. Once I have that, I can proceed with the next steps in the calculation. I’m excited to see what the future value will be based on the provided inputs! I just need to stay focused and sequential in my approach to get accurate results for the user."
+            type: summary_text
+        type: reasoning
+      - arguments: '{"username":"Sam"}'
+        call_id: call_Bv6JQ9KafubCJ5kaOjZPHXzJ
+        id: fc_051ec5444865f90500695fd7ebceb081959258b79a81fff8fb
+        name: get_account_number
+        status: completed
+        type: function_call
+    parallel_tool_calls: true
+    previous_response_id: null
+    prompt_cache_key: null
+    prompt_cache_retention: null
+    reasoning:
+      effort: medium
+      summary: detailed
+    safety_identifier: null
+    service_tier: default
+    status: completed
+    store: true
+    temperature: 1.0
+    text:
+      format:
+        type: text
+      verbosity: medium
+    tool_choice: auto
+    tools:
+      - container:
+          type: auto
+        type: code_interpreter
+      - description: Get account number for a user.
+        name: get_account_number
+        parameters:
+          additionalProperties: false
+          properties:
+            username:
+              type: string
+          required:
+            - username
+          type: object
+        strict: true
+        type: function
+      - description: Get current savings for an account.
+        name: get_current_savings
+        parameters:
+          additionalProperties: false
+          properties:
+            account_number:
+              type: string
+          required:
+            - account_number
+          type: object
+        strict: true
+        type: function
+      - description: null
+        name: weather_forecast
+        parameters:
+          additionalProperties: false
+          properties:
+            forecast_date:
+              type: string
+            post_code:
+              type: string
+          required:
+            - post_code
+            - forecast_date
+          type: object
+        strict: true
+        type: function
+    top_logprobs: 0
+    top_p: 1.0
+    truncation: disabled
+    usage:
+      input_tokens: 858
+      input_tokens_details:
+        cached_tokens: 0
+      output_tokens: 405
+      output_tokens_details:
+        reasoning_tokens: 384
+      total_tokens: 1263
+    user: null
+  headers:
+    connection: keep-alive
+    content-type: application/json
+  status_code: 200
+timestamp: "2026-01-08T16:14:20.026733+00:00"

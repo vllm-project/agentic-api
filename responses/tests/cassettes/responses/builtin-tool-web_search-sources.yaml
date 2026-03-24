@@ -1,0 +1,214 @@
+filename: 2026-03-11-019cdc41-b74c-7500-8f89-ee50c5a14902
+request:
+  body:
+    include:
+      - web_search_call.action.sources
+    input: Use web search to find the current federal funds target range in the United States. Keep it short.
+    model: gpt-5-mini
+    store: false
+    stream: false
+    tool_choice: required
+    tools:
+      - type: web_search
+  headers:
+    accept: "*/*"
+    accept-encoding: gzip, deflate, br
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "262"
+    content-type: application/json
+    user-agent: python-httpx/0.28.1
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019cdc41-b74c-7500-8f89-ee50c5a14902
+response:
+  body:
+    background: false
+    billing:
+      payer: developer
+    completed_at: 1773221833
+    created_at: 1773221820
+    error: null
+    frequency_penalty: 0.0
+    id: resp_0e9d092ff5bd29df0169b137bcd33c819789d5c2d07a93966e
+    incomplete_details: null
+    instructions: null
+    max_output_tokens: null
+    max_tool_calls: null
+    metadata: {}
+    model: gpt-5-mini-2025-08-07
+    object: response
+    output:
+      - id: rs_0e9d092ff5bd29df0169b137bd6b108197970889253a011ded
+        summary: []
+        type: reasoning
+      - action:
+          queries:
+            - federal funds target range federalreserve.gov
+            - current federal funds target range March 2026
+            - Federal Reserve target range for the federal funds rate press release
+          query: federal funds target range federalreserve.gov
+          sources:
+            - type: url
+              url: https://www.federalreserve.gov/monetarypolicy/openmarket.htm
+            - type: url
+              url: https://www.axios.com/2025/03/19/federal-reserve-interest-rates
+            - type: url
+              url: https://www.finder.com/banking/fed-funds-rate
+            - type: url
+              url: https://www.federalreserve.gov/monetarypolicy/fomcminutes20251210.htm
+            - type: url
+              url: https://www.federalreserve.gov/monetarypolicy/fomcminutes20251029.htm
+            - type: url
+              url: https://apnews.com/article/59ec6856c55574fd0a72337a6e1ee426
+            - type: url
+              url: https://www.gjopen.com/questions/4884-what-will-be-the-federal-reserve-s-median-projection-for-the-federal-funds-rate-for-2026-in-its-march-2026-projection-materials
+            - type: url
+              url: https://www.fedfundrate.org/
+            - type: url
+              url: https://d3n9y02raazwpg.cloudfront.net/nwsccc-goldenva/5804bfa7-d9e2-11ef-a9e2-005056a89546-8963e31d-07e9-4da8-a7c4-f961e5f0e0dc-1770406728.pdf
+            - type: url
+              url: https://fedprimerate.com/fedfundsrate/
+            - type: url
+              url: https://www.federalreserve.gov/economy-at-a-glance-policy-rate.htm
+            - type: url
+              url: https://tradingeconomics.com/united-states/federal-funds-target-range--upper-limit-percent-d-na-fed-data.html
+            - type: url
+              url: https://www.usbank.com/investing/financial-perspectives/market-news/federal-reserve-tapering-asset-purchases.html
+            - type: url
+              url: https://apnews.com/article/348e4db8a6c91f108268713d181d6a17
+            - type: url
+              url: https://www.ainvest.com/aime/share/fed-decision-march-2b74a9/
+            - type: url
+              url: https://www.kiplinger.com/investing/what-is-the-federal-funds-rate
+            - type: url
+              url: https://www.forbes.com/advisor/investing/fed-funds-rate-history/
+            - type: url
+              url: https://www.clevelandfed.org/-/media/project/clevelandfedtenant/clevelandfedsite/publications/working-papers/2025/wp2401r.pdf
+            - type: url
+              url: https://www.federalreserve.gov/monetarypolicy/files/fomcprojtabl20240918.pdf
+            - type: url
+              url: https://www.thedailybeast.com/fed-gives-crumbs-to-trump-with-14-percent-interest-rate-cut/
+            - type: url
+              url: https://www.lemonde.fr/en/economy/article/2025/09/18/us-federal-reserve-cuts-rates-to-boost-economy_6745500_19.html
+            - type: url
+              url: https://sheppard.tt/Reports/Sheppard%20Reports/Sheppard%20-%20US%20Rate%20Watch%20-%20Jan%202026%20%28Final%29.pdf
+            - type: url
+              url: https://www.federalreserve.gov/monetarypolicy/files/fomcprojtabl20240320.pdf
+          type: search
+        id: ws_0e9d092ff5bd29df0169b137c0804881979c4dd92bcf5a724f
+        status: completed
+        type: web_search_call
+      - id: rs_0e9d092ff5bd29df0169b137c287848197b7c39985286ad23f
+        summary: []
+        type: reasoning
+      - action:
+          queries:
+            - FOMC statement January 28 2026 federal funds target range
+            - Press release Federal Reserve Jan 28 2026 federal funds target range 3.50 3.75 site:federalreserve.gov
+          query: FOMC statement January 28 2026 federal funds target range
+          sources:
+            - type: url
+              url: https://www.federalreserve.gov/newsevents/pressreleases/monetary20260128a1.htm
+            - type: url
+              url: https://www.pcbb.com/industry-insights/economy/2026-01-28-fomc-update-jan-2026
+            - type: url
+              url: https://www.aimcusolutions.org/Communications/FOMC-Releases
+            - type: url
+              url: https://www.federalreserve.gov/monetarypolicy/fomcminutes20260128.htm
+            - type: url
+              url: https://www.ey.com/en_us/insights/strategy/macroeconomics/fomc-meeting
+            - type: url
+              url: https://economics.td.com/us-fomc-statement
+            - type: url
+              url: https://www.linkedin.com/pulse/fomc-monetary-policy-statement-analysis-january-2026-012826-amjad-7nhhf
+            - type: url
+              url: https://www.cbsnews.com/news/fed-meeting-fomc-interest-rate-decision-january-28/
+            - type: url
+              url: https://www.federalreserve.gov/monetarypolicy/files/fomcminutes20260128.pdf
+            - type: url
+              url: https://static1.squarespace.com/static/5d66b0b4b08d470001a07d34/t/697b76e95ecac26c91d9868e/1769699049104/FED%2BTRANSLATION%2BDASHBOARD%2BJANUARY%2B2026.pdf
+            - type: url
+              url: https://www.jpmorgan.com/insights/markets-and-economy/economy/fed-meeting-january-2026
+            - type: url
+              url: https://www.axios.com/2026/01/28/fed-powell-trump-rates
+            - type: url
+              url: https://www.federalreserve.gov/newsevents/pressreleases/monetary20260224a.htm
+            - type: url
+              url: https://www.principalam.com/us/insights/macro-views/january-2026-fomc-meeting-policy-rates-hold-nothing-see-here
+            - type: url
+              url: https://www.federalreserve.gov/mediacenter/files/FOMCpresconf20260128.pdf
+            - type: url
+              url: https://gryphonfp.com/blog/january-28th-fomc-follow-up/
+            - type: url
+              url: https://www.kiplinger.com/investing/live/january-fed-meeting-live-updates-and-commentary
+            - type: url
+              url: https://www.kiplinger.com/investing/when-is-the-next-fed-meeting
+            - type: url
+              url: https://www.axios.com/2025/12/10/fed-interest-rates-decision
+          type: search
+        id: ws_0e9d092ff5bd29df0169b137c302188197bc6b1fee300dda0d
+        status: completed
+        type: web_search_call
+      - id: rs_0e9d092ff5bd29df0169b137c4ff888197b217409189b07982
+        summary: []
+        type: reasoning
+      - content:
+          - annotations:
+              - end_index: 191
+                start_index: 71
+                title: Federal Reserve Board - Implementation Note issued January 28, 2026
+                type: url_citation
+                url: https://www.federalreserve.gov/newsevents/pressreleases/monetary20260128a1.htm?utm_source=openai
+            logprobs: []
+            text: As of January 28, 2026, the federal funds target range is 3.50%–3.75%. ([federalreserve.gov](https://www.federalreserve.gov/newsevents/pressreleases/monetary20260128a1.htm?utm_source=openai))
+            type: output_text
+        id: msg_0e9d092ff5bd29df0169b137c891d08197a7ed1a998bbf3270
+        role: assistant
+        status: completed
+        type: message
+    parallel_tool_calls: true
+    presence_penalty: 0.0
+    previous_response_id: null
+    prompt_cache_key: null
+    prompt_cache_retention: null
+    reasoning:
+      effort: medium
+      summary: null
+    safety_identifier: null
+    service_tier: default
+    status: completed
+    store: false
+    temperature: 1.0
+    text:
+      format:
+        type: text
+      verbosity: medium
+    tool_choice: required
+    tools:
+      - search_context_size: medium
+        type: web_search
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+    top_logprobs: 0
+    top_p: 1.0
+    truncation: disabled
+    usage:
+      input_tokens: 13018
+      input_tokens_details:
+        cached_tokens: 3584
+      output_tokens: 976
+      output_tokens_details:
+        reasoning_tokens: 832
+      total_tokens: 13994
+    user: null
+  headers:
+    connection: keep-alive
+    content-type: application/json
+  status_code: 200
+timestamp: "2026-03-11T09:37:00.236312+00:00"

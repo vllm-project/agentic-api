@@ -1,0 +1,107 @@
+filename: 2026-02-17-019c6b2d-133f-77d3-8ae7-f87dc3b68708
+request:
+  body:
+    messages:
+      - content: Call tool `mcp__github_docs__search_docs` with query='migration notes'. Do not answer directly before tool call.
+        role: user
+    model: gpt-5-nano
+    stream: true
+    stream_options:
+      include_usage: true
+    tool_choice:
+      function:
+        name: mcp__github_docs__search_docs
+      type: function
+    tools:
+      - function:
+          description: Hosted MCP wrapper tool
+          name: mcp__github_docs__search_docs
+          parameters:
+            additionalProperties: false
+            properties:
+              query:
+                type: string
+            required:
+              - query
+            type: object
+        type: function
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "560"
+    content-type: application/json
+    user-agent: OpenAI/Python 2.16.0
+    x-run-id: 20260217-103721-mcp-chat-step1
+  method: POST
+  path: /v1/chat/completions
+  query_params: {}
+request_id: 019c6b2d-133f-77d3-8ae7-f87dc3b68708
+response:
+  headers:
+    connection: keep-alive
+    content-type: text/event-stream; charset=utf-8
+  sse:
+    - 'data: {"id":"chatcmpl-DACkECnzJbzcO5O3Ld590ppCdLth2","object":"chat.completion.chunk","created":1771324642,"model":"gpt-5-nano-2025-08-07","service_tier":"default","system_fingerprint":null,"choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"call_d4CgCQekJ22QhJPrbIduqXTO","type":"function","function":{"name":"mcp__github_docs__search_docs","arguments":""}}],"refusal":null},"finish_reason":null}],"usage":null,"obfuscation":"3RW6Dz61na6ZKm"}
+
+      '
+    - "
+
+      "
+    - 'data: {"id":"chatcmpl-DACkECnzJbzcO5O3Ld590ppCdLth2","object":"chat.completion.chunk","created":1771324642,"model":"gpt-5-nano-2025-08-07","service_tier":"default","system_fingerprint":null,"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\""}}]},"finish_reason":null}],"usage":null,"obfuscation":"X02HpZCxYa"}
+
+      '
+    - "
+
+      "
+    - 'data: {"id":"chatcmpl-DACkECnzJbzcO5O3Ld590ppCdLth2","object":"chat.completion.chunk","created":1771324642,"model":"gpt-5-nano-2025-08-07","service_tier":"default","system_fingerprint":null,"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"query"}}]},"finish_reason":null}],"usage":null,"obfuscation":"hFtF7ROc"}
+
+      '
+    - "
+
+      "
+    - 'data: {"id":"chatcmpl-DACkECnzJbzcO5O3Ld590ppCdLth2","object":"chat.completion.chunk","created":1771324642,"model":"gpt-5-nano-2025-08-07","service_tier":"default","system_fingerprint":null,"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":\""}}]},"finish_reason":null}],"usage":null,"obfuscation":"9kWbg3mj"}
+
+      '
+    - "
+
+      "
+    - 'data: {"id":"chatcmpl-DACkECnzJbzcO5O3Ld590ppCdLth2","object":"chat.completion.chunk","created":1771324642,"model":"gpt-5-nano-2025-08-07","service_tier":"default","system_fingerprint":null,"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"migration"}}]},"finish_reason":null}],"usage":null,"obfuscation":"Dzw0"}
+
+      '
+    - "
+
+      "
+    - 'data: {"id":"chatcmpl-DACkECnzJbzcO5O3Ld590ppCdLth2","object":"chat.completion.chunk","created":1771324642,"model":"gpt-5-nano-2025-08-07","service_tier":"default","system_fingerprint":null,"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":" notes"}}]},"finish_reason":null}],"usage":null,"obfuscation":"xPgdopI"}
+
+      '
+    - "
+
+      "
+    - 'data: {"id":"chatcmpl-DACkECnzJbzcO5O3Ld590ppCdLth2","object":"chat.completion.chunk","created":1771324642,"model":"gpt-5-nano-2025-08-07","service_tier":"default","system_fingerprint":null,"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"}"}}]},"finish_reason":null}],"usage":null,"obfuscation":"BTWzxIDukb"}
+
+      '
+    - "
+
+      "
+    - 'data: {"id":"chatcmpl-DACkECnzJbzcO5O3Ld590ppCdLth2","object":"chat.completion.chunk","created":1771324642,"model":"gpt-5-nano-2025-08-07","service_tier":"default","system_fingerprint":null,"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}],"usage":null,"obfuscation":"T137Al74GxB"}
+
+      '
+    - "
+
+      "
+    - 'data: {"id":"chatcmpl-DACkECnzJbzcO5O3Ld590ppCdLth2","object":"chat.completion.chunk","created":1771324642,"model":"gpt-5-nano-2025-08-07","service_tier":"default","system_fingerprint":null,"choices":[],"usage":{"prompt_tokens":155,"completion_tokens":158,"total_tokens":313,"prompt_tokens_details":{"cached_tokens":0,"audio_tokens":0},"completion_tokens_details":{"reasoning_tokens":128,"audio_tokens":0,"accepted_prediction_tokens":0,"rejected_prediction_tokens":0}},"obfuscation":"J"}
+
+      '
+    - "
+
+      "
+    - "data: [DONE]
+
+      "
+    - "
+
+      "
+  status_code: 200
+timestamp: "2026-02-17T10:37:22.111282+00:00"

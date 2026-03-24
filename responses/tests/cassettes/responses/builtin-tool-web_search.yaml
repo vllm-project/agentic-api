@@ -1,0 +1,134 @@
+filename: 2026-01-02-019b7f5d-4a8a-7713-a3c1-6b2a8e3decfa
+request:
+  body:
+    input:
+      - content: Always use web search for the latest information.
+        role: system
+      - content: What is US interest rate?
+        role: user
+    model: gpt-5-nano
+    stream: false
+    tools:
+      - type: web_search
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br, zstd
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "213"
+    content-type: application/json
+    user-agent: OpenAI/Python 2.13.0
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019b7f5d-4a8a-7713-a3c1-6b2a8e3decfa
+response:
+  body:
+    background: false
+    billing:
+      payer: developer
+    completed_at: 1767368396
+    created_at: 1767368379
+    error: null
+    id: resp_0c77df3a276b37ab006957e6bb276881999d3a2e98cbff60d7
+    incomplete_details: null
+    instructions: null
+    max_output_tokens: null
+    max_tool_calls: null
+    metadata: {}
+    model: gpt-5-nano-2025-08-07
+    object: response
+    output:
+      - id: rs_0c77df3a276b37ab006957e6bbb40c8199862bd8edc5a84219
+        summary: []
+        type: reasoning
+      - action:
+          query: current US federal funds rate January 2026
+          type: search
+        id: ws_0c77df3a276b37ab006957e6bc65d0819984b8d202d3b232ff
+        status: completed
+        type: web_search_call
+      - id: rs_0c77df3a276b37ab006957e6bd5ea0819983c5b6e766b5106f
+        summary: []
+        type: reasoning
+      - content:
+          - annotations:
+              - end_index: 290
+                start_index: 179
+                title: "The Fed - Monetary Policy:"
+                type: url_citation
+                url: https://www.federalreserve.gov/monetarypolicy/fomcminutes20251210.htm?utm_source=openai
+              - end_index: 605
+                start_index: 494
+                title: "The Fed - Monetary Policy:"
+                type: url_citation
+                url: https://www.federalreserve.gov/monetarypolicy/fomcminutes20251210.htm?utm_source=openai
+              - end_index: 1012
+                start_index: 919
+                title: Average US long-term mortgage rate falls to the lowest level of the year at 6.15%
+                type: url_citation
+                url: https://apnews.com/article/2eac9ad6dbc581760cb0b47e61e77766?utm_source=openai
+            logprobs: []
+            text:
+              "Short answer: the Federal Reserve’s target range for the federal funds rate is 3.50% to 3.75% as of December 11, 2025. The next FOMC meeting is scheduled for January 27–28, 2026. ([federalreserve.gov](https://www.federalreserve.gov/monetarypolicy/fomcminutes20251210.htm?utm_source=openai))
+
+
+              Notes and context:
+
+              - This is the policy rate—the benchmark for many other interest rates in the U.S. economy. The Fed also set related rates (e.g., the primary credit rate) in that same decision cycle. ([federalreserve.gov](https://www.federalreserve.gov/monetarypolicy/fomcminutes20251210.htm?utm_source=openai))
+
+              - Other “US interest rates” (like mortgages, car loans, or Treasury yields) move with market conditions and can be quite different from the federal funds target. For example, average 30-year mortgage rates were around the mid-6% range in late 2025, influenced by expectations for Fed policy and long-term yields. ([apnews.com](https://apnews.com/article/2eac9ad6dbc581760cb0b47e61e77766?utm_source=openai))
+
+              - If you meant a different rate (e.g., the 2-year/10-year Treasury yield, consumer loan rates, or mortgage rates), tell me which one you want and I’ll fetch the latest figures.
+
+
+              Would you like me to check for any changes after the January 2026 FOMC meeting or pull up a specific rate (mortgage, Treasury yield, etc.)?"
+            type: output_text
+        id: msg_0c77df3a276b37ab006957e6ca669c819980cbf8f76ba3c6b8
+        role: assistant
+        status: completed
+        type: message
+    parallel_tool_calls: true
+    previous_response_id: null
+    prompt_cache_key: null
+    prompt_cache_retention: null
+    reasoning:
+      effort: medium
+      summary: null
+    safety_identifier: null
+    service_tier: default
+    status: completed
+    store: true
+    temperature: 1.0
+    text:
+      format:
+        type: text
+      verbosity: medium
+    tool_choice: auto
+    tools:
+      - filters: null
+        search_context_size: medium
+        type: web_search
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+    top_logprobs: 0
+    top_p: 1.0
+    truncation: disabled
+    usage:
+      input_tokens: 8179
+      input_tokens_details:
+        cached_tokens: 0
+      output_tokens: 2280
+      output_tokens_details:
+        reasoning_tokens: 1984
+      total_tokens: 10459
+    user: null
+  headers:
+    connection: keep-alive
+    content-type: application/json
+  status_code: 200
+timestamp: "2026-01-02T15:39:39.018452+00:00"

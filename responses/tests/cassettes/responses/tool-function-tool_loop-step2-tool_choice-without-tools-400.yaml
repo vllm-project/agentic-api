@@ -1,0 +1,41 @@
+filename: 2026-01-19-019bd71c-d958-7ab0-b9d5-0f5629d51396
+request:
+  body:
+    input:
+      - call_id: call_GrPGIcn6tvLd1khoF5O4CWbx
+        output: The weather in Boston, MA is sunny, 72F.
+        type: function_call_output
+      - content: Now call get_weather for location=New York, NY.
+        role: user
+    model: gpt-5-nano
+    previous_response_id: resp_0b86104b5e19cb1700696e5d602bb88196adb958a91b644dc5
+    store: true
+    tool_choice:
+      name: get_weather
+      type: function
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "383"
+    content-type: application/json
+    user-agent: OpenAI/Python 2.15.0
+    x-run-id: 20260119-163542-openai-operational
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019bd71c-d958-7ab0-b9d5-0f5629d51396
+response:
+  body:
+    error:
+      code: null
+      message: Tool choice 'function' not found in 'tools' parameter.
+      param: tool_choice
+      type: invalid_request_error
+  headers:
+    connection: keep-alive
+    content-length: "175"
+    content-type: application/json
+  status_code: 400
+timestamp: "2026-01-19T16:35:50.744791+00:00"

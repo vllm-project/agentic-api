@@ -1,0 +1,57 @@
+filename: 2026-01-08-019b9d34-118b-7973-86c7-a3af9cde9d1f
+request:
+  body:
+    messages:
+      - content: What is the capital of France?
+        role: user
+    model: gpt-5-nano
+    stream: true
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br, zstd
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "116"
+    content-type: application/json
+    user-agent: OpenAI/Python 2.9.0
+  method: POST
+  path: /v1/chat/completions
+  query_params: {}
+request_id: 019b9d34-118b-7973-86c7-a3af9cde9d1f
+response:
+  headers:
+    connection: keep-alive
+    content-type: text/event-stream; charset=utf-8
+  sse:
+    - 'data: {"id":"chatcmpl-CvhlyN2l5853AjXol1F74ckCWmuHv","object":"chat.completion.chunk","created":1767868994,"model":"gpt-5-nano-2025-08-07","service_tier":"default","system_fingerprint":null,"choices":[{"index":0,"delta":{"role":"assistant","content":"","refusal":null},"finish_reason":null}],"obfuscation":"6X"}
+
+      '
+    - "
+
+      "
+    - 'data: {"id":"chatcmpl-CvhlyN2l5853AjXol1F74ckCWmuHv","object":"chat.completion.chunk","created":1767868994,"model":"gpt-5-nano-2025-08-07","service_tier":"default","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"Paris"},"finish_reason":null}],"obfuscation":"zNFEWcytBlo5BJL"}
+
+      '
+    - "
+
+      "
+    - 'data: {"id":"chatcmpl-CvhlyN2l5853AjXol1F74ckCWmuHv","object":"chat.completion.chunk","created":1767868994,"model":"gpt-5-nano-2025-08-07","service_tier":"default","system_fingerprint":null,"choices":[{"index":0,"delta":{"content":"."},"finish_reason":null}],"obfuscation":"G1c"}
+
+      '
+    - "
+
+      "
+    - 'data: {"id":"chatcmpl-CvhlyN2l5853AjXol1F74ckCWmuHv","object":"chat.completion.chunk","created":1767868994,"model":"gpt-5-nano-2025-08-07","service_tier":"default","system_fingerprint":null,"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"obfuscation":"GwiHosAz9LQ3pa"}
+
+      '
+    - "
+
+      "
+    - "data: [DONE]
+
+      "
+    - "
+
+      "
+  status_code: 200
+timestamp: "2026-01-08T10:43:13.931780+00:00"

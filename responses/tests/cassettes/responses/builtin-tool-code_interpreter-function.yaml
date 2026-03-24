@@ -1,0 +1,141 @@
+filename: 2026-01-16-019bc63c-ab18-71e3-8af4-8a8e15fb4b75
+request:
+  body:
+    include:
+      - reasoning.encrypted_content
+    input:
+      - content: Use Python code interpreter tool to compute sqrt(2). Then transform the result using `transform_number` tool.
+        role: user
+    model: gpt-5-nano
+    reasoning:
+      effort: high
+      summary: detailed
+    stream: false
+    tool_choice: auto
+    tools:
+      - container:
+          type: auto
+        type: code_interpreter
+      - description: Get a new number.
+        name: transform_number
+        parameters:
+          additionalProperties: false
+          properties:
+            number:
+              type: number
+          required:
+            - number
+          type: object
+        strict: true
+        type: function
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "583"
+    content-type: application/json
+    user-agent: pydantic-ai/1.40.0
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019bc63c-ab18-71e3-8af4-8a8e15fb4b75
+response:
+  body:
+    background: false
+    billing:
+      payer: developer
+    completed_at: 1768557441
+    created_at: 1768557423
+    error: null
+    frequency_penalty: 0.0
+    id: resp_0f5c33e7f692211400696a0b6fd9248193b1d2859b796a64a8
+    incomplete_details: null
+    instructions: null
+    max_output_tokens: null
+    max_tool_calls: null
+    metadata: {}
+    model: gpt-5-nano-2025-08-07
+    object: response
+    output:
+      - encrypted_content: gAAAAABpaguBBS7Pl7QlXtXVMAUKQORMEB9X-mLSNS4Vh5JmUT4MQW7lYMFNE8QXLjQgFbvqOpn8FOaLgjfz2aDHnildqvv3nskvlMFYriaH5QPLXTNZ0Toe5lEqaYondH2d_pSlbCQs6i674GqoEtMJobBFNRwTqYG6iGXMQLkNg3buJyCAe4eN4BOIlvPrKDBGBDYp4fmr60NIjedgHqwk92TCEajsifzIoAMhEMeUskN5pTjPuC-XAJNkTrtWhzvDb-QCgWVKqBbb0Vna0Y-4H_jMZjZWZgGd557jyU2D339FMc9UCM-RZ1WgITvo9Yi7hIjSTvs3MOuHObjX6JbUfICGY-U7FcCvr0kJS48TmHzVVcSUyQeAYcW6pvQLS-Xv_vMzmf3dq_FImvxsxGiRanaXKd25mQeHyLNG4ScQIcKS0n6Nnl8Ka65qjNwPhbEimbrXBo6sLdFvPqofQI0UblUPu004hf9SDAaH8UUuqdwmhptSii1WS86SO9n4aIFA1le9rqrrLqsoFtguOAEru7HwWB_YSIpkI4biTm2R0U5Zth0Gr3P3dPKTJgAk-MMbpmeZ41aeWRNMELQeuw_6iUKhczjFtTzJD7wEUrsAgpAkjvkZAl92cxZ3tI3XcKL-GS3xa2haeqyOzpo6C_4rs6DIByVso3d4HcIKKURcuRvfacAyZ-FFxfq8lrRkvzVaIjQcHDcUbsgIlzPVAul4pyufZEikuoVU_XQStYu1n7shUJCAtL9d83RmxqWiPhucbgkVGDUNGud88wk_4BaQh01D2FtPwyHKQ2BTCVamZmQ0Et52bPB0IBa94F8JtkVNZ35gf0Hrry-Q3j6Q63wlVFrF-PtGchGvog1ioB2U0aoCfhSiDJujX4UnRO0HgUsaOWiA8X6MEyBK1sSz1LvlBvxbV6vHbGCeURUEdyzne4DVC3Q1OkttR7HsA82QGTzcgf8MtmrHpcARhDSiSTMPHeHsu0Vt7ynJSi0B3JhR3eVDiBYuwGjhjsrjPtKsUl3sFGZd22C-B4U5CtvcgTHohCgJWimFx1o6hFvwoQf6iF43NtMJ_2HGTdbGMCbTbYxOSPdTO5243CrPedCmYFyscNTQveR1sWn966AHO1ufmhBfywK_2WCVfvrLlg1B1WVL6d1z7i7I50iPjsM-05Tx6qlEK6lRUDA5UmMLKRjGUB5GGAvOsEB3052u-prpjQz9uQ5ZkR7COL8C0wJ_WWpRy6zAjV3-Puy-NL-hqMcmotDVsALQ-0KvKOMUNRsQ7UZxJEgCT8HWJd_Deb5V0JQhxtJ7x-yriOCKw1ypq00gTK2BNXTNJXsqWda7S_YiqPSjKihEWZnsYT_0jNYI1XkCUTpKM_mCBXnL3QbxCkBwjQuLlGM5VoeQUemaTNrROmmd58QQ9FjMVKyqNPvEnmoPExAIu7wVXM0Iynw13VN5mUztxncdN3pI6HRp7INotK1TcCQdjUOpZaHMy8PmugO2yjxJ2ivSduWjhVG0cCer4FEWPDk3B5p3ghHirpgrFJ3XO1G0KpyLNKte6WAL_yFHeuoM9GmDhDRVRfWJh-xMAPR22zWD1gwj1cxiWES00k5aOSG7AS340PtYL9rTwniIW_BX3jHkKgP_TK-h3c38xHK8leT2kUTm6LFncaqek65HKdY4ehst6ETyJFOizcMdJy7o8drRFbhZeZgQ9PkuhFg6ET2qoZtv5lImhvQMknQrjj18kw7rUl7a8njGn4x99neXjyg6_4inG-yoC01dBPJR-iFCSgPPSitqtduNLTj2zDVl3BVI1s3xd7NnUYZMbpbxCPr99NeZ7IN-O8rhbHfZUkFa2LWLIY-_Ei6NQsas_kjuHpK5LVGMOzMzp8WPidWO1ywdu6RziCyy_rIQPSVFva6cgHl3niUPzq38IvJY-_NBDp7ZEQ9KG6E8rjzhS8UgtIyesalXk8qxlTwSb2ijDZVWJRNhVs9TDYVysRtpnEGizXSXicXSypSNcsjezXUnPmOIu52mgIFyvluos6t-93cDgNlrRKwcdJf7vNxuR3olRPa4rD2iB1djWgYJQCf6ERmFSoIuIYazoIhUpgqbwAQ9uMha08D4mZXGhylYzc2EpdQoMDL23ckEvqH3Yry4TJP_IOnLY-_BSIuyX9CmmEyIWoUQP_UFHle1g9YPpTiWfsYWgXbsKCvU9oF_iZg6gFYQF9fpypWqc0JXMtwcb-c-As3DaRq_EXg_awYdfk1FFsPOX-FjIU_6g3GUp5H4T1CEfiEnMfyLchX5508TBrLsdrpVyfm9A8wH2od6bcLjrf7up7_EJWsR2Xs6WBIBBKuMXPqd9gLizBu3EtqedgIbEU55UEd6ItmTkMWcDgRlnzHUeGOmA_ZY6NXbCkMBJJ7kcGjym-1lfh9ux-v6dg6ub9OVGTAe1LbPZjvjafC8QFtpGCc5BflyGtmVZmM6zM8011mHui0Y2i7dkDROBBNC37jvBYFLtVPJmYzW5ZX5M2m4DRA63BK4ltk-raIB_G6Q8_J1OnEEXT7K-tptdWWTBmBSqmaMzQaUjTE_gPLmYlte_CbPe7KT2vzSpLeXdfg-kBKYMAJHdon4FstoxLFVfHqnO2sj5Ph_t5KoXJui6_crM1fOD2evZ6Hy1eTp9pWe4jTGdZzZLmX_-g-uKHV5CyRqrpfjMxOy3aTKA46aFitc3CVBKNNhGc97LowOgRcI5GXrtd_GvJe7vB8y6hznAcWI0jiRSlYwTbzf2M9qIaGEW3JUaGIEV7c5scDnV8MEDitVX3wOLSt_FQuQBz-_h4wQJ9mAuIV6jgThDVQHoZ9xxA0meRTjiritY9hiv1ZkCLsThgCY84lHrSgwoHxVjg-aXhiABcmD3wdk85I4naVHZnDdrW1M-dD-NTTZu1qG9Ix6nufqcRKfs60S2aqebK9iwayA-18C2pGQ8AmFng4w8uhlbxF-VDaV6Wjqh0QMM4n7AtILsyU4E1w7RuzOYxDVLHI5EKg9EXHG2KuqlgaIppwa6jMbaxdFWNd7ORHBIGgzN1knBrjqSEoqE8lYsSAc6y4Xc7MSZZ56_EGAmIRhfdysfeDowHsbx79jT20SU9ax8zmnWFQ8Hayv2sTzZwpEeas-Q_dp9gAol6MaoWbLjLAFNZVQ_a5Go2aVjDZuZx0q-8NZKzYtwzmmlnZvqp5buMXsc9B5UcEf2piBYJ7NHja-rOvR4NQMYxZiiPFcEp0TVAKfx2V58MUA0QjJpIFmJ4S4p8ItQ8k38__OkK1kr_bO6aVNO3NoXKR98FVHqi82UJwaRY6YdUhLa_TVRpygW8QAcXJ7GopORuNdDEidxs5OyaJP2yYx8hsVcHq2aMU_iZ24n7UStOAj9M6K2FuciX1gUSvpnHme7yKMHcmcjwj1kcLFf804DoHvxSsjlPz67sLW5WfHN0spVq-q37FMHW02-8Rbxn8j8lFeJRF6JXcgQqNFskcZj5Dv71_Miw==
+        id: rs_0f5c33e7f692211400696a0b741af48193b4dfd5abca5f64b1
+        summary:
+          - text: "**Executing Python computations**
+
+
+              I'm going to use Python to calculate the square root of 2 by importing the math module and running `math.sqrt(2)`. After that, I'll call the `transform_number` function with the square root value. The user's request prompts a step-by-step approach, starting with computing the square root and then transforming the result. I won't show the internal thought process in the responses to the user, just the final outputs. Let's get this done!"
+            type: summary_text
+          - text: "**Setting up Python execution**
+
+
+              I’m going to start by running a Python command in the analysis channel. I’ll import the math module and calculate the square root of 2 with the code `sqrt2 = math.sqrt(2)`. After that, the tool should respond with the calculated value. This is a straightforward step where I just need to ensure everything is set up correctly before proceeding to use the result. Let’s get this executed!"
+            type: summary_text
+        type: reasoning
+      - code: "import math\r\nsqrt2 = math.sqrt(2)\r\nsqrt2"
+        container_id: cntr_696a0b738a3c81909cf04bd16adef9ba07b35d55cedd90fe
+        id: ci_0f5c33e7f692211400696a0b7f6a4c81938c18b0fe111c410d
+        outputs: null
+        status: completed
+        type: code_interpreter_call
+      - encrypted_content: gAAAAABpaguBOwX6Reppk9jnwzANVXeS0XWiEBW5DDcpJXBgoNJG9WdHXJqDYkcWKIqyGmVNLj5A5nOpOhv3tLkY5ETldIB9dhdos2TujQduRpVZnALaXlaiYyM0S-WAfAAvo4d37VF2vUnMkfzoan_57NZ50v6JRLBUgUTjY5cMW-KCUfQV0_RNs4mjUxh_MDBQE7rmrBxyMt0tm3r3KPh1-uqEuFbfCpILpcIv8yoyOeDX-AkPJFxZKHx1NuByK9E0ogY0JV7NO7PzDnx2IAqmareetorL4pMVrZdEgqd9LH0uwoFjhHQ44pWY8DF-Lj0_9BPlmrCO3f5CmySL09VLIzBrHHm8-uKvrYxk8163YR7g6QWp24crH738Bv5wVO0LT7udkTaDrXnsQYvD9w0qao9hdKn-S9H9q0XHdyV1PBJ1JXL1sJg5GAulgKx7UGFaAwBCtVJ9rDdsJKtG3n2p5au1419pskhQztoykKunLDLHLF61_aaYu84j27VG4gLa_mLEoSBF3wQwgp4yeBixggYsk3nweZyzw5Af7J9xokdymcs7lSrbaHar7s8MQP5VaZrC1SDOPJART2OA-W4sPnwqLAvZB3Y2iQ2wamcV8yiCcAmRwFd-TpnqrK05VxLbuhhY7brUPDe1UnAinZ8Fwis3BRm2rfosTfGukucAAuThoVyx9nBNsmxvsuD1Zml7vRrWP8TVcHVzrFuW5B5aTu_JghaJSQTHbx2gE3vqzTVoBhfzPMlTpDVwqH6d_GebtlJOfXAu2xfHHvWA33qugV6fZUUD_ns1_YdFTftY86J-TZaTe83wqc7ZoLvbyCdZ34yWekuZiEz_NB4Es72jgaq0ntZ_3mtYqv-B1F2q9F46apMjkRM7b3ijnrliRfTLgPrQOakGBvkHeSs4xqSXkNyIgQBxYwOXFth6Ja4OPHi88k515o7Bf8TDAowhDMZVjBqj7p3ia7qGGQZiAqNAk6GvZ7n94ZRXEt8551JY6ixDlALhVkc=
+        id: rs_0f5c33e7f692211400696a0b7f77f081938e02eb169f511c46
+        summary: []
+        type: reasoning
+      - arguments: '{"number": 1.4142135623730951}'
+        call_id: call_Bl1aGyUe2gunKVCkWm5TgfvU
+        id: fc_0f5c33e7f692211400696a0b7fb1ec8193b56f9e5c3ea0cda6
+        name: transform_number
+        status: completed
+        type: function_call
+    parallel_tool_calls: true
+    presence_penalty: 0.0
+    previous_response_id: null
+    prompt_cache_key: null
+    prompt_cache_retention: null
+    reasoning:
+      effort: high
+      summary: detailed
+    safety_identifier: null
+    service_tier: default
+    status: completed
+    store: true
+    temperature: 1.0
+    text:
+      format:
+        type: text
+      verbosity: medium
+    tool_choice: auto
+    tools:
+      - container:
+          type: auto
+        type: code_interpreter
+      - description: Get a new number.
+        name: transform_number
+        parameters:
+          additionalProperties: false
+          properties:
+            number:
+              type: number
+          required:
+            - number
+          type: object
+        strict: true
+        type: function
+    top_logprobs: 0
+    top_p: 1.0
+    truncation: disabled
+    usage:
+      input_tokens: 1277
+      input_tokens_details:
+        cached_tokens: 0
+      output_tokens: 412
+      output_tokens_details:
+        reasoning_tokens: 384
+      total_tokens: 1689
+    user: null
+  headers:
+    connection: keep-alive
+    content-type: application/json
+  status_code: 200
+timestamp: "2026-01-16T09:57:03.384038+00:00"

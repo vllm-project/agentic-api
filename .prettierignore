@@ -1,0 +1,49 @@
+# OS
+thumbs.db
+.DS_Store
+
+# Cassettes
+responses/python/tests/cassettes/**/*.yaml
+
+# Internal references, dependencies, temporary folders & files
+.env
+archive/
+# **/__ref__/
+*.log
+*.lock
+*.db
+*.parquet
+
+# Python
+__pycache__/
+*.py*
+*$py.class
+*.egg-info
+.pytest_cache
+.ipynb_checkpoints
+.venv/
+**/.venv/
+venv/
+clients/python/tests/**/*
+
+# pip
+**/build/
+
+# pytest-cov
+**/.coverage*
+/junit
+/htmlcov
+/coverage.xml
+
+# jest-cov
+**/coverage/*
+
+# JavaScript
+**/node_modules/
+
+# Frontend
+services/app
+clients/typescript
+
+# Markdown files - handled by mdformat
+**/*.md

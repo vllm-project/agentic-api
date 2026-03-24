@@ -1,0 +1,297 @@
+filename: 2026-01-23-019be9d2-d23b-7753-871b-51a169f4717c
+request:
+  body:
+    include:
+      - code_interpreter_call.outputs
+    input:
+      - content: "You MUST use the code_interpreter tool.
+
+          Run the following Python exactly (no modifications):
+
+
+          ```python
+
+          print('P1')
+
+          1+1
+
+          print('P2')
+
+          2+2
+
+          3+3
+
+          ```
+
+
+          After the tool finishes, reply with a short confirmation.
+
+          "
+        role: user
+    model: gpt-5-nano
+    stream: true
+    tool_choice: auto
+    tools:
+      - container:
+          memory_limit: 4g
+          type: auto
+        type: code_interpreter
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "441"
+    content-type: application/json
+    user-agent: OpenAI/Python 2.15.0
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019be9d2-d23b-7753-871b-51a169f4717c
+response:
+  headers:
+    connection: keep-alive
+    content-type: text/event-stream; charset=utf-8
+  sse:
+    - "event: response.created
+
+      "
+    - 'data: {"type":"response.created","response":{"id":"resp_0b5c6a9bd35c333d00697327a30a8881989fb7ab43321b388e","object":"response","created_at":1769154467,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-5-nano-2025-08-07","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"code_interpreter","container":{"type":"auto"}}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - "
+
+      "
+    - "event: response.in_progress
+
+      "
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0b5c6a9bd35c333d00697327a30a8881989fb7ab43321b388e","object":"response","created_at":1769154467,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-5-nano-2025-08-07","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"code_interpreter","container":{"type":"auto"}}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_0b5c6a9bd35c333d00697327a5fabc8198984b63fa02e7b301","type":"reasoning","summary":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_0b5c6a9bd35c333d00697327a5fabc8198984b63fa02e7b301","type":"reasoning","summary":[]},"output_index":0,"sequence_number":3}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"ci_0b5c6a9bd35c333d00697327a899ac81988cfdbab56392f902","type":"code_interpreter_call","status":"in_progress","code":"","container_id":"cntr_697327a546688198b1609ca847bcfa5c04c032c66792ccfd","outputs":[]},"output_index":1,"sequence_number":4}
+
+      '
+    - "
+
+      "
+    - "event: response.code_interpreter_call.in_progress
+
+      "
+    - 'data: {"type":"response.code_interpreter_call.in_progress","item_id":"ci_0b5c6a9bd35c333d00697327a899ac81988cfdbab56392f902","output_index":1,"sequence_number":5}
+
+      '
+    - "
+
+      "
+    - "event: response.code_interpreter_call_code.delta
+
+      "
+    - 'data: {"type":"response.code_interpreter_call_code.delta","delta":"print","item_id":"ci_0b5c6a9bd35c333d00697327a899ac81988cfdbab56392f902","obfuscation":"Ko304TnN56u","output_index":1,"sequence_number":6}
+
+      '
+    - "
+
+      "
+    - "event: response.code_interpreter_call_code.delta
+
+      "
+    - 'data: {"type":"response.code_interpreter_call_code.delta","delta":"(''","item_id":"ci_0b5c6a9bd35c333d00697327a899ac81988cfdbab56392f902","obfuscation":"X6AOoVwGg3mW3F","output_index":1,"sequence_number":7}
+
+      '
+    - "
+
+      "
+    - "event: response.code_interpreter_call_code.delta
+
+      "
+    - 'data: {"type":"response.code_interpreter_call_code.delta","delta":"P1","item_id":"ci_0b5c6a9bd35c333d00697327a899ac81988cfdbab56392f902","obfuscation":"h2V1xGfH2Wc","output_index":1,"sequence_number":8}
+
+      '
+    - "
+
+      "
+    - "event: response.code_interpreter_call_code.delta
+
+      "
+    - 'data: {"type":"response.code_interpreter_call_code.delta","delta":"'')","item_id":"ci_0b5c6a9bd35c333d00697327a899ac81988cfdbab56392f902","obfuscation":"mXv0P4n4h9mK","output_index":1,"sequence_number":9}
+
+      '
+    - "
+
+      "
+    - "event: response.code_interpreter_call_code.delta
+
+      "
+    - 'data: {"type":"response.code_interpreter_call_code.delta","delta":"\\n","item_id":"ci_0b5c6a9bd35c333d00697327a899ac81988cfdbab56392f902","obfuscation":"0IuZrP2R3p8","output_index":1,"sequence_number":10}
+
+      '
+    - "
+
+      "
+    - "event: response.code_interpreter_call_code.delta
+
+      "
+    - 'data: {"type":"response.code_interpreter_call_code.delta","delta":"1+1\\n","item_id":"ci_0b5c6a9bd35c333d00697327a899ac81988cfdbab56392f902","obfuscation":"BVBq7vXzqPq","output_index":1,"sequence_number":11}
+
+      '
+    - "
+
+      "
+    - "event: response.code_interpreter_call_code.delta
+
+      "
+    - 'data: {"type":"response.code_interpreter_call_code.delta","delta":"print(''P2'')\\n","item_id":"ci_0b5c6a9bd35c333d00697327a899ac81988cfdbab56392f902","obfuscation":"Yod0t1pZjzW","output_index":1,"sequence_number":12}
+
+      '
+    - "
+
+      "
+    - "event: response.code_interpreter_call_code.delta
+
+      "
+    - 'data: {"type":"response.code_interpreter_call_code.delta","delta":"2+2\\n","item_id":"ci_0b5c6a9bd35c333d00697327a899ac81988cfdbab56392f902","obfuscation":"gJXrQeQqfKq","output_index":1,"sequence_number":13}
+
+      '
+    - "
+
+      "
+    - "event: response.code_interpreter_call_code.delta
+
+      "
+    - 'data: {"type":"response.code_interpreter_call_code.delta","delta":"3+3","item_id":"ci_0b5c6a9bd35c333d00697327a899ac81988cfdbab56392f902","obfuscation":"9bPHt7wY8v8","output_index":1,"sequence_number":14}
+
+      '
+    - "
+
+      "
+    - "event: response.code_interpreter_call_code.done
+
+      "
+    - 'data: {"type":"response.code_interpreter_call_code.done","code":"print(''P1'')\\n1+1\\nprint(''P2'')\\n2+2\\n3+3","item_id":"ci_0b5c6a9bd35c333d00697327a899ac81988cfdbab56392f902","output_index":1,"sequence_number":15}
+
+      '
+    - "
+
+      "
+    - "event: response.code_interpreter_call.interpreting
+
+      "
+    - 'data: {"type":"response.code_interpreter_call.interpreting","item_id":"ci_0b5c6a9bd35c333d00697327a899ac81988cfdbab56392f902","output_index":1,"sequence_number":16}
+
+      '
+    - "
+
+      "
+    - "event: response.code_interpreter_call.completed
+
+      "
+    - 'data: {"type":"response.code_interpreter_call.completed","item_id":"ci_0b5c6a9bd35c333d00697327a899ac81988cfdbab56392f902","output_index":1,"sequence_number":17}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"ci_0b5c6a9bd35c333d00697327a899ac81988cfdbab56392f902","type":"code_interpreter_call","status":"completed","code":"print(''P1'')\\n1+1\\nprint(''P2'')\\n2+2\\n3+3","container_id":"cntr_697327a546688198b1609ca847bcfa5c04c032c66792ccfd","outputs":[{"type":"logs","logs":"P1\\nP2\\n"},{"type":"logs","logs":"6"}]},"output_index":1,"sequence_number":18}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_0b5c6a9bd35c333d00697327b1b0b08198a3dc7b32a5fae3bb","type":"reasoning","summary":[]},"output_index":2,"sequence_number":19}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_0b5c6a9bd35c333d00697327b1b0b08198a3dc7b32a5fae3bb","type":"reasoning","summary":[]},"output_index":2,"sequence_number":20}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_0b5c6a9bd35c333d00697327b278e08198a1e2d5f2543a0b39","type":"message","status":"in_progress","content":[]},"output_index":3,"sequence_number":21}
+
+      '
+    - "
+
+      "
+    - "event: response.content_part.added
+
+      "
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0b5c6a9bd35c333d00697327b278e08198a1e2d5f2543a0b39","output_index":3,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":22}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.done
+
+      "
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0b5c6a9bd35c333d00697327b278e08198a1e2d5f2543a0b39","logprobs":[],"output_index":3,"sequence_number":23,"text":"Done. The code ran and produced the outputs requested."}
+
+      '
+    - "
+
+      "
+    - "event: response.content_part.done
+
+      "
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0b5c6a9bd35c333d00697327b278e08198a1e2d5f2543a0b39","output_index":3,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"Done. The code ran and produced the outputs requested."},"sequence_number":24}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_0b5c6a9bd35c333d00697327b278e08198a1e2d5f2543a0b39","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"Done. The code ran and produced the outputs requested."}]},"output_index":3,"sequence_number":25}
+
+      '
+    - "
+
+      "
+    - "event: response.completed
+
+      "
+    - 'data: {"type":"response.completed","response":{"id":"resp_0b5c6a9bd35c333d00697327a30a8881989fb7ab43321b388e","object":"response","created_at":1769154467,"status":"completed","background":false,"completed_at":1769154472,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-5-nano-2025-08-07","output":[{"id":"rs_0b5c6a9bd35c333d00697327a5fabc8198984b63fa02e7b301","type":"reasoning","summary":[]},{"id":"ci_0b5c6a9bd35c333d00697327a899ac81988cfdbab56392f902","type":"code_interpreter_call","status":"completed","code":"print(''P1'')\\n1+1\\nprint(''P2'')\\n2+2\\n3+3","container_id":"cntr_697327a546688198b1609ca847bcfa5c04c032c66792ccfd","outputs":[{"type":"logs","logs":"P1\\nP2\\n"},{"type":"logs","logs":"6"}]},{"id":"rs_0b5c6a9bd35c333d00697327b1b0b08198a3dc7b32a5fae3bb","type":"reasoning","summary":[]},{"id":"msg_0b5c6a9bd35c333d00697327b278e08198a1e2d5f2543a0b39","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"Done. The code ran and produced the outputs requested."}]}],"parallel_tool_calls":true,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"code_interpreter","container":{"type":"auto"}}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":138,"input_tokens_details":{"cached_tokens":0},"output_tokens":237,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":375},"user":null,"metadata":{}},"sequence_number":26}
+
+      '
+  status_code: 200
+timestamp: "2026-01-23T07:47:52.778164+00:00"

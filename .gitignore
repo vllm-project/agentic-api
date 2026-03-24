@@ -1,0 +1,66 @@
+# OS
+thumbs.db
+.DS_Store
+
+# Internal references, dependencies, temporary folders & files
+.env
+**/__ref__/
+*.log
+*.lock
+!uv.lock
+!responses/uv.lock
+*.db*
+*.parquet
+.cache/
+
+# Research artifacts / local harnesses (keep out of git; curated fixtures live under `responses/tests/cassettes/`)
+/cassettes/
+/study/
+/plans/
+/skills/
+
+# Docker
+/docker_data/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info
+*.whl
+.pytest_cache
+.ipynb_checkpoints
+venv/
+responses/dist
+responses/wheelhouse/
+responses/python/vllm_responses/tools/code_interpreter/bin    
+
+# pip
+**/build/
+
+# pytest-cov
+**/coverage.xml
+**/.coverage*
+/junit
+/htmlcov
+/coverage.xml
+
+# ruff
+.ruff_cache/
+
+# jest-cov
+**/coverage/*
+
+# JavaScript
+**/node_modules/
+**/logs
+responses/python/vllm_responses/tools/code_interpreter/pyodide-*.tar.bz2
+
+# db related
+**/ch_data/
+**/vm_data/
+**/ch_logs/
+/db/
+**/vl_data/
+**/rqlite_db/
+responses/python/vllm_responses/tools/code_interpreter/**/code-interpreter-server

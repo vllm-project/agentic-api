@@ -1,0 +1,53 @@
+filename: 2026-01-08-019b9d34-0880-75b0-b731-850c676c3bf8
+request:
+  body:
+    messages:
+      - content: What is the capital of France?
+        role: user
+    model: gpt-5-nano
+    stream: false
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br, zstd
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "117"
+    content-type: application/json
+    user-agent: OpenAI/Python 2.9.0
+  method: POST
+  path: /v1/chat/completions
+  query_params: {}
+request_id: 019b9d34-0880-75b0-b731-850c676c3bf8
+response:
+  body:
+    choices:
+      - finish_reason: stop
+        index: 0
+        message:
+          annotations: []
+          content: Paris.
+          refusal: null
+          role: assistant
+    created: 1767868992
+    id: chatcmpl-CvhlwgPRBt3uXp8XYvLwvQlv86R22
+    model: gpt-5-nano-2025-08-07
+    object: chat.completion
+    service_tier: default
+    system_fingerprint: null
+    usage:
+      completion_tokens: 75
+      completion_tokens_details:
+        accepted_prediction_tokens: 0
+        audio_tokens: 0
+        reasoning_tokens: 64
+        rejected_prediction_tokens: 0
+      prompt_tokens: 13
+      prompt_tokens_details:
+        audio_tokens: 0
+        cached_tokens: 0
+      total_tokens: 88
+  headers:
+    connection: keep-alive
+    content-type: application/json
+  status_code: 200
+timestamp: "2026-01-08T10:43:11.616670+00:00"

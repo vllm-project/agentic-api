@@ -1,0 +1,41 @@
+filename: 2026-02-22-019c84ad-60ff-7a60-a956-ee6f27b5a5e1
+request:
+  body:
+    input:
+      - content: Use code interpreter once and print 'HELLO'.
+        role: user
+    max_tool_calls: 0
+    model: gpt-5-mini
+    store: false
+    stream: true
+    tool_choice: required
+    tools:
+      - container:
+          type: auto
+        type: code_interpreter
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "243"
+    content-type: application/json
+    user-agent: OpenAI/Python 2.16.0
+    x-run-id: max-tool-calls-20260222-stream-v2-zero
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019c84ad-60ff-7a60-a956-ee6f27b5a5e1
+response:
+  body:
+    error:
+      code: integer_below_min_value
+      message: "Invalid 'max_tool_calls': integer below minimum value. Expected a value >= 1, but got 0 instead."
+      param: max_tool_calls
+      type: invalid_request_error
+  headers:
+    connection: keep-alive
+    content-length: "241"
+    content-type: application/json
+  status_code: 400
+timestamp: "2026-02-22T09:28:01.023810+00:00"

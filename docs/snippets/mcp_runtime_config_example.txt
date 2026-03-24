@@ -1,0 +1,20 @@
+```json
+{
+  "mcpServers": {
+    "github_docs": {
+      "url": "https://mcp.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer <token>"
+      }
+    },
+    "local_fs": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/srv/docs"]
+    },
+    "docs_sse": {
+      "url": "https://mcp.example.com/sse",
+      "transport": "sse"
+    }
+  }
+}
+```

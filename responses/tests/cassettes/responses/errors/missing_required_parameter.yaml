@@ -1,0 +1,37 @@
+filename: 2026-01-02-019b7fa5-8772-70a0-9de7-b4cf39cac3f1
+request:
+  body:
+    input:
+      - content: Always use code interpreter for math.
+        role: system
+      - content: Compute sqrt of 2.
+        role: user
+    model: gpt-5-nano
+    stream: false
+    tools:
+      - type: code_interpreter
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br, zstd
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "200"
+    content-type: application/json
+    user-agent: OpenAI/Python 2.13.0
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019b7fa5-8772-70a0-9de7-b4cf39cac3f1
+response:
+  body:
+    error:
+      code: missing_required_parameter
+      message: "Missing required parameter: 'tools[0].container'."
+      param: tools[0].container
+      type: invalid_request_error
+  headers:
+    connection: keep-alive
+    content-length: "201"
+    content-type: application/json
+  status_code: 400
+timestamp: "2026-01-02T16:58:33.202679+00:00"

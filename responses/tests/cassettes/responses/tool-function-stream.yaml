@@ -1,0 +1,1030 @@
+filename: 2026-01-05-019b8d3d-7ccf-77c3-8384-1db3edc8de43
+request:
+  body:
+    include:
+      - reasoning.encrypted_content
+    input:
+      - content: How much would Sam have after 5 years at 5% interest? You have access to tools to get user account number and current savings. Use Python code interpreter tool to compute future value.
+        role: user
+    model: gpt-5-nano
+    reasoning:
+      effort: medium
+      summary: detailed
+    stream: true
+    tool_choice: auto
+    tools:
+      - container:
+          type: auto
+        type: code_interpreter
+      - description: Get account number for a user.
+        name: get_account_number
+        parameters:
+          additionalProperties: false
+          properties:
+            username:
+              type: string
+          required:
+            - username
+          type: object
+        strict: true
+        type: function
+      - description: Get current savings for an account.
+        name: get_current_savings
+        parameters:
+          additionalProperties: false
+          properties:
+            account_number:
+              type: string
+          required:
+            - account_number
+          type: object
+        strict: true
+        type: function
+      - description: null
+        name: weather_forecast
+        parameters:
+          additionalProperties: false
+          properties:
+            forecast_date:
+              type: string
+            post_code:
+              type: string
+          required:
+            - post_code
+            - forecast_date
+          type: object
+        strict: true
+        type: function
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br, zstd
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "1192"
+    content-type: application/json
+    user-agent: pydantic-ai/1.34.0
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019b8d3d-7ccf-77c3-8384-1db3edc8de43
+response:
+  headers:
+    connection: keep-alive
+    content-type: text/event-stream; charset=utf-8
+  sse:
+    - "event: response.created
+
+      "
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_09717be3d21ba0e600695b7417f4ec819aa61993c3bf400663","object":"response","created_at":1767601176,"status":"in_progress","background":false,"completed_at":null,"error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-5-nano-2025-08-07","output":[],"parallel_tool_calls":true,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":"detailed"},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"code_interpreter","container":{"type":"auto"}},{"type":"function","description":"Get account number for a user.","name":"get_account_number","parameters":{"additionalProperties":false,"properties":{"username":{"type":"string"}},"required":["username"],"type":"object"},"strict":true},{"type":"function","description":"Get current savings for an account.","name":"get_current_savings","parameters":{"additionalProperties":false,"properties":{"account_number":{"type":"string"}},"required":["account_number"],"type":"object"},"strict":true},{"type":"function","description":null,"name":"weather_forecast","parameters":{"additionalProperties":false,"properties":{"post_code":{"type":"string"},"forecast_date":{"type":"string"}},"required":["post_code","forecast_date"],"type":"object"},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}}}
+
+      '
+    - "
+
+      "
+    - "event: response.in_progress
+
+      "
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_09717be3d21ba0e600695b7417f4ec819aa61993c3bf400663","object":"response","created_at":1767601176,"status":"in_progress","background":false,"completed_at":null,"error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-5-nano-2025-08-07","output":[],"parallel_tool_calls":true,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":"detailed"},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"code_interpreter","container":{"type":"auto"}},{"type":"function","description":"Get account number for a user.","name":"get_account_number","parameters":{"additionalProperties":false,"properties":{"username":{"type":"string"}},"required":["username"],"type":"object"},"strict":true},{"type":"function","description":"Get current savings for an account.","name":"get_current_savings","parameters":{"additionalProperties":false,"properties":{"account_number":{"type":"string"}},"required":["account_number"],"type":"object"},"strict":true},{"type":"function","description":null,"name":"weather_forecast","parameters":{"additionalProperties":false,"properties":{"post_code":{"type":"string"},"forecast_date":{"type":"string"}},"required":["post_code","forecast_date"],"type":"object"},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}}}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","type":"reasoning","encrypted_content":"gAAAAABpW3QdWYG6Ar1wW2QzetCk5vNNiIcJC9BeO4LMGSgOi9bhz-jx1P4f91-mbOrNGRrlOgy4NE1-vu-DzEGE8YQIs1rvj7MMgScH1qVKDoeHsHjuBxDMZH653HLZPlxhUuOrvktTDVWW-_c5JySaSsMd_ws9ZKQ4GoCbM5LKk0BcFGPeBce_N5oUFVsk9cVU52z7OSD_z6TZfPyDEN_bm8OrUB9UuXzBVLnSlp9uD8F-d3P6mZcXiBHDLTlDq3cXnmhuaxlK9ploXzNYdgwI7NvPgsuRKti4BXefEOhBRkHFr0JFpJ0lcng-Vx0jXit_YIsqoQv48aJRV-t2yndy1s3DnjEvUsnAvX02FpoaDKeUiYEq1QV7MZeb8H-xmW547xeizca_ndrOj-W99g20nXsA6ERQz8BWw9TdEdmTG0PcfrtpJwVROpM4xQYEQtw2OAXpUtnUgcfdZqJgcuQmzok46dc0lPAQ7fephHd0KaBEv3HBGNW3eG0RfDFZXnD0jw9aVpGooDa4ZtpHYPBUI6eUb9JdNfa93kj7HxZL7a39PWwTiBTWae3G_l1piiX5USgae_pvJufCbvN0apkf1l743OMzkpyC7eeatB8604KV2HSXF-_8emv2Mzc0f9aW7t5D7rSnQFjF9f1PAt8Y7LY5RS5FdSZs0m5o8yNM3WUHbi8-H__2TzN5YdlE3zn6_20YptTDiEGFodIM3Gm-_aKGflNAvvpHolr_To1Dh4GKdUIDEPisSMjhoM3cC84nZASfi2LmBxneOFPyg75YU12TCY1MhbDRWlDT-vSpQ5R-XVsmvTetqWHMT8MB_GZaogk8uVws","summary":[]}}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_part.added
+
+      "
+    - 'data: {"type":"response.reasoning_summary_part.added","sequence_number":3,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"part":{"type":"summary_text","text":""}}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":4,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":"**Calcul","obfuscation":"SifTcnwz"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":5,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":"ating","obfuscation":"CdJdFHVPgzB"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":6,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" comp","obfuscation":"fMx5eJsXHwf"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":7,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":"ounding","obfuscation":"WJR2bseK1"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":8,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" interest","obfuscation":"8sMl4g1"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":9,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":"**\n\nI''m","obfuscation":"c27xoZqLh"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":10,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" thinking","obfuscation":"XlxcepM"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":11,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" about","obfuscation":"lDitYzpLa0"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":12,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" comp","obfuscation":"PDWiij1OKYK"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":13,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":"ounding","obfuscation":"Vpq8Ap8mZ"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":14,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" interest","obfuscation":"gYZ8rqN"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":15,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" here","obfuscation":"Yerol9G7h3q"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":16,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":".","obfuscation":"A5i2yA2zusqzuub"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":17,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" The","obfuscation":"CYJf1nkposXN"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":18,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" user","obfuscation":"oHPKvzE5a71"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":19,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" mentioned","obfuscation":"TM4evQ"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":20,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" 5","obfuscation":"InMEa8lWF744We"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":21,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":"%","obfuscation":"RFCUYm6lXAvh9Zp"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":22,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" after","obfuscation":"ZnbLaUn7YL"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":23,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" 5","obfuscation":"zZRaGZTQSD7hgX"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":24,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" years","obfuscation":"0NAt84jx1F"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":25,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":",","obfuscation":"bFAridbShc2zVdr"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":26,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" which","obfuscation":"0LR4VQJA9W"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":27,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" usually","obfuscation":"epQgYize"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":28,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" implies","obfuscation":"X4kN5GS1"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":29,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" annual","obfuscation":"Wy2sPYslX"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":30,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" comp","obfuscation":"M83ztjMHycM"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":31,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":"ounding","obfuscation":"3tOm7V1L3"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":32,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":",","obfuscation":"fSINk3cwHTLaMVc"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":33,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" but","obfuscation":"kICBobTUl2iv"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":34,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" it","obfuscation":"MScBQ71SfKBdi"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":35,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" could","obfuscation":"eRJecl72dL"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":36,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" also","obfuscation":"FHNoAxo32JQ"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":37,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" be","obfuscation":"lwZ6M9BDNeWdr"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":38,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" monthly","obfuscation":"ncSJ2oEn"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":39,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":".","obfuscation":"t1EdDpWbAE2Bzoy"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":40,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" I","obfuscation":"P1rJI30sl5l02L"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":41,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" should","obfuscation":"4KQGNPk31"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":42,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" clarify","obfuscation":"gkxcX9SU"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":43,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" comp","obfuscation":"dAFwDdD5zPK"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":44,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":"ounding","obfuscation":"FhdBacIhY"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":45,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" details","obfuscation":"qYHGlxJ4"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":46,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" if","obfuscation":"hkUEIm20URZmd"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":47,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" they''re","obfuscation":"spqbgyBm"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":48,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" not","obfuscation":"69TEOGein0pl"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":49,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" clearly","obfuscation":"HcV1odVV"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":50,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" specified","obfuscation":"QK55x3"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":51,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":".","obfuscation":"YFhetQ7aDaUUr0a"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":52,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" For","obfuscation":"mY0C6LcevHKk"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":53,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" now","obfuscation":"oSKdAA88q6ob"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":54,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":",","obfuscation":"FSBd8gjVW73Ubkx"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":55,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" I''ll","obfuscation":"rg1M8jHUUU0"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":56,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" proceed","obfuscation":"5vwBZlgt"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":57,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" with","obfuscation":"j48tAup39on"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":58,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" annual","obfuscation":"xg7Yx14Y1"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":59,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" comp","obfuscation":"cMYcu5Drv90"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":60,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":"ounding","obfuscation":"BMRPhQrGg"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":61,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" and","obfuscation":"2LPSQorBGD8u"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":62,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" use","obfuscation":"lj5Iu7jAppCB"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":63,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" the","obfuscation":"0bJUgwgvurmt"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":64,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" Python","obfuscation":"bPuC7o3bg"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":65,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" tool","obfuscation":"cnWg0PbBKk3"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":66,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" to","obfuscation":"MKy3DMZSEvSyA"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":67,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" calculate","obfuscation":"ThPOmz"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":68,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" the","obfuscation":"MdNZg1AMLc34"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":69,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" future","obfuscation":"qWQKhXGRb"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":70,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" value","obfuscation":"7w6dVi2VNx"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":71,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":".","obfuscation":"4JnhywbE2ZeYFRV"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":72,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" However","obfuscation":"esr0oYHs"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":73,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":",","obfuscation":"O25eg1vGHemJD9k"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":74,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" I","obfuscation":"pnhPMLD05IHUlV"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":75,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" need","obfuscation":"0Yj3rFlV0Hy"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":76,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" to","obfuscation":"itD09gqz6Dltx"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":77,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" ensure","obfuscation":"XvLXiir4C"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":78,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" I","obfuscation":"JBIF67l7FeSTvJ"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":79,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" don''t","obfuscation":"VsezPV0GR4"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":80,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" reveal","obfuscation":"1EwbQE45Y"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":81,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" any","obfuscation":"s3OkTBPIqYbe"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":82,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" private","obfuscation":"37BF3R9O"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":83,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" reasoning","obfuscation":"h0VJm4"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":84,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" or","obfuscation":"IaSt7khfa8NHE"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":85,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" code","obfuscation":"G7KBG3DhIKj"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":86,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" details","obfuscation":"hcWMLlsr"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":87,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" to","obfuscation":"H6GPcaIYs448R"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":88,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" the","obfuscation":"wG2rCMOdR3ox"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":89,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" user","obfuscation":"JwrvC3hA6z2"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":90,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" unless","obfuscation":"BVPZHEUO4"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":91,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" it''s","obfuscation":"oznTjZZvvy7"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":92,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":" appropriate","obfuscation":"UWgL"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.delta
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.delta","sequence_number":93,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"delta":".","obfuscation":"muvnvxQR1UnNLKj"}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_text.done
+
+      "
+    - 'data: {"type":"response.reasoning_summary_text.done","sequence_number":94,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"text":"**Calculating compounding interest**\n\nI''m thinking about compounding interest here. The user mentioned 5% after 5 years, which usually implies annual compounding, but it could also be monthly. I should clarify compounding details if they''re not clearly specified. For now, I''ll proceed with annual compounding and use the Python tool to calculate the future value. However, I need to ensure I don''t reveal any private reasoning or code details to the user unless it''s appropriate."}
+
+      '
+    - "
+
+      "
+    - "event: response.reasoning_summary_part.done
+
+      "
+    - 'data: {"type":"response.reasoning_summary_part.done","sequence_number":95,"item_id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","output_index":0,"summary_index":0,"part":{"type":"summary_text","text":"**Calculating compounding interest**\n\nI''m thinking about compounding interest here. The user mentioned 5% after 5 years, which usually implies annual compounding, but it could also be monthly. I should clarify compounding details if they''re not clearly specified. For now, I''ll proceed with annual compounding and use the Python tool to calculate the future value. However, I need to ensure I don''t reveal any private reasoning or code details to the user unless it''s appropriate."}}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","sequence_number":96,"output_index":0,"item":{"id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","type":"reasoning","encrypted_content":"gAAAAABpW3Qj6jgdYNUWsvL6l_shR4nzMdWsFGndE7UQsU_-oYBg3LjqdGmpO5EBbgwbG0cQTKIDaKp36CxLiaPSdjVOZc43uALkftfhCqUx2u8e-9Kx8EHLWq_R9c_NnaLMaXiHmc7_urcYheF1vuhqT35yF-grijTqc95Bq6VJqamxGIBMda-egk6nzuLqWevMk-kiQoo_zeH7yiGeT-88lCe6HlSLjLYup9Ev1O0jqtBEj6A3-yewvhTR3muJQLQDx1xHafXhcxHPwy5TtNS69lPXkZMk4-Gp6KiKGSTfdS3hqvbe59Q4WmeryIfYpWV6wB-GMd7NNGnAybKNkbWpXdbfsQ4ri7yIntMoCaYwO8wYTBJaFk7FfXS-pzrc6BHE3N5mWqv-bzCgGJ_gJPtvOOO0TVGRQJEWLDmgwInv-DaxRrHlbY5kXGNPhar22uVjOvbzm4A11_NeMb2h3V8PmY8c4BBM3RHY-z-Cd1kDjmOfM_KaWsYpOXeGiHR6XVdG1SCK3wk4J4OgN5-lnfb3wX0GHve4f8rOWuQ9byznyd8u71z1Hye_OKRyAtCnGaPHX7R-3F0AIntCgPY5HAHp5lG6m3KisBmpCKA9cbo7TMU6amP2S2pi2Fs5fdCxuQgcMst-P_lFb4uIgMRJEc4glP0svBFJj9_H8aXp5sZDrkQPR7wtrq3pjIAiFMy80GWmS7AHm-IYfoqM4F7DqfgkWmcog598xpc21SvzhR6D9uGoPD14rJV5_pHqaQN13m2NttqAfepTxl8juSFYBhoQPBcidBgJxWGPM_-NVisNmvujjJHgC8wni1XQUrnGbD_ZE6cFivO9pnxPUhdWFkkTO6tQNleRHXn-EpzXVloVBJSd6mrAz5SO2wclzHQP36iHK3MFExPsDCYtRX1Lyi_8zffH0_ArgEQkgFAL68xTlemxEPIlJrGmYrJSt68d376E67SmfM51MCqZHZrxXX8-Ko8b37niWVM4e4GXoUeOMzaGk-cKZbk0q8z4FdI06BXlyo-MNHWXOez1cRf9_cjWRW21DYo3-cta0yKXizpq_fGWlC3-p5tlN__IGAI3mYGm67rQpMDjZRPJiPPTB6OcjAgmz32Ig7J66SDhL9vYyl9n7IJpsGGKINV096HqPIuaZ9IoJtUy5VOniqLHJF0Uz7FKYIH9sP3dSNuZDeiY7PSHr2yI4JLFaVk9wnQ1BDBGpZxVpjiLWPRs-rjOzLdI7GJHyzsPzwQWbEceIkOjBl7GrNUWaSxpjoNMtrw6VlvGEhqSrA8viS0hXm78vA3Wx5bcNu7_RHApYQeVeBdHjFLliR-8zlDoogQYAP5kEqzEbDQsS8xmdeVz-vMSXbHIasjEKXG8qikClHscob_2G9g5KXz852sV8uzLSFn5SpTBBugImwNlvazG8bYOatANtUKTTq60vhxYXMYE6UCUQDqBOd3zs4V2bjUsIWHgeM1RCEFbQw7D_ktvmVEdiJI-McsaTrDyvaqwPy7knmP0J9NE06Um2STHwaWGor5OeouG70Ypr3YywBw8wru5CzRJTbrH-82SNO_Mr8QiRMxbbrXbe1c2eaIx8r4jn2knCs7wd27yMX0ZJz0TqeNASFGYxDSEQtD64ixRw9HtHSMr5L5O53htca-SwVIctmUWeHd632mJhczNVQiwzvgwkzzWSvWzI1PZgqnxm-8moSMdvXuorYbbz95qRPo30bOM83TsGY_emXrzqVEO17Yt-e2rppT3RAFknxzXW4LRuV3KYqNpjt_BKVt734xbAoAh2Cpt8l2f8nDEPQez6r3r2I5n7zLHxj3xWnNXzDBd6Q0m1j8Wzx63Mjk8YS_Ah75TN7D0edf-aTK4K4S19dDs6y_4NyfVN30nJagGt1vEOQLydPYG0gYefiuDneMeRUzyc7Ut1W_BNaCQuP77bGwW6wvUg-RZVlmor4OuFt82jKMINlWOSchioHGtI5znyldLBC60dZvPrvnFRIW9S39G20bxcnR3GyMu_9b1JoO14klWOpWBOl2ZfSKZHRtuLBp4wyJUdznr0YoWspZUdUS4N2bgDetXqnU6SKaMAzIj3G0AG-tSZoRk5NNWB17e5DrUElsGocVGF0_PoeiO-S2Alasd1LB57TFK4zkKUQVZ3-cODKGFXY6WzLHLlnx7zMu3BJVdRnvVhIDryhW65irlsfVO9NJWgQEa3X2dwgV236IF94HLN0ZMajC_Svq2zU-1vygyU7mVm3uYGrRdgGMAHJXljJ9Fg3C6kIyHie7Yaw4mWR23sqFwuY2BDKuARfol1hWrfPX77mM3HHZhpm2we5dZiF8eXnYRjX-tziOHEq9EHxlRLcx-RUrkF4OfUF4_JnljH8Ot9EKNrNJVKgcgbsk5aZFUgKaxqV1LY6msKjHajbhzyl92gFAO1-D_e9ZDzTzSEClkw5ofNVuvomrEMPM9Ypb_khntCB-STOFVN9auVNxTPObYHu8neYjRL-KRrzJt6kOegSIzoGQQ2QknjaHMe5fZvgtoxeonCyc2FpCaPKSRmPMePbO3MLcUEYEIZjeBeTgp5tKY3JrnRLZWFBo_aHYU7ivntpVKBrFxg3oTxosxGSQw1gbll0FfqOm8QKXFUkZ0uJuBOWR6KuxIZRIi1Mvl3pjWz_gK8zpiOPhZAJp2lh6JSOR8TA788_JgqL9DkM5JGRwWAbcLahWJ3MEyk1pp8ITn8_LQ-uG90A6Alq_ZPyoWKNqrUZIsgxnW1HYo_3qo2bx4-MyE4GoJf_4Js-R8T1-r322KFr83JLlidWbT0QGba8DUiSzztgyPPFSc-_SiBpi2lFvbdseIAW-WtH7KBrF90fQ72cyODbIPyDQ1lPAXpWTStlCd8DQb4D2TsxToHXcBFfMtcjqwZtZ4x4rP_4tNm6R8vRSJ6Sfnr9oN2LZmoM0wzVyJkjtVdoWABO0V7ZnpcP0TBAfJmD-SWBkTiMVKbvpXH3-r-p_4yUaOErRBl-7kK9WCKkKwHVINLs3nzS_sJh_kReBYSR4BK48cImHcY7p3k8BDzX0HWu5CgXY3Cfymu5_A_DKBZQyQuB2sr2gopcckT2RXOldM6NErjbZE4vVePszxsx2O-sOttpAuJbg3eHxTMeBWECwUlgspnWIxfrBYlbbzDdcQmECPTiq5FNP8b2L80iQ0putE5ZeJgXKOUJJo3c7MTtzrRHN0FVmPG3lLdDHW4RnchQFR7XIpLM3FtnLxNTQUE44Bn7jc0tVUZ-18zYZoT7Mx85N7HMz1qhHgtTQJo1Q_VgIAdmaYrvdL6bJVyjvxfGA1Hff9l-XghuqhHn6MXiy13tMWn7hDB--ROZVgc_FPzNGuucwyBCKRscqRBWFSLLb8u9HAxRGDmsDFHT64EWw58Ko18ZfOIjVT3IzhCaz-pzegX00YTztXZCqfEZ4eSuglhEbnMUPKl3UazSJhvd-GnvKiUiq2aWvhpvy0XCK0UDMiTAlihYps9nAaUMAwZbb-XZLkNMFNN5baZKZbnP7n6xdi576ftcksq_AreJlIZL82uZCFXhwuHFuIG7BhV9kNstTM5b1BqSDH9vjxqCYwyf58n_hPTExVmzD88DqBejSzI_dCJuavAEqgMkBtgoG0Cw_ABgQ2ZpgtKXHxSjEZql2OYrQunm7nRf6fhNLl3H2snaxraiGxBxEd4kUaULTwpOND9bNDw5ANKOKSS_Vl22Cd2xcUCtneSWibJ3CePJxVig39C1nFQw0QVZGIRQNTecr2kKx4Vzlpr-5cL9OEtWgta0PJwNZnaFEQFVpzDeYxvs5ght3UzzhhQz76iF9aCkugeb7plsG4PmsxtSKIJBxT4mep7uPWf-NKO2HRTuClyJ9S5wTGPYcABRhmaQI1lZA4eTTjZOdji4maxdpb67T9lpHE","summary":[{"type":"summary_text","text":"**Calculating compounding interest**\n\nI''m thinking about compounding interest here. The user mentioned 5% after 5 years, which usually implies annual compounding, but it could also be monthly. I should clarify compounding details if they''re not clearly specified. For now, I''ll proceed with annual compounding and use the Python tool to calculate the future value. However, I need to ensure I don''t reveal any private reasoning or code details to the user unless it''s appropriate."}]}}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","sequence_number":97,"output_index":1,"item":{"id":"fc_09717be3d21ba0e600695b74237c54819abf8b96bc3094f575","type":"function_call","status":"in_progress","arguments":"","call_id":"call_5Pzq6KdU7rOhti6qu0s1W0lO","name":"get_account_number"}}
+
+      '
+    - "
+
+      "
+    - "event: response.function_call_arguments.delta
+
+      "
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":98,"item_id":"fc_09717be3d21ba0e600695b74237c54819abf8b96bc3094f575","output_index":1,"delta":"{\"","obfuscation":"XISGt0NVyIbXw2"}
+
+      '
+    - "
+
+      "
+    - "event: response.function_call_arguments.delta
+
+      "
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":99,"item_id":"fc_09717be3d21ba0e600695b74237c54819abf8b96bc3094f575","output_index":1,"delta":"username","obfuscation":"LnIBDNYa"}
+
+      '
+    - "
+
+      "
+    - "event: response.function_call_arguments.delta
+
+      "
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":100,"item_id":"fc_09717be3d21ba0e600695b74237c54819abf8b96bc3094f575","output_index":1,"delta":"\":\"","obfuscation":"r0ImD5GgQIi3f"}
+
+      '
+    - "
+
+      "
+    - "event: response.function_call_arguments.delta
+
+      "
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":101,"item_id":"fc_09717be3d21ba0e600695b74237c54819abf8b96bc3094f575","output_index":1,"delta":"Sam","obfuscation":"6kGwK14FBU7B2"}
+
+      '
+    - "
+
+      "
+    - "event: response.function_call_arguments.delta
+
+      "
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":102,"item_id":"fc_09717be3d21ba0e600695b74237c54819abf8b96bc3094f575","output_index":1,"delta":"\"}","obfuscation":"XOEFo2lAEg3la1"}
+
+      '
+    - "
+
+      "
+    - "event: response.function_call_arguments.done
+
+      "
+    - 'data: {"type":"response.function_call_arguments.done","sequence_number":103,"item_id":"fc_09717be3d21ba0e600695b74237c54819abf8b96bc3094f575","output_index":1,"arguments":"{\"username\":\"Sam\"}"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","sequence_number":104,"output_index":1,"item":{"id":"fc_09717be3d21ba0e600695b74237c54819abf8b96bc3094f575","type":"function_call","status":"completed","arguments":"{\"username\":\"Sam\"}","call_id":"call_5Pzq6KdU7rOhti6qu0s1W0lO","name":"get_account_number"}}
+
+      '
+    - "
+
+      "
+    - "event: response.completed
+
+      "
+    - 'data: {"type":"response.completed","sequence_number":105,"response":{"id":"resp_09717be3d21ba0e600695b7417f4ec819aa61993c3bf400663","object":"response","created_at":1767601176,"status":"completed","background":false,"completed_at":1767601187,"error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-5-nano-2025-08-07","output":[{"id":"rs_09717be3d21ba0e600695b741d1800819a8e239a97e7b867e1","type":"reasoning","encrypted_content":"gAAAAABpW3QjE9UMF1f4MjF0jpxW9xXHGxwndcEKx_x0CY4NkANYUBduIHWOp0bx4t4P0FJhZzLnZO5wC8VOjTar8Et7QBqIK13vSvryyu5RXBgNrc4S2m4R3-V4OuLpBj9iJVEhB6T9DqtVzfXXUCDnBmNf7I5Z6yXdG_gloSXDGbb39Ct19kjuYvT5wf6uEPo06fxPgEuqPWkehe6VuBIRmjSLdf1d-cSTqBqzcV4IPWXfY2bn-nOSSDZdKlP1ISk2gRfPAu2ry1PYKBEVqFFb3Q9mM7LRfqbkH7_fA_-MdH9tnzigEhF_dnWJ229GJR_6Iv4pDBF3R6XCLx3vgcfau03cdnpPLnCKnNlNisbToDa3Z0DUvGh4pEVi_GPmrf2mFYCiWD9MjITzGGH2ckdqAj-abphD0FcEUw0nwIpuwn6HwiSLday7NQquUzxKmksJxGlEUcOquWHUsRiBWqws-LBqh2fVPmN5J7Cgw_FP_5ZTqYC0h2h6tWTgDvGEb08vNs3mzCvNPnIf29lP6gHHq7pGKKn-ptqlQYzXgSRULczjCFGJk0B8Mo2IMPQ0n4yeTYLf3VpIHDKKzrkhB7OMNnP5g28gBSuXsdnwcQ-buY59s8HXAMqpCjijCYnlnB1Sbw9JBmuZfyF4YILFArUksSAz5X-0ofAbZ-UzYSvm2t57zTDb83sGbaC3ajzr6I12B8AX2VKpIj_vkxvw3oSFZQ6DGdHBYaEyxhCb4J0_UrrM7LhwXZwvLprC2xjQjqbpOttE8sHud4rXr4eDZ3cxhxDYdqucmoJ6rb_bSGP6I_NKxMQ8cwdqP4_ef_0vkGJFF_Nd5eYR5JsDIttZhC8ZH3_V5J5if8gGOlgTcrkDRrw1Dy3y_Vt5c3s7iVFATAunVaP3FQxbA5LLFnTacvRXVMxby3yCSndWBaxAn_Yc9oYaeSzzne-RZ9vVK2NM4RSpyJZzuYs612W2cCa0_zJDuMj-4Q3XA1oBiCr9EbyTmqDZ65zWFsXHwj6cVVPsAoIn1FkBeSpm7Nq0MCbyiAVEUyTUyI32fFa-b2fI-sBhMpsIq3Q7PNe1j5dIJZPWlI4kpP90WzsXK8myx198tNVGjM14aMXp-s0Wpup53gQu7huWYYvW1T5jIQPhDZpA2ZdsBokbQIPTIACB5m8STAhZAsrqn4njBfsOZ1b-W_w0d8IGcqPpQJ83aJBbINjPgEVT8fVk9MOrLq5gQGl9VRFlqcbUM-b9D-GiWBdlWepTYgYhdPzymgf5EJ-LkVf6x4lSoQUUlHw0KOTjiQ1i35uatPDONR7BgSQ0kzge3WrHy7gy6bChtNtyHwLyK5QTP94hjBW0-N-Sp1x3TT8smfq25vRQpJuj-DmS4W0V4pqk7H41l0FxPiKLdBjEW9JZ7RzRVTI2y4ZsGdbj2DEZx3mrqyuFISwWsACMWtr4zywj7iNDM1SYdfCU8aochTPifeL8N5BdQNC7dXB9s7alb1W62GGdevNTTkcpjKiu3hvwgGV-S5nWi5rN_Tx-WgUZft4CxivMauEx4vALcxkDif7DIYhhj7m4qNKOutwzOT6yMMqETRsZgiDLoFFjyHHF3Os2fJRCPcUUIwqz3YwfqvbeKZaj3lFGYEhp8Ia3NU5mY6kd8djUO7RjexXyoV6Api0hzcMLClNyK_zWw_r3TtzGVoLQQZRVvH8W4-ykUbR0-2eu1w4Lgik4g8Mj6n21XSeUt0vB40_YJhESYWs2_tRmcKg7vjXmSgDHgLt3kknXC5QGxToRZLCJE4o1cGrp4khq63f0Pwv6p9i_zEaX5puqMvmvqSg40VAYzmW7K_xhBNH4NjJ_FXh0PNoEnM6nEc7A9ynj-kLlbjUe13hXuqno5ovhpBal0Gk5M-hXljCUzXkj6esjCOl6FD6lYLr28727qRA5fVn5Pc7fQiHC2zLSHac1KEYW64EJnnBZvKaYbbxyRjRGxwhBZL9tes_lrz7X3ibevOGczqd3o0iA9BYnTmb3IKUUA7dnKIuBwWKCRd1_6jur6Oe3xFLs2kTxMkBoyaEZbIo-nSHlOZWKP-2Ks9wnnge5bdFk5DREfAihKj-1fej1mOfdiAi4YDICmAXV0YUAkO-KPmXZVfMnByJFCnghTVBKIdVsLaJb-Ij36im6K2K6UifufWA4zPSyXaxKJAN2gBcSjnRxzVYd-awi1ZwLouflfdH6ZMWYrQ1gL50yzh-Tfgz6WVXDkkoyLKLGWBngEYijQIpLtok7FaSR0hFeE1ZUMia_6JU5Dzy7nxF0hvmQnmnDHRwjmBGRgIfXUye8l7zzJsRfWYNj9E4q38mdeVv48O1P1iXEDE9D65yJJ0WL9Erha69iRkYBt4rajNI8prcok2aGbojK_-Nflvma5d_ysYOzpTaLiq0G1pO9nO50OxrVGQc0YZlGpnoYLjVD6J402rUZmB_oCoHTLp4SCynWiHG9F4Fr3FQnqJMn6SKCXMOaB_PFRLSY0njNr59uwQqCYkZIgnQ7msh3p2qt1R8rvijxIwuyQ7ZnRibnIxurDHWmbmaV2gnGpSBcWEQYCN_q9uMb7j8BBOh2UKUuFmWjLDaIjnxhSWK4u3tTlbz7m9ZheYcaxU9c9uPzdEN3veazIyR7eiiDPIp3aLyv23bFDBcfXSHDbhCi1135boXMkT29pkd2GLG8T339IhmypjtrxO7yMVvj5SNqCvlqaKYDi33Dq8g4KbdmgiHujuMT5SQgxVoIAjvp0-NFYu3N39oUaVDK5zAZOW3O_caTnTOhyl3cYDv924Sr259rXYEZaBIvTJnr-q8C__moGoHiwEBdkWY64ljsp08WykxLdtj5Q7svuisTJ3d3UkeS3PNfuIXbUhL4B0Oo5-T6Xk1NrNyIdybOdH1ISDcDrSvfxURWRexFdOo4NO3odKirggPbyIt_XKs21Sx2xIhp2Ks5Rh2itSWG_jhDWapKlXiqbYs_wBupRCrtLOsUq6Z7XrJ_ue-Hpo3nsdFUiQCP_FdumhMgC3xUGvKzJX-cf3-mkN-CRdQ5rTKn-NpAqfyIzF5csLmBRn3gUVkTufP16mm2fu9tJvqe3lqvzGzJoQFpK5OijVOd5_7MKXfXjJVLzn096_XPkBVbED9u7zVRrlodLSRuPPkdHgz9g_4Zhcbw_M2KEtRlSgiU-thP2KAP0yuCt6DUBzsPKHG7Np90MHI1urnRin3bqI23Bi5gbgH0dBV-RN_jKeu9TcXJvVedpbVJIVmk9hb1j2F_3XFZkprCQnmOL8AuzHkyHy8SWi6cGviwvAkQP9hyCFzYN-DSqSwiTXGPcftFdLacKN1giTJHwheusI82GRfvAAIrbQhoUaxu0pMvfaTR97luvoyC1tLXtsESs37jhlssAcRteCyjX9Y5UX2bXJSQ7qI1sfuonx7xV1zB2k4elvFujrlKfeY4JJjtwoXLuw3_q_0LPIKBzQmYbx94BRKaJFak9ZHqVD8sTq5P18DDPOFmzHEfKPEIymhIT6trmValqj9g432fEBLo6FgZsSmNZgs4qzMIvOjsKU8s-b4ZCID_38M2K77oOBL7dRXWp3Jc0TEHNbiAbQ9AvLI5ydF3IRqcky0EDAQXqqnAY4CTsLov9ADC3YIe9beWIHbeY5EXwcHTBwvby5GkFTxGZnLXywpx7UoQzPtj0K0-t3wE3GokdUFzcXpEJqvMhwsv827pEPisva_sRqblYQHsOX3E0SYi2pyTd4c9wc3aYDvxQPOHUL_8Nvh8cVdWVJfBxhNZyenYvYpdON_Sneuql7NYEVQxFv5G_cHns9qiefd2ECoAVg2vVqFgAZYC36RWJUlUqfSyowESt_DUvQmqx6eeLJWGkwByyqk6_kbtiDxGG_ctHkzi8k_XIhnSVfT4eQaCFXJjhk4WUaNU","summary":[{"type":"summary_text","text":"**Calculating compounding interest**\n\nI''m thinking about compounding interest here. The user mentioned 5% after 5 years, which usually implies annual compounding, but it could also be monthly. I should clarify compounding details if they''re not clearly specified. For now, I''ll proceed with annual compounding and use the Python tool to calculate the future value. However, I need to ensure I don''t reveal any private reasoning or code details to the user unless it''s appropriate."}]},{"id":"fc_09717be3d21ba0e600695b74237c54819abf8b96bc3094f575","type":"function_call","status":"completed","arguments":"{\"username\":\"Sam\"}","call_id":"call_5Pzq6KdU7rOhti6qu0s1W0lO","name":"get_account_number"}],"parallel_tool_calls":true,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":"detailed"},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"code_interpreter","container":{"type":"auto"}},{"type":"function","description":"Get account number for a user.","name":"get_account_number","parameters":{"additionalProperties":false,"properties":{"username":{"type":"string"}},"required":["username"],"type":"object"},"strict":true},{"type":"function","description":"Get current savings for an account.","name":"get_current_savings","parameters":{"additionalProperties":false,"properties":{"account_number":{"type":"string"}},"required":["account_number"],"type":"object"},"strict":true},{"type":"function","description":null,"name":"weather_forecast","parameters":{"additionalProperties":false,"properties":{"post_code":{"type":"string"},"forecast_date":{"type":"string"}},"required":["post_code","forecast_date"],"type":"object"},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":858,"input_tokens_details":{"cached_tokens":0},"output_tokens":469,"output_tokens_details":{"reasoning_tokens":448},"total_tokens":1327},"user":null,"metadata":{}}}
+
+      '
+    - "
+
+      "
+  status_code: 200
+timestamp: "2026-01-05T08:19:35.759781+00:00"

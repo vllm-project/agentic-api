@@ -1,0 +1,82 @@
+filename: 2026-01-02-019b7f5d-34f9-7260-847e-3de48265b21f
+request:
+  body:
+    input: What is the capital of France?
+    model: gpt-5-nano
+    stream: false
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br, zstd
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "78"
+    content-type: application/json
+    user-agent: OpenAI/Python 2.13.0
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019b7f5d-34f9-7260-847e-3de48265b21f
+response:
+  body:
+    background: false
+    billing:
+      payer: developer
+    completed_at: 1767368375
+    created_at: 1767368374
+    error: null
+    id: resp_0da71a60e97d4f1f006957e6b6741c8193857837b5aa2d535f
+    incomplete_details: null
+    instructions: null
+    max_output_tokens: null
+    max_tool_calls: null
+    metadata: {}
+    model: gpt-5-nano-2025-08-07
+    object: response
+    output:
+      - id: rs_0da71a60e97d4f1f006957e6b6cf88819394c0be78cda98736
+        summary: []
+        type: reasoning
+      - content:
+          - annotations: []
+            logprobs: []
+            text: Paris.
+            type: output_text
+        id: msg_0da71a60e97d4f1f006957e6b7c9b48193bc6b5412467273c9
+        role: assistant
+        status: completed
+        type: message
+    parallel_tool_calls: true
+    previous_response_id: null
+    prompt_cache_key: null
+    prompt_cache_retention: null
+    reasoning:
+      effort: medium
+      summary: null
+    safety_identifier: null
+    service_tier: default
+    status: completed
+    store: true
+    temperature: 1.0
+    text:
+      format:
+        type: text
+      verbosity: medium
+    tool_choice: auto
+    tools: []
+    top_logprobs: 0
+    top_p: 1.0
+    truncation: disabled
+    usage:
+      input_tokens: 13
+      input_tokens_details:
+        cached_tokens: 0
+      output_tokens: 136
+      output_tokens_details:
+        reasoning_tokens: 128
+      total_tokens: 149
+    user: null
+  headers:
+    connection: keep-alive
+    content-type: application/json
+  status_code: 200
+timestamp: "2026-01-02T15:39:33.497910+00:00"

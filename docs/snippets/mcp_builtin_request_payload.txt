@@ -1,0 +1,20 @@
+```json
+{
+  "model": "meta-llama/Llama-3.2-3B-Instruct",
+  "stream": true,
+  "input": [{"role": "user", "content": "Find migration notes in docs."}],
+  "tools": [
+    {
+      "type": "mcp",
+      "server_label": "github_docs",
+      "allowed_tools": ["search_docs"],
+      "require_approval": "never"
+    }
+  ],
+  "tool_choice": {
+    "type": "mcp",
+    "server_label": "github_docs",
+    "name": "search_docs"
+  }
+}
+```

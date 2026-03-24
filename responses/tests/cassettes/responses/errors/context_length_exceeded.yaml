@@ -1,0 +1,31 @@
+filename: 2026-01-02-019b7f62-1b31-7e93-b5aa-cca0b06519e8
+request:
+  body:
+    input: Where is Paris?
+    model: gpt-5-nano
+    stream: false
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br, zstd
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "2250048"
+    content-type: application/json
+    user-agent: OpenAI/Python 2.13.0
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019b7f62-1b31-7e93-b5aa-cca0b06519e8
+response:
+  body:
+    error:
+      code: context_length_exceeded
+      message: Your input exceeds the context window of this model. Please adjust your input and try again.
+      param: input
+      type: invalid_request_error
+  headers:
+    connection: keep-alive
+    content-length: "228"
+    content-type: application/json
+  status_code: 400
+timestamp: "2026-01-02T15:44:54.577832+00:00"

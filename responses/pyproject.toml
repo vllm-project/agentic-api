@@ -1,0 +1,190 @@
+# See https://gitlab.liris.cnrs.fr/pagoda/tools/mkdocs_template/-/blob/master/user_config/pyproject.toml
+
+# -----------------------------------------------------------------------------
+# Pytest configuration
+# https://docs.pytest.org/en/latest/customize.html?highlight=pyproject#pyproject-toml
+
+[tool.pytest.ini_options]
+timeout = 90
+log_cli = true
+asyncio_mode = "auto"
+# log_cli_level = "DEBUG"
+addopts = "--doctest-modules -vv -ra --strict-markers --no-flaky-report --durations=200 --durations-min=0.05"
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning:tensorflow.*",
+    "ignore::DeprecationWarning:tensorboard.*",
+    "ignore::DeprecationWarning:matplotlib.*",
+    "ignore::DeprecationWarning:flatbuffers.*",
+    # "ignore::UserWarning",
+    # note the use of single quote below to denote "raw" strings in TOML
+    # 'ignore:function ham\(\) is deprecated:DeprecationWarning',
+]
+markers = ["onprem: Tests that deploys on-prem models and requires SkyPilot"]
+
+# -----------------------------------------------------------------------------
+# Coverage configuration
+# https://coverage.readthedocs.io/en
+
+[tool.coverage.run]
+source = ["vllm_responses"]
+relative_files = true
+concurrency = ["multiprocessing", "thread", "greenlet"]
+parallel = true
+plugins = ["Cython.Coverage"]
+
+# -----------------------------------------------------------------------------
+# Ruff configuration
+# https://docs.astral.sh/ruff/
+
+[tool.ruff]
+line-length = 99
+indent-width = 4
+target-version = "py312"
+extend-include = [".pyi?$", ".ipynb"]
+extend-exclude = ["archive/*"]
+respect-gitignore = true
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Enable auto-formatting of code examples in docstrings. Markdown,
+# reStructuredText code/literal blocks and doctests are all supported.
+docstring-code-format = true
+
+[tool.ruff.lint]
+# 1. Enable flake8-bugbear (`B`) rules, in addition to the defaults.
+select = ["E1", "E4", "E7", "E9", "F", "I", "W1", "W2", "W3", "W6", "B"]
+
+# 2. Avoid enforcing line-length violations (`E501`)
+ignore = ["E501"]
+
+# 3. Avoid trying to fix flake8-bugbear (`B`) violations.
+unfixable = ["B"]
+
+# 4. Ignore `E402` (import violations) in all `__init__.py` files, and in selected subdirectories.
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["E402"]
+"**/{tests,docs,tools}/*" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["vllm_responses"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Allow default arguments like, e.g., `data: List[str] = fastapi.Query(None)`.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Path",
+    "fastapi.Query",
+]
+
+# -----------------------------------------------------------------------------
+# setuptools
+# https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html
+
+[build-system]
+requires = ["setuptools>=62.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vllm-responses"
+description = "FastAPI gateway exposing an OpenAI-style Responses API in front of an OpenAI-compatible upstream (e.g. vLLM)."
+readme = "README.md"
+requires-python = ">=3.12"
+# keywords = ["one", "two"]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+classifiers = [ # https://pypi.org/classifiers/
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3 :: Only",
+    "Intended Audience :: Information Technology",
+    "Operating System :: Unix",
+]
+# Sort your dependencies https://sortmylist.com/
+# Dependency versioning:
+# - We generally pin to a compatible range for PyPI distribution (avoid over-constraining downstream envs).
+# - We use `responses/uv.lock` for fully reproducible installs in CI/dev.
+dependencies = [
+    "aiosqlite~=0.22",
+    "fastapi[standard]~=0.115",
+    "gunicorn>=22.0",
+    "httpx~=0.28",
+    "jsonschema~=4.23",
+    "loguru~=0.7",
+    "orjson~=3.11",
+    "pottery~=3.0",
+    "prometheus-client~=0.21",
+    "psycopg[binary]~=3.2",
+    "pydantic-ai-slim[openai,google,anthropic,groq,mistral,cohere,bedrock,huggingface,duckduckgo,tavily,mcp,fastmcp,retries,exa]~=1.34",
+    "pydantic-extra-types[pycountry]~=2.10",
+    "pydantic-settings~=2.10",
+    "pydantic[email,timezone]~=2.11.0",                                                                                              # https://github.com/pydantic/pydantic/issues/8271, pydantic 2.12.0a1 has an issue with sqlmodel (ValueError: <class 'pydantic.types.AwareDatetime'> has no matching SQLAlchemy type)
+    "pyyaml~=6.0",
+    "redis[hiredis]~=5.3",
+    "SQLAlchemy~=2.0",
+    "sqlmodel~=0.0.20",
+    "starlette~=0.41",
+    "tenacity~=9.1",
+    "typing_extensions~=4.14",
+    "uuid-utils~=0.9",
+    "uuid7~=0.1",
+    "uvicorn[standard]~=0.28",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+docs = [
+    "mkdocs~=1.6",
+    "mkdocs-material~=9.6",
+    "pymdown-extensions~=10.14",
+]
+lint = ["ruff~=0.12", "mdformat~=1.0", "mdformat-mkdocs~=5.1"]
+tracing = [
+    "opentelemetry-exporter-otlp~=1.36.0",
+    "opentelemetry-instrumentation-fastapi~=0.57b0",
+    "opentelemetry-instrumentation-httpx~=0.57b0",
+    "opentelemetry-instrumentation-sqlalchemy~=0.57b0",
+    "opentelemetry-sdk~=1.36.0",
+]
+test = [
+    "coverage~=7.10",
+    "flaky~=3.8",
+    "locust~=2.39.0",       # Locust 2.40 causes: asyncio.run() cannot be called from a running event loop
+    "pytest-asyncio>=0.23",
+    "pytest-timeout~=2.3",
+    "pytest~=8.3",
+]
+build = [
+    "build",
+    "twine",
+] # https://realpython.com/pypi-publish-python-package/#build-your-package
+all = [
+    "vllm-responses[docs,lint,tracing,test,build]", # https://hynek.me/articles/python-recursive-optional-dependencies/
+]
+
+[project.scripts]
+vllm-responses = "vllm_responses.entrypoints.serve:main"
+vllm = "vllm_responses.entrypoints.vllm_cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "vllm_responses.version.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["python"]
+
+[tool.setuptools.package-data]
+vllm_responses = [
+    "tools/code_interpreter/bin/**",
+]
+
+[tool.setuptools.exclude-package-data]
+vllm_responses = [
+    "tools/code_interpreter/node_modules/**",
+    "tools/code_interpreter/pyodide-*.tar.bz2",
+]

@@ -1,0 +1,645 @@
+filename: 2026-02-22-019c84b2-d950-7611-b3da-89e88aafbdb0
+request:
+  body:
+    input:
+      - content: "Use web_search to do three separate searches before answering. Search 1: latest inflation rate in US. Search 2: current 10-year treasury yield. Search 3: current federal funds rate target range. After all three searches, summarize in 3 bullet points."
+        role: user
+    max_tool_calls: 1
+    model: gpt-5-mini
+    store: false
+    stream: true
+    tool_choice: required
+    tools:
+      - type: web_search
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "415"
+    content-type: application/json
+    user-agent: OpenAI/Python 2.16.0
+    x-run-id: max-tool-calls-20260222-websearch-v1
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019c84b2-d950-7611-b3da-89e88aafbdb0
+response:
+  headers:
+    connection: keep-alive
+    content-type: text/event-stream; charset=utf-8
+  sse:
+    - "event: response.created
+
+      "
+    - 'data: {"type":"response.created","response":{"id":"resp_091e54b077d3ea7701699acd87a34c819a933572c9f7068ae6","object":"response","created_at":1771752839,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":1,"model":"gpt-5-mini-2025-08-07","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"required","tools":[{"type":"web_search","filters":null,"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - "
+
+      "
+    - "event: response.in_progress
+
+      "
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_091e54b077d3ea7701699acd87a34c819a933572c9f7068ae6","object":"response","created_at":1771752839,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":1,"model":"gpt-5-mini-2025-08-07","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"auto","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"required","tools":[{"type":"web_search","filters":null,"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_091e54b077d3ea7701699acd880154819ab88d79236336dd14","type":"reasoning","summary":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_091e54b077d3ea7701699acd880154819ab88d79236336dd14","type":"reasoning","summary":[]},"output_index":0,"sequence_number":3}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"ws_091e54b077d3ea7701699acd8bba34819a951d67b4d691bf97","type":"web_search_call","status":"in_progress"},"output_index":1,"sequence_number":4}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.in_progress
+
+      "
+    - 'data: {"type":"response.web_search_call.in_progress","item_id":"ws_091e54b077d3ea7701699acd8bba34819a951d67b4d691bf97","output_index":1,"sequence_number":5}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.searching
+
+      "
+    - 'data: {"type":"response.web_search_call.searching","item_id":"ws_091e54b077d3ea7701699acd8bba34819a951d67b4d691bf97","output_index":1,"sequence_number":6}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.completed
+
+      "
+    - 'data: {"type":"response.web_search_call.completed","item_id":"ws_091e54b077d3ea7701699acd8bba34819a951d67b4d691bf97","output_index":1,"sequence_number":7}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"ws_091e54b077d3ea7701699acd8bba34819a951d67b4d691bf97","type":"web_search_call","status":"completed","action":{"type":"search","queries":["US latest inflation rate January 2026 CPI BLS","current 10-year Treasury yield today February 22 2026 10-year yield","current federal funds target rate February 22 2026 federal reserve target range"],"query":"US latest inflation rate January 2026 CPI BLS"}},"output_index":1,"sequence_number":8}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_091e54b077d3ea7701699acd8ddf3c819a90cbe71fa7a65cd0","type":"reasoning","summary":[]},"output_index":2,"sequence_number":9}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_091e54b077d3ea7701699acd8ddf3c819a90cbe71fa7a65cd0","type":"reasoning","summary":[]},"output_index":2,"sequence_number":10}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"ws_091e54b077d3ea7701699acd90fb00819a887fb08b431143ca","type":"web_search_call","status":"in_progress"},"output_index":3,"sequence_number":11}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.in_progress
+
+      "
+    - 'data: {"type":"response.web_search_call.in_progress","item_id":"ws_091e54b077d3ea7701699acd90fb00819a887fb08b431143ca","output_index":3,"sequence_number":12}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.searching
+
+      "
+    - 'data: {"type":"response.web_search_call.searching","item_id":"ws_091e54b077d3ea7701699acd90fb00819a887fb08b431143ca","output_index":3,"sequence_number":13}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.completed
+
+      "
+    - 'data: {"type":"response.web_search_call.completed","item_id":"ws_091e54b077d3ea7701699acd90fb00819a887fb08b431143ca","output_index":3,"sequence_number":14}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"ws_091e54b077d3ea7701699acd90fb00819a887fb08b431143ca","type":"web_search_call","status":"completed","action":{"type":"search","queries":["BLS CPI January 2026 percent change CPI-U January 2026 Bureau of Labor Statistics press release","Federal Reserve federal funds target range January 28 2026 FOMC statement target range site:fred.gov OR site:fed.gov","10-year Treasury yield today Feb 22 2026 Treasury.gov daily treasury yield curve rate 10 year"],"query":"BLS CPI January 2026 percent change CPI-U January 2026 Bureau of Labor Statistics press release"}},"output_index":3,"sequence_number":15}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_091e54b077d3ea7701699acd924a10819a929cfc11630213a9","type":"reasoning","summary":[]},"output_index":4,"sequence_number":16}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_091e54b077d3ea7701699acd924a10819a929cfc11630213a9","type":"reasoning","summary":[]},"output_index":4,"sequence_number":17}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":5,"sequence_number":18}
+
+      '
+    - "
+
+      "
+    - "event: response.content_part.added
+
+      "
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","output_index":5,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":19}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"- US inflation (","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"","output_index":5,"sequence_number":20}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"CPI","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"dQKxxtWtPjaM5","output_index":5,"sequence_number":21}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":", year-over-year):","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"zjda0CPFfp8McE","output_index":5,"sequence_number":22}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" about 2.36","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"2SRRy","output_index":5,"sequence_number":23}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"% for January 202","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"gPe1X5b8sOudxmv","output_index":5,"sequence_number":24}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"6 (Cleveland Fed","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"","output_index":5,"sequence_number":25}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" nowcast; updated ","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"zhefEoOu01sNr2","output_index":5,"sequence_number":26}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"02/12/202","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"FjWqRv8","output_index":5,"sequence_number":27}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"6). ","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"fKoNQ3knEgu1","output_index":5,"sequence_number":28}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"([clevelandfed.org](https://www.clevelandfed.org/indicators-and-data/inflation-nowcasting?utm_source=openai))  \n- 10","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"uy5fMsC4QVGc","output_index":5,"sequence_number":29}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.annotation.added
+
+      "
+    - 'data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","end_index":221,"start_index":112,"title":"Inflation Nowcasting","url":"https://www.clevelandfed.org/indicators-and-data/inflation-nowcasting?utm_source=openai"},"annotation_index":0,"content_index":0,"item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","output_index":5,"sequence_number":30}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"‑year Treasury yield","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"W1hCkR7t1S71","output_index":5,"sequence_number":31}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":": roughly 4.","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"r0Fb","output_index":5,"sequence_number":32}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"02% (reported intr","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"6UesSkXpmDBd71","output_index":5,"sequence_number":33}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"aday low of ~4","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"si","output_index":5,"sequence_number":34}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":".","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"iTjcfSWX6OnTkw4","output_index":5,"sequence_number":35}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"017% in recent trading","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"dsvo5wJynx","output_index":5,"sequence_number":36}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"; market quotes around ","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"7sKjCe01a","output_index":5,"sequence_number":37}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"4.0–4","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"wkrT5b45NPA","output_index":5,"sequence_number":38}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":".1%).","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"PA3m4tmRkvI","output_index":5,"sequence_number":39}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" ","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"WfeHvuOLMx0PBqA","output_index":5,"sequence_number":40}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"([barrons.com](https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai)","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"g1hEGdrZfPBVE","output_index":5,"sequence_number":41}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":")  \n- Federal funds","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"o7QP7P7MLzQwo","output_index":5,"sequence_number":42}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.annotation.added
+
+      "
+    - 'data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","end_index":465,"start_index":349,"title":"Treasury Yields Fall to 2026 Lows as Investors Flock to Bonds","url":"https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai"},"annotation_index":1,"content_index":0,"item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","output_index":5,"sequence_number":43}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" target range (FOM","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"w5048oHqN6K58d","output_index":5,"sequence_number":44}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"C): 3.","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"tFeP5Itau9","output_index":5,"sequence_number":45}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"50% – 3","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"7yIAnx3GH","output_index":5,"sequence_number":46}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":".75% (from","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"q9ZwgE","output_index":5,"sequence_number":47}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" the January 27–","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"","output_index":5,"sequence_number":48}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"28,","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"8D3QEChuk2Fx5","output_index":5,"sequence_number":49}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" 2026 FOM","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"GSxbSVb","output_index":5,"sequence_number":50}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"C actions/minutes).","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"CA6oNpls7HA4L","output_index":5,"sequence_number":51}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" ","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"TgPF7LxZSXecN97","output_index":5,"sequence_number":52}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"([ft.com](https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai))\n\nIf you want","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"kRaTav","output_index":5,"sequence_number":53}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.annotation.added
+
+      "
+    - 'data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","end_index":665,"start_index":572,"title":"Federal Reserve officials warn progress towards inflation goal will be ''uneven''","url":"https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai"},"annotation_index":2,"content_index":0,"item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","output_index":5,"sequence_number":54}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":", I can fetch the","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"BPsyQp7SfiGnsJ9","output_index":5,"sequence_number":55}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" official BLS release,","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"Gu61tOLyf4","output_index":5,"sequence_number":56}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" the Treasury daily yield curve","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"g","output_index":5,"sequence_number":57}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" page, and the Fed","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"FJdrWBYm36rB0K","output_index":5,"sequence_number":58}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"’s policy statement directly (","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"ZI","output_index":5,"sequence_number":59}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"they’ll show exact timestamps","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"qcE","output_index":5,"sequence_number":60}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":") and update these numbers","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"tHRZ7p","output_index":5,"sequence_number":61}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" to the precise timestamp you prefer","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"duJzm7I1lWfu","output_index":5,"sequence_number":62}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":".","item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"obfuscation":"TIjvcf2VVkudndE","output_index":5,"sequence_number":63}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.done
+
+      "
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","logprobs":[],"output_index":5,"sequence_number":64,"text":"- US inflation (CPI, year-over-year): about 2.36% for January 2026 (Cleveland Fed nowcast; updated 02/12/2026). ([clevelandfed.org](https://www.clevelandfed.org/indicators-and-data/inflation-nowcasting?utm_source=openai))  \n- 10‑year Treasury yield: roughly 4.02% (reported intraday low of ~4.017% in recent trading; market quotes around 4.0–4.1%). ([barrons.com](https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai))  \n- Federal funds target range (FOMC): 3.50% – 3.75% (from the January 27–28, 2026 FOMC actions/minutes). ([ft.com](https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai))\n\nIf you want, I can fetch the official BLS release, the Treasury daily yield curve page, and the Fed’s policy statement directly (they’ll show exact timestamps) and update these numbers to the precise timestamp you prefer."}
+
+      '
+    - "
+
+      "
+    - "event: response.content_part.done
+
+      "
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","output_index":5,"part":{"type":"output_text","annotations":[{"type":"url_citation","end_index":221,"start_index":112,"title":"Inflation Nowcasting","url":"https://www.clevelandfed.org/indicators-and-data/inflation-nowcasting?utm_source=openai"},{"type":"url_citation","end_index":465,"start_index":349,"title":"Treasury Yields Fall to 2026 Lows as Investors Flock to Bonds","url":"https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai"},{"type":"url_citation","end_index":665,"start_index":572,"title":"Federal Reserve officials warn progress towards inflation goal will be ''uneven''","url":"https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai"}],"logprobs":[],"text":"- US inflation (CPI, year-over-year): about 2.36% for January 2026 (Cleveland Fed nowcast; updated 02/12/2026). ([clevelandfed.org](https://www.clevelandfed.org/indicators-and-data/inflation-nowcasting?utm_source=openai))  \n- 10‑year Treasury yield: roughly 4.02% (reported intraday low of ~4.017% in recent trading; market quotes around 4.0–4.1%). ([barrons.com](https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai))  \n- Federal funds target range (FOMC): 3.50% – 3.75% (from the January 27–28, 2026 FOMC actions/minutes). ([ft.com](https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai))\n\nIf you want, I can fetch the official BLS release, the Treasury daily yield curve page, and the Fed’s policy statement directly (they’ll show exact timestamps) and update these numbers to the precise timestamp you prefer."},"sequence_number":65}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":221,"start_index":112,"title":"Inflation Nowcasting","url":"https://www.clevelandfed.org/indicators-and-data/inflation-nowcasting?utm_source=openai"},{"type":"url_citation","end_index":465,"start_index":349,"title":"Treasury Yields Fall to 2026 Lows as Investors Flock to Bonds","url":"https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai"},{"type":"url_citation","end_index":665,"start_index":572,"title":"Federal Reserve officials warn progress towards inflation goal will be ''uneven''","url":"https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai"}],"logprobs":[],"text":"- US inflation (CPI, year-over-year): about 2.36% for January 2026 (Cleveland Fed nowcast; updated 02/12/2026). ([clevelandfed.org](https://www.clevelandfed.org/indicators-and-data/inflation-nowcasting?utm_source=openai))  \n- 10‑year Treasury yield: roughly 4.02% (reported intraday low of ~4.017% in recent trading; market quotes around 4.0–4.1%). ([barrons.com](https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai))  \n- Federal funds target range (FOMC): 3.50% – 3.75% (from the January 27–28, 2026 FOMC actions/minutes). ([ft.com](https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai))\n\nIf you want, I can fetch the official BLS release, the Treasury daily yield curve page, and the Fed’s policy statement directly (they’ll show exact timestamps) and update these numbers to the precise timestamp you prefer."}],"role":"assistant"},"output_index":5,"sequence_number":66}
+
+      '
+    - "
+
+      "
+    - "event: response.completed
+
+      "
+    - 'data: {"type":"response.completed","response":{"id":"resp_091e54b077d3ea7701699acd87a34c819a933572c9f7068ae6","object":"response","created_at":1771752839,"status":"completed","background":false,"completed_at":1771752869,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":1,"model":"gpt-5-mini-2025-08-07","output":[{"id":"rs_091e54b077d3ea7701699acd880154819ab88d79236336dd14","type":"reasoning","summary":[]},{"id":"ws_091e54b077d3ea7701699acd8bba34819a951d67b4d691bf97","type":"web_search_call","status":"completed","action":{"type":"search","queries":["US latest inflation rate January 2026 CPI BLS","current 10-year Treasury yield today February 22 2026 10-year yield","current federal funds target rate February 22 2026 federal reserve target range"],"query":"US latest inflation rate January 2026 CPI BLS"}},{"id":"rs_091e54b077d3ea7701699acd8ddf3c819a90cbe71fa7a65cd0","type":"reasoning","summary":[]},{"id":"ws_091e54b077d3ea7701699acd90fb00819a887fb08b431143ca","type":"web_search_call","status":"completed","action":{"type":"search","queries":["BLS CPI January 2026 percent change CPI-U January 2026 Bureau of Labor Statistics press release","Federal Reserve federal funds target range January 28 2026 FOMC statement target range site:fred.gov OR site:fed.gov","10-year Treasury yield today Feb 22 2026 Treasury.gov daily treasury yield curve rate 10 year"],"query":"BLS CPI January 2026 percent change CPI-U January 2026 Bureau of Labor Statistics press release"}},{"id":"rs_091e54b077d3ea7701699acd924a10819a929cfc11630213a9","type":"reasoning","summary":[]},{"id":"msg_091e54b077d3ea7701699acda24670819ab03d04791a86adf7","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":221,"start_index":112,"title":"Inflation Nowcasting","url":"https://www.clevelandfed.org/indicators-and-data/inflation-nowcasting?utm_source=openai"},{"type":"url_citation","end_index":465,"start_index":349,"title":"Treasury Yields Fall to 2026 Lows as Investors Flock to Bonds","url":"https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai"},{"type":"url_citation","end_index":665,"start_index":572,"title":"Federal Reserve officials warn progress towards inflation goal will be ''uneven''","url":"https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai"}],"logprobs":[],"text":"- US inflation (CPI, year-over-year): about 2.36% for January 2026 (Cleveland Fed nowcast; updated 02/12/2026). ([clevelandfed.org](https://www.clevelandfed.org/indicators-and-data/inflation-nowcasting?utm_source=openai))  \n- 10‑year Treasury yield: roughly 4.02% (reported intraday low of ~4.017% in recent trading; market quotes around 4.0–4.1%). ([barrons.com](https://www.barrons.com/articles/treasuries-rally-yields-fall-what-gives-be85088b?utm_source=openai))  \n- Federal funds target range (FOMC): 3.50% – 3.75% (from the January 27–28, 2026 FOMC actions/minutes). ([ft.com](https://www.ft.com/content/5231da49-e62a-4dfa-bc5a-77fcf0596aa1?utm_source=openai))\n\nIf you want, I can fetch the official BLS release, the Treasury daily yield curve page, and the Fed’s policy statement directly (they’ll show exact timestamps) and update these numbers to the precise timestamp you prefer."}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"default","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"required","tools":[{"type":"web_search","filters":null,"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":9162,"input_tokens_details":{"cached_tokens":0},"output_tokens":2065,"output_tokens_details":{"reasoning_tokens":1728},"total_tokens":11227},"user":null,"metadata":{}},"sequence_number":67}
+
+      '
+    - "
+
+      "
+  status_code: 200
+timestamp: "2026-02-22T09:33:59.504739+00:00"

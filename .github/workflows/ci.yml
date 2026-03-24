@@ -1,0 +1,77 @@
+name: CI Workflow
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "main"
+  workflow_dispatch:
+
+jobs:
+  docs_build:
+    name: Docs build (MkDocs --strict)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.14"
+          enable-cache: true
+
+      - name: Build docs
+        working-directory: responses
+        run: |
+          uv sync --frozen --extra docs
+          uv run --no-sync mkdocs build --strict -f ../mkdocs.yml
+
+  pytest:
+    name: Pytest
+    runs-on: ubuntu-latest
+    env:
+      VR_PYODIDE_CACHE_DIR: ~/.cache/vllm-responses/pyodide
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.14"
+          enable-cache: true
+
+      - name: Cache Pyodide runtime
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/vllm-responses/pyodide
+          key: pyodide-0.29.1-${{ runner.os }}
+
+      - name: Sync (locked)
+        working-directory: responses
+        run: uv sync --frozen --extra test
+
+      - name: Bootstrap Pyodide cache (required for code interpreter tests)
+        run: |
+          python scripts/ci/bootstrap_pyodide_cache.py
+
+      - name: Build code interpreter binary (required for code interpreter tests)
+        run: |
+          bash scripts/ci/prebuild_code_interpreter_linux_x86_64.sh responses
+
+      - name: Run tests
+        working-directory: responses
+        run: uv run --no-sync pytest -q

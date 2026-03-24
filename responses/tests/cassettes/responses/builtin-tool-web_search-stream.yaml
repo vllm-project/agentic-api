@@ -1,0 +1,571 @@
+filename: 2026-01-02-019b7f5d-90df-7f50-88f6-370e22c35aae
+request:
+  body:
+    input:
+      - content: Always use web search for the latest information.
+        role: system
+      - content: What is US interest rate?
+        role: user
+    model: gpt-5-nano
+    stream: true
+    tools:
+      - type: web_search
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br, zstd
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "212"
+    content-type: application/json
+    user-agent: OpenAI/Python 2.13.0
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019b7f5d-90df-7f50-88f6-370e22c35aae
+response:
+  headers:
+    connection: keep-alive
+    content-type: text/event-stream; charset=utf-8
+  sse:
+    - "event: response.created
+
+      "
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_0e5dfaa1d6dd17c2006957e6cd2a688190bd7d89b4f83dd688","object":"response","created_at":1767368397,"status":"in_progress","background":false,"completed_at":null,"error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-5-nano-2025-08-07","output":[],"parallel_tool_calls":true,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"web_search","filters":null,"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}}}
+
+      '
+    - "
+
+      "
+    - "event: response.in_progress
+
+      "
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_0e5dfaa1d6dd17c2006957e6cd2a688190bd7d89b4f83dd688","object":"response","created_at":1767368397,"status":"in_progress","background":false,"completed_at":null,"error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-5-nano-2025-08-07","output":[],"parallel_tool_calls":true,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"web_search","filters":null,"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}}}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"rs_0e5dfaa1d6dd17c2006957e6ce6798819099b69718392b0405","type":"reasoning","summary":[]}}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","sequence_number":3,"output_index":0,"item":{"id":"rs_0e5dfaa1d6dd17c2006957e6ce6798819099b69718392b0405","type":"reasoning","summary":[]}}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","sequence_number":4,"output_index":1,"item":{"id":"ws_0e5dfaa1d6dd17c2006957e6d0ae5c8190a84f63a621721f03","type":"web_search_call","status":"in_progress"}}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.in_progress
+
+      "
+    - 'data: {"type":"response.web_search_call.in_progress","sequence_number":5,"output_index":1,"item_id":"ws_0e5dfaa1d6dd17c2006957e6d0ae5c8190a84f63a621721f03"}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.searching
+
+      "
+    - 'data: {"type":"response.web_search_call.searching","sequence_number":6,"output_index":1,"item_id":"ws_0e5dfaa1d6dd17c2006957e6d0ae5c8190a84f63a621721f03"}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.completed
+
+      "
+    - 'data: {"type":"response.web_search_call.completed","sequence_number":7,"output_index":1,"item_id":"ws_0e5dfaa1d6dd17c2006957e6d0ae5c8190a84f63a621721f03"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","sequence_number":8,"output_index":1,"item":{"id":"ws_0e5dfaa1d6dd17c2006957e6d0ae5c8190a84f63a621721f03","type":"web_search_call","status":"completed","action":{"type":"search","query":"Federal Reserve federal funds rate January 2026"}}}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","sequence_number":9,"output_index":2,"item":{"id":"rs_0e5dfaa1d6dd17c2006957e6d1df008190ac42879a6a1aefa0","type":"reasoning","summary":[]}}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","sequence_number":10,"output_index":2,"item":{"id":"rs_0e5dfaa1d6dd17c2006957e6d1df008190ac42879a6a1aefa0","type":"reasoning","summary":[]}}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","sequence_number":11,"output_index":3,"item":{"id":"ws_0e5dfaa1d6dd17c2006957e6d2fd088190b16f33ad75bd2047","type":"web_search_call","status":"in_progress"}}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.in_progress
+
+      "
+    - 'data: {"type":"response.web_search_call.in_progress","sequence_number":12,"output_index":3,"item_id":"ws_0e5dfaa1d6dd17c2006957e6d2fd088190b16f33ad75bd2047"}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.searching
+
+      "
+    - 'data: {"type":"response.web_search_call.searching","sequence_number":13,"output_index":3,"item_id":"ws_0e5dfaa1d6dd17c2006957e6d2fd088190b16f33ad75bd2047"}
+
+      '
+    - "
+
+      "
+    - "event: response.web_search_call.completed
+
+      "
+    - 'data: {"type":"response.web_search_call.completed","sequence_number":14,"output_index":3,"item_id":"ws_0e5dfaa1d6dd17c2006957e6d2fd088190b16f33ad75bd2047"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","sequence_number":15,"output_index":3,"item":{"id":"ws_0e5dfaa1d6dd17c2006957e6d2fd088190b16f33ad75bd2047","type":"web_search_call","status":"completed","action":{"type":"search","query":"Federal Reserve January 2026 FOMC decision press release"}}}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","sequence_number":16,"output_index":4,"item":{"id":"rs_0e5dfaa1d6dd17c2006957e6d4185c81909eddcc40bcba40b5","type":"reasoning","summary":[]}}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","sequence_number":17,"output_index":4,"item":{"id":"rs_0e5dfaa1d6dd17c2006957e6d4185c81909eddcc40bcba40b5","type":"reasoning","summary":[]}}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.added
+
+      "
+    - 'data: {"type":"response.output_item.added","sequence_number":18,"output_index":5,"item":{"id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","type":"message","status":"in_progress","content":[],"role":"assistant"}}
+
+      '
+    - "
+
+      "
+    - "event: response.content_part.added
+
+      "
+    - 'data: {"type":"response.content_part.added","sequence_number":19,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""}}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":20,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":"Short answer (as","logprobs":[],"obfuscation":""}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":21,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" of Jan 2","logprobs":[],"obfuscation":"588Ur4R"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":22,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":", 2026): The Federal Reserve’s target","logprobs":[],"obfuscation":"RBX5FENubjH"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":23,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" range for the federal funds rate is 3.50","logprobs":[],"obfuscation":"exm7Orp"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":24,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":"% to 3.75%. This is the policy","logprobs":[],"obfuscation":"MX"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":25,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" rate banks use for overnight lending and it influences other borrowing","logprobs":[],"obfuscation":"eQu9wCq6X"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":26,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" costs in the economy. The last change was","logprobs":[],"obfuscation":"Ka5tzR"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":27,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" at the December ","logprobs":[],"obfuscation":"wgtKXYDh7OkaZWq"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":28,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":"10, 202","logprobs":[],"obfuscation":"TOxh56hSK"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":29,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":"5 meeting, when","logprobs":[],"obfuscation":"u"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":30,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" the range was","logprobs":[],"obfuscation":"8z"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":31,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" cut to 3.50%–3.","logprobs":[],"obfuscation":""}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":32,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":"75% (effective December 11, 202","logprobs":[],"obfuscation":"c"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":33,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":"5). The next FOMC meeting is January ","logprobs":[],"obfuscation":"eZUci13WULx"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":34,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":"27–28, 2026, after which the","logprobs":[],"obfuscation":"efWy"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":35,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" Fed could adjust the rate again depending on incoming data.","logprobs":[],"obfuscation":"rw0X"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":36,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" ","logprobs":[],"obfuscation":"3tEbkTicASR6Rll"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":37,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":"([federalreserve.gov](https://www.federalreserve.gov/newsevents/pressreleases/monetary20251210a.htm?utm_source=openai)","logprobs":[],"obfuscation":"tkgY6Ma68M"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":38,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":")\n","logprobs":[],"obfuscation":"EQ9IzHhFIHXX8S"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.annotation.added
+
+      "
+    - 'data: {"type":"response.output_text.annotation.added","sequence_number":39,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"annotation_index":0,"annotation":{"type":"url_citation","end_index":591,"start_index":472,"title":"Federal Reserve Board - Federal Reserve issues FOMC statement","url":"https://www.federalreserve.gov/newsevents/pressreleases/monetary20251210a.htm?utm_source=openai"}}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":40,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":"\nWhat this means in","logprobs":[],"obfuscation":"6b1lDT2W65t7O"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":41,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" plain terms:\n- If you’re borrowing (","logprobs":[],"obfuscation":"L4iL0aBhAip"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":42,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":"mortgages, auto loans, credit cards, etc.), your","logprobs":[],"obfuscation":""}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":43,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" costs are influenced by this policy","logprobs":[],"obfuscation":"ZqnE8DGpIkj4"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":44,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" rate.\n- If","logprobs":[],"obfuscation":"DHp1O"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":45,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" you’re saving or","logprobs":[],"obfuscation":"ni6MFdlUtpDdnNH"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":46,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" investing, deposit and loan rates in","logprobs":[],"obfuscation":"54yMmiIB93c"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":47,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" the market tend to move in step with changes to","logprobs":[],"obfuscation":""}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":48,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" this rate.\n- The exact level can change at each F","logprobs":[],"obfuscation":"PFrKIJp1QXImiX"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":49,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":"OMC meeting, with","logprobs":[],"obfuscation":"SrcoTxU58tjAdyE"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":50,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" the next decision expected at the January","logprobs":[],"obfuscation":"wfmLl6"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":51,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" 27–28, 2026 meeting.\n\nWould","logprobs":[],"obfuscation":"DG8D"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":52,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" you like a quick rundown of how this current rate might","logprobs":[],"obfuscation":"0BJtmLbE"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":53,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" affect a specific product (mortgage, savings account","logprobs":[],"obfuscation":"q7Vm7PbDFn1"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":54,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":", or credit card rates) or the market-implied","logprobs":[],"obfuscation":"cwI"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.delta
+
+      "
+    - 'data: {"type":"response.output_text.delta","sequence_number":55,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"delta":" path for 2026?","logprobs":[],"obfuscation":"1"}
+
+      '
+    - "
+
+      "
+    - "event: response.output_text.done
+
+      "
+    - 'data: {"type":"response.output_text.done","sequence_number":56,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"text":"Short answer (as of Jan 2, 2026): The Federal Reserve’s target range for the federal funds rate is 3.50% to 3.75%. This is the policy rate banks use for overnight lending and it influences other borrowing costs in the economy. The last change was at the December 10, 2025 meeting, when the range was cut to 3.50%–3.75% (effective December 11, 2025). The next FOMC meeting is January 27–28, 2026, after which the Fed could adjust the rate again depending on incoming data. ([federalreserve.gov](https://www.federalreserve.gov/newsevents/pressreleases/monetary20251210a.htm?utm_source=openai))\n\nWhat this means in plain terms:\n- If you’re borrowing (mortgages, auto loans, credit cards, etc.), your costs are influenced by this policy rate.\n- If you’re saving or investing, deposit and loan rates in the market tend to move in step with changes to this rate.\n- The exact level can change at each FOMC meeting, with the next decision expected at the January 27–28, 2026 meeting.\n\nWould you like a quick rundown of how this current rate might affect a specific product (mortgage, savings account, or credit card rates) or the market-implied path for 2026?","logprobs":[]}
+
+      '
+    - "
+
+      "
+    - "event: response.content_part.done
+
+      "
+    - 'data: {"type":"response.content_part.done","sequence_number":57,"item_id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","output_index":5,"content_index":0,"part":{"type":"output_text","annotations":[{"type":"url_citation","end_index":591,"start_index":472,"title":"Federal Reserve Board - Federal Reserve issues FOMC statement","url":"https://www.federalreserve.gov/newsevents/pressreleases/monetary20251210a.htm?utm_source=openai"}],"logprobs":[],"text":"Short answer (as of Jan 2, 2026): The Federal Reserve’s target range for the federal funds rate is 3.50% to 3.75%. This is the policy rate banks use for overnight lending and it influences other borrowing costs in the economy. The last change was at the December 10, 2025 meeting, when the range was cut to 3.50%–3.75% (effective December 11, 2025). The next FOMC meeting is January 27–28, 2026, after which the Fed could adjust the rate again depending on incoming data. ([federalreserve.gov](https://www.federalreserve.gov/newsevents/pressreleases/monetary20251210a.htm?utm_source=openai))\n\nWhat this means in plain terms:\n- If you’re borrowing (mortgages, auto loans, credit cards, etc.), your costs are influenced by this policy rate.\n- If you’re saving or investing, deposit and loan rates in the market tend to move in step with changes to this rate.\n- The exact level can change at each FOMC meeting, with the next decision expected at the January 27–28, 2026 meeting.\n\nWould you like a quick rundown of how this current rate might affect a specific product (mortgage, savings account, or credit card rates) or the market-implied path for 2026?"}}
+
+      '
+    - "
+
+      "
+    - "event: response.output_item.done
+
+      "
+    - 'data: {"type":"response.output_item.done","sequence_number":58,"output_index":5,"item":{"id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":591,"start_index":472,"title":"Federal Reserve Board - Federal Reserve issues FOMC statement","url":"https://www.federalreserve.gov/newsevents/pressreleases/monetary20251210a.htm?utm_source=openai"}],"logprobs":[],"text":"Short answer (as of Jan 2, 2026): The Federal Reserve’s target range for the federal funds rate is 3.50% to 3.75%. This is the policy rate banks use for overnight lending and it influences other borrowing costs in the economy. The last change was at the December 10, 2025 meeting, when the range was cut to 3.50%–3.75% (effective December 11, 2025). The next FOMC meeting is January 27–28, 2026, after which the Fed could adjust the rate again depending on incoming data. ([federalreserve.gov](https://www.federalreserve.gov/newsevents/pressreleases/monetary20251210a.htm?utm_source=openai))\n\nWhat this means in plain terms:\n- If you’re borrowing (mortgages, auto loans, credit cards, etc.), your costs are influenced by this policy rate.\n- If you’re saving or investing, deposit and loan rates in the market tend to move in step with changes to this rate.\n- The exact level can change at each FOMC meeting, with the next decision expected at the January 27–28, 2026 meeting.\n\nWould you like a quick rundown of how this current rate might affect a specific product (mortgage, savings account, or credit card rates) or the market-implied path for 2026?"}],"role":"assistant"}}
+
+      '
+    - "
+
+      "
+    - "event: response.completed
+
+      "
+    - 'data: {"type":"response.completed","sequence_number":59,"response":{"id":"resp_0e5dfaa1d6dd17c2006957e6cd2a688190bd7d89b4f83dd688","object":"response","created_at":1767368397,"status":"completed","background":false,"completed_at":1767368417,"error":null,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-5-nano-2025-08-07","output":[{"id":"rs_0e5dfaa1d6dd17c2006957e6ce6798819099b69718392b0405","type":"reasoning","summary":[]},{"id":"ws_0e5dfaa1d6dd17c2006957e6d0ae5c8190a84f63a621721f03","type":"web_search_call","status":"completed","action":{"type":"search","query":"Federal Reserve federal funds rate January 2026"}},{"id":"rs_0e5dfaa1d6dd17c2006957e6d1df008190ac42879a6a1aefa0","type":"reasoning","summary":[]},{"id":"ws_0e5dfaa1d6dd17c2006957e6d2fd088190b16f33ad75bd2047","type":"web_search_call","status":"completed","action":{"type":"search","query":"Federal Reserve January 2026 FOMC decision press release"}},{"id":"rs_0e5dfaa1d6dd17c2006957e6d4185c81909eddcc40bcba40b5","type":"reasoning","summary":[]},{"id":"msg_0e5dfaa1d6dd17c2006957e6df02448190a45e796bc3225a49","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":591,"start_index":472,"title":"Federal Reserve Board - Federal Reserve issues FOMC statement","url":"https://www.federalreserve.gov/newsevents/pressreleases/monetary20251210a.htm?utm_source=openai"}],"logprobs":[],"text":"Short answer (as of Jan 2, 2026): The Federal Reserve’s target range for the federal funds rate is 3.50% to 3.75%. This is the policy rate banks use for overnight lending and it influences other borrowing costs in the economy. The last change was at the December 10, 2025 meeting, when the range was cut to 3.50%–3.75% (effective December 11, 2025). The next FOMC meeting is January 27–28, 2026, after which the Fed could adjust the rate again depending on incoming data. ([federalreserve.gov](https://www.federalreserve.gov/newsevents/pressreleases/monetary20251210a.htm?utm_source=openai))\n\nWhat this means in plain terms:\n- If you’re borrowing (mortgages, auto loans, credit cards, etc.), your costs are influenced by this policy rate.\n- If you’re saving or investing, deposit and loan rates in the market tend to move in step with changes to this rate.\n- The exact level can change at each FOMC meeting, with the next decision expected at the January 27–28, 2026 meeting.\n\nWould you like a quick rundown of how this current rate might affect a specific product (mortgage, savings account, or credit card rates) or the market-implied path for 2026?"}],"role":"assistant"}],"parallel_tool_calls":true,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"type":"web_search","filters":null,"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":12655,"input_tokens_details":{"cached_tokens":4224},"output_tokens":2724,"output_tokens_details":{"reasoning_tokens":2432},"total_tokens":15379},"user":null,"metadata":{}}}
+
+      '
+    - "
+
+      "
+  status_code: 200
+timestamp: "2026-01-02T15:39:57.023424+00:00"

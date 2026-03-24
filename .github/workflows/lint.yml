@@ -1,0 +1,106 @@
+name: Linting Workflow
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "*"
+
+jobs:
+  python_lint:
+    name: Python linting and formatting checks
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.14"
+          enable-cache: true
+
+      - name: Sync (locked)
+        working-directory: responses
+        run: uv sync --frozen --extra lint
+
+      - name: Check Python files using Ruff
+        working-directory: responses
+        run: |
+          uv run --no-sync ruff check --output-format github --config pyproject.toml ..
+          uv run --no-sync ruff format --diff --config pyproject.toml ..
+
+  prettier_lint:
+    name: Prettier Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Check files using Prettier
+        # .prettierignore excludes Markdown files (handled by mdformat)
+        run: npx prettier@3.8 --check .
+
+  markdown_format:
+    name: Markdown Format Check (mdformat)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.14"
+          enable-cache: true
+
+      - name: Sync (locked)
+        working-directory: responses
+        run: uv sync --frozen --extra lint
+
+      - name: Check Markdown formatting
+        working-directory: responses
+        run: |
+          # --no-validate allows files with complex MkDocs syntax to be checked
+          # Some files with advanced admonitions may fail strict HTML validation
+          uv run --no-sync mdformat --check --no-validate ../docs/ || (echo "Run 'cd responses && uv sync --active --extra lint' then 'uv run mdformat ../docs/' locally to fix" && exit 1)
+
+  markdown_lint:
+    name: Markdown Lint (markdownlint-cli)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Lint Markdown files
+        run: npx markdownlint-cli@0.47.0 docs/

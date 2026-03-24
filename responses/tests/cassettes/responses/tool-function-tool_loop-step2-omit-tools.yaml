@@ -1,0 +1,92 @@
+filename: 2026-01-19-019bd71b-155c-79d3-8da8-5ba6973b8438
+request:
+  body:
+    input:
+      - call_id: call_3phuilZBndrwjXPPbbJxPUsm
+        output: The weather in Boston, MA is sunny, 72F.
+        type: function_call_output
+    model: gpt-5-nano
+    previous_response_id: resp_0e9b91731bd16bb700696e5cefc4908193a611a1f14a177cdd
+    store: true
+  headers:
+    accept: application/json
+    accept-encoding: gzip, deflate, br
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "252"
+    content-type: application/json
+    user-agent: OpenAI/Python 2.15.0
+    x-run-id: 20260119-163350-openai-operational
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019bd71b-155c-79d3-8da8-5ba6973b8438
+response:
+  body:
+    background: false
+    billing:
+      payer: developer
+    completed_at: 1768840439
+    created_at: 1768840436
+    error: null
+    frequency_penalty: 0.0
+    id: resp_0e9b91731bd16bb700696e5cf402608193baa5d210e9dc963c
+    incomplete_details: null
+    instructions: null
+    max_output_tokens: null
+    max_tool_calls: null
+    metadata: {}
+    model: gpt-5-nano-2025-08-07
+    object: response
+    output:
+      - id: rs_0e9b91731bd16bb700696e5cf4f340819388065365288c833f
+        summary: []
+        type: reasoning
+      - content:
+          - annotations: []
+            logprobs: []
+            text: "Current weather for Boston, MA: Sunny, 72°F.
+
+
+              Would you like an hourly or 5-day forecast?"
+            type: output_text
+        id: msg_0e9b91731bd16bb700696e5cf6b9a08193b324d4df891c30b7
+        role: assistant
+        status: completed
+        type: message
+    parallel_tool_calls: true
+    presence_penalty: 0.0
+    previous_response_id: resp_0e9b91731bd16bb700696e5cefc4908193a611a1f14a177cdd
+    prompt_cache_key: null
+    prompt_cache_retention: null
+    reasoning:
+      effort: medium
+      summary: null
+    safety_identifier: null
+    service_tier: default
+    status: completed
+    store: true
+    temperature: 1.0
+    text:
+      format:
+        type: text
+      verbosity: medium
+    tool_choice: auto
+    tools: []
+    top_logprobs: 0
+    top_p: 1.0
+    truncation: disabled
+    usage:
+      input_tokens: 335
+      input_tokens_details:
+        cached_tokens: 0
+      output_tokens: 222
+      output_tokens_details:
+        reasoning_tokens: 192
+      total_tokens: 557
+    user: null
+  headers:
+    connection: keep-alive
+    content-type: application/json
+  status_code: 200
+timestamp: "2026-01-19T16:33:55.036778+00:00"

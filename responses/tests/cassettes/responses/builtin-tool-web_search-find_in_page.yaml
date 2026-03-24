@@ -1,0 +1,120 @@
+filename: 2026-03-11-019cdc19-e795-7cf0-b32f-7262c93b5c70
+request:
+  body:
+    input: Using the web search tool, open https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/web-search and find the exact phrase that describes what Deep Research is best for. Quote only that phrase.
+    model: gpt-5-mini
+    store: false
+    stream: false
+    tool_choice: required
+    tools:
+      - type: web_search
+  headers:
+    accept: "*/*"
+    accept-encoding: gzip, deflate, br
+    authorization: Bearer ***
+    connection: keep-alive
+    content-length: "320"
+    content-type: application/json
+    user-agent: python-httpx/0.28.1
+  method: POST
+  path: /v1/responses
+  query_params: {}
+request_id: 019cdc19-e795-7cf0-b32f-7262c93b5c70
+response:
+  body:
+    background: false
+    billing:
+      payer: developer
+    completed_at: 1773219237
+    created_at: 1773219211
+    error: null
+    frequency_penalty: 0.0
+    id: resp_0b284a664fb26d700169b12d8b47d881909bac7618fba27a05
+    incomplete_details: null
+    instructions: null
+    max_output_tokens: null
+    max_tool_calls: null
+    metadata: {}
+    model: gpt-5-mini-2025-08-07
+    object: response
+    output:
+      - id: rs_0b284a664fb26d700169b12d8c288081908f396ac31eeec1f5
+        summary: []
+        type: reasoning
+      - action:
+          type: open_page
+          url: https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/web-search
+        id: ws_0b284a664fb26d700169b12d8ee790819090ccf3951c2e4a35
+        status: completed
+        type: web_search_call
+      - id: rs_0b284a664fb26d700169b12d907e2c8190b70a3fd63d793610
+        summary: []
+        type: reasoning
+      - action:
+          pattern: is best for
+          type: find_in_page
+          url: https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/web-search
+        id: ws_0b284a664fb26d700169b12d93bc7881908409a6cac956dc3b
+        status: completed
+        type: web_search_call
+      - id: rs_0b284a664fb26d700169b12d96a2488190a86be677937912a7
+        summary: []
+        type: reasoning
+      - content:
+          - annotations:
+              - end_index: 225
+                start_index: 128
+                title: Web search with the Responses API - Microsoft Foundry | Microsoft Learn
+                type: url_citation
+                url: https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/web-search
+            logprobs: []
+            text: '"Deep Research can run for several minutes and is best for background-style workloads that prioritize completeness over speed." ([learn.microsoft.com](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/web-search))'
+            type: output_text
+        id: msg_0b284a664fb26d700169b12da49e2c8190a682922b30246261
+        role: assistant
+        status: completed
+        type: message
+    parallel_tool_calls: true
+    presence_penalty: 0.0
+    previous_response_id: null
+    prompt_cache_key: null
+    prompt_cache_retention: null
+    reasoning:
+      effort: medium
+      summary: null
+    safety_identifier: null
+    service_tier: default
+    status: completed
+    store: false
+    temperature: 1.0
+    text:
+      format:
+        type: text
+      verbosity: medium
+    tool_choice: required
+    tools:
+      - search_context_size: medium
+        type: web_search
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+    top_logprobs: 0
+    top_p: 1.0
+    truncation: disabled
+    usage:
+      input_tokens: 12976
+      input_tokens_details:
+        cached_tokens: 3584
+      output_tokens: 1351
+      output_tokens_details:
+        reasoning_tokens: 1152
+      total_tokens: 14327
+    user: null
+  headers:
+    connection: keep-alive
+    content-type: application/json
+  status_code: 200
+timestamp: "2026-03-11T08:53:31.157739+00:00"

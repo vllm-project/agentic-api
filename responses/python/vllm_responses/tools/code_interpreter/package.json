@@ -1,0 +1,19 @@
+{
+  "name": "python-sandboxed-repl",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "bun build --compile --minify src/index.ts --outfile woma"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "pyodide": "0.29.1",
+    "xmlhttprequest-ssl": "^4.0.0"
+  }
+}
