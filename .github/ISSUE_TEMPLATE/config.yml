@@ -1,5 +1,5 @@
-blank_issues_enabled: false
+blank_issues_enabled: true
 contact_links:
-  - name: Ask a question
-    url: https://github.com/agentic-stack/agentic-stack/discussions
-    about: Use GitHub Discussions to ask questions and share ideas.
+  - name: Questions
+    url: https://vllm-workspace.slack.com/archives/feat-responses
+    about: Join #feat-responses on the vLLM Slack workspace for discussion.
