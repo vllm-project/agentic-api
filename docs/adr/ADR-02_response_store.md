@@ -1,5 +1,6 @@
 # ADR-02: Response Store semantics for `previous_response_id`
 
+> **Status:** Proposal
 > **Related discussion:** [Issue #14](https://github.com/vllm-project/agentic-stack/issues/14)
 
 ## Intention
@@ -300,3 +301,16 @@ Sources:
 - [OpenAI Responses API reference](https://platform.openai.com/docs/api-reference/responses/retrieve)
 - [OpenAI data controls](https://platform.openai.com/docs/models/how-we-use-your-data)
 - [OpenAI migrate to Responses guide](https://platform.openai.com/docs/guides/migrate-to-responses)
+
+---
+
+## Proposed Decisions
+
+These reflect where things stand. Still open for discussion while we're in Draft.
+
+| # | Decision | Status |
+|---|----------|--------|
+| D1 | Continuation shape | Proposed |
+| D2 | Storage model shape | Proposed |
+| D3 | Backend model | Proposed |
+| D4 | What to store | Proposed |
