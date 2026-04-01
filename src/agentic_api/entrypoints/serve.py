@@ -28,7 +28,7 @@ def _wait_upstream_ready(runtime_config: RuntimeConfig) -> None:
             elapsed = time.perf_counter() - start
             if elapsed > timeout_s:
                 raise TimeoutError(
-                    f"upstream did not become ready within {timeout_s:.0f}s: {url}"
+                    f"vLLM did not become ready within {timeout_s:.0f}s: {url}"
                 )
 
             try:
