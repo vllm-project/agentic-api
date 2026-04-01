@@ -1,10 +1,13 @@
 import argparse
+import logging
 import subprocess
 import sys
 
 from agentic_api.config.runtime import RuntimeConfig
 from agentic_api.entrypoints.cli import _normalize_base_url
 from agentic_api.entrypoints.serve import run
+
+logger = logging.getLogger(__name__)
 
 _FLAG = "--agentic-api"
 
@@ -122,7 +125,7 @@ def main(argv: list[str] | None = None) -> None:
     try:
         run(runtime_config)
     except TimeoutError as e:
-        print(f"[serve] error: {e}", flush=True)
+        logger.error("%s", e)
         sys.exit(1)
     finally:
         vllm_proc.terminate()

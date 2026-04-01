@@ -1,3 +1,4 @@
+import logging
 import time
 
 import httpx
@@ -5,6 +6,8 @@ import uvicorn
 
 from agentic_api.config.runtime import RuntimeConfig
 from agentic_api.entrypoints.app import create_app
+
+logger = logging.getLogger(__name__)
 
 
 def _wait_upstream_ready(runtime_config: RuntimeConfig) -> None:
@@ -37,14 +40,14 @@ def _wait_upstream_ready(runtime_config: RuntimeConfig) -> None:
 
             if elapsed - last_notice >= interval_s:
                 last_notice = elapsed
-                print(f"[serve] waiting for upstream ({elapsed:.0f}s elapsed): {url}")
+                logger.info("waiting for upstream (%ds elapsed): %s", int(elapsed), url)
 
             time.sleep(interval_s)
 
 
 def run(runtime_config: RuntimeConfig) -> None:
     _wait_upstream_ready(runtime_config)
-    print(f"[serve] upstream ready: {runtime_config.llm_api_base}")
+    logger.info("upstream ready: %s", runtime_config.llm_api_base)
 
     app = create_app(runtime_config)
     uvicorn.run(
