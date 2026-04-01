@@ -3,9 +3,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from agentic_stack.config.runtime import RuntimeConfig
-from agentic_stack.core.proxy import ProxyClientManager
-from agentic_stack.routers import responses
+from agentic_api.config.runtime import RuntimeConfig
+from agentic_api.core.proxy import ProxyClientManager
+from agentic_api.routers import responses
 
 
 def create_app(runtime_config: RuntimeConfig) -> FastAPI:
@@ -17,7 +17,7 @@ def create_app(runtime_config: RuntimeConfig) -> FastAPI:
         await app.state.proxy_client_manager.aclose()
 
     app = FastAPI(
-        title="Agentic Stack",
+        title="Agentic API",
         lifespan=lifespan,
     )
     app.add_middleware(

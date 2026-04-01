@@ -4,7 +4,7 @@ import httpx
 from fastapi import Request
 from fastapi.responses import ORJSONResponse, Response, StreamingResponse
 
-from agentic_stack.config.runtime import RuntimeConfig
+from agentic_api.config.runtime import RuntimeConfig
 
 _REQUEST_HOP_BY_HOP_HEADERS = {
     "connection",

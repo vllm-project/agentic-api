@@ -2,11 +2,11 @@ import argparse
 import subprocess
 import sys
 
-from agentic_stack.config.runtime import RuntimeConfig
-from agentic_stack.entrypoints.cli import _normalize_base_url
-from agentic_stack.entrypoints.serve import run
+from agentic_api.config.runtime import RuntimeConfig
+from agentic_api.entrypoints.cli import _normalize_base_url
+from agentic_api.entrypoints.serve import run
 
-_FLAG = "--agentic-stack"
+_FLAG = "--agentic-api"
 
 _GATEWAY_DEFAULTS = {
     "gateway_host": "0.0.0.0",
@@ -84,7 +84,7 @@ def _spawn_vllm(argv: list[str]) -> subprocess.Popen[bytes]:
 
 
 def _delegate_to_vllm(argv: list[str]) -> None:
-    """Delegate to upstream vllm (no --agentic-stack flag). Replaces the process."""
+    """Delegate to upstream vllm (no --agentic-api flag). Replaces the process."""
     try:
         from vllm.scripts import main as vllm_main  # type: ignore[import]
 
@@ -103,7 +103,7 @@ def main(argv: list[str] | None = None) -> None:
 
     if raw and raw[0] == "serve" and "--help" in raw:
         print(
-            "usage: vllm serve <MODEL> --agentic-stack [vllm-serve args] [gateway args]\n\n"
+            "usage: vllm serve <MODEL> --agentic-api [vllm-serve args] [gateway args]\n\n"
             "Gateway args:\n"
             "  --llm-api-base URL            upstream vLLM base URL (default: inferred from --port)\n"
             "  --openai-api-key KEY          API key forwarded to upstream\n"

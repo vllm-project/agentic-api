@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
 
-from agentic_stack.core.proxy import ProxyClientManager, proxy_responses
+from agentic_api.core.proxy import ProxyClientManager, proxy_responses
 
 router = APIRouter()
 

@@ -7,9 +7,9 @@ from asgi_lifespan import LifespanManager
 from fastapi import FastAPI, Request
 from fastapi.responses import ORJSONResponse, Response, StreamingResponse
 
-from agentic_stack.config.runtime import RuntimeConfig
-from agentic_stack.core.proxy import ProxyClientManager
-from agentic_stack.entrypoints.app import create_app
+from agentic_api.config.runtime import RuntimeConfig
+from agentic_api.core.proxy import ProxyClientManager
+from agentic_api.entrypoints.app import create_app
 
 
 def build_test_runtime_config(

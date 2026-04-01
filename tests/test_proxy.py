@@ -4,7 +4,7 @@ import httpx
 import pytest
 from asgi_lifespan import LifespanManager
 
-from agentic_stack.entrypoints.app import create_app
+from agentic_api.entrypoints.app import create_app
 from tests.conftest import build_test_runtime_config
 
 

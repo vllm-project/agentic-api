@@ -3,8 +3,8 @@ import time
 import httpx
 import uvicorn
 
-from agentic_stack.config.runtime import RuntimeConfig
-from agentic_stack.entrypoints.app import create_app
+from agentic_api.config.runtime import RuntimeConfig
+from agentic_api.entrypoints.app import create_app
 
 
 def _wait_upstream_ready(runtime_config: RuntimeConfig) -> None:

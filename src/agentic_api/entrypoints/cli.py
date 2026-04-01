@@ -1,8 +1,8 @@
 import argparse
 import sys
 
-from agentic_stack.config.runtime import RuntimeConfig
-from agentic_stack.entrypoints.serve import run
+from agentic_api.config.runtime import RuntimeConfig
+from agentic_api.entrypoints.serve import run
 
 
 def _normalize_base_url(url: str) -> str:

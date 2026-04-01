@@ -3,14 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agentic-stack"
+name = "agentic-api"
 version = "0.1.0"
 description = "Stateful API logic for agentic applications using vLLM"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"
 authors = [
-    { name = "Agentic Stack Community" },
+    { name = "Agentic API Community" },
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -29,8 +29,8 @@ dependencies = [
 ]
 
 [project.scripts]
-agentic-stack = "agentic_stack.entrypoints.cli:main"
-vllm = "agentic_stack.entrypoints.vllm_cli:main"
+agentic-api = "agentic_api.entrypoints.cli:main"
+vllm = "agentic_api.entrypoints.vllm_cli:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -39,10 +39,10 @@ asyncio_mode = "auto"
 backend = "asyncio"
 
 [project.urls]
-Homepage = "https://github.com/vllm-project/agentic-stack"
-Repository = "https://github.com/vllm-project/agentic-stack"
-Issues = "https://github.com/vllm-project/agentic-stack/issues"
-Documentation = "https://github.com/vllm-project/agentic-stack"
+Homepage = "https://github.com/vllm-project/agentic-api"
+Repository = "https://github.com/vllm-project/agentic-api"
+Issues = "https://github.com/vllm-project/agentic-api/issues"
+Documentation = "https://github.com/vllm-project/agentic-api"
 
 [dependency-groups]
 dev = [

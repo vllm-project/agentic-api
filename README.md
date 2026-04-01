@@ -13,16 +13,16 @@ uv sync
 
 ### Integrated mode (recommended)
 
-Start vLLM and the gateway together with a single command. The `--agentic-stack` flag activates the gateway; all other flags are passed through to vLLM.
+Start vLLM and the gateway together with a single command. The `--agentic-api` flag activates the gateway; all other flags are passed through to vLLM.
 
 ```bash
-vllm serve <MODEL> --agentic-stack [--port <VLLM_PORT>] [--gateway-port <GATEWAY_PORT>]
+vllm serve <MODEL> --agentic-api [--port <VLLM_PORT>] [--gateway-port <GATEWAY_PORT>]
 ```
 
 Example:
 
 ```bash
-vllm serve Qwen/Qwen3.5-0.8B --agentic-stack --port 8000 --gateway-port 9000 --host 0.0.0.0
+vllm serve Qwen/Qwen3.5-0.8B --agentic-api --port 8000 --gateway-port 9000 --host 0.0.0.0
 ```
 
 The gateway starts on port `9000` by default and waits up to 10 minutes for vLLM to become ready before accepting traffic.
