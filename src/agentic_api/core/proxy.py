@@ -1,3 +1,4 @@
+import json
 from collections.abc import Iterable
 
 import httpx
@@ -119,7 +120,13 @@ async def proxy_responses(
         runtime_config=runtime_config,
     )
     upstream_params = list(request.query_params.multi_items())
-    client = proxy_client_manager.get_client(allow_sse_passthrough=True)
+
+    try:
+        is_streaming = bool(json.loads(body).get("stream", False)) if body else False
+    except Exception:
+        is_streaming = False
+
+    client = proxy_client_manager.get_client(allow_sse_passthrough=is_streaming)
     req = client.build_request(
         method="POST",
         url=_upstream_url(path_suffix="/v1/responses", runtime_config=runtime_config),
