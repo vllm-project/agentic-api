@@ -25,12 +25,12 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: |
-            **/requirements*.txt
-            .pre-commit-config.yaml
+          cache-dependency-path: .pre-commit-config.yaml
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@e06108dd0aef18192324c70427afc47652e63a82 # v7.5.0
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          components: rustfmt
 
       - name: Install pre-commit
         run: python -m pip install 'pre-commit>=4.4.0'
@@ -51,7 +51,6 @@ jobs:
           exit 0
         env:
           SKIP: no-commit-to-branch
-          RUFF_OUTPUT_FORMAT: github
 
       - name: Check pre-commit results
         if: steps.precommit.outputs.status != '0'

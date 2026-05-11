@@ -1,0 +1,14 @@
+[package]
+name = "agentic-api"
+version = "0.1.0"
+edition = "2024"
+description = "Stateful API logic for agentic applications using vLLM"
+license = "Apache-2.0"
+repository = "https://github.com/vllm-project/agentic-api"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }

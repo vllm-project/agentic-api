@@ -1,25 +1,25 @@
-.PHONY: help install lint format fix test pre-commit clean
+.PHONY: help install lint format test build pre-commit clean
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-install: ## Install dependencies with uv
-	uv sync
+install: ## Fetch Rust dependencies
+	cargo fetch
 
-lint: ## Run ruff linter
-	uv run ruff check .
+lint: ## Run clippy linter
+	cargo clippy --all-targets -- -D warnings
 
-format: ## Run ruff formatter
-	uv run ruff format .
+format: ## Run rustfmt
+	cargo fmt
 
-fix: ## Run ruff linter with auto-fix
-	uv run ruff check --fix .
+test: ## Run Rust tests
+	cargo test
 
-test: ## Run tests with pytest
-	uv run pytest
+build: ## Build Rust project
+	cargo build
 
 pre-commit: ## Run pre-commit hooks on all files
 	pre-commit run --all-files
 
-clean: ## Remove build artifacts and caches
-	rm -rf __pycache__ **/__pycache__ .pytest_cache .mypy_cache .ruff_cache dist *.egg-info
+clean: ## Remove Rust build artifacts
+	cargo clean

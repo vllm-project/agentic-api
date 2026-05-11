@@ -11,6 +11,9 @@ build/
 # Virtual environments
 .venv/
 
+# Rust
+target/
+
 # IDE
 .idea/
 .vscode/

@@ -11,12 +11,14 @@ everything you need to get started.
    cd agentic-api
    ```
 
-2. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) (the project's
-   package and dependency manager).
+2. Install prerequisites:
+   - [Rust toolchain](https://rustup.rs/) (rustup).
+   - [uv](https://docs.astral.sh/uv/getting-started/installation/) for docs environment and dependency setup.
+   - [pre-commit](https://pre-commit.com/) for local hook execution.
 
-3. Install project dependencies:
+3. Build and fetch dependencies:
    ```bash
-   uv sync
+   cargo build
    ```
 
 4. Install pre-commit hooks:
@@ -29,29 +31,33 @@ everything you need to get started.
 ### Running Tests
 
 ```bash
-uv run pytest
+cargo test
 ```
 
 ### Linting
 
 ```bash
-ruff check .
-```
-
-To auto-fix issues:
-
-```bash
-ruff check --fix .
+cargo clippy --all-targets -- -D warnings
 ```
 
 ### Formatting
 
 ```bash
-ruff format .
+cargo fmt
 ```
 
 All linting and formatting checks are also run automatically via pre-commit hooks on
 each commit.
+
+## Documentation
+
+Build docs locally:
+
+```bash
+uv venv
+uv pip install -r docs/requirements.txt
+uv run mkdocs serve
+```
 
 ## Pull Requests
 
@@ -65,11 +71,11 @@ each commit.
 
 ## Code Style
 
-Code style is enforced by [ruff](https://docs.astral.sh/ruff/) via pre-commit. Key
-settings:
+Code style is enforced by `rustfmt` and `clippy` via pre-commit. Key settings:
 
 - Maximum line length: 120 characters.
-- Target Python version: 3.12+.
+- Rust edition: 2024.
+- `unsafe` code is forbidden.
 
 Do not worry about manually formatting code -- the pre-commit hooks will handle it.
 

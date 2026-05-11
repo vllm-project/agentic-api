@@ -19,4 +19,4 @@ build:
     create_environment:
       - uv venv $READTHEDOCS_VIRTUALENV_PATH
     install:
-      - uv pip install --group docs
+      - uv pip install -r docs/requirements.txt

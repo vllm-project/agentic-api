@@ -4,34 +4,43 @@ Instructions for AI coding agents working on this repository.
 
 ## Project Overview
 
-This is a Python project under the `vllm-project` GitHub organization. It uses
-[uv](https://docs.astral.sh/uv/) for dependency management and virtual environment
-handling.
+This repository is Rust-first under the `vllm-project` GitHub organization.
+
+- **Rust** -- primary and active implementation language at the repo root.
+- **Docs** -- MkDocs documentation in `docs/`.
+- **Python gateway code has been removed** as part of the migration plan.
+
+## Project Structure
+
+```
+.
+├── src/              # Rust source code
+├── Cargo.toml        # Rust package manifest
+├── rustfmt.toml      # Rust formatter config
+├── clippy.toml       # Clippy linter config
+└── docs/             # Documentation (MkDocs)
+```
 
 ## Setup
 
-Install all dependencies (including dev dependencies):
+Build the project:
 
 ```bash
-uv sync
+cargo build
 ```
 
 ## Testing
 
-Run the full test suite with:
-
 ```bash
-uv run pytest
+cargo test
 ```
 
 ## Linting and Formatting
 
-Linting and formatting are enforced via pre-commit using ruff.
-
 ```bash
-ruff check .          # lint
-ruff check --fix .    # lint with auto-fix
-ruff format .         # format
+cargo clippy --all-targets -- -D warnings   # lint
+cargo fmt                                     # format
+cargo fmt -- --check                          # check formatting only
 ```
 
 To run all pre-commit hooks manually:
@@ -40,13 +49,23 @@ To run all pre-commit hooks manually:
 pre-commit run --all-files
 ```
 
+## Documentation
+
+Install docs dependencies and run docs locally:
+
+```bash
+uv venv
+uv pip install -r docs/requirements.txt
+uv run mkdocs serve
+```
+
 ## Code Style
 
-- Maximum line length: 120 characters.
-- Target Python version: 3.12+.
-- Type hints are encouraged on all public functions and methods.
-- Style is enforced automatically by ruff; do not override or disable rules without
-  discussion.
+- Rust edition: 2024.
+- Maximum line length: 120 characters (configured in `rustfmt.toml`).
+- `unsafe` code is forbidden (`unsafe_code = "forbid"` in `Cargo.toml`).
+- Clippy `all` lints are denied; `pedantic` lints are warnings.
+- Minimum supported Rust version (MSRV): 1.85.
 
 ## Commits
 
