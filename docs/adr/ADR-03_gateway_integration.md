@@ -19,6 +19,8 @@ This ADR settles:
 
 Agentic-api is the orchestration core for the vLLM Responses API. It manages the agentic loop: conversation rehydration, inference calling, tool dispatch, response persistence. The question is how it relates to the gateway proxy that sits in front of it.
 
+Note: ADR-01 decided on Python as the project language. The project has since transitioned to Rust ([PR #23](https://github.com/vllm-project/agentic-api/pull/23)), and once accepted, this ADR will supersede ADR-01's language decision (D3).
+
 ### The gateway landscape
 
 Multiple gateway options exist: Praxis (Rust, early-stage, co-development opportunity), Kong, Envoy, or no gateway at all (standalone mode for development). Coupling the orchestration core to any single gateway's plugin API creates lock-in and limits adoption.
@@ -37,15 +39,15 @@ One integration model has been proposed: decompose the agentic loop into **Praxi
 ┌─────────────────────────────────────────────┐
 │  Layer 3: Thin adapters (one per gateway)   │
 │                                             │
-│  ┌───────────┐ ┌───────┐ ┌──────┐ ┌─────┐   │
-│  │   axum    │ │Praxis │ │ Kong │ │ ... │   │
-│  │(standalone)│ filter │ │plugin│ │     │   │
-│  └───────────┘ └───────┘ └──────┘ └─────┘   │
+│  ┌───────┐ ┌──────┐ ┌─────┐                 │
+│  │Praxis │ │ Kong │ │ ... │                 │
+│  │ filter│ │plugin│ │     │                 │
+│  └───────┘ └──────┘ └─────┘                 │
 ├─────────────────────────────────────────────┤
-│  Layer 2: HTTP API (service mode)           │
+│  Layer 2: HTTP API (agentic-server / axum)  │
 │                                             │
 │  POST /v1/responses → calls into core       │
-│  SSE streaming, health checks               │
+│  SSE streaming, health checks, CLI          │
 ├─────────────────────────────────────────────┤
 │  Layer 1: Core library                      │
 │  (pure Rust, no framework dependency)       │
@@ -119,11 +121,11 @@ pub async fn execute(
 ) -> Result<ResponseStream, Error>
 ```
 
-Dependencies: `tokio`, `reqwest`, `serde`, `serde_json`, `sqlx`, `thiserror`. No `axum`, no `praxis`, no `tower`, no `hyper`.
+Dependencies: `tokio`, `reqwest`, `serde`, `serde_json`, `sqlx`, `thiserror`. No server-side framework dependencies (`axum`, `praxis`, `tower`).
 
 ### Layer 2: `agentic-server`
 
-Thin axum wrapper. Parses HTTP, calls `agentic_core::execute()`, streams the result. Owns the CLI (`clap`), vLLM subprocess management, and standalone server lifecycle. This is what PR #24 builds today.
+Thin axum wrapper. Parses HTTP, calls `agentic_core::execute()`, streams the result. Owns the CLI (`clap`), vLLM subprocess management, and standalone server lifecycle. PR #24 will introduce the proxy logic, configuration, error handling, and CLI that form the basis of this layer.
 
 ### Layer 3: `agentic-praxis`
 
@@ -257,15 +259,15 @@ MODE 3: Production (in-process)
 
 ### PR #24 — Rust proxy gateway
 
-PR #24 becomes the foundation of `agentic-core` and `agentic-server`. The proxy logic (`proxy.rs`), configuration (`config.rs`), error handling (`error.rs`), and CLI (`main.rs`) evolve into the layered crate structure. The standalone `serve` mode remains first-class in `agentic-server`. Benchmarks stay.
+PR #24 will become the foundation of `agentic-core` and `agentic-server`. The proxy logic, configuration, error handling, and CLI it introduces will evolve into the layered crate structure. The standalone `serve` mode remains first-class in `agentic-server`. Benchmarks stay.
 
 The workspace migration (flat crate → workspace with `crates/`) is a follow-up after PR #24 merges. PR #24 ships as-is — it's correct and complete for the current scope.
 
 ### PR #27 — Praxis filter-based architecture
 
-PR #27 decomposes the agentic loop into multiple Praxis filters (`responses_proxy`, `agentic_loop`, `state_hydration`, `tool_dispatch`). This ADR supersedes that approach: the loop stays as an explicit state machine in `agentic-core`, and the Praxis integration is a single thin filter in `agentic-praxis`.
+PR #27 decomposes the agentic loop into multiple Praxis filters (`responses_proxy`, `agentic_loop`, `state_hydration`, `tool_dispatch`). If accepted, this ADR supersedes that approach: the loop stays as an explicit state machine in `agentic-core`, and the Praxis integration is a single thin filter in `agentic-praxis`.
 
-PR #27 should be closed in favor of this architecture.
+If accepted, PR #27 should be closed in favor of this architecture.
 
 ---
 
