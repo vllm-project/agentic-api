@@ -112,14 +112,24 @@ agentic-api/
 
 ### Layer 1: `agentic-core`
 
-The core crate exports an async function that takes a request and returns a response stream. No HTTP types, no framework types — just domain types.
+The core crate exposes each step of the agentic loop as an individual public function. This allows consumers to compose steps with their own logic (e.g. rate limiting before tool invocation, custom guardrails between inference and response assembly).
 
 ```rust
+// High-level: run the full loop in one call
 pub async fn execute(
     request: ResponsesRequest,
-    ctx: &ExecutionContext,  // holds store, tools, inference client
+    ctx: &ExecutionContext,
 ) -> Result<ResponseStream, Error>
+
+// Individual loop steps — composable building blocks
+pub async fn rehydrate_conversation(...) -> Result<Conversation, Error>
+pub async fn call_inference(...) -> Result<InferenceResult, Error>
+pub async fn dispatch_tools(...) -> Result<Vec<ToolResult>, Error>
+pub async fn assemble_response(...) -> Result<Response, Error>
+pub async fn persist_response(...) -> Result<(), Error>
 ```
+
+`execute()` is a convenience that composes these steps with the default loop logic. Consumers who need fine-grained control (custom middleware between steps, per-step observability, conditional branching) call the individual functions directly.
 
 Dependencies: `tokio`, `reqwest`, `serde`, `serde_json`, `sqlx`, `thiserror`. No server-side framework dependencies (`axum`, `praxis`, `tower`).
 
