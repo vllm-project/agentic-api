@@ -3,9 +3,32 @@
 version = 4
 
 [[package]]
-name = "agentic-api"
+name = "agentic-core"
 version = "0.1.0"
 dependencies = [
+ "bytes",
+ "futures",
+ "http",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "agentic-praxis"
+version = "0.1.0"
+dependencies = [
+ "agentic-core",
+]
+
+[[package]]
+name = "agentic-server"
+version = "0.1.0"
+dependencies = [
+ "agentic-core",
  "axum",
  "bytes",
  "clap",
@@ -13,9 +36,7 @@ dependencies = [
  "futures",
  "http",
  "reqwest",
- "serde",
  "serde_json",
- "thiserror",
  "tokio",
  "tower-http",
  "tracing",

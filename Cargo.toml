@@ -1,37 +1,16 @@
-[package]
-name = "agentic-api"
+[workspace]
+members = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
-description = "Stateful API logic for agentic applications using vLLM"
 license = "Apache-2.0"
 repository = "https://github.com/vllm-project/agentic-api"
 
-[dependencies]
-axum = "0.8"
-bytes = "1"
-clap = { version = "4", features = ["derive", "env"] }
-futures = "0.3"
-http = "1"
-reqwest = { version = "0.12", features = ["stream"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-thiserror = "2"
-tokio = { version = "1", features = ["full"] }
-tower-http = { version = "0.6", features = ["cors"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-[dev-dependencies]
-criterion = { version = "0.5", features = ["async_tokio"] }
-reqwest = { version = "0.12", features = ["json"] }
-
-[[bench]]
-name = "proxy_bench"
-harness = false
-
-[lints.rust]
+[workspace.lints.rust]
 unsafe_code = "forbid"
 
-[lints.clippy]
+[workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
 pedantic = { level = "warn", priority = -1 }

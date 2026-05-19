@@ -1,0 +1,13 @@
+[package]
+name = "agentic-praxis"
+description = "Praxis gateway adapter for agentic-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+agentic-core = { path = "../agentic-core" }
+
+[lints]
+workspace = true
