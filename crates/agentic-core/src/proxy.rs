@@ -6,6 +6,7 @@ use futures::{Stream, TryStreamExt};
 use http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use reqwest::Client;
 use serde_json::Value;
+use tracing::warn;
 
 use crate::config::Config;
 use crate::error::Error;
@@ -62,6 +63,7 @@ impl ProxyState {
     pub fn new(config: Config) -> Result<Self, Error> {
         let stream_client = Client::builder()
             .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(900))
             .pool_max_idle_per_host(0)
             .redirect(reqwest::redirect::Policy::none())
             .build()
@@ -90,7 +92,7 @@ fn filter_request_headers(headers: &HeaderMap, config: &Config) -> reqwest::head
         }
         if let Ok(n) = reqwest::header::HeaderName::from_bytes(name.as_str().as_bytes()) {
             if let Ok(v) = reqwest::header::HeaderValue::from_bytes(value.as_bytes()) {
-                out.insert(n, v);
+                out.append(n, v);
             }
         }
     }
@@ -118,7 +120,7 @@ fn filter_response_headers(headers: &reqwest::header::HeaderMap) -> HeaderMap {
         }
         if let Ok(n) = HeaderName::from_bytes(name.as_str().as_bytes()) {
             if let Ok(v) = HeaderValue::from_bytes(value.as_bytes()) {
-                out.insert(n, v);
+                out.append(n, v);
             }
         }
     }
@@ -142,9 +144,11 @@ pub fn error_response(status: StatusCode, code: &str, message: &str) -> ProxyRes
             "code": code,
         }
     });
+    let mut headers = HeaderMap::new();
+    headers.insert("content-type", HeaderValue::from_static("application/json"));
     ProxyResponse {
         status,
-        headers: HeaderMap::new(),
+        headers,
         body: ProxyBody::Full(Bytes::from(serde_json::to_vec(&body).unwrap_or_default())),
     }
 }
@@ -173,9 +177,11 @@ pub async fn proxy_request(request: ProxyRequest, state: &ProxyState) -> ProxyRe
     let llm_resp = match client.post(&url).headers(llm_headers).body(request.body).send().await {
         Ok(r) => r,
         Err(e) if e.is_timeout() => {
+            warn!("LLM request timed out: {e}");
             return error_response(StatusCode::GATEWAY_TIMEOUT, "llm_timeout", "LLM timeout");
         }
-        Err(_) => {
+        Err(e) => {
+            warn!("LLM request failed: {e}");
             return error_response(StatusCode::BAD_GATEWAY, "llm_unavailable", "LLM unavailable");
         }
     };
@@ -197,7 +203,8 @@ pub async fn proxy_request(request: ProxyRequest, state: &ProxyState) -> ProxyRe
 
     let payload: Bytes = match llm_resp.bytes().await {
         Ok(b) => b,
-        Err(_) => {
+        Err(e) => {
+            warn!("failed to read LLM response body: {e}");
             return error_response(
                 StatusCode::BAD_GATEWAY,
                 "llm_unavailable",

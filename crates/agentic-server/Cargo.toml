@@ -9,11 +9,8 @@ repository.workspace = true
 [dependencies]
 agentic-core = { path = "../agentic-core" }
 axum = "0.8"
-bytes = "1"
 clap = { version = "4", features = ["derive", "env"] }
-futures = "0.3"
 http = "1"
-reqwest = { version = "0.12", features = ["stream"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors"] }
@@ -21,8 +18,10 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
+bytes = "1"
 criterion = { version = "0.5", features = ["async_tokio"] }
-reqwest = { version = "0.12", features = ["json"] }
+futures = "0.3"
+reqwest = { version = "0.12", features = ["json", "stream"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full", "test-util"] }
 tokio-stream = "0.1"

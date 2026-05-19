@@ -22,7 +22,7 @@ pub async fn proxy_responses(State(state): State<ProxyState>, req: axum::extract
 
     let Ok(body_bytes) = axum::body::to_bytes(body, MAX_BODY_SIZE).await else {
         return convert_response(error_response(
-            StatusCode::BAD_REQUEST,
+            StatusCode::PAYLOAD_TOO_LARGE,
             "body_too_large",
             "Request body too large",
         ));
