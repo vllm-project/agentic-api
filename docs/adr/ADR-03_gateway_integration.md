@@ -129,7 +129,7 @@ pub async fn assemble_response(...) -> Result<Response, Error>
 pub async fn persist_response(...) -> Result<(), Error>
 ```
 
-`execute()` is a convenience that composes these steps with the default loop logic. Consumers who need fine-grained control (custom middleware between steps, per-step observability, conditional branching) call the individual functions directly.
+`execute()` is a convenience that composes these steps with the default loop logic. Consumers who need fine-grained control (custom middleware between steps, per-step observability, conditional branching) call the individual functions directly. Each function can also be wrapped in its own gateway filter — a consumer who wants per-step filters can build them from these primitives without the core prescribing the decomposition.
 
 Dependencies: `tokio`, `reqwest`, `serde`, `serde_json`, `sqlx`, `thiserror`. No server-side framework dependencies (`axum`, `praxis`, `tower`).
 
