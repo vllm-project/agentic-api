@@ -19,7 +19,7 @@ This ADR settles:
 
 Agentic-api is the orchestration core for the vLLM Responses API. It manages the agentic loop: conversation rehydration, inference calling, tool dispatch, response persistence. The question is how it relates to the gateway proxy that sits in front of it.
 
-Note: ADR-01 decided on Python as the project language. The project has since transitioned to Rust ([PR #23](https://github.com/vllm-project/agentic-api/pull/23)), and once accepted, this ADR will supersede ADR-01's language decision (D3).
+Note: ADR-01 decided on Python as the project language. PR #23 transitioned the project to Rust, superseding ADR-01's language decision (D3). This ADR assumes Rust throughout.
 
 ### Praxis as the gateway
 
@@ -281,7 +281,7 @@ request arrives
   → response to client
 ```
 
-Each filter is a thin wrapper (~10 lines). All domain logic lives in `agentic-core`. Consumers customize the loop by editing the YAML — inserting filters (e.g. guardrails between inference and tool dispatch), reordering steps, or replacing filters with custom implementations. This uses Praxis's filter chain and branch constructs natively ([praxis#354](https://github.com/praxis-proxy/praxis/issues/354)).
+Each filter is a thin wrapper (~10 lines). All domain logic lives in `agentic-core`. Consumers customize the loop by editing YAML to add/remove/reorder/reconfigure filters that are already registered in the Praxis binary (for example, inserting a guardrail filter between inference and tool dispatch). Adding a brand-new custom filter implementation requires registering it in code and rebuilding the Praxis binary. This uses Praxis's filter chain and branch constructs natively ([praxis#354](https://github.com/praxis-proxy/praxis/issues/354)).
 
 #### In standalone mode
 
@@ -313,7 +313,7 @@ Both use the same `agentic-core` public functions — the domain logic is always
 
 - **Testability.** Core logic is tested without any HTTP server or gateway infrastructure.
 - **Composability.** Consumers can customize the agentic loop by wiring individual functions differently — adding steps, reordering, or replacing functions.
-- **Independent scaling.** As a service, agentic-api scales separately from the gateway. As an in-process filter, it shares the gateway's resources — the deployment choice is made at deploy time, not compile time.
+- **Independent scaling.** As a service, agentic-api scales separately from the gateway. As an in-process filter, it shares the gateway's resources. Runtime topology is a deployment decision, but in-process mode requires a Praxis build that includes `agentic-praxis` and its filter registrations.
 - **Release independence.** Core and server ship on their own schedule. Adapters depend on the core crate version, not on the gateway's release cycle.
 
 ---
