@@ -206,21 +206,82 @@ Praxis is what we start with. Because `agentic-core` functions are plain Rust wi
 
 #### In Praxis
 
-Each `agentic-core` function is wrapped in an `HttpFilter`. Praxis's filter chain orchestrates the loop — with branch chains handling tool-call re-entry:
+Each `agentic-core` function is wrapped in an `HttpFilter`. Praxis's filter chain orchestrates the loop — with branch chains handling tool-call re-entry.
+
+**Filter implementations** — thin wrappers that delegate to `agentic-core`:
+
+```rust
+struct InferenceFilter { vllm_url: String }
+impl HttpFilter for InferenceFilter {
+    async fn on_request(&self, ctx: &mut HttpFilterContext<'_>) -> Result<FilterAction> {
+        let result = agentic_core::call_inference(ctx.get("conversation"), &self.vllm_url).await?;
+        ctx.set("inference_result", result);
+        Ok(FilterAction::Continue)
+    }
+}
+
+struct ToolDispatchFilter;
+impl HttpFilter for ToolDispatchFilter {
+    async fn on_request(&self, ctx: &mut HttpFilterContext<'_>) -> Result<FilterAction> {
+        let result = ctx.get("inference_result");
+        if result.has_tool_calls() {
+            let tool_results = agentic_core::dispatch_tools(result.tool_calls()).await?;
+            ctx.set("conversation", result.with_tool_results(tool_results));
+            ctx.set_result("action", "loop");   // signal branch: tools called
+        } else {
+            ctx.set_result("action", "done");   // signal: no tools, continue
+        }
+        Ok(FilterAction::Continue)
+    }
+}
+```
+
+**YAML configuration** — Praxis orchestrates the loop declaratively:
+
+```yaml
+filter_chains:
+  - name: agentic-loop
+    filters:
+      - filter: rehydrate
+        name: rehydrate
+
+      - filter: inference
+        name: inference
+        vllm_base_url: "http://localhost:8000"
+
+      - filter: tool_dispatch
+        name: tool_dispatch
+        branch_chains:
+          - name: tool-call-loop
+            on_result:
+              filter: tool_dispatch
+              key: action
+              result: loop              # branch when tools were called
+            rejoin: inference           # re-enter at inference filter
+            max_iterations: 10          # cap tool-call iterations
+
+      - filter: assemble
+        name: assemble
+
+      - filter: persist
+        name: persist
+```
+
+**The resulting flow:**
 
 ```
-Client → Praxis filter chain
-           → auth / rate-limit / routing (gateway filters)
-           → rehydrate_conversation filter  (calls agentic_core::rehydrate_conversation)
-           → call_inference filter          (calls agentic_core::call_inference → vLLM)
-           → dispatch_tools filter          (calls agentic_core::dispatch_tools)
-           → [branch: re-enter if tool calls detected]
-           → assemble_response filter       (calls agentic_core::assemble_response)
-           → persist_response filter        (calls agentic_core::persist_response)
-           → response to client
+request arrives
+  → rehydrate         (agentic_core::rehydrate_conversation)
+  → inference          (agentic_core::call_inference → vLLM)
+  → tool_dispatch      (agentic_core::dispatch_tools)
+      ├─ action=loop → [branch: re-enter at inference, max 10 iterations]
+      └─ action=done → continue
+  → assemble           (agentic_core::assemble_response)
+  → persist            (agentic_core::persist_response)
+  → response to client
 ```
 
-Consumers customize the loop by reconfiguring the filter chain — inserting filters (e.g. guardrails between inference and tool dispatch), reordering steps, or replacing filters with custom implementations. This uses Praxis's filter chain and branch constructs natively ([praxis#354](https://github.com/praxis-proxy/praxis/issues/354)).
+Each filter is a thin wrapper (~10 lines). All domain logic lives in `agentic-core`. Consumers customize the loop by editing the YAML — inserting filters (e.g. guardrails between inference and tool dispatch), reordering steps, or replacing filters with custom implementations. This uses Praxis's filter chain and branch constructs natively ([praxis#354](https://github.com/praxis-proxy/praxis/issues/354)).
 
 #### In standalone mode
 
