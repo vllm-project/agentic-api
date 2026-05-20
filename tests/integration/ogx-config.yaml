@@ -1,0 +1,42 @@
+version: 2
+distro_name: agentic-api-test
+
+apis:
+  - responses
+  - vector_io
+  - files
+
+providers:
+  responses:
+    - provider_id: builtin
+      provider_type: inline::builtin
+      config:
+        persistence:
+          responses:
+            table_name: responses
+            backend: sql_default
+
+  vector_io:
+    - provider_id: sqlite-vec
+      provider_type: inline::sqlite-vec
+      config:
+        db_path: /tmp/ogx-test/sqlite_vec.db
+        persistence:
+          namespace: vector_io::sqlite_vec
+          backend: kv_default
+
+storage:
+  backends:
+    kv_default:
+      type: kv_sqlite
+      db_path: /tmp/ogx-test/kvstore.db
+    sql_default:
+      type: sql_sqlite
+      db_path: /tmp/ogx-test/sql_store.db
+  stores:
+    metadata:
+      namespace: registry
+      backend: kv_default
+    conversations:
+      table_name: openai_conversations
+      backend: sql_default
