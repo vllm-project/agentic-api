@@ -8,24 +8,20 @@ repository = "https://github.com/vllm-project/agentic-api"
 
 [dependencies]
 async-trait = "0.1"
+axum = "0.8"
 bytes = "1"
 clap = { version = "4", features = ["derive", "env"] }
 http = "1"
-praxis = { git = "https://github.com/praxis-proxy/praxis.git", rev = "2f7ea31" }
-praxis-proxy-core = { git = "https://github.com/praxis-proxy/praxis.git", rev = "2f7ea31" }
-praxis-proxy-filter = { git = "https://github.com/praxis-proxy/praxis.git", rev = "2f7ea31" }
-reqwest = { version = "0.12", features = ["stream"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-serde_yaml = "0.9"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
-axum = "0.8"
 futures = "0.3"
-praxis-test-utils = { git = "https://github.com/praxis-proxy/praxis.git", rev = "2f7ea31" }
 reqwest = { version = "0.12", features = ["json"] }
 tokio = { version = "1", features = ["full", "test-util"] }
 tokio-stream = "0.1"

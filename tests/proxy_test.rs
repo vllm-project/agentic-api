@@ -1,11 +1,12 @@
+#[allow(dead_code)]
 mod common;
 
-use common::{spawn_mid_stream_failure_vllm, spawn_vllm, start_agentic_proxy};
+use common::{spawn_mid_stream_failure_vllm, spawn_vllm, start_gateway};
 
 #[tokio::test]
 async fn test_non_stream_passthrough() {
     let (vllm_port, _h) = spawn_vllm().await;
-    let (gw_addr, _) = start_agentic_proxy(vllm_port, Some("env-vllm-key")).await;
+    let (gw_addr, _) = start_gateway(vllm_port, None, Some("env-vllm-key")).await;
 
     let client = reqwest::Client::new();
     let resp = client
@@ -26,7 +27,7 @@ async fn test_non_stream_passthrough() {
 #[tokio::test]
 async fn test_stream_passthrough() {
     let (vllm_port, _h) = spawn_vllm().await;
-    let (gw_addr, _) = start_agentic_proxy(vllm_port, Some("env-vllm-key")).await;
+    let (gw_addr, _) = start_gateway(vllm_port, None, Some("env-vllm-key")).await;
 
     let client = reqwest::Client::new();
     let resp = client
@@ -50,7 +51,7 @@ async fn test_stream_passthrough() {
 #[tokio::test]
 async fn test_auth_injection() {
     let (vllm_port, _h) = spawn_vllm().await;
-    let (gw_addr, _) = start_agentic_proxy(vllm_port, Some("env-vllm-key")).await;
+    let (gw_addr, _) = start_gateway(vllm_port, None, Some("env-vllm-key")).await;
 
     let client = reqwest::Client::new();
     let resp = client
@@ -68,7 +69,7 @@ async fn test_auth_injection() {
 #[tokio::test]
 async fn test_client_auth_precedence() {
     let (vllm_port, _h) = spawn_vllm().await;
-    let (gw_addr, _) = start_agentic_proxy(vllm_port, Some("env-vllm-key")).await;
+    let (gw_addr, _) = start_gateway(vllm_port, None, Some("env-vllm-key")).await;
 
     let client = reqwest::Client::new();
     let resp = client
@@ -87,7 +88,7 @@ async fn test_client_auth_precedence() {
 #[tokio::test]
 async fn test_vllm_http_error_passthrough() {
     let (vllm_port, _h) = spawn_vllm().await;
-    let (gw_addr, _) = start_agentic_proxy(vllm_port, Some("env-vllm-key")).await;
+    let (gw_addr, _) = start_gateway(vllm_port, None, Some("env-vllm-key")).await;
 
     let client = reqwest::Client::new();
     let resp = client
@@ -106,7 +107,7 @@ async fn test_vllm_http_error_passthrough() {
 #[tokio::test]
 async fn test_mid_stream_failure_closes_cleanly() {
     let (vllm_port, _h) = spawn_mid_stream_failure_vllm().await;
-    let (gw_addr, _) = start_agentic_proxy(vllm_port, Some("env-vllm-key")).await;
+    let (gw_addr, _) = start_gateway(vllm_port, None, Some("env-vllm-key")).await;
 
     let client = reqwest::Client::new();
     let resp = client
@@ -127,7 +128,7 @@ async fn test_mid_stream_failure_closes_cleanly() {
 
 #[tokio::test]
 async fn test_connect_error_maps_to_502() {
-    let (gw_addr, _) = start_agentic_proxy(1, None).await;
+    let (gw_addr, _) = start_gateway(1, None, None).await;
 
     let client = reqwest::Client::new();
     let resp = client

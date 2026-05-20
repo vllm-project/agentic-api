@@ -14,11 +14,11 @@ pub struct RuntimeConfig {
     #[arg(long, default_value_t = 9000)]
     pub gateway_port: u16,
 
-    #[arg(long, default_value_t = 600.0)]
-    pub vllm_ready_timeout_s: f64,
+    #[arg(long, default_value = "http://localhost:8080")]
+    pub ogx_base_url: String,
 
-    #[arg(long, default_value_t = 2.0)]
-    pub vllm_ready_interval_s: f64,
+    #[arg(long, default_value_t = 10)]
+    pub max_iterations: u32,
 }
 
 #[must_use]
