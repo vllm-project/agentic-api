@@ -25,11 +25,11 @@ Note: ADR-01 decided on Python as the project language. The project has since tr
 
 Praxis is the primary gateway for agentic-api. It is a Rust-native, early-stage proxy with a co-development opportunity — agentic-api is an early adopter that validates Praxis's integration model with a real agentic workload.
 
-The out-of-the-box version of agentic-api ships a Praxis filter that composes the agentic loop by calling `agentic-core` public functions. The key requirement is that consumers can build their own filter with a different loop — adding, removing, or reordering steps — by calling the same public functions (requires recompilation, not dynamic).
+The out-of-the-box version of agentic-api ships a set of Praxis filters (each implementing `HttpFilter`) that compose the agentic loop, with each filter backed by an `agentic-core` public function. Praxis's filter chain with branch support orchestrates the loop — including branching back on tool calls. In standalone mode (no gateway), `execute()` composes the same functions with plain Rust control flow. The key requirement is that consumers can customize the loop — adding, removing, or reordering filters — by calling the same public functions (requires recompilation, not dynamic).
 
 ### The integration question
 
-One integration model has been proposed: decompose the agentic loop into **Praxis re-entrant filter chains** where each step is a Praxis-specific filter. An alternative is to implement the loop steps as plain Rust public functions that a Praxis filter calls to compose the loop. The functions are testable without Praxis and usable in standalone mode. Because they are plain Rust with no gateway-specific API, they could support other gateways in the future.
+The loop steps are implemented as plain Rust public functions in `agentic-core`. When integrated with Praxis, each function is wrapped in an `HttpFilter` and composed into a filter chain — using Praxis's branch chains to handle tool-call loops. In standalone mode, `execute()` composes the same functions with plain Rust control flow. Because the functions are plain Rust with no gateway-specific API, they could support other gateways in the future.
 
 ---
 
@@ -42,8 +42,9 @@ One integration model has been proposed: decompose the agentic loop into **Praxi
 │  Layer 3: Gateway adapter (Praxis)          │
 │                                             │
 │  ┌─────────────────────────┐                 │
-│  │  agentic-praxis filter  │                 │
-│  │  (composes the loop)    │                 │
+│  │  agentic-praxis         │                 │
+│  │  (HttpFilter impls      │                 │
+│  │   backed by core fns)   │                 │
 │  └─────────────────────────┘                 │
 ├─────────────────────────────────────────────┤
 │  Layer 2: HTTP API (agentic-server / axum)  │
@@ -72,9 +73,9 @@ One integration model has been proposed: decompose the agentic loop into **Praxi
 | # | Decision | Status |
 |---|----------|--------|
 | D1 | Core orchestration logic is a Rust library crate (`agentic-core`) that exposes each loop step as a public function — plain Rust, no gateway-specific API | Proposed |
-| D2 | The agentic loop is composed by calling `agentic-core` public functions — either inside a single filter (Model A) or across per-step filters with Praxis re-entrant chains (Model B); both use the same functions | Proposed |
+| D2 | The agentic loop is composed by calling `agentic-core` public functions — in Praxis, each function is an `HttpFilter` in a filter chain with branch support; in standalone mode, `execute()` composes them with plain Rust control flow | Proposed |
 | D3 | Response store, conversation manager, tool registry, and MCP client are implemented natively in Rust within `agentic-core` | Proposed |
-| D4 | Praxis integrates via `agentic-praxis`, a filter that composes the default loop by calling `agentic-core` public functions — deployed either as a backend service or as an in-process library | Proposed |
+| D4 | Praxis integrates via `agentic-praxis`, which wraps each `agentic-core` function in an `HttpFilter` — composed into a filter chain with branches for tool-call looping | Proposed |
 | D5 | Standalone mode (axum binary) is first-class — same core functions, different hosting | Proposed |
 
 ---
@@ -108,7 +109,7 @@ agentic-api/
     agentic-praxis/        # Layer 3: Praxis adapter
       Cargo.toml           # depends on agentic-core + praxis
       src/
-        lib.rs             # Single filter: receive request → core → stream response
+        lib.rs             # HttpFilter impls: each wraps an agentic-core function
 ```
 
 ### Layer 1: `agentic-core`
@@ -140,7 +141,7 @@ Thin axum wrapper. Parses HTTP, calls `agentic_core::execute()`, streams the res
 
 ### Layer 3: `agentic-praxis`
 
-The default Praxis filter. Composes the agentic loop internally by calling `agentic-core` public functions. The out-of-the-box filter calls `execute()` for the standard loop. Consumers who need a custom loop (e.g. adding rate limiting before tool invocation, or inserting guardrails between inference and assembly) build their own filter that calls the individual step functions directly.
+The Praxis integration crate. Each `agentic-core` public function is wrapped in an `HttpFilter` implementation. The out-of-the-box configuration assembles these filters into a filter chain with branch support for tool-call looping. Consumers who need a custom loop (e.g. adding rate limiting before tool invocation, or inserting guardrails between inference and assembly) reconfigure the filter chain — adding, removing, or reordering filters.
 
 Praxis depends on `agentic-praxis` as a crate, which transitively brings in `agentic-core`:
 
@@ -170,10 +171,10 @@ Client → Praxis (auth, rate-limit, routing) → agentic-server
 
 Praxis sees agentic-api as an HTTP backend — the same way it sees vLLM. For stateful requests (`previous_response_id`, tools), Praxis routes to agentic-api. For stateless pass-through, Praxis routes directly to vLLM.
 
-Alternatively, Praxis can link `agentic-praxis` as an in-process filter, eliminating the network hop while keeping the same core logic:
+Alternatively, Praxis can link `agentic-praxis` in-process, with each `agentic-core` function as an `HttpFilter` in the filter chain — eliminating the network hop while keeping the same core logic:
 
 ```
-Client → Praxis (auth, rate-limit, routing, agentic-praxis filter) → vLLM
+Client → Praxis (auth, rate-limit, routing, agentic-praxis filters) → vLLM
                                                 │
                                           agentic-core
                                           (in-process)
@@ -199,56 +200,53 @@ Praxis is what we start with. Because `agentic-core` functions are plain Rust wi
 
 ## Rationale
 
-### Two composition models from the same primitives
+### Same functions, different orchestrators
 
-Because `agentic-core` exposes each loop step as a public function, two composition models are possible — both use the same underlying code.
+`agentic-core` exposes each loop step as a public function. Who orchestrates the loop depends on the deployment context:
 
-#### Model A: Single filter (default)
+#### In Praxis
 
-One Praxis filter composes the full loop internally by calling `agentic-core` functions:
-
-```
-Client → Praxis filters (auth, rate-limit, routing)
-           → agentic-praxis filter
-               calls: rehydrate → inference → tool_dispatch → assemble → persist
-               (loop iteration is plain Rust control flow inside the filter)
-               (inference step calls vLLM internally; response returns to client)
-```
-
-This is what `agentic-praxis` ships out of the box. The loop is self-contained, testable with `cargo test`, and works in standalone mode (axum) without Praxis.
-
-#### Model B: Per-step filter chain ([praxis#354](https://github.com/praxis-proxy/praxis/issues/354))
-
-Each `agentic-core` function is wrapped in its own Praxis filter. Praxis's re-entrant filter chains orchestrate the loop iteration:
+Each `agentic-core` function is wrapped in an `HttpFilter`. Praxis's filter chain orchestrates the loop — with branch chains handling tool-call re-entry:
 
 ```
-Client → Praxis filters (auth, rate-limit, routing)
-           → conversation_retrieval filter  (calls rehydrate_conversation)
-           → pre_inference_guardrails filter
-           → inference filter               (calls call_inference)
-           → post_inference_guardrails filter
-           → tool_dispatch filter           (calls dispatch_tools)
-           → [re-enter chain if tool calls detected]
-           → response_assembly filter       (calls assemble_response)
-           → persistence filter             (calls persist_response)
+Client → Praxis filter chain
+           → auth / rate-limit / routing (gateway filters)
+           → rehydrate_conversation filter  (calls agentic_core::rehydrate_conversation)
+           → call_inference filter          (calls agentic_core::call_inference → vLLM)
+           → dispatch_tools filter          (calls agentic_core::dispatch_tools)
+           → [branch: re-enter if tool calls detected]
+           → assemble_response filter       (calls agentic_core::assemble_response)
+           → persist_response filter        (calls agentic_core::persist_response)
            → response to client
-           (inference filter calls vLLM internally)
 ```
 
-Each filter wraps an `agentic-core` public function — the domain logic stays in `agentic-core`, the orchestration moves to Praxis's filter pipeline.
+Consumers customize the loop by reconfiguring the filter chain — inserting filters (e.g. guardrails between inference and tool dispatch), reordering steps, or replacing filters with custom implementations. This uses Praxis's filter chain and branch constructs natively ([praxis#354](https://github.com/praxis-proxy/praxis/issues/354)).
+
+#### In standalone mode
+
+`execute()` composes the same functions with plain Rust control flow — no gateway, no pipeline framework:
+
+```
+Client → agentic-server (axum)
+           → agentic_core::execute()
+               rehydrate → inference (→ vLLM) → tool_dispatch → assemble → persist
+               (loop iteration is plain Rust async)
+           → response to client
+```
+
+This is the development and community-friendly mode. Anyone can use `agentic-core` as a library without Praxis or any specific gateway.
 
 #### Comparison
 
-| Concern | Model A (single filter) | Model B (per-step filters) |
-|---------|------------------------|---------------------------|
-| Loop control | Plain Rust control flow inside the filter | Praxis re-entrant filter chains |
-| Per-step customization | Call individual functions with custom logic between them | Insert custom filters between steps in the chain |
-| Observability | Explicit instrumentation inside the filter | Praxis provides per-filter metrics and tracing |
-| Standalone mode | Works as-is (axum) | Requires Praxis |
-| Praxis dependency | Runtime only (filter API) | Runtime + re-entrant chain support ([praxis#354](https://github.com/praxis-proxy/praxis/issues/354)) |
-| Testing | `cargo test` on `agentic-core` functions directly | `cargo test` on functions + Praxis filter harness for integration |
+| Concern | Praxis (filter chain) | Standalone (execute) |
+|---------|----------------------|----------------------|
+| Loop control | Filter chain with branch support for re-entry | Plain Rust control flow |
+| Customization | Reconfigure filter chain — add/remove/reorder filters | Call individual functions with custom logic between them |
+| Observability | Praxis provides per-filter metrics and tracing | Explicit instrumentation |
+| Gateway dependency | Praxis | None |
+| Testing | `cargo test` on functions + Praxis filter chain for integration | `cargo test` on functions directly |
 
-Both models use the same `agentic-core` public functions. Model A is the starting point; Model B becomes available as Praxis's re-entrant chain support matures. The migration path is: wrap each function call in its own filter and move loop control to Praxis — no changes to `agentic-core`.
+Both use the same `agentic-core` public functions — the domain logic is always in `agentic-core`, only the orchestrator differs.
 
 ### Why three layers
 
@@ -284,7 +282,7 @@ MODE 3: Production (in-process)
   Client
     │
     ▼
-  Praxis (with agentic-praxis filter linked)
+  Praxis (with agentic-praxis filters linked)
     │  gateway filters + agentic core in one process
     ▼
   vLLM / llm-d (fleet)
@@ -302,9 +300,7 @@ The workspace migration (flat crate → workspace with `crates/`) is a follow-up
 
 ### PR #27 — Praxis filter-based architecture
 
-PR #27 decomposes the agentic loop into multiple Praxis filters (`responses_proxy`, `agentic_loop`, `state_hydration`, `tool_dispatch`). If accepted, this ADR supersedes that approach: the loop stays as an explicit state machine in `agentic-core`, and the Praxis integration is a single thin filter in `agentic-praxis`.
-
-If accepted, PR #27 should be closed in favor of this architecture.
+PR #27 decomposes the agentic loop into multiple Praxis filters (`responses_proxy`, `agentic_loop`, `state_hydration`, `tool_dispatch`). This ADR aligns with that direction — each step is an `HttpFilter` in the filter chain — but with a key difference: the domain logic lives in `agentic-core` public functions, not in Praxis-specific filter implementations. PR #27's filter decomposition should be reworked so each filter delegates to an `agentic-core` function rather than implementing the logic directly.
 
 ---
 
