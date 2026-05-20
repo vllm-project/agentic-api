@@ -15,6 +15,13 @@ fn checked_duration_seconds(name: &str, value: f64) -> Result<Duration, Error> {
         .map_err(|_| Error::Config(format!("{name} must be representable as a Duration (got {value})")))
 }
 
+fn timeout_error(url: &str, timeout_s: f64) -> Error {
+    Error::LlmTimeout {
+        url: url.to_owned(),
+        timeout_s,
+    }
+}
+
 /// Poll LLM `/health` until it responds 200 or the timeout is reached.
 ///
 /// # Errors
@@ -47,31 +54,40 @@ pub async fn wait_llm_ready(config: &Config) -> Result<(), Error> {
     let mut last_notice = Duration::ZERO;
 
     loop {
-        let elapsed = start.elapsed();
-        if elapsed > timeout {
-            return Err(Error::LlmTimeout {
-                url,
-                timeout_s: config.llm_ready_timeout_s,
-            });
+        let remaining = timeout
+            .checked_sub(start.elapsed())
+            .ok_or_else(|| timeout_error(&url, config.llm_ready_timeout_s))?;
+        if remaining.is_zero() {
+            return Err(timeout_error(&url, config.llm_ready_timeout_s));
         }
 
-        match client.get(&url).send().await {
-            Ok(resp) if resp.status().as_u16() == 200 => return Ok(()),
+        match tokio::time::timeout(remaining, client.get(&url).send()).await {
+            Ok(Ok(resp)) if resp.status().as_u16() == 200 => return Ok(()),
             _ => {}
         }
 
+        let elapsed = start.elapsed();
         if elapsed.saturating_sub(last_notice) >= interval {
             last_notice = elapsed;
             info!("waiting for LLM ({}s elapsed): {url}", elapsed.as_secs());
         }
 
-        tokio::time::sleep(interval).await;
+        let remaining = timeout
+            .checked_sub(start.elapsed())
+            .ok_or_else(|| timeout_error(&url, config.llm_ready_timeout_s))?;
+        if remaining.is_zero() {
+            return Err(timeout_error(&url, config.llm_ready_timeout_s));
+        }
+
+        tokio::time::sleep(interval.min(remaining)).await;
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::checked_duration_seconds;
+    use std::time::Duration;
+
+    use super::{checked_duration_seconds, timeout_error};
 
     #[test]
     fn checked_duration_rejects_non_positive() {
@@ -98,5 +114,24 @@ mod tests {
     fn checked_duration_accepts_positive_finite() {
         let duration = checked_duration_seconds("v", 0.25).unwrap();
         assert_eq!(duration.as_millis(), 250);
+    }
+
+    #[test]
+    fn timeout_error_preserves_inputs() {
+        let err = timeout_error("http://127.0.0.1:8000/health", 0.5);
+        match err {
+            crate::error::Error::LlmTimeout { url, timeout_s } => {
+                assert_eq!(url, "http://127.0.0.1:8000/health");
+                assert!((timeout_s - 0.5).abs() < f64::EPSILON);
+            }
+            other => panic!("expected timeout error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn interval_sleep_is_capped_by_remaining_timeout() {
+        let interval = Duration::from_secs(2);
+        let remaining = Duration::from_millis(100);
+        assert_eq!(interval.min(remaining), Duration::from_millis(100));
     }
 }
