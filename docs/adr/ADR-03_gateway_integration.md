@@ -383,3 +383,5 @@ PR #27 decomposes the agentic loop into multiple Praxis filters (`responses_prox
 3. **Guardrails integration point.** Input guardrails can run in Praxis (pre-routing) or in agentic-api (post-hydration, with full conversation context). Output guardrails must run in agentic-api (per loop iteration). The split needs to be validated with the guardrails team.
 
 4. **In-process vs service mode trade-offs.** Mode 2 (service) adds ~1ms per loop iteration but gives process isolation and independent scaling. Mode 3 (in-process) eliminates the hop but shares failure domains. Which is the default recommendation for production?
+
+5. **Separate tools crate.** Tools currently live in `agentic-core`. If a tool implementation requires non-Rust-native dependencies (C bindings, external libraries), it may make sense to split tools into a separate `agentic-tools` crate to avoid polluting `agentic-core`'s dependency tree. Revisit when tool implementations land.
