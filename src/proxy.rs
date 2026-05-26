@@ -198,3 +198,171 @@ pub async fn proxy_responses(State(state): State<ProxyState>, req: axum::extract
     *resp.headers_mut() = response_headers;
     resp
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::RuntimeConfig;
+
+    fn test_config() -> RuntimeConfig {
+        RuntimeConfig {
+            llm_api_base: "http://localhost:8000".to_owned(),
+            openai_api_key: Some("test-key".to_owned()),
+            gateway_host: "127.0.0.1".to_owned(),
+            gateway_port: 0,
+            vllm_ready_timeout_s: 5.0,
+            vllm_ready_interval_s: 0.1,
+        }
+    }
+
+    fn test_config_no_key() -> RuntimeConfig {
+        RuntimeConfig {
+            openai_api_key: None,
+            ..test_config()
+        }
+    }
+
+    #[test]
+    fn hop_by_hop_detected() {
+        assert!(is_hop_by_hop("connection"));
+        assert!(is_hop_by_hop("Connection"));
+        assert!(is_hop_by_hop("keep-alive"));
+        assert!(is_hop_by_hop("transfer-encoding"));
+        assert!(is_hop_by_hop("proxy-authorization"));
+    }
+
+    #[test]
+    fn non_hop_by_hop_passes() {
+        assert!(!is_hop_by_hop("content-type"));
+        assert!(!is_hop_by_hop("x-custom"));
+        assert!(!is_hop_by_hop("authorization"));
+    }
+
+    #[test]
+    fn request_drop_includes_host_and_content_length() {
+        assert!(is_request_drop("host"));
+        assert!(is_request_drop("content-length"));
+        assert!(is_request_drop("connection"));
+        assert!(!is_request_drop("content-type"));
+    }
+
+    #[test]
+    fn filter_request_headers_strips_hop_by_hop() {
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", "application/json".parse().unwrap());
+        headers.insert("connection", "keep-alive".parse().unwrap());
+        headers.insert("proxy-authorization", "Basic abc".parse().unwrap());
+        headers.insert("x-custom", "value".parse().unwrap());
+
+        let config = test_config_no_key();
+        let filtered = filter_request_headers(&headers, &config);
+
+        assert!(filtered.contains_key("content-type"));
+        assert!(filtered.contains_key("x-custom"));
+        assert!(!filtered.contains_key("connection"));
+        assert!(!filtered.contains_key("proxy-authorization"));
+    }
+
+    #[test]
+    fn filter_request_headers_strips_host_and_content_length() {
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "example.com".parse().unwrap());
+        headers.insert("content-length", "42".parse().unwrap());
+        headers.insert("accept", "*/*".parse().unwrap());
+
+        let config = test_config_no_key();
+        let filtered = filter_request_headers(&headers, &config);
+
+        assert!(!filtered.contains_key("host"));
+        assert!(!filtered.contains_key("content-length"));
+        assert!(filtered.contains_key("accept"));
+    }
+
+    #[test]
+    fn auth_injected_when_no_client_auth() {
+        let headers = HeaderMap::new();
+        let config = test_config();
+        let filtered = filter_request_headers(&headers, &config);
+
+        assert_eq!(
+            filtered.get("authorization").unwrap().to_str().unwrap(),
+            "Bearer test-key"
+        );
+    }
+
+    #[test]
+    fn client_auth_takes_precedence() {
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", "Bearer client-token".parse().unwrap());
+
+        let config = test_config();
+        let filtered = filter_request_headers(&headers, &config);
+
+        assert_eq!(
+            filtered.get("authorization").unwrap().to_str().unwrap(),
+            "Bearer client-token"
+        );
+    }
+
+    #[test]
+    fn no_auth_injected_when_key_empty() {
+        let headers = HeaderMap::new();
+        let config = RuntimeConfig {
+            openai_api_key: Some("  ".to_owned()),
+            ..test_config()
+        };
+        let filtered = filter_request_headers(&headers, &config);
+
+        assert!(!filtered.contains_key("authorization"));
+    }
+
+    #[test]
+    fn no_auth_injected_when_key_none() {
+        let headers = HeaderMap::new();
+        let config = test_config_no_key();
+        let filtered = filter_request_headers(&headers, &config);
+
+        assert!(!filtered.contains_key("authorization"));
+    }
+
+    #[test]
+    fn filter_response_headers_strips_hop_by_hop() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("content-type", "application/json".parse().unwrap());
+        headers.insert("connection", "keep-alive".parse().unwrap());
+        headers.insert("x-request-id", "abc".parse().unwrap());
+
+        let filtered = filter_response_headers(&headers);
+
+        assert!(filtered.contains_key("content-type"));
+        assert!(filtered.contains_key("x-request-id"));
+        assert!(!filtered.contains_key("connection"));
+    }
+
+    #[test]
+    fn sse_content_type_detected() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("content-type", "text/event-stream; charset=utf-8".parse().unwrap());
+        assert!(is_sse_content_type(&headers));
+    }
+
+    #[test]
+    fn sse_content_type_case_insensitive() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("content-type", "Text/Event-Stream".parse().unwrap());
+        assert!(is_sse_content_type(&headers));
+    }
+
+    #[test]
+    fn non_sse_content_type_rejected() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("content-type", "application/json".parse().unwrap());
+        assert!(!is_sse_content_type(&headers));
+    }
+
+    #[test]
+    fn missing_content_type_not_sse() {
+        let headers = reqwest::header::HeaderMap::new();
+        assert!(!is_sse_content_type(&headers));
+    }
+}

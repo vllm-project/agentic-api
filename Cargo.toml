@@ -24,8 +24,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio"] }
 reqwest = { version = "0.12", features = ["json"] }
-tokio = { version = "1", features = ["full", "test-util"] }
-tokio-stream = "0.1"
 
 [[bench]]
 name = "proxy_bench"
