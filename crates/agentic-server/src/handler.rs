@@ -1,10 +1,40 @@
 use agentic_core::proxy::{ProxyBody, ProxyRequest, ProxyResponse, ProxyState, error_response};
 use axum::body::Body;
 use axum::extract::State;
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use http::StatusCode;
+use tracing::warn;
 
 const MAX_BODY_SIZE: usize = 10 * 1024 * 1024;
+
+pub async fn health() -> impl IntoResponse {
+    StatusCode::OK
+}
+
+pub async fn ready(State(state): State<ProxyState>) -> impl IntoResponse {
+    let base = state.config.llm_api_base.trim_end_matches('/');
+    let url = format!("{base}/health");
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build();
+
+    let Ok(client) = client else {
+        return StatusCode::SERVICE_UNAVAILABLE;
+    };
+
+    match client.get(&url).send().await {
+        Ok(resp) if resp.status().is_success() => StatusCode::OK,
+        Ok(resp) => {
+            warn!("LLM backend not ready: status {}", resp.status());
+            StatusCode::SERVICE_UNAVAILABLE
+        }
+        Err(e) => {
+            warn!("LLM backend unreachable: {e}");
+            StatusCode::SERVICE_UNAVAILABLE
+        }
+    }
+}
 
 fn convert_response(resp: ProxyResponse) -> Response {
     let mut builder = Response::builder().status(resp.status);
