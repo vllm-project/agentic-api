@@ -223,21 +223,19 @@ pub async fn proxy_request(request: ProxyRequest, state: &ProxyState) -> ProxyRe
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::RuntimeConfig;
+    use crate::config::Config;
 
-    fn test_config() -> RuntimeConfig {
-        RuntimeConfig {
+    fn test_config() -> Config {
+        Config {
             llm_api_base: "http://localhost:8000".to_owned(),
             openai_api_key: Some("test-key".to_owned()),
-            gateway_host: "127.0.0.1".to_owned(),
-            gateway_port: 0,
-            vllm_ready_timeout_s: 5.0,
-            vllm_ready_interval_s: 0.1,
+            llm_ready_timeout_s: 5.0,
+            llm_ready_interval_s: 0.1,
         }
     }
 
-    fn test_config_no_key() -> RuntimeConfig {
-        RuntimeConfig {
+    fn test_config_no_key() -> Config {
+        Config {
             openai_api_key: None,
             ..test_config()
         }
@@ -328,7 +326,7 @@ mod tests {
     #[test]
     fn no_auth_injected_when_key_empty() {
         let headers = HeaderMap::new();
-        let config = RuntimeConfig {
+        let config = Config {
             openai_api_key: Some("  ".to_owned()),
             ..test_config()
         };
