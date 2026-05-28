@@ -1,6 +1,6 @@
+use axum::Router;
 use axum::response::IntoResponse;
 use axum::routing::get;
-use axum::Router;
 use http::StatusCode;
 use tokio::net::TcpListener;
 
