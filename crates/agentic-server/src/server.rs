@@ -1,12 +1,12 @@
-use agentic_core::config::Config;
-use agentic_core::error::Error;
-use agentic_core::proxy::ProxyState;
-use agentic_core::readiness::wait_llm_ready;
 use agentic_server::app::build_router;
+use agentic_server::config::GatewayConfig;
+use agentic_server::error::Error;
+use agentic_server::proxy::ProxyState;
+use agentic_server::readiness::wait_llm_ready;
 use tokio::net::TcpListener;
 use tracing::info;
 
-async fn serve_gateway(config: Config, host: &str, port: u16) -> Result<(), Error> {
+async fn serve_gateway(config: GatewayConfig, host: &str, port: u16) -> Result<(), Error> {
     let addr = format!("{host}:{port}");
     let state = ProxyState::new(config)?;
     let router = build_router(state);
@@ -21,7 +21,7 @@ async fn serve_gateway(config: Config, host: &str, port: u16) -> Result<(), Erro
 /// # Errors
 ///
 /// Returns an error if LLM readiness polling fails or the server cannot bind.
-pub async fn run(config: Config, host: &str, port: u16) -> Result<(), Error> {
+pub async fn run(config: GatewayConfig, host: &str, port: u16) -> Result<(), Error> {
     wait_llm_ready(&config).await?;
     info!("LLM ready: {}", config.llm_api_base);
     serve_gateway(config, host, port).await
@@ -32,7 +32,7 @@ pub async fn run(config: Config, host: &str, port: u16) -> Result<(), Error> {
 /// # Errors
 ///
 /// Returns an error if vLLM fails to start or the gateway errors.
-pub async fn run_with_llm(config: Config, host: &str, port: u16, llm_args: Vec<String>) -> Result<(), Error> {
+pub async fn run_with_llm(config: GatewayConfig, host: &str, port: u16, llm_args: Vec<String>) -> Result<(), Error> {
     let mut cmd = tokio::process::Command::new("python");
     cmd.arg("-m").arg("vllm.entrypoints.openai.api_server");
     cmd.args(&llm_args);

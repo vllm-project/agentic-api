@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use tracing::info;
 
-use crate::config::Config;
+use crate::config::GatewayConfig;
 use crate::error::Error;
 
 fn checked_duration_seconds(name: &str, value: f64) -> Result<Duration, Error> {
@@ -27,7 +27,7 @@ fn timeout_error(url: &str, timeout_s: f64) -> Error {
 /// # Errors
 ///
 /// Returns an error if the LLM does not become ready within the configured timeout.
-pub async fn wait_llm_ready(config: &Config) -> Result<(), Error> {
+pub async fn wait_llm_ready(config: &GatewayConfig) -> Result<(), Error> {
     let base = config.llm_api_base.trim_end_matches('/');
     let url = format!("{base}/health");
 

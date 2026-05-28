@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-agentic-core = { path = "../agentic-core" }
+agentic-core.workspace = true
 
 [lints]
 workspace = true

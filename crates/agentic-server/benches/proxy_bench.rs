@@ -12,12 +12,12 @@ use http::StatusCode;
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
 
-use agentic_core::config::Config;
-use agentic_core::proxy::ProxyState;
 use agentic_server::app::build_router;
+use agentic_server::config::GatewayConfig;
+use agentic_server::proxy::ProxyState;
 
-fn bench_config(llm_url: &str) -> Config {
-    Config {
+fn bench_config(llm_url: &str) -> GatewayConfig {
+    GatewayConfig {
         llm_api_base: llm_url.to_owned(),
         openai_api_key: Some("bench-key".to_owned()),
         llm_ready_timeout_s: 5.0,
@@ -70,7 +70,7 @@ async fn spawn_llm() -> String {
     format!("http://{addr}")
 }
 
-async fn spawn_gateway(config: Config) -> String {
+async fn spawn_gateway(config: GatewayConfig) -> String {
     let state = ProxyState::new(config).unwrap();
     let router = build_router(state);
 
