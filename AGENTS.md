@@ -23,9 +23,10 @@ This repository is Rust-first under the `vllm-project` GitHub organization.
 
 ## Setup
 
-Build the project:
+Install pre-commit hooks and build the project:
 
 ```bash
+pre-commit install
 cargo build
 ```
 
