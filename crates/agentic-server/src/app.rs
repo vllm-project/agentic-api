@@ -1,8 +1,8 @@
+use agentic_core::proxy::ProxyState;
 use axum::Router;
 use axum::routing::{get, post};
 
 use crate::handler::{health, proxy_responses, ready};
-use crate::proxy::ProxyState;
 
 pub fn build_router(state: ProxyState) -> Router {
     Router::new()

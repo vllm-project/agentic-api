@@ -5,6 +5,17 @@ version = 4
 [[package]]
 name = "agentic-core"
 version = "0.1.0"
+dependencies = [
+ "bytes",
+ "futures",
+ "http",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "agentic-praxis"
@@ -25,9 +36,7 @@ dependencies = [
  "futures",
  "http",
  "reqwest",
- "serde",
  "serde_json",
- "thiserror",
  "tokio",
  "tower-http",
  "tracing",

@@ -8,7 +8,7 @@ use reqwest::Client;
 use serde_json::Value;
 use tracing::warn;
 
-use crate::config::GatewayConfig;
+use crate::config::Config;
 use crate::error::Error;
 
 const HOP_BY_HOP: &[&str] = &[
@@ -51,7 +51,7 @@ pub struct ProxyResponse {
 
 #[derive(Clone)]
 pub struct ProxyState {
-    pub config: GatewayConfig,
+    pub config: Config,
     pub stream_client: Client,
     pub non_stream_client: Client,
 }
@@ -60,7 +60,7 @@ impl ProxyState {
     /// # Errors
     ///
     /// Returns an error if the HTTP clients cannot be built.
-    pub fn new(config: GatewayConfig) -> Result<Self, Error> {
+    pub fn new(config: Config) -> Result<Self, Error> {
         let stream_client = Client::builder()
             .connect_timeout(Duration::from_secs(10))
             .timeout(Duration::from_secs(900))
@@ -84,7 +84,7 @@ impl ProxyState {
     }
 }
 
-fn filter_request_headers(headers: &HeaderMap, config: &GatewayConfig) -> reqwest::header::HeaderMap {
+fn filter_request_headers(headers: &HeaderMap, config: &Config) -> reqwest::header::HeaderMap {
     let mut out = reqwest::header::HeaderMap::new();
     for (name, value) in headers {
         if is_request_drop(name.as_str()) {
@@ -223,10 +223,10 @@ pub async fn proxy_request(request: ProxyRequest, state: &ProxyState) -> ProxyRe
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::GatewayConfig;
+    use crate::config::Config;
 
-    fn test_config() -> GatewayConfig {
-        GatewayConfig {
+    fn test_config() -> Config {
+        Config {
             llm_api_base: "http://localhost:8000".to_owned(),
             openai_api_key: Some("test-key".to_owned()),
             llm_ready_timeout_s: 5.0,
@@ -234,8 +234,8 @@ mod tests {
         }
     }
 
-    fn test_config_no_key() -> GatewayConfig {
-        GatewayConfig {
+    fn test_config_no_key() -> Config {
+        Config {
             openai_api_key: None,
             ..test_config()
         }
@@ -326,7 +326,7 @@ mod tests {
     #[test]
     fn no_auth_injected_when_key_empty() {
         let headers = HeaderMap::new();
-        let config = GatewayConfig {
+        let config = Config {
             openai_api_key: Some("  ".to_owned()),
             ..test_config()
         };

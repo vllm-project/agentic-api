@@ -1,10 +1,9 @@
+use agentic_core::proxy::{ProxyBody, ProxyRequest, ProxyResponse, ProxyState, error_response};
 use axum::body::Body;
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
 use http::StatusCode;
 use tracing::warn;
-
-use crate::proxy::{ProxyBody, ProxyRequest, ProxyResponse, ProxyState, error_response};
 
 const MAX_BODY_SIZE: usize = 10 * 1024 * 1024;
 
@@ -76,5 +75,5 @@ pub async fn proxy_responses(State(state): State<ProxyState>, req: axum::extract
         query: parts.uri.query().map(String::from),
     };
 
-    convert_response(crate::proxy::proxy_request(proxy_req, &state).await)
+    convert_response(agentic_core::proxy::proxy_request(proxy_req, &state).await)
 }

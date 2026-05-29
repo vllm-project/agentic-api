@@ -1,7 +1,7 @@
 use clap::{Args, Parser, Subcommand};
 
-use agentic_server::config::{GatewayConfig, normalize_base_url};
-use agentic_server::error::Error;
+use agentic_core::config::{Config, normalize_base_url};
+use agentic_core::error::Error;
 
 mod server;
 
@@ -53,8 +53,8 @@ enum Commands {
     },
 }
 
-fn build_config(llm_api_base: String, common: &CommonArgs) -> GatewayConfig {
-    GatewayConfig {
+fn build_config(llm_api_base: String, common: &CommonArgs) -> Config {
+    Config {
         llm_api_base,
         openai_api_key: common.openai_api_key.clone(),
         llm_ready_timeout_s: common.llm_ready_timeout_s,

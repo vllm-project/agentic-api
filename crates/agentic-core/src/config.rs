@@ -1,5 +1,5 @@
 #[derive(Debug, Clone)]
-pub struct GatewayConfig {
+pub struct Config {
     pub llm_api_base: String,
     pub openai_api_key: Option<String>,
     pub llm_ready_timeout_s: f64,
