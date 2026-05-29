@@ -14,7 +14,7 @@ use tokio::runtime::Runtime;
 
 use agentic_core::config::Config;
 use agentic_core::proxy::ProxyState;
-use agentic_server::app::build_router;
+use agentic_server::app::{ServerConfig, build_router};
 
 fn bench_config(llm_url: &str) -> Config {
     Config {
@@ -72,7 +72,8 @@ async fn spawn_llm() -> String {
 
 async fn spawn_gateway(config: Config) -> String {
     let state = ProxyState::new(config).unwrap();
-    let router = build_router(state);
+    let server_config = ServerConfig::from_env();
+    let router = build_router(state, &server_config);
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();

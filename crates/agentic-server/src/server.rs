@@ -2,14 +2,15 @@ use agentic_core::config::Config;
 use agentic_core::error::Error;
 use agentic_core::proxy::ProxyState;
 use agentic_core::readiness::wait_llm_ready;
-use agentic_server::app::build_router;
+use agentic_server::app::{ServerConfig, build_router};
 use tokio::net::TcpListener;
 use tracing::info;
 
 async fn serve_gateway(config: Config, host: &str, port: u16) -> Result<(), Error> {
     let addr = format!("{host}:{port}");
     let state = ProxyState::new(config)?;
-    let router = build_router(state);
+    let server_config = ServerConfig::from_env();
+    let router = build_router(state, &server_config);
     let listener = TcpListener::bind(&addr).await?;
     info!("gateway listening on {addr}");
     axum::serve(listener, router).await?;

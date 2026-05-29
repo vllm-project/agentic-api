@@ -28,7 +28,8 @@ async fn spawn_mock_llm() -> (String, tokio::task::JoinHandle<()>) {
 
 async fn spawn_gateway(config: Config) -> (String, tokio::task::JoinHandle<()>) {
     let state = ProxyState::new(config).unwrap();
-    let router = agentic_server::app::build_router(state);
+    let server_config = agentic_server::app::ServerConfig::from_env();
+    let router = agentic_server::app::build_router(state, &server_config);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let handle = tokio::spawn(async move {
