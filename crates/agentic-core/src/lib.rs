@@ -1,1 +1,1 @@
-// Core abstractions are added by follow-up PRs.
+// Framework-agnostic core abstractions (store traits, execution logic) are added by follow-up PRs.
