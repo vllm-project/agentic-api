@@ -15,8 +15,19 @@ pub async fn ready(State(state): State<ProxyState>) -> impl IntoResponse {
     let base = state.config.llm_api_base.trim_end_matches('/');
     let url = format!("{base}/health");
 
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Some(key) = state.config.openai_api_key.as_deref() {
+        let trimmed = key.trim();
+        if !trimmed.is_empty() {
+            if let Ok(v) = reqwest::header::HeaderValue::from_str(&format!("Bearer {trimmed}")) {
+                headers.insert(reqwest::header::AUTHORIZATION, v);
+            }
+        }
+    }
+
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(2))
+        .default_headers(headers)
         .build();
 
     let Ok(client) = client else {
