@@ -9,6 +9,8 @@ use super::super::models::Conversation as StorageDbConversation;
 pub struct ConversationData {
     /// Unique conversation identifier
     pub conversation_id: String,
+    /// Optional metadata as JSON string
+    pub metadata: Option<String>,
     /// Creation timestamp as Unix timestamp in seconds
     pub created_at: i64,
 }
@@ -17,6 +19,7 @@ impl From<StorageDbConversation> for ConversationData {
     fn from(row: StorageDbConversation) -> Self {
         Self {
             conversation_id: row.id,
+            metadata: row.metadata,
             created_at: row.created_at,
         }
     }
@@ -26,6 +29,7 @@ impl From<ConversationData> for StorageDbConversation {
     fn from(data: ConversationData) -> Self {
         Self {
             id: data.conversation_id,
+            metadata: data.metadata,
             created_at: data.created_at,
         }
     }
@@ -39,6 +43,7 @@ mod tests {
     fn test_conversation_from_db_conversation() {
         let db_row = StorageDbConversation {
             id: "conv_123".to_string(),
+            metadata: None,
             created_at: 1_704_067_200,
         };
 
@@ -51,11 +56,13 @@ mod tests {
     fn test_conversation_roundtrip() {
         let data = ConversationData {
             conversation_id: "conv_456".to_string(),
+            metadata: Some(r#"{"key":"value"}"#.to_string()),
             created_at: 1_704_067_200,
         };
 
         let db_row: StorageDbConversation = data.into();
         assert_eq!(db_row.id, "conv_456");
+        assert_eq!(db_row.metadata, Some(r#"{"key":"value"}"#.to_string()));
         assert_eq!(db_row.created_at, 1_704_067_200);
     }
 
@@ -63,6 +70,7 @@ mod tests {
     fn test_conversation_data_clone() {
         let data = ConversationData {
             conversation_id: "conv_clone".to_string(),
+            metadata: None,
             created_at: 1_704_067_200,
         };
 
@@ -75,6 +83,7 @@ mod tests {
     fn test_conversation_data_debug_format() {
         let data = ConversationData {
             conversation_id: "conv_debug".to_string(),
+            metadata: None,
             created_at: 1_704_067_200,
         };
 
@@ -87,6 +96,7 @@ mod tests {
     fn test_conversation_bidirectional_conversion() {
         let original = ConversationData {
             conversation_id: "conv_bidir".to_string(),
+            metadata: None,
             created_at: 1_706_790_600,
         };
 

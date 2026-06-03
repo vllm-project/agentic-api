@@ -12,6 +12,9 @@ pub struct Conversation {
     /// Unique conversation identifier.
     pub id: String,
 
+    /// Optional metadata as JSON string.
+    pub metadata: Option<String>,
+
     /// Creation timestamp as Unix timestamp in seconds.
     pub created_at: i64,
 }
@@ -69,10 +72,12 @@ mod tests {
     fn test_conversation_basic() {
         let conversation = Conversation {
             id: "conv_1".to_string(),
+            metadata: None,
             created_at: 1_704_067_200,
         };
 
         assert_eq!(conversation.id, "conv_1");
+        assert!(conversation.metadata.is_none());
         assert_eq!(conversation.created_at, 1_704_067_200);
     }
 }

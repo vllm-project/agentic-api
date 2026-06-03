@@ -51,6 +51,8 @@ pub enum InputItem {
     Message(InputMessage),
     #[serde(rename = "function_call_output")]
     FunctionCallOutput(FunctionToolResultMessage),
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,6 +110,8 @@ pub enum OutputItem {
     Message(OutputMessage),
     #[serde(rename = "function_call")]
     FunctionCall(FunctionToolCall),
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
