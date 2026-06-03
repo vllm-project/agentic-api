@@ -92,6 +92,8 @@ markdown_extensions:
 nav:
   - Home: index.md
   - API Reference: api/index.md
+  - Developing:
+    - Getting Started: developing/getting-started.md
   - Community: community/index.md
 
 extra:
