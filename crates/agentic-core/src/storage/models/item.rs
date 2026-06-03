@@ -46,18 +46,14 @@ impl Item {
     /// Deserialize data column as either `InputItem` or `OutputItem`.
     #[must_use]
     pub fn as_inout(&self) -> Option<InOutItem> {
-        if let Some(input) = self.as_input() {
-            if !matches!(input, InputItem::Unknown) {
-                return Some(InOutItem::Input(input));
+        match (self.as_input(), self.as_output()) {
+            (Some(input), _) if !matches!(input, InputItem::Unknown) => Some(InOutItem::Input(input)),
+            (_, Some(output)) if !matches!(output, OutputItem::Unknown) => Some(InOutItem::Output(output)),
+            _ => {
+                warn!(item_id = %self.id, "unrecognized item type in stored data");
+                None
             }
         }
-        if let Some(output) = self.as_output() {
-            if !matches!(output, OutputItem::Unknown) {
-                return Some(InOutItem::Output(output));
-            }
-        }
-        warn!(item_id = %self.id, "unrecognized item type in stored data");
-        None
     }
 }
 
