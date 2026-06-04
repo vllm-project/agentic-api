@@ -14,8 +14,8 @@
 |----------|------|--------------|
 | `execute()` | `executor/engine.rs` | Entry point — rehydrate → infer → persist |
 | `rehydrate_conversation()` | `executor/engine.rs` | Load history from store, build enriched request |
-| `call_inference()` | `executor/engine.rs` | Stream SSE from vLLM backend |
-| `persist_response()` | `executor/engine.rs` | Save response + items to store |
+| `call_inference()` | `executor/engine.rs` | Returns `impl Stream` of SSE lines (sync fn, not async — stream is lazy) |
+| `persist_response()` | `executor/engine.rs` | Save response + items to store (takes handlers as explicit params) |
 | `ResponseAccumulator` | `executor/accumulator.rs` | SSE state machine — collects stream into ResponsePayload |
 | `ExecutionContext` | `executor/request.rs` | Runtime deps: handlers, HTTP client, LLM URL |
 | `RequestContext` | `executor/request.rs` | Per-turn state: original + enriched request, IDs |
@@ -40,13 +40,15 @@ The base loop handles text messages. This design extends it with:
 
 Each phase = one PR with tests. Phases are ordered by dependency.
 
-### Phase 1: SSE Event Extension (no dependency on PR #46)
+### Phase 1: SSE Event Extension (lands after PR #46 merges)
 
-**PR scope:** Extend `types/event.rs` and `accumulator.rs` on current main.
+**PR scope:** Extend `types/event.rs` and `executor/accumulator.rs` (both introduced by PR #46).
 
 - Add ~12 new `SSEEventType` variants for function_call, reasoning, output_item lifecycle
-- Extend `ResponseAccumulator::process_sse_line()` to detect and collect `OutputItem::FunctionCall`
+- Modify `ResponseAccumulator::process_sse_line()` (private method — changes are within the same file) to detect and collect `OutputItem::FunctionCall` from streaming deltas
 - Unit tests verifying accumulator correctly builds FunctionCall items from SSE deltas
+
+**Note:** `accumulator.rs` and `types/event.rs` are introduced by PR #46. This phase lands immediately after PR #46 merges — it's a small, focused follow-up with no other dependencies.
 
 ```rust
 // New variants in SSEEventType
@@ -70,7 +72,7 @@ pub enum SSEEventType {
 }
 ```
 
-**Size:** ~200 lines | **Blocked by:** nothing | **Target:** 3rd merged PR
+**Size:** ~200 lines | **Blocked by:** PR #46 merge | **Target:** 3rd merged PR (fast follow-up)
 
 ---
 
@@ -91,22 +93,24 @@ pub async fn dispatch_tools(
     output: &[OutputItem],
     tool_ctx: &ToolContext,
     iteration: usize,
-    max_iterations: usize,
 ) -> ExecutorResult<LoopDecision>
 
+/// Initially non-streaming only (returns Left). Streaming support added in Phase 3.
 pub async fn execute_loop(
     request: RequestPayload,
     exec_ctx: Arc<ExecutionContext>,
     tool_ctx: &ToolContext,
-) -> ExecutorResult<Either<ResponsePayload, BoxStream>>
+) -> ExecutorResult<ResponsePayload>
 ```
 
-`execute_loop` wraps PR #46's `execute()`:
-1. Rehydrate (from PR #46)
-2. Call inference (from PR #46)
-3. Accumulate response
-4. Check output for `OutputItem::FunctionCall` → dispatch → loop or done
-5. Persist final response
+`execute_loop` wraps PR #46's functions in a tool-dispatch loop:
+1. Rehydrate (delegates to PR #46's `rehydrate_conversation`)
+2. Call inference (delegates to PR #46's `call_inference` — returns stream lazily)
+3. Accumulate response (via `ResponseAccumulator::from_stream`)
+4. Check output for `OutputItem::FunctionCall` → `dispatch_tools` → loop or done
+5. Persist final response (delegates to PR #46's `persist_response` with explicit handlers)
+
+**Phase 2 is non-streaming only.** The tool loop inspects the full accumulated response before deciding. Streaming + tool dispatch (forwarding events to client while detecting tool calls) requires Phase 3's tee pattern.
 
 `ToolContext` holds optional executor references:
 
@@ -147,7 +151,7 @@ Returns two handles:
 - `BoxStream` — yields SSE events to client in real-time
 - `Future<ResponsePayload>` — resolves when stream completes, contains accumulated output for tool detection
 
-This enables ADR-01's requirement: "SSE stream to the client is interleaved with the tool loop — events go out in real time, not buffered until done."
+This enables the real-time streaming requirement from ADR-01 §3 — events should reach the client as they arrive, interleaved with the tool loop, rather than buffered until completion.
 
 **Size:** ~300 lines | **Blocked by:** PR #46 merge | **Target:** feature PR
 
@@ -158,29 +162,32 @@ This enables ADR-01's requirement: "SSE stream to the client is interleaved with
 **PR scope:** `executor/tools/` module.
 
 ```rust
-#[async_trait]
+// Native async traits (Rust 1.75+, no #[async_trait] boxing needed)
 pub trait McpToolExecutor: Send + Sync {
-    async fn execute(
+    fn execute(
         &self,
         tool_name: &str,
         arguments: &Value,
         server_config: &Value,
-    ) -> Result<Value, ExecutorError>;
+    ) -> impl Future<Output = Result<Value, ExecutorError>> + Send;
 }
 
-#[async_trait]
 pub trait WebSearchProvider: Send + Sync {
-    async fn search(&self, query: &str, context_size: ContextSize) -> Result<Value, ExecutorError>;
+    /// context_size: "low" | "medium" | "high" — controls result verbosity
+    fn search(
+        &self,
+        query: &str,
+        context_size: &str,
+    ) -> impl Future<Output = Result<Value, ExecutorError>> + Send;
 }
 
-#[async_trait]
 pub trait VectorStoreClient: Send + Sync {
-    async fn search(
+    fn search(
         &self,
         store_id: &str,
         query: &str,
         max_results: u32,
-    ) -> Result<Vec<Value>, ExecutorError>;
+    ) -> impl Future<Output = Result<Vec<Value>, ExecutorError>> + Send;
 }
 ```
 
@@ -198,7 +205,7 @@ This PR includes mock implementations for integration testing (in-memory tool ex
 | D2 | `LoopDecision` carries tool results directly | Avoids mutating shared state between dispatch and re-entry |
 | D3 | Streaming tee as separate module, not refactor of accumulator | Preserves PR #46's non-streaming path unchanged |
 | D4 | Traits for tool executors, not concrete types | Enables OGX (PR #34), mock testing, and future providers |
-| D5 | Phase 1 independent of PR #46 | Unblocks progress while base loop is in review |
+| D5 | Phase 1 is a fast follow-up to PR #46 | Small scope, lands immediately after merge — unblocks Phase 2 quickly |
 
 ---
 
