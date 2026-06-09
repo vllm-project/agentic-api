@@ -40,39 +40,55 @@ The base loop handles text messages. This design extends it with:
 
 Each phase = one PR with tests. Phases are ordered by dependency.
 
-### Phase 1: SSE Event Extension (lands after PR #46 merges)
+### Phase 1: SSE Event Normalizer Module (lands on main — no PR #46 dependency)
 
-**PR scope:** Extend `types/event.rs` and `executor/accumulator.rs` (both introduced by PR #46).
+**PR scope:** New `events/` module in `agentic-core` — separate from executor, no dependency on PR #46.
 
-- Add ~12 new `SSEEventType` variants for function_call, reasoning, output_item lifecycle
-- Modify `ResponseAccumulator::process_sse_line()` (private method — changes are within the same file) to detect and collect `OutputItem::FunctionCall` from streaming deltas
-- Unit tests verifying accumulator correctly builds FunctionCall items from SSE deltas
+Per @maralbahari's feedback ([PR #46 discussion](https://github.com/vllm-project/agentic-api/pull/46#discussion_r3352104210)): the SSE event handling should be a **separate core module** to avoid bloating the accumulator. Design draws from PydanticAI's `StreamedResponse._process_event()`.
 
-**Note:** `accumulator.rs` and `types/event.rs` are introduced by PR #46. This phase lands immediately after PR #46 merges — it's a small, focused follow-up with no other dependencies.
+```
+crates/agentic-core/src/
+  events/
+    mod.rs          // pub mod normalize; pub mod types;
+    types.rs        // SSEEventType (28+ variants) + typed EventPayload enum
+    normalize.rs    // normalize_sse_line(&str) -> EventFrame { event_type, payload }
+```
+
+- `EventFrame { event_type: SSEEventType, payload: EventPayload }` — typed output from raw SSE
+- `normalize_sse_line()` — zero-copy where possible, maps `data: {...}` to typed frame
+- Expanded `SSEEventType` covering all Responses API events
+- Unit tests verifying correct parsing of function_call, reasoning, and tool-call events
 
 ```rust
-// New variants in SSEEventType
 pub enum SSEEventType {
-    // Existing (PR #46)
     ResponseCreated,
+    ResponseInProgress,
     ResponseOutputItemAdded,
+    ResponseOutputItemDone,         // detect completed tool calls
     ResponseOutputTextDelta,
-    ResponseDone,
-    // New — Phase 1
-    ResponseOutputItemDone,        // detect completed tool calls
-    FunctionCallArgumentsDelta,    // streaming function args
-    FunctionCallArgumentsDone,     // complete function call
-    ResponseOutputTextDone,        // text completion signal
+    ResponseOutputTextDone,
+    FunctionCallArgumentsDelta,     // streaming function args
+    FunctionCallArgumentsDone,      // complete function call
     ContentPartAdded,
     ContentPartDone,
     ReasoningSummaryTextDelta,
     ReasoningSummaryTextDone,
+    ResponseCompleted,
+    ResponseFailed,
+    ResponseIncomplete,
+    // Built-in tool events
+    FileSearchCallSearching,
+    FileSearchCallCompleted,
+    WebSearchCallSearching,
+    WebSearchCallCompleted,
     // Catch-all
     Other,
 }
 ```
 
-**Size:** ~200 lines | **Blocked by:** PR #46 merge | **Target:** 3rd merged PR (fast follow-up)
+Once PR #46 merges, a follow-up PR refactors the accumulator to consume `EventFrame` instead of doing inline JSON parsing.
+
+**Size:** ~300 lines | **Blocked by:** nothing (lands on main) | **Target:** 3rd merged PR
 
 ---
 
@@ -193,6 +209,8 @@ pub trait VectorStoreClient: Send + Sync {
 
 This PR includes mock implementations for integration testing (in-memory tool executors that return canned responses). Real implementations (MCP client, Brave search, Qdrant) come in later PRs.
 
+**Note:** These traits must be compatible with @franciscojavierarceo's OGX integration (PR #34). The trait-based approach allows OGX to be one implementation behind `McpToolExecutor` — the dispatch layer doesn't care whether tools run via OGX or native Rust.
+
 **Size:** ~500 lines | **Blocked by:** Phase 2 | **Target:** feature PR
 
 ---
@@ -205,7 +223,8 @@ This PR includes mock implementations for integration testing (in-memory tool ex
 | D2 | `LoopDecision` carries tool results directly | Avoids mutating shared state between dispatch and re-entry |
 | D3 | Streaming tee as separate module, not refactor of accumulator | Preserves PR #46's non-streaming path unchanged |
 | D4 | Traits for tool executors, not concrete types | Enables OGX (PR #34), mock testing, and future providers |
-| D5 | Phase 1 is a fast follow-up to PR #46 | Small scope, lands immediately after merge — unblocks Phase 2 quickly |
+| D5 | Phase 1 lands on main independently of PR #46 | Separate `events/` module has no executor dependency — unblocks Phase 2 while #46 is still in review |
+| D6 | Tool traits compatible with OGX (PR #34) | OGX is one backend behind the trait interface — doesn't constrain the dispatch API |
 
 ---
 
@@ -221,6 +240,7 @@ How the complete pipeline maps to @leseb's proposed filter chain:
 | 3 | `file_resolve` | `resolve_files()` | Future | — |
 | 4 | `tool_parse` | `parse_tools()` | Future | — |
 | 5 | `responses_proxy` | `call_inference()` | PR #46 | @maralbahari |
+| 5.5 | `event_normalize` | `normalize_sse_line()` | Phase 1 | @ashwing |
 | 6 | `stream_events` | `transform_stream()` / tee | Phase 3 | @ashwing |
 | 7 | `tool_dispatch` | `dispatch_tools()` | Phase 2 | @ashwing |
 | 8 | `mcp_tool` | `McpToolExecutor::execute()` | Phase 4 | @ashwing |
