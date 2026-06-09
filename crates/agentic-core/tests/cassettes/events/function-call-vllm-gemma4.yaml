@@ -1,0 +1,37 @@
+# Recorded from google/gemma-4-26B-A4B-it via vLLM v0.21.0
+# Request: {"model":"google/gemma-4-26B-A4B-it","input":"What is the weather in San Francisco?","tools":[...],"tool_choice":"required","stream":true}
+# Date: 2026-06-09
+
+model: google/gemma-4-26B-A4B-it
+request:
+  input: "What is the weather in San Francisco?"
+  tools:
+    - type: function
+      name: get_weather
+      description: "Get current weather"
+      parameters:
+        type: object
+        properties:
+          city:
+            type: string
+        required: ["city"]
+  tool_choice: required
+  stream: true
+expected_function_call:
+  name: get_weather
+  arguments: '{"city": "San Francisco"}'
+sse:
+  - 'data: {"response":{"id":"resp_938d583bbec02940","created_at":1781048957,"status":"in_progress","output":[],"model":"google/gemma-4-26B-A4B-it","object":"response"},"sequence_number":0,"type":"response.created"}'
+  - 'data: {"response":{"id":"resp_938d583bbec02940","status":"in_progress"},"sequence_number":1,"type":"response.in_progress"}'
+  - 'data: {"item":{"arguments":"","call_id":"call_92fd766dcc21a19c","name":"get_weather","type":"function_call","id":"8c5375b5b08d666c","status":"in_progress"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}'
+  - 'data: {"delta":"{\"","item_id":"8c5375b5b08d666c","output_index":0,"sequence_number":3,"type":"response.function_call_arguments.delta"}'
+  - 'data: {"delta":"city","item_id":"8c5375b5b08d666c","output_index":0,"sequence_number":4,"type":"response.function_call_arguments.delta"}'
+  - 'data: {"delta":"\":","item_id":"8c5375b5b08d666c","output_index":0,"sequence_number":5,"type":"response.function_call_arguments.delta"}'
+  - 'data: {"delta":" \"","item_id":"8c5375b5b08d666c","output_index":0,"sequence_number":6,"type":"response.function_call_arguments.delta"}'
+  - 'data: {"delta":"San","item_id":"8c5375b5b08d666c","output_index":0,"sequence_number":7,"type":"response.function_call_arguments.delta"}'
+  - 'data: {"delta":" Francisco","item_id":"8c5375b5b08d666c","output_index":0,"sequence_number":8,"type":"response.function_call_arguments.delta"}'
+  - 'data: {"delta":"\"","item_id":"8c5375b5b08d666c","output_index":0,"sequence_number":9,"type":"response.function_call_arguments.delta"}'
+  - 'data: {"delta":"}","item_id":"8c5375b5b08d666c","output_index":0,"sequence_number":10,"type":"response.function_call_arguments.delta"}'
+  - 'data: {"arguments":"{\"city\": \"San Francisco\"}","item_id":"8c5375b5b08d666c","name":"get_weather","output_index":0,"sequence_number":11,"type":"response.function_call_arguments.done"}'
+  - 'data: {"item":{"arguments":"{\"city\": \"San Francisco\"}","call_id":"call_92fd766dcc21a19c","name":"get_weather","type":"function_call","id":"8c5375b5b08d666c","status":"completed"},"output_index":0,"sequence_number":12,"type":"response.output_item.done"}'
+  - 'data: {"response":{"id":"resp_938d583bbec02940","status":"completed","usage":{"input_tokens":66,"output_tokens":21,"total_tokens":87}},"sequence_number":13,"type":"response.completed"}'

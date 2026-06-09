@@ -1,4 +1,26 @@
 use agentic_core::events::{EventPayload, SSEEventType, normalize_sse_line};
+use serde::Deserialize;
+
+const CASSETTE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/events");
+
+#[derive(Deserialize)]
+struct EventCassette {
+    sse: Vec<String>,
+    expected_text: Option<String>,
+    expected_function_call: Option<ExpectedFunctionCall>,
+}
+
+#[derive(Deserialize)]
+struct ExpectedFunctionCall {
+    name: String,
+    arguments: String,
+}
+
+fn load_event_cassette(filename: &str) -> EventCassette {
+    let path = format!("{CASSETTE_DIR}/{filename}");
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
+    serde_yaml::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"))
+}
 
 /// Simulated streaming cassette matching the format of
 /// `resp-single-gpt-4o-streaming.yaml` — single turn, text "GLOBE" split
@@ -157,4 +179,50 @@ fn test_real_vllm_function_call_stream() {
     } else {
         panic!("expected OutputItemDone");
     }
+}
+
+// --- Cassette-driven tests ---
+
+#[test]
+fn test_cassette_text_only_vllm() {
+    let cassette = load_event_cassette("text-only-vllm-gemma4.yaml");
+    let mut text = String::new();
+    let mut parsed_count = 0;
+
+    for line in &cassette.sse {
+        if let Some(frame) = normalize_sse_line(line) {
+            parsed_count += 1;
+            if let EventPayload::TextDelta { delta, .. } = &frame.payload {
+                text.push_str(delta);
+            }
+        }
+    }
+
+    assert_eq!(text, cassette.expected_text.unwrap());
+    assert_eq!(parsed_count, cassette.sse.len(), "all lines should parse");
+}
+
+#[test]
+fn test_cassette_function_call_vllm() {
+    let cassette = load_event_cassette("function-call-vllm-gemma4.yaml");
+    let expected = cassette.expected_function_call.unwrap();
+
+    let mut args = String::new();
+    let mut final_name = String::new();
+    let mut parsed_count = 0;
+
+    for line in &cassette.sse {
+        if let Some(frame) = normalize_sse_line(line) {
+            parsed_count += 1;
+            match &frame.payload {
+                EventPayload::FunctionCallArgsDelta { delta, .. } => args.push_str(delta),
+                EventPayload::FunctionCallArgsDone { name, .. } => final_name = name.clone(),
+                _ => {}
+            }
+        }
+    }
+
+    assert_eq!(args, expected.arguments);
+    assert_eq!(final_name, expected.name);
+    assert_eq!(parsed_count, cassette.sse.len(), "all lines should parse");
 }

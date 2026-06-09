@@ -1,0 +1,19 @@
+# Recorded from google/gemma-4-26B-A4B-it via vLLM v0.21.0
+# Request: {"model":"google/gemma-4-26B-A4B-it","input":"Reply with exactly one word: HELLO","stream":true}
+# Date: 2026-06-09
+
+model: google/gemma-4-26B-A4B-it
+request:
+  input: "Reply with exactly one word: HELLO"
+  stream: true
+expected_text: "HELLO"
+sse:
+  - 'data: {"response":{"id":"resp_b52e78cb2fb5fef9","created_at":1781048941,"status":"in_progress","output":[],"model":"google/gemma-4-26B-A4B-it","object":"response"},"sequence_number":0,"type":"response.created"}'
+  - 'data: {"response":{"id":"resp_b52e78cb2fb5fef9","status":"in_progress"},"sequence_number":1,"type":"response.in_progress"}'
+  - 'data: {"item":{"id":"b659a474ace39990","content":[],"role":"assistant","status":"in_progress","type":"message"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}'
+  - 'data: {"content_index":0,"item_id":"b659a474ace39990","output_index":0,"part":{"annotations":[],"text":"","type":"output_text"},"sequence_number":3,"type":"response.content_part.added"}'
+  - 'data: {"content_index":0,"delta":"HELLO","item_id":"b659a474ace39990","output_index":0,"sequence_number":4,"type":"response.output_text.delta"}'
+  - 'data: {"content_index":0,"item_id":"b659a474ace39990","output_index":0,"sequence_number":5,"text":"HELLO","type":"response.output_text.done"}'
+  - 'data: {"content_index":0,"item_id":"b659a474ace39990","output_index":0,"part":{"annotations":[],"text":"HELLO","type":"output_text"},"sequence_number":6,"type":"response.content_part.done"}'
+  - 'data: {"item":{"id":"b659a474ace39990","content":[{"annotations":[],"text":"HELLO","type":"output_text"}],"role":"assistant","status":"completed","type":"message"},"output_index":0,"sequence_number":7,"type":"response.output_item.done"}'
+  - 'data: {"response":{"id":"resp_b52e78cb2fb5fef9","status":"completed","usage":{"input_tokens":21,"output_tokens":2,"total_tokens":23}},"sequence_number":8,"type":"response.completed"}'
