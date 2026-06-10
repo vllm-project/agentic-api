@@ -19,7 +19,7 @@ struct ExpectedFunctionCall {
 fn load_event_cassette(filename: &str) -> EventCassette {
     let path = format!("{CASSETTE_DIR}/{filename}");
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
-    serde_yaml::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"))
+    serde_yml::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"))
 }
 
 /// Simulated streaming cassette matching the format of

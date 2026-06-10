@@ -76,9 +76,8 @@ fn extract_payload(event_type: SSEEventType, json: &Value) -> EventPayload {
         SSEEventType::FunctionCallArgumentsDelta => extract_fn_call_args_delta(json),
         SSEEventType::FunctionCallArgumentsDone => extract_fn_call_args_done(json),
 
-        SSEEventType::ReasoningSummaryTextDelta | SSEEventType::ReasoningSummaryTextDone => {
-            extract_reasoning_delta(json)
-        }
+        SSEEventType::ReasoningSummaryTextDelta => extract_reasoning_delta(json),
+        SSEEventType::ReasoningSummaryTextDone => extract_reasoning_done(json),
 
         SSEEventType::ContentPartAdded
         | SSEEventType::ContentPartDone
@@ -109,6 +108,8 @@ fn extract_output_item_added(json: &Value) -> EventPayload {
         item_id: item["id"].as_str().unwrap_or_default().to_string(),
         item_type: item["type"].as_str().unwrap_or_default().to_string(),
         output_index: index_u32(json, "output_index"),
+        name: item["name"].as_str().map(ToString::to_string),
+        call_id: item["call_id"].as_str().map(ToString::to_string),
     }
 }
 
@@ -142,7 +143,7 @@ fn extract_text_done(json: &Value) -> EventPayload {
 fn extract_fn_call_args_delta(json: &Value) -> EventPayload {
     EventPayload::FunctionCallArgsDelta {
         delta: json["delta"].as_str().unwrap_or_default().to_string(),
-        call_id: json["call_id"].as_str().unwrap_or_default().to_string(),
+        call_id: json["call_id"].as_str().map(ToString::to_string),
         item_id: json["item_id"].as_str().unwrap_or_default().to_string(),
         output_index: index_u32(json, "output_index"),
     }
@@ -151,7 +152,7 @@ fn extract_fn_call_args_delta(json: &Value) -> EventPayload {
 fn extract_fn_call_args_done(json: &Value) -> EventPayload {
     EventPayload::FunctionCallArgsDone {
         arguments: json["arguments"].as_str().unwrap_or_default().to_string(),
-        call_id: json["call_id"].as_str().unwrap_or_default().to_string(),
+        call_id: json["call_id"].as_str().map(ToString::to_string),
         item_id: json["item_id"].as_str().unwrap_or_default().to_string(),
         name: json["name"].as_str().unwrap_or_default().to_string(),
         output_index: index_u32(json, "output_index"),
@@ -161,6 +162,13 @@ fn extract_fn_call_args_done(json: &Value) -> EventPayload {
 fn extract_reasoning_delta(json: &Value) -> EventPayload {
     EventPayload::ReasoningDelta {
         delta: json["delta"].as_str().unwrap_or_default().to_string(),
+        item_id: json["item_id"].as_str().unwrap_or_default().to_string(),
+    }
+}
+
+fn extract_reasoning_done(json: &Value) -> EventPayload {
+    EventPayload::ReasoningDone {
+        text: json["text"].as_str().unwrap_or_default().to_string(),
         item_id: json["item_id"].as_str().unwrap_or_default().to_string(),
     }
 }
@@ -205,7 +213,7 @@ mod tests {
         } = &frame.payload
         {
             assert_eq!(delta, r#"{"city":"#);
-            assert_eq!(call_id, "call_abc");
+            assert_eq!(call_id.as_deref(), Some("call_abc"));
             assert_eq!(item_id, "fc_1");
             assert_eq!(*output_index, 0);
         } else {
@@ -226,7 +234,7 @@ mod tests {
         } = &frame.payload
         {
             assert_eq!(arguments, r#"{"city":"SF"}"#);
-            assert_eq!(call_id, "call_abc");
+            assert_eq!(call_id.as_deref(), Some("call_abc"));
             assert_eq!(name, "get_weather");
         } else {
             panic!("expected FunctionCallArgsDone payload");
@@ -330,6 +338,7 @@ mod tests {
             item_id,
             item_type,
             output_index,
+            ..
         } = &frame.payload
         {
             assert_eq!(item_id, "msg_1");
@@ -349,11 +358,15 @@ mod tests {
             item_id,
             item_type,
             output_index,
+            name,
+            call_id,
         } = &frame.payload
         {
             assert_eq!(item_id, "fc_1");
             assert_eq!(item_type, "function_call");
             assert_eq!(*output_index, 1);
+            assert_eq!(name.as_deref(), Some("get_weather"));
+            assert_eq!(call_id.as_deref(), Some("call_1"));
         } else {
             panic!("expected OutputItemAdded payload");
         }

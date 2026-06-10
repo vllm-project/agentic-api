@@ -5,6 +5,7 @@ use serde_json::Value;
 /// Covers both the `OpenAI` and vLLM wire formats (e.g. `response.done` vs
 /// `response.completed`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum SSEEventType {
     // Response lifecycle
     ResponseCreated,
@@ -43,6 +44,7 @@ pub enum SSEEventType {
 
 /// Typed payload extracted from an SSE event's JSON data.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum EventPayload {
     /// `response.created` / `response.completed` / `response.failed` /
     /// `response.incomplete` / `response.in_progress`
@@ -57,6 +59,8 @@ pub enum EventPayload {
         item_id: String,
         item_type: String,
         output_index: u32,
+        name: Option<String>,
+        call_id: Option<String>,
     },
 
     /// `response.output_item.done`
@@ -85,7 +89,7 @@ pub enum EventPayload {
     /// `response.function_call_arguments.delta`
     FunctionCallArgsDelta {
         delta: String,
-        call_id: String,
+        call_id: Option<String>,
         item_id: String,
         output_index: u32,
     },
@@ -93,15 +97,17 @@ pub enum EventPayload {
     /// `response.function_call_arguments.done`
     FunctionCallArgsDone {
         arguments: String,
-        call_id: String,
+        call_id: Option<String>,
         item_id: String,
         name: String,
         output_index: u32,
     },
 
-    /// `response.reasoning_summary_text.delta` /
-    /// `response.reasoning_summary_text.done`
+    /// `response.reasoning_summary_text.delta`
     ReasoningDelta { delta: String, item_id: String },
+
+    /// `response.reasoning_summary_text.done`
+    ReasoningDone { text: String, item_id: String },
 
     /// Events we classify but don't deeply parse yet.
     Raw(Value),

@@ -27,6 +27,7 @@ uuid = { version = "1", features = ["v7", "serde"] }
 axum.workspace = true
 criterion = { workspace = true }
 serde_yaml = "0.9"
+serde_yml = "0.0.12"
 tokio = { workspace = true, features = ["full"] }
 
 [[bench]]
