@@ -90,15 +90,23 @@ fn extract_payload(event_type: SSEEventType, json: &Value) -> EventPayload {
     }
 }
 
-fn index_u32(json: &Value, key: &str) -> u32 {
+fn json_str(json: &Value, key: &str) -> String {
+    json[key].as_str().unwrap_or_default().to_string()
+}
+
+fn json_str_opt(json: &Value, key: &str) -> Option<String> {
+    json[key].as_str().map(ToString::to_string)
+}
+
+fn json_u32(json: &Value, key: &str) -> u32 {
     u32::try_from(json[key].as_u64().unwrap_or(0)).unwrap_or(u32::MAX)
 }
 
 fn extract_response_payload(json: &Value) -> EventPayload {
     let response = &json["response"];
     EventPayload::Response {
-        id: response["id"].as_str().unwrap_or_default().to_string(),
-        status: response["status"].as_str().unwrap_or_default().to_string(),
+        id: json_str(response, "id"),
+        status: json_str(response, "status"),
         usage: response.get("usage").filter(|v| !v.is_null()).cloned(),
     }
 }
@@ -106,70 +114,70 @@ fn extract_response_payload(json: &Value) -> EventPayload {
 fn extract_output_item_added(json: &Value) -> EventPayload {
     let item = &json["item"];
     EventPayload::OutputItemAdded {
-        item_id: item["id"].as_str().unwrap_or_default().to_string(),
-        item_type: item["type"].as_str().unwrap_or_default().to_string(),
-        output_index: index_u32(json, "output_index"),
-        name: item["name"].as_str().map(ToString::to_string),
-        call_id: item["call_id"].as_str().map(ToString::to_string),
+        item_id: json_str(item, "id"),
+        item_type: json_str(item, "type"),
+        output_index: json_u32(json, "output_index"),
+        name: json_str_opt(item, "name"),
+        call_id: json_str_opt(item, "call_id"),
     }
 }
 
 fn extract_output_item_done(json: &Value) -> EventPayload {
     let item = &json["item"];
     EventPayload::OutputItemDone {
-        item_id: item["id"].as_str().unwrap_or_default().to_string(),
-        item_type: item["type"].as_str().unwrap_or_default().to_string(),
-        output_index: index_u32(json, "output_index"),
+        item_id: json_str(item, "id"),
+        item_type: json_str(item, "type"),
+        output_index: json_u32(json, "output_index"),
         item: item.clone(),
     }
 }
 
 fn extract_text_delta(json: &Value) -> EventPayload {
     EventPayload::TextDelta {
-        delta: json["delta"].as_str().unwrap_or_default().to_string(),
-        item_id: json["item_id"].as_str().unwrap_or_default().to_string(),
-        output_index: index_u32(json, "output_index"),
-        content_index: index_u32(json, "content_index"),
+        delta: json_str(json, "delta"),
+        item_id: json_str(json, "item_id"),
+        output_index: json_u32(json, "output_index"),
+        content_index: json_u32(json, "content_index"),
     }
 }
 
 fn extract_text_done(json: &Value) -> EventPayload {
     EventPayload::TextDone {
-        text: json["text"].as_str().unwrap_or_default().to_string(),
-        item_id: json["item_id"].as_str().unwrap_or_default().to_string(),
-        output_index: index_u32(json, "output_index"),
+        text: json_str(json, "text"),
+        item_id: json_str(json, "item_id"),
+        output_index: json_u32(json, "output_index"),
     }
 }
 
 fn extract_fn_call_args_delta(json: &Value) -> EventPayload {
     EventPayload::FunctionCallArgsDelta {
-        delta: json["delta"].as_str().unwrap_or_default().to_string(),
-        call_id: json["call_id"].as_str().map(ToString::to_string),
-        item_id: json["item_id"].as_str().unwrap_or_default().to_string(),
-        output_index: index_u32(json, "output_index"),
+        delta: json_str(json, "delta"),
+        call_id: json_str_opt(json, "call_id"),
+        item_id: json_str(json, "item_id"),
+        output_index: json_u32(json, "output_index"),
     }
 }
 
 fn extract_fn_call_args_done(json: &Value) -> EventPayload {
     EventPayload::FunctionCallArgsDone {
-        arguments: json["arguments"].as_str().unwrap_or_default().to_string(),
-        call_id: json["call_id"].as_str().map(ToString::to_string),
-        item_id: json["item_id"].as_str().unwrap_or_default().to_string(),
-        name: json["name"].as_str().unwrap_or_default().to_string(),
-        output_index: index_u32(json, "output_index"),
+        arguments: json_str(json, "arguments"),
+        call_id: json_str_opt(json, "call_id"),
+        item_id: json_str(json, "item_id"),
+        name: json_str(json, "name"),
+        output_index: json_u32(json, "output_index"),
     }
 }
 
 fn extract_reasoning_delta(json: &Value) -> EventPayload {
     EventPayload::ReasoningDelta {
-        delta: json["delta"].as_str().unwrap_or_default().to_string(),
-        item_id: json["item_id"].as_str().unwrap_or_default().to_string(),
+        delta: json_str(json, "delta"),
+        item_id: json_str(json, "item_id"),
     }
 }
 
 fn extract_reasoning_done(json: &Value) -> EventPayload {
     EventPayload::ReasoningDone {
-        text: json["text"].as_str().unwrap_or_default().to_string(),
-        item_id: json["item_id"].as_str().unwrap_or_default().to_string(),
+        text: json_str(json, "text"),
+        item_id: json_str(json, "item_id"),
     }
 }
