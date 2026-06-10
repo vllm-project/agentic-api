@@ -100,7 +100,10 @@ impl ResponseStore {
     ) -> StoreResult<()> {
         let pool = self.pool()?;
 
-        let mut item_ids: Vec<String> = Vec::new();
+        let mut item_ids: Vec<String> = match previous_response_id {
+            Some(prev_id) => self.get(prev_id).await?.history_item_ids,
+            None => Vec::new(),
+        };
         let mut items_: Vec<(String, String)> = Vec::new();
         for any_item in new_items {
             let item_id = uuid7_str("item_");

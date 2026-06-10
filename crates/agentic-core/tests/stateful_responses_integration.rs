@@ -7,7 +7,10 @@ mod support;
 
 use agentic_core::executor::execute;
 use std::sync::Arc;
-use support::{TestFixture, collect_stream, expected_text, load_cassette, make_request, output_text, unwrap_blocking};
+use support::{
+    TestFixture, collect_stream, expected_text, load_cassette, make_request, output_text, request_input_texts,
+    text_response, unwrap_blocking,
+};
 
 const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/text_only/responses");
 
@@ -161,4 +164,105 @@ async fn test_store_disabled_not_reusable_as_previous_response_id() {
 
     // Assert — executor errors at rehydrate, before calling the LLM
     assert!(result.is_err(), "expected error for unstored previous_response_id");
+}
+
+#[tokio::test]
+async fn test_previous_response_id_rehydrates_full_checkpoint_history() {
+    let fixture = TestFixture::new_with_responses(vec![
+        text_response("first answer"),
+        text_response("second answer"),
+        text_response("third answer"),
+    ])
+    .await;
+
+    let p1 = unwrap_blocking(
+        execute(
+            make_request("turn 1", true, false, None, None),
+            Arc::clone(&fixture.exec_ctx),
+        )
+        .await
+        .expect("t1"),
+    );
+    let p2 = unwrap_blocking(
+        execute(
+            make_request("turn 2", true, false, Some(p1.id.clone()), None),
+            Arc::clone(&fixture.exec_ctx),
+        )
+        .await
+        .expect("t2"),
+    );
+    let p3 = unwrap_blocking(
+        execute(
+            make_request("turn 3", true, false, Some(p2.id), None),
+            Arc::clone(&fixture.exec_ctx),
+        )
+        .await
+        .expect("t3"),
+    );
+
+    assert_eq!(output_text(&p3), "third answer");
+    let requests = fixture.request_bodies().await;
+    assert_eq!(requests.len(), 3);
+    assert_eq!(
+        request_input_texts(&requests[2]),
+        vec!["turn 1", "first answer", "turn 2", "second answer", "turn 3"]
+    );
+}
+
+#[tokio::test]
+async fn test_store_false_with_previous_response_id_hydrates_but_does_not_persist() {
+    let fixture =
+        TestFixture::new_with_responses(vec![text_response("stored answer"), text_response("stateless answer")]).await;
+
+    let p1 = unwrap_blocking(
+        execute(
+            make_request("seed", true, false, None, None),
+            Arc::clone(&fixture.exec_ctx),
+        )
+        .await
+        .expect("stored turn"),
+    );
+    let p2 = unwrap_blocking(
+        execute(
+            make_request("follow up", false, false, Some(p1.id), None),
+            Arc::clone(&fixture.exec_ctx),
+        )
+        .await
+        .expect("store=false follow-up"),
+    );
+
+    assert_eq!(output_text(&p2), "stateless answer");
+    let requests = fixture.request_bodies().await;
+    assert_eq!(requests.len(), 2);
+    assert_eq!(
+        request_input_texts(&requests[1]),
+        vec!["seed", "stored answer", "follow up"]
+    );
+
+    let result = execute(
+        make_request("should not find stateless response", true, false, Some(p2.id), None),
+        Arc::clone(&fixture.exec_ctx),
+    )
+    .await;
+    assert!(result.is_err(), "store=false response should not be persisted");
+}
+
+#[tokio::test]
+async fn test_conversation_id_and_previous_response_id_are_rejected_together() {
+    let fixture = TestFixture::new_with_responses(vec![]).await;
+
+    let result = execute(
+        make_request(
+            "ambiguous",
+            true,
+            false,
+            Some("resp_ambiguous".to_string()),
+            Some("conv_ambiguous".to_string()),
+        ),
+        Arc::clone(&fixture.exec_ctx),
+    )
+    .await;
+
+    assert!(result.is_err(), "expected ambiguous state IDs to be rejected");
+    assert!(fixture.request_bodies().await.is_empty());
 }

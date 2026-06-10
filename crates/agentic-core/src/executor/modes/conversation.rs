@@ -34,6 +34,22 @@ impl ConversationHandler {
         self.store.get_or_create(conv_id).await.map_err(ExecutorError::Storage)
     }
 
+    /// Gets an existing conversation.
+    ///
+    /// Reads `conversation_id` from `ctx.original_request`.
+    ///
+    /// # Errors
+    /// Returns `ExecutorError` if `conversation_id` is absent, the store is
+    /// disabled, the conversation does not exist, or the database query fails.
+    pub async fn get(&self, ctx: &RequestContext) -> ExecutorResult<ConversationData> {
+        let conv_id = ctx
+            .original_request
+            .conversation_id
+            .as_deref()
+            .ok_or_else(|| ExecutorError::InvalidRequest("conversation_id is required for get".into()))?;
+        self.store.get(conv_id).await.map_err(ExecutorError::Storage)
+    }
+
     /// Creates a brand-new conversation with a freshly generated ID.
     ///
     /// # Errors
@@ -150,6 +166,12 @@ mod tests {
     #[tokio::test]
     async fn test_get_or_create_disabled_store_returns_error() {
         let result = disabled_handler().get_or_create(&make_ctx(Some("conv_1"))).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_get_disabled_store_returns_error() {
+        let result = disabled_handler().get(&make_ctx(Some("conv_1"))).await;
         assert!(result.is_err());
     }
 

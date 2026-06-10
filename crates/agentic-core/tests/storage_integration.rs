@@ -150,6 +150,10 @@ async fn test_response_store_with_previous_response() {
     let response = store.get("resp_2").await.expect("get failed");
 
     assert_eq!(response.previous_response_id, Some("resp_1".to_string()));
+    assert_eq!(response.history_item_ids.len(), 2);
+
+    let rehydrated = store.rehydrate("resp_2").await.expect("rehydrate failed");
+    assert_eq!(rehydrated.len(), 2);
 }
 
 // Edge case tests

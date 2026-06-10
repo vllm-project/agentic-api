@@ -116,11 +116,10 @@ async fn fetch_response_json(
 /// for `original_request` so the engine retains an unmodified copy for persistence
 /// and ID resolution.
 ///
-/// Dispatches to one of four paths based on `store` flag and which ID is present:
-/// - `store=false` + `previous_response_id`: validate the prior response exists, no history loaded
-/// - `store=true`  + `previous_response_id`: [`rehydrate_from_response`]
-/// - `store=true`  + `conversation_id`:      [`rehydrate_from_conversation`]
-/// - `store=true`  + no ids:                 create a new conversation
+/// Dispatches based on `store` flag and which ID is present:
+/// - `previous_response_id`: rehydrate from the prior response checkpoint
+/// - `conversation_id`:      rehydrate from the conversation
+/// - no ids:                 forward only the new input
 ///
 /// # Errors
 /// Returns [`ExecutorError`] if storage is unavailable or a referenced ID does not exist.
@@ -141,12 +140,10 @@ pub async fn rehydrate_conversation(
         conversation_id: None,
     };
 
-    if !ctx.original_request.store {
-        // Non-store path: validate previous_response_id only; no history needed.
-        if ctx.original_request.previous_response_id.is_some() {
-            exec_ctx.resp_handler.validate_exists(&ctx).await?;
-        }
-        return Ok(ctx);
+    if ctx.original_request.conversation_id.is_some() && ctx.original_request.previous_response_id.is_some() {
+        return Err(ExecutorError::InvalidRequest(
+            "provide only one of conversation_id or previous_response_id".into(),
+        ));
     }
 
     if ctx.original_request.conversation_id.is_some() {
@@ -159,9 +156,6 @@ pub async fn rehydrate_conversation(
         return Ok(ctx);
     }
 
-    // Store + no ids: create a fresh conversation.
-    let conv_data = exec_ctx.conv_handler.create().await?;
-    ctx.conversation_id = Some(conv_data.conversation_id);
     ctx.enriched_request.input = ResponsesInput::Items(ctx.new_input_items.clone());
     Ok(ctx)
 }
@@ -197,11 +191,17 @@ async fn rehydrate_from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionC
 
 /// Hydrates `ctx` from the conversation store.
 ///
-/// Gets or creates the conversation and rehydrates its history in parallel,
-/// then prepends the history items to the enriched request input.
+/// Gets or creates the conversation (depending on `store`) and rehydrates its
+/// history in parallel, then prepends the history items to the enriched request input.
 async fn rehydrate_from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
     let (conv_data, history) = tokio::try_join!(
-        exec_ctx.conv_handler.get_or_create(ctx),
+        async {
+            if ctx.original_request.store {
+                exec_ctx.conv_handler.get_or_create(ctx).await
+            } else {
+                exec_ctx.conv_handler.get(ctx).await
+            }
+        },
         exec_ctx.conv_handler.rehydrate(ctx),
     )?;
 

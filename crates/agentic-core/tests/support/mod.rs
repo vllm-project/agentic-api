@@ -16,6 +16,7 @@ use axum::routing::post;
 use either::Either;
 use futures::StreamExt;
 use serde::Deserialize;
+use serde_json::Value;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
@@ -117,11 +118,16 @@ pub fn expected_text(turn: &Turn) -> String {
 pub struct MockServer {
     url: String,
     handle: JoinHandle<()>,
+    requests: Arc<Mutex<Vec<Value>>>,
 }
 
 impl MockServer {
     pub fn url(&self) -> &str {
         &self.url
+    }
+
+    pub async fn request_bodies(&self) -> Vec<Value> {
+        self.requests.lock().await.clone()
     }
 }
 
@@ -183,14 +189,20 @@ impl MockServer {
         let url = format!("http://{addr}");
         // Store as VecDeque for O(1) pop_front.
         let queue: Arc<Mutex<VecDeque<MockResponse>>> = Arc::new(Mutex::new(VecDeque::from(responses)));
+        let requests: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
+        let requests_for_route = Arc::clone(&requests);
 
         let handle = tokio::spawn(async move {
             let app = Router::new()
                 .route(
                     "/v1/responses",
-                    post(move |_body: axum::body::Bytes| {
+                    post(move |body: axum::body::Bytes| {
                         let queue = Arc::clone(&queue);
+                        let requests = Arc::clone(&requests_for_route);
                         async move {
+                            let request_body =
+                                serde_json::from_slice::<Value>(&body).expect("request body should be valid JSON");
+                            requests.lock().await.push(request_body);
                             let mut q = queue.lock().await;
                             let resp = q.pop_front().expect("mock queue exhausted — check test setup");
                             build_response(resp)
@@ -207,7 +219,7 @@ impl MockServer {
             axum::serve(listener, app).await.ok();
         });
 
-        Self { url, handle }
+        Self { url, handle, requests }
     }
 }
 
@@ -226,7 +238,7 @@ pub async fn setup_pool() -> Arc<DbPool> {
 pub struct TestFixture {
     pub exec_ctx: Arc<ExecutionContext>,
     // Kept for its Drop impl — aborts the mock server when the test ends.
-    _server: MockServer,
+    server: MockServer,
 }
 
 impl TestFixture {
@@ -255,10 +267,80 @@ impl TestFixture {
             None,
         ));
 
-        Self {
-            exec_ctx,
-            _server: server,
-        }
+        Self { exec_ctx, server }
+    }
+
+    pub async fn new_with_responses(responses: Vec<MockResponse>) -> Self {
+        let server = MockServer::start_deque(responses).await;
+
+        let pool = setup_pool().await;
+        let conv_handler = ConversationHandler::new(ConversationStore::new(Arc::clone(&pool)));
+        let resp_handler = ResponseHandler::new(ResponseStore::new(Arc::clone(&pool)));
+        let client = Arc::new(reqwest::Client::new());
+        let exec_ctx = Arc::new(ExecutionContext::new(
+            conv_handler,
+            resp_handler,
+            client,
+            server.url().to_string(),
+            None,
+        ));
+
+        Self { exec_ctx, server }
+    }
+
+    pub async fn request_bodies(&self) -> Vec<Value> {
+        self.server.request_bodies().await
+    }
+}
+
+pub fn text_response(text: &str) -> MockResponse {
+    let id_suffix = text.replace(' ', "_");
+    MockResponse::Json(
+        serde_json::json!({
+            "id": format!("resp_upstream_{id_suffix}"),
+            "object": "response",
+            "created_at": 0,
+            "model": "test-model",
+            "status": "completed",
+            "output": [{
+                "id": format!("msg_upstream_{id_suffix}"),
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{
+                    "type": "output_text",
+                    "text": text,
+                    "annotations": []
+                }]
+            }],
+            "usage": null,
+            "incomplete_details": null,
+            "error": null,
+            "previous_response_id": null,
+            "conversation_id": null,
+            "instructions": null
+        })
+        .to_string(),
+    )
+}
+
+pub fn request_input_texts(body: &Value) -> Vec<String> {
+    match &body["input"] {
+        Value::String(text) => vec![text.clone()],
+        Value::Array(items) => items
+            .iter()
+            .filter_map(|item| match &item["content"] {
+                Value::String(text) => Some(text.clone()),
+                Value::Array(parts) => Some(
+                    parts
+                        .iter()
+                        .filter_map(|part| part["text"].as_str())
+                        .collect::<String>(),
+                ),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
     }
 }
 

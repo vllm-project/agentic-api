@@ -9,8 +9,8 @@ mod support;
 use agentic_core::executor::{create_conversation, execute};
 use std::sync::Arc;
 use support::{
-    TestFixture, collect_stream, expected_text, load_cassette, make_request, output_text, responses_turns,
-    unwrap_blocking,
+    TestFixture, collect_stream, expected_text, load_cassette, make_request, output_text, request_input_texts,
+    responses_turns, text_response, unwrap_blocking,
 };
 
 const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/text_only/conversation");
@@ -302,4 +302,54 @@ async fn test_multi_branch() {
     );
     assert_eq!(p5.status, "completed");
     assert_eq!(output_text(&p5), expected_text(t5));
+}
+
+#[tokio::test]
+async fn test_store_false_with_conversation_id_hydrates_but_does_not_persist() {
+    let fixture = TestFixture::new_with_responses(vec![
+        text_response("stored answer"),
+        text_response("stateless answer"),
+        text_response("final answer"),
+    ])
+    .await;
+    let ctx = &fixture.exec_ctx;
+    let conv_id = create_conversation(ctx).await.expect("create conv").conversation_id;
+
+    let p1 = unwrap_blocking(
+        execute(
+            make_request("seed", true, false, None, Some(conv_id.clone())),
+            Arc::clone(ctx),
+        )
+        .await
+        .expect("stored turn"),
+    );
+    assert_eq!(output_text(&p1), "stored answer");
+
+    let p2 = unwrap_blocking(
+        execute(
+            make_request("follow up", false, false, None, Some(conv_id.clone())),
+            Arc::clone(ctx),
+        )
+        .await
+        .expect("store=false follow-up"),
+    );
+    assert_eq!(output_text(&p2), "stateless answer");
+
+    let p3 = unwrap_blocking(
+        execute(make_request("third", true, false, None, Some(conv_id)), Arc::clone(ctx))
+            .await
+            .expect("stored third turn"),
+    );
+    assert_eq!(output_text(&p3), "final answer");
+
+    let requests = fixture.request_bodies().await;
+    assert_eq!(requests.len(), 3);
+    assert_eq!(
+        request_input_texts(&requests[1]),
+        vec!["seed", "stored answer", "follow up"]
+    );
+    assert_eq!(
+        request_input_texts(&requests[2]),
+        vec!["seed", "stored answer", "third"]
+    );
 }

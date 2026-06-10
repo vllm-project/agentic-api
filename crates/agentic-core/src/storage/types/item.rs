@@ -5,7 +5,7 @@ use std::convert::TryFrom;
 use serde::{Deserialize, Serialize};
 
 use crate::storage::StorageError;
-use crate::types::io::{InputItem, OutputItem};
+use crate::types::io::{InputItem, InputMessage, InputMessageContent, OutputItem};
 use crate::utils::common::serialize_to_string;
 
 /// Item kind (input vs output) for storage and retrieval.
@@ -47,14 +47,21 @@ impl TryFrom<&InOutItem> for String {
 }
 
 impl InOutItem {
-    /// Extracts input items from a mixed history, filtering out output items.
+    /// Converts stored history into input items suitable for a model request.
     #[must_use]
     pub fn into_input_items(history: Vec<InOutItem>) -> Vec<InputItem> {
         history
             .into_iter()
             .filter_map(|i| match i {
                 InOutItem::Input(item) => Some(item),
-                InOutItem::Output(_) => None,
+                InOutItem::Output(OutputItem::Message(msg)) => {
+                    let text = msg.content.into_iter().map(|content| content.text).collect::<String>();
+                    Some(InputItem::Message(InputMessage {
+                        role: msg.role,
+                        content: InputMessageContent::Text(text),
+                    }))
+                }
+                InOutItem::Output(OutputItem::FunctionCall(_) | OutputItem::Unknown) => None,
             })
             .collect()
     }
@@ -63,7 +70,7 @@ impl InOutItem {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::io::{InputMessage, InputMessageContent, OutputMessage};
+    use crate::types::io::{OutputMessage, OutputTextContent};
 
     #[test]
     fn test_inout_item_from_input() {
@@ -95,21 +102,30 @@ mod tests {
     }
 
     #[test]
-    fn test_into_input_items_filters_outputs() {
+    fn test_into_input_items_converts_output_messages() {
+        let mut output = OutputMessage::new("out1", "done");
+        output.content.push(OutputTextContent::new("answer"));
         let items = vec![
             InOutItem::Input(InputItem::Message(InputMessage {
                 role: "user".to_string(),
                 content: InputMessageContent::Text("msg1".to_string()),
             })),
-            InOutItem::Output(OutputItem::Message(OutputMessage::new("out1", "done"))),
+            InOutItem::Output(OutputItem::Message(output)),
             InOutItem::Input(InputItem::Message(InputMessage {
-                role: "assistant".to_string(),
+                role: "user".to_string(),
                 content: InputMessageContent::Text("msg2".to_string()),
             })),
         ];
 
         let inputs = InOutItem::into_input_items(items);
-        assert_eq!(inputs.len(), 2);
+        assert_eq!(inputs.len(), 3);
+        match &inputs[1] {
+            InputItem::Message(message) => {
+                assert_eq!(message.role, "assistant");
+                assert!(matches!(&message.content, InputMessageContent::Text(text) if text == "answer"));
+            }
+            InputItem::FunctionCallOutput(_) | InputItem::Unknown => panic!("expected message"),
+        }
     }
 
     #[test]
