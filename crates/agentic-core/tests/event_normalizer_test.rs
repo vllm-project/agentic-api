@@ -226,3 +226,94 @@ fn test_cassette_function_call_vllm() {
     assert_eq!(final_name, expected.name);
     assert_eq!(parsed_count, cassette.sse.len(), "all lines should parse");
 }
+
+/// Parallel function calls — two tools called in the same response (different `output_index`).
+#[test]
+fn test_parallel_function_calls() {
+    let lines = &[
+        r#"data: {"type":"response.created","response":{"id":"resp_par","status":"in_progress","usage":null},"sequence_number":0}"#,
+        r#"data: {"type":"response.output_item.added","item":{"id":"fc_1","type":"function_call","name":"get_weather","call_id":"call_1","arguments":"","status":"in_progress"},"output_index":0,"sequence_number":1}"#,
+        r#"data: {"type":"response.output_item.added","item":{"id":"fc_2","type":"function_call","name":"get_time","call_id":"call_2","arguments":"","status":"in_progress"},"output_index":1,"sequence_number":2}"#,
+        r#"data: {"type":"response.function_call_arguments.delta","delta":"{\"city\":\"SF\"}","item_id":"fc_1","output_index":0,"sequence_number":3}"#,
+        r#"data: {"type":"response.function_call_arguments.delta","delta":"{\"tz\":\"PST\"}","item_id":"fc_2","output_index":1,"sequence_number":4}"#,
+        r#"data: {"type":"response.function_call_arguments.done","arguments":"{\"city\":\"SF\"}","item_id":"fc_1","name":"get_weather","output_index":0,"sequence_number":5}"#,
+        r#"data: {"type":"response.function_call_arguments.done","arguments":"{\"tz\":\"PST\"}","item_id":"fc_2","name":"get_time","output_index":1,"sequence_number":6}"#,
+        r#"data: {"type":"response.output_item.done","item":{"id":"fc_1","type":"function_call","name":"get_weather","call_id":"call_1","arguments":"{\"city\":\"SF\"}","status":"completed"},"output_index":0,"sequence_number":7}"#,
+        r#"data: {"type":"response.output_item.done","item":{"id":"fc_2","type":"function_call","name":"get_time","call_id":"call_2","arguments":"{\"tz\":\"PST\"}","status":"completed"},"output_index":1,"sequence_number":8}"#,
+        r#"data: {"type":"response.completed","response":{"id":"resp_par","status":"completed","usage":{"input_tokens":30,"output_tokens":15,"total_tokens":45}},"sequence_number":9}"#,
+    ];
+
+    let mut calls: std::collections::HashMap<String, (String, String)> = std::collections::HashMap::new();
+
+    for line in lines {
+        let frame = normalize_sse_line(line).unwrap();
+        if let EventPayload::FunctionCallArgsDone {
+            item_id,
+            name,
+            arguments,
+            ..
+        } = &frame.payload
+        {
+            calls.insert(item_id.clone(), (name.clone(), arguments.clone()));
+        }
+    }
+
+    assert_eq!(calls.len(), 2);
+    assert_eq!(calls["fc_1"], ("get_weather".into(), r#"{"city":"SF"}"#.into()));
+    assert_eq!(calls["fc_2"], ("get_time".into(), r#"{"tz":"PST"}"#.into()));
+}
+
+/// Mixed response: text message (`output_index`=0) + function call (`output_index`=1).
+#[test]
+fn test_mixed_text_and_function_call() {
+    let lines = &[
+        r#"data: {"type":"response.created","response":{"id":"resp_mix","status":"in_progress","usage":null},"sequence_number":0}"#,
+        r#"data: {"type":"response.output_item.added","item":{"id":"msg_1","type":"message","status":"in_progress","content":[]},"output_index":0,"sequence_number":1}"#,
+        r#"data: {"type":"response.output_text.delta","delta":"Let me check ","item_id":"msg_1","output_index":0,"content_index":0,"sequence_number":2}"#,
+        r#"data: {"type":"response.output_text.delta","delta":"the weather.","item_id":"msg_1","output_index":0,"content_index":0,"sequence_number":3}"#,
+        r#"data: {"type":"response.output_text.done","text":"Let me check the weather.","item_id":"msg_1","output_index":0,"sequence_number":4}"#,
+        r#"data: {"type":"response.output_item.done","item":{"id":"msg_1","type":"message","status":"completed","content":[{"type":"output_text","text":"Let me check the weather."}]},"output_index":0,"sequence_number":5}"#,
+        r#"data: {"type":"response.output_item.added","item":{"id":"fc_1","type":"function_call","name":"get_weather","call_id":"call_x","arguments":"","status":"in_progress"},"output_index":1,"sequence_number":6}"#,
+        r#"data: {"type":"response.function_call_arguments.delta","delta":"{\"city\":\"NYC\"}","item_id":"fc_1","output_index":1,"sequence_number":7}"#,
+        r#"data: {"type":"response.function_call_arguments.done","arguments":"{\"city\":\"NYC\"}","item_id":"fc_1","name":"get_weather","output_index":1,"sequence_number":8}"#,
+        r#"data: {"type":"response.output_item.done","item":{"id":"fc_1","type":"function_call","name":"get_weather","call_id":"call_x","arguments":"{\"city\":\"NYC\"}","status":"completed"},"output_index":1,"sequence_number":9}"#,
+        r#"data: {"type":"response.completed","response":{"id":"resp_mix","status":"completed","usage":{"input_tokens":25,"output_tokens":20,"total_tokens":45}},"sequence_number":10}"#,
+    ];
+
+    let mut text = String::new();
+    let mut fn_name = String::new();
+    let mut fn_args = String::new();
+
+    for line in lines {
+        let frame = normalize_sse_line(line).unwrap();
+        match &frame.payload {
+            EventPayload::TextDelta { delta, .. } => text.push_str(delta),
+            EventPayload::FunctionCallArgsDone { name, arguments, .. } => {
+                fn_name = name.clone();
+                fn_args = arguments.clone();
+            }
+            _ => {}
+        }
+    }
+
+    assert_eq!(text, "Let me check the weather.");
+    assert_eq!(fn_name, "get_weather");
+    assert_eq!(fn_args, r#"{"city":"NYC"}"#);
+}
+
+/// Verify `call_id` is recoverable from `OutputItemAdded` for vLLM streams.
+#[test]
+fn test_call_id_from_output_item_added() {
+    let line = r#"data: {"type":"response.output_item.added","item":{"arguments":"","call_id":"call_abc123","name":"search","type":"function_call","id":"fc_99","status":"in_progress"},"output_index":0,"sequence_number":2}"#;
+    let frame = normalize_sse_line(line).unwrap();
+    if let EventPayload::OutputItemAdded {
+        call_id, name, item_id, ..
+    } = &frame.payload
+    {
+        assert_eq!(call_id.as_deref(), Some("call_abc123"));
+        assert_eq!(name.as_deref(), Some("search"));
+        assert_eq!(item_id, "fc_99");
+    } else {
+        panic!("expected OutputItemAdded");
+    }
+}

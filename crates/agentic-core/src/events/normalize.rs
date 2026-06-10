@@ -386,4 +386,95 @@ mod tests {
         let frame = normalize_sse_line(line).unwrap();
         assert_eq!(frame.sequence_number, None);
     }
+
+    #[test]
+    fn test_reasoning_delta() {
+        let line = r#"data: {"type":"response.reasoning_summary_text.delta","delta":"Let me think","item_id":"rs_1","sequence_number":3}"#;
+        let frame = normalize_sse_line(line).unwrap();
+        assert_eq!(frame.event_type, SSEEventType::ReasoningSummaryTextDelta);
+        if let EventPayload::ReasoningDelta { delta, item_id } = &frame.payload {
+            assert_eq!(delta, "Let me think");
+            assert_eq!(item_id, "rs_1");
+        } else {
+            panic!("expected ReasoningDelta payload");
+        }
+    }
+
+    #[test]
+    fn test_reasoning_done_reads_text_not_delta() {
+        let line = r#"data: {"type":"response.reasoning_summary_text.done","text":"Full reasoning summary here","item_id":"rs_1","sequence_number":5}"#;
+        let frame = normalize_sse_line(line).unwrap();
+        assert_eq!(frame.event_type, SSEEventType::ReasoningSummaryTextDone);
+        if let EventPayload::ReasoningDone { text, item_id } = &frame.payload {
+            assert_eq!(text, "Full reasoning summary here");
+            assert_eq!(item_id, "rs_1");
+        } else {
+            panic!("expected ReasoningDone payload");
+        }
+    }
+
+    #[test]
+    fn test_response_failed() {
+        let line = r#"data: {"type":"response.failed","response":{"id":"resp_err","status":"failed","usage":null},"sequence_number":2}"#;
+        let frame = normalize_sse_line(line).unwrap();
+        assert_eq!(frame.event_type, SSEEventType::ResponseFailed);
+        if let EventPayload::Response { id, status, .. } = &frame.payload {
+            assert_eq!(id, "resp_err");
+            assert_eq!(status, "failed");
+        } else {
+            panic!("expected Response payload");
+        }
+    }
+
+    #[test]
+    fn test_response_incomplete() {
+        let line = r#"data: {"type":"response.incomplete","response":{"id":"resp_inc","status":"incomplete","usage":{"input_tokens":100,"output_tokens":4096,"total_tokens":4196}},"sequence_number":99}"#;
+        let frame = normalize_sse_line(line).unwrap();
+        assert_eq!(frame.event_type, SSEEventType::ResponseIncomplete);
+        if let EventPayload::Response { status, usage, .. } = &frame.payload {
+            assert_eq!(status, "incomplete");
+            assert!(usage.is_some());
+        } else {
+            panic!("expected Response payload");
+        }
+    }
+
+    #[test]
+    fn test_empty_delta() {
+        let line = r#"data: {"type":"response.output_text.delta","delta":"","item_id":"msg_1","output_index":0,"content_index":0,"sequence_number":4}"#;
+        let frame = normalize_sse_line(line).unwrap();
+        assert_eq!(frame.event_type, SSEEventType::OutputTextDelta);
+        if let EventPayload::TextDelta { delta, .. } = &frame.payload {
+            assert_eq!(delta, "");
+        } else {
+            panic!("expected TextDelta payload");
+        }
+    }
+
+    #[test]
+    fn test_unicode_in_delta() {
+        let line = r#"data: {"type":"response.output_text.delta","delta":"こんにちは 🌍","item_id":"msg_1","output_index":0,"content_index":0,"sequence_number":4}"#;
+        let frame = normalize_sse_line(line).unwrap();
+        if let EventPayload::TextDelta { delta, .. } = &frame.payload {
+            assert_eq!(delta, "こんにちは 🌍");
+        } else {
+            panic!("expected TextDelta payload");
+        }
+    }
+
+    #[test]
+    fn test_file_search_classification() {
+        let line = r#"data: {"type":"response.file_search_call.searching","item_id":"fs_1","output_index":0,"sequence_number":3}"#;
+        let frame = normalize_sse_line(line).unwrap();
+        assert_eq!(frame.event_type, SSEEventType::FileSearchCallSearching);
+        assert!(matches!(frame.payload, EventPayload::Raw(_)));
+    }
+
+    #[test]
+    fn test_web_search_classification() {
+        let line = r#"data: {"type":"response.web_search_call.completed","item_id":"ws_1","output_index":0,"sequence_number":6}"#;
+        let frame = normalize_sse_line(line).unwrap();
+        assert_eq!(frame.event_type, SSEEventType::WebSearchCallCompleted);
+        assert!(matches!(frame.payload, EventPayload::Raw(_)));
+    }
 }
