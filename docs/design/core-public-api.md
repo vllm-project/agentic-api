@@ -175,7 +175,7 @@ This enables the real-time streaming requirement from ADR-01 §3 — events shou
 
 ### Phase 4: Tool Executor Traits + Mock Implementations (depends on Phase 2)
 
-**PR scope:** `executor/tools/` module.
+**PR scope:** `tools/` module.
 
 ```rust
 // Native async traits (Rust 1.75+, no #[async_trait] boxing needed)
@@ -209,7 +209,7 @@ pub trait VectorStoreClient: Send + Sync {
 
 This PR includes mock implementations for integration testing (in-memory tool executors that return canned responses). Real implementations (MCP client, Brave search, Qdrant) come in later PRs.
 
-**Note:** These traits must be compatible with @franciscojavierarceo's OGX integration (PR #34). The trait-based approach allows OGX to be one implementation behind `McpToolExecutor` — the dispatch layer doesn't care whether tools run via OGX or native Rust.
+**Note:** The dispatch layer routes by tool type: function calls → `McpToolExecutor`, file_search → `VectorStoreClient` (@franciscojavierarceo's OGX integration, PR #34), web_search → `WebSearchProvider`.
 
 **Size:** ~500 lines | **Blocked by:** Phase 2 | **Target:** feature PR
 
@@ -237,15 +237,15 @@ How the complete pipeline maps to @leseb's proposed filter chain:
 | 0 | `request_validate` | `validate_request()` | Future | — |
 | 1 | `response_store` (init) | `init_store()` | Future | — |
 | 2 | `rehydrate` | `rehydrate_conversation()` | PR #46 | @maralbahari |
-| 3 | `file_resolve` | `resolve_files()` | Future | — |
-| 4 | `tool_parse` | `parse_tools()` | Future | — |
+| 3 | `file_resolve` | `resolve_files()` | Future | @franciscojavierarceo |
+| 4 | `tool_parse` | `parse_tools()` | Future | @franciscojavierarceo |
 | 5 | `responses_proxy` | `call_inference()` | PR #46 | @maralbahari |
 | 5.5 | `event_normalize` | `normalize_sse_line()` | Phase 1 | @ashwing |
 | 6 | `stream_events` | `transform_stream()` / tee | Phase 3 | @ashwing |
 | 7 | `tool_dispatch` | `dispatch_tools()` | Phase 2 | @ashwing |
 | 8 | `mcp_tool` | `McpToolExecutor::execute()` | Phase 4 | @ashwing |
-| 9 | `web_search` | `WebSearchProvider::search()` | Phase 4 | @ashwing |
-| 10 | `file_search` | `VectorStoreClient::search()` | Phase 4 | @ashwing |
+| 9 | `web_search` | `WebSearchProvider::search()` | Phase 4 | @franciscojavierarceo |
+| 10 | `file_search` | `VectorStoreClient::search()` | Phase 4 | @franciscojavierarceo |
 | 11 | `compact` | `compact_context()` | Future | — |
 | 12 | `reasoning` | `summarize_reasoning()` | Future | — |
 | 13 | `response_store` (resp) | `persist_response()` | PR #46 | @maralbahari |
