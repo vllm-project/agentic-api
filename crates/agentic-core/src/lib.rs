@@ -1,7 +1,7 @@
 pub mod config;
 pub mod error;
-pub mod executor;
 pub mod events;
+pub mod executor;
 pub mod proxy;
 pub mod readiness;
 pub mod storage;
