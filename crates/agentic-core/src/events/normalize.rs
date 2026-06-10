@@ -1,6 +1,7 @@
 use serde_json::Value;
 
 use super::types::{EventFrame, EventPayload, SSEEventType};
+use crate::utils::common::deserialize_from_str_opt;
 
 /// Normalize a raw SSE data line into a typed [`EventFrame`].
 ///
@@ -14,7 +15,7 @@ pub fn normalize_sse_line(line: &str) -> Option<EventFrame> {
         return None;
     }
 
-    let json: Value = serde_json::from_str(data_str).ok()?;
+    let json: Value = deserialize_from_str_opt(data_str)?;
 
     let event_type = json
         .get("type")
