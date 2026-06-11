@@ -325,4 +325,144 @@ mod tests {
         assert_eq!(MessageStatus::Completed.as_str(), "completed");
         assert_eq!(MessageStatus::InProgress.as_str(), "in_progress");
     }
+
+    // --- process_event tests (exercises the refactored path directly) ---
+
+    /// Feeding a `ResponseCreated` `EventFrame` sets the `response_id` on the accumulator.
+    #[test]
+    fn test_process_event_response_created_sets_id() {
+        let mut acc = ResponseAccumulator::new("resp_old".into(), None);
+        let frame = EventFrame {
+            event_type: SSEEventType::ResponseCreated,
+            payload: EventPayload::Response {
+                id: "resp_new".into(),
+                status: "in_progress".into(),
+                usage: None,
+            },
+            sequence_number: Some(0),
+        };
+
+        acc.process_event(&frame);
+        assert_eq!(acc.response_id, "resp_new");
+    }
+
+    /// `ResponseCreated` with empty id should NOT overwrite the existing `response_id`.
+    #[test]
+    fn test_process_event_response_created_empty_id_no_overwrite() {
+        let mut acc = ResponseAccumulator::new("resp_keep".into(), None);
+        let frame = EventFrame {
+            event_type: SSEEventType::ResponseCreated,
+            payload: EventPayload::Response {
+                id: String::new(),
+                status: "in_progress".into(),
+                usage: None,
+            },
+            sequence_number: Some(0),
+        };
+
+        acc.process_event(&frame);
+        assert_eq!(acc.response_id, "resp_keep");
+    }
+
+    /// `TextDelta` events accumulate text which gets attached to the current message.
+    #[test]
+    fn test_process_event_text_delta_accumulates() {
+        let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+
+        // Start a message
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::OutputItemAdded,
+            payload: EventPayload::OutputItemAdded {
+                item_id: "msg_1".into(),
+                item_type: "message".into(),
+                output_index: 0,
+                name: None,
+                call_id: None,
+            },
+            sequence_number: Some(1),
+        });
+
+        // Feed deltas
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::OutputTextDelta,
+            payload: EventPayload::TextDelta {
+                delta: "Hello".into(),
+                item_id: "msg_1".into(),
+                output_index: 0,
+                content_index: 0,
+            },
+            sequence_number: Some(2),
+        });
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::OutputTextDelta,
+            payload: EventPayload::TextDelta {
+                delta: " world".into(),
+                item_id: "msg_1".into(),
+                output_index: 0,
+                content_index: 0,
+            },
+            sequence_number: Some(3),
+        });
+
+        // Finalize
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::ResponseCompleted,
+            payload: EventPayload::Response {
+                id: "resp_1".into(),
+                status: "completed".into(),
+                usage: None,
+            },
+            sequence_number: Some(4),
+        });
+
+        assert_eq!(acc.status, ResponseStatus::Completed);
+        assert_eq!(acc.output.len(), 1);
+        if let OutputItem::Message(msg) = &acc.output[0] {
+            assert_eq!(msg.content[0].text, "Hello world");
+        } else {
+            panic!("expected Message");
+        }
+    }
+
+    /// `ResponseCompleted` with usage extracts token counts correctly.
+    #[test]
+    fn test_process_event_completed_with_usage() {
+        let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+        let frame = EventFrame {
+            event_type: SSEEventType::ResponseCompleted,
+            payload: EventPayload::Response {
+                id: "resp_1".into(),
+                status: "completed".into(),
+                usage: Some(serde_json::json!({
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "total_tokens": 15
+                })),
+            },
+            sequence_number: Some(9),
+        };
+
+        acc.process_event(&frame);
+        assert_eq!(acc.status, ResponseStatus::Completed);
+        assert!(acc.usage.is_some());
+        assert_eq!(acc.usage.unwrap().total_tokens, 15);
+    }
+
+    /// Unknown/unhandled event types are silently ignored — no panic or state change.
+    /// Verifies the wildcard `_ => {}` arm works correctly.
+    #[test]
+    fn test_process_event_unknown_payload_ignored() {
+        let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+        let frame = EventFrame {
+            event_type: SSEEventType::ContentPartAdded,
+            payload: EventPayload::Raw(serde_json::json!({"type": "response.content_part.added"})),
+            sequence_number: Some(3),
+        };
+
+        acc.process_event(&frame);
+        // No state change — still initial state
+        assert_eq!(acc.response_id, "resp_1");
+        assert_eq!(acc.status, ResponseStatus::InProgress);
+        assert!(acc.output.is_empty());
+    }
 }
