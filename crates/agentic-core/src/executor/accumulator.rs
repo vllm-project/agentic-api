@@ -12,11 +12,12 @@ use std::sync::mpsc;
 
 use futures::{Stream, StreamExt};
 
+use crate::events::{EventFrame, EventPayload, SSEEventType, normalize_sse_line};
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::types::event::{MessageStatus, ResponseStatus, SSEEventType};
+use crate::types::event::{MessageStatus, ResponseStatus};
 use crate::types::io::{OutputItem, OutputMessage, OutputTextContent, ResponseUsage};
 use crate::types::request_response::{IncompleteDetails, ResponsePayload};
-use crate::utils::common::{deserialize_from_str, deserialize_from_value, deserialize_from_value_opt};
+use crate::utils::common::{deserialize_from_str, deserialize_from_value_opt};
 use crate::utils::uuid7_str;
 
 /// Accumulates LLM response chunks from streaming or non-streaming sources.
@@ -178,45 +179,43 @@ impl ResponseAccumulator {
     ///
     /// Non-`data:` lines, `[DONE]`, and malformed JSON are silently skipped.
     fn process_sse_line(&mut self, line: &str) {
-        let Some(data_str) = line.strip_prefix("data: ") else {
-            return;
-        };
-        if data_str == "[DONE]" {
-            return;
+        if let Some(frame) = normalize_sse_line(line) {
+            self.process_event(&frame);
         }
-        let Ok(json) = deserialize_from_str::<serde_json::Value>(data_str) else {
-            return;
-        };
+    }
 
-        match json["type"]
-            .as_str()
-            .map_or(SSEEventType::Other, |s| s.parse().unwrap_or_default())
-        {
-            SSEEventType::ResponseCreated => {
-                if let Some(id) = json["response"]["id"].as_str() {
-                    self.response_id = id.to_string();
-                }
+    /// Processes a typed [`EventFrame`], updating accumulator state.
+    ///
+    /// This is the core state machine — callers that already have a normalized
+    /// frame (e.g. [`StreamTee`](future)) can call this directly without
+    /// re-parsing from a raw line.
+    pub fn process_event(&mut self, frame: &EventFrame) {
+        match (&frame.event_type, &frame.payload) {
+            (SSEEventType::ResponseCreated, EventPayload::Response { id, .. }) if !id.is_empty() => {
+                self.response_id.clone_from(id);
             }
-            SSEEventType::ResponseOutputItemAdded => {
+            (_, EventPayload::OutputItemAdded { item_id, .. }) => {
                 self.finalize_current_message();
-                let item_id = json["item"]["id"]
-                    .as_str()
-                    .map_or_else(|| uuid7_str("msg_"), str::to_string);
-                self.current_message = Some(OutputMessage::new(&item_id, MessageStatus::InProgress.as_str()));
+                let id = if item_id.is_empty() {
+                    uuid7_str("msg_")
+                } else {
+                    item_id.clone()
+                };
+                self.current_message = Some(OutputMessage::new(&id, MessageStatus::InProgress.as_str()));
             }
-            SSEEventType::ResponseOutputTextDelta => {
-                if let Some(delta) = json["delta"].as_str() {
-                    self.accumulated_text.push_str(delta);
-                }
+            (_, EventPayload::TextDelta { delta, .. }) => {
+                self.accumulated_text.push_str(delta);
             }
-            SSEEventType::ResponseDone => {
+            (SSEEventType::ResponseCompleted, EventPayload::Response { usage, .. }) => {
                 self.finalize_current_message();
                 self.status = ResponseStatus::Completed;
-                if let Ok(usage) = deserialize_from_value::<ResponseUsage>(json["response"]["usage"].clone()) {
-                    self.usage = Some(usage);
+                if let Some(u) = usage {
+                    if let Ok(parsed) = serde_json::from_value::<ResponseUsage>(u.clone()) {
+                        self.usage = Some(parsed);
+                    }
                 }
             }
-            SSEEventType::Other => {}
+            _ => {}
         }
     }
 
