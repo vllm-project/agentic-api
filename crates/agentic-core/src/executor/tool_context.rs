@@ -32,8 +32,17 @@ impl ToolContext {
     ///
     /// Concurrency note: futures run on the tokio runtime's thread pool.
     /// True parallelism depends on the runtime being multi-threaded.
-    /// Individual failures produce an error string as the tool output for that
-    /// `call_id` — the dispatch does NOT fail as a whole.
+    ///
+    /// Failure model: individual failures produce an error JSON string as the
+    /// tool output for that `call_id` — the dispatch does NOT fail as a whole.
+    /// The model sees the error and decides whether to retry (next iteration),
+    /// try a different approach, or answer without that result.
+    ///
+    /// Retry policy: this layer does NOT retry. Providers handle their own
+    /// retries internally (transient network errors, 503s, etc.). By the time
+    /// an error reaches here, the provider already exhausted its retry budget.
+    /// The agentic loop itself serves as a higher-level retry — the model can
+    /// re-call a failed tool on the next iteration if it chooses to.
     pub async fn execute_all(&self, calls: &[&FunctionToolCall]) -> Vec<InputItem> {
         let futures: Vec<_> = calls.iter().map(|call| self.execute_one(call)).collect();
         futures::future::join_all(futures).await
