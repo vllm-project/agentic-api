@@ -1,3 +1,4 @@
+// Integration tests for the tool dispatch layer.
 #![allow(clippy::doc_markdown)]
 
 use std::future::Future;
