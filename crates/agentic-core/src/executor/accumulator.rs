@@ -189,12 +189,12 @@ impl ResponseAccumulator {
     /// This is the core state machine — callers that already have a normalized
     /// frame (e.g. [`StreamTee`](future)) can call this directly without
     /// re-parsing from a raw line.
-    pub fn process_event(&mut self, frame: &EventFrame) {
+    pub(crate) fn process_event(&mut self, frame: &EventFrame) {
         match (&frame.event_type, &frame.payload) {
             (SSEEventType::ResponseCreated, EventPayload::Response { id, .. }) if !id.is_empty() => {
                 self.response_id.clone_from(id);
             }
-            (_, EventPayload::OutputItemAdded { item_id, .. }) => {
+            (SSEEventType::OutputItemAdded, EventPayload::OutputItemAdded { item_id, .. }) => {
                 self.finalize_current_message();
                 let id = if item_id.is_empty() {
                     uuid7_str("msg_")
@@ -203,7 +203,7 @@ impl ResponseAccumulator {
                 };
                 self.current_message = Some(OutputMessage::new(&id, MessageStatus::InProgress.as_str()));
             }
-            (_, EventPayload::TextDelta { delta, .. }) => {
+            (SSEEventType::OutputTextDelta, EventPayload::TextDelta { delta, .. }) => {
                 self.accumulated_text.push_str(delta);
             }
             (SSEEventType::ResponseCompleted, EventPayload::Response { usage, .. }) => {
