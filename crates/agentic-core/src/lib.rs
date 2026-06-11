@@ -5,6 +5,7 @@ pub mod executor;
 pub mod proxy;
 pub mod readiness;
 pub mod storage;
+pub mod tools;
 pub mod types;
 pub mod utils;
 
