@@ -85,6 +85,12 @@ pub async fn execute_loop(
     // for the caller's persistence logic.
     let original_previous_response_id = request.previous_response_id.clone();
 
+    // Suppress persistence for ALL iterations inside the loop. The caller
+    // (server handler) owns final persistence with the correct RequestContext.
+    // Without this, the first iteration would persist a partial response
+    // (containing only the tool-call output, not the final answer) to the DB.
+    request.store = false;
+
     for iteration in 0_usize.. {
         // Defense-in-depth: even if dispatch_tools has a bug that never returns
         // Incomplete, we won't loop forever.
@@ -136,9 +142,12 @@ pub async fn execute_loop(
             }
             // Hit max_iterations — stop looping, mark as incomplete.
             // The model may have wanted to call more tools, but we're cutting it off.
+            // Attach the reason to incomplete_details so the client knows why.
             LoopDecision::Incomplete(reason) => {
                 debug!(iteration, %reason, "loop incomplete");
                 payload.status = "incomplete".to_string();
+                payload.incomplete_details =
+                    Some(crate::types::request_response::IncompleteDetails { reason: Some(reason) });
                 payload.previous_response_id = original_previous_response_id;
                 return Ok(payload);
             }
@@ -179,12 +188,8 @@ pub async fn execute_loop(
                 // Clear previous_response_id — on re-entry, we don't want execute()
                 // to rehydrate from DB (we're managing context in-memory via items).
                 request.previous_response_id = None;
-
-                // Suppress persistence for intermediate iterations. Only the final
-                // response (returned to caller) should be persisted. If execute()
-                // tried to persist each intermediate response, we'd get N partial
-                // records in the DB instead of 1 complete one.
-                request.store = false;
+                // request.store already set to false before the loop — no need
+                // to re-set here.
             }
         }
     }
