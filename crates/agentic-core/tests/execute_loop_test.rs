@@ -621,3 +621,90 @@ async fn test_cassette_tool_loop_vllm_gemma4() {
         .collect();
     assert_eq!(output_text, cassette.expected.final_text);
 }
+
+// --- Additional coverage tests ---
+
+/// When the request already has Items input (not Text), the loop should
+/// extend the existing items with tool results on Continue.
+#[tokio::test]
+async fn test_items_input_extended_correctly() {
+    use agentic_core::types::io::{InputItem, InputMessage, InputMessageContent};
+
+    let server = MockServer::start_deque(vec![
+        function_call_llm_response("tool", "{}", "call_1"),
+        text_llm_response("done"),
+    ])
+    .await;
+    let exec_ctx = build_exec_ctx(&server).await;
+    let tool_ctx = ToolContext {
+        mcp: Some(Arc::new(MockMcp::new("result"))),
+        max_iterations: 10,
+        ..ToolContext::default()
+    };
+
+    // Start with Items input (not Text)
+    let request = RequestPayload {
+        model: "test-model".to_string(),
+        input: ResponsesInput::Items(vec![InputItem::Message(InputMessage {
+            role: "user".into(),
+            content: InputMessageContent::Text("hello from items".into()),
+        })]),
+        instructions: None,
+        previous_response_id: None,
+        conversation_id: None,
+        tools: None,
+        tool_choice: ToolChoice::Auto,
+        stream: false,
+        store: false,
+        include: None,
+        temperature: None,
+        top_p: None,
+        max_output_tokens: None,
+        truncation: None,
+        metadata: None,
+    };
+
+    let result = execute_loop(request, exec_ctx, &tool_ctx).await.unwrap();
+    assert_eq!(result.status, "completed");
+
+    // Second request should have: original item + tool result
+    let bodies = server.request_bodies().await;
+    assert_eq!(bodies.len(), 2);
+    let second_input = &bodies[1]["input"];
+    let input_array = second_input.as_array().unwrap();
+    // Should have at least 2 items: original message + function_call_output
+    assert!(
+        input_array.len() >= 2,
+        "expected at least 2 items, got {}",
+        input_array.len()
+    );
+}
+
+/// Verify that previous_response_id=None on input produces None on output payload.
+/// (Testing with Some(id) requires a seeded DB — deferred to full integration test.)
+#[tokio::test]
+async fn test_previous_response_id_none_preserved() {
+    let server = MockServer::start_deque(vec![
+        function_call_llm_response("tool", "{}", "c1"),
+        text_llm_response("done"),
+    ])
+    .await;
+    let exec_ctx = build_exec_ctx(&server).await;
+    let tool_ctx = ToolContext {
+        mcp: Some(Arc::new(MockMcp::new("ok"))),
+        max_iterations: 10,
+        ..ToolContext::default()
+    };
+
+    let request = make_request("test", false, false);
+    // request.previous_response_id is None
+
+    let result = execute_loop(request, exec_ctx, &tool_ctx).await.unwrap();
+
+    // After the loop mutated previous_response_id internally (set to None),
+    // the original value (None) should be restored on the payload.
+    assert_eq!(
+        result.previous_response_id, None,
+        "should preserve original None previous_response_id"
+    );
+}

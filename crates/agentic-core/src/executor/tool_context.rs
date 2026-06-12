@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::executor::ExecutorError;
 use crate::tools::{McpToolExecutor, VectorStoreClient, WebSearchProvider};
@@ -14,6 +15,10 @@ pub struct ToolContext {
     pub web_search: Option<Arc<dyn WebSearchProvider>>,
     pub vector_store: Option<Arc<dyn VectorStoreClient>>,
     pub max_iterations: usize,
+    /// Per-tool-call timeout. If a provider takes longer than this, the call
+    /// produces a timeout error string (not a total dispatch failure).
+    /// `Duration::ZERO` disables the timeout.
+    pub tool_timeout: Duration,
 }
 
 impl Default for ToolContext {
@@ -23,6 +28,7 @@ impl Default for ToolContext {
             web_search: None,
             vector_store: None,
             max_iterations: 10,
+            tool_timeout: Duration::from_secs(30),
         }
     }
 }
@@ -49,7 +55,17 @@ impl ToolContext {
     }
 
     async fn execute_one(&self, call: &FunctionToolCall) -> InputItem {
-        let result = self.route_call(call).await;
+        let result = if self.tool_timeout.is_zero() {
+            self.route_call(call).await
+        } else {
+            match tokio::time::timeout(self.tool_timeout, self.route_call(call)).await {
+                Ok(r) => r,
+                Err(_elapsed) => Err(ExecutorError::StreamError(format!(
+                    "tool '{}' timed out after {:?}",
+                    call.name, self.tool_timeout
+                ))),
+            }
+        };
 
         let output = match result {
             Ok(s) => s,
