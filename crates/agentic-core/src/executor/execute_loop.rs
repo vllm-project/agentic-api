@@ -48,7 +48,18 @@ pub async fn execute_loop(
 
         debug!(iteration, "execute_loop iteration");
 
-        let result = execute(request.clone(), Arc::clone(&exec_ctx)).await?;
+        let inference_timeout = exec_ctx.streaming_timeout;
+        let result = if inference_timeout.is_zero() {
+            execute(request.clone(), Arc::clone(&exec_ctx)).await?
+        } else {
+            tokio::time::timeout(inference_timeout, execute(request.clone(), Arc::clone(&exec_ctx)))
+                .await
+                .map_err(|_| {
+                    crate::executor::ExecutorError::StreamError(format!(
+                        "LLM inference timed out after {inference_timeout:?} on iteration {iteration}"
+                    ))
+                })??
+        };
 
         let mut payload = match result {
             Either::Left(payload) => payload,
