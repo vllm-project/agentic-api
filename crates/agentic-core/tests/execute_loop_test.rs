@@ -377,7 +377,10 @@ async fn test_max_iterations_stops_loop() {
     assert_eq!(server.request_bodies().await.len(), 3);
 
     // Returns the last payload (the one from iteration 2)
-    assert_eq!(result.status, "completed");
+    assert_eq!(
+        result.status, "incomplete",
+        "should be marked incomplete when max iterations hit"
+    );
 }
 
 /// max_iterations=1 means only 1 tool dispatch is allowed.
@@ -401,7 +404,10 @@ async fn test_max_iterations_one_allows_single_dispatch() {
     // iteration 0: execute → FC → dispatch(iter=0) → Continue (0 < 1)
     // iteration 1: execute → FC → dispatch(iter=1) → Incomplete (1 >= 1)
     assert_eq!(server.request_bodies().await.len(), 2);
-    assert_eq!(result.status, "completed");
+    assert_eq!(
+        result.status, "incomplete",
+        "should be marked incomplete when max iterations hit"
+    );
 }
 
 // --- P1: Tool failure doesn't kill the loop ---
