@@ -1,0 +1,43 @@
+# Recorded from google/gemma-4-26B-A4B-it via vLLM v0.21.0
+# Date: 2026-06-12
+# Scenario: User asks weather → model calls get_weather → tool returns result → model answers
+#
+# This cassette drives execute_loop through a complete 2-iteration tool loop:
+#   Iteration 0: model returns FunctionCall (get_weather)
+#   Iteration 1: model returns Message (final answer using tool result)
+
+model: google/gemma-4-26B-A4B-it
+request:
+  input: "What is the weather in San Francisco?"
+  tools:
+    - type: function
+      name: get_weather
+      description: "Get current weather for a city"
+      parameters:
+        type: object
+        properties:
+          city:
+            type: string
+        required: ["city"]
+  tool_choice: required
+  stream: false
+
+tool_mock:
+  get_weather: '{"temperature": 72, "condition": "sunny", "humidity": 45}'
+
+expected:
+  iterations: 2
+  final_text: "The current weather in San Francisco is sunny with a temperature of 72°F and 45% humidity."
+  function_call:
+    name: get_weather
+    arguments: '{"city": "San Francisco"}'
+    call_id: "chatcmpl-tool-a2bac67597e69338"
+
+turns:
+  - description: "Turn 1: model calls get_weather"
+    response:
+      body: '{"id":"resp_9ef6bc922b19eb44","created_at":1781296371,"incomplete_details":null,"instructions":null,"metadata":null,"model":"google/gemma-4-26B-A4B-it","object":"response","output":[{"arguments":"{\"city\": \"San Francisco\"}","call_id":"chatcmpl-tool-a2bac67597e69338","name":"get_weather","type":"function_call","id":"fc_a55c74f95b5c8fcd","namespace":null,"status":"completed"}],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"required","tools":[{"name":"get_weather","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]},"strict":null,"type":"function","defer_loading":null,"description":"Get current weather for a city"}],"top_p":0.95,"background":false,"max_output_tokens":32699,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"completed","text":{"format":{"name":"tool_calling_response","schema":{"type":"array","minItems":1,"items":{"type":"object","anyOf":[{"properties":{"name":{"type":"string","enum":["get_weather"]},"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}},"required":["name","parameters"]}]}},"type":"json_schema","description":null,"strict":true},"verbosity":null},"top_logprobs":null,"truncation":"disabled","usage":{"input_tokens":69,"input_tokens_details":{"cached_tokens":64,"input_tokens_per_turn":[],"cached_tokens_per_turn":[]},"output_tokens":21,"output_tokens_details":{"reasoning_tokens":0,"tool_output_tokens":0,"output_tokens_per_turn":[],"tool_output_tokens_per_turn":[]},"total_tokens":90},"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null}'
+
+  - description: "Turn 2: model responds with final answer after receiving tool result"
+    response:
+      body: '{"id":"resp_a443bc5c4af1a46b","created_at":1781296379,"incomplete_details":null,"instructions":null,"metadata":null,"model":"google/gemma-4-26B-A4B-it","object":"response","output":[{"id":"msg_90c2c001ac5517da","content":[{"annotations":[],"text":"The current weather in San Francisco is sunny with a temperature of 72°F and 45% humidity.","type":"output_text","logprobs":null}],"role":"assistant","status":"completed","type":"message","phase":null}],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":0.95,"background":false,"max_output_tokens":32703,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"completed","text":null,"top_logprobs":null,"truncation":"disabled","usage":{"input_tokens":65,"input_tokens_details":{"cached_tokens":64,"input_tokens_per_turn":[],"cached_tokens_per_turn":[]},"output_tokens":29,"output_tokens_details":{"reasoning_tokens":2,"tool_output_tokens":0,"output_tokens_per_turn":[],"tool_output_tokens_per_turn":[]},"total_tokens":94},"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null}'

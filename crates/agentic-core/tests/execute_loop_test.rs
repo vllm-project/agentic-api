@@ -3,6 +3,8 @@
 
 mod support;
 
+use serde::Deserialize;
+
 use std::sync::Arc;
 
 use agentic_core::executor::{ExecutionContext, ExecutorError, ToolContext, execute_loop};
@@ -532,4 +534,84 @@ async fn test_llm_returns_error() {
     // Should propagate the error (mock queue exhausted = panic in mock, caught as error)
     // In practice this tests that execute_loop doesn't swallow execute() errors
     assert!(result.is_err(), "should propagate LLM error");
+}
+
+// --- P2: Cassette-driven integration test (real vLLM output) ---
+
+const TOOL_LOOP_CASSETTE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/tool_loop");
+
+#[derive(Deserialize)]
+struct ToolLoopCassette {
+    turns: Vec<CassetteTurn>,
+    expected: CassetteExpected,
+    tool_mock: std::collections::HashMap<String, String>,
+}
+
+#[derive(Deserialize)]
+struct CassetteTurn {
+    response: CassetteTurnResponse,
+}
+
+#[derive(Deserialize)]
+struct CassetteTurnResponse {
+    body: String,
+}
+
+#[derive(Deserialize)]
+struct CassetteExpected {
+    iterations: usize,
+    final_text: String,
+}
+
+/// Replays a recorded vLLM tool-call session through execute_loop.
+/// Validates the loop produces the same final text as the real model.
+#[tokio::test]
+async fn test_cassette_tool_loop_vllm_gemma4() {
+    let path = format!("{TOOL_LOOP_CASSETTE}/function-call-loop-vllm-gemma4.yaml");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let cassette: ToolLoopCassette = serde_yml::from_str(&text).unwrap();
+
+    // Build mock server with the recorded responses queued
+    let responses: Vec<MockResponse> = cassette
+        .turns
+        .iter()
+        .map(|t| MockResponse::Json(t.response.body.clone()))
+        .collect();
+    let server = MockServer::start_deque(responses).await;
+    let exec_ctx = build_exec_ctx(&server).await;
+
+    // Build ToolContext with mock that returns the cassette's tool_mock value
+    let tool_response = cassette.tool_mock.get("get_weather").cloned().unwrap_or_default();
+    let tool_ctx = ToolContext {
+        mcp: Some(Arc::new(MockMcp::new(&tool_response))),
+        max_iterations: 10,
+        ..ToolContext::default()
+    };
+
+    let request = make_request("What is the weather in San Francisco?", false, false);
+    let result = execute_loop(request, exec_ctx, &tool_ctx).await.unwrap();
+
+    // Verify the loop ran the expected number of iterations
+    let bodies = server.request_bodies().await;
+    assert_eq!(
+        bodies.len(),
+        cassette.expected.iterations,
+        "expected {} LLM calls, got {}",
+        cassette.expected.iterations,
+        bodies.len()
+    );
+
+    // Verify final response contains the expected text
+    assert_eq!(result.status, "completed");
+    let output_text: String = result
+        .output
+        .iter()
+        .filter_map(|item| match item {
+            agentic_core::types::io::OutputItem::Message(msg) => {
+                Some(msg.content.iter().map(|c| c.text.as_str()).collect::<String>())
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(output_text, cassette.expected.final_text);
 }
