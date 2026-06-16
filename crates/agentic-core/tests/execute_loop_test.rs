@@ -852,14 +852,8 @@ async fn test_all_persistence_triggers_cleared_internally() {
     let result = execute_loop(request, exec_ctx, &tool_ctx).await.unwrap();
 
     assert_eq!(result.status, "completed");
-    assert_eq!(
-        result.previous_response_id,
-        Some("resp_prev_999".to_string()),
-    );
-    assert_eq!(
-        result.conversation_id,
-        Some("conv_session_42".to_string()),
-    );
+    assert_eq!(result.previous_response_id, Some("resp_prev_999".to_string()),);
+    assert_eq!(result.conversation_id, Some("conv_session_42".to_string()),);
 
     // All 3 internal LLM calls should have all persistence triggers cleared
     let bodies = server.request_bodies().await;
@@ -917,10 +911,7 @@ async fn test_incomplete_restores_both_ids() {
     );
 
     // Verify incomplete_details has a reason
-    assert!(
-        result.incomplete_details.is_some(),
-        "incomplete should have details"
-    );
+    assert!(result.incomplete_details.is_some(), "incomplete should have details");
     let reason = result.incomplete_details.unwrap().reason.unwrap();
     assert!(
         reason.contains("max tool iterations"),
