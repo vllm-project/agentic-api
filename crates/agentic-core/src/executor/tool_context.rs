@@ -95,8 +95,7 @@ impl ToolContext {
     /// serves as a higher-level retry — the model can re-call a failed tool on
     /// the next iteration if it chooses to.
     pub async fn execute_all(&self, calls: &[&FunctionToolCall]) -> Vec<InputItem> {
-        let futures: Vec<_> = calls.iter().map(|call| self.execute_one(call)).collect();
-        futures::future::join_all(futures).await
+        futures::future::join_all(calls.iter().map(|call| self.execute_one(call))).await
     }
 
     /// Execute a single tool call with timeout protection.

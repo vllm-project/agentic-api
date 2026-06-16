@@ -27,13 +27,14 @@ use std::sync::Arc;
 use either::Either;
 use tracing::debug;
 
+use crate::executor::ExecutorError;
 use crate::executor::dispatch::{LoopDecision, dispatch_tools};
 use crate::executor::engine::execute;
 use crate::executor::error::ExecutorResult;
 use crate::executor::request::ExecutionContext;
 use crate::executor::tool_context::ToolContext;
-use crate::types::io::ResponsesInput;
-use crate::types::request_response::{RequestPayload, ResponsePayload};
+use crate::types::io::{InputItem, InputMessage, InputMessageContent, ResponsesInput};
+use crate::types::request_response::{IncompleteDetails, RequestPayload, ResponsePayload};
 
 /// Defense-in-depth hard cap, independent of `tool_ctx.max_iterations`.
 /// Prevents infinite loops even if dispatch logic has a bug.
@@ -95,7 +96,7 @@ pub async fn execute_loop(
         // Defense-in-depth: even if dispatch_tools has a bug that never returns
         // Incomplete, we won't loop forever.
         if iteration >= MAX_LOOP_GUARD {
-            return Err(crate::executor::ExecutorError::InvalidRequest(format!(
+            return Err(ExecutorError::InvalidRequest(format!(
                 "execute_loop exceeded hard iteration cap ({MAX_LOOP_GUARD})"
             )));
         }
@@ -112,7 +113,7 @@ pub async fn execute_loop(
             tokio::time::timeout(inference_timeout, execute(request.clone(), Arc::clone(&exec_ctx)))
                 .await
                 .map_err(|_| {
-                    crate::executor::ExecutorError::StreamError(format!(
+                    ExecutorError::StreamError(format!(
                         "LLM inference timed out after {inference_timeout:?} on iteration {iteration}"
                     ))
                 })??
@@ -123,7 +124,7 @@ pub async fn execute_loop(
         let mut payload = match result {
             Either::Left(payload) => payload,
             Either::Right(_stream) => {
-                return Err(crate::executor::ExecutorError::InvalidRequest(
+                return Err(ExecutorError::InvalidRequest(
                     "execute_loop does not support streaming yet — set stream=false".into(),
                 ));
             }
@@ -146,8 +147,7 @@ pub async fn execute_loop(
             LoopDecision::Incomplete(reason) => {
                 debug!(iteration, %reason, "loop incomplete");
                 payload.status = "incomplete".to_string();
-                payload.incomplete_details =
-                    Some(crate::types::request_response::IncompleteDetails { reason: Some(reason) });
+                payload.incomplete_details = Some(IncompleteDetails { reason: Some(reason) });
                 payload.previous_response_id = original_previous_response_id;
                 return Ok(payload);
             }
@@ -159,31 +159,19 @@ pub async fn execute_loop(
                     "tool results received, re-entering"
                 );
 
-                // Build the input for the next iteration:
-                // existing context + tool results appended.
-                let mut items = match &request.input {
-                    // Already structured items — clone and extend.
-                    ResponsesInput::Items(existing) => existing.clone(),
-                    // First iteration with plain text — convert to structured item.
-                    ResponsesInput::Text(t) => {
-                        vec![crate::types::io::InputItem::Message(crate::types::io::InputMessage {
-                            role: "user".into(),
-                            content: crate::types::io::InputMessageContent::Text(t.clone()),
-                        })]
-                    }
-                };
-
-                // TODO: Append assistant's FunctionCall output items to context.
-                // The Responses API wire format includes `type: "function_call"` in
-                // input, but InputItem doesn't have that variant yet. Adding it
-                // requires a type system change (follow-up PR). For now the model
-                // only sees function_call_output results, not its own tool requests.
-                // This may cause the model to re-call tools or behave unexpectedly
-                // in complex multi-hop scenarios.
-
-                // Append tool execution results (function_call_output items).
-                items.extend(tool_results);
-                request.input = ResponsesInput::Items(items);
+                // Convert text input to structured items on first tool call,
+                // then extend in-place on subsequent iterations (no clone).
+                if let ResponsesInput::Text(t) = &request.input {
+                    let msg = InputItem::Message(InputMessage {
+                        role: "user".into(),
+                        content: InputMessageContent::Text(t.clone()),
+                    });
+                    request.input = ResponsesInput::Items(vec![msg]);
+                }
+                if let ResponsesInput::Items(ref mut items) = request.input {
+                    items.reserve(tool_results.len());
+                    items.extend(tool_results);
+                }
 
                 // Clear previous_response_id — on re-entry, we don't want execute()
                 // to rehydrate from DB (we're managing context in-memory via items).

@@ -71,17 +71,17 @@ pub async fn dispatch_tools(
     tool_ctx: &ToolContext,
     iteration: usize,
 ) -> ExecutorResult<LoopDecision> {
-    // Step 1: Extract FunctionCall items. Messages and Unknown are ignored.
-    let function_calls: Vec<_> = output
+    // Step 1: Extract FunctionCall items lazily — no allocation until we know we need it.
+    let mut function_calls = output
         .iter()
         .filter_map(|item| match item {
             OutputItem::FunctionCall(fc) => Some(fc),
             _ => None,
         })
-        .collect();
+        .peekable();
 
     // Step 2: No tool calls → model is done generating.
-    if function_calls.is_empty() {
+    if function_calls.peek().is_none() {
         return Ok(LoopDecision::Done);
     }
 
@@ -94,8 +94,8 @@ pub async fn dispatch_tools(
         )));
     }
 
-    // Step 4: Execute all tool calls in parallel and return results.
-    // Individual failures produce error strings (not Err), so this always succeeds.
-    let results = tool_ctx.execute_all(&function_calls).await;
+    // Step 4: Only allocate when we'll actually execute.
+    let calls: Vec<_> = function_calls.collect();
+    let results = tool_ctx.execute_all(&calls).await;
     Ok(LoopDecision::Continue(results))
 }
