@@ -49,11 +49,13 @@ const MAX_LOOP_GUARD: usize = 128;
 /// - **Caller provides:** request, execution context (LLM + DB), tool context (providers)
 /// - **This function returns:** the final `ResponsePayload` (caller persists it)
 /// - **Persistence:** NOT done here. Caller (server handler) owns persistence because
-///   it has the full `RequestContext` with correct `new_input_items`. We set
-///   `request.store = false` for intermediate iterations to suppress the internal
-///   `execute()` from persisting partial state.
-/// - **Response chain:** `previous_response_id` on the returned payload reflects the
-///   ORIGINAL caller-supplied value, not the internal mutations.
+///   it has the full `RequestContext` with correct `new_input_items`. We clear
+///   all three persistence triggers (`store`, `previous_response_id`,
+///   `conversation_id`) to suppress intermediate `execute()` calls from
+///   persisting partial state (PR #56 persists when ANY of the three is set).
+/// - **ID restoration:** Both `previous_response_id` and `conversation_id` on the
+///   returned payload reflect the ORIGINAL caller-supplied values, not the
+///   internal mutations. This is critical for the caller's persist step.
 ///
 /// # Timeouts
 ///
@@ -81,17 +83,11 @@ pub async fn execute_loop(
     exec_ctx: Arc<ExecutionContext>,
     tool_ctx: &ToolContext,
 ) -> ExecutorResult<ResponsePayload> {
-    // Capture before the loop mutates the request. Restored on final payload
-    // so the response chain remains correct for the caller.
     let original_previous_response_id = request.previous_response_id.clone();
     let original_conversation_id = request.conversation_id.clone();
 
-    // Suppress persistence for ALL iterations inside the loop. The caller
-    // (server handler) owns final persistence with the correct RequestContext.
-    // Without this, intermediate iterations would persist partial responses
-    // (containing only tool-call output, not the final answer).
-    // Must clear all three persistence triggers (PR #56 persists when any is set):
-    //   store=true, previous_response_id.is_some(), conversation_id.is_some()
+    // Clear all three persistence triggers so intermediate execute() calls
+    // don't write partial tool-call-only responses to the store.
     request.store = false;
     request.previous_response_id = None;
     request.conversation_id = None;

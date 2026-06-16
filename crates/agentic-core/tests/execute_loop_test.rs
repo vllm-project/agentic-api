@@ -708,3 +708,281 @@ async fn test_previous_response_id_none_preserved() {
         "should preserve original None previous_response_id"
     );
 }
+
+// --- P2: Persistence trigger suppression & ID restoration tests ---
+//
+// These tests verify the critical invariants from Section 14 of the design doc:
+// - Internal LLM calls have store=false, prev_resp_id=null, conv_id=null
+// - Original prev_resp_id and conv_id are restored on the returned payload
+// - Both Done and Incomplete exit paths restore correctly
+
+/// previous_response_id=Some is captured before the loop and restored on Done.
+#[tokio::test]
+async fn test_previous_response_id_some_restored_on_done() {
+    let server = MockServer::start_deque(vec![
+        function_call_llm_response("tool", "{}", "c1"),
+        text_llm_response("final answer"),
+    ])
+    .await;
+    let exec_ctx = build_exec_ctx(&server).await;
+    let tool_ctx = ToolContext {
+        mcp: Some(Arc::new(MockMcp::new("tool result"))),
+        max_iterations: 10,
+        ..ToolContext::default()
+    };
+
+    let mut request = make_request("test", false, false);
+    request.previous_response_id = Some("resp_original_123".to_string());
+
+    let result = execute_loop(request, exec_ctx, &tool_ctx).await.unwrap();
+
+    assert_eq!(result.status, "completed");
+    assert_eq!(
+        result.previous_response_id,
+        Some("resp_original_123".to_string()),
+        "previous_response_id must be restored from pre-loop capture"
+    );
+
+    // Verify internal LLM calls had prev_resp_id cleared
+    let bodies = server.request_bodies().await;
+    assert_eq!(bodies.len(), 2);
+    for (i, body) in bodies.iter().enumerate() {
+        assert!(
+            body["previous_response_id"].is_null(),
+            "internal LLM call {i} should have previous_response_id=null, got: {}",
+            body["previous_response_id"]
+        );
+    }
+}
+
+/// conversation_id=Some is captured before the loop and restored on Done.
+#[tokio::test]
+async fn test_conversation_id_restored_on_done() {
+    let server = MockServer::start_deque(vec![
+        function_call_llm_response("tool", "{}", "c1"),
+        text_llm_response("done"),
+    ])
+    .await;
+    let exec_ctx = build_exec_ctx(&server).await;
+    let tool_ctx = ToolContext {
+        mcp: Some(Arc::new(MockMcp::new("ok"))),
+        max_iterations: 10,
+        ..ToolContext::default()
+    };
+
+    let mut request = make_request("test", false, false);
+    request.conversation_id = Some("conv_abc_456".to_string());
+
+    let result = execute_loop(request, exec_ctx, &tool_ctx).await.unwrap();
+
+    assert_eq!(result.status, "completed");
+    assert_eq!(
+        result.conversation_id,
+        Some("conv_abc_456".to_string()),
+        "conversation_id must be restored from pre-loop capture"
+    );
+
+    // Verify internal LLM calls had conv_id cleared
+    let bodies = server.request_bodies().await;
+    for (i, body) in bodies.iter().enumerate() {
+        assert!(
+            body["conversation_id"].is_null(),
+            "internal LLM call {i} should have conversation_id=null, got: {}",
+            body["conversation_id"]
+        );
+    }
+}
+
+/// store=true is suppressed to false for ALL internal iterations.
+#[tokio::test]
+async fn test_store_suppressed_in_internal_iterations() {
+    let server = MockServer::start_deque(vec![
+        function_call_llm_response("tool", "{}", "c1"),
+        text_llm_response("stored result"),
+    ])
+    .await;
+    let exec_ctx = build_exec_ctx(&server).await;
+    let tool_ctx = ToolContext {
+        mcp: Some(Arc::new(MockMcp::new("ok"))),
+        max_iterations: 10,
+        ..ToolContext::default()
+    };
+
+    let mut request = make_request("test", false, true); // store=true
+    request.store = true;
+
+    let result = execute_loop(request, exec_ctx, &tool_ctx).await.unwrap();
+    assert_eq!(result.status, "completed");
+
+    // Both internal LLM calls should have store=false (or absent/null — serde skips false)
+    let bodies = server.request_bodies().await;
+    assert_eq!(bodies.len(), 2);
+    for (i, body) in bodies.iter().enumerate() {
+        let store_val = &body["store"];
+        assert!(
+            store_val.is_null() || store_val == false,
+            "internal LLM call {i} should have store=false/absent, got: {store_val}"
+        );
+    }
+}
+
+/// All three persistence triggers cleared in internal iterations: combined scenario.
+/// Request: store=true, prev_resp_id=Some, conv_id=Some
+/// Assert: all internal calls have store=false, both IDs null
+/// Assert: returned payload has both IDs restored
+#[tokio::test]
+async fn test_all_persistence_triggers_cleared_internally() {
+    let server = MockServer::start_deque(vec![
+        function_call_llm_response("search", "{\"q\":\"rust\"}", "call_s"),
+        function_call_llm_response("summarize", "{\"t\":\"text\"}", "call_sum"),
+        text_llm_response("final summary"),
+    ])
+    .await;
+    let exec_ctx = build_exec_ctx(&server).await;
+    let tool_ctx = ToolContext {
+        mcp: Some(Arc::new(MockMcp::new("tool output"))),
+        max_iterations: 10,
+        ..ToolContext::default()
+    };
+
+    let mut request = make_request("multi-hop with IDs", false, true);
+    request.previous_response_id = Some("resp_prev_999".to_string());
+    request.conversation_id = Some("conv_session_42".to_string());
+
+    let result = execute_loop(request, exec_ctx, &tool_ctx).await.unwrap();
+
+    assert_eq!(result.status, "completed");
+    assert_eq!(
+        result.previous_response_id,
+        Some("resp_prev_999".to_string()),
+    );
+    assert_eq!(
+        result.conversation_id,
+        Some("conv_session_42".to_string()),
+    );
+
+    // All 3 internal LLM calls should have all persistence triggers cleared
+    let bodies = server.request_bodies().await;
+    assert_eq!(bodies.len(), 3, "3 iterations: FC → FC → text");
+    for (i, body) in bodies.iter().enumerate() {
+        let store_val = &body["store"];
+        assert!(
+            store_val.is_null() || store_val == false,
+            "call {i}: store should be false/absent, got: {store_val}"
+        );
+        assert!(
+            body["previous_response_id"].is_null(),
+            "call {i}: previous_response_id should be null, got: {}",
+            body["previous_response_id"]
+        );
+        assert!(
+            body["conversation_id"].is_null(),
+            "call {i}: conversation_id should be null, got: {}",
+            body["conversation_id"]
+        );
+    }
+}
+
+/// Incomplete path (max_iterations hit) also restores both IDs correctly.
+#[tokio::test]
+async fn test_incomplete_restores_both_ids() {
+    let server = MockServer::start_deque(vec![
+        function_call_llm_response("tool", "{}", "c1"),
+        function_call_llm_response("tool", "{}", "c2"),
+    ])
+    .await;
+    let exec_ctx = build_exec_ctx(&server).await;
+    let tool_ctx = ToolContext {
+        mcp: Some(Arc::new(MockMcp::new("ok"))),
+        max_iterations: 1, // stops at iteration 1
+        ..ToolContext::default()
+    };
+
+    let mut request = make_request("will be incomplete", false, false);
+    request.previous_response_id = Some("resp_incomplete_orig".to_string());
+    request.conversation_id = Some("conv_incomplete_orig".to_string());
+
+    let result = execute_loop(request, exec_ctx, &tool_ctx).await.unwrap();
+
+    assert_eq!(result.status, "incomplete");
+    assert_eq!(
+        result.previous_response_id,
+        Some("resp_incomplete_orig".to_string()),
+        "Incomplete path must restore previous_response_id"
+    );
+    assert_eq!(
+        result.conversation_id,
+        Some("conv_incomplete_orig".to_string()),
+        "Incomplete path must restore conversation_id"
+    );
+
+    // Verify incomplete_details has a reason
+    assert!(
+        result.incomplete_details.is_some(),
+        "incomplete should have details"
+    );
+    let reason = result.incomplete_details.unwrap().reason.unwrap();
+    assert!(
+        reason.contains("max tool iterations"),
+        "reason should mention max iterations: {reason}"
+    );
+}
+
+/// Input already as Items + conversation_id set: verify in-place extend works
+/// and conversation_id appears on the output.
+#[tokio::test]
+async fn test_items_input_with_conversation_id() {
+    use agentic_core::types::io::{InputItem, InputMessage, InputMessageContent};
+
+    let server = MockServer::start_deque(vec![
+        function_call_llm_response("tool", "{}", "c1"),
+        text_llm_response("done with items+conv"),
+    ])
+    .await;
+    let exec_ctx = build_exec_ctx(&server).await;
+    let tool_ctx = ToolContext {
+        mcp: Some(Arc::new(MockMcp::new("result"))),
+        max_iterations: 10,
+        ..ToolContext::default()
+    };
+
+    let request = RequestPayload {
+        model: "test-model".to_string(),
+        input: ResponsesInput::Items(vec![InputItem::Message(InputMessage {
+            role: "user".into(),
+            content: InputMessageContent::Text("hello from items".into()),
+        })]),
+        instructions: None,
+        previous_response_id: Some("resp_items_prev".to_string()),
+        conversation_id: Some("conv_items_session".to_string()),
+        tools: None,
+        tool_choice: ToolChoice::Auto,
+        stream: false,
+        store: true,
+        include: None,
+        temperature: None,
+        top_p: None,
+        max_output_tokens: None,
+        truncation: None,
+        metadata: None,
+    };
+
+    let result = execute_loop(request, exec_ctx, &tool_ctx).await.unwrap();
+
+    assert_eq!(result.status, "completed");
+    assert_eq!(result.previous_response_id, Some("resp_items_prev".to_string()));
+    assert_eq!(result.conversation_id, Some("conv_items_session".to_string()));
+
+    // Second request should have original item + tool result (Items extended in-place)
+    let bodies = server.request_bodies().await;
+    assert_eq!(bodies.len(), 2);
+    let second_input = bodies[1]["input"].as_array().unwrap();
+    assert!(
+        second_input.len() >= 2,
+        "should have original item + function_call_output, got {}",
+        second_input.len()
+    );
+    // All internal calls should have persistence suppressed
+    assert!(bodies[0]["store"].is_null() || bodies[0]["store"] == false);
+    assert!(bodies[1]["store"].is_null() || bodies[1]["store"] == false);
+}
