@@ -3,7 +3,7 @@
 use tracing::warn;
 
 use super::super::pool::{DbPool, DbResult, DbTransaction};
-use super::super::types::item::InOutItem;
+use super::super::types::item::{InOutItem, ItemKind, STORED_ITEM_KIND_KEY};
 use crate::types::io::{InputItem, OutputItem};
 use crate::utils::common::{deserialize_from_str_opt, utcnow_str};
 
@@ -46,6 +46,21 @@ impl Item {
     /// Deserialize data column as either `InputItem` or `OutputItem`.
     #[must_use]
     pub fn as_inout(&self) -> Option<InOutItem> {
+        if let Some(kind) = self.stored_item_kind() {
+            match kind {
+                ItemKind::Input => {
+                    if let Some(input) = self.as_input().filter(|input| !matches!(input, InputItem::Unknown)) {
+                        return Some(InOutItem::Input(input));
+                    }
+                }
+                ItemKind::Output => {
+                    if let Some(output) = self.as_output().filter(|output| !matches!(output, OutputItem::Unknown)) {
+                        return Some(InOutItem::Output(output));
+                    }
+                }
+            }
+        }
+
         match (self.as_input(), self.as_output()) {
             (Some(input), _) if !matches!(input, InputItem::Unknown) => Some(InOutItem::Input(input)),
             (_, Some(output)) if !matches!(output, OutputItem::Unknown) => Some(InOutItem::Output(output)),
@@ -54,6 +69,11 @@ impl Item {
                 None
             }
         }
+    }
+
+    fn stored_item_kind(&self) -> Option<ItemKind> {
+        let value = deserialize_from_str_opt::<serde_json::Value>(&self.data)?;
+        ItemKind::from_stored_str(value.get(STORED_ITEM_KIND_KEY)?.as_str()?)
     }
 }
 
@@ -138,6 +158,7 @@ pub async fn conversation_item_count(tx: &mut DbTransaction<'_>, conversation_id
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::io::{OutputItem, ReasoningOutput, ReasoningTextContent};
 
     #[test]
     fn test_item_basic() {
@@ -166,5 +187,24 @@ mod tests {
 
         assert!(item.conversation_id.is_none());
         assert!(item.seq.is_none());
+    }
+
+    #[test]
+    fn test_as_inout_uses_stored_kind_for_reasoning_output() {
+        let mut reasoning = ReasoningOutput::new("rs_1");
+        reasoning.content.push(ReasoningTextContent::new("thinking..."));
+        let stored = InOutItem::Output(OutputItem::Reasoning(reasoning));
+        let item = Item {
+            id: "item_reasoning".to_string(),
+            data: String::try_from(&stored).expect("serialization failed"),
+            created_at: 1_704_067_200,
+            conversation_id: None,
+            seq: None,
+        };
+
+        assert!(matches!(
+            item.as_inout(),
+            Some(InOutItem::Output(OutputItem::Reasoning(_)))
+        ));
     }
 }

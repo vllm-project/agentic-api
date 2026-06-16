@@ -3,17 +3,36 @@
 use std::convert::TryFrom;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::storage::StorageError;
 use crate::types::io::{InputItem, OutputItem};
-use crate::utils::common::serialize_to_string;
+
+pub(crate) const STORED_ITEM_KIND_KEY: &str = "_agentic_item_kind";
 
 /// Item kind (input vs output) for storage and retrieval.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ItemKind {
     Input,
     Output,
+}
+
+impl ItemKind {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Input => "input",
+            Self::Output => "output",
+        }
+    }
+
+    pub(crate) fn from_stored_str(value: &str) -> Option<Self> {
+        match value {
+            "input" => Some(Self::Input),
+            "output" => Some(Self::Output),
+            _ => None,
+        }
+    }
 }
 
 /// Union type for conversation items (input or output).
@@ -39,10 +58,25 @@ impl TryFrom<&InOutItem> for String {
     type Error = StorageError;
 
     fn try_from(item: &InOutItem) -> Result<Self, Self::Error> {
-        match item {
-            InOutItem::Input(input) => serialize_to_string(input).map_err(StorageError::Serialization),
-            InOutItem::Output(output) => serialize_to_string(output).map_err(StorageError::Serialization),
+        let (mut value, kind) = match item {
+            InOutItem::Input(input) => (
+                serde_json::to_value(input).map_err(StorageError::Serialization)?,
+                ItemKind::Input,
+            ),
+            InOutItem::Output(output) => (
+                serde_json::to_value(output).map_err(StorageError::Serialization)?,
+                ItemKind::Output,
+            ),
+        };
+
+        if let Some(obj) = value.as_object_mut() {
+            obj.insert(
+                STORED_ITEM_KIND_KEY.to_string(),
+                Value::String(kind.as_str().to_string()),
+            );
         }
+
+        serde_json::to_string(&value).map_err(StorageError::Serialization)
     }
 }
 
@@ -54,10 +88,8 @@ impl InOutItem {
             .into_iter()
             .filter_map(|i| match i {
                 InOutItem::Input(item) => Some(item),
-                InOutItem::Output(OutputItem::Message(msg)) => {
-                    // Embed history OutputMessage as an input item so the model sees prior turns.
-                    Some(InputItem::Message(msg.into()))
-                }
+                InOutItem::Output(OutputItem::Message(msg)) => Some(InputItem::Message(msg.into())),
+                InOutItem::Output(OutputItem::Reasoning(r)) => Some(InputItem::Reasoning(r)),
                 InOutItem::Output(OutputItem::FunctionCall(_) | OutputItem::Unknown) => None,
             })
             .collect()
@@ -67,7 +99,10 @@ impl InOutItem {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::io::{InputContent, InputMessage, InputMessageContent, OutputMessage, OutputTextContent};
+    use crate::types::io::{
+        InputContent, InputMessage, InputMessageContent, OutputMessage, OutputTextContent, ReasoningOutput,
+        ReasoningTextContent,
+    };
 
     #[test]
     fn test_inout_item_from_input() {
@@ -94,6 +129,8 @@ mod tests {
         });
         let item = InOutItem::Input(input);
         let json = String::try_from(&item).expect("serialization failed");
+        assert!(json.contains(STORED_ITEM_KIND_KEY));
+        assert!(json.contains("input"));
         assert!(json.contains("user"));
         assert!(json.contains("test"));
     }
@@ -133,7 +170,25 @@ mod tests {
                     InputMessageContent::Text(_) => panic!("expected parts content"),
                 }
             }
-            InputItem::FunctionCallOutput(_) | InputItem::Unknown => panic!("expected message"),
+            _ => panic!("expected message"),
+        }
+    }
+
+    #[test]
+    fn test_into_input_items_includes_reasoning() {
+        let mut reasoning = ReasoningOutput::new("rs_1");
+        reasoning.content.push(ReasoningTextContent::new("thinking..."));
+        let items = vec![
+            InOutItem::Output(OutputItem::Reasoning(reasoning)),
+            InOutItem::Output(OutputItem::Message(OutputMessage::new("msg_1", "completed"))),
+        ];
+
+        let inputs = InOutItem::into_input_items(items);
+        assert_eq!(inputs.len(), 2);
+        assert!(matches!(inputs[0], InputItem::Reasoning(_)));
+        if let InputItem::Reasoning(r) = &inputs[0] {
+            assert_eq!(r.id, "rs_1");
+            assert_eq!(r.content[0].text, "thinking...");
         }
     }
 

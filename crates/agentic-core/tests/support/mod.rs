@@ -404,7 +404,7 @@ pub fn output_text(payload: &ResponsePayload) -> String {
         .iter()
         .filter_map(|item| match item {
             OutputItem::Message(msg) => Some(msg.content.iter().map(|c| c.text.as_str()).collect::<String>()),
-            OutputItem::FunctionCall(_) | OutputItem::Unknown => None,
+            OutputItem::FunctionCall(_) | OutputItem::Reasoning(_) | OutputItem::Unknown => None,
         })
         .collect::<String>()
 }

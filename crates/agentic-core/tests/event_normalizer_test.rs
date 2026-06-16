@@ -241,6 +241,48 @@ fn test_reasoning_done_reads_text_not_delta() {
 }
 
 #[test]
+fn test_reasoning_text_delta() {
+    let line = r#"data: {"type":"response.reasoning_text.delta","delta":"The user asks","item_id":"rs_1","output_index":0,"content_index":0,"sequence_number":4}"#;
+    let frame = normalize_sse_line(line).unwrap();
+    assert_eq!(frame.event_type, SSEEventType::ReasoningTextDelta);
+    if let EventPayload::ReasoningDelta { delta, item_id } = &frame.payload {
+        assert_eq!(delta, "The user asks");
+        assert_eq!(item_id, "rs_1");
+    } else {
+        panic!("expected ReasoningDelta payload");
+    }
+}
+
+#[test]
+fn test_reasoning_text_done() {
+    let line = r#"data: {"type":"response.reasoning_text.done","text":"The user asks about math.","item_id":"rs_1","output_index":0,"content_index":0,"sequence_number":10}"#;
+    let frame = normalize_sse_line(line).unwrap();
+    assert_eq!(frame.event_type, SSEEventType::ReasoningTextDone);
+    if let EventPayload::ReasoningDone { text, item_id } = &frame.payload {
+        assert_eq!(text, "The user asks about math.");
+        assert_eq!(item_id, "rs_1");
+    } else {
+        panic!("expected ReasoningDone payload");
+    }
+}
+
+#[test]
+fn test_reasoning_part_added_classified() {
+    let line = r#"data: {"type":"response.reasoning_part.added","content_index":0,"item_id":"rs_1","output_index":0,"part":{"text":"","type":"reasoning_text"},"sequence_number":3}"#;
+    let frame = normalize_sse_line(line).unwrap();
+    assert_eq!(frame.event_type, SSEEventType::ReasoningPartAdded);
+    assert!(matches!(frame.payload, EventPayload::Raw(_)));
+}
+
+#[test]
+fn test_reasoning_part_done_classified() {
+    let line = r#"data: {"type":"response.reasoning_part.done","content_index":0,"item_id":"rs_1","output_index":0,"part":{"text":"thinking...","type":"reasoning_text"},"sequence_number":80}"#;
+    let frame = normalize_sse_line(line).unwrap();
+    assert_eq!(frame.event_type, SSEEventType::ReasoningPartDone);
+    assert!(matches!(frame.payload, EventPayload::Raw(_)));
+}
+
+#[test]
 fn test_response_failed() {
     let line = r#"data: {"type":"response.failed","response":{"id":"resp_err","status":"failed","usage":null},"sequence_number":2}"#;
     let frame = normalize_sse_line(line).unwrap();

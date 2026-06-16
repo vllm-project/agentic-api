@@ -29,6 +29,10 @@ pub enum SSEEventType {
     FunctionCallArgumentsDone,
 
     // Reasoning
+    ReasoningTextDelta,
+    ReasoningTextDone,
+    ReasoningPartAdded,
+    ReasoningPartDone,
     ReasoningSummaryTextDelta,
     ReasoningSummaryTextDone,
 

@@ -15,7 +15,9 @@ use futures::{Stream, StreamExt};
 use crate::events::{EventFrame, EventPayload, SSEEventType, normalize_sse_line};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::types::event::{MessageStatus, ResponseStatus};
-use crate::types::io::{OutputItem, OutputMessage, OutputTextContent, ResponseUsage};
+use crate::types::io::{
+    OutputItem, OutputMessage, OutputTextContent, ReasoningOutput, ReasoningTextContent, ResponseUsage,
+};
 use crate::types::request_response::{IncompleteDetails, ResponsePayload};
 use crate::utils::common::{deserialize_from_str, deserialize_from_value_opt};
 use crate::utils::uuid7_str;
@@ -32,6 +34,9 @@ pub struct ResponseAccumulator {
     // In-flight message state — owned here so process_sse_line takes only &mut self.
     current_message: Option<OutputMessage>,
     accumulated_text: String,
+    // In-flight reasoning state.
+    current_reasoning: Option<ReasoningOutput>,
+    accumulated_reasoning_text: String,
 }
 
 impl ResponseAccumulator {
@@ -47,6 +52,8 @@ impl ResponseAccumulator {
             incomplete_details: None,
             current_message: None,
             accumulated_text: String::new(),
+            current_reasoning: None,
+            accumulated_reasoning_text: String::new(),
         }
     }
 
@@ -90,6 +97,8 @@ impl ResponseAccumulator {
             incomplete_details: None,
             current_message: None,
             accumulated_text: String::new(),
+            current_reasoning: None,
+            accumulated_reasoning_text: String::new(),
         })
     }
 
@@ -141,6 +150,7 @@ impl ResponseAccumulator {
         for line in rx {
             acc.process_sse_line(&line);
         }
+        acc.finalize_current_reasoning();
         acc.finalize_current_message();
         if acc.status == ResponseStatus::InProgress {
             acc.status = ResponseStatus::Completed;
@@ -159,8 +169,22 @@ impl ResponseAccumulator {
         for line in lines {
             acc.process_sse_line(&line);
         }
+        acc.finalize_current_reasoning();
         acc.finalize_current_message();
         acc
+    }
+
+    /// Closes the in-flight reasoning item, pushing it to `output` with accumulated text.
+    fn finalize_current_reasoning(&mut self) {
+        if let Some(mut reasoning) = self.current_reasoning.take() {
+            if !self.accumulated_reasoning_text.is_empty() {
+                reasoning
+                    .content
+                    .push(ReasoningTextContent::new(&self.accumulated_reasoning_text));
+            }
+            self.output.push(OutputItem::Reasoning(reasoning));
+        }
+        self.accumulated_reasoning_text.clear();
     }
 
     /// Closes the in-flight message, pushing it to `output` with accumulated text.
@@ -194,19 +218,46 @@ impl ResponseAccumulator {
             (SSEEventType::ResponseCreated, EventPayload::Response { id, .. }) if !id.is_empty() => {
                 self.response_id.clone_from(id);
             }
-            (SSEEventType::OutputItemAdded, EventPayload::OutputItemAdded { item_id, .. }) => {
-                self.finalize_current_message();
-                let id = if item_id.is_empty() {
-                    uuid7_str("msg_")
+            (SSEEventType::OutputItemAdded, EventPayload::OutputItemAdded { item_id, item_type, .. }) => {
+                let item_id = if item_id.is_empty() {
+                    let prefix = if item_type == "reasoning" { "rs_" } else { "msg_" };
+                    uuid7_str(prefix)
                 } else {
                     item_id.clone()
                 };
-                self.current_message = Some(OutputMessage::new(id, MessageStatus::InProgress.as_str()));
+                if item_type == "reasoning" {
+                    self.finalize_current_message();
+                    self.finalize_current_reasoning();
+                    self.current_reasoning = Some(ReasoningOutput::new(item_id));
+                } else {
+                    self.finalize_current_reasoning();
+                    self.finalize_current_message();
+                    self.current_message = Some(OutputMessage::new(item_id, MessageStatus::InProgress.as_str()));
+                }
+            }
+            (SSEEventType::ReasoningTextDelta, EventPayload::ReasoningDelta { delta, .. }) => {
+                self.accumulated_reasoning_text.push_str(delta);
+            }
+            (SSEEventType::ReasoningTextDone, EventPayload::ReasoningDone { text, .. }) => {
+                // Text done finalizes the content but the reasoning item stays
+                // open until the next output_item.added or response.done.
+                if let Some(reasoning) = self.current_reasoning.as_mut() {
+                    let text = if text.is_empty() {
+                        std::mem::take(&mut self.accumulated_reasoning_text)
+                    } else {
+                        text.clone()
+                    };
+                    self.accumulated_reasoning_text.clear();
+                    if !text.is_empty() {
+                        reasoning.content.push(ReasoningTextContent::new(text));
+                    }
+                }
             }
             (SSEEventType::OutputTextDelta, EventPayload::TextDelta { delta, .. }) => {
                 self.accumulated_text.push_str(delta);
             }
             (SSEEventType::ResponseCompleted, EventPayload::Response { usage, .. }) => {
+                self.finalize_current_reasoning();
                 self.finalize_current_message();
                 self.status = ResponseStatus::Completed;
                 if let Some(u) = usage {
@@ -464,5 +515,108 @@ mod tests {
         assert_eq!(acc.response_id, "resp_1");
         assert_eq!(acc.status, ResponseStatus::InProgress);
         assert!(acc.output.is_empty());
+    }
+
+    #[test]
+    fn test_accumulator_reasoning_and_message_from_sse() {
+        let lines = vec![
+            r#"data: {"type":"response.created","response":{"id":"resp_abc"}}"#.to_string(),
+            r#"data: {"type":"response.output_item.added","item":{"id":"rs_1","type":"reasoning","summary":[]}}"#
+                .to_string(),
+            r#"data: {"type":"response.reasoning_text.delta","delta":"Let me "}"#.to_string(),
+            r#"data: {"type":"response.reasoning_text.delta","delta":"think."}"#.to_string(),
+            r#"data: {"type":"response.reasoning_text.done","text":"Let me think."}"#.to_string(),
+            r#"data: {"type":"response.output_item.added","item":{"id":"msg_1","type":"message"}}"#.to_string(),
+            r#"data: {"type":"response.output_text.delta","delta":"Hello"}"#.to_string(),
+            r#"data: {"type":"response.done","response":{"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}"#.to_string(),
+        ];
+
+        let acc = ResponseAccumulator::from_sse_lines(lines, None);
+        assert_eq!(acc.status, ResponseStatus::Completed);
+        assert_eq!(acc.output.len(), 2);
+
+        if let OutputItem::Reasoning(r) = &acc.output[0] {
+            assert_eq!(r.id, "rs_1");
+            assert_eq!(r.content.len(), 1);
+            assert_eq!(r.content[0].text, "Let me think.");
+        } else {
+            panic!("expected OutputItem::Reasoning, got {:?}", acc.output[0]);
+        }
+
+        if let OutputItem::Message(msg) = &acc.output[1] {
+            assert_eq!(msg.id, "msg_1");
+            assert_eq!(msg.content[0].text, "Hello");
+        } else {
+            panic!("expected OutputItem::Message");
+        }
+    }
+
+    #[test]
+    fn test_accumulator_message_then_reasoning_preserves_order() {
+        let lines = vec![
+            r#"data: {"type":"response.created","response":{"id":"resp_abc"}}"#.to_string(),
+            r#"data: {"type":"response.output_item.added","item":{"id":"msg_1","type":"message"}}"#.to_string(),
+            r#"data: {"type":"response.output_text.delta","delta":"Hello"}"#.to_string(),
+            r#"data: {"type":"response.output_item.added","item":{"id":"rs_1","type":"reasoning","summary":[]}}"#
+                .to_string(),
+            r#"data: {"type":"response.reasoning_text.done","text":"thinking..."}"#.to_string(),
+            r#"data: {"type":"response.done","response":{"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}"#
+                .to_string(),
+        ];
+
+        let acc = ResponseAccumulator::from_sse_lines(lines, None);
+        assert_eq!(acc.output.len(), 2);
+        assert!(matches!(acc.output[0], OutputItem::Message(_)));
+        assert!(matches!(acc.output[1], OutputItem::Reasoning(_)));
+    }
+
+    #[test]
+    fn test_accumulator_reasoning_done_without_delta_uses_text() {
+        let lines = vec![
+            r#"data: {"type":"response.output_item.added","item":{"id":"rs_1","type":"reasoning","summary":[]}}"#
+                .to_string(),
+            r#"data: {"type":"response.reasoning_text.done","text":"done only"}"#.to_string(),
+            r#"data: {"type":"response.done","response":{"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}"#
+                .to_string(),
+        ];
+
+        let acc = ResponseAccumulator::from_sse_lines(lines, None);
+        if let OutputItem::Reasoning(reasoning) = &acc.output[0] {
+            assert_eq!(reasoning.content.len(), 1);
+            assert_eq!(reasoning.content[0].text, "done only");
+        } else {
+            panic!("expected reasoning output");
+        }
+    }
+
+    #[test]
+    fn test_accumulator_reasoning_from_json() {
+        let body = serde_json::json!({
+            "id": "resp_xyz",
+            "status": "completed",
+            "output": [
+                {
+                    "id": "rs_1",
+                    "type": "reasoning",
+                    "summary": [],
+                    "content": [{"text": "thinking...", "type": "reasoning_text"}],
+                    "encrypted_content": null,
+                    "status": null
+                },
+                {
+                    "id": "msg_1",
+                    "type": "message",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [{"type": "output_text", "text": "answer", "annotations": []}]
+                }
+            ],
+            "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+        });
+
+        let acc = ResponseAccumulator::from_json(&body.to_string(), None).unwrap();
+        assert_eq!(acc.output.len(), 2);
+        assert!(matches!(acc.output[0], OutputItem::Reasoning(_)));
+        assert!(matches!(acc.output[1], OutputItem::Message(_)));
     }
 }

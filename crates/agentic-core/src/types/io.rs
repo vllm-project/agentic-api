@@ -51,6 +51,8 @@ pub enum InputItem {
     Message(InputMessage),
     #[serde(rename = "function_call_output")]
     FunctionCallOutput(FunctionToolResultMessage),
+    #[serde(rename = "reasoning")]
+    Reasoning(ReasoningOutput),
     #[serde(other)]
     Unknown,
 }
@@ -123,12 +125,53 @@ pub struct FunctionToolCall {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReasoningTextContent {
+    #[serde(rename = "type")]
+    pub type_: String,
+    pub text: String,
+}
+
+impl ReasoningTextContent {
+    pub fn new(text: impl Into<String>) -> Self {
+        Self {
+            type_: "reasoning_text".into(),
+            text: text.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReasoningOutput {
+    pub id: String,
+    #[serde(default)]
+    pub content: Vec<ReasoningTextContent>,
+    #[serde(default)]
+    pub summary: Vec<Value>,
+    pub encrypted_content: Option<Value>,
+    pub status: Option<String>,
+}
+
+impl ReasoningOutput {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            content: vec![],
+            summary: vec![],
+            encrypted_content: None,
+            status: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum OutputItem {
     #[serde(rename = "message")]
     Message(OutputMessage),
     #[serde(rename = "function_call")]
     FunctionCall(FunctionToolCall),
+    #[serde(rename = "reasoning")]
+    Reasoning(ReasoningOutput),
     #[serde(other)]
     Unknown,
 }
@@ -210,4 +253,66 @@ pub(crate) fn resolve_tool_choice(
 pub enum ResponsesInput {
     Text(String),
     Items(Vec<InputItem>),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reasoning_output_round_trips_through_serde() {
+        let json = serde_json::json!({
+            "id": "rs_abc",
+            "type": "reasoning",
+            "summary": [],
+            "content": [{"text": "Let me think...", "type": "reasoning_text"}],
+            "encrypted_content": null,
+            "status": null
+        });
+        let item: OutputItem = serde_json::from_value(json).unwrap();
+        assert!(matches!(item, OutputItem::Reasoning(_)));
+        if let OutputItem::Reasoning(r) = &item {
+            assert_eq!(r.id, "rs_abc");
+            assert_eq!(r.content.len(), 1);
+            assert_eq!(r.content[0].text, "Let me think...");
+        }
+        let serialized = serde_json::to_value(&item).unwrap();
+        assert_eq!(serialized["type"], "reasoning");
+        assert_eq!(serialized["id"], "rs_abc");
+    }
+
+    #[test]
+    fn reasoning_input_round_trips_through_serde() {
+        let reasoning = ReasoningOutput::new("rs_1");
+        let item = InputItem::Reasoning(reasoning);
+        let json = serde_json::to_value(&item).unwrap();
+        assert_eq!(json["type"], "reasoning");
+        let back: InputItem = serde_json::from_value(json).unwrap();
+        assert!(matches!(back, InputItem::Reasoning(_)));
+    }
+
+    #[test]
+    fn vllm_reasoning_response_deserializes() {
+        let vllm_output = serde_json::json!([
+            {
+                "id": "rs_bb637a529f72b88d",
+                "summary": [],
+                "type": "reasoning",
+                "content": [{"text": "2+2 is 4.", "type": "reasoning_text"}],
+                "encrypted_content": null,
+                "status": null
+            },
+            {
+                "id": "msg_bb68f033f2ed1725",
+                "content": [{"annotations": [], "text": "2+2 equals 4.", "type": "output_text"}],
+                "role": "assistant",
+                "status": "completed",
+                "type": "message"
+            }
+        ]);
+        let items: Vec<OutputItem> = serde_json::from_value(vllm_output).unwrap();
+        assert_eq!(items.len(), 2);
+        assert!(matches!(items[0], OutputItem::Reasoning(_)));
+        assert!(matches!(items[1], OutputItem::Message(_)));
+    }
 }

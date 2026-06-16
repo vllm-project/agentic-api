@@ -49,6 +49,10 @@ fn classify_event_type(type_str: &str) -> SSEEventType {
         "response.content_part.done" => SSEEventType::ContentPartDone,
         "response.function_call_arguments.delta" => SSEEventType::FunctionCallArgumentsDelta,
         "response.function_call_arguments.done" => SSEEventType::FunctionCallArgumentsDone,
+        "response.reasoning_text.delta" => SSEEventType::ReasoningTextDelta,
+        "response.reasoning_text.done" => SSEEventType::ReasoningTextDone,
+        "response.reasoning_part.added" => SSEEventType::ReasoningPartAdded,
+        "response.reasoning_part.done" => SSEEventType::ReasoningPartDone,
         "response.reasoning_summary_text.delta" => SSEEventType::ReasoningSummaryTextDelta,
         "response.reasoning_summary_text.done" => SSEEventType::ReasoningSummaryTextDone,
         "response.file_search_call.searching" => SSEEventType::FileSearchCallSearching,
@@ -77,11 +81,13 @@ fn extract_payload(event_type: SSEEventType, json: &Value) -> EventPayload {
         SSEEventType::FunctionCallArgumentsDelta => extract_fn_call_args_delta(json),
         SSEEventType::FunctionCallArgumentsDone => extract_fn_call_args_done(json),
 
-        SSEEventType::ReasoningSummaryTextDelta => extract_reasoning_delta(json),
-        SSEEventType::ReasoningSummaryTextDone => extract_reasoning_done(json),
+        SSEEventType::ReasoningTextDelta | SSEEventType::ReasoningSummaryTextDelta => extract_reasoning_delta(json),
+        SSEEventType::ReasoningTextDone | SSEEventType::ReasoningSummaryTextDone => extract_reasoning_done(json),
 
         SSEEventType::ContentPartAdded
         | SSEEventType::ContentPartDone
+        | SSEEventType::ReasoningPartAdded
+        | SSEEventType::ReasoningPartDone
         | SSEEventType::FileSearchCallSearching
         | SSEEventType::FileSearchCallCompleted
         | SSEEventType::WebSearchCallSearching
