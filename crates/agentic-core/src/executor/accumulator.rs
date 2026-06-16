@@ -201,7 +201,7 @@ impl ResponseAccumulator {
                 } else {
                     item_id.clone()
                 };
-                self.current_message = Some(OutputMessage::new(&id, MessageStatus::InProgress.as_str()));
+                self.current_message = Some(OutputMessage::new(id, MessageStatus::InProgress.as_str()));
             }
             (SSEEventType::OutputTextDelta, EventPayload::TextDelta { delta, .. }) => {
                 self.accumulated_text.push_str(delta);
