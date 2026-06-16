@@ -82,15 +82,19 @@ pub async fn execute_loop(
     tool_ctx: &ToolContext,
 ) -> ExecutorResult<ResponsePayload> {
     // Capture before the loop mutates the request. Restored on final payload
-    // so the response chain (previous_response_id linkage) remains correct
-    // for the caller's persistence logic.
+    // so the response chain remains correct for the caller.
     let original_previous_response_id = request.previous_response_id.clone();
+    let original_conversation_id = request.conversation_id.clone();
 
     // Suppress persistence for ALL iterations inside the loop. The caller
     // (server handler) owns final persistence with the correct RequestContext.
-    // Without this, the first iteration would persist a partial response
-    // (containing only the tool-call output, not the final answer) to the DB.
+    // Without this, intermediate iterations would persist partial responses
+    // (containing only tool-call output, not the final answer).
+    // Must clear all three persistence triggers (PR #56 persists when any is set):
+    //   store=true, previous_response_id.is_some(), conversation_id.is_some()
     request.store = false;
+    request.previous_response_id = None;
+    request.conversation_id = None;
 
     for iteration in 0_usize.. {
         // Defense-in-depth: even if dispatch_tools has a bug that never returns
@@ -139,6 +143,7 @@ pub async fn execute_loop(
             // No tool calls (or only client-side functions) — we're done.
             LoopDecision::Done => {
                 payload.previous_response_id = original_previous_response_id;
+                payload.conversation_id = original_conversation_id;
                 return Ok(payload);
             }
             // Hit max_iterations — stop looping, mark as incomplete.
@@ -149,6 +154,7 @@ pub async fn execute_loop(
                 payload.status = "incomplete".to_string();
                 payload.incomplete_details = Some(IncompleteDetails { reason: Some(reason) });
                 payload.previous_response_id = original_previous_response_id;
+                payload.conversation_id = original_conversation_id;
                 return Ok(payload);
             }
             // Tools were executed — inject results and re-enter inference.
@@ -169,15 +175,11 @@ pub async fn execute_loop(
                     request.input = ResponsesInput::Items(vec![msg]);
                 }
                 if let ResponsesInput::Items(ref mut items) = request.input {
+                    // TODO: also inject assistant's FunctionCall output items here
+                    // (requires InputItem::FunctionCall variant — follow-up PR)
                     items.reserve(tool_results.len());
                     items.extend(tool_results);
                 }
-
-                // Clear previous_response_id — on re-entry, we don't want execute()
-                // to rehydrate from DB (we're managing context in-memory via items).
-                request.previous_response_id = None;
-                // request.store already set to false before the loop — no need
-                // to re-set here.
             }
         }
     }
