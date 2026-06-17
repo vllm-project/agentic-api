@@ -16,7 +16,8 @@ use crate::events::{EventFrame, EventPayload, SSEEventType, normalize_sse_line};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::types::event::{MessageStatus, ResponseStatus};
 use crate::types::io::{
-    OutputItem, OutputMessage, OutputTextContent, ReasoningOutput, ReasoningTextContent, ResponseUsage,
+    FunctionToolCall, OutputItem, OutputMessage, OutputTextContent, ReasoningOutput, ReasoningTextContent,
+    ResponseUsage,
 };
 use crate::types::request_response::{IncompleteDetails, ResponsePayload};
 use crate::utils::common::{deserialize_from_str, deserialize_from_value_opt};
@@ -37,6 +38,9 @@ pub struct ResponseAccumulator {
     // In-flight reasoning state.
     current_reasoning: Option<ReasoningOutput>,
     accumulated_reasoning_text: String,
+    // In-flight function call state.
+    current_function_call: Option<FunctionToolCall>,
+    accumulated_arguments: String,
 }
 
 impl ResponseAccumulator {
@@ -54,6 +58,8 @@ impl ResponseAccumulator {
             accumulated_text: String::new(),
             current_reasoning: None,
             accumulated_reasoning_text: String::new(),
+            current_function_call: None,
+            accumulated_arguments: String::new(),
         }
     }
 
@@ -99,6 +105,8 @@ impl ResponseAccumulator {
             accumulated_text: String::new(),
             current_reasoning: None,
             accumulated_reasoning_text: String::new(),
+            current_function_call: None,
+            accumulated_arguments: String::new(),
         })
     }
 
@@ -151,6 +159,7 @@ impl ResponseAccumulator {
             acc.process_sse_line(&line);
         }
         acc.finalize_current_reasoning();
+        acc.finalize_current_function_call();
         acc.finalize_current_message();
         if acc.status == ResponseStatus::InProgress {
             acc.status = ResponseStatus::Completed;
@@ -170,6 +179,7 @@ impl ResponseAccumulator {
             acc.process_sse_line(&line);
         }
         acc.finalize_current_reasoning();
+        acc.finalize_current_function_call();
         acc.finalize_current_message();
         acc
     }
@@ -185,6 +195,18 @@ impl ResponseAccumulator {
             self.output.push(OutputItem::Reasoning(reasoning));
         }
         self.accumulated_reasoning_text.clear();
+    }
+
+    /// Closes the in-flight function call, pushing it to `output` with accumulated arguments.
+    fn finalize_current_function_call(&mut self) {
+        if let Some(mut fc) = self.current_function_call.take() {
+            if !self.accumulated_arguments.is_empty() && fc.arguments.is_empty() {
+                fc.arguments = std::mem::take(&mut self.accumulated_arguments);
+            }
+            fc.status = "completed".to_string();
+            self.output.push(OutputItem::FunctionCall(fc));
+        }
+        self.accumulated_arguments.clear();
     }
 
     /// Closes the in-flight message, pushing it to `output` with accumulated text.
@@ -218,21 +240,52 @@ impl ResponseAccumulator {
             (SSEEventType::ResponseCreated, EventPayload::Response { id, .. }) if !id.is_empty() => {
                 self.response_id.clone_from(id);
             }
-            (SSEEventType::OutputItemAdded, EventPayload::OutputItemAdded { item_id, item_type, .. }) => {
+            (
+                SSEEventType::OutputItemAdded,
+                EventPayload::OutputItemAdded {
+                    item_id,
+                    item_type,
+                    name,
+                    call_id,
+                    ..
+                },
+            ) => {
                 let item_id = if item_id.is_empty() {
-                    let prefix = if item_type == "reasoning" { "rs_" } else { "msg_" };
+                    let prefix = match item_type.as_str() {
+                        "reasoning" => "rs_",
+                        "function_call" => "fc_",
+                        _ => "msg_",
+                    };
                     uuid7_str(prefix)
                 } else {
                     item_id.clone()
                 };
-                if item_type == "reasoning" {
-                    self.finalize_current_message();
-                    self.finalize_current_reasoning();
-                    self.current_reasoning = Some(ReasoningOutput::new(item_id));
-                } else {
-                    self.finalize_current_reasoning();
-                    self.finalize_current_message();
-                    self.current_message = Some(OutputMessage::new(item_id, MessageStatus::InProgress.as_str()));
+                match item_type.as_str() {
+                    "reasoning" => {
+                        self.finalize_current_function_call();
+                        self.finalize_current_message();
+                        self.finalize_current_reasoning();
+                        self.current_reasoning = Some(ReasoningOutput::new(item_id));
+                    }
+                    "function_call" => {
+                        self.finalize_current_reasoning();
+                        self.finalize_current_message();
+                        self.finalize_current_function_call();
+                        self.current_function_call = Some(FunctionToolCall {
+                            id: item_id,
+                            call_id: call_id.clone().unwrap_or_default(),
+                            name: name.clone().unwrap_or_default(),
+                            arguments: String::new(),
+                            status: "in_progress".to_string(),
+                        });
+                    }
+                    _ => {
+                        self.finalize_current_reasoning();
+                        self.finalize_current_function_call();
+                        self.finalize_current_message();
+                        self.current_message =
+                            Some(OutputMessage::new(item_id, MessageStatus::InProgress.as_str()));
+                    }
                 }
             }
             (SSEEventType::ReasoningTextDelta, EventPayload::ReasoningDelta { delta, .. }) => {
@@ -253,11 +306,42 @@ impl ResponseAccumulator {
                     }
                 }
             }
+            (SSEEventType::FunctionCallArgumentsDelta, EventPayload::FunctionCallArgsDelta { delta, .. }) => {
+                self.accumulated_arguments.push_str(delta);
+            }
+            (
+                SSEEventType::FunctionCallArgumentsDone,
+                EventPayload::FunctionCallArgsDone {
+                    arguments,
+                    call_id,
+                    name,
+                    ..
+                },
+            ) => {
+                if let Some(fc) = self.current_function_call.as_mut() {
+                    fc.arguments = if arguments.is_empty() {
+                        std::mem::take(&mut self.accumulated_arguments)
+                    } else {
+                        arguments.clone()
+                    };
+                    if let Some(cid) = call_id {
+                        if !cid.is_empty() {
+                            fc.call_id.clone_from(cid);
+                        }
+                    }
+                    if !name.is_empty() {
+                        fc.name.clone_from(name);
+                    }
+                    self.accumulated_arguments.clear();
+                }
+                self.finalize_current_function_call();
+            }
             (SSEEventType::OutputTextDelta, EventPayload::TextDelta { delta, .. }) => {
                 self.accumulated_text.push_str(delta);
             }
             (SSEEventType::ResponseCompleted, EventPayload::Response { usage, .. }) => {
                 self.finalize_current_reasoning();
+                self.finalize_current_function_call();
                 self.finalize_current_message();
                 self.status = ResponseStatus::Completed;
                 if let Some(u) = usage {
@@ -517,6 +601,8 @@ mod tests {
         assert!(acc.output.is_empty());
     }
 
+    // --- Reasoning accumulation tests ---
+
     #[test]
     fn test_accumulator_reasoning_and_message_from_sse() {
         let lines = vec![
@@ -618,5 +704,431 @@ mod tests {
         assert_eq!(acc.output.len(), 2);
         assert!(matches!(acc.output[0], OutputItem::Reasoning(_)));
         assert!(matches!(acc.output[1], OutputItem::Message(_)));
+    }
+
+    // --- Function call accumulation tests ---
+
+    /// Full `function_call` lifecycle: `OutputItemAdded` → deltas → Done → `ResponseCompleted`.
+    #[test]
+    fn test_function_call_accumulation_basic() {
+        let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::OutputItemAdded,
+            payload: EventPayload::OutputItemAdded {
+                item_id: "fc_1".into(),
+                item_type: "function_call".into(),
+                output_index: 0,
+                name: Some("get_weather".into()),
+                call_id: Some("call_abc".into()),
+            },
+            sequence_number: Some(1),
+        });
+
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::FunctionCallArgumentsDelta,
+            payload: EventPayload::FunctionCallArgsDelta {
+                delta: r#"{"location""#.into(),
+                call_id: Some("call_abc".into()),
+                item_id: "fc_1".into(),
+                output_index: 0,
+            },
+            sequence_number: Some(2),
+        });
+
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::FunctionCallArgumentsDelta,
+            payload: EventPayload::FunctionCallArgsDelta {
+                delta: r#":"Paris"}"#.into(),
+                call_id: Some("call_abc".into()),
+                item_id: "fc_1".into(),
+                output_index: 0,
+            },
+            sequence_number: Some(3),
+        });
+
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::FunctionCallArgumentsDone,
+            payload: EventPayload::FunctionCallArgsDone {
+                arguments: r#"{"location":"Paris"}"#.into(),
+                call_id: Some("call_abc".into()),
+                item_id: "fc_1".into(),
+                name: "get_weather".into(),
+                output_index: 0,
+            },
+            sequence_number: Some(4),
+        });
+
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::ResponseCompleted,
+            payload: EventPayload::Response {
+                id: "resp_1".into(),
+                status: "completed".into(),
+                usage: None,
+            },
+            sequence_number: Some(5),
+        });
+
+        assert_eq!(acc.status, ResponseStatus::Completed);
+        assert_eq!(acc.output.len(), 1);
+        if let OutputItem::FunctionCall(fc) = &acc.output[0] {
+            assert_eq!(fc.id, "fc_1");
+            assert_eq!(fc.call_id, "call_abc");
+            assert_eq!(fc.name, "get_weather");
+            assert_eq!(fc.arguments, r#"{"location":"Paris"}"#);
+            assert_eq!(fc.status, "completed");
+        } else {
+            panic!("expected FunctionCall");
+        }
+    }
+
+    /// `FunctionCallArgumentsDone` uses accumulated deltas when its own `arguments` field is empty.
+    #[test]
+    fn test_function_call_done_uses_deltas_when_arguments_empty() {
+        let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::OutputItemAdded,
+            payload: EventPayload::OutputItemAdded {
+                item_id: "fc_1".into(),
+                item_type: "function_call".into(),
+                output_index: 0,
+                name: Some("search".into()),
+                call_id: Some("call_1".into()),
+            },
+            sequence_number: Some(1),
+        });
+
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::FunctionCallArgumentsDelta,
+            payload: EventPayload::FunctionCallArgsDelta {
+                delta: r#"{"q":"rust"}"#.into(),
+                call_id: Some("call_1".into()),
+                item_id: "fc_1".into(),
+                output_index: 0,
+            },
+            sequence_number: Some(2),
+        });
+
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::FunctionCallArgumentsDone,
+            payload: EventPayload::FunctionCallArgsDone {
+                arguments: String::new(),
+                call_id: Some("call_1".into()),
+                item_id: "fc_1".into(),
+                name: "search".into(),
+                output_index: 0,
+            },
+            sequence_number: Some(3),
+        });
+
+        assert_eq!(acc.output.len(), 1);
+        if let OutputItem::FunctionCall(fc) = &acc.output[0] {
+            assert_eq!(fc.arguments, r#"{"q":"rust"}"#);
+        } else {
+            panic!("expected FunctionCall");
+        }
+    }
+
+    /// Multiple function calls in one response (parallel tool use).
+    #[test]
+    fn test_function_call_multiple_parallel() {
+        let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+
+        // First function call
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::OutputItemAdded,
+            payload: EventPayload::OutputItemAdded {
+                item_id: "fc_1".into(),
+                item_type: "function_call".into(),
+                output_index: 0,
+                name: Some("get_weather".into()),
+                call_id: Some("call_1".into()),
+            },
+            sequence_number: Some(1),
+        });
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::FunctionCallArgumentsDone,
+            payload: EventPayload::FunctionCallArgsDone {
+                arguments: r#"{"city":"NYC"}"#.into(),
+                call_id: Some("call_1".into()),
+                item_id: "fc_1".into(),
+                name: "get_weather".into(),
+                output_index: 0,
+            },
+            sequence_number: Some(2),
+        });
+
+        // Second function call
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::OutputItemAdded,
+            payload: EventPayload::OutputItemAdded {
+                item_id: "fc_2".into(),
+                item_type: "function_call".into(),
+                output_index: 1,
+                name: Some("get_time".into()),
+                call_id: Some("call_2".into()),
+            },
+            sequence_number: Some(3),
+        });
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::FunctionCallArgumentsDone,
+            payload: EventPayload::FunctionCallArgsDone {
+                arguments: r#"{"tz":"EST"}"#.into(),
+                call_id: Some("call_2".into()),
+                item_id: "fc_2".into(),
+                name: "get_time".into(),
+                output_index: 1,
+            },
+            sequence_number: Some(4),
+        });
+
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::ResponseCompleted,
+            payload: EventPayload::Response {
+                id: "resp_1".into(),
+                status: "completed".into(),
+                usage: None,
+            },
+            sequence_number: Some(5),
+        });
+
+        assert_eq!(acc.output.len(), 2);
+        assert!(matches!(&acc.output[0], OutputItem::FunctionCall(fc) if fc.name == "get_weather"));
+        assert!(matches!(&acc.output[1], OutputItem::FunctionCall(fc) if fc.name == "get_time"));
+    }
+
+    /// Function call interleaved with a message output item.
+    #[test]
+    fn test_function_call_interleaved_with_message() {
+        let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+
+        // Message first
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::OutputItemAdded,
+            payload: EventPayload::OutputItemAdded {
+                item_id: "msg_1".into(),
+                item_type: "message".into(),
+                output_index: 0,
+                name: None,
+                call_id: None,
+            },
+            sequence_number: Some(1),
+        });
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::OutputTextDelta,
+            payload: EventPayload::TextDelta {
+                delta: "Let me check".into(),
+                item_id: "msg_1".into(),
+                output_index: 0,
+                content_index: 0,
+            },
+            sequence_number: Some(2),
+        });
+
+        // Then function call
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::OutputItemAdded,
+            payload: EventPayload::OutputItemAdded {
+                item_id: "fc_1".into(),
+                item_type: "function_call".into(),
+                output_index: 1,
+                name: Some("lookup".into()),
+                call_id: Some("call_x".into()),
+            },
+            sequence_number: Some(3),
+        });
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::FunctionCallArgumentsDone,
+            payload: EventPayload::FunctionCallArgsDone {
+                arguments: "{}".into(),
+                call_id: Some("call_x".into()),
+                item_id: "fc_1".into(),
+                name: "lookup".into(),
+                output_index: 1,
+            },
+            sequence_number: Some(4),
+        });
+
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::ResponseCompleted,
+            payload: EventPayload::Response {
+                id: "resp_1".into(),
+                status: "completed".into(),
+                usage: None,
+            },
+            sequence_number: Some(5),
+        });
+
+        assert_eq!(acc.output.len(), 2);
+        assert!(matches!(&acc.output[0], OutputItem::Message(m) if m.content[0].text == "Let me check"));
+        assert!(matches!(&acc.output[1], OutputItem::FunctionCall(fc) if fc.name == "lookup"));
+    }
+
+    /// `FunctionCallArgumentsDone` updates `call_id` and `name` if provided.
+    #[test]
+    fn test_function_call_done_updates_metadata() {
+        let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::OutputItemAdded,
+            payload: EventPayload::OutputItemAdded {
+                item_id: "fc_1".into(),
+                item_type: "function_call".into(),
+                output_index: 0,
+                name: Some("old_name".into()),
+                call_id: Some("old_call".into()),
+            },
+            sequence_number: Some(1),
+        });
+
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::FunctionCallArgumentsDone,
+            payload: EventPayload::FunctionCallArgsDone {
+                arguments: "{}".into(),
+                call_id: Some("new_call".into()),
+                item_id: "fc_1".into(),
+                name: "new_name".into(),
+                output_index: 0,
+            },
+            sequence_number: Some(2),
+        });
+
+        if let OutputItem::FunctionCall(fc) = &acc.output[0] {
+            assert_eq!(fc.call_id, "new_call");
+            assert_eq!(fc.name, "new_name");
+        } else {
+            panic!("expected FunctionCall");
+        }
+    }
+
+    /// A `function_call` `OutputItemAdded` auto-generates an id when the server sends an empty one.
+    #[test]
+    fn test_function_call_empty_item_id_generates_uuid() {
+        let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::OutputItemAdded,
+            payload: EventPayload::OutputItemAdded {
+                item_id: String::new(),
+                item_type: "function_call".into(),
+                output_index: 0,
+                name: Some("tool".into()),
+                call_id: Some("c1".into()),
+            },
+            sequence_number: Some(1),
+        });
+
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::FunctionCallArgumentsDone,
+            payload: EventPayload::FunctionCallArgsDone {
+                arguments: "{}".into(),
+                call_id: Some("c1".into()),
+                item_id: String::new(),
+                name: "tool".into(),
+                output_index: 0,
+            },
+            sequence_number: Some(2),
+        });
+
+        if let OutputItem::FunctionCall(fc) = &acc.output[0] {
+            assert!(fc.id.starts_with("fc_"), "expected fc_ prefix, got: {}", fc.id);
+        } else {
+            panic!("expected FunctionCall");
+        }
+    }
+
+    /// Orphaned `FunctionCallArgumentsDelta` events (no active function call) are harmless.
+    #[test]
+    fn test_function_call_orphaned_delta_safe() {
+        let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::FunctionCallArgumentsDelta,
+            payload: EventPayload::FunctionCallArgsDelta {
+                delta: "orphan".into(),
+                call_id: None,
+                item_id: String::new(),
+                output_index: 0,
+            },
+            sequence_number: Some(1),
+        });
+
+        assert!(acc.output.is_empty());
+        assert_eq!(acc.accumulated_arguments, "orphan");
+    }
+
+    /// `ResponseCompleted` finalizes any in-flight function call even without a Done event.
+    #[test]
+    fn test_function_call_finalized_on_response_completed() {
+        let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::OutputItemAdded,
+            payload: EventPayload::OutputItemAdded {
+                item_id: "fc_1".into(),
+                item_type: "function_call".into(),
+                output_index: 0,
+                name: Some("partial".into()),
+                call_id: Some("c1".into()),
+            },
+            sequence_number: Some(1),
+        });
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::FunctionCallArgumentsDelta,
+            payload: EventPayload::FunctionCallArgsDelta {
+                delta: r#"{"x":1}"#.into(),
+                call_id: Some("c1".into()),
+                item_id: "fc_1".into(),
+                output_index: 0,
+            },
+            sequence_number: Some(2),
+        });
+
+        // No ArgumentsDone — jump straight to ResponseCompleted
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::ResponseCompleted,
+            payload: EventPayload::Response {
+                id: "resp_1".into(),
+                status: "completed".into(),
+                usage: None,
+            },
+            sequence_number: Some(3),
+        });
+
+        assert_eq!(acc.output.len(), 1);
+        if let OutputItem::FunctionCall(fc) = &acc.output[0] {
+            assert_eq!(fc.arguments, r#"{"x":1}"#);
+            assert_eq!(fc.status, "completed");
+        } else {
+            panic!("expected FunctionCall");
+        }
+    }
+
+    /// `from_sse_lines` end-to-end with function call SSE data.
+    #[test]
+    fn test_function_call_from_sse_lines() {
+        let lines = vec![
+            r#"data: {"type":"response.created","response":{"id":"resp_fc"}}"#.to_string(),
+            r#"data: {"type":"response.output_item.added","item":{"id":"fc_1","type":"function_call","name":"get_weather","call_id":"call_abc"}}"#.to_string(),
+            r#"data: {"type":"response.function_call_arguments.delta","delta":"{\"city\":"}"#.to_string(),
+            r#"data: {"type":"response.function_call_arguments.delta","delta":"\"SF\"}"}"#.to_string(),
+            r#"data: {"type":"response.function_call_arguments.done","arguments":"{\"city\":\"SF\"}","call_id":"call_abc","name":"get_weather"}"#.to_string(),
+            r#"data: {"type":"response.done","response":{"id":"resp_fc","usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}"#.to_string(),
+        ];
+
+        let acc = ResponseAccumulator::from_sse_lines(lines, Some("conv_1"));
+        assert_eq!(acc.status, ResponseStatus::Completed);
+        assert_eq!(acc.output.len(), 1);
+
+        if let OutputItem::FunctionCall(fc) = &acc.output[0] {
+            assert_eq!(fc.name, "get_weather");
+            assert_eq!(fc.arguments, r#"{"city":"SF"}"#);
+            assert_eq!(fc.call_id, "call_abc");
+        } else {
+            panic!("expected FunctionCall");
+        }
+
+        assert_eq!(acc.usage.unwrap().total_tokens, 15);
     }
 }
