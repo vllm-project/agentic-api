@@ -235,6 +235,7 @@ impl ResponseAccumulator {
     /// This is the core state machine — callers that already have a normalized
     /// frame (e.g. [`StreamTee`](future)) can call this directly without
     /// re-parsing from a raw line.
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn process_event(&mut self, frame: &EventFrame) {
         match (&frame.event_type, &frame.payload) {
             (SSEEventType::ResponseCreated, EventPayload::Response { id, .. }) if !id.is_empty() => {
@@ -283,8 +284,7 @@ impl ResponseAccumulator {
                         self.finalize_current_reasoning();
                         self.finalize_current_function_call();
                         self.finalize_current_message();
-                        self.current_message =
-                            Some(OutputMessage::new(item_id, MessageStatus::InProgress.as_str()));
+                        self.current_message = Some(OutputMessage::new(item_id, MessageStatus::InProgress.as_str()));
                     }
                 }
             }
