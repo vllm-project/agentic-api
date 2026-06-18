@@ -20,7 +20,7 @@ turns:
     - 'event: response.created
 
       '
-    - 'data: {"response":{"id":"resp_b23d2c649fe8c967","created_at":1781669958,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":130997,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":0,"type":"response.created"}
+    - 'data: {"response":{"id":"resp_9fdfaf29a1596f70","created_at":1781822105,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":130997,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":0,"type":"response.created"}
 
       '
     - '
@@ -29,7 +29,7 @@ turns:
     - 'event: response.in_progress
 
       '
-    - 'data: {"response":{"id":"resp_b23d2c649fe8c967","created_at":1781669958,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":130997,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":1,"type":"response.in_progress"}
+    - 'data: {"response":{"id":"resp_9fdfaf29a1596f70","created_at":1781822105,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":130997,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":1,"type":"response.in_progress"}
 
       '
     - '
@@ -38,7 +38,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"item":{"id":"msg_8b9153183e425160","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
+    - 'data: {"item":{"id":"msg_bdff6c694d0c26b6","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
 
       '
     - '
@@ -47,7 +47,7 @@ turns:
     - 'event: response.reasoning_part.added
 
       '
-    - 'data: {"content_index":0,"item_id":"msg_8b9153183e425160","output_index":0,"part":{"text":"","type":"reasoning_text"},"sequence_number":3,"type":"response.reasoning_part.added"}
+    - 'data: {"content_index":0,"item_id":"msg_bdff6c694d0c26b6","output_index":0,"part":{"text":"","type":"reasoning_text"},"sequence_number":3,"type":"response.reasoning_part.added"}
 
       '
     - '
@@ -56,7 +56,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":"User","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":4,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"The","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":4,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -65,7 +65,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" says: \"Reply with exactly one word","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":5,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" user","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":5,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -74,7 +74,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":":","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":6,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":":","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":6,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -83,7 +83,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" HEL","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":7,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" \"","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":7,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -92,7 +92,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":"LO","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":8,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"Reply","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":8,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -101,7 +101,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":"\".","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":9,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" with","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":9,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -110,7 +110,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" So","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":10,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" exactly","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":10,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -119,7 +119,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" they","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":11,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" one","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":11,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -128,7 +128,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" want","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":12,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" word","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":12,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -137,7 +137,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" me","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":13,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":":","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":13,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -146,7 +146,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" to","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":14,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" HEL","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":14,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -155,7 +155,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" reply","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":15,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"LO","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":15,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -164,7 +164,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" with","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":16,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"\".","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":16,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -173,7 +173,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" exactly","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":17,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" So","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":17,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -182,7 +182,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" one","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":18,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" we","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":18,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -191,7 +191,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" word","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":19,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" need","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":19,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -200,7 +200,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":":","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":20,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" to","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":20,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -209,7 +209,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" \"","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":21,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" reply","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":21,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -218,7 +218,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":"HEL","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":22,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" with","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":22,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -227,7 +227,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":"LO","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":23,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" exactly","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":23,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -236,7 +236,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":"\".","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":24,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" one","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":24,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -245,7 +245,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" Just","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":25,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" word","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":25,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -254,7 +254,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" output","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":26,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":",","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":26,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -263,7 +263,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" HEL","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":27,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" presumably","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":27,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -272,7 +272,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":"LO","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":28,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" \"","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":28,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -281,7 +281,907 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":".","item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":29,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"HEL","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":29,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"LO","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":30,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"\"?","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":31,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" They","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":32,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" say","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":33,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" \"","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":34,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"Reply","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":35,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" with","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":36,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" exactly","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":37,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" one","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":38,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" word","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":39,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":":","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":40,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" HEL","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":41,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"LO","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":42,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"\".","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":43,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" The","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":44,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" instruction","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":45,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":":","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":46,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" reply","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":47,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" with","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":48,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" exactly","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":49,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" one","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":50,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" word","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":51,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":",","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":52,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" and","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":53,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" the","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":54,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" word","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":55,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" is","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":56,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" HEL","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":57,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"LO","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":58,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":".","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":59,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" So","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":60,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" we","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":61,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" should","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":62,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" output","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":63,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" HEL","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":64,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"LO","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":65,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":".","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":66,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" But","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":67,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" note","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":68,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":",","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":69,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" we","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":70,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" need","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":71,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" exactly","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":72,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" one","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":73,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" word","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":74,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":".","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":75,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" The","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":76,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" given","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":77,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" text","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":78,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" \"","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":79,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"HEL","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":80,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"LO","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":81,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"\"","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":82,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" is","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":83,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" one","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":84,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" word","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":85,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":".","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":86,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" So","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":87,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" output","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":88,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" HEL","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":89,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"LO","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":90,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":".","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":91,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" No","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":92,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" punctuation","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":93,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" aside","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":94,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" from","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":95,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" maybe","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":96,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" ex","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":97,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"clamation","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":98,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"?","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":99,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" They","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":100,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" said","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":101,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" exactly","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":102,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" one","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":103,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" word","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":104,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":",","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":105,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" so","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":106,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" just","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":107,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" \"","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":108,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"HEL","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":109,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"LO","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":110,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"\".","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":111,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" No","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":112,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" quoting","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":113,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":",","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":114,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" no","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":115,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" extra","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":116,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" spaces","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":117,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":";","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":118,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" just","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":119,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" the","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":120,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" word","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":121,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":".","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":122,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" So","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":123,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" final","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":124,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" answer","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":125,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":":","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":126,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" HEL","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":127,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"LO","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":128,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":".","item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":129,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -290,9 +1190,7 @@ turns:
     - 'event: response.reasoning_text.done
 
       '
-    - 'data: {"content_index":0,"item_id":"msg_8b9153183e425160","output_index":0,"sequence_number":30,"text":"User
-      says: \"Reply with exactly one word: HELLO\". So they want me to reply with
-      exactly one word: \"HELLO\". Just output HELLO.","type":"response.reasoning_text.done"}
+    - 'data: {"content_index":0,"item_id":"msg_bdff6c694d0c26b6","output_index":0,"sequence_number":130,"text":"The user: \"Reply with exactly one word: HELLO\". So we need to reply with exactly one word, presumably \"HELLO\"? They say \"Reply with exactly one word: HELLO\". The instruction: reply with exactly one word, and the word is HELLO. So we should output HELLO. But note, we need exactly one word. The given text \"HELLO\" is one word. So output HELLO. No punctuation aside from maybe exclamation? They said exactly one word, so just \"HELLO\". No quoting, no extra spaces; just the word. So final answer: HELLO.","type":"response.reasoning_text.done"}
 
       '
     - '
@@ -301,9 +1199,7 @@ turns:
     - 'event: response.reasoning_part.done
 
       '
-    - 'data: {"content_index":0,"item_id":"msg_8b9153183e425160","output_index":0,"part":{"text":"User
-      says: \"Reply with exactly one word: HELLO\". So they want me to reply with
-      exactly one word: \"HELLO\". Just output HELLO.","type":"reasoning_text"},"sequence_number":31,"type":"response.reasoning_part.done"}
+    - 'data: {"content_index":0,"item_id":"msg_bdff6c694d0c26b6","output_index":0,"part":{"text":"The user: \"Reply with exactly one word: HELLO\". So we need to reply with exactly one word, presumably \"HELLO\"? They say \"Reply with exactly one word: HELLO\". The instruction: reply with exactly one word, and the word is HELLO. So we should output HELLO. But note, we need exactly one word. The given text \"HELLO\" is one word. So output HELLO. No punctuation aside from maybe exclamation? They said exactly one word, so just \"HELLO\". No quoting, no extra spaces; just the word. So final answer: HELLO.","type":"reasoning_text"},"sequence_number":131,"type":"response.reasoning_part.done"}
 
       '
     - '
@@ -312,9 +1208,43 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"item":{"id":"msg_8b9153183e425160","summary":[],"type":"reasoning","content":[{"text":"User
-      says: \"Reply with exactly one word: HELLO\". So they want me to reply with
-      exactly one word: \"HELLO\". Just output HELLO.","type":"reasoning_text"}],"encrypted_content":null,"status":"completed"},"output_index":0,"sequence_number":32,"type":"response.output_item.done"}
+    - 'data: {"item":{"id":"msg_bdff6c694d0c26b6","summary":[],"type":"reasoning","content":[{"text":"The user: \"Reply with exactly one word: HELLO\". So we need to reply with exactly one word, presumably \"HELLO\"? They say \"Reply with exactly one word: HELLO\". The instruction: reply with exactly one word, and the word is HELLO. So we should output HELLO. But note, we need exactly one word. The given text \"HELLO\" is one word. So output HELLO. No punctuation aside from maybe exclamation? They said exactly one word, so just \"HELLO\". No quoting, no extra spaces; just the word. So final answer: HELLO.","type":"reasoning_text"}],"encrypted_content":null,"status":"completed"},"output_index":0,"sequence_number":132,"type":"response.output_item.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"item":{"id":"msg_b35c15db1b8efefc","content":[],"role":"assistant","status":"in_progress","type":"message","phase":null},"output_index":1,"sequence_number":133,"type":"response.output_item.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"content_index":1,"item_id":"msg_b35c15db1b8efefc","output_index":1,"part":{"annotations":[],"text":"","type":"output_text","logprobs":[]},"sequence_number":134,"type":"response.content_part.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":1,"delta":"HEL","item_id":"msg_b35c15db1b8efefc","logprobs":[],"output_index":1,"sequence_number":135,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":1,"delta":"LO","item_id":"msg_b35c15db1b8efefc","logprobs":[],"output_index":1,"sequence_number":136,"type":"response.output_text.delta"}
 
       '
     - '
@@ -323,7 +1253,7 @@ turns:
     - 'event: response.output_text.done
 
       '
-    - 'data: {"content_index":0,"item_id":"msg_8b9153183e425160","logprobs":[],"output_index":1,"sequence_number":33,"text":"HELLO","type":"response.output_text.done"}
+    - 'data: {"content_index":1,"item_id":"msg_b35c15db1b8efefc","logprobs":[],"output_index":1,"sequence_number":137,"text":"HELLO","type":"response.output_text.done"}
 
       '
     - '
@@ -332,7 +1262,7 @@ turns:
     - 'event: response.content_part.done
 
       '
-    - 'data: {"content_index":0,"item_id":"msg_8b9153183e425160","output_index":1,"part":{"annotations":[],"text":"HELLO","type":"output_text","logprobs":null},"sequence_number":34,"type":"response.content_part.done"}
+    - 'data: {"content_index":1,"item_id":"msg_b35c15db1b8efefc","output_index":1,"part":{"annotations":[],"text":"HELLO","type":"output_text","logprobs":null},"sequence_number":138,"type":"response.content_part.done"}
 
       '
     - '
@@ -341,7 +1271,7 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"item":{"id":"msg_8b9153183e425160","content":[{"annotations":[],"text":"HELLO","type":"output_text","logprobs":null}],"role":"assistant","status":"completed","type":"message","phase":null},"output_index":1,"sequence_number":35,"type":"response.output_item.done"}
+    - 'data: {"item":{"id":"msg_b35c15db1b8efefc","content":[{"annotations":[],"text":"HELLO","type":"output_text","logprobs":null}],"role":"assistant","status":"completed","type":"message","phase":null},"output_index":1,"sequence_number":139,"type":"response.output_item.done"}
 
       '
     - '
@@ -350,9 +1280,7 @@ turns:
     - 'event: response.completed
 
       '
-    - 'data: {"response":{"id":"resp_b23d2c649fe8c967","created_at":1781669958,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[{"id":"rs_a31e19b97b32c714","summary":[],"type":"reasoning","content":[{"text":"User
-      says: \"Reply with exactly one word: HELLO\". So they want me to reply with
-      exactly one word: \"HELLO\". Just output HELLO.","type":"reasoning_text"}],"encrypted_content":null,"status":null},{"id":"msg_adec7efbbb2ad5cc","content":[{"annotations":[],"text":"HELLO","type":"output_text","logprobs":null}],"role":"assistant","status":"completed","type":"message","phase":null}],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":130997,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"completed","text":null,"top_logprobs":null,"truncation":"disabled","usage":{"input_tokens":75,"input_tokens_details":{"cached_tokens":64,"input_tokens_per_turn":[75],"cached_tokens_per_turn":[64]},"output_tokens":45,"output_tokens_details":{"reasoning_tokens":27,"tool_output_tokens":0,"output_tokens_per_turn":[45],"tool_output_tokens_per_turn":[0]},"total_tokens":120},"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":36,"type":"response.completed"}
+    - 'data: {"response":{"id":"resp_9fdfaf29a1596f70","created_at":1781822105,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[{"id":"rs_b1ea5b30e0681446","summary":[],"type":"reasoning","content":[{"text":"The user: \"Reply with exactly one word: HELLO\". So we need to reply with exactly one word, presumably \"HELLO\"? They say \"Reply with exactly one word: HELLO\". The instruction: reply with exactly one word, and the word is HELLO. So we should output HELLO. But note, we need exactly one word. The given text \"HELLO\" is one word. So output HELLO. No punctuation aside from maybe exclamation? They said exactly one word, so just \"HELLO\". No quoting, no extra spaces; just the word. So final answer: HELLO.","type":"reasoning_text"}],"encrypted_content":null,"status":null},{"id":"msg_aa6b42695be3b449","content":[{"annotations":[],"text":"HELLO","type":"output_text","logprobs":null}],"role":"assistant","status":"completed","type":"message","phase":null}],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":130997,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"completed","text":null,"top_logprobs":null,"truncation":"disabled","usage":{"input_tokens":75,"input_tokens_details":{"cached_tokens":64,"input_tokens_per_turn":[75],"cached_tokens_per_turn":[64]},"output_tokens":138,"output_tokens_details":{"reasoning_tokens":127,"tool_output_tokens":0,"output_tokens_per_turn":[138],"tool_output_tokens_per_turn":[0]},"total_tokens":213},"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":140,"type":"response.completed"}
 
       '
     - '
