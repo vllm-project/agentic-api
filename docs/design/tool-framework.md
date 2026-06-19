@@ -284,6 +284,22 @@ PR A lands independently. PR C can parallelize with PR B. Future handlers (web_s
 
 ---
 
+## Alternatives Considered for `function` Tool Handling
+
+Decision D3 (`function` is never gateway-executed, returns `requires_action`) is the most debatable choice. Here are the alternatives we evaluated:
+
+| # | Alternative | Behavior | Why rejected |
+|---|-------------|----------|--------------|
+| A | **Reject function tools entirely** | Validate at parse time — if `type: "function"` is present, return 400. Force clients to back all tools with MCP servers. | Breaks OpenAI spec compatibility. Prevents agent clients (Codex, Claude Code) from using their natural pattern. Unnecessarily opinionated. |
+| B | **Ignore + warn** | Accept `function` tools, normalize to vLLM, but if model calls one: drop the call silently, log a warning, and continue inference without it. | Silent data loss. Model asked for a tool result and gets nothing — produces hallucinated or degraded responses. Violates least-surprise. |
+| C | **Search MCP servers for matching name** | When model calls a `function` tool, check if any registered MCP server happens to expose a tool with that name. If found, execute via MCP. If not, fall back to `requires_action`. | Spooky action at a distance. Client declares `type: "function"` expecting to own execution, but gateway silently intercepts it if an MCP server has a name collision. Also adds latency (extra `tools/list` queries). |
+| D | **Gateway-execute all (require registered executor)** | Every `function` tool must have a backing executor configured in gateway config. No `requires_action` at all. | Requires operators to pre-configure every tool. Impossible for dynamic agent clients that generate tool definitions at runtime. Breaks the most common agentic pattern. |
+| E | **Configurable per-request** | Add a field like `function_execution: "client" \| "gateway"` to let the client choose. | Over-engineering for MVP. Adds complexity to every code path. If a real use case emerges, we can add it later without breaking the default. |
+
+**Chosen: passthrough with `requires_action`** — matches OpenAI spec exactly, zero surprise for clients, and cleanly separates "tools the gateway owns" from "tools the client owns" based solely on the `type` field the client already provides.
+
+---
+
 ## Open Questions
 
 | # | Question | Proposed Answer |
