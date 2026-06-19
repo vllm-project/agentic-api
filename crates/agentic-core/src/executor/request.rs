@@ -7,6 +7,7 @@ use crate::executor::modes::{ConversationHandler, ResponseHandler};
 use crate::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
 use crate::types::io::InputItem;
 use crate::types::request_response::{RequestPayload, ResponsePayload};
+use crate::vector_search::{VectorSearch, ogx::OgxStore};
 
 /// Context built by `rehydrate_conversation`, threaded through the execute pipeline.
 #[derive(Debug)]
@@ -39,15 +40,18 @@ impl RequestContext {
 /// Runtime dependencies passed into `execute()`.
 ///
 /// Owns the storage handlers, HTTP client, and LLM endpoint configuration.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ExecutionContext {
     pub conv_handler: ConversationHandler,
     pub resp_handler: ResponseHandler,
     pub client: Arc<reqwest::Client>,
+    pub vector_search: Option<Arc<dyn VectorSearch>>,
     /// Base URL for the LLM backend, e.g. `"http://localhost:8000"`.
     pub llm_base_url: String,
     /// Bearer token forwarded from the client, if any.
     pub client_auth: Option<String>,
+    /// Maximum model/tool turns for the agentic loop.
+    pub max_iterations: u32,
     /// Maximum wait time for the next SSE chunk.  `Duration::ZERO` disables the timeout.
     /// Sourced from [`Config::streaming_chunk_timeout_s`](crate::config::Config::streaming_chunk_timeout_s).
     pub streaming_timeout: Duration,
@@ -78,10 +82,19 @@ impl ExecutionContext {
             conv_handler,
             resp_handler,
             client,
+            vector_search: None,
             llm_base_url,
             client_auth,
+            max_iterations: 10,
             streaming_timeout: Duration::from_secs(30),
         }
+    }
+
+    #[must_use]
+    pub fn with_vector_search(mut self, vector_search: Arc<dyn VectorSearch>, max_iterations: u32) -> Self {
+        self.vector_search = Some(vector_search);
+        self.max_iterations = max_iterations;
+        self
     }
 
     /// Build an `ExecutionContext` directly from [`Config`](crate::config::Config).
@@ -102,13 +115,16 @@ impl ExecutionContext {
         let conv_handler = ConversationHandler::new(ConversationStore::new(pool.clone()));
         let resp_handler = ResponseHandler::new(ResponseStore::new(pool));
         let client = Arc::new(reqwest::Client::new());
+        let vector_search = Arc::new(OgxStore::new(&cfg.ogx_base_url, reqwest::Client::new()));
 
         Ok(Self {
             conv_handler,
             resp_handler,
             client,
+            vector_search: Some(vector_search),
             llm_base_url: cfg.llm_api_base.clone(),
             client_auth: cfg.openai_api_key.clone(),
+            max_iterations: cfg.max_iterations,
             streaming_timeout: Duration::from_secs(30),
         })
     }

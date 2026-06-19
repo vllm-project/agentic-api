@@ -7,6 +7,7 @@ pub mod readiness;
 pub mod storage;
 pub mod types;
 pub mod utils;
+pub mod vector_search;
 
 pub use storage::{
     ConversationData, ConversationStore, DbPool, InOutItem, ItemKind, ResponseData, ResponseMetadata, ResponseStore,

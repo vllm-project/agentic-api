@@ -157,6 +157,8 @@ async fn spawn_gateway(llm_url: &str) -> (Arc<reqwest::Client>, String) {
         llm_ready_timeout_s: 5.0,
         llm_ready_interval_s: 0.1,
         db_url: Some(format!("sqlite://{}", db_path.display())),
+        ogx_base_url: "http://127.0.0.1:1".to_owned(),
+        max_iterations: 10,
     };
 
     let proxy_state = ProxyState::new(config.clone()).unwrap();

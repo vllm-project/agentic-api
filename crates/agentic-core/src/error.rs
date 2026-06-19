@@ -19,4 +19,25 @@ pub enum Error {
 
     #[error("{0}")]
     Config(String),
+
+    #[error("store request failed")]
+    Store(#[source] reqwest::Error),
+
+    #[error("store returned {status}: {body}")]
+    StoreResponse { status: u16, body: String },
+
+    #[error("vLLM proxy request failed")]
+    Proxy(#[source] reqwest::Error),
+
+    #[error("vLLM returned {status}: {body}")]
+    ProxyResponse { status: u16, body: String },
+
+    #[error("database error")]
+    Database(#[from] sqlx::Error),
+
+    #[error(transparent)]
+    StateStore(#[from] crate::storage::StorageError),
+
+    #[error("agentic loop exceeded {max_iterations} iterations")]
+    MaxIterations { max_iterations: u32 },
 }

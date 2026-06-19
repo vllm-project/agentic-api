@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 mod common;
 
 use agentic_core::config::Config;

@@ -26,9 +26,10 @@ tracing-subscriber.workspace = true
 bytes.workspace = true
 criterion.workspace = true
 futures.workspace = true
-reqwest = { workspace = true, features = ["json"] }
+reqwest = { workspace = true, features = ["json", "multipart"] }
 serde_json.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
+tokio-stream = "0.1"
 uuid = { version = "1", features = ["v7"] }
 
 [[bench]]

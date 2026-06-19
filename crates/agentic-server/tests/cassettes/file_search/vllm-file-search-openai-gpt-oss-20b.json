@@ -1,0 +1,296 @@
+{
+  "metadata": {
+    "recorded_at": "2026-06-17T12:30:24+00:00",
+    "model": "openai/gpt-oss-20b",
+    "note": "Harmony models reject tool_choice=required, so this cassette uses tool_choice=auto with a direct prompt."
+  },
+  "turns": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/responses",
+        "body": {
+          "model": "openai/gpt-oss-20b",
+          "input": "Use the file_search tool to find information about Rust memory safety ownership.",
+          "tools": [
+            {
+              "type": "function",
+              "name": "file_search",
+              "description": "Search uploaded files for relevant passages.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "description": "Search query."
+                  }
+                },
+                "required": [
+                  "query"
+                ]
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": false
+        }
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "id": "resp_a4c1eeb7507be20a",
+          "created_at": 1781699419,
+          "incomplete_details": null,
+          "instructions": null,
+          "metadata": null,
+          "model": "openai/gpt-oss-20b",
+          "object": "response",
+          "output": [
+            {
+              "id": "rs_b28e1cdf8ad9b24c",
+              "summary": [],
+              "type": "reasoning",
+              "content": [
+                {
+                  "text": "We need to use the file_search tool to search for \"Rust memory safety ownership\" or something like that. The instruction: \"Use the file_search tool to find information about Rust memory safety ownership.\" We need to call the function. We can pass query \"Rust memory safety ownership\". Then we need to answer by providing the relevant info. Probably the tool returns passages or summaries. Use tool.",
+                  "type": "reasoning_text"
+                }
+              ],
+              "encrypted_content": null,
+              "status": null
+            },
+            {
+              "arguments": "{\"query\":\"Rust memory safety ownership\"}",
+              "call_id": "call_8e217e84eeadc2fb",
+              "name": "file_search",
+              "type": "function_call",
+              "id": "fc_8e217e84eeadc2fb",
+              "status": null
+            }
+          ],
+          "parallel_tool_calls": true,
+          "temperature": 1.0,
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "name": "file_search",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "description": "Search query."
+                  }
+                },
+                "required": [
+                  "query"
+                ]
+              },
+              "strict": null,
+              "type": "function",
+              "description": "Search uploaded files for relevant passages."
+            }
+          ],
+          "top_p": 1.0,
+          "background": false,
+          "max_output_tokens": 16247,
+          "max_tool_calls": null,
+          "previous_response_id": null,
+          "prompt": null,
+          "reasoning": null,
+          "service_tier": "auto",
+          "status": "completed",
+          "text": null,
+          "top_logprobs": null,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 137,
+            "input_tokens_details": {
+              "cached_tokens": 128,
+              "input_tokens_per_turn": [
+                137
+              ],
+              "cached_tokens_per_turn": [
+                128
+              ]
+            },
+            "output_tokens": 106,
+            "output_tokens_details": {
+              "reasoning_tokens": 89,
+              "tool_output_tokens": 0,
+              "output_tokens_per_turn": [
+                106
+              ],
+              "tool_output_tokens_per_turn": [
+                0
+              ]
+            },
+            "total_tokens": 243
+          },
+          "user": null,
+          "presence_penalty": 0.0,
+          "frequency_penalty": 0.0,
+          "kv_transfer_params": null,
+          "input_messages": null,
+          "output_messages": null
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/responses",
+        "body": {
+          "model": "openai/gpt-oss-20b",
+          "input": [
+            {
+              "type": "message",
+              "role": "user",
+              "content": "Use the file_search tool to find information about Rust memory safety ownership."
+            },
+            {
+              "arguments": "{\"query\":\"Rust memory safety ownership\"}",
+              "call_id": "call_8e217e84eeadc2fb",
+              "name": "file_search",
+              "type": "function_call",
+              "id": "fc_8e217e84eeadc2fb",
+              "status": null
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_8e217e84eeadc2fb",
+              "output": "{\"results\":[{\"file_id\":\"file_abc\",\"filename\":\"rust-memory-safety.txt\",\"score\":0.95,\"attributes\":{},\"content\":[{\"type\":\"text\",\"text\":\"Rust enforces memory safety without a garbage collector through ownership, borrowing, and lifetimes.\"}]}]}"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "file_search",
+              "description": "Search uploaded files for relevant passages.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "description": "Search query."
+                  }
+                },
+                "required": [
+                  "query"
+                ]
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": false
+        }
+      },
+      "response": {
+        "status_code": 200,
+        "body": {
+          "id": "resp_92585e571ba11e5e",
+          "created_at": 1781699421,
+          "incomplete_details": null,
+          "instructions": null,
+          "metadata": null,
+          "model": "openai/gpt-oss-20b",
+          "object": "response",
+          "output": [
+            {
+              "id": "rs_b6dcc6546ab2d7c2",
+              "summary": [],
+              "type": "reasoning",
+              "content": [
+                {
+                  "text": "We have the file content. Provide answer.",
+                  "type": "reasoning_text"
+                }
+              ],
+              "encrypted_content": null,
+              "status": null
+            },
+            {
+              "id": "msg_a7c9b9489fe74d58",
+              "content": [
+                {
+                  "annotations": [],
+                  "text": "**Rust Memory Safety & Ownership**\n\nRust guarantees memory safety at compile time without relying on a garbage collector. The core concepts that enable this are:\n\n- **Ownership** – Each value has a single owner.\n- **Borrowing** – References (`&T` for immutable and `&mut T` for mutable) allow temporary access without taking ownership.\n- **Lifetimes** – Compile‑time annotations that ensure references do not outlive the data they point to.\n\nThese rules together prevent common bugs such as use‑after‑free, double frees, and data races in concurrent programs.",
+                  "type": "output_text",
+                  "logprobs": null
+                }
+              ],
+              "role": "assistant",
+              "status": "completed",
+              "type": "message"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "temperature": 1.0,
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "name": "file_search",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "description": "Search query."
+                  }
+                },
+                "required": [
+                  "query"
+                ]
+              },
+              "strict": null,
+              "type": "function",
+              "description": "Search uploaded files for relevant passages."
+            }
+          ],
+          "top_p": 1.0,
+          "background": false,
+          "max_output_tokens": 16155,
+          "max_tool_calls": null,
+          "previous_response_id": null,
+          "prompt": null,
+          "reasoning": null,
+          "service_tier": "auto",
+          "status": "completed",
+          "text": null,
+          "top_logprobs": null,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 229,
+            "input_tokens_details": {
+              "cached_tokens": 224,
+              "input_tokens_per_turn": [
+                229
+              ],
+              "cached_tokens_per_turn": [
+                224
+              ]
+            },
+            "output_tokens": 137,
+            "output_tokens_details": {
+              "reasoning_tokens": 10,
+              "tool_output_tokens": 0,
+              "output_tokens_per_turn": [
+                137
+              ],
+              "tool_output_tokens_per_turn": [
+                0
+              ]
+            },
+            "total_tokens": 366
+          },
+          "user": null,
+          "presence_penalty": 0.0,
+          "frequency_penalty": 0.0,
+          "kv_transfer_params": null,
+          "input_messages": null,
+          "output_messages": null
+        }
+      }
+    }
+  ]
+}

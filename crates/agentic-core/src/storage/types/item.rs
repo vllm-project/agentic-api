@@ -88,9 +88,13 @@ impl InOutItem {
             .into_iter()
             .filter_map(|i| match i {
                 InOutItem::Input(item) => Some(item),
-                InOutItem::Output(OutputItem::Message(msg)) => Some(InputItem::Message(msg.into())),
+                InOutItem::Output(OutputItem::Message(msg)) => {
+                    // Embed history OutputMessage as an input item so the model sees prior turns.
+                    Some(InputItem::Message(msg.into()))
+                }
                 InOutItem::Output(OutputItem::Reasoning(r)) => Some(InputItem::Reasoning(r)),
-                InOutItem::Output(OutputItem::FunctionCall(_) | OutputItem::Unknown) => None,
+                InOutItem::Output(OutputItem::FunctionCall(call)) => Some(InputItem::FunctionCall(call)),
+                InOutItem::Output(OutputItem::Unknown) => None,
             })
             .collect()
     }

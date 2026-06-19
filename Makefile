@@ -1,4 +1,4 @@
-.PHONY: help install lint format test build pre-commit clean
+.PHONY: help install lint format test build pre-commit clean integration-test
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -23,3 +23,6 @@ pre-commit: ## Run pre-commit hooks on all files
 
 clean: ## Remove Rust build artifacts
 	cargo clean
+
+integration-test: ## Run integration tests (starts OGx, runs tests, tears down)
+	./crates/agentic-server/tests/integration/run.sh

@@ -7,6 +7,10 @@ pub struct Config {
     /// Database URL for conversation and response storage.
     /// `None` means stateful features are disabled; all requests are proxied.
     pub db_url: Option<String>,
+    /// Base URL for OGX-compatible vector search.
+    pub ogx_base_url: String,
+    /// Maximum number of model/tool iterations before stopping the agentic loop.
+    pub max_iterations: u32,
 }
 
 #[must_use]

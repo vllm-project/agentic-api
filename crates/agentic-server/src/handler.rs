@@ -177,7 +177,7 @@ pub async fn responses(State(state): State<AppState>, req: Request) -> Response 
 
     let should_persist = payload.store || payload.previous_response_id.is_some() || payload.conversation_id.is_some();
 
-    if should_persist {
+    if should_persist || payload.has_file_search_tool() {
         execute_responses(&state, parts, payload).await
     } else {
         proxy_responses(&state, parts, bytes).await

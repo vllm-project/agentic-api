@@ -80,6 +80,13 @@ impl RequestPayload {
             metadata: self.metadata.as_ref(),
         }
     }
+
+    #[must_use]
+    pub fn has_file_search_tool(&self) -> bool {
+        self.tools
+            .as_deref()
+            .is_some_and(|tools| tools.iter().any(|tool| matches!(tool, ResponsesTool::FileSearch(_))))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

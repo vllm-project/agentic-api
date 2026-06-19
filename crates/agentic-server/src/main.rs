@@ -31,6 +31,12 @@ struct CommonArgs {
         global = true
     )]
     db_url: String,
+
+    #[arg(long, default_value = "http://localhost:8080", global = true)]
+    ogx_base_url: String,
+
+    #[arg(long, default_value_t = 10, global = true)]
+    max_iterations: u32,
 }
 
 #[derive(Parser)]
@@ -70,6 +76,8 @@ fn build_config(llm_api_base: String, common: &CommonArgs) -> Config {
         llm_ready_timeout_s: common.llm_ready_timeout_s,
         llm_ready_interval_s: common.llm_ready_interval_s,
         db_url: Some(common.db_url.clone()),
+        ogx_base_url: normalize_base_url(&common.ogx_base_url),
+        max_iterations: common.max_iterations,
     }
 }
 

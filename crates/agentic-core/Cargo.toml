@@ -8,11 +8,12 @@ repository.workspace = true
 
 [dependencies]
 async-stream.workspace = true
+async-trait = "0.1"
 bytes.workspace = true
 either.workspace = true
 futures.workspace = true
 http.workspace = true
-reqwest = { workspace = true, features = ["default-tls", "stream"] }
+reqwest = { workspace = true, features = ["default-tls", "json", "stream"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

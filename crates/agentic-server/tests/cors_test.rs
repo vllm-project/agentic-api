@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 mod common;
 
 use common::{spawn_gateway, spawn_mock_llm, test_config, test_state};

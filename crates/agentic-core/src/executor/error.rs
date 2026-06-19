@@ -52,6 +52,12 @@ pub enum ExecutorError {
     #[error("{entity} not found: {id}")]
     NotFound { entity: String, id: String },
 
+    #[error("agentic loop exceeded {max_iterations} iterations")]
+    MaxIterations { max_iterations: u32 },
+
+    #[error("{0}")]
+    ToolExecution(String),
+
     #[error("invalid request: {0}")]
     InvalidRequest(String),
 }
@@ -62,6 +68,7 @@ impl ExecutorError {
     pub fn http_status(&self) -> StatusCode {
         match self {
             Self::Storage(e) if e.is_not_found() => StatusCode::NOT_FOUND,
+            Self::MaxIterations { .. } | Self::ToolExecution(_) => StatusCode::BAD_GATEWAY,
             Self::LLMRequest { status, .. } => *status,
             Self::InvalidRequest(_) | Self::JsonError(_) => StatusCode::BAD_REQUEST,
             Self::ParseError(_) => StatusCode::UNPROCESSABLE_ENTITY,
@@ -75,6 +82,7 @@ impl ExecutorError {
         match self {
             Self::Storage(e) if e.is_not_found() => "not_found",
             Self::LLMRequest { .. } => "upstream_error",
+            Self::ToolExecution(_) => "tool_execution_error",
             Self::InvalidRequest(_) | Self::ParseError(_) | Self::JsonError(_) => "invalid_request_error",
             _ => "server_error",
         }

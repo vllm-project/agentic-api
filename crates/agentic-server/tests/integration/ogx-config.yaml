@@ -1,0 +1,56 @@
+version: 2
+distro_name: agentic-api-test
+
+apis:
+  - inference
+  - files
+  - vector_io
+  - file_processors
+
+providers:
+  inference:
+    - provider_id: sentence-transformers
+      provider_type: inline::sentence-transformers
+      config:
+        trust_remote_code: true
+
+  files:
+    - provider_id: localfs
+      provider_type: inline::localfs
+      config:
+        storage_dir: /tmp/ogx-test/files
+        metadata_store:
+          table_name: files_metadata
+          backend: sql_default
+
+  vector_io:
+    - provider_id: faiss
+      provider_type: inline::faiss
+      config:
+        persistence:
+          namespace: vector_io::faiss
+          backend: kv_default
+
+  file_processors:
+    - provider_id: auto
+      provider_type: inline::auto
+      config: {}
+
+storage:
+  backends:
+    kv_default:
+      type: kv_sqlite
+      db_path: /tmp/ogx-test/kvstore.db
+    sql_default:
+      type: sql_sqlite
+      db_path: /tmp/ogx-test/sql_store.db
+  stores:
+    metadata:
+      namespace: registry
+      backend: kv_default
+    inference:
+      table_name: inference_store
+      backend: sql_default
+    vector_stores:
+      table_name: vector_store_metadata
+      backend: sql_default
