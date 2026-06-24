@@ -843,12 +843,181 @@ fn test_stateful_responses_branch_all_turns_parse() {
 // Cross-cassette: all stateful cassettes parse without error
 // ═══════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════
+// Tool-output-only turn: model responds autonomously with text
+// ═══════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_stateful_responses_tool_output_only_produces_text() {
+    let cassette = load_turn_cassette_from(MULTI_TURN_DIR, "responses_tool_calls_tool_output_only.yaml");
+    assert_eq!(cassette.turns.len(), 3);
+
+    // Turn 2 has tool output only (no user message) → model should produce text
+    let t2 = process_nonstreaming_turn(&cassette, 1, "openai/gpt-oss-20b");
+    let has_text = t2.iter().any(|item| matches!(item, OutputItem::Message(_)));
+    assert!(has_text, "tool-output-only turn should produce a text response");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Parallel tool calls (OpenAI only — gpt-4o reliably produces these)
+// ═══════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_openai_parallel_tool_calls() {
+    let cassette = load_turn_cassette_from(MULTI_TURN_DIR, "openai_responses_tool_calls_parallel.yaml");
+    assert_eq!(cassette.turns.len(), 3);
+
+    // Turn 1 should have 2 parallel function calls
+    let t1 = process_nonstreaming_turn(&cassette, 0, "gpt-4o");
+    let t1_names = get_function_call_names(&t1);
+    assert!(
+        t1_names.len() >= 2,
+        "parallel cassette turn 1 must have 2+ function calls, got: {t1_names:?}"
+    );
+    assert!(t1_names.contains(&"get_job_status".to_string()));
+    assert!(t1_names.contains(&"web_search".to_string()));
+}
+
+/// Verifies that the request input for turn 2 contains multiple `function_call_output`
+/// items (one per parallel call from turn 1).
+#[test]
+fn test_openai_parallel_tool_outputs_in_request() {
+    let cassette = load_turn_cassette_from(MULTI_TURN_DIR, "openai_responses_tool_calls_parallel.yaml");
+
+    let body2 = cassette.turns[1].request.as_mapping().unwrap();
+    let req2 = body2
+        .get(serde_yml::Value::String("body".into()))
+        .and_then(serde_yml::Value::as_mapping)
+        .unwrap();
+    let input2 = req2
+        .get(serde_yml::Value::String("input".into()))
+        .expect("turn 2 must have input");
+    let input_seq = input2.as_sequence().expect("turn 2 input must be a list");
+
+    let tool_outputs: Vec<_> = input_seq
+        .iter()
+        .filter(|item| {
+            item.as_mapping()
+                .and_then(|m| m.get(serde_yml::Value::String("type".into())))
+                .and_then(serde_yml::Value::as_str)
+                == Some("function_call_output")
+        })
+        .collect();
+
+    assert!(
+        tool_outputs.len() >= 2,
+        "turn 2 input must contain 2+ function_call_output items for parallel calls, got {}",
+        tool_outputs.len()
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// OpenAI cassettes: verify they parse identically to vLLM
+// (status is "completed" string, not null)
+// ═══════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_openai_3turn_parses_and_retains_context() {
+    let cassette = load_turn_cassette_from(MULTI_TURN_DIR, "openai_responses_tool_calls_3turn.yaml");
+    assert_eq!(cassette.turns.len(), 3);
+    assert_stateful_chaining(&cassette);
+
+    let t1 = process_nonstreaming_turn(&cassette, 0, "gpt-4o");
+    assert_eq!(get_function_call_names(&t1), vec!["get_job_status"]);
+
+    // Context retention: turn 2 says "that job"
+    let t2 = process_nonstreaming_turn(&cassette, 1, "gpt-4o");
+    let t2_args = get_first_fc_arguments(&t2);
+    assert!(
+        t2_args.contains("job-382"),
+        "OpenAI turn 2 must resolve 'that job' to job-382, got: {t2_args}"
+    );
+}
+
+#[test]
+fn test_openai_5turn_full_sequence() {
+    let cassette = load_turn_cassette_from(MULTI_TURN_DIR, "openai_responses_tool_calls_5turn.yaml");
+    assert_eq!(cassette.turns.len(), 5);
+    assert_stateful_chaining(&cassette);
+
+    let expected_tools = [
+        "get_job_status",
+        "get_error_logs",
+        "search_runbook",
+        "run_analysis",
+        "restart_job",
+    ];
+    for (i, expected) in expected_tools.iter().enumerate() {
+        let output = process_nonstreaming_turn(&cassette, i, "gpt-4o");
+        let names = get_function_call_names(&output);
+        assert_eq!(names.len(), 1, "OpenAI turn {} should call 1 tool", i + 1);
+        assert_eq!(&names[0], expected, "OpenAI turn {} should call {expected}", i + 1);
+    }
+}
+
+#[test]
+fn test_openai_streaming_3turn() {
+    let cassette = load_turn_cassette_from(MULTI_TURN_DIR, "openai_responses_tool_calls_3turn_streaming.yaml");
+    assert_eq!(cassette.turns.len(), 3);
+
+    for i in 0..3 {
+        let output = process_streaming_turn(&cassette, i, "gpt-4o");
+        assert!(
+            count_function_calls(&output) >= 1,
+            "OpenAI streaming turn {} must produce a function_call",
+            i + 1
+        );
+    }
+}
+
+#[test]
+fn test_openai_branch_divergence() {
+    let cassette = load_turn_cassette_from(MULTI_TURN_DIR, "openai_responses_tool_calls_branch.yaml");
+    assert_eq!(cassette.turns.len(), 3);
+
+    let body2 = cassette.turns[1].request.as_mapping().unwrap();
+    let req2 = body2
+        .get(serde_yml::Value::String("body".into()))
+        .and_then(serde_yml::Value::as_mapping)
+        .unwrap();
+    let prev2 = req2
+        .get(serde_yml::Value::String("previous_response_id".into()))
+        .and_then(serde_yml::Value::as_str)
+        .expect("turn 2 must have prev_id");
+
+    let body3 = cassette.turns[2].request.as_mapping().unwrap();
+    let req3 = body3
+        .get(serde_yml::Value::String("body".into()))
+        .and_then(serde_yml::Value::as_mapping)
+        .unwrap();
+    let prev3 = req3
+        .get(serde_yml::Value::String("previous_response_id".into()))
+        .and_then(serde_yml::Value::as_str)
+        .expect("turn 3 must have prev_id");
+
+    assert_eq!(
+        prev2, prev3,
+        "OpenAI branch: turn 3 must branch from turn 1 (same prev_id as turn 2)"
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Cross-cassette: ALL stateful cassettes parse without error
+// ═══════════════════════════════════════════════════════════════════
+
 #[test]
 fn test_all_stateful_cassettes_parse_without_error() {
     let nonstreaming = [
         "responses_tool_calls_3turn.yaml",
         "responses_tool_calls_5turn.yaml",
         "responses_tool_calls_branch.yaml",
+        "responses_tool_calls_parallel.yaml",
+        "responses_tool_calls_tool_output_only.yaml",
+        "openai_responses_tool_calls_3turn.yaml",
+        "openai_responses_tool_calls_5turn.yaml",
+        "openai_responses_tool_calls_branch.yaml",
+        "openai_responses_tool_calls_parallel.yaml",
+        "openai_responses_tool_calls_tool_output_only.yaml",
     ];
 
     for filename in &nonstreaming {
@@ -867,7 +1036,7 @@ fn test_all_stateful_cassettes_parse_without_error() {
                 i + 1,
                 result.err()
             );
-            let payload = result.unwrap().finalize("openai/gpt-oss-20b", None, None);
+            let payload = result.unwrap().finalize("gpt-4o", None, None);
             assert_eq!(
                 payload.status,
                 "completed",
@@ -877,7 +1046,10 @@ fn test_all_stateful_cassettes_parse_without_error() {
         }
     }
 
-    let streaming = ["responses_tool_calls_3turn_streaming.yaml"];
+    let streaming = [
+        "responses_tool_calls_3turn_streaming.yaml",
+        "openai_responses_tool_calls_3turn_streaming.yaml",
+    ];
     for filename in &streaming {
         let cassette = load_turn_cassette_from(MULTI_TURN_DIR, filename);
         for i in 0..cassette.turns.len() {
@@ -888,7 +1060,7 @@ fn test_all_stateful_cassettes_parse_without_error() {
                 i + 1
             );
             let acc = ResponseAccumulator::from_sse_lines(data_lines, None);
-            let payload = acc.finalize("openai/gpt-oss-20b", None, None);
+            let payload = acc.finalize("gpt-4o", None, None);
             assert_eq!(
                 payload.status,
                 "completed",

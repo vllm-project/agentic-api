@@ -4,7 +4,7 @@ turns:
     body:
       input: You are an SRE assistant. ETL pipeline job-382 failed overnight. What
         is its current status?
-      model: openai/gpt-oss-20b
+      model: gpt-4o
       store: true
       stream: false
       tool_choice: auto
@@ -129,6 +129,7 @@ turns:
         type: function
     headers:
       accept: '*/*'
+      authorization: Bearer ***
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
@@ -137,48 +138,49 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331372
+      billing:
+        payer: developer
+      completed_at: 1782331481
+      created_at: 1782331481
+      error: null
       frequency_penalty: 0.0
-      id: resp_9951741be0cfd0aa
+      id: resp_03fd10c22367f14c006a3c38590640819981d8e689417d6da2
       incomplete_details: null
-      input_messages: null
       instructions: null
-      kv_transfer_params: null
-      max_output_tokens: 3657
+      max_output_tokens: null
       max_tool_calls: null
-      metadata: null
-      model: openai/gpt-oss-20b
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
       object: response
       output:
-      - content:
-        - text: We should use get_job_status.
-          type: reasoning_text
-        encrypted_content: null
-        id: rs_b9b65102428a224d
-        status: null
-        summary: []
-        type: reasoning
       - arguments: '{"job_id":"job-382"}'
-        call_id: call_b9bae339250e867f
-        id: fc_b9bae339250e867f
+        call_id: call_KvqKd7Oqx9UM0kV4BIRAyLEi
+        id: fc_03fd10c22367f14c006a3c385990e481999a7ef70c7dd82761
         name: get_job_status
-        namespace: null
-        status: null
+        status: completed
         type: function_call
-      output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
       previous_response_id: null
-      prompt: null
-      reasoning: null
-      service_tier: auto
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
       status: completed
+      store: true
       temperature: 1.0
-      text: null
+      text:
+        format:
+          type: text
+        verbosity: medium
       tool_choice: auto
       tools:
-      - defer_loading: null
-        description: Query the pipeline orchestrator for a job's current state, metadata,
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
           and failure info.
         name: get_job_status
         parameters:
@@ -192,8 +194,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Fetch error logs and stack traces for a failed pipeline job.
+      - description: Fetch error logs and stack traces for a failed pipeline job.
         name: get_error_logs
         parameters:
           additionalProperties: false
@@ -219,8 +220,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Search internal operations runbooks for troubleshooting procedures.
+      - description: Search internal operations runbooks for troubleshooting procedures.
         name: search_runbook
         parameters:
           additionalProperties: false
@@ -237,8 +237,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Execute a Python analysis script in a sandboxed environment for
+      - description: Execute a Python analysis script in a sandboxed environment for
           log parsing or data inspection.
         name: run_analysis
         parameters:
@@ -256,8 +255,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Restart a failed pipeline job with optional configuration overrides.
+      - description: Restart a failed pipeline job with optional configuration overrides.
         name: restart_job
         parameters:
           additionalProperties: false
@@ -286,8 +284,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Search the public web for technical documentation, blog posts,
+      - description: Search the public web for technical documentation, blog posts,
           and known issues.
         name: web_search
         parameters:
@@ -301,26 +298,17 @@ turns:
           type: object
         strict: true
         type: function
-      top_logprobs: null
+      top_logprobs: 0
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 439
+        input_tokens: 358
         input_tokens_details:
-          cached_tokens: 432
-          cached_tokens_per_turn:
-          - 432
-          input_tokens_per_turn:
-          - 439
-        output_tokens: 35
+          cached_tokens: 0
+        output_tokens: 19
         output_tokens_details:
-          output_tokens_per_turn:
-          - 35
-          reasoning_tokens: 17
-          tool_output_tokens: 0
-          tool_output_tokens_per_turn:
-          - 0
-        total_tokens: 474
+          reasoning_tokens: 0
+        total_tokens: 377
       user: null
     headers:
       content-type: application/json
@@ -329,7 +317,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_b9bae339250e867f
+      - call_id: call_KvqKd7Oqx9UM0kV4BIRAyLEi
         output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
           "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
           31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
@@ -338,8 +326,8 @@ turns:
           20 entries.
         role: user
         type: message
-      model: openai/gpt-oss-20b
-      previous_response_id: resp_9951741be0cfd0aa
+      model: gpt-4o
+      previous_response_id: resp_03fd10c22367f14c006a3c38590640819981d8e689417d6da2
       store: true
       stream: false
       tool_choice: auto
@@ -464,6 +452,7 @@ turns:
         type: function
     headers:
       accept: '*/*'
+      authorization: Bearer ***
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
@@ -472,48 +461,49 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331372
+      billing:
+        payer: developer
+      completed_at: 1782331482
+      created_at: 1782331482
+      error: null
       frequency_penalty: 0.0
-      id: resp_a0d45c68cfdf0dc3
+      id: resp_03fd10c22367f14c006a3c3859dfe4819982720510863bf1fa
       incomplete_details: null
-      input_messages: null
       instructions: null
-      kv_transfer_params: null
-      max_output_tokens: 3497
+      max_output_tokens: null
       max_tool_calls: null
-      metadata: null
-      model: openai/gpt-oss-20b
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
       object: response
       output:
-      - content:
-        - text: Use get_error_logs.
-          type: reasoning_text
-        encrypted_content: null
-        id: rs_81a485924cbf2205
-        status: null
-        summary: []
-        type: reasoning
       - arguments: '{"job_id":"job-382","severity":"ERROR","max_entries":20}'
-        call_id: call_b2ab544b587ed933
-        id: fc_b2ab544b587ed933
+        call_id: call_LhB0vE8IH2AIMglFujcSYxwk
+        id: fc_03fd10c22367f14c006a3c385a9efc8199bc2db350998c1ea9
         name: get_error_logs
-        namespace: null
-        status: null
+        status: completed
         type: function_call
-      output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_9951741be0cfd0aa
-      prompt: null
-      reasoning: null
-      service_tier: auto
+      previous_response_id: resp_03fd10c22367f14c006a3c38590640819981d8e689417d6da2
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
       status: completed
+      store: true
       temperature: 1.0
-      text: null
+      text:
+        format:
+          type: text
+        verbosity: medium
       tool_choice: auto
       tools:
-      - defer_loading: null
-        description: Query the pipeline orchestrator for a job's current state, metadata,
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
           and failure info.
         name: get_job_status
         parameters:
@@ -527,8 +517,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Fetch error logs and stack traces for a failed pipeline job.
+      - description: Fetch error logs and stack traces for a failed pipeline job.
         name: get_error_logs
         parameters:
           additionalProperties: false
@@ -554,8 +543,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Search internal operations runbooks for troubleshooting procedures.
+      - description: Search internal operations runbooks for troubleshooting procedures.
         name: search_runbook
         parameters:
           additionalProperties: false
@@ -572,8 +560,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Execute a Python analysis script in a sandboxed environment for
+      - description: Execute a Python analysis script in a sandboxed environment for
           log parsing or data inspection.
         name: run_analysis
         parameters:
@@ -591,8 +578,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Restart a failed pipeline job with optional configuration overrides.
+      - description: Restart a failed pipeline job with optional configuration overrides.
         name: restart_job
         parameters:
           additionalProperties: false
@@ -621,8 +607,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Search the public web for technical documentation, blog posts,
+      - description: Search the public web for technical documentation, blog posts,
           and known issues.
         name: web_search
         parameters:
@@ -636,26 +621,17 @@ turns:
           type: object
         strict: true
         type: function
-      top_logprobs: null
+      top_logprobs: 0
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 599
+        input_tokens: 496
         input_tokens_details:
-          cached_tokens: 448
-          cached_tokens_per_turn:
-          - 448
-          input_tokens_per_turn:
-          - 599
-        output_tokens: 42
+          cached_tokens: 0
+        output_tokens: 28
         output_tokens_details:
-          output_tokens_per_turn:
-          - 42
-          reasoning_tokens: 24
-          tool_output_tokens: 0
-          tool_output_tokens_per_turn:
-          - 0
-        total_tokens: 641
+          reasoning_tokens: 0
+        total_tokens: 524
       user: null
     headers:
       content-type: application/json
@@ -664,7 +640,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_b2ab544b587ed933
+      - call_id: call_LhB0vE8IH2AIMglFujcSYxwk
         output: '[{"timestamp": "2024-01-15T03:22:09Z", "severity": "ERROR", "message":
           "OutOfMemoryError at stage ''transform'': heap space exhausted (31.2GB/32GB)",
           "stack_trace": "java.lang.OutOfMemoryError: Java heap space\n  at org.apache.spark.memory.TaskMemoryManager.allocatePage"},
@@ -679,8 +655,8 @@ turns:
           Max 5 results.
         role: user
         type: message
-      model: openai/gpt-oss-20b
-      previous_response_id: resp_a0d45c68cfdf0dc3
+      model: gpt-4o
+      previous_response_id: resp_03fd10c22367f14c006a3c3859dfe4819982720510863bf1fa
       store: true
       stream: false
       tool_choice: auto
@@ -805,6 +781,7 @@ turns:
         type: function
     headers:
       accept: '*/*'
+      authorization: Bearer ***
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
@@ -813,49 +790,49 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331372
+      billing:
+        payer: developer
+      completed_at: 1782331484
+      created_at: 1782331483
+      error: null
       frequency_penalty: 0.0
-      id: resp_942924910373a289
+      id: resp_03fd10c22367f14c006a3c385b44a48199af24641819516d31
       incomplete_details: null
-      input_messages: null
       instructions: null
-      kv_transfer_params: null
-      max_output_tokens: 3222
+      max_output_tokens: null
       max_tool_calls: null
-      metadata: null
-      model: openai/gpt-oss-20b
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
       object: response
       output:
-      - content:
-        - text: Use search_runbook.
-          type: reasoning_text
-        encrypted_content: null
-        id: rs_99598f9b7ee05702
-        status: null
-        summary: []
-        type: reasoning
-      - arguments: '{"query":"OutOfMemoryError transform stage spark partition 20
-          entries","max_results":5}'
-        call_id: call_bd3e5a22c5de5a46
-        id: fc_bd3e5a22c5de5a46
+      - arguments: '{"query":"OutOfMemoryError in ETL pipeline transform stage","max_results":5}'
+        call_id: call_Uuq0Gf92pAL1YAUEgnbr8p6B
+        id: fc_03fd10c22367f14c006a3c385c0a248199a0f952e077038d08
         name: search_runbook
-        namespace: null
-        status: null
+        status: completed
         type: function_call
-      output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_a0d45c68cfdf0dc3
-      prompt: null
-      reasoning: null
-      service_tier: auto
+      previous_response_id: resp_03fd10c22367f14c006a3c3859dfe4819982720510863bf1fa
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
       status: completed
+      store: true
       temperature: 1.0
-      text: null
+      text:
+        format:
+          type: text
+        verbosity: medium
       tool_choice: auto
       tools:
-      - defer_loading: null
-        description: Query the pipeline orchestrator for a job's current state, metadata,
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
           and failure info.
         name: get_job_status
         parameters:
@@ -869,8 +846,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Fetch error logs and stack traces for a failed pipeline job.
+      - description: Fetch error logs and stack traces for a failed pipeline job.
         name: get_error_logs
         parameters:
           additionalProperties: false
@@ -896,8 +872,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Search internal operations runbooks for troubleshooting procedures.
+      - description: Search internal operations runbooks for troubleshooting procedures.
         name: search_runbook
         parameters:
           additionalProperties: false
@@ -914,8 +889,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Execute a Python analysis script in a sandboxed environment for
+      - description: Execute a Python analysis script in a sandboxed environment for
           log parsing or data inspection.
         name: run_analysis
         parameters:
@@ -933,8 +907,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Restart a failed pipeline job with optional configuration overrides.
+      - description: Restart a failed pipeline job with optional configuration overrides.
         name: restart_job
         parameters:
           additionalProperties: false
@@ -963,8 +936,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Search the public web for technical documentation, blog posts,
+      - description: Search the public web for technical documentation, blog posts,
           and known issues.
         name: web_search
         parameters:
@@ -978,26 +950,17 @@ turns:
           type: object
         strict: true
         type: function
-      top_logprobs: null
+      top_logprobs: 0
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 874
+        input_tokens: 751
         input_tokens_details:
-          cached_tokens: 608
-          cached_tokens_per_turn:
-          - 608
-          input_tokens_per_turn:
-          - 874
-        output_tokens: 45
+          cached_tokens: 0
+        output_tokens: 30
         output_tokens_details:
-          output_tokens_per_turn:
-          - 45
-          reasoning_tokens: 27
-          tool_output_tokens: 0
-          tool_output_tokens_per_turn:
-          - 0
-        total_tokens: 919
+          reasoning_tokens: 0
+        total_tokens: 781
       user: null
     headers:
       content-type: application/json
@@ -1006,7 +969,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_bd3e5a22c5de5a46
+      - call_id: call_Uuq0Gf92pAL1YAUEgnbr8p6B
         output: '[{"title": "OOM Troubleshooting for ETL Pipelines", "path": "/runbooks/data-platform/oom-etl.md",
           "snippet": "When transform stage OOMs: 1) Check partition skew with get_partition_stats,
           2) Increase executor memory (default 32GB -> 64GB), 3) Enable adaptive query
@@ -1019,8 +982,8 @@ turns:
           ''increase memory to 64GB''}))'
         role: user
         type: message
-      model: openai/gpt-oss-20b
-      previous_response_id: resp_942924910373a289
+      model: gpt-4o
+      previous_response_id: resp_03fd10c22367f14c006a3c385b44a48199af24641819516d31
       store: true
       stream: false
       tool_choice: auto
@@ -1145,6 +1108,7 @@ turns:
         type: function
     headers:
       accept: '*/*'
+      authorization: Bearer ***
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
@@ -1153,50 +1117,51 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331373
+      billing:
+        payer: developer
+      completed_at: 1782331485
+      created_at: 1782331484
+      error: null
       frequency_penalty: 0.0
-      id: resp_ad167af2a228ea80
+      id: resp_03fd10c22367f14c006a3c385c88788199bfcfc70ff88ce28f
       incomplete_details: null
-      input_messages: null
       instructions: null
-      kv_transfer_params: null
-      max_output_tokens: 2980
+      max_output_tokens: null
       max_tool_calls: null
-      metadata: null
-      model: openai/gpt-oss-20b
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
       object: response
       output:
-      - content:
-        - text: We need to call run_analysis.
-          type: reasoning_text
-        encrypted_content: null
-        id: rs_a7f023b8835b666c
-        status: null
-        summary: []
-        type: reasoning
       - arguments: '{"code":"import json\nprint(json.dumps({''job'': ''job-382'',
           ''error'': ''OOM'', ''stage'': ''transform'', ''recommendation'': ''increase
           memory to 64GB''}))","timeout_seconds":30}'
-        call_id: call_9972b03347027652
-        id: fc_9972b03347027652
+        call_id: call_hy09mPn87sDCueIq8Mxd3JBo
+        id: fc_03fd10c22367f14c006a3c385d69c0819980fcbf225cde945f
         name: run_analysis
-        namespace: null
-        status: null
+        status: completed
         type: function_call
-      output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_942924910373a289
-      prompt: null
-      reasoning: null
-      service_tier: auto
+      previous_response_id: resp_03fd10c22367f14c006a3c385b44a48199af24641819516d31
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
       status: completed
+      store: true
       temperature: 1.0
-      text: null
+      text:
+        format:
+          type: text
+        verbosity: medium
       tool_choice: auto
       tools:
-      - defer_loading: null
-        description: Query the pipeline orchestrator for a job's current state, metadata,
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
           and failure info.
         name: get_job_status
         parameters:
@@ -1210,8 +1175,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Fetch error logs and stack traces for a failed pipeline job.
+      - description: Fetch error logs and stack traces for a failed pipeline job.
         name: get_error_logs
         parameters:
           additionalProperties: false
@@ -1237,8 +1201,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Search internal operations runbooks for troubleshooting procedures.
+      - description: Search internal operations runbooks for troubleshooting procedures.
         name: search_runbook
         parameters:
           additionalProperties: false
@@ -1255,8 +1218,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Execute a Python analysis script in a sandboxed environment for
+      - description: Execute a Python analysis script in a sandboxed environment for
           log parsing or data inspection.
         name: run_analysis
         parameters:
@@ -1274,8 +1236,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Restart a failed pipeline job with optional configuration overrides.
+      - description: Restart a failed pipeline job with optional configuration overrides.
         name: restart_job
         parameters:
           additionalProperties: false
@@ -1304,8 +1265,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Search the public web for technical documentation, blog posts,
+      - description: Search the public web for technical documentation, blog posts,
           and known issues.
         name: web_search
         parameters:
@@ -1319,26 +1279,17 @@ turns:
           type: object
         strict: true
         type: function
-      top_logprobs: null
+      top_logprobs: 0
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 1116
+        input_tokens: 972
         input_tokens_details:
-          cached_tokens: 880
-          cached_tokens_per_turn:
-          - 880
-          input_tokens_per_turn:
-          - 1116
-        output_tokens: 74
+          cached_tokens: 0
+        output_tokens: 58
         output_tokens_details:
-          output_tokens_per_turn:
-          - 74
-          reasoning_tokens: 57
-          tool_output_tokens: 0
-          tool_output_tokens_per_turn:
-          - 0
-        total_tokens: 1190
+          reasoning_tokens: 0
+        total_tokens: 1030
       user: null
     headers:
       content-type: application/json
@@ -1347,7 +1298,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_9972b03347027652
+      - call_id: call_hy09mPn87sDCueIq8Mxd3JBo
         output: '{"stdout": "Failed stage: transform, count: 2\nPattern: consistent
           OOM at partition-47 (2.1M rows)\nRecommendation: increase memory to 64GB
           or repartition", "stderr": "", "exit_code": 0, "duration_ms": 120}'
@@ -1356,8 +1307,8 @@ turns:
           high priority.
         role: user
         type: message
-      model: openai/gpt-oss-20b
-      previous_response_id: resp_ad167af2a228ea80
+      model: gpt-4o
+      previous_response_id: resp_03fd10c22367f14c006a3c385c88788199bfcfc70ff88ce28f
       store: true
       stream: false
       tool_choice: auto
@@ -1482,6 +1433,7 @@ turns:
         type: function
     headers:
       accept: '*/*'
+      authorization: Bearer ***
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
@@ -1490,48 +1442,49 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331373
+      billing:
+        payer: developer
+      completed_at: 1782331486
+      created_at: 1782331486
+      error: null
       frequency_penalty: 0.0
-      id: resp_ba8c42b503457f18
+      id: resp_03fd10c22367f14c006a3c385e0a38819983064ba1cbb83062
       incomplete_details: null
-      input_messages: null
       instructions: null
-      kv_transfer_params: null
-      max_output_tokens: 2808
+      max_output_tokens: null
       max_tool_calls: null
-      metadata: null
-      model: openai/gpt-oss-20b
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
       object: response
       output:
-      - content:
-        - text: Use restart_job.
-          type: reasoning_text
-        encrypted_content: null
-        id: rs_9a2415f2829c554b
-        status: null
-        summary: []
-        type: reasoning
       - arguments: '{"job_id":"job-382","memory_override_gb":64,"skip_completed_stages":true,"priority":"high"}'
-        call_id: call_945de04a969d9596
-        id: fc_945de04a969d9596
+        call_id: call_EgLYkmLEPhzgZl9drilwu1B7
+        id: fc_03fd10c22367f14c006a3c385eafa88199b729b7ba313d626c
         name: restart_job
-        namespace: null
-        status: null
+        status: completed
         type: function_call
-      output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_ad167af2a228ea80
-      prompt: null
-      reasoning: null
-      service_tier: auto
+      previous_response_id: resp_03fd10c22367f14c006a3c385c88788199bfcfc70ff88ce28f
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
       status: completed
+      store: true
       temperature: 1.0
-      text: null
+      text:
+        format:
+          type: text
+        verbosity: medium
       tool_choice: auto
       tools:
-      - defer_loading: null
-        description: Query the pipeline orchestrator for a job's current state, metadata,
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
           and failure info.
         name: get_job_status
         parameters:
@@ -1545,8 +1498,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Fetch error logs and stack traces for a failed pipeline job.
+      - description: Fetch error logs and stack traces for a failed pipeline job.
         name: get_error_logs
         parameters:
           additionalProperties: false
@@ -1572,8 +1524,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Search internal operations runbooks for troubleshooting procedures.
+      - description: Search internal operations runbooks for troubleshooting procedures.
         name: search_runbook
         parameters:
           additionalProperties: false
@@ -1590,8 +1541,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Execute a Python analysis script in a sandboxed environment for
+      - description: Execute a Python analysis script in a sandboxed environment for
           log parsing or data inspection.
         name: run_analysis
         parameters:
@@ -1609,8 +1559,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Restart a failed pipeline job with optional configuration overrides.
+      - description: Restart a failed pipeline job with optional configuration overrides.
         name: restart_job
         parameters:
           additionalProperties: false
@@ -1639,8 +1588,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Search the public web for technical documentation, blog posts,
+      - description: Search the public web for technical documentation, blog posts,
           and known issues.
         name: web_search
         parameters:
@@ -1654,26 +1602,17 @@ turns:
           type: object
         strict: true
         type: function
-      top_logprobs: null
+      top_logprobs: 0
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 1288
+        input_tokens: 1122
         input_tokens_details:
-          cached_tokens: 1120
-          cached_tokens_per_turn:
-          - 1120
-          input_tokens_per_turn:
-          - 1288
-        output_tokens: 49
+          cached_tokens: 0
+        output_tokens: 36
         output_tokens_details:
-          output_tokens_per_turn:
-          - 49
-          reasoning_tokens: 32
-          tool_output_tokens: 0
-          tool_output_tokens_per_turn:
-          - 0
-        total_tokens: 1337
+          reasoning_tokens: 0
+        total_tokens: 1158
       user: null
     headers:
       content-type: application/json

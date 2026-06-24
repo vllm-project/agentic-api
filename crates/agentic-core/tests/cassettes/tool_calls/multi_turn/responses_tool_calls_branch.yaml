@@ -136,9 +136,9 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782285929
+      created_at: 1782331392
       frequency_penalty: 0.0
-      id: resp_887f6295aa43fb96
+      id: resp_bcc40e72c8d9c69d
       incomplete_details: null
       input_messages: null
       instructions: null
@@ -153,13 +153,13 @@ turns:
         - text: We need to call get_job_status.
           type: reasoning_text
         encrypted_content: null
-        id: rs_91cfc91f69b6f252
+        id: rs_be52377bf2edcc74
         status: null
         summary: []
         type: reasoning
       - arguments: '{"job_id":"job-382"}'
-        call_id: call_9e471a12b0e01b14
-        id: fc_9e471a12b0e01b14
+        call_id: call_bb5389175f60b859
+        id: fc_bb5389175f60b859
         name: get_job_status
         namespace: null
         status: null
@@ -327,9 +327,17 @@ turns:
 - filename: t2
   request:
     body:
-      input: Get the error logs for that job with severity ERROR and max 10 entries.
+      input:
+      - call_id: call_bb5389175f60b859
+        output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
+          "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
+          31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
+        type: function_call_output
+      - content: Get the error logs for that job with severity ERROR and max 10 entries.
+        role: user
+        type: message
       model: openai/gpt-oss-20b
-      previous_response_id: resp_887f6295aa43fb96
+      previous_response_id: resp_bcc40e72c8d9c69d
       store: true
       stream: false
       tool_choice: auto
@@ -462,30 +470,30 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782285930
+      created_at: 1782331392
       frequency_penalty: 0.0
-      id: resp_bd929a6ae43e5ff9
+      id: resp_b6f737f9fa6c4cf8
       incomplete_details: null
       input_messages: null
       instructions: null
       kv_transfer_params: null
-      max_output_tokens: 3602
+      max_output_tokens: 3501
       max_tool_calls: null
       metadata: null
       model: openai/gpt-oss-20b
       object: response
       output:
       - content:
-        - text: Use get_error_logs.
+        - text: Call get_error_logs.
           type: reasoning_text
         encrypted_content: null
-        id: rs_825ec278d2c86186
+        id: rs_b726441da4677400
         status: null
         summary: []
         type: reasoning
       - arguments: '{"job_id":"job-382","severity":"ERROR","max_entries":10}'
-        call_id: call_80c557a803ad1d26
-        id: fc_80c557a803ad1d26
+        call_id: call_88a9e761caa65554
+        id: fc_88a9e761caa65554
         name: get_error_logs
         namespace: null
         status: null
@@ -493,7 +501,7 @@ turns:
       output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_887f6295aa43fb96
+      previous_response_id: resp_bcc40e72c8d9c69d
       prompt: null
       reasoning: null
       service_tier: auto
@@ -630,13 +638,13 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 494
+        input_tokens: 595
         input_tokens_details:
-          cached_tokens: 448
+          cached_tokens: 576
           cached_tokens_per_turn:
-          - 448
+          - 576
           input_tokens_per_turn:
-          - 494
+          - 595
         output_tokens: 42
         output_tokens_details:
           output_tokens_per_turn:
@@ -645,7 +653,7 @@ turns:
           tool_output_tokens: 0
           tool_output_tokens_per_turn:
           - 0
-        total_tokens: 536
+        total_tokens: 637
       user: null
     headers:
       content-type: application/json
@@ -653,10 +661,18 @@ turns:
 - filename: t3
   request:
     body:
-      input: Instead of investigating errors, search the runbook for how to increase
-        memory limits for ETL jobs. Max 3 results.
+      input:
+      - call_id: call_bb5389175f60b859
+        output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
+          "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
+          31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
+        type: function_call_output
+      - content: Instead of investigating errors, search the runbook for how to increase
+          memory limits for ETL jobs. Max 3 results.
+        role: user
+        type: message
       model: openai/gpt-oss-20b
-      previous_response_id: resp_887f6295aa43fb96
+      previous_response_id: resp_bcc40e72c8d9c69d
       store: true
       stream: false
       tool_choice: auto
@@ -789,30 +805,30 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782285930
+      created_at: 1782331393
       frequency_penalty: 0.0
-      id: resp_926736eebb257cfd
+      id: resp_991eab30a6ad96c8
       incomplete_details: null
       input_messages: null
       instructions: null
       kv_transfer_params: null
-      max_output_tokens: 3593
+      max_output_tokens: 3492
       max_tool_calls: null
       metadata: null
       model: openai/gpt-oss-20b
       object: response
       output:
       - content:
-        - text: We need runbook search.
+        - text: We need to call search_runbook.
           type: reasoning_text
         encrypted_content: null
-        id: rs_8f6c080dca467649
+        id: rs_978d79d63851ced6
         status: null
         summary: []
         type: reasoning
-      - arguments: '{"query":"increase memory limits for ETL jobs","max_results":3}'
-        call_id: call_815e8956def890df
-        id: fc_815e8956def890df
+      - arguments: '{"query":"increase memory limits for ETL jobs runbook","max_results":3}'
+        call_id: call_9339bb4ac308c0fc
+        id: fc_9339bb4ac308c0fc
         name: search_runbook
         namespace: null
         status: null
@@ -820,7 +836,7 @@ turns:
       output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_887f6295aa43fb96
+      previous_response_id: resp_bcc40e72c8d9c69d
       prompt: null
       reasoning: null
       service_tier: auto
@@ -957,22 +973,22 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 503
+        input_tokens: 604
         input_tokens_details:
-          cached_tokens: 464
+          cached_tokens: 576
           cached_tokens_per_turn:
-          - 464
+          - 576
           input_tokens_per_turn:
-          - 503
-        output_tokens: 42
+          - 604
+        output_tokens: 46
         output_tokens_details:
           output_tokens_per_turn:
-          - 42
-          reasoning_tokens: 24
+          - 46
+          reasoning_tokens: 28
           tool_output_tokens: 0
           tool_output_tokens_per_turn:
           - 0
-        total_tokens: 545
+        total_tokens: 650
       user: null
     headers:
       content-type: application/json

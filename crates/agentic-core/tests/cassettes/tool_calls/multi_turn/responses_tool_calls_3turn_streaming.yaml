@@ -140,7 +140,7 @@ turns:
     - 'event: response.created
 
       '
-    - 'data: {"response":{"id":"resp_84fc22eb02e37767","created_at":1782285919,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+    - 'data: {"response":{"id":"resp_ac3c1315a91f31a2","created_at":1782331382,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
       job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Query
       the pipeline orchestrator for a job''s current state, metadata, and failure
       info."},{"name":"get_error_logs","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
@@ -170,7 +170,7 @@ turns:
     - 'event: response.in_progress
 
       '
-    - 'data: {"response":{"id":"resp_84fc22eb02e37767","created_at":1782285919,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+    - 'data: {"response":{"id":"resp_ac3c1315a91f31a2","created_at":1782331382,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
       job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Query
       the pipeline orchestrator for a job''s current state, metadata, and failure
       info."},{"name":"get_error_logs","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
@@ -200,7 +200,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"item":{"id":"msg_9f8f443f3d36c276","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
+    - 'data: {"item":{"id":"msg_b13a0755fc859b6a","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
 
       '
     - '
@@ -209,7 +209,7 @@ turns:
     - 'event: response.reasoning_part.added
 
       '
-    - 'data: {"content_index":0,"item_id":"msg_9f8f443f3d36c276","output_index":0,"part":{"text":"","type":"reasoning_text"},"sequence_number":3,"type":"response.reasoning_part.added"}
+    - 'data: {"content_index":0,"item_id":"msg_b13a0755fc859b6a","output_index":0,"part":{"text":"","type":"reasoning_text"},"sequence_number":3,"type":"response.reasoning_part.added"}
 
       '
     - '
@@ -218,7 +218,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":"We","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":4,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"We","item_id":"msg_b13a0755fc859b6a","output_index":0,"sequence_number":4,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -227,7 +227,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" need","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":5,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" need","item_id":"msg_b13a0755fc859b6a","output_index":0,"sequence_number":5,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -236,7 +236,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" to","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":6,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" to","item_id":"msg_b13a0755fc859b6a","output_index":0,"sequence_number":6,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -245,7 +245,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" query","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":7,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" call","item_id":"msg_b13a0755fc859b6a","output_index":0,"sequence_number":7,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -254,7 +254,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" pipeline","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":8,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" get","item_id":"msg_b13a0755fc859b6a","output_index":0,"sequence_number":8,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -263,7 +263,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" orchestr","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":9,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"_job","item_id":"msg_b13a0755fc859b6a","output_index":0,"sequence_number":9,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -272,7 +272,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":"ator","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":10,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"_status","item_id":"msg_b13a0755fc859b6a","output_index":0,"sequence_number":10,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -281,7 +281,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" for","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":11,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" with","item_id":"msg_b13a0755fc859b6a","output_index":0,"sequence_number":11,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -290,7 +290,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" job","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":12,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" job","item_id":"msg_b13a0755fc859b6a","output_index":0,"sequence_number":12,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -299,7 +299,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":"-","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":13,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"_id","item_id":"msg_b13a0755fc859b6a","output_index":0,"sequence_number":13,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -308,7 +308,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":"382","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":14,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":":","item_id":"msg_b13a0755fc859b6a","output_index":0,"sequence_number":14,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -317,7 +317,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":".","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":15,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" \"","item_id":"msg_b13a0755fc859b6a","output_index":0,"sequence_number":15,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -326,7 +326,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" Use","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":16,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"job","item_id":"msg_b13a0755fc859b6a","output_index":0,"sequence_number":16,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -335,7 +335,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" functions","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":17,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"-","item_id":"msg_b13a0755fc859b6a","output_index":0,"sequence_number":17,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -344,7 +344,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":".get","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":18,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"382","item_id":"msg_b13a0755fc859b6a","output_index":0,"sequence_number":18,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -353,25 +353,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":"_job","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":19,"type":"response.reasoning_text.delta"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"content_index":0,"delta":"_status","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":20,"type":"response.reasoning_text.delta"}
-
-      '
-    - '
-
-      '
-    - 'event: response.reasoning_text.delta
-
-      '
-    - 'data: {"content_index":0,"delta":".","item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":21,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"\".","item_id":"msg_b13a0755fc859b6a","output_index":0,"sequence_number":19,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -380,8 +362,8 @@ turns:
     - 'event: response.reasoning_text.done
 
       '
-    - 'data: {"content_index":0,"item_id":"msg_9f8f443f3d36c276","output_index":0,"sequence_number":22,"text":"We
-      need to query pipeline orchestrator for job-382. Use functions.get_job_status.","type":"response.reasoning_text.done"}
+    - 'data: {"content_index":0,"item_id":"msg_b13a0755fc859b6a","output_index":0,"sequence_number":20,"text":"We
+      need to call get_job_status with job_id: \"job-382\".","type":"response.reasoning_text.done"}
 
       '
     - '
@@ -390,8 +372,8 @@ turns:
     - 'event: response.reasoning_part.done
 
       '
-    - 'data: {"content_index":0,"item_id":"msg_9f8f443f3d36c276","output_index":0,"part":{"text":"We
-      need to query pipeline orchestrator for job-382. Use functions.get_job_status.","type":"reasoning_text"},"sequence_number":23,"type":"response.reasoning_part.done"}
+    - 'data: {"content_index":0,"item_id":"msg_b13a0755fc859b6a","output_index":0,"part":{"text":"We
+      need to call get_job_status with job_id: \"job-382\".","type":"reasoning_text"},"sequence_number":21,"type":"response.reasoning_part.done"}
 
       '
     - '
@@ -400,8 +382,8 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"item":{"id":"msg_9f8f443f3d36c276","summary":[],"type":"reasoning","content":[{"text":"We
-      need to query pipeline orchestrator for job-382. Use functions.get_job_status.","type":"reasoning_text"}],"encrypted_content":null,"status":"completed"},"output_index":0,"sequence_number":24,"type":"response.output_item.done"}
+    - 'data: {"item":{"id":"msg_b13a0755fc859b6a","summary":[],"type":"reasoning","content":[{"text":"We
+      need to call get_job_status with job_id: \"job-382\".","type":"reasoning_text"}],"encrypted_content":null,"status":"completed"},"output_index":0,"sequence_number":22,"type":"response.output_item.done"}
 
       '
     - '
@@ -410,7 +392,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"item":{"arguments":"","call_id":"call_bfdbcf3562684b32","name":"get_job_status","type":"function_call","id":"fc_a7e910a365eca0be","namespace":null,"status":"in_progress"},"output_index":1,"sequence_number":25,"type":"response.output_item.added"}
+    - 'data: {"item":{"arguments":"","call_id":"call_be4f9dfe0052d170","name":"get_job_status","type":"function_call","id":"fc_820d82db029349a4","namespace":null,"status":"in_progress"},"output_index":1,"sequence_number":23,"type":"response.output_item.added"}
 
       '
     - '
@@ -419,7 +401,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"{\"","item_id":"fc_a7e910a365eca0be","output_index":1,"sequence_number":26,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"{\"","item_id":"fc_820d82db029349a4","output_index":1,"sequence_number":24,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -428,7 +410,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"job","item_id":"fc_a7e910a365eca0be","output_index":1,"sequence_number":27,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"job","item_id":"fc_820d82db029349a4","output_index":1,"sequence_number":25,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -437,7 +419,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"_id","item_id":"fc_a7e910a365eca0be","output_index":1,"sequence_number":28,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"_id","item_id":"fc_820d82db029349a4","output_index":1,"sequence_number":26,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -446,7 +428,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"\":\"","item_id":"fc_a7e910a365eca0be","output_index":1,"sequence_number":29,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"\":\"","item_id":"fc_820d82db029349a4","output_index":1,"sequence_number":27,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -455,7 +437,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"job","item_id":"fc_a7e910a365eca0be","output_index":1,"sequence_number":30,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"job","item_id":"fc_820d82db029349a4","output_index":1,"sequence_number":28,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -464,7 +446,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"-","item_id":"fc_a7e910a365eca0be","output_index":1,"sequence_number":31,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"-","item_id":"fc_820d82db029349a4","output_index":1,"sequence_number":29,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -473,7 +455,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"382","item_id":"fc_a7e910a365eca0be","output_index":1,"sequence_number":32,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"382","item_id":"fc_820d82db029349a4","output_index":1,"sequence_number":30,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -482,7 +464,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"\"}","item_id":"fc_a7e910a365eca0be","output_index":1,"sequence_number":33,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"\"}","item_id":"fc_820d82db029349a4","output_index":1,"sequence_number":31,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -491,7 +473,7 @@ turns:
     - 'event: response.function_call_arguments.done
 
       '
-    - 'data: {"arguments":"{\"job_id\":\"job-382\"}","item_id":"fc_a7e910a365eca0be","name":"get_job_status","output_index":1,"sequence_number":34,"type":"response.function_call_arguments.done"}
+    - 'data: {"arguments":"{\"job_id\":\"job-382\"}","item_id":"fc_820d82db029349a4","name":"get_job_status","output_index":1,"sequence_number":32,"type":"response.function_call_arguments.done"}
 
       '
     - '
@@ -500,7 +482,7 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"item":{"arguments":"{\"job_id\":\"job-382\"}","call_id":"call_bfdbcf3562684b32","name":"get_job_status","type":"function_call","id":null,"namespace":null,"status":"completed","item_id":"fc_a7e910a365eca0be","output_index":1,"sequence_number":-1},"output_index":1,"sequence_number":35,"type":"response.output_item.done"}
+    - 'data: {"item":{"arguments":"{\"job_id\":\"job-382\"}","call_id":"call_be4f9dfe0052d170","name":"get_job_status","type":"function_call","id":null,"namespace":null,"status":"completed","item_id":"fc_820d82db029349a4","output_index":1,"sequence_number":-1},"output_index":1,"sequence_number":33,"type":"response.output_item.done"}
 
       '
     - '
@@ -509,8 +491,8 @@ turns:
     - 'event: response.completed
 
       '
-    - 'data: {"response":{"id":"resp_84fc22eb02e37767","created_at":1782285919,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[{"id":"rs_b20f9cf797c0fb6d","summary":[],"type":"reasoning","content":[{"text":"We
-      need to query pipeline orchestrator for job-382. Use functions.get_job_status.","type":"reasoning_text"}],"encrypted_content":null,"status":null},{"arguments":"{\"job_id\":\"job-382\"}","call_id":"call_814e8f02d1cc07ae","name":"get_job_status","type":"function_call","id":"fc_814e8f02d1cc07ae","namespace":null,"status":null}],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+    - 'data: {"response":{"id":"resp_ac3c1315a91f31a2","created_at":1782331382,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[{"id":"rs_b661a3bbd2228d16","summary":[],"type":"reasoning","content":[{"text":"We
+      need to call get_job_status with job_id: \"job-382\".","type":"reasoning_text"}],"encrypted_content":null,"status":null},{"arguments":"{\"job_id\":\"job-382\"}","call_id":"call_8ce70f6987366936","name":"get_job_status","type":"function_call","id":"fc_8ce70f6987366936","namespace":null,"status":null}],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
       job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Query
       the pipeline orchestrator for a job''s current state, metadata, and failure
       info."},{"name":"get_error_logs","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
@@ -531,7 +513,7 @@ turns:
       priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Restart
       a failed pipeline job with optional configuration overrides."},{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
       query"}},"required":["query"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Search
-      the public web for technical documentation, blog posts, and known issues."}],"top_p":1.0,"background":false,"max_output_tokens":3663,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"completed","text":null,"top_logprobs":null,"truncation":"disabled","usage":{"input_tokens":433,"input_tokens_details":{"cached_tokens":432,"input_tokens_per_turn":[433],"cached_tokens_per_turn":[432]},"output_tokens":46,"output_tokens_details":{"reasoning_tokens":28,"tool_output_tokens":0,"output_tokens_per_turn":[46],"tool_output_tokens_per_turn":[0]},"total_tokens":479},"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":36,"type":"response.completed"}
+      the public web for technical documentation, blog posts, and known issues."}],"top_p":1.0,"background":false,"max_output_tokens":3663,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"completed","text":null,"top_logprobs":null,"truncation":"disabled","usage":{"input_tokens":433,"input_tokens_details":{"cached_tokens":432,"input_tokens_per_turn":[433],"cached_tokens_per_turn":[432]},"output_tokens":44,"output_tokens_details":{"reasoning_tokens":26,"tool_output_tokens":0,"output_tokens_per_turn":[44],"tool_output_tokens_per_turn":[0]},"total_tokens":477},"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":34,"type":"response.completed"}
 
       '
     - '
@@ -541,9 +523,17 @@ turns:
 - filename: t2
   request:
     body:
-      input: Get the error logs for that job with severity FATAL and max 5 entries.
+      input:
+      - call_id: call_8ce70f6987366936
+        output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
+          "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
+          31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
+        type: function_call_output
+      - content: Get the error logs for that job with severity FATAL and max 5 entries.
+        role: user
+        type: message
       model: openai/gpt-oss-20b
-      previous_response_id: resp_84fc22eb02e37767
+      previous_response_id: resp_ac3c1315a91f31a2
       store: true
       stream: true
       tool_choice: auto
@@ -680,7 +670,7 @@ turns:
     - 'event: response.created
 
       '
-    - 'data: {"response":{"id":"resp_bc7651309b00838d","created_at":1782285919,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+    - 'data: {"response":{"id":"resp_8f993b44ca8e52e3","created_at":1782331383,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
       job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Query
       the pipeline orchestrator for a job''s current state, metadata, and failure
       info."},{"name":"get_error_logs","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
@@ -701,7 +691,7 @@ turns:
       priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Restart
       a failed pipeline job with optional configuration overrides."},{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
       query"}},"required":["query"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Search
-      the public web for technical documentation, blog posts, and known issues."}],"top_p":1.0,"background":false,"max_output_tokens":3594,"max_tool_calls":null,"previous_response_id":"resp_84fc22eb02e37767","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":0,"type":"response.created"}
+      the public web for technical documentation, blog posts, and known issues."}],"top_p":1.0,"background":false,"max_output_tokens":3495,"max_tool_calls":null,"previous_response_id":"resp_ac3c1315a91f31a2","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":0,"type":"response.created"}
 
       '
     - '
@@ -710,7 +700,7 @@ turns:
     - 'event: response.in_progress
 
       '
-    - 'data: {"response":{"id":"resp_bc7651309b00838d","created_at":1782285919,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+    - 'data: {"response":{"id":"resp_8f993b44ca8e52e3","created_at":1782331383,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
       job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Query
       the pipeline orchestrator for a job''s current state, metadata, and failure
       info."},{"name":"get_error_logs","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
@@ -731,7 +721,7 @@ turns:
       priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Restart
       a failed pipeline job with optional configuration overrides."},{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
       query"}},"required":["query"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Search
-      the public web for technical documentation, blog posts, and known issues."}],"top_p":1.0,"background":false,"max_output_tokens":3594,"max_tool_calls":null,"previous_response_id":"resp_84fc22eb02e37767","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":1,"type":"response.in_progress"}
+      the public web for technical documentation, blog posts, and known issues."}],"top_p":1.0,"background":false,"max_output_tokens":3495,"max_tool_calls":null,"previous_response_id":"resp_ac3c1315a91f31a2","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":1,"type":"response.in_progress"}
 
       '
     - '
@@ -740,7 +730,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"item":{"id":"msg_a4d66d1800b6b304","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
+    - 'data: {"item":{"id":"msg_85bbe0941f1ebf9d","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
 
       '
     - '
@@ -749,7 +739,7 @@ turns:
     - 'event: response.reasoning_part.added
 
       '
-    - 'data: {"content_index":0,"item_id":"msg_a4d66d1800b6b304","output_index":0,"part":{"text":"","type":"reasoning_text"},"sequence_number":3,"type":"response.reasoning_part.added"}
+    - 'data: {"content_index":0,"item_id":"msg_85bbe0941f1ebf9d","output_index":0,"part":{"text":"","type":"reasoning_text"},"sequence_number":3,"type":"response.reasoning_part.added"}
 
       '
     - '
@@ -758,7 +748,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":"Call","item_id":"msg_a4d66d1800b6b304","output_index":0,"sequence_number":4,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"Need","item_id":"msg_85bbe0941f1ebf9d","output_index":0,"sequence_number":4,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -767,7 +757,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" get","item_id":"msg_a4d66d1800b6b304","output_index":0,"sequence_number":5,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" get","item_id":"msg_85bbe0941f1ebf9d","output_index":0,"sequence_number":5,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -776,7 +766,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":"_error","item_id":"msg_a4d66d1800b6b304","output_index":0,"sequence_number":6,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"_error","item_id":"msg_85bbe0941f1ebf9d","output_index":0,"sequence_number":6,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -785,7 +775,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":"_logs","item_id":"msg_a4d66d1800b6b304","output_index":0,"sequence_number":7,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"_logs","item_id":"msg_85bbe0941f1ebf9d","output_index":0,"sequence_number":7,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -794,7 +784,16 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":".","item_id":"msg_a4d66d1800b6b304","output_index":0,"sequence_number":8,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" function","item_id":"msg_85bbe0941f1ebf9d","output_index":0,"sequence_number":8,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":".","item_id":"msg_85bbe0941f1ebf9d","output_index":0,"sequence_number":9,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -803,8 +802,8 @@ turns:
     - 'event: response.reasoning_text.done
 
       '
-    - 'data: {"content_index":0,"item_id":"msg_a4d66d1800b6b304","output_index":0,"sequence_number":9,"text":"Call
-      get_error_logs.","type":"response.reasoning_text.done"}
+    - 'data: {"content_index":0,"item_id":"msg_85bbe0941f1ebf9d","output_index":0,"sequence_number":10,"text":"Need
+      get_error_logs function.","type":"response.reasoning_text.done"}
 
       '
     - '
@@ -813,8 +812,8 @@ turns:
     - 'event: response.reasoning_part.done
 
       '
-    - 'data: {"content_index":0,"item_id":"msg_a4d66d1800b6b304","output_index":0,"part":{"text":"Call
-      get_error_logs.","type":"reasoning_text"},"sequence_number":10,"type":"response.reasoning_part.done"}
+    - 'data: {"content_index":0,"item_id":"msg_85bbe0941f1ebf9d","output_index":0,"part":{"text":"Need
+      get_error_logs function.","type":"reasoning_text"},"sequence_number":11,"type":"response.reasoning_part.done"}
 
       '
     - '
@@ -823,8 +822,8 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"item":{"id":"msg_a4d66d1800b6b304","summary":[],"type":"reasoning","content":[{"text":"Call
-      get_error_logs.","type":"reasoning_text"}],"encrypted_content":null,"status":"completed"},"output_index":0,"sequence_number":11,"type":"response.output_item.done"}
+    - 'data: {"item":{"id":"msg_85bbe0941f1ebf9d","summary":[],"type":"reasoning","content":[{"text":"Need
+      get_error_logs function.","type":"reasoning_text"}],"encrypted_content":null,"status":"completed"},"output_index":0,"sequence_number":12,"type":"response.output_item.done"}
 
       '
     - '
@@ -833,7 +832,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"item":{"arguments":"","call_id":"call_a7b9ccec2aceeeac","name":"get_error_logs","type":"function_call","id":"fc_bd0b870ba5f84b7f","namespace":null,"status":"in_progress"},"output_index":1,"sequence_number":12,"type":"response.output_item.added"}
+    - 'data: {"item":{"arguments":"","call_id":"call_a12afd5ebc0e5edd","name":"get_error_logs","type":"function_call","id":"fc_b5165a0ca873fb55","namespace":null,"status":"in_progress"},"output_index":1,"sequence_number":13,"type":"response.output_item.added"}
 
       '
     - '
@@ -842,7 +841,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"{\"","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":13,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"{\"","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":14,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -851,7 +850,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"job","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":14,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"job","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":15,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -860,7 +859,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"_id","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":15,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"_id","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":16,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -869,7 +868,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"\":\"","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":16,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"\":\"","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":17,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -878,7 +877,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"job","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":17,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"job","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":18,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -887,7 +886,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"-","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":18,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"-","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":19,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -896,7 +895,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"382","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":19,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"382","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":20,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -905,7 +904,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"\",\"","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":20,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"\",\"","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":21,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -914,7 +913,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"severity","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":21,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"severity","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":22,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -923,7 +922,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"\":\"","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":22,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"\":\"","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":23,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -932,7 +931,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"F","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":23,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"F","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":24,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -941,7 +940,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"ATAL","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":24,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"ATAL","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":25,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -950,7 +949,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"\",\"","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":25,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"\",\"","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":26,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -959,7 +958,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"max","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":26,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"max","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":27,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -968,7 +967,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"_entries","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":27,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"_entries","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":28,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -977,7 +976,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"\":","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":28,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"\":","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":29,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -986,7 +985,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"5","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":29,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"5","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":30,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -995,7 +994,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"}","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":30,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"}","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":31,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -1004,7 +1003,7 @@ turns:
     - 'event: response.function_call_arguments.done
 
       '
-    - 'data: {"arguments":"{\"job_id\":\"job-382\",\"severity\":\"FATAL\",\"max_entries\":5}","item_id":"fc_bd0b870ba5f84b7f","name":"get_error_logs","output_index":1,"sequence_number":31,"type":"response.function_call_arguments.done"}
+    - 'data: {"arguments":"{\"job_id\":\"job-382\",\"severity\":\"FATAL\",\"max_entries\":5}","item_id":"fc_b5165a0ca873fb55","name":"get_error_logs","output_index":1,"sequence_number":32,"type":"response.function_call_arguments.done"}
 
       '
     - '
@@ -1013,7 +1012,7 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"item":{"arguments":"{\"job_id\":\"job-382\",\"severity\":\"FATAL\",\"max_entries\":5}","call_id":"call_a7b9ccec2aceeeac","name":"get_error_logs","type":"function_call","id":null,"namespace":null,"status":"completed","item_id":"fc_bd0b870ba5f84b7f","output_index":1,"sequence_number":-1},"output_index":1,"sequence_number":32,"type":"response.output_item.done"}
+    - 'data: {"item":{"arguments":"{\"job_id\":\"job-382\",\"severity\":\"FATAL\",\"max_entries\":5}","call_id":"call_a12afd5ebc0e5edd","name":"get_error_logs","type":"function_call","id":null,"namespace":null,"status":"completed","item_id":"fc_b5165a0ca873fb55","output_index":1,"sequence_number":-1},"output_index":1,"sequence_number":33,"type":"response.output_item.done"}
 
       '
     - '
@@ -1022,8 +1021,8 @@ turns:
     - 'event: response.completed
 
       '
-    - 'data: {"response":{"id":"resp_bc7651309b00838d","created_at":1782285919,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[{"id":"rs_811e7867685d357b","summary":[],"type":"reasoning","content":[{"text":"Call
-      get_error_logs.","type":"reasoning_text"}],"encrypted_content":null,"status":null},{"arguments":"{\"job_id\":\"job-382\",\"severity\":\"FATAL\",\"max_entries\":5}","call_id":"call_b7430f4eccc1208e","name":"get_error_logs","type":"function_call","id":"fc_b7430f4eccc1208e","namespace":null,"status":null}],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+    - 'data: {"response":{"id":"resp_8f993b44ca8e52e3","created_at":1782331383,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[{"id":"rs_ac77fd030765f30a","summary":[],"type":"reasoning","content":[{"text":"Need
+      get_error_logs function.","type":"reasoning_text"}],"encrypted_content":null,"status":null},{"arguments":"{\"job_id\":\"job-382\",\"severity\":\"FATAL\",\"max_entries\":5}","call_id":"call_82bf682ac0599fd9","name":"get_error_logs","type":"function_call","id":"fc_82bf682ac0599fd9","namespace":null,"status":null}],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
       job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Query
       the pipeline orchestrator for a job''s current state, metadata, and failure
       info."},{"name":"get_error_logs","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
@@ -1044,7 +1043,7 @@ turns:
       priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Restart
       a failed pipeline job with optional configuration overrides."},{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
       query"}},"required":["query"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Search
-      the public web for technical documentation, blog posts, and known issues."}],"top_p":1.0,"background":false,"max_output_tokens":3594,"max_tool_calls":null,"previous_response_id":"resp_84fc22eb02e37767","prompt":null,"reasoning":null,"service_tier":"auto","status":"completed","text":null,"top_logprobs":null,"truncation":"disabled","usage":{"input_tokens":502,"input_tokens_details":{"cached_tokens":448,"input_tokens_per_turn":[502],"cached_tokens_per_turn":[448]},"output_tokens":43,"output_tokens_details":{"reasoning_tokens":25,"tool_output_tokens":0,"output_tokens_per_turn":[43],"tool_output_tokens_per_turn":[0]},"total_tokens":545},"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":33,"type":"response.completed"}
+      the public web for technical documentation, blog posts, and known issues."}],"top_p":1.0,"background":false,"max_output_tokens":3495,"max_tool_calls":null,"previous_response_id":"resp_ac3c1315a91f31a2","prompt":null,"reasoning":null,"service_tier":"auto","status":"completed","text":null,"top_logprobs":null,"truncation":"disabled","usage":{"input_tokens":601,"input_tokens_details":{"cached_tokens":448,"input_tokens_per_turn":[601],"cached_tokens_per_turn":[448]},"output_tokens":44,"output_tokens_details":{"reasoning_tokens":26,"tool_output_tokens":0,"output_tokens_per_turn":[44],"tool_output_tokens_per_turn":[0]},"total_tokens":645},"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":34,"type":"response.completed"}
 
       '
     - '
@@ -1054,9 +1053,23 @@ turns:
 - filename: t3
   request:
     body:
-      input: Search the web for how to fix that type of error in Spark pipelines.
+      input:
+      - call_id: call_82bf682ac0599fd9
+        output: '[{"timestamp": "2024-01-15T03:22:09Z", "severity": "ERROR", "message":
+          "OutOfMemoryError at stage ''transform'': heap space exhausted (31.2GB/32GB)",
+          "stack_trace": "java.lang.OutOfMemoryError: Java heap space\n  at org.apache.spark.memory.TaskMemoryManager.allocatePage"},
+          {"timestamp": "2024-01-15T03:22:10Z", "severity": "ERROR", "message": "Task
+          failed: transform-partition-47 OOM after processing 2.1M rows", "stack_trace":
+          "org.apache.spark.SparkException: Task failed while writing rows"}, {"timestamp":
+          "2024-01-15T03:22:11Z", "severity": "ERROR", "message": "Job job-382 marked
+          FAILED after 3 consecutive OOM errors in transform stage", "stack_trace":
+          null}]'
+        type: function_call_output
+      - content: Search the web for how to fix that type of error in Spark pipelines.
+        role: user
+        type: message
       model: openai/gpt-oss-20b
-      previous_response_id: resp_bc7651309b00838d
+      previous_response_id: resp_8f993b44ca8e52e3
       store: true
       stream: true
       tool_choice: auto
@@ -1193,7 +1206,7 @@ turns:
     - 'event: response.created
 
       '
-    - 'data: {"response":{"id":"resp_94ce25968dc3b4f4","created_at":1782285920,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+    - 'data: {"response":{"id":"resp_8d9428f89b5bbe23","created_at":1782331383,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
       job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Query
       the pipeline orchestrator for a job''s current state, metadata, and failure
       info."},{"name":"get_error_logs","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
@@ -1214,7 +1227,7 @@ turns:
       priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Restart
       a failed pipeline job with optional configuration overrides."},{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
       query"}},"required":["query"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Search
-      the public web for technical documentation, blog posts, and known issues."}],"top_p":1.0,"background":false,"max_output_tokens":3530,"max_tool_calls":null,"previous_response_id":"resp_bc7651309b00838d","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":0,"type":"response.created"}
+      the public web for technical documentation, blog posts, and known issues."}],"top_p":1.0,"background":false,"max_output_tokens":3223,"max_tool_calls":null,"previous_response_id":"resp_8f993b44ca8e52e3","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":0,"type":"response.created"}
 
       '
     - '
@@ -1223,7 +1236,7 @@ turns:
     - 'event: response.in_progress
 
       '
-    - 'data: {"response":{"id":"resp_94ce25968dc3b4f4","created_at":1782285920,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+    - 'data: {"response":{"id":"resp_8d9428f89b5bbe23","created_at":1782331383,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
       job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Query
       the pipeline orchestrator for a job''s current state, metadata, and failure
       info."},{"name":"get_error_logs","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
@@ -1244,7 +1257,7 @@ turns:
       priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Restart
       a failed pipeline job with optional configuration overrides."},{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
       query"}},"required":["query"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Search
-      the public web for technical documentation, blog posts, and known issues."}],"top_p":1.0,"background":false,"max_output_tokens":3530,"max_tool_calls":null,"previous_response_id":"resp_bc7651309b00838d","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":1,"type":"response.in_progress"}
+      the public web for technical documentation, blog posts, and known issues."}],"top_p":1.0,"background":false,"max_output_tokens":3223,"max_tool_calls":null,"previous_response_id":"resp_8f993b44ca8e52e3","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":1,"type":"response.in_progress"}
 
       '
     - '
@@ -1253,7 +1266,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"item":{"id":"msg_b211473eff0066b4","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
+    - 'data: {"item":{"id":"msg_b5d30a9e826b60fb","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
 
       '
     - '
@@ -1262,7 +1275,7 @@ turns:
     - 'event: response.reasoning_part.added
 
       '
-    - 'data: {"content_index":0,"item_id":"msg_b211473eff0066b4","output_index":0,"part":{"text":"","type":"reasoning_text"},"sequence_number":3,"type":"response.reasoning_part.added"}
+    - 'data: {"content_index":0,"item_id":"msg_b5d30a9e826b60fb","output_index":0,"part":{"text":"","type":"reasoning_text"},"sequence_number":3,"type":"response.reasoning_part.added"}
 
       '
     - '
@@ -1271,7 +1284,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":"Use","item_id":"msg_b211473eff0066b4","output_index":0,"sequence_number":4,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"Using","item_id":"msg_b5d30a9e826b60fb","output_index":0,"sequence_number":4,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -1280,7 +1293,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":" web","item_id":"msg_b211473eff0066b4","output_index":0,"sequence_number":5,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":" web","item_id":"msg_b5d30a9e826b60fb","output_index":0,"sequence_number":5,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -1289,7 +1302,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":"_search","item_id":"msg_b211473eff0066b4","output_index":0,"sequence_number":6,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":"_search","item_id":"msg_b5d30a9e826b60fb","output_index":0,"sequence_number":6,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -1298,7 +1311,7 @@ turns:
     - 'event: response.reasoning_text.delta
 
       '
-    - 'data: {"content_index":0,"delta":".","item_id":"msg_b211473eff0066b4","output_index":0,"sequence_number":7,"type":"response.reasoning_text.delta"}
+    - 'data: {"content_index":0,"delta":".","item_id":"msg_b5d30a9e826b60fb","output_index":0,"sequence_number":7,"type":"response.reasoning_text.delta"}
 
       '
     - '
@@ -1307,7 +1320,7 @@ turns:
     - 'event: response.reasoning_text.done
 
       '
-    - 'data: {"content_index":0,"item_id":"msg_b211473eff0066b4","output_index":0,"sequence_number":8,"text":"Use
+    - 'data: {"content_index":0,"item_id":"msg_b5d30a9e826b60fb","output_index":0,"sequence_number":8,"text":"Using
       web_search.","type":"response.reasoning_text.done"}
 
       '
@@ -1317,7 +1330,7 @@ turns:
     - 'event: response.reasoning_part.done
 
       '
-    - 'data: {"content_index":0,"item_id":"msg_b211473eff0066b4","output_index":0,"part":{"text":"Use
+    - 'data: {"content_index":0,"item_id":"msg_b5d30a9e826b60fb","output_index":0,"part":{"text":"Using
       web_search.","type":"reasoning_text"},"sequence_number":9,"type":"response.reasoning_part.done"}
 
       '
@@ -1327,7 +1340,7 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"item":{"id":"msg_b211473eff0066b4","summary":[],"type":"reasoning","content":[{"text":"Use
+    - 'data: {"item":{"id":"msg_b5d30a9e826b60fb","summary":[],"type":"reasoning","content":[{"text":"Using
       web_search.","type":"reasoning_text"}],"encrypted_content":null,"status":"completed"},"output_index":0,"sequence_number":10,"type":"response.output_item.done"}
 
       '
@@ -1337,7 +1350,7 @@ turns:
     - 'event: response.output_item.added
 
       '
-    - 'data: {"item":{"arguments":"","call_id":"call_a8f833f716bcbc25","name":"web_search","type":"function_call","id":"fc_a389865814a7198c","namespace":null,"status":"in_progress"},"output_index":1,"sequence_number":11,"type":"response.output_item.added"}
+    - 'data: {"item":{"arguments":"","call_id":"call_b5ab6fded3b63402","name":"web_search","type":"function_call","id":"fc_b107336aafb717b5","namespace":null,"status":"in_progress"},"output_index":1,"sequence_number":11,"type":"response.output_item.added"}
 
       '
     - '
@@ -1346,7 +1359,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"{\"","item_id":"fc_a389865814a7198c","output_index":1,"sequence_number":12,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"{\"","item_id":"fc_b107336aafb717b5","output_index":1,"sequence_number":12,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -1355,7 +1368,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"query","item_id":"fc_a389865814a7198c","output_index":1,"sequence_number":13,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"query","item_id":"fc_b107336aafb717b5","output_index":1,"sequence_number":13,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -1364,7 +1377,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"\":\"","item_id":"fc_a389865814a7198c","output_index":1,"sequence_number":14,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"\":\"","item_id":"fc_b107336aafb717b5","output_index":1,"sequence_number":14,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -1373,7 +1386,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"how","item_id":"fc_a389865814a7198c","output_index":1,"sequence_number":15,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"Spark","item_id":"fc_b107336aafb717b5","output_index":1,"sequence_number":15,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -1382,7 +1395,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":" to","item_id":"fc_a389865814a7198c","output_index":1,"sequence_number":16,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":" Out","item_id":"fc_b107336aafb717b5","output_index":1,"sequence_number":16,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -1391,7 +1404,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":" fix","item_id":"fc_a389865814a7198c","output_index":1,"sequence_number":17,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"Of","item_id":"fc_b107336aafb717b5","output_index":1,"sequence_number":17,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -1400,7 +1413,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":" F","item_id":"fc_a389865814a7198c","output_index":1,"sequence_number":18,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"Memory","item_id":"fc_b107336aafb717b5","output_index":1,"sequence_number":18,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -1409,7 +1422,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"ATAL","item_id":"fc_a389865814a7198c","output_index":1,"sequence_number":19,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":"Error","item_id":"fc_b107336aafb717b5","output_index":1,"sequence_number":19,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -1418,7 +1431,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":" error","item_id":"fc_a389865814a7198c","output_index":1,"sequence_number":20,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":" transform","item_id":"fc_b107336aafb717b5","output_index":1,"sequence_number":20,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -1427,7 +1440,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":" in","item_id":"fc_a389865814a7198c","output_index":1,"sequence_number":21,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":" stage","item_id":"fc_b107336aafb717b5","output_index":1,"sequence_number":21,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -1436,7 +1449,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":" Spark","item_id":"fc_a389865814a7198c","output_index":1,"sequence_number":22,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":" fix","item_id":"fc_b107336aafb717b5","output_index":1,"sequence_number":22,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -1445,7 +1458,7 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":" pipelines","item_id":"fc_a389865814a7198c","output_index":1,"sequence_number":23,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":" memory","item_id":"fc_b107336aafb717b5","output_index":1,"sequence_number":23,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -1454,7 +1467,25 @@ turns:
     - 'event: response.function_call_arguments.delta
 
       '
-    - 'data: {"delta":"\"}","item_id":"fc_a389865814a7198c","output_index":1,"sequence_number":24,"type":"response.function_call_arguments.delta"}
+    - 'data: {"delta":" limits","item_id":"fc_b107336aafb717b5","output_index":1,"sequence_number":24,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":" solve","item_id":"fc_b107336aafb717b5","output_index":1,"sequence_number":25,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"\"}","item_id":"fc_b107336aafb717b5","output_index":1,"sequence_number":26,"type":"response.function_call_arguments.delta"}
 
       '
     - '
@@ -1463,7 +1494,8 @@ turns:
     - 'event: response.function_call_arguments.done
 
       '
-    - 'data: {"arguments":"{\"query\":\"how to fix FATAL error in Spark pipelines\"}","item_id":"fc_a389865814a7198c","name":"web_search","output_index":1,"sequence_number":25,"type":"response.function_call_arguments.done"}
+    - 'data: {"arguments":"{\"query\":\"Spark OutOfMemoryError transform stage fix
+      memory limits solve\"}","item_id":"fc_b107336aafb717b5","name":"web_search","output_index":1,"sequence_number":27,"type":"response.function_call_arguments.done"}
 
       '
     - '
@@ -1472,7 +1504,8 @@ turns:
     - 'event: response.output_item.done
 
       '
-    - 'data: {"item":{"arguments":"{\"query\":\"how to fix FATAL error in Spark pipelines\"}","call_id":"call_a8f833f716bcbc25","name":"web_search","type":"function_call","id":null,"namespace":null,"status":"completed","item_id":"fc_a389865814a7198c","output_index":1,"sequence_number":-1},"output_index":1,"sequence_number":26,"type":"response.output_item.done"}
+    - 'data: {"item":{"arguments":"{\"query\":\"Spark OutOfMemoryError transform stage
+      fix memory limits solve\"}","call_id":"call_b5ab6fded3b63402","name":"web_search","type":"function_call","id":null,"namespace":null,"status":"completed","item_id":"fc_b107336aafb717b5","output_index":1,"sequence_number":-1},"output_index":1,"sequence_number":28,"type":"response.output_item.done"}
 
       '
     - '
@@ -1481,9 +1514,9 @@ turns:
     - 'event: response.completed
 
       '
-    - 'data: {"response":{"id":"resp_94ce25968dc3b4f4","created_at":1782285920,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[{"id":"rs_a101c61e5eef4c23","summary":[],"type":"reasoning","content":[{"text":"Use
-      web_search.","type":"reasoning_text"}],"encrypted_content":null,"status":null},{"arguments":"{\"query\":\"how
-      to fix FATAL error in Spark pipelines\"}","call_id":"call_9abf8aa146f1da2b","name":"web_search","type":"function_call","id":"fc_9abf8aa146f1da2b","namespace":null,"status":null}],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
+    - 'data: {"response":{"id":"resp_8d9428f89b5bbe23","created_at":1782331383,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[{"id":"rs_abc5949f81a3505f","summary":[],"type":"reasoning","content":[{"text":"Using
+      web_search.","type":"reasoning_text"}],"encrypted_content":null,"status":null},{"arguments":"{\"query\":\"Spark
+      OutOfMemoryError transform stage fix memory limits solve\"}","call_id":"call_8682d661d7f3a9fd","name":"web_search","type":"function_call","id":"fc_8682d661d7f3a9fd","namespace":null,"status":null}],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"get_job_status","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
       job identifier, e.g. job-382"}},"required":["job_id"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Query
       the pipeline orchestrator for a job''s current state, metadata, and failure
       info."},{"name":"get_error_logs","parameters":{"type":"object","properties":{"job_id":{"type":"string","description":"Pipeline
@@ -1504,7 +1537,7 @@ turns:
       priority"}},"required":["job_id","memory_override_gb","skip_completed_stages","priority"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Restart
       a failed pipeline job with optional configuration overrides."},{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"Search
       query"}},"required":["query"],"additionalProperties":false},"strict":true,"type":"function","defer_loading":null,"description":"Search
-      the public web for technical documentation, blog posts, and known issues."}],"top_p":1.0,"background":false,"max_output_tokens":3530,"max_tool_calls":null,"previous_response_id":"resp_bc7651309b00838d","prompt":null,"reasoning":null,"service_tier":"auto","status":"completed","text":null,"top_logprobs":null,"truncation":"disabled","usage":{"input_tokens":566,"input_tokens_details":{"cached_tokens":512,"input_tokens_per_turn":[566],"cached_tokens_per_turn":[512]},"output_tokens":36,"output_tokens_details":{"reasoning_tokens":19,"tool_output_tokens":0,"output_tokens_per_turn":[36],"tool_output_tokens_per_turn":[0]},"total_tokens":602},"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":27,"type":"response.completed"}
+      the public web for technical documentation, blog posts, and known issues."}],"top_p":1.0,"background":false,"max_output_tokens":3223,"max_tool_calls":null,"previous_response_id":"resp_8f993b44ca8e52e3","prompt":null,"reasoning":null,"service_tier":"auto","status":"completed","text":null,"top_logprobs":null,"truncation":"disabled","usage":{"input_tokens":873,"input_tokens_details":{"cached_tokens":608,"input_tokens_per_turn":[873],"cached_tokens_per_turn":[608]},"output_tokens":38,"output_tokens_details":{"reasoning_tokens":21,"tool_output_tokens":0,"output_tokens_per_turn":[38],"tool_output_tokens_per_turn":[0]},"total_tokens":911},"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":29,"type":"response.completed"}
 
       '
     - '

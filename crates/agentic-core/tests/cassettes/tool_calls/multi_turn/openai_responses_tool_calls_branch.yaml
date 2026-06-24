@@ -3,7 +3,7 @@ turns:
   request:
     body:
       input: You are an SRE assistant. Check the current status of ETL pipeline job-382.
-      model: openai/gpt-oss-20b
+      model: gpt-4o
       store: true
       stream: false
       tool_choice: auto
@@ -128,6 +128,7 @@ turns:
         type: function
     headers:
       accept: '*/*'
+      authorization: Bearer ***
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
@@ -136,48 +137,49 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331360
+      billing:
+        payer: developer
+      completed_at: 1782331511
+      created_at: 1782331509
+      error: null
       frequency_penalty: 0.0
-      id: resp_99ff5424f2627e43
+      id: resp_05bbd2f607378fa0006a3c387599cc81998df1b061f645e587
       incomplete_details: null
-      input_messages: null
       instructions: null
-      kv_transfer_params: null
-      max_output_tokens: 3660
+      max_output_tokens: null
       max_tool_calls: null
-      metadata: null
-      model: openai/gpt-oss-20b
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
       object: response
       output:
-      - content:
-        - text: We need to call get_job_status.
-          type: reasoning_text
-        encrypted_content: null
-        id: rs_901adb851069f6c7
-        status: null
-        summary: []
-        type: reasoning
       - arguments: '{"job_id":"job-382"}'
-        call_id: call_af81636bdbc9dec5
-        id: fc_af81636bdbc9dec5
+        call_id: call_NWcEmKRN0AkUr4ZmlHWaqcQn
+        id: fc_05bbd2f607378fa0006a3c3877757c81999eedf1f10d0b4309
         name: get_job_status
-        namespace: null
-        status: null
+        status: completed
         type: function_call
-      output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
       previous_response_id: null
-      prompt: null
-      reasoning: null
-      service_tier: auto
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
       status: completed
+      store: true
       temperature: 1.0
-      text: null
+      text:
+        format:
+          type: text
+        verbosity: medium
       tool_choice: auto
       tools:
-      - defer_loading: null
-        description: Query the pipeline orchestrator for a job's current state, metadata,
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
           and failure info.
         name: get_job_status
         parameters:
@@ -191,8 +193,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Fetch error logs and stack traces for a failed pipeline job.
+      - description: Fetch error logs and stack traces for a failed pipeline job.
         name: get_error_logs
         parameters:
           additionalProperties: false
@@ -218,8 +219,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Search internal operations runbooks for troubleshooting procedures.
+      - description: Search internal operations runbooks for troubleshooting procedures.
         name: search_runbook
         parameters:
           additionalProperties: false
@@ -236,8 +236,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Execute a Python analysis script in a sandboxed environment for
+      - description: Execute a Python analysis script in a sandboxed environment for
           log parsing or data inspection.
         name: run_analysis
         parameters:
@@ -255,8 +254,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Restart a failed pipeline job with optional configuration overrides.
+      - description: Restart a failed pipeline job with optional configuration overrides.
         name: restart_job
         parameters:
           additionalProperties: false
@@ -285,8 +283,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Search the public web for technical documentation, blog posts,
+      - description: Search the public web for technical documentation, blog posts,
           and known issues.
         name: web_search
         parameters:
@@ -300,26 +297,17 @@ turns:
           type: object
         strict: true
         type: function
-      top_logprobs: null
+      top_logprobs: 0
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 436
+        input_tokens: 355
         input_tokens_details:
-          cached_tokens: 432
-          cached_tokens_per_turn:
-          - 432
-          input_tokens_per_turn:
-          - 436
-        output_tokens: 36
+          cached_tokens: 0
+        output_tokens: 19
         output_tokens_details:
-          output_tokens_per_turn:
-          - 36
-          reasoning_tokens: 18
-          tool_output_tokens: 0
-          tool_output_tokens_per_turn:
-          - 0
-        total_tokens: 472
+          reasoning_tokens: 0
+        total_tokens: 374
       user: null
     headers:
       content-type: application/json
@@ -328,17 +316,16 @@ turns:
   request:
     body:
       input:
-      - call_id: call_af81636bdbc9dec5
+      - call_id: call_NWcEmKRN0AkUr4ZmlHWaqcQn
         output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
           "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
           31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
         type: function_call_output
-      - content: Now pull the error logs for that job. Use severity ERROR and max
-          10 entries.
+      - content: Get the error logs for that job with severity ERROR and max 10 entries.
         role: user
         type: message
-      model: openai/gpt-oss-20b
-      previous_response_id: resp_99ff5424f2627e43
+      model: gpt-4o
+      previous_response_id: resp_05bbd2f607378fa0006a3c387599cc81998df1b061f645e587
       store: true
       stream: false
       tool_choice: auto
@@ -463,6 +450,7 @@ turns:
         type: function
     headers:
       accept: '*/*'
+      authorization: Bearer ***
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
@@ -471,48 +459,49 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331361
+      billing:
+        payer: developer
+      completed_at: 1782331512
+      created_at: 1782331511
+      error: null
       frequency_penalty: 0.0
-      id: resp_b44e3326e81a597c
+      id: resp_05bbd2f607378fa0006a3c3877c0f0819983a3f1411a2242b9
       incomplete_details: null
-      input_messages: null
       instructions: null
-      kv_transfer_params: null
-      max_output_tokens: 3499
+      max_output_tokens: null
       max_tool_calls: null
-      metadata: null
-      model: openai/gpt-oss-20b
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
       object: response
       output:
-      - content:
-        - text: Call get_error_logs.
-          type: reasoning_text
-        encrypted_content: null
-        id: rs_8f36d456b69a137a
-        status: null
-        summary: []
-        type: reasoning
       - arguments: '{"job_id":"job-382","severity":"ERROR","max_entries":10}'
-        call_id: call_961a299b68e2f0d9
-        id: fc_961a299b68e2f0d9
+        call_id: call_8SfacO4G0hZKrTnfTI76zeAa
+        id: fc_05bbd2f607378fa0006a3c38789348819980949dfc83474c4b
         name: get_error_logs
-        namespace: null
-        status: null
+        status: completed
         type: function_call
-      output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_99ff5424f2627e43
-      prompt: null
-      reasoning: null
-      service_tier: auto
+      previous_response_id: resp_05bbd2f607378fa0006a3c387599cc81998df1b061f645e587
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
       status: completed
+      store: true
       temperature: 1.0
-      text: null
+      text:
+        format:
+          type: text
+        verbosity: medium
       tool_choice: auto
       tools:
-      - defer_loading: null
-        description: Query the pipeline orchestrator for a job's current state, metadata,
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
           and failure info.
         name: get_job_status
         parameters:
@@ -526,8 +515,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Fetch error logs and stack traces for a failed pipeline job.
+      - description: Fetch error logs and stack traces for a failed pipeline job.
         name: get_error_logs
         parameters:
           additionalProperties: false
@@ -553,8 +541,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Search internal operations runbooks for troubleshooting procedures.
+      - description: Search internal operations runbooks for troubleshooting procedures.
         name: search_runbook
         parameters:
           additionalProperties: false
@@ -571,8 +558,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Execute a Python analysis script in a sandboxed environment for
+      - description: Execute a Python analysis script in a sandboxed environment for
           log parsing or data inspection.
         name: run_analysis
         parameters:
@@ -590,8 +576,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Restart a failed pipeline job with optional configuration overrides.
+      - description: Restart a failed pipeline job with optional configuration overrides.
         name: restart_job
         parameters:
           additionalProperties: false
@@ -620,8 +605,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Search the public web for technical documentation, blog posts,
+      - description: Search the public web for technical documentation, blog posts,
           and known issues.
         name: web_search
         parameters:
@@ -635,26 +619,17 @@ turns:
           type: object
         strict: true
         type: function
-      top_logprobs: null
+      top_logprobs: 0
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 597
+        input_tokens: 491
         input_tokens_details:
-          cached_tokens: 464
-          cached_tokens_per_turn:
-          - 464
-          input_tokens_per_turn:
-          - 597
-        output_tokens: 42
+          cached_tokens: 0
+        output_tokens: 28
         output_tokens_details:
-          output_tokens_per_turn:
-          - 42
-          reasoning_tokens: 24
-          tool_output_tokens: 0
-          tool_output_tokens_per_turn:
-          - 0
-        total_tokens: 639
+          reasoning_tokens: 0
+        total_tokens: 519
       user: null
     headers:
       content-type: application/json
@@ -663,23 +638,17 @@ turns:
   request:
     body:
       input:
-      - call_id: call_961a299b68e2f0d9
-        output: '[{"timestamp": "2024-01-15T03:22:09Z", "severity": "ERROR", "message":
-          "OutOfMemoryError at stage ''transform'': heap space exhausted (31.2GB/32GB)",
-          "stack_trace": "java.lang.OutOfMemoryError: Java heap space\n  at org.apache.spark.memory.TaskMemoryManager.allocatePage"},
-          {"timestamp": "2024-01-15T03:22:10Z", "severity": "ERROR", "message": "Task
-          failed: transform-partition-47 OOM after processing 2.1M rows", "stack_trace":
-          "org.apache.spark.SparkException: Task failed while writing rows"}, {"timestamp":
-          "2024-01-15T03:22:11Z", "severity": "ERROR", "message": "Job job-382 marked
-          FAILED after 3 consecutive OOM errors in transform stage", "stack_trace":
-          null}]'
+      - call_id: call_NWcEmKRN0AkUr4ZmlHWaqcQn
+        output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
+          "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
+          31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
         type: function_call_output
-      - content: Based on those errors, search the runbook for troubleshooting procedures.
-          Max 5 results.
+      - content: Instead of investigating errors, search the runbook for how to increase
+          memory limits for ETL jobs. Max 3 results.
         role: user
         type: message
-      model: openai/gpt-oss-20b
-      previous_response_id: resp_b44e3326e81a597c
+      model: gpt-4o
+      previous_response_id: resp_05bbd2f607378fa0006a3c387599cc81998df1b061f645e587
       store: true
       stream: false
       tool_choice: auto
@@ -804,6 +773,7 @@ turns:
         type: function
     headers:
       accept: '*/*'
+      authorization: Bearer ***
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
@@ -812,48 +782,49 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331361
+      billing:
+        payer: developer
+      completed_at: 1782331514
+      created_at: 1782331512
+      error: null
       frequency_penalty: 0.0
-      id: resp_8dfe29723818b937
+      id: resp_05bbd2f607378fa0006a3c3878eb5481999b020abb1bbaaa0f
       incomplete_details: null
-      input_messages: null
       instructions: null
-      kv_transfer_params: null
-      max_output_tokens: 3226
+      max_output_tokens: null
       max_tool_calls: null
-      metadata: null
-      model: openai/gpt-oss-20b
+      metadata: {}
+      model: gpt-4o-2024-08-06
+      moderation: null
       object: response
       output:
-      - content:
-        - text: Use search_runbook.
-          type: reasoning_text
-        encrypted_content: null
-        id: rs_8682e2c6b269a60c
-        status: null
-        summary: []
-        type: reasoning
-      - arguments: '{"query":"OutOfMemoryError transform stage ETL daily ingest troubleshoot","max_results":5}'
-        call_id: call_847a146847337019
-        id: fc_847a146847337019
+      - arguments: '{"query":"increase memory limits for ETL jobs","max_results":3}'
+        call_id: call_XVIOIR7ZtfV0urAs3C4ZXPK8
+        id: fc_05bbd2f607378fa0006a3c3879e768819997294f712fc6012c
         name: search_runbook
-        namespace: null
-        status: null
+        status: completed
         type: function_call
-      output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_b44e3326e81a597c
-      prompt: null
-      reasoning: null
-      service_tier: auto
+      previous_response_id: resp_05bbd2f607378fa0006a3c387599cc81998df1b061f645e587
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
       status: completed
+      store: true
       temperature: 1.0
-      text: null
+      text:
+        format:
+          type: text
+        verbosity: medium
       tool_choice: auto
       tools:
-      - defer_loading: null
-        description: Query the pipeline orchestrator for a job's current state, metadata,
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
           and failure info.
         name: get_job_status
         parameters:
@@ -867,8 +838,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Fetch error logs and stack traces for a failed pipeline job.
+      - description: Fetch error logs and stack traces for a failed pipeline job.
         name: get_error_logs
         parameters:
           additionalProperties: false
@@ -894,8 +864,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Search internal operations runbooks for troubleshooting procedures.
+      - description: Search internal operations runbooks for troubleshooting procedures.
         name: search_runbook
         parameters:
           additionalProperties: false
@@ -912,8 +881,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Execute a Python analysis script in a sandboxed environment for
+      - description: Execute a Python analysis script in a sandboxed environment for
           log parsing or data inspection.
         name: run_analysis
         parameters:
@@ -931,8 +899,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Restart a failed pipeline job with optional configuration overrides.
+      - description: Restart a failed pipeline job with optional configuration overrides.
         name: restart_job
         parameters:
           additionalProperties: false
@@ -961,8 +928,7 @@ turns:
           type: object
         strict: true
         type: function
-      - defer_loading: null
-        description: Search the public web for technical documentation, blog posts,
+      - description: Search the public web for technical documentation, blog posts,
           and known issues.
         name: web_search
         parameters:
@@ -976,26 +942,17 @@ turns:
           type: object
         strict: true
         type: function
-      top_logprobs: null
+      top_logprobs: 0
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 870
+        input_tokens: 500
         input_tokens_details:
-          cached_tokens: 608
-          cached_tokens_per_turn:
-          - 608
-          input_tokens_per_turn:
-          - 870
-        output_tokens: 45
+          cached_tokens: 0
+        output_tokens: 27
         output_tokens_details:
-          output_tokens_per_turn:
-          - 45
-          reasoning_tokens: 27
-          tool_output_tokens: 0
-          tool_output_tokens_per_turn:
-          - 0
-        total_tokens: 915
+          reasoning_tokens: 0
+        total_tokens: 527
       user: null
     headers:
       content-type: application/json
