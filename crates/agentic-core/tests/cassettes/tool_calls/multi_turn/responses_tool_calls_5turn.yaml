@@ -137,9 +137,9 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331372
+      created_at: 1782332949
       frequency_penalty: 0.0
-      id: resp_9951741be0cfd0aa
+      id: resp_bdd5b90cf69f193e
       incomplete_details: null
       input_messages: null
       instructions: null
@@ -151,16 +151,16 @@ turns:
       object: response
       output:
       - content:
-        - text: We should use get_job_status.
+        - text: We need to use get_job_status.
           type: reasoning_text
         encrypted_content: null
-        id: rs_b9b65102428a224d
+        id: rs_99dcd006b8361f42
         status: null
         summary: []
         type: reasoning
       - arguments: '{"job_id":"job-382"}'
-        call_id: call_b9bae339250e867f
-        id: fc_b9bae339250e867f
+        call_id: call_a8ec7f8606f82fcb
+        id: fc_a8ec7f8606f82fcb
         name: get_job_status
         namespace: null
         status: null
@@ -312,15 +312,15 @@ turns:
           - 432
           input_tokens_per_turn:
           - 439
-        output_tokens: 35
+        output_tokens: 36
         output_tokens_details:
           output_tokens_per_turn:
-          - 35
-          reasoning_tokens: 17
+          - 36
+          reasoning_tokens: 18
           tool_output_tokens: 0
           tool_output_tokens_per_turn:
           - 0
-        total_tokens: 474
+        total_tokens: 475
       user: null
     headers:
       content-type: application/json
@@ -329,7 +329,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_b9bae339250e867f
+      - call_id: call_a8ec7f8606f82fcb
         output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
           "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
           31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
@@ -339,7 +339,7 @@ turns:
         role: user
         type: message
       model: openai/gpt-oss-20b
-      previous_response_id: resp_9951741be0cfd0aa
+      previous_response_id: resp_bdd5b90cf69f193e
       store: true
       stream: false
       tool_choice: auto
@@ -472,30 +472,30 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331372
+      created_at: 1782332949
       frequency_penalty: 0.0
-      id: resp_a0d45c68cfdf0dc3
+      id: resp_b333098339569097
       incomplete_details: null
       input_messages: null
       instructions: null
       kv_transfer_params: null
-      max_output_tokens: 3497
+      max_output_tokens: 3496
       max_tool_calls: null
       metadata: null
       model: openai/gpt-oss-20b
       object: response
       output:
       - content:
-        - text: Use get_error_logs.
+        - text: We will get_error_logs.
           type: reasoning_text
         encrypted_content: null
-        id: rs_81a485924cbf2205
+        id: rs_8475b754aec8bc57
         status: null
         summary: []
         type: reasoning
       - arguments: '{"job_id":"job-382","severity":"ERROR","max_entries":20}'
-        call_id: call_b2ab544b587ed933
-        id: fc_b2ab544b587ed933
+        call_id: call_8473140fc968508b
+        id: fc_8473140fc968508b
         name: get_error_logs
         namespace: null
         status: null
@@ -503,7 +503,7 @@ turns:
       output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_9951741be0cfd0aa
+      previous_response_id: resp_bdd5b90cf69f193e
       prompt: null
       reasoning: null
       service_tier: auto
@@ -640,22 +640,22 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 599
+        input_tokens: 600
         input_tokens_details:
           cached_tokens: 448
           cached_tokens_per_turn:
           - 448
           input_tokens_per_turn:
-          - 599
-        output_tokens: 42
+          - 600
+        output_tokens: 43
         output_tokens_details:
           output_tokens_per_turn:
-          - 42
-          reasoning_tokens: 24
+          - 43
+          reasoning_tokens: 25
           tool_output_tokens: 0
           tool_output_tokens_per_turn:
           - 0
-        total_tokens: 641
+        total_tokens: 643
       user: null
     headers:
       content-type: application/json
@@ -664,7 +664,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_b2ab544b587ed933
+      - call_id: call_8473140fc968508b
         output: '[{"timestamp": "2024-01-15T03:22:09Z", "severity": "ERROR", "message":
           "OutOfMemoryError at stage ''transform'': heap space exhausted (31.2GB/32GB)",
           "stack_trace": "java.lang.OutOfMemoryError: Java heap space\n  at org.apache.spark.memory.TaskMemoryManager.allocatePage"},
@@ -680,7 +680,7 @@ turns:
         role: user
         type: message
       model: openai/gpt-oss-20b
-      previous_response_id: resp_a0d45c68cfdf0dc3
+      previous_response_id: resp_b333098339569097
       store: true
       stream: false
       tool_choice: auto
@@ -813,31 +813,31 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331372
+      created_at: 1782332950
       frequency_penalty: 0.0
-      id: resp_942924910373a289
+      id: resp_965a415718fbf3d6
       incomplete_details: null
       input_messages: null
       instructions: null
       kv_transfer_params: null
-      max_output_tokens: 3222
+      max_output_tokens: 3220
       max_tool_calls: null
       metadata: null
       model: openai/gpt-oss-20b
       object: response
       output:
       - content:
-        - text: Use search_runbook.
+        - text: Call search_runbook.
           type: reasoning_text
         encrypted_content: null
-        id: rs_99598f9b7ee05702
+        id: rs_9d57d334a763e6cd
         status: null
         summary: []
         type: reasoning
-      - arguments: '{"query":"OutOfMemoryError transform stage spark partition 20
-          entries","max_results":5}'
-        call_id: call_bd3e5a22c5de5a46
-        id: fc_bd3e5a22c5de5a46
+      - arguments: '{"query":"OutOfMemoryError in transform stage spark job-382 fix
+          runbook", "max_results":5}'
+        call_id: call_9f8fb58fca2c18a3
+        id: fc_9f8fb58fca2c18a3
         name: search_runbook
         namespace: null
         status: null
@@ -845,7 +845,7 @@ turns:
       output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_a0d45c68cfdf0dc3
+      previous_response_id: resp_b333098339569097
       prompt: null
       reasoning: null
       service_tier: auto
@@ -982,22 +982,22 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 874
+        input_tokens: 876
         input_tokens_details:
           cached_tokens: 608
           cached_tokens_per_turn:
           - 608
           input_tokens_per_turn:
-          - 874
-        output_tokens: 45
+          - 876
+        output_tokens: 49
         output_tokens_details:
           output_tokens_per_turn:
-          - 45
-          reasoning_tokens: 27
+          - 49
+          reasoning_tokens: 31
           tool_output_tokens: 0
           tool_output_tokens_per_turn:
           - 0
-        total_tokens: 919
+        total_tokens: 925
       user: null
     headers:
       content-type: application/json
@@ -1006,7 +1006,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_bd3e5a22c5de5a46
+      - call_id: call_9f8fb58fca2c18a3
         output: '[{"title": "OOM Troubleshooting for ETL Pipelines", "path": "/runbooks/data-platform/oom-etl.md",
           "snippet": "When transform stage OOMs: 1) Check partition skew with get_partition_stats,
           2) Increase executor memory (default 32GB -> 64GB), 3) Enable adaptive query
@@ -1020,7 +1020,7 @@ turns:
         role: user
         type: message
       model: openai/gpt-oss-20b
-      previous_response_id: resp_942924910373a289
+      previous_response_id: resp_965a415718fbf3d6
       store: true
       stream: false
       tool_choice: auto
@@ -1153,32 +1153,32 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331373
+      created_at: 1782332950
       frequency_penalty: 0.0
-      id: resp_ad167af2a228ea80
+      id: resp_bd9e5303a45132a7
       incomplete_details: null
       input_messages: null
       instructions: null
       kv_transfer_params: null
-      max_output_tokens: 2980
+      max_output_tokens: 2974
       max_tool_calls: null
       metadata: null
       model: openai/gpt-oss-20b
       object: response
       output:
       - content:
-        - text: We need to call run_analysis.
+        - text: We call run_analysis.
           type: reasoning_text
         encrypted_content: null
-        id: rs_a7f023b8835b666c
+        id: rs_98daf1dc1d378213
         status: null
         summary: []
         type: reasoning
-      - arguments: '{"code":"import json\nprint(json.dumps({''job'': ''job-382'',
+      - arguments: '{"code":"import json; print(json.dumps({''job'': ''job-382'',
           ''error'': ''OOM'', ''stage'': ''transform'', ''recommendation'': ''increase
           memory to 64GB''}))","timeout_seconds":30}'
-        call_id: call_9972b03347027652
-        id: fc_9972b03347027652
+        call_id: call_87c2a52cfc83b243
+        id: fc_87c2a52cfc83b243
         name: run_analysis
         namespace: null
         status: null
@@ -1186,7 +1186,7 @@ turns:
       output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_942924910373a289
+      previous_response_id: resp_965a415718fbf3d6
       prompt: null
       reasoning: null
       service_tier: auto
@@ -1323,22 +1323,22 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 1116
+        input_tokens: 1122
         input_tokens_details:
           cached_tokens: 880
           cached_tokens_per_turn:
           - 880
           input_tokens_per_turn:
-          - 1116
-        output_tokens: 74
+          - 1122
+        output_tokens: 72
         output_tokens_details:
           output_tokens_per_turn:
-          - 74
-          reasoning_tokens: 57
+          - 72
+          reasoning_tokens: 55
           tool_output_tokens: 0
           tool_output_tokens_per_turn:
           - 0
-        total_tokens: 1190
+        total_tokens: 1194
       user: null
     headers:
       content-type: application/json
@@ -1347,7 +1347,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_9972b03347027652
+      - call_id: call_87c2a52cfc83b243
         output: '{"stdout": "Failed stage: transform, count: 2\nPattern: consistent
           OOM at partition-47 (2.1M rows)\nRecommendation: increase memory to 64GB
           or repartition", "stderr": "", "exit_code": 0, "duration_ms": 120}'
@@ -1357,7 +1357,7 @@ turns:
         role: user
         type: message
       model: openai/gpt-oss-20b
-      previous_response_id: resp_ad167af2a228ea80
+      previous_response_id: resp_bd9e5303a45132a7
       store: true
       stream: false
       tool_choice: auto
@@ -1490,30 +1490,30 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331373
+      created_at: 1782332951
       frequency_penalty: 0.0
-      id: resp_ba8c42b503457f18
+      id: resp_82fb53818571c25a
       incomplete_details: null
       input_messages: null
       instructions: null
       kv_transfer_params: null
-      max_output_tokens: 2808
+      max_output_tokens: 2804
       max_tool_calls: null
       metadata: null
       model: openai/gpt-oss-20b
       object: response
       output:
       - content:
-        - text: Use restart_job.
+        - text: Call restart_job.
           type: reasoning_text
         encrypted_content: null
-        id: rs_9a2415f2829c554b
+        id: rs_83a9d72111ec93c4
         status: null
         summary: []
         type: reasoning
       - arguments: '{"job_id":"job-382","memory_override_gb":64,"skip_completed_stages":true,"priority":"high"}'
-        call_id: call_945de04a969d9596
-        id: fc_945de04a969d9596
+        call_id: call_a255f9a0224bf7d9
+        id: fc_a255f9a0224bf7d9
         name: restart_job
         namespace: null
         status: null
@@ -1521,7 +1521,7 @@ turns:
       output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_ad167af2a228ea80
+      previous_response_id: resp_bd9e5303a45132a7
       prompt: null
       reasoning: null
       service_tier: auto
@@ -1658,13 +1658,13 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 1288
+        input_tokens: 1292
         input_tokens_details:
           cached_tokens: 1120
           cached_tokens_per_turn:
           - 1120
           input_tokens_per_turn:
-          - 1288
+          - 1292
         output_tokens: 49
         output_tokens_details:
           output_tokens_per_turn:
@@ -1673,7 +1673,7 @@ turns:
           tool_output_tokens: 0
           tool_output_tokens_per_turn:
           - 0
-        total_tokens: 1337
+        total_tokens: 1341
       user: null
     headers:
       content-type: application/json

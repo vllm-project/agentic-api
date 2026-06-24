@@ -139,11 +139,11 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1782331535
-      created_at: 1782331534
+      completed_at: 1782333011
+      created_at: 1782333008
       error: null
       frequency_penalty: 0.0
-      id: resp_0ec7c4ddd5fc13e2006a3c388edc30819ab696d5b8584fb6c6
+      id: resp_0cd8ef891c0f4c71006a3c3e507b68819b84f7f3f1a42a599a
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -154,8 +154,8 @@ turns:
       object: response
       output:
       - arguments: '{"job_id":"job-382"}'
-        call_id: call_xuHSO4xB7M872HdpG65mhXWb
-        id: fc_0ec7c4ddd5fc13e2006a3c388f7f64819aab560a66e56e0f41
+        call_id: call_Be8nCBDD2O0m7GSL5ATsZn1i
+        id: fc_0cd8ef891c0f4c71006a3c3e52f520819b96aa59c35fff1b5d
         name: get_job_status
         status: completed
         type: function_call
@@ -316,13 +316,13 @@ turns:
   request:
     body:
       input:
-      - call_id: call_xuHSO4xB7M872HdpG65mhXWb
+      - call_id: call_Be8nCBDD2O0m7GSL5ATsZn1i
         output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
           "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
           31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
         type: function_call_output
       model: gpt-4o
-      previous_response_id: resp_0ec7c4ddd5fc13e2006a3c388edc30819ab696d5b8584fb6c6
+      previous_response_id: resp_0cd8ef891c0f4c71006a3c3e507b68819b84f7f3f1a42a599a
       store: true
       stream: false
       tool_choice: auto
@@ -458,11 +458,11 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1782331537
-      created_at: 1782331535
+      completed_at: 1782333013
+      created_at: 1782333012
       error: null
       frequency_penalty: 0.0
-      id: resp_0ec7c4ddd5fc13e2006a3c388fd0cc819a9407adfbb0c2c208
+      id: resp_0cd8ef891c0f4c71006a3c3e53eef8819bbcac061137bbf660
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -475,35 +475,34 @@ turns:
       - content:
         - annotations: []
           logprobs: []
-          text: 'The ETL pipeline job `job-382` has failed. Here are the details:
+          text: 'The ETL pipeline job **job-382** has failed. Here are the details:
 
 
-            - **Status**: Failed
+            - **Error Type:** OutOfMemoryError
 
-            - **Error Type**: OutOfMemoryError
+            - **Failed At:** 2024-01-15T03:22:11Z
 
-            - **Failed At**: 2024-01-15T03:22:11Z
+            - **Stage:** Transform
 
-            - **Stage**: Transform
+            - **Memory Used:** 31.2 GB
 
-            - **Memory Used**: 31.2 GB
+            - **Memory Limit:** 32 GB
 
-            - **Memory Limit**: 32 GB
+            - **Pipeline:** etl-daily-ingest
 
-            - **Pipeline**: etl-daily-ingest
-
-            - **Owner**: Data Platform Team
+            - **Owner:** Data Platform Team
 
 
-            Would you like me to investigate further or take any action?'
+            Would you like me to retrieve error logs or attempt to restart the job
+            with adjusted parameters?'
           type: output_text
-        id: msg_0ec7c4ddd5fc13e2006a3c38909204819ab534a8798edadde1
+        id: msg_0cd8ef891c0f4c71006a3c3e5478c4819bbab78f4548e94859
         role: assistant
         status: completed
         type: message
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_0ec7c4ddd5fc13e2006a3c388edc30819ab696d5b8584fb6c6
+      previous_response_id: resp_0cd8ef891c0f4c71006a3c3e507b68819b84f7f3f1a42a599a
       prompt_cache_key: null
       prompt_cache_retention: in_memory
       reasoning:
@@ -646,10 +645,10 @@ turns:
         input_tokens: 471
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 121
+        output_tokens: 113
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 592
+        total_tokens: 584
       user: null
     headers:
       content-type: application/json
@@ -657,9 +656,10 @@ turns:
 - filename: t3
   request:
     body:
-      input: Great, now search the runbook for how to fix that OOM error. Max 5 results.
+      input: Based on what you found, search the runbook for how to fix it. Max 5
+        results.
       model: gpt-4o
-      previous_response_id: resp_0ec7c4ddd5fc13e2006a3c388fd0cc819a9407adfbb0c2c208
+      previous_response_id: resp_0cd8ef891c0f4c71006a3c3e53eef8819bbcac061137bbf660
       store: true
       stream: false
       tool_choice: auto
@@ -795,11 +795,11 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1782331538
-      created_at: 1782331537
+      completed_at: 1782333014
+      created_at: 1782333014
       error: null
       frequency_penalty: 0.0
-      id: resp_0ec7c4ddd5fc13e2006a3c3891a958819a8bf49dba0916fef0
+      id: resp_0cd8ef891c0f4c71006a3c3e561858819bba80615c21372611
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -809,15 +809,15 @@ turns:
       moderation: null
       object: response
       output:
-      - arguments: '{"query":"OutOfMemoryError ETL pipeline","max_results":5}'
-        call_id: call_wmlJBIMN1WijA0cAJMjjes0X
-        id: fc_0ec7c4ddd5fc13e2006a3c38922b24819ab44bfbe155a4ecb2
+      - arguments: '{"query":"OutOfMemoryError in ETL pipeline","max_results":5}'
+        call_id: call_I0IVG6tBnGhK5zZGic76mhPo
+        id: fc_0cd8ef891c0f4c71006a3c3e568658819b82e90c7976061f87
         name: search_runbook
         status: completed
         type: function_call
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_0ec7c4ddd5fc13e2006a3c388fd0cc819a9407adfbb0c2c208
+      previous_response_id: resp_0cd8ef891c0f4c71006a3c3e53eef8819bbcac061137bbf660
       prompt_cache_key: null
       prompt_cache_retention: in_memory
       reasoning:
@@ -957,13 +957,13 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 619
+        input_tokens: 611
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 27
+        output_tokens: 28
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 646
+        total_tokens: 639
       user: null
     headers:
       content-type: application/json

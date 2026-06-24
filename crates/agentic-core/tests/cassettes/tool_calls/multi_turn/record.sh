@@ -23,7 +23,7 @@
 
 set -euo pipefail
 
-RECORDER="$(dirname "$0")/../../cassettes/record_cassette.py"
+RECORDER="$(dirname "$0")/../../record_cassette.py"
 TOOLS="$(dirname "$0")/pipeline_tools.json"
 TOOL_OUTPUTS="$(dirname "$0")/pipeline_tool_outputs.json"
 OUTPUT_DIR="$(dirname "$0")"
@@ -113,6 +113,7 @@ printf '%s\n' \
 
 echo ""
 echo "=== 3-turn tool-output-only (turn 2 has no user message, just tool output) ==="
+# Turn 2 prompt is empty string → _build_tool_output_input omits user message
 printf '%s\n' \
   "You are an SRE assistant. Check the current status of ETL pipeline job-382." \
   "" \
@@ -122,7 +123,6 @@ printf '%s\n' \
     --model "$VLLM_MODEL" --vllm "$VLLM_URL" \
     --tools "$TOOLS" --tool-choice auto \
     --tool-outputs "$TOOL_OUTPUTS" \
-    --tool-output-only-turn 2 \
     --output "$OUTPUT_DIR/responses_tool_calls_tool_output_only.yaml"
 
 echo ""
@@ -212,6 +212,7 @@ printf '%s\n' \
 
 echo ""
 echo "=== 3-turn tool-output-only (turn 2 has no user message) ==="
+# Turn 2 prompt is empty string → _build_tool_output_input omits user message
 printf '%s\n' \
   "You are an SRE assistant. Check the current status of ETL pipeline job-382." \
   "" \
@@ -221,7 +222,6 @@ printf '%s\n' \
     --model "$OPENAI_MODEL" \
     --tools "$TOOLS" --tool-choice auto \
     --tool-outputs "$TOOL_OUTPUTS" \
-    --tool-output-only-turn 2 \
     --output "$OUTPUT_DIR/openai_responses_tool_calls_tool_output_only.yaml"
 
 echo ""
@@ -232,5 +232,6 @@ fi
 
 echo ""
 echo "══════════════════════════════════════════════════════════════"
-echo "  All done. 12 cassettes total."
+CASSETTE_COUNT=$(ls "$OUTPUT_DIR"/*.yaml 2>/dev/null | wc -l | tr -d ' ')
+echo "  All done. ${CASSETTE_COUNT} cassettes in ${OUTPUT_DIR}."
 echo "══════════════════════════════════════════════════════════════"

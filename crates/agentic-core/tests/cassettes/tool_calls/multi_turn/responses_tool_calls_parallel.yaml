@@ -2,9 +2,8 @@ turns:
 - filename: t1
   request:
     body:
-      input: 'You are an SRE assistant. I need you to do TWO things in parallel: 1)
-        call get_job_status for job-382, and 2) call web_search for ''Spark ETL OOM
-        causes''. Do both now.'
+      input: 'You are an SRE assistant. Do TWO things in parallel: 1) check the status
+        of job-382 AND 2) search the web for Spark OOM fixes. Call BOTH tools now.'
       model: openai/gpt-oss-20b
       store: true
       stream: false
@@ -138,31 +137,31 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331421
+      created_at: 1782332957
       frequency_penalty: 0.0
-      id: resp_8d2ba1fd0c04698e
+      id: resp_9bfc4dacc826288b
       incomplete_details: null
       input_messages: null
       instructions: null
       kv_transfer_params: null
-      max_output_tokens: 3630
+      max_output_tokens: 3638
       max_tool_calls: null
       metadata: null
       model: openai/gpt-oss-20b
       object: response
       output:
       - content:
-        - text: We have two tasks. Need to issue function calls. In parallel but we
-            can do sequential calls. We'll return a response with both calls.
+        - text: 'We need to call two tools: get_job_status with job_id "job-382" and
+            web_search for "Spark OOM fixes". We''ll output both. We''ll use tools.'
           type: reasoning_text
         encrypted_content: null
-        id: rs_80890552364f4920
+        id: rs_9e89d5f70cbf5c3b
         status: null
         summary: []
         type: reasoning
       - arguments: '{"job_id":"job-382"}'
-        call_id: call_8e475b02312e69a7
-        id: fc_8e475b02312e69a7
+        call_id: call_adbd2bbc5203b3d4
+        id: fc_adbd2bbc5203b3d4
         name: get_job_status
         namespace: null
         status: null
@@ -307,18 +306,18 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 466
+        input_tokens: 458
         input_tokens_details:
           cached_tokens: 416
           cached_tokens_per_turn:
           - 416
           input_tokens_per_turn:
-          - 466
-        output_tokens: 56
+          - 458
+        output_tokens: 64
         output_tokens_details:
           output_tokens_per_turn:
-          - 56
-          reasoning_tokens: 38
+          - 64
+          reasoning_tokens: 46
           tool_output_tokens: 0
           tool_output_tokens_per_turn:
           - 0
@@ -331,17 +330,17 @@ turns:
   request:
     body:
       input:
-      - call_id: call_8e475b02312e69a7
+      - call_id: call_adbd2bbc5203b3d4
         output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
           "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
           31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
         type: function_call_output
-      - content: Based on those results, search the runbook for memory increase procedures.
+      - content: Based on those results, search the runbook for memory override procedures.
           Max 3 results.
         role: user
         type: message
       model: openai/gpt-oss-20b
-      previous_response_id: resp_8d2ba1fd0c04698e
+      previous_response_id: resp_9bfc4dacc826288b
       store: true
       stream: false
       tool_choice: auto
@@ -474,9 +473,9 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331422
+      created_at: 1782332958
       frequency_penalty: 0.0
-      id: resp_aba6b58081c2af00
+      id: resp_9e29702b26e8d17f
       incomplete_details: null
       input_messages: null
       instructions: null
@@ -488,16 +487,17 @@ turns:
       object: response
       output:
       - content:
-        - text: 'We use search_runbook with query: "increase memory in spark etl job".'
+        - text: Call search_runbook with query "memory override procedure pipeline
+            job" maybe.
           type: reasoning_text
         encrypted_content: null
-        id: rs_bdf90e9ca5f2cfe1
+        id: rs_8564e8af0bfe516e
         status: null
         summary: []
         type: reasoning
-      - arguments: '{"query":"increase memory in spark etl job","max_results":3}'
-        call_id: call_bdca8527c50ba7c3
-        id: fc_bdca8527c50ba7c3
+      - arguments: '{"query":"memory override procedure pipeline job", "max_results":3}'
+        call_id: call_8641aa37edcc8a37
+        id: fc_8641aa37edcc8a37
         name: search_runbook
         namespace: null
         status: null
@@ -505,7 +505,7 @@ turns:
       output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_8d2ba1fd0c04698e
+      previous_response_id: resp_9bfc4dacc826288b
       prompt: null
       reasoning: null
       service_tier: auto
@@ -649,15 +649,15 @@ turns:
           - 496
           input_tokens_per_turn:
           - 648
-        output_tokens: 53
+        output_tokens: 50
         output_tokens_details:
           output_tokens_per_turn:
-          - 53
-          reasoning_tokens: 35
+          - 50
+          reasoning_tokens: 32
           tool_output_tokens: 0
           tool_output_tokens_per_turn:
           - 0
-        total_tokens: 701
+        total_tokens: 698
       user: null
     headers:
       content-type: application/json
@@ -666,7 +666,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_bdca8527c50ba7c3
+      - call_id: call_8641aa37edcc8a37
         output: '[{"title": "OOM Troubleshooting for ETL Pipelines", "path": "/runbooks/data-platform/oom-etl.md",
           "snippet": "When transform stage OOMs: 1) Check partition skew with get_partition_stats,
           2) Increase executor memory (default 32GB -> 64GB), 3) Enable adaptive query
@@ -674,12 +674,11 @@ turns:
           "snippet": "To increase memory: use restart_job with memory_override_gb.
           Standard escalation: 32->64->128. Requires approval above 128GB."}]'
         type: function_call_output
-      - content: Now restart that job with 64 GB memory, skip completed stages, high
-          priority.
+      - content: Now restart that job with 64GB memory and high priority.
         role: user
         type: message
       model: openai/gpt-oss-20b
-      previous_response_id: resp_aba6b58081c2af00
+      previous_response_id: resp_9e29702b26e8d17f
       store: true
       stream: false
       tool_choice: auto
@@ -812,30 +811,30 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331422
+      created_at: 1782332958
       frequency_penalty: 0.0
-      id: resp_ad6b4fc0f049ab2c
+      id: resp_9d863819516f196f
       incomplete_details: null
       input_messages: null
       instructions: null
       kv_transfer_params: null
-      max_output_tokens: 3227
+      max_output_tokens: 3234
       max_tool_calls: null
       metadata: null
       model: openai/gpt-oss-20b
       object: response
       output:
       - content:
-        - text: We call restart_job.
+        - text: Call restart_job.
           type: reasoning_text
         encrypted_content: null
-        id: rs_bdb91c841cb8efe5
+        id: rs_ae5f6f0e38b5f7d4
         status: null
         summary: []
         type: reasoning
       - arguments: '{"job_id":"job-382","memory_override_gb":64,"skip_completed_stages":true,"priority":"high"}'
-        call_id: call_ab53b40d671c09d9
-        id: fc_ab53b40d671c09d9
+        call_id: call_b231aec112209369
+        id: fc_b231aec112209369
         name: restart_job
         namespace: null
         status: null
@@ -843,7 +842,7 @@ turns:
       output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_aba6b58081c2af00
+      previous_response_id: resp_9e29702b26e8d17f
       prompt: null
       reasoning: null
       service_tier: auto
@@ -980,22 +979,22 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 869
+        input_tokens: 862
         input_tokens_details:
           cached_tokens: 656
           cached_tokens_per_turn:
           - 656
           input_tokens_per_turn:
-          - 869
-        output_tokens: 50
+          - 862
+        output_tokens: 49
         output_tokens_details:
           output_tokens_per_turn:
-          - 50
-          reasoning_tokens: 33
+          - 49
+          reasoning_tokens: 32
           tool_output_tokens: 0
           tool_output_tokens_per_turn:
           - 0
-        total_tokens: 919
+        total_tokens: 911
       user: null
     headers:
       content-type: application/json

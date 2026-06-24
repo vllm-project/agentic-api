@@ -139,11 +139,11 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1782331467
-      created_at: 1782331466
+      completed_at: 1782332973
+      created_at: 1782332972
       error: null
       frequency_penalty: 0.0
-      id: resp_049b5e7584cd0867006a3c384ab9a88199a7bb53c011a2c1fa
+      id: resp_053fd4e04cde0a13006a3c3e2cb15481999f99b43d8b7ba0eb
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -154,8 +154,8 @@ turns:
       object: response
       output:
       - arguments: '{"job_id":"job-382"}'
-        call_id: call_WHuX19CANJfWBjbT8lqdEiya
-        id: fc_049b5e7584cd0867006a3c384bc20481999a4ed6ff6b79fac6
+        call_id: call_3X1PVcQ6ehCZzHs06wCQYUKS
+        id: fc_053fd4e04cde0a13006a3c3e2d915c8199bbe2658507aca5a3
         name: get_job_status
         status: completed
         type: function_call
@@ -316,7 +316,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_WHuX19CANJfWBjbT8lqdEiya
+      - call_id: call_3X1PVcQ6ehCZzHs06wCQYUKS
         output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
           "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
           31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
@@ -326,7 +326,7 @@ turns:
         role: user
         type: message
       model: gpt-4o
-      previous_response_id: resp_049b5e7584cd0867006a3c384ab9a88199a7bb53c011a2c1fa
+      previous_response_id: resp_053fd4e04cde0a13006a3c3e2cb15481999f99b43d8b7ba0eb
       store: true
       stream: false
       tool_choice: auto
@@ -462,11 +462,11 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1782331468
-      created_at: 1782331468
+      completed_at: 1782332974
+      created_at: 1782332974
       error: null
       frequency_penalty: 0.0
-      id: resp_049b5e7584cd0867006a3c384c03748199949f46ad0cd9b7f2
+      id: resp_053fd4e04cde0a13006a3c3e2e09fc8199b946b967b1807204
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -477,14 +477,14 @@ turns:
       object: response
       output:
       - arguments: '{"job_id":"job-382","severity":"ERROR","max_entries":10}'
-        call_id: call_43JRhsN6hGDMwwMx06hK3SWY
-        id: fc_049b5e7584cd0867006a3c384caea881999eba9bcd4ec6ee9b
+        call_id: call_fOWZK3bqWYpKzLkZZ43j8CkC
+        id: fc_053fd4e04cde0a13006a3c3e2ea0148199bca9b82969b56771
         name: get_error_logs
         status: completed
         type: function_call
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_049b5e7584cd0867006a3c384ab9a88199a7bb53c011a2c1fa
+      previous_response_id: resp_053fd4e04cde0a13006a3c3e2cb15481999f99b43d8b7ba0eb
       prompt_cache_key: null
       prompt_cache_retention: in_memory
       reasoning:
@@ -639,7 +639,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_43JRhsN6hGDMwwMx06hK3SWY
+      - call_id: call_fOWZK3bqWYpKzLkZZ43j8CkC
         output: '[{"timestamp": "2024-01-15T03:22:09Z", "severity": "ERROR", "message":
           "OutOfMemoryError at stage ''transform'': heap space exhausted (31.2GB/32GB)",
           "stack_trace": "java.lang.OutOfMemoryError: Java heap space\n  at org.apache.spark.memory.TaskMemoryManager.allocatePage"},
@@ -655,7 +655,7 @@ turns:
         role: user
         type: message
       model: gpt-4o
-      previous_response_id: resp_049b5e7584cd0867006a3c384c03748199949f46ad0cd9b7f2
+      previous_response_id: resp_053fd4e04cde0a13006a3c3e2e09fc8199b946b967b1807204
       store: true
       stream: false
       tool_choice: auto
@@ -791,11 +791,11 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1782331470
-      created_at: 1782331469
+      completed_at: 1782332976
+      created_at: 1782332975
       error: null
       frequency_penalty: 0.0
-      id: resp_049b5e7584cd0867006a3c384d13d48199a2782d3f3d47efe8
+      id: resp_053fd4e04cde0a13006a3c3e2f21b481999e17dd868d5c3d17
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -805,15 +805,15 @@ turns:
       moderation: null
       object: response
       output:
-      - arguments: '{"query":"OutOfMemoryError in ETL transform stage","max_results":5}'
-        call_id: call_tSIYLWKg6qeX4YLQC9jBLctZ
-        id: fc_049b5e7584cd0867006a3c384e2488819995cd62e88ea95a97
+      - arguments: '{"query":"OutOfMemoryError in Spark ETL pipeline","max_results":5}'
+        call_id: call_YDBEHTdaQUL2SLAoITTufq5z
+        id: fc_053fd4e04cde0a13006a3c3e3070e8819985588ede678d1791
         name: search_runbook
         status: completed
         type: function_call
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_049b5e7584cd0867006a3c384c03748199949f46ad0cd9b7f2
+      previous_response_id: resp_053fd4e04cde0a13006a3c3e2e09fc8199b946b967b1807204
       prompt_cache_key: null
       prompt_cache_retention: in_memory
       reasoning:

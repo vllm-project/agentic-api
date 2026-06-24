@@ -139,11 +139,11 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1782331511
-      created_at: 1782331509
+      completed_at: 1782333000
+      created_at: 1782332998
       error: null
       frequency_penalty: 0.0
-      id: resp_05bbd2f607378fa0006a3c387599cc81998df1b061f645e587
+      id: resp_060930d6abfe49c7006a3c3e468914819aa9bba6693b0b3070
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -154,8 +154,8 @@ turns:
       object: response
       output:
       - arguments: '{"job_id":"job-382"}'
-        call_id: call_NWcEmKRN0AkUr4ZmlHWaqcQn
-        id: fc_05bbd2f607378fa0006a3c3877757c81999eedf1f10d0b4309
+        call_id: call_pn7qCsEVkAGhDdjzZLCH9cWT
+        id: fc_060930d6abfe49c7006a3c3e47edc0819ab59873692fe0f672
         name: get_job_status
         status: completed
         type: function_call
@@ -316,7 +316,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_NWcEmKRN0AkUr4ZmlHWaqcQn
+      - call_id: call_pn7qCsEVkAGhDdjzZLCH9cWT
         output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
           "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
           31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
@@ -325,7 +325,7 @@ turns:
         role: user
         type: message
       model: gpt-4o
-      previous_response_id: resp_05bbd2f607378fa0006a3c387599cc81998df1b061f645e587
+      previous_response_id: resp_060930d6abfe49c7006a3c3e468914819aa9bba6693b0b3070
       store: true
       stream: false
       tool_choice: auto
@@ -461,11 +461,11 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1782331512
-      created_at: 1782331511
+      completed_at: 1782333001
+      created_at: 1782333000
       error: null
       frequency_penalty: 0.0
-      id: resp_05bbd2f607378fa0006a3c3877c0f0819983a3f1411a2242b9
+      id: resp_060930d6abfe49c7006a3c3e48529c819a944ed725bbe55cd0
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -476,14 +476,14 @@ turns:
       object: response
       output:
       - arguments: '{"job_id":"job-382","severity":"ERROR","max_entries":10}'
-        call_id: call_8SfacO4G0hZKrTnfTI76zeAa
-        id: fc_05bbd2f607378fa0006a3c38789348819980949dfc83474c4b
+        call_id: call_nDUFTXwJnhbqZjpaQws3XdGa
+        id: fc_060930d6abfe49c7006a3c3e491504819aa6c312a6b9216ce9
         name: get_error_logs
         status: completed
         type: function_call
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_05bbd2f607378fa0006a3c387599cc81998df1b061f645e587
+      previous_response_id: resp_060930d6abfe49c7006a3c3e468914819aa9bba6693b0b3070
       prompt_cache_key: null
       prompt_cache_retention: in_memory
       reasoning:
@@ -638,7 +638,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_NWcEmKRN0AkUr4ZmlHWaqcQn
+      - call_id: call_pn7qCsEVkAGhDdjzZLCH9cWT
         output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
           "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
           31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
@@ -648,7 +648,7 @@ turns:
         role: user
         type: message
       model: gpt-4o
-      previous_response_id: resp_05bbd2f607378fa0006a3c387599cc81998df1b061f645e587
+      previous_response_id: resp_060930d6abfe49c7006a3c3e468914819aa9bba6693b0b3070
       store: true
       stream: false
       tool_choice: auto
@@ -784,11 +784,11 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1782331514
-      created_at: 1782331512
+      completed_at: 1782333002
+      created_at: 1782333001
       error: null
       frequency_penalty: 0.0
-      id: resp_05bbd2f607378fa0006a3c3878eb5481999b020abb1bbaaa0f
+      id: resp_060930d6abfe49c7006a3c3e497860819aa2284f65a4dcb398
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -799,14 +799,14 @@ turns:
       object: response
       output:
       - arguments: '{"query":"increase memory limits for ETL jobs","max_results":3}'
-        call_id: call_XVIOIR7ZtfV0urAs3C4ZXPK8
-        id: fc_05bbd2f607378fa0006a3c3879e768819997294f712fc6012c
+        call_id: call_o2XvimyEnM5NRIzViu7DEDsN
+        id: fc_060930d6abfe49c7006a3c3e4a093c819aa7b19626148ad151
         name: search_runbook
         status: completed
         type: function_call
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_05bbd2f607378fa0006a3c387599cc81998df1b061f645e587
+      previous_response_id: resp_060930d6abfe49c7006a3c3e468914819aa9bba6693b0b3070
       prompt_cache_key: null
       prompt_cache_retention: in_memory
       reasoning:

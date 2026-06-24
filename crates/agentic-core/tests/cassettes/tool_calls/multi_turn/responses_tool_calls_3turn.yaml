@@ -136,9 +136,9 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331360
+      created_at: 1782332947
       frequency_penalty: 0.0
-      id: resp_99ff5424f2627e43
+      id: resp_800ce8df847a299d
       incomplete_details: null
       input_messages: null
       instructions: null
@@ -150,16 +150,16 @@ turns:
       object: response
       output:
       - content:
-        - text: We need to call get_job_status.
+        - text: We need to query get_job_status.
           type: reasoning_text
         encrypted_content: null
-        id: rs_901adb851069f6c7
+        id: rs_8586850ba9dcee47
         status: null
         summary: []
         type: reasoning
       - arguments: '{"job_id":"job-382"}'
-        call_id: call_af81636bdbc9dec5
-        id: fc_af81636bdbc9dec5
+        call_id: call_80b2f4f754dbba6b
+        id: fc_80b2f4f754dbba6b
         name: get_job_status
         namespace: null
         status: null
@@ -328,7 +328,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_af81636bdbc9dec5
+      - call_id: call_80b2f4f754dbba6b
         output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
           "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
           31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
@@ -338,7 +338,7 @@ turns:
         role: user
         type: message
       model: openai/gpt-oss-20b
-      previous_response_id: resp_99ff5424f2627e43
+      previous_response_id: resp_800ce8df847a299d
       store: true
       stream: false
       tool_choice: auto
@@ -471,9 +471,9 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331361
+      created_at: 1782332947
       frequency_penalty: 0.0
-      id: resp_b44e3326e81a597c
+      id: resp_96a3170ed78e87b3
       incomplete_details: null
       input_messages: null
       instructions: null
@@ -485,16 +485,16 @@ turns:
       object: response
       output:
       - content:
-        - text: Call get_error_logs.
+        - text: We need get_error_logs.
           type: reasoning_text
         encrypted_content: null
-        id: rs_8f36d456b69a137a
+        id: rs_b35e1283a0afe646
         status: null
         summary: []
         type: reasoning
       - arguments: '{"job_id":"job-382","severity":"ERROR","max_entries":10}'
-        call_id: call_961a299b68e2f0d9
-        id: fc_961a299b68e2f0d9
+        call_id: call_a4919ceec5777dd0
+        id: fc_a4919ceec5777dd0
         name: get_error_logs
         namespace: null
         status: null
@@ -502,7 +502,7 @@ turns:
       output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_99ff5424f2627e43
+      previous_response_id: resp_800ce8df847a299d
       prompt: null
       reasoning: null
       service_tier: auto
@@ -641,20 +641,20 @@ turns:
       usage:
         input_tokens: 597
         input_tokens_details:
-          cached_tokens: 464
+          cached_tokens: 448
           cached_tokens_per_turn:
-          - 464
+          - 448
           input_tokens_per_turn:
           - 597
-        output_tokens: 42
+        output_tokens: 43
         output_tokens_details:
           output_tokens_per_turn:
-          - 42
-          reasoning_tokens: 24
+          - 43
+          reasoning_tokens: 25
           tool_output_tokens: 0
           tool_output_tokens_per_turn:
           - 0
-        total_tokens: 639
+        total_tokens: 640
       user: null
     headers:
       content-type: application/json
@@ -663,7 +663,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_961a299b68e2f0d9
+      - call_id: call_a4919ceec5777dd0
         output: '[{"timestamp": "2024-01-15T03:22:09Z", "severity": "ERROR", "message":
           "OutOfMemoryError at stage ''transform'': heap space exhausted (31.2GB/32GB)",
           "stack_trace": "java.lang.OutOfMemoryError: Java heap space\n  at org.apache.spark.memory.TaskMemoryManager.allocatePage"},
@@ -679,7 +679,7 @@ turns:
         role: user
         type: message
       model: openai/gpt-oss-20b
-      previous_response_id: resp_b44e3326e81a597c
+      previous_response_id: resp_96a3170ed78e87b3
       store: true
       stream: false
       tool_choice: auto
@@ -812,30 +812,31 @@ turns:
   response:
     body:
       background: false
-      created_at: 1782331361
+      created_at: 1782332947
       frequency_penalty: 0.0
-      id: resp_8dfe29723818b937
+      id: resp_a89ba667cd7e86df
       incomplete_details: null
       input_messages: null
       instructions: null
       kv_transfer_params: null
-      max_output_tokens: 3226
+      max_output_tokens: 3225
       max_tool_calls: null
       metadata: null
       model: openai/gpt-oss-20b
       object: response
       output:
       - content:
-        - text: Use search_runbook.
+        - text: Search runbook.
           type: reasoning_text
         encrypted_content: null
-        id: rs_8682e2c6b269a60c
+        id: rs_81269817d22797d0
         status: null
         summary: []
         type: reasoning
-      - arguments: '{"query":"OutOfMemoryError transform stage ETL daily ingest troubleshoot","max_results":5}'
-        call_id: call_847a146847337019
-        id: fc_847a146847337019
+      - arguments: '{"query":"OutOfMemoryError ETL transform stage Spark restart job
+          memory limit", "max_results":5}'
+        call_id: call_bb883df29ae253d1
+        id: fc_bb883df29ae253d1
         name: search_runbook
         namespace: null
         status: null
@@ -843,7 +844,7 @@ turns:
       output_messages: null
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_b44e3326e81a597c
+      previous_response_id: resp_96a3170ed78e87b3
       prompt: null
       reasoning: null
       service_tier: auto
@@ -980,22 +981,22 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 870
+        input_tokens: 871
         input_tokens_details:
           cached_tokens: 608
           cached_tokens_per_turn:
           - 608
           input_tokens_per_turn:
-          - 870
-        output_tokens: 45
+          - 871
+        output_tokens: 47
         output_tokens_details:
           output_tokens_per_turn:
-          - 45
-          reasoning_tokens: 27
+          - 47
+          reasoning_tokens: 29
           tool_output_tokens: 0
           tool_output_tokens_per_turn:
           - 0
-        total_tokens: 915
+        total_tokens: 918
       user: null
     headers:
       content-type: application/json

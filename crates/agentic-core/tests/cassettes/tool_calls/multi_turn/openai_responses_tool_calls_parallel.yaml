@@ -2,9 +2,8 @@ turns:
 - filename: t1
   request:
     body:
-      input: 'You are an SRE assistant. I need you to do TWO things in parallel: 1)
-        call get_job_status for job-382, and 2) call web_search for ''Spark ETL OOM
-        causes''. Do both now.'
+      input: 'You are an SRE assistant. Do TWO things in parallel: 1) check the status
+        of job-382 AND 2) search the web for Spark OOM fixes. Call BOTH tools now.'
       model: gpt-4o
       store: true
       stream: false
@@ -141,11 +140,11 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1782331523
-      created_at: 1782331523
+      completed_at: 1782333004
+      created_at: 1782333003
       error: null
       frequency_penalty: 0.0
-      id: resp_0862f67eff09df0d006a3c38830c6881998c50cd3fe21a1e49
+      id: resp_0d6f4d0f7ecfbcbe006a3c3e4b94b08199adefa3fb3b9e6032
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -156,14 +155,14 @@ turns:
       object: response
       output:
       - arguments: '{"job_id":"job-382"}'
-        call_id: call_wsICgbUO4BlbKuK1o6fGzNSp
-        id: fc_0862f67eff09df0d006a3c3883c1bc8199993f62d77975f8dc
+        call_id: call_qsZfyBw1H87UfhQzVJUoQ7Zg
+        id: fc_0d6f4d0f7ecfbcbe006a3c3e4c67b08199b20c7ffffd19dfd1
         name: get_job_status
         status: completed
         type: function_call
-      - arguments: '{"query":"Spark ETL OOM causes"}'
-        call_id: call_kDwkX53Mu7EbLjLOkeymIMya
-        id: fc_0862f67eff09df0d006a3c3883c1d48199949f18556c62e1ec
+      - arguments: '{"query":"Spark OOM fixes"}'
+        call_id: call_9NgvfTtmjW3F1zy9oUmM0Wna
+        id: fc_0d6f4d0f7ecfbcbe006a3c3e4c67bc8199a5d2ff4e72a5e3b5
         name: web_search
         status: completed
         type: function_call
@@ -309,13 +308,13 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 385
+        input_tokens: 377
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 54
+        output_tokens: 52
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 439
+        total_tokens: 429
       user: null
     headers:
       content-type: application/json
@@ -324,12 +323,12 @@ turns:
   request:
     body:
       input:
-      - call_id: call_wsICgbUO4BlbKuK1o6fGzNSp
+      - call_id: call_qsZfyBw1H87UfhQzVJUoQ7Zg
         output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
           "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
           31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
         type: function_call_output
-      - call_id: call_kDwkX53Mu7EbLjLOkeymIMya
+      - call_id: call_9NgvfTtmjW3F1zy9oUmM0Wna
         output: '[{"title": "Spark OOM in ETL: Root Causes and Fixes - Databricks
           Blog", "url": "https://docs.databricks.com/en/optimizations/oom.html", "snippet":
           "Common causes: data skew in shuffle partitions, broadcast join threshold
@@ -339,12 +338,12 @@ turns:
           "snippet": "Increase spark.executor.memory or spark.driver.memory. For shuffle-heavy
           workloads, also increase spark.sql.shuffle.partitions."}]'
         type: function_call_output
-      - content: Based on those results, search the runbook for memory increase procedures.
+      - content: Based on those results, search the runbook for memory override procedures.
           Max 3 results.
         role: user
         type: message
       model: gpt-4o
-      previous_response_id: resp_0862f67eff09df0d006a3c38830c6881998c50cd3fe21a1e49
+      previous_response_id: resp_0d6f4d0f7ecfbcbe006a3c3e4b94b08199adefa3fb3b9e6032
       store: true
       stream: false
       tool_choice: auto
@@ -480,11 +479,11 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1782331524
-      created_at: 1782331524
+      completed_at: 1782333006
+      created_at: 1782333004
       error: null
       frequency_penalty: 0.0
-      id: resp_0862f67eff09df0d006a3c3883f6108199bf628e4a2c6469dd
+      id: resp_0d6f4d0f7ecfbcbe006a3c3e4ca1708199a0c174c7eca6dd03
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -494,15 +493,15 @@ turns:
       moderation: null
       object: response
       output:
-      - arguments: '{"query":"memory increase procedures for Spark","max_results":3}'
-        call_id: call_l2MaoNnfIGtswWuyJUBJ3G3G
-        id: fc_0862f67eff09df0d006a3c38849ba4819991a40c71a014ca1f
+      - arguments: '{"query":"memory override procedures","max_results":3}'
+        call_id: call_RaHQ2EJUGrXRWTgM7qUlfdhg
+        id: fc_0d6f4d0f7ecfbcbe006a3c3e4dfe488199abf55a5d0896e72f
         name: search_runbook
         status: completed
         type: function_call
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_0862f67eff09df0d006a3c38830c6881998c50cd3fe21a1e49
+      previous_response_id: resp_0d6f4d0f7ecfbcbe006a3c3e4b94b08199adefa3fb3b9e6032
       prompt_cache_key: null
       prompt_cache_retention: in_memory
       reasoning:
@@ -642,13 +641,13 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 686
+        input_tokens: 676
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 25
+        output_tokens: 23
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 711
+        total_tokens: 699
       user: null
     headers:
       content-type: application/json
@@ -657,7 +656,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_l2MaoNnfIGtswWuyJUBJ3G3G
+      - call_id: call_RaHQ2EJUGrXRWTgM7qUlfdhg
         output: '[{"title": "OOM Troubleshooting for ETL Pipelines", "path": "/runbooks/data-platform/oom-etl.md",
           "snippet": "When transform stage OOMs: 1) Check partition skew with get_partition_stats,
           2) Increase executor memory (default 32GB -> 64GB), 3) Enable adaptive query
@@ -665,12 +664,11 @@ turns:
           "snippet": "To increase memory: use restart_job with memory_override_gb.
           Standard escalation: 32->64->128. Requires approval above 128GB."}]'
         type: function_call_output
-      - content: Now restart that job with 64 GB memory, skip completed stages, high
-          priority.
+      - content: Now restart that job with 64GB memory and high priority.
         role: user
         type: message
       model: gpt-4o
-      previous_response_id: resp_0862f67eff09df0d006a3c3883f6108199bf628e4a2c6469dd
+      previous_response_id: resp_0d6f4d0f7ecfbcbe006a3c3e4ca1708199a0c174c7eca6dd03
       store: true
       stream: false
       tool_choice: auto
@@ -806,11 +804,11 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1782331525
-      created_at: 1782331525
+      completed_at: 1782333006
+      created_at: 1782333006
       error: null
       frequency_penalty: 0.0
-      id: resp_0862f67eff09df0d006a3c3884f8cc81998a1d105f46eb9e69
+      id: resp_0d6f4d0f7ecfbcbe006a3c3e4e530481999b6062fbd63f7df9
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -821,14 +819,14 @@ turns:
       object: response
       output:
       - arguments: '{"job_id":"job-382","memory_override_gb":64,"skip_completed_stages":true,"priority":"high"}'
-        call_id: call_JLVwHJ1DWkQvlsvhJqL5DuF5
-        id: fc_0862f67eff09df0d006a3c3885bf5081999e5a54327b5f629b
+        call_id: call_141clJIyorJeRB9bew8mY8Hf
+        id: fc_0d6f4d0f7ecfbcbe006a3c3e4ebc748199875c7dc7d0025c1e
         name: restart_job
         status: completed
         type: function_call
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_0862f67eff09df0d006a3c3883f6108199bf628e4a2c6469dd
+      previous_response_id: resp_0d6f4d0f7ecfbcbe006a3c3e4ca1708199a0c174c7eca6dd03
       prompt_cache_key: null
       prompt_cache_retention: in_memory
       reasoning:
@@ -968,13 +966,13 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 873
+        input_tokens: 857
         input_tokens_details:
           cached_tokens: 0
         output_tokens: 36
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 909
+        total_tokens: 893
       user: null
     headers:
       content-type: application/json

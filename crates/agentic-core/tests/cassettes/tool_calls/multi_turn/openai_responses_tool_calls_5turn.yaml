@@ -140,11 +140,11 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1782331481
-      created_at: 1782331481
+      completed_at: 1782332981
+      created_at: 1782332978
       error: null
       frequency_penalty: 0.0
-      id: resp_03fd10c22367f14c006a3c38590640819981d8e689417d6da2
+      id: resp_05ffdb1c1fbb4099006a3c3e321f04819b8f5178e57393bdbb
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -155,8 +155,8 @@ turns:
       object: response
       output:
       - arguments: '{"job_id":"job-382"}'
-        call_id: call_KvqKd7Oqx9UM0kV4BIRAyLEi
-        id: fc_03fd10c22367f14c006a3c385990e481999a7ef70c7dd82761
+        call_id: call_zUYtpSPtiZDIA0xgaf9MKQsL
+        id: fc_05ffdb1c1fbb4099006a3c3e3569f8819b8303dec8c3c61e7f
         name: get_job_status
         status: completed
         type: function_call
@@ -317,7 +317,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_KvqKd7Oqx9UM0kV4BIRAyLEi
+      - call_id: call_zUYtpSPtiZDIA0xgaf9MKQsL
         output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
           "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
           31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
@@ -327,7 +327,7 @@ turns:
         role: user
         type: message
       model: gpt-4o
-      previous_response_id: resp_03fd10c22367f14c006a3c38590640819981d8e689417d6da2
+      previous_response_id: resp_05ffdb1c1fbb4099006a3c3e321f04819b8f5178e57393bdbb
       store: true
       stream: false
       tool_choice: auto
@@ -463,11 +463,11 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1782331482
-      created_at: 1782331482
+      completed_at: 1782332984
+      created_at: 1782332981
       error: null
       frequency_penalty: 0.0
-      id: resp_03fd10c22367f14c006a3c3859dfe4819982720510863bf1fa
+      id: resp_05ffdb1c1fbb4099006a3c3e35df20819b8b6fb4d784425cbd
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -478,14 +478,14 @@ turns:
       object: response
       output:
       - arguments: '{"job_id":"job-382","severity":"ERROR","max_entries":20}'
-        call_id: call_LhB0vE8IH2AIMglFujcSYxwk
-        id: fc_03fd10c22367f14c006a3c385a9efc8199bc2db350998c1ea9
+        call_id: call_bO7EyX3P64ApXE1D3og5t24S
+        id: fc_05ffdb1c1fbb4099006a3c3e37da80819bab37e6b91f212f18
         name: get_error_logs
         status: completed
         type: function_call
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_03fd10c22367f14c006a3c38590640819981d8e689417d6da2
+      previous_response_id: resp_05ffdb1c1fbb4099006a3c3e321f04819b8f5178e57393bdbb
       prompt_cache_key: null
       prompt_cache_retention: in_memory
       reasoning:
@@ -640,7 +640,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_LhB0vE8IH2AIMglFujcSYxwk
+      - call_id: call_bO7EyX3P64ApXE1D3og5t24S
         output: '[{"timestamp": "2024-01-15T03:22:09Z", "severity": "ERROR", "message":
           "OutOfMemoryError at stage ''transform'': heap space exhausted (31.2GB/32GB)",
           "stack_trace": "java.lang.OutOfMemoryError: Java heap space\n  at org.apache.spark.memory.TaskMemoryManager.allocatePage"},
@@ -656,7 +656,7 @@ turns:
         role: user
         type: message
       model: gpt-4o
-      previous_response_id: resp_03fd10c22367f14c006a3c3859dfe4819982720510863bf1fa
+      previous_response_id: resp_05ffdb1c1fbb4099006a3c3e35df20819b8b6fb4d784425cbd
       store: true
       stream: false
       tool_choice: auto
@@ -792,11 +792,11 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1782331484
-      created_at: 1782331483
+      completed_at: 1782332987
+      created_at: 1782332984
       error: null
       frequency_penalty: 0.0
-      id: resp_03fd10c22367f14c006a3c385b44a48199af24641819516d31
+      id: resp_05ffdb1c1fbb4099006a3c3e38693c819bb3f436b554202a58
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -806,15 +806,15 @@ turns:
       moderation: null
       object: response
       output:
-      - arguments: '{"query":"OutOfMemoryError in ETL pipeline transform stage","max_results":5}'
-        call_id: call_Uuq0Gf92pAL1YAUEgnbr8p6B
-        id: fc_03fd10c22367f14c006a3c385c0a248199a0f952e077038d08
+      - arguments: '{"query":"OutOfMemoryError heap space transform stage","max_results":5}'
+        call_id: call_05MIRpeAmcRcfWqIo2fNo0qL
+        id: fc_05ffdb1c1fbb4099006a3c3e3aca44819b90eed8647106b319
         name: search_runbook
         status: completed
         type: function_call
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_03fd10c22367f14c006a3c3859dfe4819982720510863bf1fa
+      previous_response_id: resp_05ffdb1c1fbb4099006a3c3e35df20819b8b6fb4d784425cbd
       prompt_cache_key: null
       prompt_cache_retention: in_memory
       reasoning:
@@ -957,10 +957,10 @@ turns:
         input_tokens: 751
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 30
+        output_tokens: 28
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 781
+        total_tokens: 779
       user: null
     headers:
       content-type: application/json
@@ -969,7 +969,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_Uuq0Gf92pAL1YAUEgnbr8p6B
+      - call_id: call_05MIRpeAmcRcfWqIo2fNo0qL
         output: '[{"title": "OOM Troubleshooting for ETL Pipelines", "path": "/runbooks/data-platform/oom-etl.md",
           "snippet": "When transform stage OOMs: 1) Check partition skew with get_partition_stats,
           2) Increase executor memory (default 32GB -> 64GB), 3) Enable adaptive query
@@ -983,7 +983,7 @@ turns:
         role: user
         type: message
       model: gpt-4o
-      previous_response_id: resp_03fd10c22367f14c006a3c385b44a48199af24641819516d31
+      previous_response_id: resp_05ffdb1c1fbb4099006a3c3e38693c819bb3f436b554202a58
       store: true
       stream: false
       tool_choice: auto
@@ -1119,11 +1119,11 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1782331485
-      created_at: 1782331484
+      completed_at: 1782332989
+      created_at: 1782332987
       error: null
       frequency_penalty: 0.0
-      id: resp_03fd10c22367f14c006a3c385c88788199bfcfc70ff88ce28f
+      id: resp_05ffdb1c1fbb4099006a3c3e3ba4b0819ba847aac847612c9c
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -1136,14 +1136,14 @@ turns:
       - arguments: '{"code":"import json\nprint(json.dumps({''job'': ''job-382'',
           ''error'': ''OOM'', ''stage'': ''transform'', ''recommendation'': ''increase
           memory to 64GB''}))","timeout_seconds":30}'
-        call_id: call_hy09mPn87sDCueIq8Mxd3JBo
-        id: fc_03fd10c22367f14c006a3c385d69c0819980fcbf225cde945f
+        call_id: call_aLDbBvIdBv8z49RXYjC0bpk7
+        id: fc_05ffdb1c1fbb4099006a3c3e3d4dbc819b86d79c1e871caafc
         name: run_analysis
         status: completed
         type: function_call
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_03fd10c22367f14c006a3c385b44a48199af24641819516d31
+      previous_response_id: resp_05ffdb1c1fbb4099006a3c3e38693c819bb3f436b554202a58
       prompt_cache_key: null
       prompt_cache_retention: in_memory
       reasoning:
@@ -1283,13 +1283,13 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 972
+        input_tokens: 970
         input_tokens_details:
           cached_tokens: 0
         output_tokens: 58
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 1030
+        total_tokens: 1028
       user: null
     headers:
       content-type: application/json
@@ -1298,7 +1298,7 @@ turns:
   request:
     body:
       input:
-      - call_id: call_hy09mPn87sDCueIq8Mxd3JBo
+      - call_id: call_aLDbBvIdBv8z49RXYjC0bpk7
         output: '{"stdout": "Failed stage: transform, count: 2\nPattern: consistent
           OOM at partition-47 (2.1M rows)\nRecommendation: increase memory to 64GB
           or repartition", "stderr": "", "exit_code": 0, "duration_ms": 120}'
@@ -1308,7 +1308,7 @@ turns:
         role: user
         type: message
       model: gpt-4o
-      previous_response_id: resp_03fd10c22367f14c006a3c385c88788199bfcfc70ff88ce28f
+      previous_response_id: resp_05ffdb1c1fbb4099006a3c3e3ba4b0819ba847aac847612c9c
       store: true
       stream: false
       tool_choice: auto
@@ -1444,11 +1444,11 @@ turns:
       background: false
       billing:
         payer: developer
-      completed_at: 1782331486
-      created_at: 1782331486
+      completed_at: 1782332991
+      created_at: 1782332990
       error: null
       frequency_penalty: 0.0
-      id: resp_03fd10c22367f14c006a3c385e0a38819983064ba1cbb83062
+      id: resp_05ffdb1c1fbb4099006a3c3e3e2ed8819b977b9a9f508f2751
       incomplete_details: null
       instructions: null
       max_output_tokens: null
@@ -1459,14 +1459,14 @@ turns:
       object: response
       output:
       - arguments: '{"job_id":"job-382","memory_override_gb":64,"skip_completed_stages":true,"priority":"high"}'
-        call_id: call_EgLYkmLEPhzgZl9drilwu1B7
-        id: fc_03fd10c22367f14c006a3c385eafa88199b729b7ba313d626c
+        call_id: call_he6F2Xnx5vqdxnN2LS3rc5Dj
+        id: fc_05ffdb1c1fbb4099006a3c3e3ed060819b82206a634d7c8dd3
         name: restart_job
         status: completed
         type: function_call
       parallel_tool_calls: true
       presence_penalty: 0.0
-      previous_response_id: resp_03fd10c22367f14c006a3c385c88788199bfcfc70ff88ce28f
+      previous_response_id: resp_05ffdb1c1fbb4099006a3c3e3ba4b0819ba847aac847612c9c
       prompt_cache_key: null
       prompt_cache_retention: in_memory
       reasoning:
@@ -1606,13 +1606,13 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 1122
+        input_tokens: 1120
         input_tokens_details:
           cached_tokens: 0
         output_tokens: 36
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 1158
+        total_tokens: 1156
       user: null
     headers:
       content-type: application/json
