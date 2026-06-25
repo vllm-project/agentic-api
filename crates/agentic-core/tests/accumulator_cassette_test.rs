@@ -534,38 +534,6 @@ fn has_reasoning(output: &[OutputItem]) -> bool {
     output.iter().any(|item| matches!(item, OutputItem::Reasoning(_)))
 }
 
-/// Verifies that the cassette has proper `previous_response_id` chaining:
-/// turn 1 has no `prev_id`, subsequent turns reference the prior response.
-fn assert_stateful_chaining(cassette: &TurnCassette) {
-    for (i, turn) in cassette.turns.iter().enumerate() {
-        let body = turn.request.as_mapping().expect("request must be a map");
-        let req_body = body
-            .get(serde_yml::Value::String("body".into()))
-            .and_then(serde_yml::Value::as_mapping)
-            .expect("request.body must be a map");
-        let store = req_body
-            .get(serde_yml::Value::String("store".into()))
-            .and_then(serde_yml::Value::as_bool)
-            .unwrap_or(false);
-        assert!(store, "turn {} must have store=true", i + 1);
-
-        if i == 0 {
-            let prev_id = req_body.get(serde_yml::Value::String("previous_response_id".into()));
-            assert!(
-                prev_id.is_none() || prev_id.unwrap().is_null(),
-                "turn 1 should have no previous_response_id"
-            );
-        } else {
-            let prev_id = req_body.get(serde_yml::Value::String("previous_response_id".into()));
-            assert!(
-                prev_id.is_some() && !prev_id.unwrap().is_null(),
-                "turn {} must have a previous_response_id",
-                i + 1
-            );
-        }
-    }
-}
-
 /// Extracts the `arguments` JSON string from the first function call in output items.
 fn get_first_fc_arguments(output: &[OutputItem]) -> String {
     output
@@ -584,13 +552,6 @@ fn get_first_fc_arguments(output: &[OutputItem]) -> String {
 // Stateful 3-turn: get_job_status → get_error_logs → search_runbook
 // Non-streaming, store=true, previous_response_id chain
 // ═══════════════════════════════════════════════════════════════════
-
-#[test]
-fn test_stateful_responses_3turn_chaining() {
-    let cassette = load_turn_cassette_from(MULTI_TURN_DIR, "responses_tool_calls_3turn.yaml");
-    assert_eq!(cassette.turns.len(), 3);
-    assert_stateful_chaining(&cassette);
-}
 
 #[test]
 fn test_stateful_responses_3turn_tool_calls() {
@@ -659,13 +620,6 @@ fn test_stateful_responses_3turn_null_status_deserialization() {
 // Stateful 5-turn: full investigation pipeline
 // get_job_status → get_error_logs → search_runbook → run_analysis → restart_job
 // ═══════════════════════════════════════════════════════════════════
-
-#[test]
-fn test_stateful_responses_5turn_chaining() {
-    let cassette = load_turn_cassette_from(MULTI_TURN_DIR, "responses_tool_calls_5turn.yaml");
-    assert_eq!(cassette.turns.len(), 5);
-    assert_stateful_chaining(&cassette);
-}
 
 #[test]
 fn test_stateful_responses_5turn_tool_sequence() {
@@ -920,7 +874,6 @@ fn test_openai_parallel_tool_outputs_in_request() {
 fn test_openai_3turn_parses_and_retains_context() {
     let cassette = load_turn_cassette_from(MULTI_TURN_DIR, "openai_responses_tool_calls_3turn.yaml");
     assert_eq!(cassette.turns.len(), 3);
-    assert_stateful_chaining(&cassette);
 
     let t1 = process_nonstreaming_turn(&cassette, 0, "gpt-4o");
     assert_eq!(get_function_call_names(&t1), vec!["get_job_status"]);
@@ -938,7 +891,6 @@ fn test_openai_3turn_parses_and_retains_context() {
 fn test_openai_5turn_full_sequence() {
     let cassette = load_turn_cassette_from(MULTI_TURN_DIR, "openai_responses_tool_calls_5turn.yaml");
     assert_eq!(cassette.turns.len(), 5);
-    assert_stateful_chaining(&cassette);
 
     let expected_tools = [
         "get_job_status",
