@@ -95,7 +95,7 @@ fn assert_registry_lookup(cassette_file: &str) {
         for tool in &tools {
             if let ResponsesTool::Function(p) = tool {
                 let entry = registry
-                    .lookup(&p.name)
+                    .lookup(p.name.as_str())
                     .unwrap_or_else(|| panic!("{cassette_file} turn {i}: tool '{}' not found in registry", p.name));
                 assert_eq!(
                     entry.tool_type,

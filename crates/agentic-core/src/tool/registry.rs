@@ -53,13 +53,11 @@ impl ToolRegistry {
         for tool in tools {
             match tool {
                 ResponsesTool::Function(p) => {
-                    if p.name.is_empty() {
-                        tracing::warn!("skipping function tool with empty name during registry build");
-                        continue;
-                    }
+                    // p.name is NonEmptyToolName — empty names are impossible here
+                    // (serde rejects them at deserialization time).
                     if entries
                         .insert(
-                            p.name.clone(),
+                            p.name.as_str().to_owned(),
                             ToolEntry {
                                 tool_type: ToolType::Function,
                                 config: serde_json::to_value(p).expect("serialization of known struct is infallible"),
@@ -112,10 +110,6 @@ impl ToolRegistry {
                             server_label: None,
                         },
                     );
-                }
-                #[allow(unreachable_patterns)]
-                _ => {
-                    tracing::debug!("unknown ResponsesTool variant skipped during registry build");
                 }
             }
         }

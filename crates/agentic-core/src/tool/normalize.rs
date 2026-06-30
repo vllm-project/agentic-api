@@ -17,13 +17,9 @@ impl ResponsesTool {
     #[must_use]
     pub fn to_function_tool(&self) -> Option<FunctionTool> {
         match self {
-            ResponsesTool::Function(p) => {
-                if p.name.is_empty() {
-                    tracing::debug!("function tool with empty name skipped in normalize");
-                    return None;
-                }
-                Some(FunctionTool::from(p))
-            }
+            // name is NonEmptyToolName — empty names are rejected by serde at
+            // deserialization time, so no runtime check is needed here.
+            ResponsesTool::Function(p) => Some(FunctionTool::from(p)),
             ResponsesTool::Mcp(p) => {
                 tracing::debug!(
                     server_label = %p.server_label,
@@ -41,11 +37,6 @@ impl ResponsesTool {
             }
             ResponsesTool::CodeInterpreter(_) => {
                 tracing::debug!("code_interpreter tool skipped in normalize — handler not yet registered");
-                None
-            }
-            #[allow(unreachable_patterns)]
-            _ => {
-                tracing::debug!("unknown tool type skipped in normalize");
                 None
             }
         }

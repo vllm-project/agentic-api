@@ -19,21 +19,13 @@ pub enum ToolError {
     Config(String),
 }
 
-/// Trait implemented by each tool type (function, MCP, `web_search`, …).
+/// Trait implemented by every tool type — client-owned and gateway-owned alike.
 ///
-/// Every tool type normalises itself to vLLM-compatible `FunctionTool` definitions
-/// and, when gateway-owned, executes via `execute()`. Function tools skip
-/// execution and return `requires_action` to the client.
+/// Covers validation and normalization: the steps that apply to all tools
+/// regardless of who executes them.
 ///
 /// Implementations must be `Send + Sync` so they can be stored behind `Arc<dyn
 /// ToolHandler>` and used across async task boundaries.
-///
-/// ## Note on `async fn` in traits
-///
-/// Native `async fn` in traits (Rust 1.75+) is not yet `dyn`-compatible. Since
-/// PR B will store handlers as `Arc<dyn ToolHandler>`, we use explicit
-/// `Pin<Box<dyn Future>>` return types. If `dyn` dispatch is not needed in your
-/// context, consider `#[trait_variant::make]` or `#[async_trait]`.
 pub trait ToolHandler: Send + Sync {
     #[must_use]
     fn tool_type(&self) -> super::registry::ToolType;
@@ -48,11 +40,21 @@ pub trait ToolHandler: Send + Sync {
     /// Normalise this tool declaration into vLLM-compatible `FunctionTool` entries.
     #[must_use]
     fn normalize(&self, param: &Value) -> Vec<FunctionTool>;
+}
 
+/// Extension of [`ToolHandler`] for tool types that are executed by the gateway.
+///
+/// Only gateway-owned tools (`Mcp`, `WebSearch`, `FileSearch`, `CodeInterpreter`)
+/// implement this trait. Client-owned tools (`Function`) do not — the type system
+/// makes it impossible to call `execute()` on them.
+///
+/// ## Note on `async fn` in traits
+///
+/// Native `async fn` in traits (Rust 1.75+) is not yet `dyn`-compatible. Since
+/// PR B will store handlers as `Arc<dyn GatewayExecutor>`, we use explicit
+/// `Pin<Box<dyn Future>>` return types.
+pub trait GatewayExecutor: ToolHandler + 'static {
     /// Execute a tool call and return the result.
-    ///
-    /// This method is **never called** for `ToolType::Function` — function tools are
-    /// client-owned and the gateway returns `requires_action` to the caller instead.
     ///
     /// ## `config` parameter
     ///
@@ -69,4 +71,15 @@ pub trait ToolHandler: Send + Sync {
         arguments: &str,
         config: &Value,
     ) -> Pin<Box<dyn Future<Output = Result<ToolOutput, ToolError>> + Send + '_>>;
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+
+    // Compile-time check: Arc<dyn GatewayExecutor> must be constructable.
+    // This fails to compile if GatewayExecutor ever becomes dyn-incompatible.
+    fn _assert_gateway_executor_dyn_compatible(_: Arc<dyn GatewayExecutor>) {}
 }

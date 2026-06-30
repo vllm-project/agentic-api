@@ -14,7 +14,9 @@ pub use storage::{
     SchemaManager, StorageError, StoreResult, create_pool, create_pool_with_schema,
     models::{Conversation as DbConversation, Item as DbItem, Response as DbResponse},
 };
-pub use tool::{FunctionHandler, ToolEntry, ToolError, ToolHandler, ToolOutput, ToolRegistry, ToolType};
+pub use tool::{
+    FunctionHandler, GatewayExecutor, ToolEntry, ToolError, ToolHandler, ToolOutput, ToolRegistry, ToolType,
+};
 pub use types::{
     CodeInterpreterToolParam, EmptyToolNameError, FileSearchToolParam, FunctionTool, FunctionToolCall,
     FunctionToolParam, FunctionToolResultMessage, IncompleteDetails, InputContent, InputImageContent, InputItem,

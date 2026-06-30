@@ -97,9 +97,12 @@ pub enum ResponsesTool {
 ///
 /// Does NOT carry a `type` field — serde consumes the tag during
 /// deserialization and the payload struct must not also carry it.
+///
+/// `name` is a [`NonEmptyToolName`]: serde rejects empty strings at
+/// deserialization time, making the invalid state unrepresentable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionToolParam {
-    pub name: String,
+    pub name: NonEmptyToolName,
     pub description: Option<String>,
     pub parameters: Option<Value>,
     pub strict: Option<bool>,
@@ -171,7 +174,7 @@ mod tests {
         let tool: ResponsesTool = serde_json::from_value(json).unwrap();
         assert!(matches!(tool, ResponsesTool::Function(_)));
         if let ResponsesTool::Function(ref p) = tool {
-            assert_eq!(p.name, "get_weather");
+            assert_eq!(p.name.as_str(), "get_weather");
         }
         let back = serde_json::to_value(&tool).unwrap();
         assert_eq!(back["type"], "function");
