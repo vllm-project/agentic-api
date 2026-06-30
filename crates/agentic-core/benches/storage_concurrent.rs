@@ -34,6 +34,7 @@ use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group};
 use tokio::runtime::Runtime;
 
 use agentic_core::storage::{ConversationStore, InOutItem, ResponseMetadata, ResponseStore, create_pool_with_schema};
+use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::{InputItem, InputMessage, InputMessageContent, OutputItem, OutputMessage};
 
 static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -64,7 +65,10 @@ fn make_items() -> Vec<InOutItem> {
     });
     vec![
         InOutItem::Input(input.clone()),
-        InOutItem::Output(OutputItem::Message(OutputMessage::new("msg_123", "completed"))),
+        InOutItem::Output(OutputItem::Message(OutputMessage::new(
+            "msg_123",
+            MessageStatus::Completed,
+        ))),
         InOutItem::Input(input),
     ]
 }

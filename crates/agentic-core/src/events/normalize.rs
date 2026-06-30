@@ -1,7 +1,7 @@
 use serde_json::Value;
 
-use super::types::{EventFrame, EventPayload, SSEEventType};
-use crate::utils::common::deserialize_from_str_opt;
+use super::types::{EventFrame, EventPayload, SSEEventType, SSEItemType};
+use crate::utils::common::{deserialize_from_str_opt, deserialize_from_value_opt};
 
 /// Normalize a raw SSE data line into a typed [`EventFrame`].
 ///
@@ -113,7 +113,10 @@ fn extract_response_payload(json: &Value) -> EventPayload {
     EventPayload::Response {
         id: json_str(response, "id"),
         status: json_str(response, "status"),
-        usage: response.get("usage").filter(|v| !v.is_null()).cloned(),
+        usage: response
+            .get("usage")
+            .filter(|v| !v.is_null())
+            .and_then(|v| deserialize_from_value_opt(v.clone())),
     }
 }
 
@@ -121,7 +124,7 @@ fn extract_output_item_added(json: &Value) -> EventPayload {
     let item = &json["item"];
     EventPayload::OutputItemAdded {
         item_id: json_str(item, "id"),
-        item_type: json_str(item, "type"),
+        item_type: SSEItemType::from(json_str(item, "type")),
         output_index: json_u32(json, "output_index"),
         name: json_str_opt(item, "name"),
         call_id: json_str_opt(item, "call_id"),
@@ -132,7 +135,7 @@ fn extract_output_item_done(json: &Value) -> EventPayload {
     let item = &json["item"];
     EventPayload::OutputItemDone {
         item_id: json_str(item, "id"),
-        item_type: json_str(item, "type"),
+        item_type: SSEItemType::from(json_str(item, "type")),
         output_index: json_u32(json, "output_index"),
         item: item.clone(),
     }

@@ -1,0 +1,1001 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: 'You are an SRE assistant. Do TWO things in parallel: 1) check the status
+        of job-382 AND 2) search the web for Spark OOM fixes. Call BOTH tools now.'
+      model: openai/gpt-oss-20b
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
+          and failure info.
+        name: get_job_status
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier, e.g. job-382
+              type: string
+          required:
+          - job_id
+          type: object
+        strict: true
+        type: function
+      - description: Fetch error logs and stack traces for a failed pipeline job.
+        name: get_error_logs
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier
+              type: string
+            max_entries:
+              description: Maximum log entries to return (default 50)
+              type: integer
+            severity:
+              description: Minimum severity filter
+              enum:
+              - WARN
+              - ERROR
+              - FATAL
+              - ALL
+              type: string
+          required:
+          - job_id
+          - severity
+          - max_entries
+          type: object
+        strict: true
+        type: function
+      - description: Search internal operations runbooks for troubleshooting procedures.
+        name: search_runbook
+        parameters:
+          additionalProperties: false
+          properties:
+            max_results:
+              description: Maximum results to return (default 5)
+              type: integer
+            query:
+              description: Natural language search query
+              type: string
+          required:
+          - query
+          - max_results
+          type: object
+        strict: true
+        type: function
+      - description: Execute a Python analysis script in a sandboxed environment for
+          log parsing or data inspection.
+        name: run_analysis
+        parameters:
+          additionalProperties: false
+          properties:
+            code:
+              description: Python code to execute
+              type: string
+            timeout_seconds:
+              description: Execution timeout (default 30)
+              type: integer
+          required:
+          - code
+          - timeout_seconds
+          type: object
+        strict: true
+        type: function
+      - description: Restart a failed pipeline job with optional configuration overrides.
+        name: restart_job
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier to restart
+              type: string
+            memory_override_gb:
+              description: Override memory limit in GB
+              type: integer
+            priority:
+              description: Queue priority
+              enum:
+              - low
+              - normal
+              - high
+              type: string
+            skip_completed_stages:
+              description: Skip stages that completed successfully (default true)
+              type: boolean
+          required:
+          - job_id
+          - memory_override_gb
+          - skip_completed_stages
+          - priority
+          type: object
+        strict: true
+        type: function
+      - description: Search the public web for technical documentation, blog posts,
+          and known issues.
+        name: web_search
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: Search query
+              type: string
+          required:
+          - query
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      created_at: 1782332957
+      frequency_penalty: 0.0
+      id: resp_9bfc4dacc826288b
+      incomplete_details: null
+      input_messages: null
+      instructions: null
+      kv_transfer_params: null
+      max_output_tokens: 3638
+      max_tool_calls: null
+      metadata: null
+      model: openai/gpt-oss-20b
+      object: response
+      output:
+      - content:
+        - text: 'We need to call two tools: get_job_status with job_id "job-382" and
+            web_search for "Spark OOM fixes". We''ll output both. We''ll use tools.'
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_9e89d5f70cbf5c3b
+        status: null
+        summary: []
+        type: reasoning
+      - arguments: '{"job_id":"job-382"}'
+        call_id: call_adbd2bbc5203b3d4
+        id: fc_adbd2bbc5203b3d4
+        name: get_job_status
+        namespace: null
+        status: null
+        type: function_call
+      output_messages: null
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt: null
+      reasoning: null
+      service_tier: auto
+      status: completed
+      temperature: 1.0
+      text: null
+      tool_choice: auto
+      tools:
+      - defer_loading: null
+        description: Query the pipeline orchestrator for a job's current state, metadata,
+          and failure info.
+        name: get_job_status
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier, e.g. job-382
+              type: string
+          required:
+          - job_id
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Fetch error logs and stack traces for a failed pipeline job.
+        name: get_error_logs
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier
+              type: string
+            max_entries:
+              description: Maximum log entries to return (default 50)
+              type: integer
+            severity:
+              description: Minimum severity filter
+              enum:
+              - WARN
+              - ERROR
+              - FATAL
+              - ALL
+              type: string
+          required:
+          - job_id
+          - severity
+          - max_entries
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Search internal operations runbooks for troubleshooting procedures.
+        name: search_runbook
+        parameters:
+          additionalProperties: false
+          properties:
+            max_results:
+              description: Maximum results to return (default 5)
+              type: integer
+            query:
+              description: Natural language search query
+              type: string
+          required:
+          - query
+          - max_results
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Execute a Python analysis script in a sandboxed environment for
+          log parsing or data inspection.
+        name: run_analysis
+        parameters:
+          additionalProperties: false
+          properties:
+            code:
+              description: Python code to execute
+              type: string
+            timeout_seconds:
+              description: Execution timeout (default 30)
+              type: integer
+          required:
+          - code
+          - timeout_seconds
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Restart a failed pipeline job with optional configuration overrides.
+        name: restart_job
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier to restart
+              type: string
+            memory_override_gb:
+              description: Override memory limit in GB
+              type: integer
+            priority:
+              description: Queue priority
+              enum:
+              - low
+              - normal
+              - high
+              type: string
+            skip_completed_stages:
+              description: Skip stages that completed successfully (default true)
+              type: boolean
+          required:
+          - job_id
+          - memory_override_gb
+          - skip_completed_stages
+          - priority
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Search the public web for technical documentation, blog posts,
+          and known issues.
+        name: web_search
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: Search query
+              type: string
+          required:
+          - query
+          type: object
+        strict: true
+        type: function
+      top_logprobs: null
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 458
+        input_tokens_details:
+          cached_tokens: 416
+          cached_tokens_per_turn:
+          - 416
+          input_tokens_per_turn:
+          - 458
+        output_tokens: 64
+        output_tokens_details:
+          output_tokens_per_turn:
+          - 64
+          reasoning_tokens: 46
+          tool_output_tokens: 0
+          tool_output_tokens_per_turn:
+          - 0
+        total_tokens: 522
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: call_adbd2bbc5203b3d4
+        output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
+          "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
+          31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
+        type: function_call_output
+      - content: Based on those results, search the runbook for memory override procedures.
+          Max 3 results.
+        role: user
+        type: message
+      model: openai/gpt-oss-20b
+      previous_response_id: resp_9bfc4dacc826288b
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
+          and failure info.
+        name: get_job_status
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier, e.g. job-382
+              type: string
+          required:
+          - job_id
+          type: object
+        strict: true
+        type: function
+      - description: Fetch error logs and stack traces for a failed pipeline job.
+        name: get_error_logs
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier
+              type: string
+            max_entries:
+              description: Maximum log entries to return (default 50)
+              type: integer
+            severity:
+              description: Minimum severity filter
+              enum:
+              - WARN
+              - ERROR
+              - FATAL
+              - ALL
+              type: string
+          required:
+          - job_id
+          - severity
+          - max_entries
+          type: object
+        strict: true
+        type: function
+      - description: Search internal operations runbooks for troubleshooting procedures.
+        name: search_runbook
+        parameters:
+          additionalProperties: false
+          properties:
+            max_results:
+              description: Maximum results to return (default 5)
+              type: integer
+            query:
+              description: Natural language search query
+              type: string
+          required:
+          - query
+          - max_results
+          type: object
+        strict: true
+        type: function
+      - description: Execute a Python analysis script in a sandboxed environment for
+          log parsing or data inspection.
+        name: run_analysis
+        parameters:
+          additionalProperties: false
+          properties:
+            code:
+              description: Python code to execute
+              type: string
+            timeout_seconds:
+              description: Execution timeout (default 30)
+              type: integer
+          required:
+          - code
+          - timeout_seconds
+          type: object
+        strict: true
+        type: function
+      - description: Restart a failed pipeline job with optional configuration overrides.
+        name: restart_job
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier to restart
+              type: string
+            memory_override_gb:
+              description: Override memory limit in GB
+              type: integer
+            priority:
+              description: Queue priority
+              enum:
+              - low
+              - normal
+              - high
+              type: string
+            skip_completed_stages:
+              description: Skip stages that completed successfully (default true)
+              type: boolean
+          required:
+          - job_id
+          - memory_override_gb
+          - skip_completed_stages
+          - priority
+          type: object
+        strict: true
+        type: function
+      - description: Search the public web for technical documentation, blog posts,
+          and known issues.
+        name: web_search
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: Search query
+              type: string
+          required:
+          - query
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      created_at: 1782332958
+      frequency_penalty: 0.0
+      id: resp_9e29702b26e8d17f
+      incomplete_details: null
+      input_messages: null
+      instructions: null
+      kv_transfer_params: null
+      max_output_tokens: 3448
+      max_tool_calls: null
+      metadata: null
+      model: openai/gpt-oss-20b
+      object: response
+      output:
+      - content:
+        - text: Call search_runbook with query "memory override procedure pipeline
+            job" maybe.
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_8564e8af0bfe516e
+        status: null
+        summary: []
+        type: reasoning
+      - arguments: '{"query":"memory override procedure pipeline job", "max_results":3}'
+        call_id: call_8641aa37edcc8a37
+        id: fc_8641aa37edcc8a37
+        name: search_runbook
+        namespace: null
+        status: null
+        type: function_call
+      output_messages: null
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_9bfc4dacc826288b
+      prompt: null
+      reasoning: null
+      service_tier: auto
+      status: completed
+      temperature: 1.0
+      text: null
+      tool_choice: auto
+      tools:
+      - defer_loading: null
+        description: Query the pipeline orchestrator for a job's current state, metadata,
+          and failure info.
+        name: get_job_status
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier, e.g. job-382
+              type: string
+          required:
+          - job_id
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Fetch error logs and stack traces for a failed pipeline job.
+        name: get_error_logs
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier
+              type: string
+            max_entries:
+              description: Maximum log entries to return (default 50)
+              type: integer
+            severity:
+              description: Minimum severity filter
+              enum:
+              - WARN
+              - ERROR
+              - FATAL
+              - ALL
+              type: string
+          required:
+          - job_id
+          - severity
+          - max_entries
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Search internal operations runbooks for troubleshooting procedures.
+        name: search_runbook
+        parameters:
+          additionalProperties: false
+          properties:
+            max_results:
+              description: Maximum results to return (default 5)
+              type: integer
+            query:
+              description: Natural language search query
+              type: string
+          required:
+          - query
+          - max_results
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Execute a Python analysis script in a sandboxed environment for
+          log parsing or data inspection.
+        name: run_analysis
+        parameters:
+          additionalProperties: false
+          properties:
+            code:
+              description: Python code to execute
+              type: string
+            timeout_seconds:
+              description: Execution timeout (default 30)
+              type: integer
+          required:
+          - code
+          - timeout_seconds
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Restart a failed pipeline job with optional configuration overrides.
+        name: restart_job
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier to restart
+              type: string
+            memory_override_gb:
+              description: Override memory limit in GB
+              type: integer
+            priority:
+              description: Queue priority
+              enum:
+              - low
+              - normal
+              - high
+              type: string
+            skip_completed_stages:
+              description: Skip stages that completed successfully (default true)
+              type: boolean
+          required:
+          - job_id
+          - memory_override_gb
+          - skip_completed_stages
+          - priority
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Search the public web for technical documentation, blog posts,
+          and known issues.
+        name: web_search
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: Search query
+              type: string
+          required:
+          - query
+          type: object
+        strict: true
+        type: function
+      top_logprobs: null
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 648
+        input_tokens_details:
+          cached_tokens: 496
+          cached_tokens_per_turn:
+          - 496
+          input_tokens_per_turn:
+          - 648
+        output_tokens: 50
+        output_tokens_details:
+          output_tokens_per_turn:
+          - 50
+          reasoning_tokens: 32
+          tool_output_tokens: 0
+          tool_output_tokens_per_turn:
+          - 0
+        total_tokens: 698
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - call_id: call_8641aa37edcc8a37
+        output: '[{"title": "OOM Troubleshooting for ETL Pipelines", "path": "/runbooks/data-platform/oom-etl.md",
+          "snippet": "When transform stage OOMs: 1) Check partition skew with get_partition_stats,
+          2) Increase executor memory (default 32GB -> 64GB), 3) Enable adaptive query
+          execution"}, {"title": "Memory Limit Override Procedures", "path": "/runbooks/data-platform/memory-overrides.md",
+          "snippet": "To increase memory: use restart_job with memory_override_gb.
+          Standard escalation: 32->64->128. Requires approval above 128GB."}]'
+        type: function_call_output
+      - content: Now restart that job with 64GB memory and high priority.
+        role: user
+        type: message
+      model: openai/gpt-oss-20b
+      previous_response_id: resp_9e29702b26e8d17f
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - description: Query the pipeline orchestrator for a job's current state, metadata,
+          and failure info.
+        name: get_job_status
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier, e.g. job-382
+              type: string
+          required:
+          - job_id
+          type: object
+        strict: true
+        type: function
+      - description: Fetch error logs and stack traces for a failed pipeline job.
+        name: get_error_logs
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier
+              type: string
+            max_entries:
+              description: Maximum log entries to return (default 50)
+              type: integer
+            severity:
+              description: Minimum severity filter
+              enum:
+              - WARN
+              - ERROR
+              - FATAL
+              - ALL
+              type: string
+          required:
+          - job_id
+          - severity
+          - max_entries
+          type: object
+        strict: true
+        type: function
+      - description: Search internal operations runbooks for troubleshooting procedures.
+        name: search_runbook
+        parameters:
+          additionalProperties: false
+          properties:
+            max_results:
+              description: Maximum results to return (default 5)
+              type: integer
+            query:
+              description: Natural language search query
+              type: string
+          required:
+          - query
+          - max_results
+          type: object
+        strict: true
+        type: function
+      - description: Execute a Python analysis script in a sandboxed environment for
+          log parsing or data inspection.
+        name: run_analysis
+        parameters:
+          additionalProperties: false
+          properties:
+            code:
+              description: Python code to execute
+              type: string
+            timeout_seconds:
+              description: Execution timeout (default 30)
+              type: integer
+          required:
+          - code
+          - timeout_seconds
+          type: object
+        strict: true
+        type: function
+      - description: Restart a failed pipeline job with optional configuration overrides.
+        name: restart_job
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier to restart
+              type: string
+            memory_override_gb:
+              description: Override memory limit in GB
+              type: integer
+            priority:
+              description: Queue priority
+              enum:
+              - low
+              - normal
+              - high
+              type: string
+            skip_completed_stages:
+              description: Skip stages that completed successfully (default true)
+              type: boolean
+          required:
+          - job_id
+          - memory_override_gb
+          - skip_completed_stages
+          - priority
+          type: object
+        strict: true
+        type: function
+      - description: Search the public web for technical documentation, blog posts,
+          and known issues.
+        name: web_search
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: Search query
+              type: string
+          required:
+          - query
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      created_at: 1782332958
+      frequency_penalty: 0.0
+      id: resp_9d863819516f196f
+      incomplete_details: null
+      input_messages: null
+      instructions: null
+      kv_transfer_params: null
+      max_output_tokens: 3234
+      max_tool_calls: null
+      metadata: null
+      model: openai/gpt-oss-20b
+      object: response
+      output:
+      - content:
+        - text: Call restart_job.
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_ae5f6f0e38b5f7d4
+        status: null
+        summary: []
+        type: reasoning
+      - arguments: '{"job_id":"job-382","memory_override_gb":64,"skip_completed_stages":true,"priority":"high"}'
+        call_id: call_b231aec112209369
+        id: fc_b231aec112209369
+        name: restart_job
+        namespace: null
+        status: null
+        type: function_call
+      output_messages: null
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_9e29702b26e8d17f
+      prompt: null
+      reasoning: null
+      service_tier: auto
+      status: completed
+      temperature: 1.0
+      text: null
+      tool_choice: auto
+      tools:
+      - defer_loading: null
+        description: Query the pipeline orchestrator for a job's current state, metadata,
+          and failure info.
+        name: get_job_status
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier, e.g. job-382
+              type: string
+          required:
+          - job_id
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Fetch error logs and stack traces for a failed pipeline job.
+        name: get_error_logs
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier
+              type: string
+            max_entries:
+              description: Maximum log entries to return (default 50)
+              type: integer
+            severity:
+              description: Minimum severity filter
+              enum:
+              - WARN
+              - ERROR
+              - FATAL
+              - ALL
+              type: string
+          required:
+          - job_id
+          - severity
+          - max_entries
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Search internal operations runbooks for troubleshooting procedures.
+        name: search_runbook
+        parameters:
+          additionalProperties: false
+          properties:
+            max_results:
+              description: Maximum results to return (default 5)
+              type: integer
+            query:
+              description: Natural language search query
+              type: string
+          required:
+          - query
+          - max_results
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Execute a Python analysis script in a sandboxed environment for
+          log parsing or data inspection.
+        name: run_analysis
+        parameters:
+          additionalProperties: false
+          properties:
+            code:
+              description: Python code to execute
+              type: string
+            timeout_seconds:
+              description: Execution timeout (default 30)
+              type: integer
+          required:
+          - code
+          - timeout_seconds
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Restart a failed pipeline job with optional configuration overrides.
+        name: restart_job
+        parameters:
+          additionalProperties: false
+          properties:
+            job_id:
+              description: Pipeline job identifier to restart
+              type: string
+            memory_override_gb:
+              description: Override memory limit in GB
+              type: integer
+            priority:
+              description: Queue priority
+              enum:
+              - low
+              - normal
+              - high
+              type: string
+            skip_completed_stages:
+              description: Skip stages that completed successfully (default true)
+              type: boolean
+          required:
+          - job_id
+          - memory_override_gb
+          - skip_completed_stages
+          - priority
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Search the public web for technical documentation, blog posts,
+          and known issues.
+        name: web_search
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: Search query
+              type: string
+          required:
+          - query
+          type: object
+        strict: true
+        type: function
+      top_logprobs: null
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 862
+        input_tokens_details:
+          cached_tokens: 656
+          cached_tokens_per_turn:
+          - 656
+          input_tokens_per_turn:
+          - 862
+        output_tokens: 49
+        output_tokens_details:
+          output_tokens_per_turn:
+          - 49
+          reasoning_tokens: 32
+          tool_output_tokens: 0
+          tool_output_tokens_per_turn:
+          - 0
+        total_tokens: 911
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

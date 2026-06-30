@@ -1,0 +1,446 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: 'Please do two things: first call the get_weather tool for Paris, and
+        also write a short text message explaining what you are doing.'
+      model: Qwen/Qwen3-30B-A3B-FP8
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - description: Get current temperature and conditions for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            location:
+              description: City name
+              type: string
+            unit:
+              enum:
+              - celsius
+              - fahrenheit
+              type: string
+          required:
+          - location
+          type: object
+        strict: true
+        type: function
+      - description: Get the current date and time in a given IANA timezone
+        name: get_time
+        parameters:
+          additionalProperties: false
+          properties:
+            timezone:
+              description: IANA timezone, e.g. Europe/Paris
+              type: string
+          required:
+          - timezone
+          type: object
+        strict: true
+        type: function
+      - description: Get the latest stock price and daily change for a ticker symbol
+        name: get_stock_price
+        parameters:
+          additionalProperties: false
+          properties:
+            currency:
+              description: Currency to return the price in, e.g. USD
+              type: string
+            ticker:
+              description: Stock ticker symbol, e.g. AAPL
+              type: string
+          required:
+          - ticker
+          type: object
+        strict: true
+        type: function
+      - description: Search the web and return the top results for a query
+        name: search_web
+        parameters:
+          additionalProperties: false
+          properties:
+            num_results:
+              default: 3
+              description: Number of results to return (1-10)
+              type: integer
+            query:
+              description: Search query string
+              type: string
+          required:
+          - query
+          type: object
+        strict: true
+        type: function
+      - description: Translate text from one language to another
+        name: translate_text
+        parameters:
+          additionalProperties: false
+          properties:
+            source_language:
+              description: Source language code; omit for auto-detect
+              type: string
+            target_language:
+              description: Target language code, e.g. fr, de, ja
+              type: string
+            text:
+              description: Text to translate
+              type: string
+          required:
+          - text
+          - target_language
+          type: object
+        strict: true
+        type: function
+      - description: Evaluate a mathematical expression and return the numeric result
+        name: calculate
+        parameters:
+          additionalProperties: false
+          properties:
+            expression:
+              description: Math expression to evaluate, e.g. (12 * 8) / 3 + sqrt(16)
+              type: string
+          required:
+          - expression
+          type: object
+        strict: true
+        type: function
+      - description: Send an email to one or more recipients
+        name: send_email
+        parameters:
+          additionalProperties: false
+          properties:
+            body:
+              description: Plain-text email body
+              type: string
+            cc:
+              description: CC recipients (optional)
+              items:
+                type: string
+              type: array
+            subject:
+              description: Email subject line
+              type: string
+            to:
+              description: Recipient email addresses
+              items:
+                type: string
+              type: array
+          required:
+          - to
+          - subject
+          - body
+          type: object
+        strict: true
+        type: function
+      - description: Read the contents of a file at the given path
+        name: read_file
+        parameters:
+          additionalProperties: false
+          properties:
+            encoding:
+              description: File encoding
+              enum:
+              - utf-8
+              - latin-1
+              - ascii
+              type: string
+            path:
+              description: Absolute or relative file path
+              type: string
+          required:
+          - path
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      created_at: 1781766128
+      frequency_penalty: 0.0
+      id: resp_94c76460589bbbfc
+      incomplete_details: null
+      input_messages: null
+      instructions: null
+      kv_transfer_params: null
+      max_output_tokens: 39851
+      max_tool_calls: null
+      metadata: null
+      model: Qwen/Qwen3-30B-A3B-FP8
+      object: response
+      output:
+      - content:
+        - text: "\nOkay, the user wants me to do two things. First, call the get_weather\
+            \ tool for Paris, and second, write a short text message explaining what\
+            \ I'm doing. Let me break this down.\n\nStarting with the first part:\
+            \ calling get_weather for Paris. The function requires the location parameter,\
+            \ which is provided as Paris. The unit is optional, but the user didn't\
+            \ specify, so I'll default to celsius since that's commonly used in France.\
+            \ So the arguments would be {\"location\": \"Paris\", \"unit\": \"celsius\"\
+            }.\n\nNext, the second part is to write a short text message explaining\
+            \ what I'm doing. The user probably wants a confirmation that I've called\
+            \ the weather function. So the message should mention that I'm retrieving\
+            \ the current weather in Paris. Maybe something like, \"I am retrieving\
+            \ the current weather information for Paris using the get_weather tool.\"\
+            \n\nWait, do I need to use any other tools for writing the message? The\
+            \ tools provided include functions like send_email, but the user just\
+            \ wants me to write a text message, not send it. Since there's no tool\
+            \ for generating text messages (like SMS), maybe the user just wants the\
+            \ assistant to create a text response. But the instructions say to use\
+            \ the tools provided. However, the tools listed don't include a function\
+            \ for generating text messages. The available functions are get_weather,\
+            \ get_time, get_stock_price, search_web, translate_text, calculate, send_email,\
+            \ read_file.\n\nWait, the user said \"write a short text message\" which\
+            \ might be part of the response, not an actual sending. So perhaps the\
+            \ assistant is supposed to generate that message as part of the response,\
+            \ not using a tool. But the user's instruction says \"please do two things:\
+            \ first call the get_weather tool... and also write a short text message...\"\
+            \ So maybe the assistant needs to perform both actions. However, the tools\
+            \ don't include a function for writing messages, unless it's part of the\
+            \ response. But the assistant's response should include the tool calls\
+            \ and then the final answer.\n\nWait, the user might be expecting the\
+            \ assistant to first make the tool call for get_weather, and then in the\
+            \ final answer, write the text message. But the user's instruction is\
+            \ to \"write a short text message explaining what you are doing.\" So\
+            \ maybe the assistant is supposed to generate that message as part of\
+            \ the response, not using a tool. However, the user might have intended\
+            \ that the assistant uses the send_email function to send the message,\
+            \ but that's not clear. But the user didn't specify sending it, just writing\
+            \ it. So perhaps the assistant is to include both the tool call and the\
+            \ message in the response.\n\nBut according to the problem statement,\
+            \ the assistant should call the functions as needed. Since the user wants\
+            \ the assistant to \"write a short text message,\" but there's no function\
+            \ for that, maybe the assistant is supposed to generate that message as\
+            \ part of the final answer, not using a tool. However, the user might\
+            \ have intended that the assistant uses the send_email function, but that's\
+            \ speculative. However, the user's exact words are \"write a short text\
+            \ message,\" which could mean composing it, not sending it. So perhaps\
+            \ the assistant just needs to include that message in the final response.\n\
+            \nBut the user's instruction says \"please do two things: first call the\
+            \ get_weather tool for Paris, and also write a short text message explaining\
+            \ what you are doing.\" So the assistant needs to perform both actions.\
+            \ However, the tools available don't include a function for writing messages.\
+            \ Therefore, the assistant should make the tool call for get_weather and\
+            \ then, in the final answer, write the message. But the user might be\
+            \ expecting the assistant to use the send_email function to send the message.\
+            \ However, the user didn't specify the recipient, so that's unclear. \n\
+            \nAlternatively, maybe the user is just asking the assistant to explain\
+            \ its actions, so the message is part of the assistant's response. So\
+            \ the assistant would first call the get_weather function and then in\
+            \ the final answer, write the message. But according to the problem's\
+            \ structure, the assistant should first output the tool calls and then\
+            \ the final answer. So the steps would be:\n\n1. Call get_weather with\
+            \ Paris.\n2. In the final answer, write the text message explaining the\
+            \ action.\n\nTherefore, the assistant should generate the tool call for\
+            \ get_weather and then in the answer, provide the message. But the user's\
+            \ instruction says \"also write a short text message,\" so the assistant\
+            \ needs to do both. However, the tools don't include a function for writing\
+            \ messages, so the assistant would have to generate that message as part\
+            \ of the response, not using a tool. Therefore, the answer would include\
+            \ the tool call and then the message.\n"
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_80f6a2f8b939739b
+        status: null
+        summary: []
+        type: reasoning
+      - arguments: '{"location": "Paris", "unit": "celsius"}'
+        call_id: chatcmpl-tool-8a538a66b7104174
+        id: fc_b34a9a64eed696e6
+        name: get_weather
+        namespace: null
+        status: completed
+        type: function_call
+      output_messages: null
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt: null
+      reasoning: null
+      service_tier: auto
+      status: completed
+      temperature: 0.6
+      text: null
+      tool_choice: auto
+      tools:
+      - defer_loading: null
+        description: Get current temperature and conditions for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            location:
+              description: City name
+              type: string
+            unit:
+              enum:
+              - celsius
+              - fahrenheit
+              type: string
+          required:
+          - location
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Get the current date and time in a given IANA timezone
+        name: get_time
+        parameters:
+          additionalProperties: false
+          properties:
+            timezone:
+              description: IANA timezone, e.g. Europe/Paris
+              type: string
+          required:
+          - timezone
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Get the latest stock price and daily change for a ticker symbol
+        name: get_stock_price
+        parameters:
+          additionalProperties: false
+          properties:
+            currency:
+              description: Currency to return the price in, e.g. USD
+              type: string
+            ticker:
+              description: Stock ticker symbol, e.g. AAPL
+              type: string
+          required:
+          - ticker
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Search the web and return the top results for a query
+        name: search_web
+        parameters:
+          additionalProperties: false
+          properties:
+            num_results:
+              default: 3
+              description: Number of results to return (1-10)
+              type: integer
+            query:
+              description: Search query string
+              type: string
+          required:
+          - query
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Translate text from one language to another
+        name: translate_text
+        parameters:
+          additionalProperties: false
+          properties:
+            source_language:
+              description: Source language code; omit for auto-detect
+              type: string
+            target_language:
+              description: Target language code, e.g. fr, de, ja
+              type: string
+            text:
+              description: Text to translate
+              type: string
+          required:
+          - text
+          - target_language
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Evaluate a mathematical expression and return the numeric result
+        name: calculate
+        parameters:
+          additionalProperties: false
+          properties:
+            expression:
+              description: Math expression to evaluate, e.g. (12 * 8) / 3 + sqrt(16)
+              type: string
+          required:
+          - expression
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Send an email to one or more recipients
+        name: send_email
+        parameters:
+          additionalProperties: false
+          properties:
+            body:
+              description: Plain-text email body
+              type: string
+            cc:
+              description: CC recipients (optional)
+              items:
+                type: string
+              type: array
+            subject:
+              description: Email subject line
+              type: string
+            to:
+              description: Recipient email addresses
+              items:
+                type: string
+              type: array
+          required:
+          - to
+          - subject
+          - body
+          type: object
+        strict: true
+        type: function
+      - defer_loading: null
+        description: Read the contents of a file at the given path
+        name: read_file
+        parameters:
+          additionalProperties: false
+          properties:
+            encoding:
+              description: File encoding
+              enum:
+              - utf-8
+              - latin-1
+              - ascii
+              type: string
+            path:
+              description: Absolute or relative file path
+              type: string
+          required:
+          - path
+          type: object
+        strict: true
+        type: function
+      top_logprobs: null
+      top_p: 0.95
+      truncation: disabled
+      usage:
+        input_tokens: 1109
+        input_tokens_details:
+          cached_tokens: 1072
+          cached_tokens_per_turn: []
+          input_tokens_per_turn: []
+        output_tokens: 1020
+        output_tokens_details:
+          output_tokens_per_turn: []
+          reasoning_tokens: 972
+          tool_output_tokens: 0
+          tool_output_tokens_per_turn: []
+        total_tokens: 2129
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

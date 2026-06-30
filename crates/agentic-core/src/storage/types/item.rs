@@ -99,6 +99,7 @@ impl InOutItem {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::event::MessageStatus;
     use crate::types::io::{
         InputContent, InputMessage, InputMessageContent, OutputMessage, OutputTextContent, ReasoningOutput,
         ReasoningTextContent,
@@ -116,7 +117,7 @@ mod tests {
 
     #[test]
     fn test_inout_item_from_output() {
-        let output = OutputItem::Message(OutputMessage::new("msg_1", "completed"));
+        let output = OutputItem::Message(OutputMessage::new("msg_1", MessageStatus::Completed));
         let item: InOutItem = output.into();
         assert!(matches!(item, InOutItem::Output(_)));
     }
@@ -137,7 +138,7 @@ mod tests {
 
     #[test]
     fn test_into_input_items_converts_output_messages() {
-        let mut output = OutputMessage::new("out1", "done");
+        let mut output = OutputMessage::new("out1", MessageStatus::Completed);
         output.content.push(OutputTextContent::new("answer"));
         let items = vec![
             InOutItem::Input(InputItem::Message(InputMessage {
@@ -180,7 +181,10 @@ mod tests {
         reasoning.content.push(ReasoningTextContent::new("thinking..."));
         let items = vec![
             InOutItem::Output(OutputItem::Reasoning(reasoning)),
-            InOutItem::Output(OutputItem::Message(OutputMessage::new("msg_1", "completed"))),
+            InOutItem::Output(OutputItem::Message(OutputMessage::new(
+                "msg_1",
+                MessageStatus::Completed,
+            ))),
         ];
 
         let inputs = InOutItem::into_input_items(items);

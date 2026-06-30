@@ -18,18 +18,21 @@ pedantic = { level = "warn", priority = -1 }
 [workspace.dependencies]
 agentic-core = { path = "crates/agentic-core" }
 async-stream = "0.3"
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
 either = "1"
 bytes = "1"
 clap = { version = "4", features = ["derive", "env"] }
 criterion = { version = "0.5", features = ["async_tokio"] }
 futures = "0.3"
+indexmap = "2"
 http = "1"
 reqwest = { version = "0.12", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
 tower-http = { version = "0.6", features = ["cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio-tungstenite = "0.29"

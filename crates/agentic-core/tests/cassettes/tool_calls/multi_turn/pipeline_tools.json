@@ -1,0 +1,93 @@
+[
+  {
+    "type": "function",
+    "name": "get_job_status",
+    "description": "Query the pipeline orchestrator for a job's current state, metadata, and failure info.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "job_id": {"type": "string", "description": "Pipeline job identifier, e.g. job-382"}
+      },
+      "required": ["job_id"],
+      "additionalProperties": false
+    },
+    "strict": true
+  },
+  {
+    "type": "function",
+    "name": "get_error_logs",
+    "description": "Fetch error logs and stack traces for a failed pipeline job.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "job_id": {"type": "string", "description": "Pipeline job identifier"},
+        "severity": {"type": "string", "enum": ["WARN", "ERROR", "FATAL", "ALL"], "description": "Minimum severity filter"},
+        "max_entries": {"type": "integer", "description": "Maximum log entries to return (default 50)"}
+      },
+      "required": ["job_id", "severity", "max_entries"],
+      "additionalProperties": false
+    },
+    "strict": true
+  },
+  {
+    "type": "function",
+    "name": "search_runbook",
+    "description": "Search internal operations runbooks for troubleshooting procedures.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {"type": "string", "description": "Natural language search query"},
+        "max_results": {"type": "integer", "description": "Maximum results to return (default 5)"}
+      },
+      "required": ["query", "max_results"],
+      "additionalProperties": false
+    },
+    "strict": true
+  },
+  {
+    "type": "function",
+    "name": "run_analysis",
+    "description": "Execute a Python analysis script in a sandboxed environment for log parsing or data inspection.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "code": {"type": "string", "description": "Python code to execute"},
+        "timeout_seconds": {"type": "integer", "description": "Execution timeout (default 30)"}
+      },
+      "required": ["code", "timeout_seconds"],
+      "additionalProperties": false
+    },
+    "strict": true
+  },
+  {
+    "type": "function",
+    "name": "restart_job",
+    "description": "Restart a failed pipeline job with optional configuration overrides.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "job_id": {"type": "string", "description": "Pipeline job identifier to restart"},
+        "memory_override_gb": {"type": "integer", "description": "Override memory limit in GB"},
+        "skip_completed_stages": {"type": "boolean", "description": "Skip stages that completed successfully (default true)"},
+        "priority": {"type": "string", "enum": ["low", "normal", "high"], "description": "Queue priority"}
+      },
+      "required": ["job_id", "memory_override_gb", "skip_completed_stages", "priority"],
+      "additionalProperties": false
+    },
+    "strict": true
+  },
+  {
+    "type": "function",
+    "name": "web_search",
+    "description": "Search the public web for technical documentation, blog posts, and known issues.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {"type": "string", "description": "Search query"}
+      },
+      "required": ["query"],
+      "additionalProperties": false
+    },
+    "strict": true
+  }
+]

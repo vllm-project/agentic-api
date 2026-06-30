@@ -3,12 +3,13 @@ use std::sync::Arc;
 use axum::Router;
 use axum::routing::{get, post};
 use http::HeaderValue;
+use tokio_util::sync::CancellationToken;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 
 use agentic_core::executor::ExecutionContext;
 use agentic_core::proxy::ProxyState;
 
-use crate::handler::{conversations, health, ready, responses};
+use crate::handler::{conversations, health, ready, responses, responses_ws};
 
 /// Server-level configuration read from environment variables.
 pub struct ServerConfig {
@@ -59,6 +60,8 @@ impl ServerConfig {
 pub struct AppState {
     pub proxy_state: ProxyState,
     pub exec_ctx: Arc<ExecutionContext>,
+    /// Shared cancellation signal used to drain long-lived handlers.
+    pub shutdown_token: CancellationToken,
     /// vLLM base URL — used by the `/ready` health probe.
     pub llm_api_base: String,
 }
@@ -68,7 +71,7 @@ pub fn build_router(state: AppState, server_config: &ServerConfig) -> Router {
         .route("/health", get(health))
         .route("/ready", get(ready))
         .route("/v1/conversations", post(conversations))
-        .route("/v1/responses", post(responses))
+        .route("/v1/responses", post(responses).get(responses_ws))
         .layer(server_config.cors_layer())
         .with_state(state)
 }

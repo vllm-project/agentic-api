@@ -1,61 +1,12 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InputTextContent {
-    #[serde(rename = "type")]
-    pub type_: String,
-    pub text: String,
-}
+use crate::events::EventPayload;
+use crate::executor::error::ExecutorError;
+use crate::types::event::MessageStatus;
+use crate::utils::uuid7_str;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InputImageContent {
-    #[serde(rename = "type")]
-    pub type_: String,
-    pub image_url: Option<String>,
-    pub detail: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum InputContent {
-    #[serde(rename = "input_text")]
-    Text(InputTextContent),
-    #[serde(rename = "input_image")]
-    Image(InputImageContent),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InputMessage {
-    pub role: String,
-    pub content: InputMessageContent,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum InputMessageContent {
-    Text(String),
-    Parts(Vec<InputContent>),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FunctionToolResultMessage {
-    pub call_id: String,
-    pub output: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum InputItem {
-    #[serde(rename = "message")]
-    Message(InputMessage),
-    #[serde(rename = "function_call_output")]
-    FunctionCallOutput(FunctionToolResultMessage),
-    #[serde(rename = "reasoning")]
-    Reasoning(ReasoningOutput),
-    #[serde(other)]
-    Unknown,
-}
+use super::input::{InputContent, InputMessage, InputMessageContent, InputTextContent};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputTextContent {
@@ -80,19 +31,35 @@ impl OutputTextContent {
 pub struct OutputMessage {
     pub id: String,
     pub role: String,
-    pub status: String,
+    pub status: MessageStatus,
     #[serde(default)]
     pub content: Vec<OutputTextContent>,
 }
 
 impl OutputMessage {
-    pub fn new(id: impl Into<String>, status: impl Into<String>) -> Self {
+    pub fn new(id: impl Into<String>, status: MessageStatus) -> Self {
         Self {
             id: id.into(),
             role: "assistant".into(),
-            status: status.into(),
+            status,
             content: vec![],
         }
+    }
+}
+
+impl TryFrom<&EventPayload> for OutputMessage {
+    type Error = ExecutorError;
+
+    fn try_from(payload: &EventPayload) -> Result<Self, Self::Error> {
+        let EventPayload::OutputItemAdded { item_id, .. } = payload else {
+            return Err(ExecutorError::ParseError("expected OutputItemAdded payload".into()));
+        };
+        let id = if item_id.is_empty() {
+            uuid7_str("msg_")
+        } else {
+            item_id.clone()
+        };
+        Ok(Self::new(id, MessageStatus::InProgress))
     }
 }
 
@@ -121,7 +88,46 @@ pub struct FunctionToolCall {
     pub call_id: String,
     pub name: String,
     pub arguments: String,
-    pub status: String,
+    #[serde(default = "default_completed_status")]
+    #[serde(deserialize_with = "deserialize_status_or_default")]
+    pub status: MessageStatus,
+}
+
+fn default_completed_status() -> MessageStatus {
+    MessageStatus::Completed
+}
+
+fn deserialize_status_or_default<'de, D>(deserializer: D) -> Result<MessageStatus, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt: Option<MessageStatus> = Option::deserialize(deserializer)?;
+    Ok(opt.unwrap_or(MessageStatus::Completed))
+}
+
+impl TryFrom<&EventPayload> for FunctionToolCall {
+    type Error = ExecutorError;
+
+    fn try_from(payload: &EventPayload) -> Result<Self, Self::Error> {
+        let EventPayload::OutputItemAdded {
+            item_id, call_id, name, ..
+        } = payload
+        else {
+            return Err(ExecutorError::ParseError("expected OutputItemAdded payload".into()));
+        };
+        let id = if item_id.is_empty() {
+            uuid7_str("fc_")
+        } else {
+            item_id.clone()
+        };
+        Ok(Self {
+            id,
+            call_id: call_id.as_deref().unwrap_or_default().to_owned(),
+            name: name.as_deref().unwrap_or_default().to_owned(),
+            arguments: String::new(),
+            status: MessageStatus::InProgress,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -163,6 +169,74 @@ impl ReasoningOutput {
     }
 }
 
+impl TryFrom<&EventPayload> for ReasoningOutput {
+    type Error = ExecutorError;
+
+    fn try_from(payload: &EventPayload) -> Result<Self, Self::Error> {
+        let EventPayload::OutputItemAdded { item_id, .. } = payload else {
+            return Err(ExecutorError::ParseError("expected OutputItemAdded payload".into()));
+        };
+        let id = if item_id.is_empty() {
+            uuid7_str("rs_")
+        } else {
+            item_id.clone()
+        };
+        Ok(Self::new(id))
+    }
+}
+
+/// Applies a `*Done` event payload onto an in-flight output item.
+///
+/// `buffer` holds accumulated delta text/arguments. If the payload's own field
+/// is empty the buffer is used as the final value and then cleared; otherwise
+/// the buffer is discarded and the payload value is used directly.
+pub trait ApplyDone {
+    fn apply_done(&mut self, payload: &EventPayload, buffer: &mut String);
+}
+
+impl ApplyDone for ReasoningOutput {
+    fn apply_done(&mut self, payload: &EventPayload, buffer: &mut String) {
+        let EventPayload::ReasoningDone { text, .. } = payload else {
+            return;
+        };
+        let text = if text.is_empty() {
+            std::mem::take(buffer)
+        } else {
+            buffer.clear();
+            text.clone()
+        };
+        if !text.is_empty() {
+            self.content.push(ReasoningTextContent::new(text));
+        }
+    }
+}
+
+impl ApplyDone for FunctionToolCall {
+    fn apply_done(&mut self, payload: &EventPayload, buffer: &mut String) {
+        let EventPayload::FunctionCallArgsDone {
+            arguments,
+            call_id,
+            name,
+            ..
+        } = payload
+        else {
+            return;
+        };
+        self.arguments = if arguments.is_empty() {
+            std::mem::take(buffer)
+        } else {
+            buffer.clear();
+            arguments.clone()
+        };
+        if let Some(cid) = call_id.as_deref().filter(|s| !s.is_empty()) {
+            cid.clone_into(&mut self.call_id);
+        }
+        if !name.is_empty() {
+            name.clone_into(&mut self.name);
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum OutputItem {
@@ -174,85 +248,6 @@ pub enum OutputItem {
     Reasoning(ReasoningOutput),
     #[serde(other)]
     Unknown,
-}
-
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-pub struct InputTokenDetails {
-    pub cached_tokens: i64,
-}
-
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-pub struct OutputTokenDetails {
-    pub reasoning_tokens: i64,
-}
-
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
-pub struct ResponseUsage {
-    pub input_tokens: i64,
-    pub output_tokens: i64,
-    pub total_tokens: i64,
-    #[serde(default)]
-    pub input_tokens_details: InputTokenDetails,
-    #[serde(default)]
-    pub output_tokens_details: OutputTokenDetails,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FunctionTool {
-    #[serde(rename = "type")]
-    pub type_: String,
-    pub name: String,
-    pub description: Option<String>,
-    pub parameters: Option<Value>,
-    pub strict: Option<bool>,
-}
-
-pub type ResponsesTool = FunctionTool;
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ToolChoice {
-    #[default]
-    Auto,
-    None,
-    Required,
-    #[serde(rename = "function")]
-    Function {
-        name: String,
-    },
-}
-
-/// Returns the effective tool list, preferring `request_tools` when explicitly
-/// set by the caller, otherwise falling back to the stored configuration.
-#[inline]
-pub(crate) fn resolve_tools(
-    request_tools: Option<&[ResponsesTool]>,
-    stored_tools: Option<&[ResponsesTool]>,
-    tools_explicitly_set: bool,
-) -> Option<Vec<ResponsesTool>> {
-    if tools_explicitly_set {
-        request_tools
-    } else {
-        stored_tools
-    }
-    .map(<[_]>::to_vec)
-}
-
-/// Returns the effective tool choice using the same precedence as [`resolve_tools`].
-#[inline]
-pub(crate) fn resolve_tool_choice(
-    request_choice: &ToolChoice,
-    stored_choice: &ToolChoice,
-    explicitly_set: bool,
-) -> ToolChoice {
-    if explicitly_set { request_choice } else { stored_choice }.clone()
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ResponsesInput {
-    Text(String),
-    Items(Vec<InputItem>),
 }
 
 #[cfg(test)]
@@ -283,6 +278,7 @@ mod tests {
 
     #[test]
     fn reasoning_input_round_trips_through_serde() {
+        use crate::types::io::input::InputItem;
         let reasoning = ReasoningOutput::new("rs_1");
         let item = InputItem::Reasoning(reasoning);
         let json = serde_json::to_value(&item).unwrap();

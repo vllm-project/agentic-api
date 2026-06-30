@@ -37,6 +37,7 @@ use futures::stream;
 use http::StatusCode;
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
+use tokio_util::sync::CancellationToken;
 
 use agentic_core::config::Config;
 use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHandler};
@@ -170,6 +171,7 @@ async fn spawn_gateway(llm_url: &str) -> (Arc<reqwest::Client>, String) {
     let state = AppState {
         proxy_state,
         exec_ctx,
+        shutdown_token: CancellationToken::new(),
         llm_api_base: config.llm_api_base,
     };
 

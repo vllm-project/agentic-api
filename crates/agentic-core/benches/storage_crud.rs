@@ -1,6 +1,7 @@
 use criterion::{BatchSize, Criterion, black_box, criterion_group};
 
 use agentic_core::storage::{ConversationStore, InOutItem, ResponseMetadata, ResponseStore, create_pool_with_schema};
+use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::{InputItem, InputMessage, InputMessageContent, OutputItem, OutputMessage};
 
 static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -16,7 +17,7 @@ fn create_test_items() -> Vec<InOutItem> {
         content: InputMessageContent::Text("Test message".to_string()),
     });
 
-    let output_msg = OutputMessage::new("msg_123", "completed");
+    let output_msg = OutputMessage::new("msg_123", MessageStatus::Completed);
 
     vec![
         InOutItem::Input(input_item.clone()),

@@ -279,16 +279,16 @@ def _create_conversation(client: httpx.Client, proxy_url: str) -> str:
     return conv_id
 
 
-def _send_nonstreaming(client: httpx.Client, body: dict, proxy_url: str) -> str | None:
+def _send_nonstreaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | None:
     resp = client.post(f"{proxy_url}/v1/responses", json=body, timeout=300)
     resp.raise_for_status()
     data = resp.json()
     print(f"\n[Response]\n{json.dumps(data, indent=2)}\n")
-    return data.get("id")
+    return data
 
 
-def _send_streaming(client: httpx.Client, body: dict, proxy_url: str) -> str | None:
-    response_id = None
+def _send_streaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | None:
+    response_data = None
     print("\n[Streaming response]")
     with client.stream(
         "POST", f"{proxy_url}/v1/responses", json=body, timeout=300
@@ -302,14 +302,14 @@ def _send_streaming(client: httpx.Client, body: dict, proxy_url: str) -> str | N
                 try:
                     payload = json.loads(line[5:].strip())
                     if payload.get("type") == "response.completed":
-                        response_id = payload.get("response", {}).get("id")
+                        response_data = payload.get("response")
                 except Exception:
                     pass
     print()
-    return response_id
+    return response_data
 
 
-def _send(client: httpx.Client, body: dict, stream: bool, proxy_url: str) -> str | None:
+def _send(client: httpx.Client, body: dict, stream: bool, proxy_url: str) -> dict | None:
     return (
         _send_streaming(client, body, proxy_url)
         if stream
@@ -330,6 +330,48 @@ def _inject_tools(body: dict, tools: list | None, tool_choice: Any) -> None:
         body["tools"] = tools
     if tool_choice is not None:
         body["tool_choice"] = tool_choice
+
+
+def _extract_function_calls(response_data: dict | None) -> list[dict]:
+    """Extract function_call items from a response's output array."""
+    if not response_data:
+        return []
+    output = response_data.get("output", [])
+    return [item for item in output if item.get("type") == "function_call"]
+
+
+def _build_tool_output_input(
+    function_calls: list[dict],
+    tool_outputs: dict[str, str],
+    user_prompt: str | None,
+) -> list[dict]:
+    """Build an input list with function_call_output items followed by optional user message.
+
+    Args:
+        function_calls: function_call items from the previous response.
+        tool_outputs: mapping of tool name -> fake JSON output string.
+        user_prompt: the next user message (None for tool-output-only turns).
+
+    Returns:
+        A list suitable for the `input` field of the next request.
+    """
+    input_items: list[dict] = []
+    for fc in function_calls:
+        call_id = fc.get("call_id", "")
+        name = fc.get("name", "")
+        output = tool_outputs.get(name, json.dumps({"result": f"mock output for {name}"}))
+        input_items.append({
+            "type": "function_call_output",
+            "call_id": call_id,
+            "output": output,
+        })
+    if user_prompt:
+        input_items.append({
+            "type": "message",
+            "role": "user",
+            "content": user_prompt,
+        })
+    return input_items
 
 
 def run_conv(
@@ -371,7 +413,8 @@ def run_conv(
             body["previous_response_id"] = previous_response_id
         else:
             body["conversation"] = conv_id
-        response_id = _send(client, body, stream, proxy_url)
+        response_data = _send(client, body, stream, proxy_url)
+        response_id = response_data.get("id") if response_data else None
         if response_id:
             response_ids[turn] = response_id
             previous_response_id = response_id
@@ -466,7 +509,8 @@ def run_mixed(
             body["previous_response_id"] = previous_response_id
         else:
             body["conversation"] = conv_id
-        previous_response_id = _send(client, body, stream, proxy_url)
+        response_data = _send(client, body, stream, proxy_url)
+        previous_response_id = response_data.get("id") if response_data else None
 
 
 def run_responses(
@@ -479,8 +523,10 @@ def run_responses(
     proxy_url: str,
     tools: list | None = None,
     tool_choice: Any = None,
+    tool_outputs: dict[str, str] | None = None,
 ) -> None:
     response_ids: dict[int, str] = {}
+    responses: dict[int, dict] = {}
     branch_map: dict[int, int] = {}
     extra_branches: list[int] = []
     for branch_from, branch_turn_number in branches:
@@ -490,6 +536,7 @@ def run_responses(
             extra_branches.append(branch_from)
 
     previous_response_id: str | None = None
+    last_response: dict | None = None
     for turn in range(1, turns + 1):
         if turn in branch_map:
             branch_from = branch_map[turn]
@@ -499,18 +546,32 @@ def run_responses(
                     f"(available: {sorted(response_ids)})"
                 )
             previous_response_id = response_ids[branch_from]
+            last_response = responses.get(branch_from)
             click.echo(
                 f"\n[Branch] turn {turn} chains from turn {branch_from} (response_id={previous_response_id})"
             )
         prompt = _prompt(f"Turn {turn}/{turns} — enter prompt: ")
-        body: dict = {"model": model, "input": prompt, "stream": stream, "store": store}
+
+        # Build input: if previous response had function calls and we have tool_outputs,
+        # inject function_call_output items before the user message.
+        pending_calls = _extract_function_calls(last_response) if tool_outputs else []
+        if pending_calls and tool_outputs:
+            input_value: Any = _build_tool_output_input(pending_calls, tool_outputs, prompt if prompt else None)
+            click.echo(f"  [injecting {len(pending_calls)} tool output(s) before user message]")
+        else:
+            input_value = prompt
+
+        body: dict = {"model": model, "input": input_value, "stream": stream, "store": store}
         if previous_response_id and store:
             body["previous_response_id"] = previous_response_id
         _inject_tools(body, tools, tool_choice)
-        response_id = _send(client, body, stream, proxy_url)
+        response_data = _send(client, body, stream, proxy_url)
+        response_id = response_data.get("id") if response_data else None
         previous_response_id = response_id if store else None
+        last_response = response_data
         if response_id:
             response_ids[turn] = response_id
+            responses[turn] = response_data
 
     for b_idx, branch_from in enumerate(extra_branches, start=1):
         if branch_from not in response_ids:
@@ -519,15 +580,24 @@ def run_responses(
                 f"(available: {sorted(response_ids)})"
             )
         branch_resp_id = response_ids[branch_from]
+        branch_response = responses.get(branch_from)
         click.echo(
             f"\n[Extra branch {b_idx}] from turn {branch_from} (response_id={branch_resp_id}), turn {turns + 1}"
         )
         prompt = _prompt(
             f"Turn {turns + 1} (extra branch from turn {branch_from}) — enter prompt: "
         )
+
+        pending_calls = _extract_function_calls(branch_response) if tool_outputs else []
+        if pending_calls and tool_outputs:
+            input_value = _build_tool_output_input(pending_calls, tool_outputs, prompt if prompt else None)
+            click.echo(f"  [injecting {len(pending_calls)} tool output(s) before user message]")
+        else:
+            input_value = prompt
+
         body = {
             "model": model,
-            "input": prompt,
+            "input": input_value,
             "stream": stream,
             "store": store,
             "previous_response_id": branch_resp_id,
@@ -619,6 +689,16 @@ def run_responses(
     default=None,
     help='tool_choice value: "auto", "none", "required", or JSON e.g. \'{"type":"function","name":"foo"}\'.',
 )
+@click.option(
+    "--tool-outputs",
+    "tool_outputs_file",
+    metavar="FILE",
+    default=None,
+    type=click.Path(exists=True),
+    help="Path to a JSON file mapping tool names to fake output strings. "
+    "When provided, function_call_output items are automatically injected "
+    "between turns (required for OpenAI Responses API).",
+)
 def main(
     turns: int,
     output: str,
@@ -633,6 +713,7 @@ def main(
     vllm_url: str | None,
     tools_file: str | None,
     tool_choice_raw: str | None,
+    tool_outputs_file: str | None,
 ) -> None:
     """Interactive multi-turn cassette recorder (proxy embedded)."""
     if branch_turn_number and not branch_from:
@@ -667,6 +748,14 @@ def main(
             tool_choice = json.loads(stripped)
         else:
             tool_choice = stripped
+
+    tool_outputs: dict[str, str] | None = None
+    if tool_outputs_file:
+        with open(tool_outputs_file, encoding="utf-8") as f:
+            tool_outputs = json.load(f)
+        if not isinstance(tool_outputs, dict):
+            raise click.UsageError("--tool-outputs file must contain a JSON object (name -> output string).")
+        click.echo(f"Tool outputs: {list(tool_outputs.keys())}")
 
     if vllm_url:
         target = vllm_url.rstrip("/")
@@ -703,7 +792,7 @@ def main(
             elif mode == "mixed":
                 run_mixed(client, turns, model, stream, store, proxy_url)
             elif mode == "responses":
-                run_responses(client, turns, model, stream, store, branches, proxy_url, tools, tool_choice)
+                run_responses(client, turns, model, stream, store, branches, proxy_url, tools, tool_choice, tool_outputs)
             elif mode == "store_true_then_store_false":
                 run_store_true_then_store_false(client, turns, model, stream, proxy_url)
     finally:

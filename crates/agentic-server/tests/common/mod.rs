@@ -5,6 +5,7 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use http::StatusCode;
 use tokio::net::TcpListener;
+use tokio_util::sync::CancellationToken;
 
 use agentic_core::config::Config;
 use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHandler};
@@ -34,6 +35,7 @@ pub fn test_state(config: &Config) -> AppState {
     AppState {
         proxy_state,
         exec_ctx,
+        shutdown_token: CancellationToken::new(),
         llm_api_base: config.llm_api_base.clone(),
     }
 }

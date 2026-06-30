@@ -11,6 +11,7 @@ async-stream.workspace = true
 bytes.workspace = true
 either.workspace = true
 futures.workspace = true
+indexmap.workspace = true
 http.workspace = true
 reqwest = { workspace = true, features = ["default-tls", "stream"] }
 serde.workspace = true

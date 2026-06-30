@@ -3,6 +3,7 @@ mod support;
 use agentic_core::storage::InOutItem;
 use agentic_core::storage::ResponseMetadata;
 use agentic_core::storage::{ConversationStore, ResponseStore};
+use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::{InputItem, InputMessage, InputMessageContent, OutputItem, OutputMessage};
 use std::sync::Arc;
 
@@ -15,8 +16,8 @@ fn create_input_item(text: &str) -> InOutItem {
     }))
 }
 
-fn create_output_item(id: &str, status: &str) -> InOutItem {
-    InOutItem::Output(OutputItem::Message(OutputMessage::new(id, status)))
+fn create_output_item(id: &str) -> InOutItem {
+    InOutItem::Output(OutputItem::Message(OutputMessage::new(id, MessageStatus::Completed)))
 }
 
 #[tokio::test]
@@ -40,7 +41,7 @@ async fn test_conversation_store_persist_and_rehydrate() {
     let conversation = store.create().await.expect("create failed");
     let conv_id = &conversation.conversation_id;
 
-    let items = vec![create_input_item("hello"), create_output_item("msg_1", "completed")];
+    let items = vec![create_input_item("hello"), create_output_item("msg_1")];
 
     let metadata = ResponseMetadata::default();
 
@@ -92,7 +93,7 @@ async fn test_response_store_persist_and_rehydrate() {
     let pool = setup_pool().await;
     let store = ResponseStore::new(pool);
 
-    let items = vec![create_input_item("query"), create_output_item("out_1", "done")];
+    let items = vec![create_input_item("query"), create_output_item("out_1")];
 
     let metadata = ResponseMetadata::default();
 
@@ -138,12 +139,7 @@ async fn test_response_store_with_previous_response() {
         .expect("persist first failed");
 
     store
-        .persist(
-            "resp_2",
-            Some("resp_1"),
-            vec![create_output_item("out_2", "done")],
-            &metadata,
-        )
+        .persist("resp_2", Some("resp_1"), vec![create_output_item("out_2")], &metadata)
         .await
         .expect("persist second failed");
 
@@ -203,7 +199,7 @@ async fn test_conversation_rehydrate_after_multiple_varying_turns() {
             Some("resp_1"),
             vec![
                 create_input_item("turn2a"),
-                create_output_item("out2", "done"),
+                create_output_item("out2"),
                 create_input_item("turn2b"),
             ],
             &metadata,
@@ -217,7 +213,7 @@ async fn test_conversation_rehydrate_after_multiple_varying_turns() {
             conv_id,
             "resp_3",
             Some("resp_2"),
-            vec![create_input_item("turn3"), create_output_item("out3", "done")],
+            vec![create_input_item("turn3"), create_output_item("out3")],
             &metadata,
         )
         .await
@@ -244,12 +240,7 @@ async fn test_response_store_chaining_respects_foreign_key() {
     // Try to create resp_3 with resp_2 as previous (resp_2 doesn't exist)
     // This should fail due to foreign key constraint
     let result = store
-        .persist(
-            "resp_3",
-            Some("resp_2"),
-            vec![create_output_item("out3", "done")],
-            &metadata,
-        )
+        .persist("resp_3", Some("resp_2"), vec![create_output_item("out3")], &metadata)
         .await;
 
     assert!(
@@ -401,7 +392,7 @@ async fn test_response_store_get_after_persist() {
     let pool = setup_pool().await;
     let store = ResponseStore::new(pool);
 
-    let items = vec![create_input_item("query"), create_output_item("out_1", "done")];
+    let items = vec![create_input_item("query"), create_output_item("out_1")];
     let metadata = ResponseMetadata::default();
 
     store
