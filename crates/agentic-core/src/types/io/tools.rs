@@ -1,21 +1,17 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-fn default_function_type() -> String {
-    "function".to_string()
-}
+use crate::types::tools::ResponsesTool;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionTool {
-    #[serde(rename = "type", default = "default_function_type")]
+    #[serde(rename = "type")]
     pub type_: String,
     pub name: String,
     pub description: Option<String>,
     pub parameters: Option<Value>,
     pub strict: Option<bool>,
 }
-
-pub type ResponsesTool = FunctionTool;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
