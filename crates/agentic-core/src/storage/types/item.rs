@@ -90,7 +90,8 @@ impl InOutItem {
                 InOutItem::Input(item) => Some(item),
                 InOutItem::Output(OutputItem::Message(msg)) => Some(InputItem::Message(msg.into())),
                 InOutItem::Output(OutputItem::Reasoning(r)) => Some(InputItem::Reasoning(r)),
-                InOutItem::Output(OutputItem::FunctionCall(_) | OutputItem::Unknown) => None,
+                InOutItem::Output(OutputItem::FunctionCall(f)) => Some(InputItem::FunctionCall(f)),
+                InOutItem::Output(OutputItem::Unknown) => None,
             })
             .collect()
     }
@@ -101,8 +102,8 @@ mod tests {
     use super::*;
     use crate::types::event::MessageStatus;
     use crate::types::io::{
-        InputContent, InputMessage, InputMessageContent, OutputMessage, OutputTextContent, ReasoningOutput,
-        ReasoningTextContent,
+        FunctionToolCall, InputContent, InputMessage, InputMessageContent, OutputMessage, OutputTextContent,
+        ReasoningOutput, ReasoningTextContent,
     };
 
     #[test]
@@ -161,11 +162,10 @@ mod tests {
                     InputMessageContent::Parts(parts) => {
                         assert_eq!(parts.len(), 1);
                         match &parts[0] {
-                            InputContent::Text(t) => {
-                                assert_eq!(t.type_, "output_text");
+                            InputContent::OutputText(t) => {
                                 assert_eq!(t.text, "answer");
                             }
-                            InputContent::Image(_) => panic!("expected text part"),
+                            _ => panic!("expected OutputText part"),
                         }
                     }
                     InputMessageContent::Text(_) => panic!("expected parts content"),
@@ -193,6 +193,25 @@ mod tests {
         if let InputItem::Reasoning(r) = &inputs[0] {
             assert_eq!(r.id, "rs_1");
             assert_eq!(r.content[0].text, "thinking...");
+        }
+    }
+
+    #[test]
+    fn test_into_input_items_preserves_function_calls() {
+        use crate::types::event::MessageStatus;
+        let fc = FunctionToolCall {
+            id: "fc_1".to_string(),
+            call_id: "call_abc".to_string(),
+            name: "my_tool".to_string(),
+            arguments: "{}".to_string(),
+            status: MessageStatus::Completed,
+        };
+        let items = vec![InOutItem::Output(OutputItem::FunctionCall(fc))];
+        let inputs = InOutItem::into_input_items(items);
+        assert_eq!(inputs.len(), 1);
+        assert!(matches!(inputs[0], InputItem::FunctionCall(_)));
+        if let InputItem::FunctionCall(f) = &inputs[0] {
+            assert_eq!(f.name, "my_tool");
         }
     }
 

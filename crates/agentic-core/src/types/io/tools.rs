@@ -1,9 +1,13 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+fn default_function_type() -> String {
+    "function".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionTool {
-    #[serde(rename = "type")]
+    #[serde(rename = "type", default = "default_function_type")]
     pub type_: String,
     pub name: String,
     pub description: Option<String>,

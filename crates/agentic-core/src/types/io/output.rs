@@ -68,12 +68,7 @@ impl From<OutputMessage> for InputMessage {
         let parts = msg
             .content
             .into_iter()
-            .map(|c| {
-                InputContent::Text(InputTextContent {
-                    type_: c.type_,
-                    text: c.text,
-                })
-            })
+            .map(|c| InputContent::OutputText(InputTextContent { text: c.text }))
             .collect();
         Self {
             role: msg.role,
@@ -148,6 +143,7 @@ impl ReasoningTextContent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReasoningOutput {
+    #[serde(default)]
     pub id: String,
     #[serde(default)]
     pub content: Vec<ReasoningTextContent>,
