@@ -6,6 +6,10 @@
 mod support;
 
 use agentic_core::executor::execute;
+use agentic_core::executor::request::RequestContext;
+use agentic_core::types::io::ToolChoice;
+use agentic_core::types::request_response::RequestPayload;
+use agentic_core::types::tools::{FunctionToolParam, NonEmptyToolName, ResponsesTool};
 use std::sync::Arc;
 use support::{
     TestFixture, collect_stream, expected_text, load_cassette, make_request, output_text, request_input_texts,
@@ -245,6 +249,82 @@ async fn test_store_false_with_previous_response_id_hydrates_but_does_not_persis
     )
     .await;
     assert!(result.is_err(), "store=false response should not be persisted");
+}
+
+#[tokio::test]
+async fn test_previous_response_id_persists_inherited_tools_and_choice() {
+    let fixture =
+        TestFixture::new_with_responses(vec![text_response("seed answer"), text_response("follow up answer")]).await;
+
+    let tool = ResponsesTool::Function(FunctionToolParam {
+        name: NonEmptyToolName::try_from("lookup_weather").expect("valid tool name"),
+        description: Some("Look up weather".to_string()),
+        parameters: Some(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "city": {"type": "string"}
+            }
+        })),
+        strict: Some(true),
+    });
+
+    let mut first_request = make_request("seed", true, false, None, None);
+    first_request.tools = Some(vec![tool]);
+    first_request.tool_choice = ToolChoice::Required;
+
+    let p1 = unwrap_blocking(
+        execute(first_request, Arc::clone(&fixture.exec_ctx))
+            .await
+            .expect("seed turn"),
+    );
+
+    let mut second_request = make_request("follow up", true, false, Some(p1.id.clone()), None);
+    second_request.tools = None;
+    second_request.tool_choice = ToolChoice::Auto;
+
+    let p2 = unwrap_blocking(
+        execute(second_request.clone(), Arc::clone(&fixture.exec_ctx))
+            .await
+            .expect("follow-up turn"),
+    );
+
+    assert_eq!(output_text(&p2), "follow up answer");
+
+    let lookup_ctx = RequestContext {
+        original_request: RequestPayload {
+            previous_response_id: Some(p2.id.clone()),
+            ..second_request
+        },
+        enriched_request: RequestPayload {
+            previous_response_id: Some(p2.id.clone()),
+            ..make_request("lookup", true, false, None, None)
+        },
+        new_input_items: vec![],
+        response_id: "resp_lookup".into(),
+        conversation_id: None,
+    };
+
+    let stored = fixture
+        .exec_ctx
+        .resp_handler
+        .get(&lookup_ctx)
+        .await
+        .expect("fetch persisted response");
+
+    assert_eq!(stored.metadata.model, "test-model");
+    assert!(matches!(stored.metadata.effective_tool_choice, ToolChoice::Required));
+
+    let tools = stored.metadata.effective_tools.expect("expected persisted tools");
+    assert_eq!(tools.len(), 1);
+    match &tools[0] {
+        ResponsesTool::Function(p) => {
+            assert_eq!(p.name.as_str(), "lookup_weather");
+            assert_eq!(p.description.as_deref(), Some("Look up weather"));
+            assert_eq!(p.strict, Some(true));
+            assert_eq!(p.parameters.as_ref().and_then(|v| v["type"].as_str()), Some("object"));
+        }
+        _ => panic!("expected function tool"),
+    }
 }
 
 #[tokio::test]
