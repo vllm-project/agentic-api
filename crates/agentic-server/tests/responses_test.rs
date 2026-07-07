@@ -1,12 +1,11 @@
 mod common;
 
-use std::sync::Arc;
-
 use axum::Router;
 use axum::body::Bytes;
 use axum::response::IntoResponse;
 use axum::routing::post;
 use http::StatusCode;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 
@@ -131,6 +130,35 @@ async fn test_store_false_with_web_search_reaches_executor() {
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0]["tools"][0]["type"], "function");
     assert_eq!(requests[0]["tools"][0]["name"], "web_search");
+}
+
+#[tokio::test]
+async fn test_store_false_proxies_large_json_body_to_vllm() {
+    // Arrange
+    let (llm_url, requests, _h1) = spawn_mock_vllm_json_capture().await;
+    let (gw_url, _h2) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+    let prompt = "x".repeat(100 * 1024);
+
+    // Act
+    let resp = reqwest::Client::new()
+        .post(format!("{gw_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "input": [{"type": "message", "role": "user", "content": prompt}],
+            "store": false,
+            "stream": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // Assert — the gateway keeps this below-limit request on the proxy path.
+    assert_eq!(resp.status(), 200);
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0]["store"], false);
+    assert_eq!(requests[0]["stream"], false);
+    assert_eq!(requests[0]["input"][0]["content"].as_str().unwrap().len(), 100 * 1024);
 }
 
 #[tokio::test]
