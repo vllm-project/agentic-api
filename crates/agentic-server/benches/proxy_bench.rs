@@ -21,7 +21,7 @@ use agentic_core::storage::{ConversationStore, ResponseStore};
 use agentic_server::app::{AppState, ServerConfig, build_router};
 
 const CONTENT_TYPE_JSON: &str = "application/json";
-const PAYLOAD_SIZES: [usize; 3] = [1024, 10 * 1024, 100 * 1024];
+const PROMPT_SIZES: [usize; 3] = [1024, 10 * 1024, 100 * 1024];
 
 fn bench_config(llm_url: &str) -> Config {
     Config {
@@ -60,6 +60,7 @@ async fn responses_handler(req: Request) -> Response {
             .into_response();
     }
 
+    // Keep the mock response fixed so prompt-size runs isolate request upload overhead.
     let out = r#"{"id":"resp_bench","object":"response","status":"completed"}"#;
     (StatusCode::OK, [("content-type", CONTENT_TYPE_JSON)], out).into_response()
 }
@@ -173,23 +174,31 @@ fn bench_single_request(c: &mut Criterion, rt: &Runtime, client: &reqwest::Clien
     group.finish();
 }
 
-fn bench_body_size(c: &mut Criterion, rt: &Runtime, client: &reqwest::Client, llm_url: &str, gateway_url: &str) {
-    let mut group = c.benchmark_group("non_stream/body_size");
+fn bench_prompt_size(c: &mut Criterion, rt: &Runtime, client: &reqwest::Client, llm_url: &str, gateway_url: &str) {
+    let mut group = c.benchmark_group("non_stream/prompt_bytes");
 
-    for size in PAYLOAD_SIZES {
-        group.bench_with_input(BenchmarkId::new("direct", size), &size, |b, &size| {
-            let url = responses_url(llm_url);
-            let body = request_body(size, false);
-            b.to_async(rt)
-                .iter(|| post_response(client.clone(), url.clone(), body.clone()));
-        });
+    for prompt_bytes in PROMPT_SIZES {
+        group.bench_with_input(
+            BenchmarkId::new("direct", prompt_bytes),
+            &prompt_bytes,
+            |b, &prompt_bytes| {
+                let url = responses_url(llm_url);
+                let body = request_body(prompt_bytes, false);
+                b.to_async(rt)
+                    .iter(|| post_response(client.clone(), url.clone(), body.clone()));
+            },
+        );
 
-        group.bench_with_input(BenchmarkId::new("proxied", size), &size, |b, &size| {
-            let url = responses_url(gateway_url);
-            let body = request_body(size, false);
-            b.to_async(rt)
-                .iter(|| post_response(client.clone(), url.clone(), body.clone()));
-        });
+        group.bench_with_input(
+            BenchmarkId::new("proxied", prompt_bytes),
+            &prompt_bytes,
+            |b, &prompt_bytes| {
+                let url = responses_url(gateway_url);
+                let body = request_body(prompt_bytes, false);
+                b.to_async(rt)
+                    .iter(|| post_response(client.clone(), url.clone(), body.clone()));
+            },
+        );
     }
 
     group.finish();
@@ -208,7 +217,7 @@ fn proxy_benchmarks(c: &mut Criterion) {
     let client = reqwest::Client::new();
 
     bench_single_request(c, &rt, &client, &llm_url, &gateway_url);
-    bench_body_size(c, &rt, &client, &llm_url, &gateway_url);
+    bench_prompt_size(c, &rt, &client, &llm_url, &gateway_url);
 }
 
 criterion_group!(proxy_benches, proxy_benchmarks);
