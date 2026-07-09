@@ -1,4 +1,4 @@
-# Design: `agentic-core` Public API
+# Design: `agentic-server-core` Public API
 
 > Status: Active — implementation in progress
 > References: [ADR-03](../adr/ADR-03_gateway_integration.md), [Issue #42](https://github.com/vllm-project/agentic-api/issues/42), [Praxis #354](https://github.com/praxis-proxy/praxis/issues/354)
@@ -42,12 +42,12 @@ Each phase = one PR with tests. Phases are ordered by dependency.
 
 ### Phase 1: SSE Event Normalizer Module (lands on main — no PR #46 dependency)
 
-**PR scope:** New `events/` module in `agentic-core` — separate from executor, no dependency on PR #46.
+**PR scope:** New `events/` module in `agentic-server-core` — separate from executor, no dependency on PR #46.
 
 Per @maralbahari's feedback ([PR #46 discussion](https://github.com/vllm-project/agentic-api/pull/46#discussion_r3352104210)): the SSE event handling should be a **separate core module** to avoid bloating the accumulator. Design draws from PydanticAI's `StreamedResponse._process_event()`.
 
 ```
-crates/agentic-core/src/
+crates/agentic-server-core/src/
   events/
     mod.rs          // pub mod normalize; pub mod types;
     types.rs        // SSEEventType (28+ variants) + typed EventPayload enum

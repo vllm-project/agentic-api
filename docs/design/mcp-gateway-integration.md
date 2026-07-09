@@ -1,6 +1,6 @@
 # MCP Gateway Integration
 
-Target: `crates/agentic-core/`
+Target: `crates/agentic-server-core/`
 Reference: [mcp handlers](https://github.com/openai/codex/tree/main/codex-rs/core/src/tools/handlers), [rmcp-client](https://github.com/openai/codex/tree/main/codex-rs/rmcp-client), [turn.rs](https://github.com/openai/codex/blob/main/codex-rs/core/src/session/turn.rs), [rust-sdk README](https://github.com/modelcontextprotocol/rust-sdk#readme)
 
 ---

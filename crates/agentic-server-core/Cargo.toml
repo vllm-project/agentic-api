@@ -1,10 +1,18 @@
 [package]
-name = "agentic-core"
+name = "agentic-server-core"
 description = "Framework-agnostic core library for agentic-api"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+exclude = [
+    "agentic_api.db*",
+    "benches/cassettes/**",
+    "tests/cassettes/**",
+]
+
+[lib]
+name = "agentic_core"
 
 [dependencies]
 async-stream.workspace = true
