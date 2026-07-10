@@ -223,6 +223,78 @@ async fn openai_mixed_gateway_and_client_owned_hands_back_after_gateway_exec() {
     );
 }
 
+/// A gateway `web_search` turn followed by a Codex `namespace` turn, driven
+/// through the loop as one conversation (per @maralbahari's review ask on #83).
+///
+/// Round 0: the model emits a gateway-owned `web_search` call → the loop
+/// executes it against the You.com mock and continues. Round 1: the model emits
+/// the flat, model-visible namespace call
+/// `agentic_ns__mcp__agentic_fixture__add_numbers` → the loop restores it to
+/// `{namespace: "mcp__agentic_fixture", name: "add_numbers"}`, classifies it as
+/// client-owned, and hands the turn back (`RequiresClientAction`). Two model
+/// calls total; the namespace call is returned restored, never flattened.
+#[tokio::test]
+async fn openai_gateway_web_search_then_codex_namespace_across_turns() {
+    let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
+    let llm = support::MockServer::start_deque(vec![
+        cassette_turn("gateway_web_search_then_codex_namespace.yaml", 0),
+        cassette_turn("gateway_web_search_then_codex_namespace.yaml", 1),
+    ])
+    .await;
+    let exec_ctx = build_exec_ctx_with_web_search(llm.url(), &you_url).await;
+
+    let web_search: ResponsesTool = serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).unwrap();
+    let codex_namespace: ResponsesTool = serde_json::from_value(serde_json::json!({
+        "type": "namespace",
+        "name": "mcp__agentic_fixture",
+        "tools": [{"type": "function", "name": "add_numbers", "parameters": {"type": "object"}}]
+    }))
+    .unwrap();
+
+    let result = ExecuteRequest::new(
+        request("search then add", Some(vec![web_search, codex_namespace])),
+        exec_ctx,
+    )
+    .run()
+    .await
+    .expect("execute should succeed");
+    let Either::Left(response) = result else {
+        panic!("non-streaming request should return a payload");
+    };
+
+    // Round 0 executed the gateway web_search against the You.com mock, then
+    // round 1 emitted the namespace call — two model calls in one conversation.
+    let search = captured_you.recv().await.expect("web_search should hit You.com");
+    assert!(search.body.get("query").is_some(), "web_search executed with a query");
+    assert_eq!(
+        llm.request_bodies().await.len(),
+        2,
+        "gateway round + client-action round"
+    );
+
+    // The namespace call is handed back restored to {namespace, name}, never
+    // the flat model-visible name.
+    let output = serde_json::to_value(&response.output).unwrap();
+    let items = output.as_array().unwrap();
+    let ns_call = items
+        .iter()
+        .find(|it| it["type"] == "function_call" && it["call_id"] == "call_ns")
+        .expect("namespace call handed back to the client");
+    assert_eq!(ns_call["name"], "add_numbers", "flat name restored to member name");
+    assert_eq!(ns_call["namespace"], "mcp__agentic_fixture", "namespace restored");
+    assert!(
+        !items
+            .iter()
+            .any(|it| it["name"] == "agentic_ns__mcp__agentic_fixture__add_numbers"),
+        "flat namespaced name must not leak to the client"
+    );
+    // The gateway web_search surfaced as a public web_search_call, not a raw fn.
+    assert!(
+        items.iter().any(|it| it["type"] == "web_search_call"),
+        "web_search resolved into a public web_search_call: {output:#}"
+    );
+}
+
 // --- You.com mock (mirrors web_search_tool_test.rs) -------------------------
 
 struct CapturedSearch {
