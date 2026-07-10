@@ -1089,7 +1089,7 @@ async fn execute_feeds_web_search_execution_errors_back_to_model() {
 }
 
 #[tokio::test]
-async fn execute_errors_after_max_gateway_tool_rounds() {
+async fn execute_returns_incomplete_after_max_gateway_tool_rounds() {
     let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
     let llm_responses = std::iter::repeat_with(web_search_function_call_response)
         .take(10)
@@ -1115,11 +1115,19 @@ async fn execute_errors_after_max_gateway_tool_rounds() {
         metadata: None,
     };
 
-    let result = ExecuteRequest::new(payload, exec_ctx).run().await;
-    assert!(
-        result
-            .err()
-            .is_some_and(|err| err.to_string().contains("gateway tool execution exceeded 10 rounds"))
+    // Budget exhausted while the model keeps requesting tools → the response is
+    // surfaced as status: "incomplete" (Responses API semantics), not an error.
+    let result = ExecuteRequest::new(payload, exec_ctx)
+        .run()
+        .await
+        .expect("hitting the round cap returns an incomplete response, not an error");
+    let Either::Left(response) = result else {
+        panic!("non-streaming request should return a payload");
+    };
+    assert_eq!(response.status, "incomplete");
+    assert_eq!(
+        response.incomplete_details.and_then(|d| d.reason).as_deref(),
+        Some("gateway tool execution exceeded 10 rounds")
     );
     for _ in 0..10 {
         captured_you.recv().await.expect("mock You.com should receive request");
@@ -1182,9 +1190,16 @@ async fn execute_feeds_invalid_web_search_arguments_back_to_model() {
 }
 
 #[tokio::test]
-async fn execute_errors_when_gateway_tool_call_fanout_exceeds_limit() {
+async fn execute_runs_large_gateway_fanout_without_hard_cap() {
+    // A single turn requesting 9 gateway calls (more than the concurrency
+    // window of 5) must all execute — the sliding window drains them safely,
+    // with no hard per-round count cap that fails the request.
     let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
-    let llm = support::MockServer::start_deque(vec![many_web_search_function_call_response(9)]).await;
+    let llm = support::MockServer::start_deque(vec![
+        many_web_search_function_call_response(9),
+        support::text_response("done with all searches"),
+    ])
+    .await;
     let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
     let web_search: ResponsesTool = serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).unwrap();
     let payload = RequestPayload {
@@ -1205,17 +1220,24 @@ async fn execute_errors_when_gateway_tool_call_fanout_exceeds_limit() {
         metadata: None,
     };
 
-    let result = ExecuteRequest::new(payload, exec_ctx).run().await;
-    assert!(
-        result
-            .err()
-            .is_some_and(|err| err.to_string().contains("gateway tool call limit exceeded"))
+    let result = ExecuteRequest::new(payload, exec_ctx)
+        .run()
+        .await
+        .expect("large fan-out executes; no hard cap error");
+    let Either::Left(response) = result else {
+        panic!("non-streaming request should return a payload");
+    };
+    assert_eq!(response.status, "completed");
+
+    let mut searches = 0;
+    while captured_you.try_recv().is_ok() {
+        searches += 1;
+    }
+    assert_eq!(
+        searches, 9,
+        "all 9 gateway calls execute despite the concurrency window of 5"
     );
-    assert!(
-        captured_you.try_recv().is_err(),
-        "fanout limit should fail before paid searches"
-    );
-    assert_eq!(llm.request_bodies().await.len(), 1);
+    assert_eq!(llm.request_bodies().await.len(), 2);
 }
 
 #[tokio::test]
@@ -1274,4 +1296,183 @@ async fn stream_error_events_escape_error_messages() {
     assert_eq!(parsed["type"], "error");
     let error = parsed["error"]["message"].as_str().unwrap();
     assert!(error.contains(r#"bad \"quoted\" upstream response"#), "{error}");
+}
+
+fn web_search_function_call_response_with_id(call_id: &str) -> support::MockResponse {
+    support::MockResponse::Json(
+        serde_json::json!({
+            "id": format!("resp_{call_id}"),
+            "object": "response",
+            "created_at": 0,
+            "model": "test-model",
+            "status": "completed",
+            "output": [{
+                "id": format!("fc_{call_id}"),
+                "type": "function_call",
+                "call_id": call_id,
+                "name": "web_search",
+                "arguments": "{\"query\":\"rust async\",\"count\":2}",
+                "status": "completed"
+            }],
+            "usage": null,
+            "incomplete_details": null,
+            "error": null,
+            "previous_response_id": null,
+            "conversation_id": null,
+            "instructions": null
+        })
+        .to_string(),
+    )
+}
+
+#[tokio::test]
+async fn incomplete_turn_persists_a_consistent_conversation_for_continuation() {
+    // 10 web_search rounds -> incomplete, then one text turn for the continuation.
+    // Each round emits a UNIQUE call_id (call_r0..call_r9) so the FINAL round's
+    // call is individually detectable in the persisted conversation.
+    let (you_url, _captured_you, _you_handle) = spawn_mock_you().await;
+    let mut llm_responses: Vec<support::MockResponse> = (0..10)
+        .map(|round| web_search_function_call_response_with_id(&format!("call_r{round}")))
+        .collect();
+    llm_responses.push(support::text_response("continued after incomplete"));
+    let llm = support::MockServer::start_deque(llm_responses).await;
+    let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
+    let web_search: ResponsesTool = serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).unwrap();
+    let payload = RequestPayload {
+        model: "test-model".to_owned(),
+        input: ResponsesInput::Text("look up rust async".to_owned()),
+        instructions: None,
+        previous_response_id: None,
+        conversation_id: None,
+        tools: Some(vec![web_search]),
+        tool_choice: None,
+        stream: false,
+        store: true,
+        include: None,
+        temperature: None,
+        top_p: None,
+        max_output_tokens: Some(1024),
+        truncation: None,
+        metadata: None,
+    };
+
+    let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();
+    let Either::Left(response) = result else {
+        panic!("non-streaming request should return a payload");
+    };
+    assert_eq!(response.status, "incomplete");
+
+    // Continue from the incomplete response — rehydrates the persisted turn.
+    let continuation_payload = RequestPayload {
+        model: "test-model".to_owned(),
+        input: ResponsesInput::Text("continue".to_owned()),
+        instructions: None,
+        previous_response_id: Some(response.id),
+        conversation_id: None,
+        tools: None,
+        tool_choice: None,
+        stream: false,
+        store: true,
+        include: None,
+        temperature: None,
+        top_p: None,
+        max_output_tokens: Some(1024),
+        truncation: None,
+        metadata: None,
+    };
+    let _ = ExecuteRequest::new(continuation_payload, exec_ctx).run().await.unwrap();
+
+    // The continuation's upstream request carries the rehydrated conversation.
+    // Every function_call must pair with a function_call_output — no dangling call.
+    let request_bodies = llm.request_bodies().await;
+    let continuation_input = request_bodies
+        .last()
+        .expect("continuation request")
+        .get("input")
+        .and_then(|input| input.as_array())
+        .expect("continuation input is an array");
+    let call_ids: std::collections::HashSet<&str> = continuation_input
+        .iter()
+        .filter(|item| item["type"] == "function_call")
+        .filter_map(|item| item["call_id"].as_str())
+        .collect();
+    let output_call_ids: std::collections::HashSet<&str> = continuation_input
+        .iter()
+        .filter(|item| item["type"] == "function_call_output")
+        .filter_map(|item| item["call_id"].as_str())
+        .collect();
+
+    // The FINAL round (call_r9) executed but the loop stopped on the budget. Its
+    // call and output must both be persisted — guards the Incomplete arm skipping
+    // the append, which would drop call_r9's output while its call is in output.
+    assert!(
+        call_ids.contains("call_r9"),
+        "final-round gateway call must be persisted, got calls {call_ids:?}"
+    );
+    assert!(
+        output_call_ids.contains("call_r9"),
+        "final-round gateway call has no matching output in the persisted conversation"
+    );
+    for cid in &call_ids {
+        assert!(
+            output_call_ids.contains(cid),
+            "gateway function_call {cid} has no matching output in the persisted conversation"
+        );
+    }
+}
+
+#[tokio::test]
+async fn stream_returns_incomplete_after_max_gateway_tool_rounds() {
+    // Streaming counterpart of the blocking cap test: past the round budget over
+    // an SSE stream, the final streamed payload must carry status "incomplete".
+    let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
+    let llm_responses = std::iter::repeat_with(web_search_function_call_sse_response)
+        .take(10)
+        .collect();
+    let llm = support::MockServer::start_deque(llm_responses).await;
+    let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
+    let web_search: ResponsesTool = serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).unwrap();
+    let payload = RequestPayload {
+        model: "test-model".to_owned(),
+        input: ResponsesInput::Text("look up rust async".to_owned()),
+        instructions: None,
+        previous_response_id: None,
+        conversation_id: None,
+        tools: Some(vec![web_search]),
+        tool_choice: None,
+        stream: true,
+        store: true,
+        include: None,
+        temperature: None,
+        top_p: None,
+        max_output_tokens: Some(1024),
+        truncation: None,
+        metadata: None,
+    };
+
+    let result = ExecuteRequest::new(payload, exec_ctx).run().await.unwrap();
+    let Either::Right(stream) = result else {
+        panic!("expected streaming response");
+    };
+    let chunks: Vec<String> = stream.collect().await;
+
+    let final_event = chunks
+        .iter()
+        .filter_map(|chunk| {
+            let data = chunk.trim_end_matches('\n').strip_prefix("data: ")?;
+            (data != "[DONE]").then(|| serde_json::from_str::<serde_json::Value>(data).ok())?
+        })
+        .next_back()
+        .expect("stream should carry a final response payload");
+    // The terminal SSE event wraps the payload: {"type":"response.incomplete","response":{...}}
+    let response = &final_event["response"];
+    assert_eq!(response["status"], "incomplete");
+    assert_eq!(
+        response["incomplete_details"]["reason"],
+        "gateway tool execution exceeded 10 rounds"
+    );
+    for _ in 0..10 {
+        captured_you.recv().await.expect("mock You.com should receive request");
+    }
+    assert_eq!(llm.request_bodies().await.len(), 10);
 }

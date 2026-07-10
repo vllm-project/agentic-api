@@ -1,0 +1,65 @@
+# Composed multi-turn cassette for the gateway tool loop integration test.
+#
+# Turn 0 body is a recorded-shape gateway `web_search` function call (the tool
+# the gateway executes server-side). Turn 1 body is the flat, model-visible
+# Codex namespace call `agentic_ns__mcp__agentic_fixture__add_numbers` (the same
+# flattened form as cassettes/codex/tools/direct_vllm_flat_namespace_tool.json),
+# which the loop restores to `{namespace, name}` and hands back to the client.
+#
+# Driven by dispatch_loop_cassette_test.rs::
+#   openai_gateway_web_search_then_codex_namespace_across_turns
+turns:
+  - filename: t0
+    request:
+      body:
+        input: search then add
+      method: POST
+      path: /v1/responses
+    response:
+      status_code: 200
+      body:
+        id: resp_ws_0
+        object: response
+        created_at: 0
+        model: test-model
+        status: completed
+        output:
+          - id: fc_ws
+            type: function_call
+            call_id: call_ws
+            name: web_search
+            arguments: '{"query":"rust async"}'
+            status: completed
+        usage: null
+        incomplete_details: null
+        error: null
+        previous_response_id: null
+        conversation_id: null
+        instructions: null
+  - filename: t1
+    request:
+      body:
+        input: continue
+      method: POST
+      path: /v1/responses
+    response:
+      status_code: 200
+      body:
+        id: resp_ns_1
+        object: response
+        created_at: 0
+        model: test-model
+        status: completed
+        output:
+          - id: fc_ns
+            type: function_call
+            call_id: call_ns
+            name: agentic_ns__mcp__agentic_fixture__add_numbers
+            arguments: '{"numbers":[8,0]}'
+            status: completed
+        usage: null
+        incomplete_details: null
+        error: null
+        previous_response_id: resp_ws_0
+        conversation_id: null
+        instructions: null
