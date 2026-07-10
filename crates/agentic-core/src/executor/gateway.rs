@@ -536,7 +536,8 @@ mod tests {
         let registry = ToolRegistry::build_with_handlers(&[web_search], |tool_type| match tool_type {
             ToolType::WebSearch => Some(Arc::new(SlowExecutor) as Arc<dyn GatewayExecutor>),
             _ => None,
-        });
+        })
+        .expect("registry builds");
 
         // 1ms budget vs a 50ms tool → the timeout fires. Must return (not hang):
         // the stuck call becomes an error output the loop can feed back.
@@ -570,7 +571,7 @@ mod tests {
         // not fail the whole request.
         let web_search: ResponsesTool =
             serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).expect("web_search tool param");
-        let registry = ToolRegistry::build_with_handlers(&[web_search], |_tool_type| None);
+        let registry = ToolRegistry::build_with_handlers(&[web_search], |_tool_type| None).expect("registry builds");
 
         let result =
             execute_gateway_call_with_timeout(web_search_call("call_no_handler"), &registry, std::time::Duration::ZERO)
