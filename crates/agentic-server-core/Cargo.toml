@@ -7,8 +7,8 @@ license.workspace = true
 repository.workspace = true
 exclude = [
     "agentic_api.db*",
-    "benches/cassettes/**",
-    "tests/cassettes/**",
+    "benches/**",
+    "tests/**",
 ]
 
 [lib]
