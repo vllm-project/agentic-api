@@ -13,10 +13,10 @@ use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
 use super::gateway::{
-    append_gateway_calls_to_new_input, append_output_items_to_input, append_tool_outputs,
+    LoopDecision, append_gateway_calls_to_new_input, append_output_items_to_input, append_tool_outputs, classify_round,
     execute_and_emit_output_calls, has_client_owned_calls, public_output_items,
 };
-use crate::executor::error::{ExecutorError, ExecutorResult};
+use crate::executor::error::ExecutorResult;
 use crate::executor::inference::DONE_MARKER;
 use crate::executor::persist::persist_if_needed;
 use crate::executor::rehydrate::rehydrate_conversation;
@@ -24,7 +24,7 @@ use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::upstream::{fetch_blocking_payload, fetch_stream_payload};
 use crate::tool::ToolRegistry;
 use crate::types::io::{ResponseUsage, ToolChoice};
-use crate::types::request_response::{RequestPayload, ResponsePayload};
+use crate::types::request_response::{IncompleteDetails, RequestPayload, ResponsePayload};
 use crate::utils::common::serialize_to_string;
 
 pub use crate::executor::inference::BoxStream;
@@ -114,54 +114,83 @@ async fn run_until_gateway_tools_complete(
     let mut combined_output: Vec<crate::OutputItem> = Vec::new();
     let mut combined_usage: Option<ResponseUsage> = None;
 
-    for _ in 0..MAX_GATEWAY_TOOL_ROUNDS {
+    for round in 0..MAX_GATEWAY_TOOL_ROUNDS {
         let mut payload: ResponsePayload = if stream_upstream {
             fetch_stream_payload(&ctx, exec_ctx, auth, &registry, stream_events).await?
         } else {
             fetch_blocking_payload(&ctx, exec_ctx, auth).await?
         };
         registry.restore_final_payload_output(&mut payload.output);
-        accumulate_usage(&mut combined_usage, payload.usage);
+        accumulate_usage(&mut combined_usage, payload.usage.take());
         let current_output = std::mem::take(&mut payload.output);
-        let has_client_owned_calls = has_client_owned_calls(&current_output, &registry);
+        let has_client_owned = has_client_owned_calls(&current_output, &registry);
         let gateway_results =
             execute_and_emit_output_calls(&current_output, &registry, combined_output.len(), stream_events).await?;
         let public_output = public_output_items(&current_output, &registry, &gateway_results);
-
-        if has_client_owned_calls {
-            combined_output.extend(public_output);
-            append_gateway_calls_to_new_input(&mut ctx, &current_output, &registry);
-            append_tool_outputs(
-                &mut ctx,
-                gateway_results.into_iter().map(|result| result.input_item).collect(),
-            );
-            payload.output = combined_output;
-            payload.usage = combined_usage;
-            ctx.inject_ids(&mut payload);
-            return Ok((payload, ctx));
-        }
-
-        if gateway_results.is_empty() {
-            combined_output.extend(public_output);
-            payload.output = combined_output;
-            payload.usage = combined_usage;
-            ctx.inject_ids(&mut payload);
-            return Ok((payload, ctx));
-        }
-
         combined_output.extend(public_output);
-        ctx.enriched_request.tool_choice = Some(ToolChoice::Auto);
-        append_output_items_to_input(&mut ctx.enriched_request.input, &current_output);
-        append_gateway_calls_to_new_input(&mut ctx, &current_output, &registry);
-        append_tool_outputs(
-            &mut ctx,
-            gateway_results.into_iter().map(|result| result.input_item).collect(),
-        );
+
+        match classify_round(has_client_owned, &gateway_results, round, MAX_GATEWAY_TOOL_ROUNDS) {
+            // Client-owned calls (plain function or Codex namespace tools) are
+            // handed back to the caller. Gateway calls in the same turn are
+            // still recorded so the returned conversation is complete.
+            LoopDecision::RequiresClientAction => {
+                append_gateway_calls_to_new_input(&mut ctx, &current_output, &registry);
+                append_tool_outputs(
+                    &mut ctx,
+                    gateway_results.into_iter().map(|result| result.input_item).collect(),
+                );
+                finalize_loop(&mut payload, combined_output, combined_usage, &ctx);
+                return Ok((payload, ctx));
+            }
+            // No gateway work remains — this turn is the final response.
+            LoopDecision::Done => {
+                finalize_loop(&mut payload, combined_output, combined_usage, &ctx);
+                return Ok((payload, ctx));
+            }
+            // Budget exhausted while the model was still requesting gateway
+            // tools: surface the accumulated work as a partial
+            // `status: "incomplete"` response instead of failing the request.
+            // The final round's gateway calls and outputs are recorded so a
+            // continuation is not fed a dangling tool call.
+            LoopDecision::Incomplete(reason) => {
+                append_gateway_calls_to_new_input(&mut ctx, &current_output, &registry);
+                append_tool_outputs(
+                    &mut ctx,
+                    gateway_results.into_iter().map(|result| result.input_item).collect(),
+                );
+                finalize_loop(&mut payload, combined_output, combined_usage, &ctx);
+                "incomplete".clone_into(&mut payload.status);
+                payload.incomplete_details = Some(IncompleteDetails { reason: Some(reason) });
+                return Ok((payload, ctx));
+            }
+            // Gateway tools ran and rounds remain; feed outputs back and loop.
+            LoopDecision::Continue => {
+                ctx.enriched_request.tool_choice = Some(ToolChoice::Auto);
+                append_output_items_to_input(&mut ctx.enriched_request.input, &current_output);
+                append_gateway_calls_to_new_input(&mut ctx, &current_output, &registry);
+                append_tool_outputs(
+                    &mut ctx,
+                    gateway_results.into_iter().map(|result| result.input_item).collect(),
+                );
+            }
+        }
     }
 
-    Err(ExecutorError::InvalidRequest(format!(
-        "gateway tool execution exceeded {MAX_GATEWAY_TOOL_ROUNDS} rounds"
-    )))
+    unreachable!("the final round returns Done, RequiresClientAction, or Incomplete");
+}
+
+/// Move accumulated output/usage onto the terminating round's payload and
+/// inject the response/conversation IDs. The payload's `model`/`created_at`/
+/// `status` from the latest inference turn are preserved.
+fn finalize_loop(
+    payload: &mut ResponsePayload,
+    combined_output: Vec<crate::types::io::OutputItem>,
+    combined_usage: Option<ResponseUsage>,
+    ctx: &RequestContext,
+) {
+    payload.output = combined_output;
+    payload.usage = combined_usage;
+    ctx.inject_ids(payload);
 }
 
 async fn run_blocking(
