@@ -1,0 +1,342 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Search the web for the latest Rust async news. Use the web_search tool.
+      max_output_tokens: 1024
+      model: gpt-4o
+      store: true
+      stream: true
+      tools:
+      - description: Search the web for current information.
+        name: web_search
+        parameters:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        type: function
+      - description: Run a shell command via the mcp__shell namespace tool.
+        name: agentic_ns__mcp__shell__run
+        parameters:
+          properties:
+            command:
+              type: string
+          required:
+          - command
+          type: object
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_065eb111d59a10dd006a514c41c62c81998de5a364fc417df7","object":"response","created_at":1783712833,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Search
+      the web for current information.","name":"web_search","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"],"additionalProperties":false},"strict":true},{"type":"function","description":"Run
+      a shell command via the mcp__shell namespace tool.","name":"agentic_ns__mcp__shell__run","output_schema":null,"parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_065eb111d59a10dd006a514c41c62c81998de5a364fc417df7","object":"response","created_at":1783712833,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Search
+      the web for current information.","name":"web_search","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"],"additionalProperties":false},"strict":true},{"type":"function","description":"Run
+      a shell command via the mcp__shell namespace tool.","name":"agentic_ns__mcp__shell__run","output_schema":null,"parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"fc_065eb111d59a10dd006a514c427e408199bda223027c1892c7","type":"function_call","status":"in_progress","arguments":"","call_id":"call_uXmi4TV4J4BHOh8Nt5HfFOL2","name":"web_search"},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"{\"","item_id":"fc_065eb111d59a10dd006a514c427e408199bda223027c1892c7","obfuscation":"5MIJerHG2wUdMb","output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"query","item_id":"fc_065eb111d59a10dd006a514c427e408199bda223027c1892c7","obfuscation":"xx2nHYRfvOZ","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"\":\"","item_id":"fc_065eb111d59a10dd006a514c427e408199bda223027c1892c7","obfuscation":"eyD7mDFyp2b57","output_index":0,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"latest","item_id":"fc_065eb111d59a10dd006a514c427e408199bda223027c1892c7","obfuscation":"FRGiU6fPNV","output_index":0,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":" Rust","item_id":"fc_065eb111d59a10dd006a514c427e408199bda223027c1892c7","obfuscation":"1andrRdcYyY","output_index":0,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":" async","item_id":"fc_065eb111d59a10dd006a514c427e408199bda223027c1892c7","obfuscation":"MMSOvwTila","output_index":0,"sequence_number":8}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":" news","item_id":"fc_065eb111d59a10dd006a514c427e408199bda223027c1892c7","obfuscation":"ok6mb0yvBAu","output_index":0,"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"\"}","item_id":"fc_065eb111d59a10dd006a514c427e408199bda223027c1892c7","obfuscation":"8QyMgCbnXNKrRH","output_index":0,"sequence_number":10}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.done
+
+      '
+    - 'data: {"type":"response.function_call_arguments.done","arguments":"{\"query\":\"latest
+      Rust async news\"}","item_id":"fc_065eb111d59a10dd006a514c427e408199bda223027c1892c7","output_index":0,"sequence_number":11}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"fc_065eb111d59a10dd006a514c427e408199bda223027c1892c7","type":"function_call","status":"completed","arguments":"{\"query\":\"latest
+      Rust async news\"}","call_id":"call_uXmi4TV4J4BHOh8Nt5HfFOL2","name":"web_search"},"output_index":0,"sequence_number":12}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_065eb111d59a10dd006a514c41c62c81998de5a364fc417df7","object":"response","created_at":1783712833,"status":"completed","background":false,"completed_at":1783712834,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[{"id":"fc_065eb111d59a10dd006a514c427e408199bda223027c1892c7","type":"function_call","status":"completed","arguments":"{\"query\":\"latest
+      Rust async news\"}","call_id":"call_uXmi4TV4J4BHOh8Nt5HfFOL2","name":"web_search"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Search
+      the web for current information.","name":"web_search","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"],"additionalProperties":false},"strict":true},{"type":"function","description":"Run
+      a shell command via the mcp__shell namespace tool.","name":"agentic_ns__mcp__shell__run","output_schema":null,"parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":94,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":18,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":112},"user":null,"metadata":{}},"sequence_number":13}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: call_uXmi4TV4J4BHOh8Nt5HfFOL2
+        output: '{"results":{"web":[{"url":"https://example.com/rust-async","title":"Rust
+          async guide","snippets":["Use async carefully."]}]},"metadata":{"query":"rust
+          async news"}}'
+        type: function_call_output
+      - content: Good. Now call agentic_ns__mcp__shell__run to run 'pwd'.
+        role: user
+        type: message
+      max_output_tokens: 1024
+      model: gpt-4o
+      previous_response_id: resp_065eb111d59a10dd006a514c41c62c81998de5a364fc417df7
+      store: true
+      stream: true
+      tools:
+      - description: Search the web for current information.
+        name: web_search
+        parameters:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        type: function
+      - description: Run a shell command via the mcp__shell namespace tool.
+        name: agentic_ns__mcp__shell__run
+        parameters:
+          properties:
+            command:
+              type: string
+          required:
+          - command
+          type: object
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_065eb111d59a10dd006a514c42c7f08199a64647cdae1d7884","object":"response","created_at":1783712834,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_065eb111d59a10dd006a514c41c62c81998de5a364fc417df7","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Search
+      the web for current information.","name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"],"additionalProperties":false},"strict":true},{"type":"function","description":"Run
+      a shell command via the mcp__shell namespace tool.","name":"agentic_ns__mcp__shell__run","parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_065eb111d59a10dd006a514c42c7f08199a64647cdae1d7884","object":"response","created_at":1783712834,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_065eb111d59a10dd006a514c41c62c81998de5a364fc417df7","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Search
+      the web for current information.","name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"],"additionalProperties":false},"strict":true},{"type":"function","description":"Run
+      a shell command via the mcp__shell namespace tool.","name":"agentic_ns__mcp__shell__run","parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"fc_065eb111d59a10dd006a514c435fb08199931eb31eac468001","type":"function_call","status":"in_progress","arguments":"","call_id":"call_mmG1tORJWhZJeNlvmSat2ip1","name":"agentic_ns__mcp__shell__run"},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"{\"","item_id":"fc_065eb111d59a10dd006a514c435fb08199931eb31eac468001","obfuscation":"pzMmKZNvn7kA7C","output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"command","item_id":"fc_065eb111d59a10dd006a514c435fb08199931eb31eac468001","obfuscation":"UpZprm5by","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"\":\"","item_id":"fc_065eb111d59a10dd006a514c435fb08199931eb31eac468001","obfuscation":"QDCbYP7HCNMBf","output_index":0,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"pwd","item_id":"fc_065eb111d59a10dd006a514c435fb08199931eb31eac468001","obfuscation":"HPJItmBbKyFhx","output_index":0,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"\"}","item_id":"fc_065eb111d59a10dd006a514c435fb08199931eb31eac468001","obfuscation":"85vKlM92dQAmii","output_index":0,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.done
+
+      '
+    - 'data: {"type":"response.function_call_arguments.done","arguments":"{\"command\":\"pwd\"}","item_id":"fc_065eb111d59a10dd006a514c435fb08199931eb31eac468001","output_index":0,"sequence_number":8}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"fc_065eb111d59a10dd006a514c435fb08199931eb31eac468001","type":"function_call","status":"completed","arguments":"{\"command\":\"pwd\"}","call_id":"call_mmG1tORJWhZJeNlvmSat2ip1","name":"agentic_ns__mcp__shell__run"},"output_index":0,"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_065eb111d59a10dd006a514c42c7f08199a64647cdae1d7884","object":"response","created_at":1783712834,"status":"completed","background":false,"completed_at":1783712835,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[{"id":"fc_065eb111d59a10dd006a514c435fb08199931eb31eac468001","type":"function_call","status":"completed","arguments":"{\"command\":\"pwd\"}","call_id":"call_mmG1tORJWhZJeNlvmSat2ip1","name":"agentic_ns__mcp__shell__run"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_065eb111d59a10dd006a514c41c62c81998de5a364fc417df7","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Search
+      the web for current information.","name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"],"additionalProperties":false},"strict":true},{"type":"function","description":"Run
+      a shell command via the mcp__shell namespace tool.","name":"agentic_ns__mcp__shell__run","parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":185,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":23,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":208},"user":null,"metadata":{}},"sequence_number":10}
+
+      '
+    - '
+
+      '
+    status_code: 200

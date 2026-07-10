@@ -1,0 +1,553 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Search the web for the latest Rust async news. Use the web_search tool.
+      max_output_tokens: 1024
+      model: openai/gpt-oss-20b
+      store: true
+      stream: true
+      tools:
+      - description: Search the web for current information.
+        name: web_search
+        parameters:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        type: function
+      - description: Run a shell command via the mcp__shell namespace tool.
+        name: agentic_ns__mcp__shell__run
+        parameters:
+          properties:
+            command:
+              type: string
+          required:
+          - command
+          type: object
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"response":{"id":"resp_aca305fd1819d465","created_at":1783713376,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"]},"strict":null,"type":"function","defer_loading":null,"description":"Search
+      the web for current information."},{"name":"agentic_ns__mcp__shell__run","parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]},"strict":null,"type":"function","defer_loading":null,"description":"Run
+      a shell command via the mcp__shell namespace tool."}],"top_p":1.0,"background":false,"max_output_tokens":1024,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":0,"type":"response.created"}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"response":{"id":"resp_aca305fd1819d465","created_at":1783713376,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"]},"strict":null,"type":"function","defer_loading":null,"description":"Search
+      the web for current information."},{"name":"agentic_ns__mcp__shell__run","parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]},"strict":null,"type":"function","defer_loading":null,"description":"Run
+      a shell command via the mcp__shell namespace tool."}],"top_p":1.0,"background":false,"max_output_tokens":1024,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":1,"type":"response.in_progress"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"item":{"id":"msg_80d39229e6661001","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_part.added
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_80d39229e6661001","output_index":0,"part":{"text":"","type":"reasoning_text"},"sequence_number":3,"type":"response.reasoning_part.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"Need","item_id":"msg_80d39229e6661001","output_index":0,"sequence_number":4,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" to use web_search","item_id":"msg_80d39229e6661001","output_index":0,"sequence_number":5,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":".","item_id":"msg_80d39229e6661001","output_index":0,"sequence_number":6,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.done
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_80d39229e6661001","output_index":0,"sequence_number":7,"text":"Need
+      to use web_search.","type":"response.reasoning_text.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_part.done
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_80d39229e6661001","output_index":0,"part":{"text":"Need
+      to use web_search.","type":"reasoning_text"},"sequence_number":8,"type":"response.reasoning_part.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"item":{"id":"msg_80d39229e6661001","summary":[],"type":"reasoning","content":[{"text":"Need
+      to use web_search.","type":"reasoning_text"}],"encrypted_content":null,"status":"completed"},"output_index":0,"sequence_number":9,"type":"response.output_item.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"item":{"arguments":"","call_id":"call_966ac832ff2c814e","name":"web_search","type":"function_call","id":"fc_9105bc40ba2a4559","namespace":null,"status":"in_progress"},"output_index":1,"sequence_number":10,"type":"response.output_item.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"{\"","item_id":"fc_9105bc40ba2a4559","output_index":1,"sequence_number":11,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"query","item_id":"fc_9105bc40ba2a4559","output_index":1,"sequence_number":12,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"\":\"","item_id":"fc_9105bc40ba2a4559","output_index":1,"sequence_number":13,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"latest","item_id":"fc_9105bc40ba2a4559","output_index":1,"sequence_number":14,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":" Rust","item_id":"fc_9105bc40ba2a4559","output_index":1,"sequence_number":15,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":" async","item_id":"fc_9105bc40ba2a4559","output_index":1,"sequence_number":16,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":" news","item_id":"fc_9105bc40ba2a4559","output_index":1,"sequence_number":17,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":" ","item_id":"fc_9105bc40ba2a4559","output_index":1,"sequence_number":18,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"202","item_id":"fc_9105bc40ba2a4559","output_index":1,"sequence_number":19,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"6","item_id":"fc_9105bc40ba2a4559","output_index":1,"sequence_number":20,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"\"}","item_id":"fc_9105bc40ba2a4559","output_index":1,"sequence_number":21,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.done
+
+      '
+    - 'data: {"arguments":"{\"query\":\"latest Rust async news 2026\"}","item_id":"fc_9105bc40ba2a4559","name":"web_search","output_index":1,"sequence_number":22,"type":"response.function_call_arguments.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"item":{"arguments":"{\"query\":\"latest Rust async news 2026\"}","call_id":"call_966ac832ff2c814e","name":"web_search","type":"function_call","id":null,"namespace":null,"status":"completed","item_id":"fc_9105bc40ba2a4559","output_index":1,"sequence_number":-1},"output_index":1,"sequence_number":23,"type":"response.output_item.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"response":{"id":"resp_aca305fd1819d465","created_at":1783713376,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[{"id":"rs_a6b25e327dae8d0e","summary":[],"type":"reasoning","content":[{"text":"Need
+      to use web_search.","type":"reasoning_text"}],"encrypted_content":null,"status":null},{"arguments":"{\"query\":\"latest
+      Rust async news 2026\"}","call_id":"call_b327e643984ef757","name":"web_search","type":"function_call","id":"fc_b327e643984ef757","namespace":null,"status":null}],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"]},"strict":null,"type":"function","defer_loading":null,"description":"Search
+      the web for current information."},{"name":"agentic_ns__mcp__shell__run","parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]},"strict":null,"type":"function","defer_loading":null,"description":"Run
+      a shell command via the mcp__shell namespace tool."}],"top_p":1.0,"background":false,"max_output_tokens":1024,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"completed","text":null,"top_logprobs":null,"truncation":"disabled","usage":{"input_tokens":176,"input_tokens_details":{"cached_tokens":80,"input_tokens_per_turn":[176],"cached_tokens_per_turn":[80]},"output_tokens":36,"output_tokens_details":{"reasoning_tokens":16,"tool_output_tokens":0,"output_tokens_per_turn":[36],"tool_output_tokens_per_turn":[0]},"total_tokens":212},"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":24,"type":"response.completed"}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: call_b327e643984ef757
+        output: '{"results":{"web":[{"url":"https://example.com/rust-async","title":"Rust
+          async guide","snippets":["Use async carefully."]}]},"metadata":{"query":"rust
+          async news"}}'
+        type: function_call_output
+      - content: Good. Now call agentic_ns__mcp__shell__run to run 'pwd'.
+        role: user
+        type: message
+      max_output_tokens: 1024
+      model: openai/gpt-oss-20b
+      previous_response_id: resp_aca305fd1819d465
+      store: true
+      stream: true
+      tools:
+      - description: Search the web for current information.
+        name: web_search
+        parameters:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        type: function
+      - description: Run a shell command via the mcp__shell namespace tool.
+        name: agentic_ns__mcp__shell__run
+        parameters:
+          properties:
+            command:
+              type: string
+          required:
+          - command
+          type: object
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"response":{"id":"resp_98d9ee595491b112","created_at":1783713377,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"]},"strict":null,"type":"function","defer_loading":null,"description":"Search
+      the web for current information."},{"name":"agentic_ns__mcp__shell__run","parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]},"strict":null,"type":"function","defer_loading":null,"description":"Run
+      a shell command via the mcp__shell namespace tool."}],"top_p":1.0,"background":false,"max_output_tokens":1024,"max_tool_calls":null,"previous_response_id":"resp_aca305fd1819d465","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":0,"type":"response.created"}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"response":{"id":"resp_98d9ee595491b112","created_at":1783713377,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"]},"strict":null,"type":"function","defer_loading":null,"description":"Search
+      the web for current information."},{"name":"agentic_ns__mcp__shell__run","parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]},"strict":null,"type":"function","defer_loading":null,"description":"Run
+      a shell command via the mcp__shell namespace tool."}],"top_p":1.0,"background":false,"max_output_tokens":1024,"max_tool_calls":null,"previous_response_id":"resp_aca305fd1819d465","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":1,"type":"response.in_progress"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"item":{"id":"msg_a1c8f00940c47a88","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_part.added
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_a1c8f00940c47a88","output_index":0,"part":{"text":"","type":"reasoning_text"},"sequence_number":3,"type":"response.reasoning_part.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"We","item_id":"msg_a1c8f00940c47a88","output_index":0,"sequence_number":4,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" need","item_id":"msg_a1c8f00940c47a88","output_index":0,"sequence_number":5,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" to","item_id":"msg_a1c8f00940c47a88","output_index":0,"sequence_number":6,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" invoke","item_id":"msg_a1c8f00940c47a88","output_index":0,"sequence_number":7,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" that","item_id":"msg_a1c8f00940c47a88","output_index":0,"sequence_number":8,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" tool","item_id":"msg_a1c8f00940c47a88","output_index":0,"sequence_number":9,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":".","item_id":"msg_a1c8f00940c47a88","output_index":0,"sequence_number":10,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.done
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_a1c8f00940c47a88","output_index":0,"sequence_number":11,"text":"We
+      need to invoke that tool.","type":"response.reasoning_text.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_part.done
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_a1c8f00940c47a88","output_index":0,"part":{"text":"We
+      need to invoke that tool.","type":"reasoning_text"},"sequence_number":12,"type":"response.reasoning_part.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"item":{"id":"msg_a1c8f00940c47a88","summary":[],"type":"reasoning","content":[{"text":"We
+      need to invoke that tool.","type":"reasoning_text"}],"encrypted_content":null,"status":"completed"},"output_index":0,"sequence_number":13,"type":"response.output_item.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"item":{"arguments":"","call_id":"call_9141adfc3ce26ab7","name":"agentic_ns__mcp__shell__run","type":"function_call","id":"fc_9a29506a05398e47","namespace":null,"status":"in_progress"},"output_index":1,"sequence_number":14,"type":"response.output_item.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"{\"","item_id":"fc_9a29506a05398e47","output_index":1,"sequence_number":15,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"command","item_id":"fc_9a29506a05398e47","output_index":1,"sequence_number":16,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"\":\"","item_id":"fc_9a29506a05398e47","output_index":1,"sequence_number":17,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"pwd","item_id":"fc_9a29506a05398e47","output_index":1,"sequence_number":18,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"\"}","item_id":"fc_9a29506a05398e47","output_index":1,"sequence_number":19,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.done
+
+      '
+    - 'data: {"arguments":"{\"command\":\"pwd\"}","item_id":"fc_9a29506a05398e47","name":"agentic_ns__mcp__shell__run","output_index":1,"sequence_number":20,"type":"response.function_call_arguments.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"item":{"arguments":"{\"command\":\"pwd\"}","call_id":"call_9141adfc3ce26ab7","name":"agentic_ns__mcp__shell__run","type":"function_call","id":null,"namespace":null,"status":"completed","item_id":"fc_9a29506a05398e47","output_index":1,"sequence_number":-1},"output_index":1,"sequence_number":21,"type":"response.output_item.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"response":{"id":"resp_98d9ee595491b112","created_at":1783713377,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[{"id":"rs_933e2dac0ee5d976","summary":[],"type":"reasoning","content":[{"text":"We
+      need to invoke that tool.","type":"reasoning_text"}],"encrypted_content":null,"status":null},{"arguments":"{\"command\":\"pwd\"}","call_id":"call_adcaba79614326ee","name":"agentic_ns__mcp__shell__run","type":"function_call","id":"fc_adcaba79614326ee","namespace":null,"status":null}],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"]},"strict":null,"type":"function","defer_loading":null,"description":"Search
+      the web for current information."},{"name":"agentic_ns__mcp__shell__run","parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]},"strict":null,"type":"function","defer_loading":null,"description":"Run
+      a shell command via the mcp__shell namespace tool."}],"top_p":1.0,"background":false,"max_output_tokens":1024,"max_tool_calls":null,"previous_response_id":"resp_aca305fd1819d465","prompt":null,"reasoning":null,"service_tier":"auto","status":"completed","text":null,"top_logprobs":null,"truncation":"disabled","usage":{"input_tokens":291,"input_tokens_details":{"cached_tokens":176,"input_tokens_per_turn":[291],"cached_tokens_per_turn":[176]},"output_tokens":39,"output_tokens_details":{"reasoning_tokens":14,"tool_output_tokens":0,"output_tokens_per_turn":[39],"tool_output_tokens_per_turn":[0]},"total_tokens":330},"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":22,"type":"response.completed"}
+
+      '
+    - '
+
+      '
+    status_code: 200

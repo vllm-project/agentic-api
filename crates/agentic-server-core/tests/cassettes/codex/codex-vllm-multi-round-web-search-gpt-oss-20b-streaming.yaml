@@ -1,0 +1,1093 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Search the web for the latest Rust async news using web_search.
+      max_output_tokens: 1024
+      model: openai/gpt-oss-20b
+      store: true
+      stream: true
+      tools:
+      - description: Search the web for current information.
+        name: web_search
+        parameters:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"response":{"id":"resp_854b8b6733ff921e","created_at":1783713943,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"]},"strict":null,"type":"function","defer_loading":null,"description":"Search
+      the web for current information."}],"top_p":1.0,"background":false,"max_output_tokens":1024,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":0,"type":"response.created"}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"response":{"id":"resp_854b8b6733ff921e","created_at":1783713943,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"]},"strict":null,"type":"function","defer_loading":null,"description":"Search
+      the web for current information."}],"top_p":1.0,"background":false,"max_output_tokens":1024,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":1,"type":"response.in_progress"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"item":{"id":"msg_b0ef3ea8804e2b55","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_part.added
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_b0ef3ea8804e2b55","output_index":0,"part":{"text":"","type":"reasoning_text"},"sequence_number":3,"type":"response.reasoning_part.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"We","item_id":"msg_b0ef3ea8804e2b55","output_index":0,"sequence_number":4,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" need","item_id":"msg_b0ef3ea8804e2b55","output_index":0,"sequence_number":5,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" to","item_id":"msg_b0ef3ea8804e2b55","output_index":0,"sequence_number":6,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" use","item_id":"msg_b0ef3ea8804e2b55","output_index":0,"sequence_number":7,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" web","item_id":"msg_b0ef3ea8804e2b55","output_index":0,"sequence_number":8,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"_search","item_id":"msg_b0ef3ea8804e2b55","output_index":0,"sequence_number":9,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":".","item_id":"msg_b0ef3ea8804e2b55","output_index":0,"sequence_number":10,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" Thus","item_id":"msg_b0ef3ea8804e2b55","output_index":0,"sequence_number":11,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" call","item_id":"msg_b0ef3ea8804e2b55","output_index":0,"sequence_number":12,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" to","item_id":"msg_b0ef3ea8804e2b55","output_index":0,"sequence_number":13,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" the","item_id":"msg_b0ef3ea8804e2b55","output_index":0,"sequence_number":14,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" tool","item_id":"msg_b0ef3ea8804e2b55","output_index":0,"sequence_number":15,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":".","item_id":"msg_b0ef3ea8804e2b55","output_index":0,"sequence_number":16,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.done
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_b0ef3ea8804e2b55","output_index":0,"sequence_number":17,"text":"We
+      need to use web_search. Thus call to the tool.","type":"response.reasoning_text.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_part.done
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_b0ef3ea8804e2b55","output_index":0,"part":{"text":"We
+      need to use web_search. Thus call to the tool.","type":"reasoning_text"},"sequence_number":18,"type":"response.reasoning_part.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"item":{"id":"msg_b0ef3ea8804e2b55","summary":[],"type":"reasoning","content":[{"text":"We
+      need to use web_search. Thus call to the tool.","type":"reasoning_text"}],"encrypted_content":null,"status":"completed"},"output_index":0,"sequence_number":19,"type":"response.output_item.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"item":{"arguments":"","call_id":"call_936a52a1d20f276b","name":"web_search","type":"function_call","id":"fc_89e1c56cf0b8530f","namespace":null,"status":"in_progress"},"output_index":1,"sequence_number":20,"type":"response.output_item.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"{\"","item_id":"fc_89e1c56cf0b8530f","output_index":1,"sequence_number":21,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"query","item_id":"fc_89e1c56cf0b8530f","output_index":1,"sequence_number":22,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"\":\"","item_id":"fc_89e1c56cf0b8530f","output_index":1,"sequence_number":23,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"latest","item_id":"fc_89e1c56cf0b8530f","output_index":1,"sequence_number":24,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":" Rust","item_id":"fc_89e1c56cf0b8530f","output_index":1,"sequence_number":25,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":" async","item_id":"fc_89e1c56cf0b8530f","output_index":1,"sequence_number":26,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":" news","item_id":"fc_89e1c56cf0b8530f","output_index":1,"sequence_number":27,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"\"}","item_id":"fc_89e1c56cf0b8530f","output_index":1,"sequence_number":28,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.done
+
+      '
+    - 'data: {"arguments":"{\"query\":\"latest Rust async news\"}","item_id":"fc_89e1c56cf0b8530f","name":"web_search","output_index":1,"sequence_number":29,"type":"response.function_call_arguments.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"item":{"arguments":"{\"query\":\"latest Rust async news\"}","call_id":"call_936a52a1d20f276b","name":"web_search","type":"function_call","id":null,"namespace":null,"status":"completed","item_id":"fc_89e1c56cf0b8530f","output_index":1,"sequence_number":-1},"output_index":1,"sequence_number":30,"type":"response.output_item.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"response":{"id":"resp_854b8b6733ff921e","created_at":1783713943,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[{"id":"rs_898d70f87e4233cf","summary":[],"type":"reasoning","content":[{"text":"We
+      need to use web_search. Thus call to the tool.","type":"reasoning_text"}],"encrypted_content":null,"status":null},{"arguments":"{\"query\":\"latest
+      Rust async news\"}","call_id":"call_a061d4718d147e07","name":"web_search","type":"function_call","id":"fc_a061d4718d147e07","namespace":null,"status":null}],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"]},"strict":null,"type":"function","defer_loading":null,"description":"Search
+      the web for current information."}],"top_p":1.0,"background":false,"max_output_tokens":1024,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"completed","text":null,"top_logprobs":null,"truncation":"disabled","usage":{"input_tokens":137,"input_tokens_details":{"cached_tokens":112,"input_tokens_per_turn":[137],"cached_tokens_per_turn":[112]},"output_tokens":40,"output_tokens_details":{"reasoning_tokens":23,"tool_output_tokens":0,"output_tokens_per_turn":[40],"tool_output_tokens_per_turn":[0]},"total_tokens":177},"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":31,"type":"response.completed"}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: call_a061d4718d147e07
+        output: '{"results":{"web":[{"url":"https://example.com/rust-async","title":"Rust
+          async guide","snippets":["partial result"]}]},"metadata":{"query":"rust
+          async"}}'
+        type: function_call_output
+      - content: That result was incomplete. Search again with a refined query using
+          web_search.
+        role: user
+        type: message
+      max_output_tokens: 1024
+      model: openai/gpt-oss-20b
+      previous_response_id: resp_854b8b6733ff921e
+      store: true
+      stream: true
+      tools:
+      - description: Search the web for current information.
+        name: web_search
+        parameters:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"response":{"id":"resp_ac34025e70547564","created_at":1783713943,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"]},"strict":null,"type":"function","defer_loading":null,"description":"Search
+      the web for current information."}],"top_p":1.0,"background":false,"max_output_tokens":1024,"max_tool_calls":null,"previous_response_id":"resp_854b8b6733ff921e","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":0,"type":"response.created"}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"response":{"id":"resp_ac34025e70547564","created_at":1783713943,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"]},"strict":null,"type":"function","defer_loading":null,"description":"Search
+      the web for current information."}],"top_p":1.0,"background":false,"max_output_tokens":1024,"max_tool_calls":null,"previous_response_id":"resp_854b8b6733ff921e","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":1,"type":"response.in_progress"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"item":{"id":"msg_a18e4d42f797d772","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_part.added
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_a18e4d42f797d772","output_index":0,"part":{"text":"","type":"reasoning_text"},"sequence_number":3,"type":"response.reasoning_part.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"We","item_id":"msg_a18e4d42f797d772","output_index":0,"sequence_number":4,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" need","item_id":"msg_a18e4d42f797d772","output_index":0,"sequence_number":5,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" to","item_id":"msg_a18e4d42f797d772","output_index":0,"sequence_number":6,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" refine","item_id":"msg_a18e4d42f797d772","output_index":0,"sequence_number":7,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" query","item_id":"msg_a18e4d42f797d772","output_index":0,"sequence_number":8,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":".","item_id":"msg_a18e4d42f797d772","output_index":0,"sequence_number":9,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" Maybe","item_id":"msg_a18e4d42f797d772","output_index":0,"sequence_number":10,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" specify","item_id":"msg_a18e4d42f797d772","output_index":0,"sequence_number":11,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" \"","item_id":"msg_a18e4d42f797d772","output_index":0,"sequence_number":12,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"202","item_id":"msg_a18e4d42f797d772","output_index":0,"sequence_number":13,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"4","item_id":"msg_a18e4d42f797d772","output_index":0,"sequence_number":14,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" Rust","item_id":"msg_a18e4d42f797d772","output_index":0,"sequence_number":15,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" async","item_id":"msg_a18e4d42f797d772","output_index":0,"sequence_number":16,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"\".","item_id":"msg_a18e4d42f797d772","output_index":0,"sequence_number":17,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.done
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_a18e4d42f797d772","output_index":0,"sequence_number":18,"text":"We
+      need to refine query. Maybe specify \"2024 Rust async\".","type":"response.reasoning_text.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_part.done
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_a18e4d42f797d772","output_index":0,"part":{"text":"We
+      need to refine query. Maybe specify \"2024 Rust async\".","type":"reasoning_text"},"sequence_number":19,"type":"response.reasoning_part.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"item":{"id":"msg_a18e4d42f797d772","summary":[],"type":"reasoning","content":[{"text":"We
+      need to refine query. Maybe specify \"2024 Rust async\".","type":"reasoning_text"}],"encrypted_content":null,"status":"completed"},"output_index":0,"sequence_number":20,"type":"response.output_item.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"item":{"arguments":"","call_id":"call_934bd92183b8cb59","name":"web_search","type":"function_call","id":"fc_804d926b8311120f","namespace":null,"status":"in_progress"},"output_index":1,"sequence_number":21,"type":"response.output_item.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"{\"","item_id":"fc_804d926b8311120f","output_index":1,"sequence_number":22,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"query","item_id":"fc_804d926b8311120f","output_index":1,"sequence_number":23,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"\":\"","item_id":"fc_804d926b8311120f","output_index":1,"sequence_number":24,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"202","item_id":"fc_804d926b8311120f","output_index":1,"sequence_number":25,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"4","item_id":"fc_804d926b8311120f","output_index":1,"sequence_number":26,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":" Rust","item_id":"fc_804d926b8311120f","output_index":1,"sequence_number":27,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":" async","item_id":"fc_804d926b8311120f","output_index":1,"sequence_number":28,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":" updates","item_id":"fc_804d926b8311120f","output_index":1,"sequence_number":29,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"delta":"\"}","item_id":"fc_804d926b8311120f","output_index":1,"sequence_number":30,"type":"response.function_call_arguments.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.done
+
+      '
+    - 'data: {"arguments":"{\"query\":\"2024 Rust async updates\"}","item_id":"fc_804d926b8311120f","name":"web_search","output_index":1,"sequence_number":31,"type":"response.function_call_arguments.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"item":{"arguments":"{\"query\":\"2024 Rust async updates\"}","call_id":"call_934bd92183b8cb59","name":"web_search","type":"function_call","id":null,"namespace":null,"status":"completed","item_id":"fc_804d926b8311120f","output_index":1,"sequence_number":-1},"output_index":1,"sequence_number":32,"type":"response.output_item.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"response":{"id":"resp_ac34025e70547564","created_at":1783713943,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[{"id":"rs_bd46ee7c5ec5496f","summary":[],"type":"reasoning","content":[{"text":"We
+      need to refine query. Maybe specify \"2024 Rust async\".","type":"reasoning_text"}],"encrypted_content":null,"status":null},{"arguments":"{\"query\":\"2024
+      Rust async updates\"}","call_id":"call_93780fccabe551bb","name":"web_search","type":"function_call","id":"fc_93780fccabe551bb","namespace":null,"status":null}],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"]},"strict":null,"type":"function","defer_loading":null,"description":"Search
+      the web for current information."}],"top_p":1.0,"background":false,"max_output_tokens":1024,"max_tool_calls":null,"previous_response_id":"resp_854b8b6733ff921e","prompt":null,"reasoning":null,"service_tier":"auto","status":"completed","text":null,"top_logprobs":null,"truncation":"disabled","usage":{"input_tokens":249,"input_tokens_details":{"cached_tokens":144,"input_tokens_per_turn":[249],"cached_tokens_per_turn":[144]},"output_tokens":42,"output_tokens_details":{"reasoning_tokens":25,"tool_output_tokens":0,"output_tokens_per_turn":[42],"tool_output_tokens_per_turn":[0]},"total_tokens":291},"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":33,"type":"response.completed"}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - call_id: call_93780fccabe551bb
+        output: '{"results":{"web":[{"url":"https://example.com/rust-async","title":"Rust
+          async guide","snippets":["partial result"]}]},"metadata":{"query":"rust
+          async"}}'
+        type: function_call_output
+      - content: Good. Now summarize the finding in one sentence. Do not call any
+          tools.
+        role: user
+        type: message
+      max_output_tokens: 1024
+      model: openai/gpt-oss-20b
+      previous_response_id: resp_ac34025e70547564
+      store: true
+      stream: true
+      tools:
+      - description: Search the web for current information.
+        name: web_search
+        parameters:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"response":{"id":"resp_a6779a58b9dec40c","created_at":1783713944,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"]},"strict":null,"type":"function","defer_loading":null,"description":"Search
+      the web for current information."}],"top_p":1.0,"background":false,"max_output_tokens":1024,"max_tool_calls":null,"previous_response_id":"resp_ac34025e70547564","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":0,"type":"response.created"}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"response":{"id":"resp_a6779a58b9dec40c","created_at":1783713944,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"]},"strict":null,"type":"function","defer_loading":null,"description":"Search
+      the web for current information."}],"top_p":1.0,"background":false,"max_output_tokens":1024,"max_tool_calls":null,"previous_response_id":"resp_ac34025e70547564","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":1,"type":"response.in_progress"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"item":{"id":"msg_ad8ee6d642f1cd74","content":[],"role":"assistant","status":"in_progress","type":"message","phase":null},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_ad8ee6d642f1cd74","output_index":0,"part":{"annotations":[],"text":"","type":"output_text","logprobs":[]},"sequence_number":3,"type":"response.content_part.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"Rust","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":4,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"’s","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":5,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" async","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":6,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" ecosystem","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":7,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" has","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":8,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" seen","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":9,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" significant","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":10,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" updates","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":11,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" in","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":12,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" ","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":13,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"202","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":14,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"4","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":15,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":",","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":16,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" including","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":17,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" new","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":18,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" language","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":19,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" features","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":20,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":",","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":21,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" stabilized","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":22,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" crates","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":23,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":",","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":24,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" and","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":25,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" performance","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":26,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" improvements","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":27,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" that","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":28,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" further","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":29,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" simplify","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":30,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" concurrent","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":31,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" programming","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":32,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":".","item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":33,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_ad8ee6d642f1cd74","logprobs":[],"output_index":0,"sequence_number":34,"text":"Rust’s
+      async ecosystem has seen significant updates in 2024, including new language
+      features, stabilized crates, and performance improvements that further simplify
+      concurrent programming.","type":"response.output_text.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_ad8ee6d642f1cd74","output_index":0,"part":{"annotations":[],"text":"Rust’s
+      async ecosystem has seen significant updates in 2024, including new language
+      features, stabilized crates, and performance improvements that further simplify
+      concurrent programming.","type":"output_text","logprobs":null},"sequence_number":35,"type":"response.content_part.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"item":{"id":"msg_ad8ee6d642f1cd74","content":[{"annotations":[],"text":"Rust’s
+      async ecosystem has seen significant updates in 2024, including new language
+      features, stabilized crates, and performance improvements that further simplify
+      concurrent programming.","type":"output_text","logprobs":null}],"role":"assistant","status":"completed","type":"message","phase":null},"output_index":0,"sequence_number":36,"type":"response.output_item.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"response":{"id":"resp_a6779a58b9dec40c","created_at":1783713944,"incomplete_details":null,"instructions":null,"metadata":null,"model":"openai/gpt-oss-20b","object":"response","output":[{"id":"msg_b13f719d20afaa02","content":[{"annotations":[],"text":"Rust’s
+      async ecosystem has seen significant updates in 2024, including new language
+      features, stabilized crates, and performance improvements that further simplify
+      concurrent programming.","type":"output_text","logprobs":null}],"role":"assistant","status":"completed","type":"message","phase":null}],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"auto","tools":[{"name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string","description":"the
+      search query"}},"required":["query"]},"strict":null,"type":"function","defer_loading":null,"description":"Search
+      the web for current information."}],"top_p":1.0,"background":false,"max_output_tokens":1024,"max_tool_calls":null,"previous_response_id":"resp_ac34025e70547564","prompt":null,"reasoning":null,"service_tier":"auto","status":"completed","text":null,"top_logprobs":null,"truncation":"disabled","usage":{"input_tokens":364,"input_tokens_details":{"cached_tokens":256,"input_tokens_per_turn":[364],"cached_tokens_per_turn":[256]},"output_tokens":34,"output_tokens_details":{"reasoning_tokens":0,"tool_output_tokens":0,"output_tokens_per_turn":[34],"tool_output_tokens_per_turn":[0]},"total_tokens":398},"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":37,"type":"response.completed"}
+
+      '
+    - '
+
+      '
+    status_code: 200

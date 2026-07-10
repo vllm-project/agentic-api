@@ -21,19 +21,28 @@ use agentic_core::types::io::{OutputItem, ResponsesInput};
 use agentic_core::types::request_response::RequestPayload;
 use agentic_core::types::tools::ResponsesTool;
 use either::Either;
+use futures::StreamExt;
 
 mod support;
 
-const MULTI_TURN_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/tool_calls/multi_turn");
+const CASSETTE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes");
 
-/// Load turn N (0-based) response body from a multi-turn cassette as a mock
-/// JSON response for the LLM `MockServer`.
+/// Load turn N (0-based) response from a multi-turn cassette under
+/// `tests/cassettes/tool_calls/multi_turn` as a mock response for the LLM
+/// `MockServer`.
 ///
 /// Uses a permissive local parser (input typed as `Value`) rather than the
 /// shared strict `Cassette` — these `OpenAI` cassettes carry array-valued `input`
 /// on later turns, which the shared string-typed loader rejects. We only need
-/// the response body, so the request shape is irrelevant here.
+/// the response, so the request shape is irrelevant here.
 fn cassette_turn(filename: &str, turn: usize) -> support::MockResponse {
+    cassette_turn_at(&format!("tool_calls/multi_turn/{filename}"), turn)
+}
+
+/// Same as [`cassette_turn`] but takes a path relative to `tests/cassettes`, so
+/// recordings outside `tool_calls/multi_turn` (e.g. `codex/…`) can be replayed
+/// through the loop too.
+fn cassette_turn_at(rel_path: &str, turn: usize) -> support::MockResponse {
     use serde::Deserialize;
 
     #[derive(Deserialize)]
@@ -52,14 +61,14 @@ fn cassette_turn(filename: &str, turn: usize) -> support::MockResponse {
         sse: Option<Vec<String>>,
     }
 
-    let path = format!("{MULTI_TURN_DIR}/{filename}");
+    let path = format!("{CASSETTE_DIR}/{rel_path}");
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
     let doc: Doc = serde_yaml::from_str(&text).unwrap_or_else(|e| panic!("parse {path}: {e}"));
     let resp = doc
         .turns
         .into_iter()
         .nth(turn)
-        .unwrap_or_else(|| panic!("cassette {filename} missing turn {turn}"))
+        .unwrap_or_else(|| panic!("cassette {rel_path} missing turn {turn}"))
         .response;
 
     if let Some(body) = resp.body {
@@ -67,7 +76,7 @@ fn cassette_turn(filename: &str, turn: usize) -> support::MockResponse {
     } else if let Some(sse) = resp.sse {
         support::MockResponse::Sse(sse.join(""))
     } else {
-        panic!("cassette {filename} turn {turn} has neither body nor sse");
+        panic!("cassette {rel_path} turn {turn} has neither body nor sse");
     }
 }
 
@@ -223,22 +232,21 @@ async fn openai_mixed_gateway_and_client_owned_hands_back_after_gateway_exec() {
     );
 }
 
-/// A gateway `web_search` turn followed by a Codex `namespace` turn, driven
-/// through the loop as one conversation (per @maralbahari's review ask on #83).
+/// Drive a real recorded 2-turn cassette (gateway `web_search` turn then a Codex
+/// `namespace` turn) through the streaming loop and assert the end-to-end
+/// behavior — shared by the `OpenAI` and `vLLM` backend recordings.
 ///
 /// Round 0: the model emits a gateway-owned `web_search` call → the loop
 /// executes it against the You.com mock and continues. Round 1: the model emits
-/// the flat, model-visible namespace call
-/// `agentic_ns__mcp__agentic_fixture__add_numbers` → the loop restores it to
-/// `{namespace: "mcp__agentic_fixture", name: "add_numbers"}`, classifies it as
-/// client-owned, and hands the turn back (`RequiresClientAction`). Two model
-/// calls total; the namespace call is returned restored, never flattened.
-#[tokio::test]
-async fn openai_gateway_web_search_then_codex_namespace_across_turns() {
+/// the flat, model-visible `agentic_ns__mcp__shell__run` → the loop restores it
+/// to `{namespace: "mcp__shell", name: "run"}`, classifies it client-owned, and
+/// hands the turn back (`RequiresClientAction`). Two model calls total; the
+/// namespace call is returned restored, never flattened.
+async fn assert_web_search_then_namespace(cassette_rel_path: &str) {
     let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
     let llm = support::MockServer::start_deque(vec![
-        cassette_turn("gateway_web_search_then_codex_namespace.yaml", 0),
-        cassette_turn("gateway_web_search_then_codex_namespace.yaml", 1),
+        cassette_turn_at(cassette_rel_path, 0),
+        cassette_turn_at(cassette_rel_path, 1),
     ])
     .await;
     let exec_ctx = build_exec_ctx_with_web_search(llm.url(), &you_url).await;
@@ -246,21 +254,21 @@ async fn openai_gateway_web_search_then_codex_namespace_across_turns() {
     let web_search: ResponsesTool = serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).unwrap();
     let codex_namespace: ResponsesTool = serde_json::from_value(serde_json::json!({
         "type": "namespace",
-        "name": "mcp__agentic_fixture",
-        "tools": [{"type": "function", "name": "add_numbers", "parameters": {"type": "object"}}]
+        "name": "mcp__shell",
+        "tools": [{"type": "function", "name": "run", "parameters": {"type": "object"}}]
     }))
     .unwrap();
 
-    let result = ExecuteRequest::new(
-        request("search then add", Some(vec![web_search, codex_namespace])),
-        exec_ctx,
-    )
-    .run()
-    .await
-    .expect("execute should succeed");
-    let Either::Left(response) = result else {
-        panic!("non-streaming request should return a payload");
+    let mut payload = request("search then run pwd", Some(vec![web_search, codex_namespace]));
+    payload.stream = true;
+    let result = ExecuteRequest::new(payload, exec_ctx)
+        .run()
+        .await
+        .expect("execute should succeed");
+    let Either::Right(stream) = result else {
+        panic!("streaming request should return a stream");
     };
+    let chunks: Vec<String> = stream.collect().await;
 
     // Round 0 executed the gateway web_search against the You.com mock, then
     // round 1 emitted the namespace call — two model calls in one conversation.
@@ -272,26 +280,218 @@ async fn openai_gateway_web_search_then_codex_namespace_across_turns() {
         "gateway round + client-action round"
     );
 
-    // The namespace call is handed back restored to {namespace, name}, never
-    // the flat model-visible name.
-    let output = serde_json::to_value(&response.output).unwrap();
-    let items = output.as_array().unwrap();
+    let events: Vec<serde_json::Value> = chunks
+        .iter()
+        .filter_map(|chunk| {
+            let data = chunk.trim_end_matches('\n').strip_prefix("data: ")?;
+            (data != "[DONE]").then(|| serde_json::from_str(data).ok())?
+        })
+        .collect();
+
+    // The gateway web_search surfaced as public web_search_call lifecycle events;
+    // its raw function call never leaked to the client.
+    let event_types: Vec<&str> = events.iter().filter_map(|e| e["type"].as_str()).collect();
+    assert!(
+        event_types.contains(&"response.web_search_call.completed"),
+        "gateway web_search should emit its public lifecycle events; got {event_types:?}"
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|e| e["item"]["type"] == "function_call" && e["item"]["name"] == "web_search"),
+        "internal web_search function call must not be forwarded"
+    );
+
+    // The terminal response hands back the namespace call restored to
+    // {namespace, name}, never the flat model-visible name.
+    let terminal = events
+        .iter()
+        .rev()
+        .find_map(|e| e.get("response").filter(|r| r.get("output").is_some()))
+        .expect("stream should include a terminal response payload");
+    let items = terminal["output"].as_array().unwrap();
     let ns_call = items
         .iter()
-        .find(|it| it["type"] == "function_call" && it["call_id"] == "call_ns")
+        .find(|it| it["type"] == "function_call" && it["namespace"] == "mcp__shell")
         .expect("namespace call handed back to the client");
-    assert_eq!(ns_call["name"], "add_numbers", "flat name restored to member name");
-    assert_eq!(ns_call["namespace"], "mcp__agentic_fixture", "namespace restored");
+    assert_eq!(ns_call["name"], "run", "flat name restored to member name");
+    assert!(
+        !items.iter().any(|it| it["name"] == "agentic_ns__mcp__shell__run"),
+        "flat namespaced name must not leak to the client"
+    );
+    assert!(
+        items.iter().any(|it| it["type"] == "web_search_call"),
+        "web_search resolved into a public web_search_call: {terminal:#}"
+    );
+}
+
+/// Real recorded **`OpenAI`** (`gpt-4o`) traffic through the mixed
+/// gateway-plus-namespace flow. Both turns are typed incremental SSE.
+#[tokio::test]
+async fn openai_gateway_web_search_then_codex_namespace_across_turns() {
+    assert_web_search_then_namespace("codex/codex-openai-web-search-then-namespace-gpt-4o-streaming.yaml").await;
+}
+
+/// Real recorded **vLLM** (`openai/gpt-oss-20b`) traffic through the same flow —
+/// backend parity with the `OpenAI` recording (mirrors the dual-backend approach
+/// in PR #77).
+#[tokio::test]
+async fn vllm_gateway_web_search_then_codex_namespace_across_turns() {
+    assert_web_search_then_namespace("codex/codex-vllm-web-search-then-namespace-gpt-oss-20b-streaming.yaml").await;
+}
+
+/// Drive a real recorded 3-turn cassette where the model calls the gateway
+/// `web_search` tool on two consecutive turns before answering. This is the only
+/// coverage of the loop's `Continue` decision firing **more than once**: round 0
+/// and round 1 both dispatch a gateway call and loop, round 2 returns a message
+/// so the loop terminates `Done`. Three model calls, two You.com executions.
+async fn assert_multi_round_web_search(cassette_rel_path: &str) {
+    let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
+    let llm = support::MockServer::start_deque(vec![
+        cassette_turn_at(cassette_rel_path, 0),
+        cassette_turn_at(cassette_rel_path, 1),
+        cassette_turn_at(cassette_rel_path, 2),
+    ])
+    .await;
+    let exec_ctx = build_exec_ctx_with_web_search(llm.url(), &you_url).await;
+
+    let web_search: ResponsesTool = serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).unwrap();
+    let mut payload = request("research rust async", Some(vec![web_search]));
+    payload.stream = true;
+    let result = ExecuteRequest::new(payload, exec_ctx)
+        .run()
+        .await
+        .expect("execute should succeed");
+    let Either::Right(stream) = result else {
+        panic!("streaming request should return a stream");
+    };
+    let chunks: Vec<String> = stream.collect().await;
+
+    // Two gateway web_search executions (rounds 0 and 1), three model calls total
+    // (the loop continued twice, then the model answered).
+    let first = captured_you.recv().await.expect("first web_search should hit You.com");
+    assert!(first.body.get("query").is_some(), "round-0 web_search executed");
+    let second = captured_you.recv().await.expect("second web_search should hit You.com");
+    assert!(second.body.get("query").is_some(), "round-1 web_search executed");
+    assert_eq!(
+        llm.request_bodies().await.len(),
+        3,
+        "two Continue rounds + a final answering round"
+    );
+
+    let events: Vec<serde_json::Value> = chunks
+        .iter()
+        .filter_map(|chunk| {
+            let data = chunk.trim_end_matches('\n').strip_prefix("data: ")?;
+            (data != "[DONE]").then(|| serde_json::from_str(data).ok())?
+        })
+        .collect();
+    // Both gateway calls surfaced as public web_search_call items in the terminal
+    // response; the final turn produced a message.
+    let terminal = events
+        .iter()
+        .rev()
+        .find_map(|e| e.get("response").filter(|r| r.get("output").is_some()))
+        .expect("stream should include a terminal response payload");
+    let items = terminal["output"].as_array().unwrap();
+    let searches = items.iter().filter(|it| it["type"] == "web_search_call").count();
+    assert_eq!(searches, 2, "both gateway searches recorded on output: {terminal:#}");
+    assert!(
+        items.iter().any(|it| it["type"] == "message"),
+        "final turn produced a message"
+    );
     assert!(
         !items
             .iter()
-            .any(|it| it["name"] == "agentic_ns__mcp__agentic_fixture__add_numbers"),
-        "flat namespaced name must not leak to the client"
+            .any(|it| it["type"] == "function_call" && it["name"] == "web_search"),
+        "raw web_search function calls must stay internal"
     );
-    // The gateway web_search surfaced as a public web_search_call, not a raw fn.
+}
+
+/// Real recorded **`OpenAI`** (`gpt-4o`) multi-round gateway loop.
+#[tokio::test]
+async fn openai_multi_round_web_search_loops_then_answers() {
+    assert_multi_round_web_search("codex/codex-openai-multi-round-web-search-gpt-4o-streaming.yaml").await;
+}
+
+/// Real recorded **vLLM** (`openai/gpt-oss-20b`) multi-round gateway loop —
+/// backend parity.
+#[tokio::test]
+async fn vllm_multi_round_web_search_loops_then_answers() {
+    assert_multi_round_web_search("codex/codex-vllm-multi-round-web-search-gpt-oss-20b-streaming.yaml").await;
+}
+
+/// Real recorded **OpenAI** (`gpt-4o`) turn that emits a gateway `web_search`
+/// call **and** a Codex namespace call in a *single* model output. The loop
+/// executes the gateway call and, because a client-owned call is also present,
+/// hands the turn back (`RequiresClientAction`) in one round — the gateway
+/// result is recorded alongside the restored namespace call. gpt-oss does not
+/// emit both tools in one turn, so this path is `OpenAI`-only.
+#[tokio::test]
+async fn openai_web_search_and_namespace_same_turn_hands_back_in_one_round() {
+    let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
+    let llm = support::MockServer::start_deque(vec![cassette_turn_at(
+        "codex/codex-openai-web-search-and-namespace-same-turn-gpt-4o-streaming.yaml",
+        0,
+    )])
+    .await;
+    let exec_ctx = build_exec_ctx_with_web_search(llm.url(), &you_url).await;
+
+    let web_search: ResponsesTool = serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).unwrap();
+    let codex_namespace: ResponsesTool = serde_json::from_value(serde_json::json!({
+        "type": "namespace",
+        "name": "mcp__shell",
+        "tools": [{"type": "function", "name": "run", "parameters": {"type": "object"}}]
+    }))
+    .unwrap();
+    let mut payload = request("search and run pwd together", Some(vec![web_search, codex_namespace]));
+    payload.stream = true;
+    let result = ExecuteRequest::new(payload, exec_ctx)
+        .run()
+        .await
+        .expect("execute should succeed");
+    let Either::Right(stream) = result else {
+        panic!("streaming request should return a stream");
+    };
+    let chunks: Vec<String> = stream.collect().await;
+
+    // The gateway web_search executed this turn, and the turn ended in ONE model
+    // call (no loop-back) because a client-owned namespace call was also present.
+    let search = captured_you.recv().await.expect("web_search should hit You.com");
+    assert!(search.body.get("query").is_some(), "web_search executed with a query");
+    assert_eq!(
+        llm.request_bodies().await.len(),
+        1,
+        "mixed turn hands back immediately — no second model call"
+    );
+
+    let events: Vec<serde_json::Value> = chunks
+        .iter()
+        .filter_map(|chunk| {
+            let data = chunk.trim_end_matches('\n').strip_prefix("data: ")?;
+            (data != "[DONE]").then(|| serde_json::from_str(data).ok())?
+        })
+        .collect();
+    let terminal = events
+        .iter()
+        .rev()
+        .find_map(|e| e.get("response").filter(|r| r.get("output").is_some()))
+        .expect("stream should include a terminal response payload");
+    let items = terminal["output"].as_array().unwrap();
+    // Gateway call resolved to a public web_search_call...
     assert!(
         items.iter().any(|it| it["type"] == "web_search_call"),
-        "web_search resolved into a public web_search_call: {output:#}"
+        "web_search resolved into a public web_search_call: {terminal:#}"
+    );
+    // ...and the namespace call handed back restored to {namespace, name}.
+    let ns_call = items
+        .iter()
+        .find(|it| it["type"] == "function_call" && it["namespace"] == "mcp__shell")
+        .expect("namespace call handed back to the client");
+    assert_eq!(ns_call["name"], "run", "flat name restored to member name");
+    assert!(
+        !items.iter().any(|it| it["name"] == "agentic_ns__mcp__shell__run"),
+        "flat namespaced name must not leak to the client"
     );
 }
 
