@@ -5,8 +5,50 @@ use crate::config::Config;
 use crate::error::Error;
 use crate::executor::modes::{ConversationHandler, ResponseHandler};
 use crate::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
+use crate::tool::{GatewayExecutor, ToolType, WebSearchHandler};
 use crate::types::io::InputItem;
 use crate::types::request_response::{RequestPayload, ResponsePayload};
+
+#[derive(Clone, Default)]
+pub struct GatewayExecutors {
+    web_search: Option<Arc<dyn GatewayExecutor>>,
+}
+
+impl GatewayExecutors {
+    #[must_use]
+    pub fn from_env(client: Arc<reqwest::Client>) -> Self {
+        Self {
+            web_search: Some(Arc::new(WebSearchHandler::from_env(client))),
+        }
+    }
+
+    pub fn insert(&mut self, executor: Arc<dyn GatewayExecutor>) {
+        match executor.tool_type() {
+            ToolType::WebSearch => self.web_search = Some(executor),
+            other => tracing::debug!(tool_type = ?other, "gateway executor type not wired yet"),
+        }
+    }
+
+    #[must_use]
+    pub fn get(&self, tool_type: ToolType) -> Option<Arc<dyn GatewayExecutor>> {
+        match tool_type {
+            ToolType::WebSearch => self.web_search.clone(),
+            ToolType::Function
+            | ToolType::CodexNamespace
+            | ToolType::Mcp
+            | ToolType::FileSearch
+            | ToolType::CodeInterpreter => None,
+        }
+    }
+}
+
+impl std::fmt::Debug for GatewayExecutors {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GatewayExecutors")
+            .field("web_search", &self.web_search.is_some())
+            .finish()
+    }
+}
 
 /// Context built by `rehydrate_conversation`, threaded through the execute pipeline.
 #[derive(Debug)]
@@ -39,15 +81,16 @@ impl RequestContext {
 /// Runtime dependencies passed into `execute()`.
 ///
 /// Owns the storage handlers, HTTP client, and LLM endpoint configuration.
+/// Per-request auth is supplied via [`crate::executor::engine::ExecuteRequest::with_auth`]
+/// rather than stored here, keeping this context purely shared and immutable.
 #[derive(Clone, Debug)]
 pub struct ExecutionContext {
     pub conv_handler: ConversationHandler,
     pub resp_handler: ResponseHandler,
     pub client: Arc<reqwest::Client>,
+    pub gateway_executors: GatewayExecutors,
     /// Base URL for the LLM backend, e.g. `"http://localhost:8000"`.
     pub llm_base_url: String,
-    /// Bearer token forwarded from the client, if any.
-    pub client_auth: Option<String>,
     /// Maximum wait time for the next SSE chunk.  `Duration::ZERO` disables the timeout.
     /// Sourced from [`Config::streaming_chunk_timeout_s`](crate::config::Config::streaming_chunk_timeout_s).
     pub streaming_timeout: Duration,
@@ -72,16 +115,22 @@ impl ExecutionContext {
         resp_handler: ResponseHandler,
         client: Arc<reqwest::Client>,
         llm_base_url: String,
-        client_auth: Option<String>,
     ) -> Self {
+        let gateway_executors = GatewayExecutors::from_env(Arc::clone(&client));
         Self {
             conv_handler,
             resp_handler,
             client,
+            gateway_executors,
             llm_base_url,
-            client_auth,
             streaming_timeout: Duration::from_secs(30),
         }
+    }
+
+    #[must_use]
+    pub fn with_gateway_executor(mut self, executor: Arc<dyn GatewayExecutor>) -> Self {
+        self.gateway_executors.insert(executor);
+        self
     }
 
     /// Build an `ExecutionContext` directly from [`Config`](crate::config::Config).
@@ -102,13 +151,14 @@ impl ExecutionContext {
         let conv_handler = ConversationHandler::new(ConversationStore::new(pool.clone()));
         let resp_handler = ResponseHandler::new(ResponseStore::new(pool));
         let client = Arc::new(reqwest::Client::new());
+        let gateway_executors = GatewayExecutors::from_env(Arc::clone(&client));
 
         Ok(Self {
             conv_handler,
             resp_handler,
             client,
+            gateway_executors,
             llm_base_url: cfg.llm_api_base.clone(),
-            client_auth: cfg.openai_api_key.clone(),
             streaming_timeout: Duration::from_secs(30),
         })
     }

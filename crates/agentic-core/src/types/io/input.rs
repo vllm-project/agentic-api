@@ -69,6 +69,13 @@ pub enum InputItem {
     Unknown,
 }
 
+impl InputItem {
+    #[must_use]
+    pub(crate) fn is_unknown(&self) -> bool {
+        matches!(self, Self::Unknown)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ResponsesInput {

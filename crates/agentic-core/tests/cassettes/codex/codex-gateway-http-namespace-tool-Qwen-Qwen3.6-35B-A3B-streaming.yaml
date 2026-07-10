@@ -1,0 +1,120 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: You must call mcp__agentic_fixture.add_numbers with numbers [8, 0] before
+        answering.
+      model: Qwen/Qwen3.6-35B-A3B
+      store: true
+      stream: true
+      tools:
+      - description: Codex namespace fixture for cassette recording.
+        name: mcp__agentic_fixture
+        tools:
+        - description: Add a list of numbers and return the total.
+          name: add_numbers
+          parameters:
+            additionalProperties: false
+            properties:
+              numbers:
+                items:
+                  type: number
+                minItems: 1
+                type: array
+            required:
+            - numbers
+            type: object
+          strict: true
+          type: function
+        type: namespace
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'data: {"id":"resp_019f226a-9b50-7c13-b8f6-d67b43ff8fdc","object":"response","created_at":1782988840,"model":"Qwen/Qwen3.6-35B-A3B","status":"completed","output":[{"content":[{"text":"The
+      user wants me to call a specific function `agentic_ns__mcp__agentic_fixture__add_numbers`
+      with the numbers `[8, 0]` before answering.\n\nFunction signature:\n`agentic_ns__mcp__agentic_fixture__add_numbers`\nParameters:
+      `numbers` (array of numbers, required)\n\nI will call the function with `numbers:
+      [8, 0]`.\nThen I will provide the result in my answer.\nLet''s make the function
+      call.\n","type":"reasoning_text"}],"encrypted_content":null,"id":"rs_019f226a-9ea0-7352-84d0-db8031c43f97","status":null,"summary":[],"type":"reasoning"},{"content":[{"annotations":[],"text":"\n\n","type":"output_text"}],"id":"msg_019f226a-9ebd-72c0-8192-ac6bd8b19dfb","role":"assistant","status":"completed","type":"message"},{"arguments":"{\"numbers\":
+      [8, 0]}","call_id":"call_73d4d96b2fe6460fa3a39b73","id":"fc_019f226a-9ec0-7193-97e5-2e1ea4adee9a","name":"add_numbers","namespace":"mcp__agentic_fixture","status":"completed","type":"function_call"}],"usage":{"input_tokens":320,"output_tokens":152,"total_tokens":472,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":100}},"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: call_73d4d96b2fe6460fa3a39b73
+        output: '{"sum":8,"count":2}'
+        type: function_call_output
+      - content: Use the tool output. Return only the sum.
+        role: user
+        type: message
+      model: Qwen/Qwen3.6-35B-A3B
+      previous_response_id: resp_019f226a-9b50-7c13-b8f6-d67b43ff8fdc
+      store: true
+      stream: true
+      tools:
+      - description: Codex namespace fixture for cassette recording.
+        name: mcp__agentic_fixture
+        tools:
+        - description: Add a list of numbers and return the total.
+          name: add_numbers
+          parameters:
+            additionalProperties: false
+            properties:
+              numbers:
+                items:
+                  type: number
+                minItems: 1
+                type: array
+            required:
+            - numbers
+            type: object
+          strict: true
+          type: function
+        type: namespace
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'data: {"id":"resp_019f226a-9f70-7352-b01c-6abd36f40f8f","object":"response","created_at":1782988841,"model":"Qwen/Qwen3.6-35B-A3B","status":"completed","output":[{"content":[{"text":"The
+      user wants me to return the sum from the previous tool call.\nThe tool output
+      was `{\"sum\":8,\"count\":2}`.\nThe sum is 8.\nI need to return only the sum.\nThe
+      sum is 8.\nI will output \"8\".\n","type":"reasoning_text"}],"encrypted_content":null,"id":"rs_019f226a-a14f-7e01-b149-e7d6eef6a935","status":null,"summary":[],"type":"reasoning"},{"content":[{"annotations":[],"text":"\n\n8","type":"output_text"}],"id":"msg_019f226a-a160-7173-ad33-18a3c22e6445","role":"assistant","status":"completed","type":"message"}],"usage":{"input_tokens":394,"output_tokens":65,"total_tokens":459,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":55}},"incomplete_details":null,"error":null,"previous_response_id":"resp_019f226a-9b50-7c13-b8f6-d67b43ff8fdc","conversation_id":null,"instructions":null}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200

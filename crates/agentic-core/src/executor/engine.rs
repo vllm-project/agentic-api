@@ -1,383 +1,230 @@
-//! Agentic loop executor.
+//! Stateful conversation executor.
 //!
-//! Exposes each step of the loop as a public function so consumers can compose
-//! them directly (e.g. as Praxis filters). [`execute`] is the convenience entry
-//! point that composes all steps with the default control flow.
+//! Exposes each step of the conversation pipeline as a public function so consumers
+//! can compose them directly (e.g. as Praxis filters). [`ExecuteRequest`] is the
+//! primary entry point; [`execute`] is a convenience shim for callers that don't
+//! need per-request configuration.
 
-use std::pin::Pin;
 use std::sync::Arc;
 
 use async_stream::stream;
 use either::Either;
-use futures::{Stream, StreamExt};
-use tracing::warn;
+use tokio::sync::mpsc;
+use tracing::{debug, warn};
 
-use crate::executor::accumulator::ResponseAccumulator;
+use super::gateway::{
+    append_gateway_calls_to_new_input, append_output_items_to_input, append_tool_outputs,
+    execute_and_emit_output_calls, has_client_owned_calls, public_output_items,
+};
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::modes::{ConversationHandler, ResponseHandler};
+use crate::executor::inference::DONE_MARKER;
+use crate::executor::persist::persist_if_needed;
+use crate::executor::rehydrate::rehydrate_conversation;
 use crate::executor::request::{ExecutionContext, RequestContext};
-use crate::storage::InOutItem;
-use crate::types::event::ResponseStatus;
-use crate::types::io::{InputItem, ResponsesInput, resolve_tool_choice, resolve_tools};
+use crate::executor::upstream::{fetch_blocking_payload, fetch_stream_payload};
+use crate::tool::ToolRegistry;
+use crate::types::io::{ResponseUsage, ToolChoice};
 use crate::types::request_response::{RequestPayload, ResponsePayload};
 use crate::utils::common::serialize_to_string;
-use crate::utils::uuid7_str;
 
-use std::time::Duration;
+pub use crate::executor::inference::BoxStream;
 
-/// SSE stream of raw lines sent to the client (`data: …\n\n` per event).
-pub type BoxStream = Pin<Box<dyn Stream<Item = String> + Send>>;
+const MAX_GATEWAY_TOOL_ROUNDS: usize = 10;
 
-/// Wire-format marker signalling end-of-stream to the client.
-const DONE_MARKER: &str = "data: [DONE]\n\n";
-
-/// Fetch the next raw bytes chunk from a streaming response.
-///
-/// Returns `Ok(Some(bytes))` on data, `Ok(None)` when the stream ends cleanly,
-/// and `Err` on a network failure or chunk timeout.
-async fn next_chunk<S>(stream: &mut S, timeout: Duration) -> ExecutorResult<Option<bytes::Bytes>>
-where
-    S: futures::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Unpin,
-{
-    let item = if timeout.is_zero() {
-        stream.next().await
-    } else {
-        tokio::time::timeout(timeout, stream.next()).await.map_err(|_| {
-            ExecutorError::StreamError("chunk timeout: no data received within the configured window".into())
-        })?
-    };
-    item.transpose().map_err(ExecutorError::NetworkError)
-}
-
-/// Build, send, and validate an HTTP POST to the LLM backend.
-///
-/// Shared by both the blocking path (caller reads `.text()`) and the streaming
-/// path (caller reads `.bytes_stream()`). Maps connect/timeout failures and
-/// non-2xx status codes to [`ExecutorError::LLMRequest`].
-async fn send_request(
-    client: &reqwest::Client,
-    url: &str,
-    body: String,
-    auth: Option<&str>,
-) -> ExecutorResult<reqwest::Response> {
-    let mut req = client.post(url).header("Content-Type", "application/json").body(body);
-    if let Some(key) = auth {
-        req = req.bearer_auth(key);
-    }
-
-    let resp = req.send().await.map_err(|e| ExecutorError::LLMRequest {
-        status: if e.is_timeout() {
-            http::StatusCode::GATEWAY_TIMEOUT
-        } else {
-            http::StatusCode::BAD_GATEWAY
+fn add_usage(total: ResponseUsage, usage: ResponseUsage) -> ResponseUsage {
+    ResponseUsage {
+        input_tokens: total.input_tokens.saturating_add(usage.input_tokens),
+        output_tokens: total.output_tokens.saturating_add(usage.output_tokens),
+        total_tokens: total.total_tokens.saturating_add(usage.total_tokens),
+        input_tokens_details: crate::types::io::InputTokenDetails {
+            cached_tokens: total
+                .input_tokens_details
+                .cached_tokens
+                .saturating_add(usage.input_tokens_details.cached_tokens),
         },
-        body: if e.is_timeout() {
-            "upstream timeout".into()
-        } else {
-            "upstream unavailable".into()
+        output_tokens_details: crate::types::io::OutputTokenDetails {
+            reasoning_tokens: total
+                .output_tokens_details
+                .reasoning_tokens
+                .saturating_add(usage.output_tokens_details.reasoning_tokens),
         },
-    })?;
-
-    if !resp.status().is_success() {
-        let status = resp.status().as_u16();
-        // Log and discard any error reading the error body — the status code
-        // is the primary signal; an empty body is acceptable here.
-        let body = resp
-            .text()
-            .await
-            .inspect_err(|e| tracing::debug!("failed to read error response body: {e}"))
-            .unwrap_or_default();
-        return Err(ExecutorError::LLMRequest {
-            status: http::StatusCode::from_u16(status).unwrap_or(http::StatusCode::INTERNAL_SERVER_ERROR),
-            body,
-        });
     }
-
-    Ok(resp)
 }
 
-/// Makes a non-streaming HTTP POST to the LLM backend and returns the full JSON body.
-///
-/// Used by [`run_blocking`] so it can pass the result to [`ResponseAccumulator::from_json`].
-async fn fetch_response_json(
-    upstream_json: String,
-    url: &str,
-    client: &reqwest::Client,
-    auth: Option<&str>,
-) -> ExecutorResult<String> {
-    let resp = send_request(client, url, upstream_json, auth).await?;
-    // Preserve the reqwest::Error as the typed source (NetworkError).
-    resp.text().await.map_err(ExecutorError::NetworkError)
+fn accumulate_usage(total: &mut Option<ResponseUsage>, usage: Option<ResponseUsage>) {
+    if let Some(usage) = usage {
+        *total = Some(total.map_or(usage, |current| add_usage(current, usage)));
+    }
 }
 
-/// Step 1 — Build [`RequestContext`] by rehydrating conversation history.
-///
-/// `request` is moved into the context as `enriched_request`; one clone is taken
-/// for `original_request` so the engine retains an unmodified copy for persistence
-/// and ID resolution.
-///
-/// Dispatches based on `store` flag and which ID is present:
-/// - `previous_response_id`: rehydrate from the prior response checkpoint
-/// - `conversation_id`:      rehydrate from the conversation
-/// - no ids:                 forward only the new input
-///
-/// # Errors
-/// Returns [`ExecutorError`] if storage is unavailable or a referenced ID does not exist.
-pub async fn rehydrate_conversation(
-    request: RequestPayload,
+fn error_sse_chunk(message: &str) -> String {
+    let event = serde_json::json!({
+        "type": "error",
+        "error": {
+            "message": message,
+        },
+    });
+    let event_json = serialize_to_string(&event).unwrap_or_else(|_| "{\"error\":\"stream error\"}".to_owned());
+    format!("data: {event_json}\n\n")
+}
+
+struct AbortOnDrop<T> {
+    handle: tokio::task::JoinHandle<T>,
+}
+
+impl<T> AbortOnDrop<T> {
+    fn new(handle: tokio::task::JoinHandle<T>) -> Self {
+        Self { handle }
+    }
+}
+
+impl<T> std::ops::Deref for AbortOnDrop<T> {
+    type Target = tokio::task::JoinHandle<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handle
+    }
+}
+
+impl<T> std::ops::DerefMut for AbortOnDrop<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.handle
+    }
+}
+
+impl<T> Drop for AbortOnDrop<T> {
+    fn drop(&mut self) {
+        if !self.handle.is_finished() {
+            self.handle.abort();
+        }
+    }
+}
+
+async fn run_until_gateway_tools_complete(
+    mut ctx: RequestContext,
     exec_ctx: &ExecutionContext,
-) -> ExecutorResult<RequestContext> {
-    let response_id = uuid7_str("resp_");
-    let new_input_items: Vec<InputItem> = Vec::from(&request.input);
-
-    // One clone for the unmodified original; `request` is moved as enriched_request.
-    let original_request = request.clone();
-    let mut ctx = RequestContext {
-        enriched_request: request,
-        original_request,
-        new_input_items,
-        response_id,
-        conversation_id: None,
+    auth: Option<&str>,
+    stream_upstream: bool,
+    stream_events: Option<&mpsc::UnboundedSender<String>>,
+) -> ExecutorResult<(ResponsePayload, RequestContext)> {
+    let registry: ToolRegistry = match ctx.enriched_request.tools.as_ref() {
+        Some(tools) => ToolRegistry::build_with_handlers(tools, |tool_type| exec_ctx.gateway_executors.get(tool_type))?,
+        None => ToolRegistry::default(),
     };
+    let mut combined_output: Vec<crate::OutputItem> = Vec::new();
+    let mut combined_usage: Option<ResponseUsage> = None;
 
-    if ctx.original_request.conversation_id.is_some() && ctx.original_request.previous_response_id.is_some() {
-        return Err(ExecutorError::InvalidRequest(
-            "provide only one of conversation_id or previous_response_id".into(),
-        ));
-    }
-
-    if ctx.original_request.conversation_id.is_some() {
-        rehydrate_from_conversation(&mut ctx, exec_ctx).await?;
-        return Ok(ctx);
-    }
-
-    if ctx.original_request.previous_response_id.is_some() {
-        rehydrate_from_response(&mut ctx, exec_ctx).await?;
-        return Ok(ctx);
-    }
-
-    ctx.enriched_request.input = ResponsesInput::Items(ctx.new_input_items.clone());
-    Ok(ctx)
-}
-
-/// Hydrates `ctx` from the previous response chain.
-///
-/// Loads the stored response, rehydrates its history items, resolves effective
-/// tools and tool choice from the stored metadata, and prepends the history to
-/// the enriched request input.
-async fn rehydrate_from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
-    let stored = exec_ctx.resp_handler.get(ctx).await?;
-    let history = exec_ctx.resp_handler.rehydrate(ctx).await?;
-
-    let mut items = InOutItem::into_input_items(history);
-    items.reserve(ctx.new_input_items.len());
-    items.extend(ctx.new_input_items.iter().cloned());
-
-    ctx.enriched_request.previous_response_id = None;
-    ctx.enriched_request.input = ResponsesInput::Items(items);
-    ctx.enriched_request.tools = resolve_tools(
-        ctx.original_request.tools.as_deref(),
-        stored.metadata.effective_tools.as_deref(),
-        ctx.original_request.tools.is_some(),
-    );
-    ctx.enriched_request.tool_choice = resolve_tool_choice(
-        &ctx.original_request.tool_choice,
-        &stored.metadata.effective_tool_choice,
-        false,
-    );
-    ctx.conversation_id = stored.conversation_id;
-    Ok(())
-}
-
-/// Hydrates `ctx` from the conversation store.
-///
-/// Gets or creates the conversation (depending on `store`) and rehydrates its
-/// history in parallel, then prepends the history items to the enriched request input.
-async fn rehydrate_from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
-    let (conv_data, history) = tokio::try_join!(
-        async {
-            if ctx.original_request.store {
-                exec_ctx.conv_handler.get_or_create(ctx).await
-            } else {
-                exec_ctx.conv_handler.get(ctx).await
-            }
-        },
-        exec_ctx.conv_handler.rehydrate(ctx),
-    )?;
-
-    let mut items = InOutItem::into_input_items(history);
-    items.reserve(ctx.new_input_items.len());
-    items.extend(ctx.new_input_items.iter().cloned());
-
-    ctx.enriched_request.input = ResponsesInput::Items(items);
-    ctx.conversation_id = Some(conv_data.conversation_id);
-    Ok(())
-}
-
-/// Step 2 — Call the LLM inference backend; yields raw SSE lines (`data: …`).
-///
-/// Always requests `stream=true` upstream. Stops on `[DONE]`.
-///
-/// # Errors
-/// Each stream item is `Result<String, ExecutorError>`. The stream yields `Err` on:
-/// - [`ExecutorError::LLMRequest`] — connect timeout (504), connection failure (502),
-///   or non-2xx HTTP status from the backend
-/// - [`ExecutorError::NetworkError`] — network failure while reading the response body
-pub fn call_inference(
-    upstream_json: String,
-    url: String,
-    client: Arc<reqwest::Client>,
-    auth: Option<String>,
-    chunk_timeout: Duration,
-) -> impl Stream<Item = Result<String, ExecutorError>> + Send + 'static {
-    stream! {
-        let resp = match send_request(&client, &url, upstream_json, auth.as_deref()).await {
-            Ok(r) => r,
-            Err(e) => { yield Err(e); return; }
+    for _ in 0..MAX_GATEWAY_TOOL_ROUNDS {
+        let mut payload: ResponsePayload = if stream_upstream {
+            fetch_stream_payload(&ctx, exec_ctx, auth, &registry, stream_events).await?
+        } else {
+            fetch_blocking_payload(&ctx, exec_ctx, auth).await?
         };
+        registry.restore_final_payload_output(&mut payload.output);
+        accumulate_usage(&mut combined_usage, payload.usage);
+        let current_output = std::mem::take(&mut payload.output);
+        let has_client_owned_calls = has_client_owned_calls(&current_output, &registry);
+        let gateway_results =
+            execute_and_emit_output_calls(&current_output, &registry, combined_output.len(), stream_events).await?;
+        let public_output = public_output_items(&current_output, &registry, &gateway_results);
 
-        let mut bytes = resp.bytes_stream();
-        let mut buf = String::with_capacity(8192);
-
-        loop {
-            let chunk = match next_chunk(&mut bytes, chunk_timeout).await {
-                Ok(Some(c)) => c,
-                Ok(None) => break,
-                Err(e) => { yield Err(e); return; }
-            };
-
-            match std::str::from_utf8(&chunk) {
-                Ok(s) => buf.push_str(s),
-                Err(_) => buf.push_str(&String::from_utf8_lossy(&chunk)),
-            }
-
-            while let Some(pos) = buf.find('\n') {
-                let line = buf[..pos].trim_end_matches('\r');
-                match line {
-                    "data: [DONE]" => return,
-                    l if l.starts_with("data: ") => yield Ok(l.to_string()),
-                    _ => {}
-                }
-                buf.drain(..=pos);
-            }
+        if has_client_owned_calls {
+            combined_output.extend(public_output);
+            append_gateway_calls_to_new_input(&mut ctx, &current_output, &registry);
+            append_tool_outputs(
+                &mut ctx,
+                gateway_results.into_iter().map(|result| result.input_item).collect(),
+            );
+            payload.output = combined_output;
+            payload.usage = combined_usage;
+            ctx.inject_ids(&mut payload);
+            return Ok((payload, ctx));
         }
+
+        if gateway_results.is_empty() {
+            combined_output.extend(public_output);
+            payload.output = combined_output;
+            payload.usage = combined_usage;
+            ctx.inject_ids(&mut payload);
+            return Ok((payload, ctx));
+        }
+
+        combined_output.extend(public_output);
+        ctx.enriched_request.tool_choice = Some(ToolChoice::Auto);
+        append_output_items_to_input(&mut ctx.enriched_request.input, &current_output);
+        append_gateway_calls_to_new_input(&mut ctx, &current_output, &registry);
+        append_tool_outputs(
+            &mut ctx,
+            gateway_results.into_iter().map(|result| result.input_item).collect(),
+        );
     }
+
+    Err(ExecutorError::InvalidRequest(format!(
+        "gateway tool execution exceeded {MAX_GATEWAY_TOOL_ROUNDS} rounds"
+    )))
 }
 
-/// Step 3 — Persist the completed response to storage.
-///
-/// Skipped if [`ResponseStatus`] is not `Completed`/`Incomplete` or `payload.id` is empty.
-/// Routes to [`ConversationHandler`] when `ctx.conversation_id` is set,
-/// otherwise [`ResponseHandler`].
-///
-/// # Errors
-/// Returns [`ExecutorError`] if the storage operation fails.
-pub async fn persist_response(
-    payload: ResponsePayload,
+async fn run_blocking(
     ctx: RequestContext,
-    conv_handler: ConversationHandler,
-    resp_handler: ResponseHandler,
-) -> ExecutorResult<()> {
-    // Use typed enum — no hardcoded status strings.
-    if !matches!(
-        payload.status.parse::<ResponseStatus>().unwrap_or_default(),
-        ResponseStatus::Completed | ResponseStatus::Incomplete
-    ) || payload.id.is_empty()
-    {
-        return Ok(());
-    }
+    exec_ctx: &ExecutionContext,
+    auth: Option<&str>,
+) -> ExecutorResult<ResponsePayload> {
+    let (payload, ctx) = run_until_gateway_tools_complete(ctx, exec_ctx, auth, false, None).await?;
 
-    // Move output items from payload; handlers build ResponseMetadata from ctx internally.
-    let output_items = payload.output;
-
-    if ctx.conversation_id.is_some() {
-        conv_handler.execute_turn(ctx, output_items).await
-    } else {
-        resp_handler.execute_turn(ctx, output_items).await
-    }
-}
-
-async fn run_blocking(ctx: RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<ResponsePayload> {
-    let url = exec_ctx.responses_url();
-    // Non-streaming request: stream=false → full JSON body → from_json.
-    let upstream_json =
-        serialize_to_string(&ctx.enriched_request.to_upstream_request(false)).map_err(ExecutorError::JsonError)?;
-
-    let body = fetch_response_json(upstream_json, &url, &exec_ctx.client, exec_ctx.client_auth.as_deref()).await?;
-
-    let acc = ResponseAccumulator::from_json(&body, ctx.conversation_id.as_deref())?;
-    let mut payload = acc.finalize(
-        &ctx.enriched_request.model,
-        ctx.original_request.previous_response_id.as_deref(),
-        ctx.original_request.instructions.as_deref(),
-    );
-    ctx.inject_ids(&mut payload);
-
-    let should_persist = ctx.original_request.store
-        || ctx.original_request.previous_response_id.is_some()
-        || ctx.original_request.conversation_id.is_some();
-    if should_persist {
-        let ch = exec_ctx.conv_handler.clone();
-        let rh = exec_ctx.resp_handler.clone();
-        if let Err(e) = persist_response(payload.clone(), ctx, ch, rh).await {
-            warn!("persist failed: {e}");
-        }
+    let ch = exec_ctx.conv_handler.clone();
+    let rh = exec_ctx.resp_handler.clone();
+    if let Err(e) = persist_if_needed(payload.clone(), ctx, ch, rh).await {
+        warn!("persist failed: {e}");
     }
 
     Ok(payload)
 }
 
-fn run_stream(ctx: RequestContext, exec_ctx: Arc<ExecutionContext>) -> BoxStream {
-    let url = exec_ctx.responses_url();
-    // Streaming request: stream=true → SSE lines → from_stream.
-    let upstream_json = match serialize_to_string(&ctx.enriched_request.to_upstream_request(true)) {
-        Ok(s) => s,
-        Err(e) => {
-            return Box::pin(stream! {
-                yield format!("data: {{\"error\": \"serialize error: {e}\"}}\n\n");
-                yield DONE_MARKER.to_string();
-            });
-        }
-    };
-
-    // Persist when store=true, or when an ID is passed — context continuity must
-    // be preserved even if the caller sets store=false.
-    let should_persist = ctx.original_request.store
-        || ctx.original_request.previous_response_id.is_some()
-        || ctx.original_request.conversation_id.is_some();
-
+fn run_stream(ctx: RequestContext, exec_ctx: Arc<ExecutionContext>, auth: Option<String>) -> BoxStream {
     Box::pin(stream! {
-        let line_stream = Box::pin(call_inference(
-            upstream_json,
-            url,
-            Arc::clone(&exec_ctx.client),
-            exec_ctx.client_auth.clone(),
-            exec_ctx.streaming_timeout,
-        ));
+        let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+        let exec_ctx_for_run = Arc::clone(&exec_ctx);
+        let mut run_handle = AbortOnDrop::new(tokio::spawn(async move {
+            run_until_gateway_tools_complete(
+                ctx,
+                exec_ctx_for_run.as_ref(),
+                auth.as_deref(),
+                true,
+                Some(&event_tx),
+            )
+            .await
+        }));
 
-        // from_stream feeds SSE lines to a spawn_blocking worker via channel.
-        // All JSON parsing is CPU-bound and runs off the async executor.
-        match ResponseAccumulator::from_stream(line_stream, ctx.conversation_id.as_deref()).await {
-            Err(e) => {
-                yield format!("data: {{\"error\": \"{e}\"}}\n\n");
-                yield DONE_MARKER.to_string();
-            }
-            Ok(acc) => {
-                let mut payload = acc.finalize(
-                    &ctx.enriched_request.model,
-                    ctx.original_request.previous_response_id.as_deref(),
-                    ctx.original_request.instructions.as_deref(),
-                );
-                ctx.inject_ids(&mut payload);
-                yield payload.as_responses_chunk();
-                yield DONE_MARKER.to_string();
-
-                if should_persist {
-                    let ch = exec_ctx.conv_handler.clone();
-                    let rh = exec_ctx.resp_handler.clone();
-                    if let Err(e) = persist_response(payload, ctx, ch, rh).await {
-                        warn!("persist failed: {e}");
+        loop {
+            tokio::select! {
+                Some(event) = event_rx.recv() => {
+                    yield event;
+                }
+                result = &mut run_handle.handle => {
+                    while let Ok(event) = event_rx.try_recv() {
+                        yield event;
                     }
+                    match result {
+                        Err(e) => {
+                            yield error_sse_chunk(&format!("stream task failed: {e}"));
+                            yield DONE_MARKER.to_string();
+                        }
+                        Ok(Err(e)) => {
+                            yield error_sse_chunk(&e.to_string());
+                            yield DONE_MARKER.to_string();
+                        }
+                        Ok(Ok((payload, ctx))) => {
+                            yield payload.as_terminal_response_chunk();
+                            yield DONE_MARKER.to_string();
+
+                            let ch = exec_ctx.conv_handler.clone();
+                            let rh = exec_ctx.resp_handler.clone();
+                            if let Err(e) = persist_if_needed(payload, ctx, ch, rh).await {
+                                warn!("persist failed: {e}");
+                            }
+                        }
+                    }
+                    break;
                 }
             }
         }
@@ -396,12 +243,66 @@ pub async fn create_conversation(exec_ctx: &ExecutionContext) -> ExecutorResult<
     exec_ctx.conv_handler.create().await
 }
 
-/// Run the full agentic loop.
+/// Builder for a stateful conversation turn.
 ///
-/// Returns `Either::Left(ResponsePayload)` for non-streaming requests, or
-// TODO: replace with a builder — ExecuteRequest::new(payload, ctx).auth(token).run().await
-/// `Either::Right(BoxStream)` for streaming, each yielded `String` is an SSE
-/// line ready to forward to the client.
+/// ```ignore
+/// ExecuteRequest::new(payload, exec_ctx).with_auth(token).run().await
+/// ```
+pub struct ExecuteRequest {
+    payload: RequestPayload,
+    exec_ctx: Arc<ExecutionContext>,
+    client_auth: Option<String>,
+}
+
+impl ExecuteRequest {
+    #[must_use]
+    pub fn new(payload: RequestPayload, exec_ctx: Arc<ExecutionContext>) -> Self {
+        Self {
+            payload,
+            exec_ctx,
+            client_auth: None,
+        }
+    }
+
+    /// Override the bearer token for this request only; does not touch the shared [`ExecutionContext`].
+    #[must_use]
+    pub fn with_auth(mut self, token: Option<String>) -> Self {
+        self.client_auth = token;
+        self
+    }
+
+    /// Execute one stateful conversation turn.
+    ///
+    /// Returns `Either::Left(ResponsePayload)` for non-streaming requests, or
+    /// `Either::Right(BoxStream)` for streaming, each yielded `String` is an SSE
+    /// line ready to forward to the client.
+    ///
+    /// # Errors
+    /// Returns [`ExecutorError`] if rehydration or (non-streaming) LLM inference fails.
+    pub async fn run(self) -> ExecutorResult<Either<ResponsePayload, BoxStream>> {
+        debug!(
+            model = %self.payload.model,
+            store = self.payload.store,
+            stream = self.payload.stream,
+            has_previous_response_id = self.payload.previous_response_id.is_some(),
+            has_conversation_id = self.payload.conversation_id.is_some(),
+            tools = self.payload.tools.as_ref().map_or(0, Vec::len),
+            "executor received responses request"
+        );
+        let ctx = rehydrate_conversation(self.payload, &self.exec_ctx).await?;
+        if ctx.original_request.stream {
+            Ok(Either::Right(run_stream(ctx, self.exec_ctx, self.client_auth)))
+        } else {
+            Ok(Either::Left(
+                run_blocking(ctx, &self.exec_ctx, self.client_auth.as_deref()).await?,
+            ))
+        }
+    }
+}
+
+/// Execute one stateful conversation turn.
+///
+/// Thin shim over [`ExecuteRequest`] for callers that don't need per-request auth override.
 ///
 /// # Errors
 /// Returns [`ExecutorError`] if rehydration or (non-streaming) LLM inference fails.
@@ -409,10 +310,5 @@ pub async fn execute(
     request: RequestPayload,
     exec_ctx: Arc<ExecutionContext>,
 ) -> ExecutorResult<Either<ResponsePayload, BoxStream>> {
-    let ctx = rehydrate_conversation(request, &exec_ctx).await?;
-    if ctx.original_request.stream {
-        Ok(Either::Right(run_stream(ctx, exec_ctx)))
-    } else {
-        Ok(Either::Left(run_blocking(ctx, &exec_ctx).await?))
-    }
+    ExecuteRequest::new(request, exec_ctx).run().await
 }

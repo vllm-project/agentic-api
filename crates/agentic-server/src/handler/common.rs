@@ -1,19 +1,14 @@
-use std::sync::Arc;
-
 use axum::body::Body;
 use axum::http::HeaderMap;
-use axum::http::request::Parts;
 use axum::response::Response;
 use bytes::Bytes;
 use futures::StreamExt;
 use http::StatusCode;
 use tracing::warn;
 
-use agentic_core::executor::{BoxStream, ExecutionContext, ExecutorError};
+use agentic_core::executor::{BoxStream, ExecutorError};
 use agentic_core::proxy::{ProxyBody, ProxyResponse, error_response};
 use agentic_core::types::request_response::RequestPayload;
-
-use crate::app::AppState;
 
 pub(super) const MAX_BODY_SIZE: usize = 10 * 1024 * 1024;
 
@@ -68,25 +63,14 @@ pub(super) fn extract_store(bytes: &[u8]) -> bool {
         .unwrap_or(true)
 }
 
-pub(super) fn resolve_exec_ctx_from_headers(state: &AppState, headers: &HeaderMap) -> Arc<ExecutionContext> {
-    let request_auth = headers
+pub(super) fn extract_bearer(headers: &HeaderMap, config_key: Option<&str>) -> Option<String> {
+    headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
         .filter(|s| !s.is_empty())
-        .map(str::to_string);
-
-    if request_auth.is_some() && request_auth != state.exec_ctx.client_auth {
-        let mut ctx = (*state.exec_ctx).clone();
-        ctx.client_auth = request_auth;
-        Arc::new(ctx)
-    } else {
-        Arc::clone(&state.exec_ctx)
-    }
-}
-
-pub(super) fn resolve_exec_ctx(state: &AppState, parts: &Parts) -> Arc<ExecutionContext> {
-    resolve_exec_ctx_from_headers(state, &parts.headers)
+        .map(str::to_string)
+        .or_else(|| config_key.filter(|s| !s.is_empty()).map(str::to_string))
 }
 
 pub(super) fn sse_response(stream: BoxStream) -> Response {

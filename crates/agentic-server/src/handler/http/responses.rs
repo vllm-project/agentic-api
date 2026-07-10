@@ -3,12 +3,16 @@ use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
 use either::Either;
+use tracing::debug;
 
-use agentic_core::executor::execute;
+use std::sync::Arc;
+
+use agentic_core::executor::ExecuteRequest;
 use agentic_core::proxy::{ProxyRequest, proxy_request};
 use agentic_core::types::request_response::RequestPayload;
+use agentic_core::types::tools::ResponsesTool;
 
-use super::super::common::{convert_response, executor_error_response, read_and_parse, resolve_exec_ctx, sse_response};
+use super::super::common::{convert_response, executor_error_response, extract_bearer, read_and_parse, sse_response};
 use crate::app::AppState;
 
 async fn proxy_responses(state: &AppState, parts: Parts, body: Bytes) -> Response {
@@ -21,11 +25,23 @@ async fn proxy_responses(state: &AppState, parts: Parts, body: Bytes) -> Respons
 }
 
 async fn execute_responses(state: &AppState, parts: Parts, payload: RequestPayload) -> Response {
-    match execute(payload, resolve_exec_ctx(state, &parts)).await {
+    let auth = extract_bearer(&parts.headers, state.openai_api_key.as_deref());
+    match ExecuteRequest::new(payload, Arc::clone(&state.exec_ctx))
+        .with_auth(auth)
+        .run()
+        .await
+    {
         Ok(Either::Left(response_payload)) => axum::Json(response_payload).into_response(),
         Ok(Either::Right(stream)) => sse_response(stream),
         Err(e) => executor_error_response(e),
     }
+}
+
+fn has_gateway_tools(payload: &RequestPayload) -> bool {
+    payload
+        .tools
+        .as_ref()
+        .is_some_and(|tools| tools.iter().any(|tool| !matches!(tool, ResponsesTool::Function(_))))
 }
 
 pub async fn responses(State(state): State<AppState>, req: Request) -> Response {
@@ -35,9 +51,21 @@ pub async fn responses(State(state): State<AppState>, req: Request) -> Response 
         Err(e) => return e,
     };
 
-    let should_persist = payload.store || payload.previous_response_id.is_some() || payload.conversation_id.is_some();
+    let should_execute = payload.store
+        || payload.previous_response_id.is_some()
+        || payload.conversation_id.is_some()
+        || has_gateway_tools(&payload);
+    debug!(
+        route = if should_execute { "executor" } else { "proxy" },
+        store = payload.store,
+        stream = payload.stream,
+        has_previous_response_id = payload.previous_response_id.is_some(),
+        has_conversation_id = payload.conversation_id.is_some(),
+        tools = payload.tools.as_ref().map_or(0, Vec::len),
+        "routing HTTP responses request"
+    );
 
-    if should_persist {
+    if should_execute {
         execute_responses(&state, parts, payload).await
     } else {
         proxy_responses(&state, parts, bytes).await

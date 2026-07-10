@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use super::super::models::Response as StorageDbResponse;
 use super::errors::StorageError;
-use crate::types::io::{ResponsesTool, ToolChoice};
+use crate::types::io::ToolChoice;
+use crate::types::tools::ResponsesTool;
 use crate::utils::common::serialize_to_string;
 
 /// Response metadata with effective configuration.

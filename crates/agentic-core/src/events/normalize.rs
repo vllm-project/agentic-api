@@ -57,6 +57,7 @@ fn classify_event_type(type_str: &str) -> SSEEventType {
         "response.reasoning_summary_text.done" => SSEEventType::ReasoningSummaryTextDone,
         "response.file_search_call.searching" => SSEEventType::FileSearchCallSearching,
         "response.file_search_call.completed" => SSEEventType::FileSearchCallCompleted,
+        "response.web_search_call.in_progress" => SSEEventType::WebSearchCallInProgress,
         "response.web_search_call.searching" => SSEEventType::WebSearchCallSearching,
         "response.web_search_call.completed" => SSEEventType::WebSearchCallCompleted,
         _ => SSEEventType::Other,
@@ -90,6 +91,7 @@ fn extract_payload(event_type: SSEEventType, json: &Value) -> EventPayload {
         | SSEEventType::ReasoningPartDone
         | SSEEventType::FileSearchCallSearching
         | SSEEventType::FileSearchCallCompleted
+        | SSEEventType::WebSearchCallInProgress
         | SSEEventType::WebSearchCallSearching
         | SSEEventType::WebSearchCallCompleted
         | SSEEventType::Other => EventPayload::Raw(json.clone()),
@@ -127,6 +129,7 @@ fn extract_output_item_added(json: &Value) -> EventPayload {
         item_type: SSEItemType::from(json_str(item, "type")),
         output_index: json_u32(json, "output_index"),
         name: json_str_opt(item, "name"),
+        namespace: json_str_opt(item, "namespace"),
         call_id: json_str_opt(item, "call_id"),
     }
 }

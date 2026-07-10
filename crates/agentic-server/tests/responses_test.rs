@@ -1,10 +1,13 @@
 mod common;
 
 use axum::Router;
+use axum::body::Bytes;
 use axum::response::IntoResponse;
 use axum::routing::post;
 use http::StatusCode;
+use std::sync::Arc;
 use tokio::net::TcpListener;
+use tokio::sync::Mutex;
 
 use common::{spawn_gateway, spawn_mock_llm, test_config, test_state};
 
@@ -28,6 +31,34 @@ async fn spawn_mock_vllm_json() -> (String, tokio::task::JoinHandle<()>) {
     let addr = listener.local_addr().unwrap();
     let handle = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     (format!("http://{addr}"), handle)
+}
+
+async fn spawn_mock_vllm_json_capture() -> (String, Arc<Mutex<Vec<serde_json::Value>>>, tokio::task::JoinHandle<()>) {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let route_requests = Arc::clone(&requests);
+    let app = Router::new().route(
+        "/v1/responses",
+        post(move |body: Bytes| {
+            let route_requests = Arc::clone(&route_requests);
+            async move {
+                let body = serde_json::from_slice::<serde_json::Value>(&body).unwrap();
+                route_requests.lock().await.push(body);
+                axum::response::Response::builder()
+                    .status(200)
+                    .header("Content-Type", "application/json")
+                    .body(axum::body::Body::from(
+                        r#"{"id":"mock_id","object":"response","status":"completed",
+                            "model":"test","output":[],"created_at":0}"#,
+                    ))
+                    .unwrap()
+                    .into_response()
+            }
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (format!("http://{addr}"), requests, handle)
 }
 
 /// Spawn a mock vLLM that returns an SSE stream.
@@ -69,6 +100,65 @@ async fn test_store_false_proxies_json_to_vllm() {
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.unwrap();
     assert_eq!(body["id"], "mock_id");
+}
+
+#[tokio::test]
+async fn test_store_false_with_web_search_reaches_executor() {
+    // Arrange
+    let (llm_url, requests, _h1) = spawn_mock_vllm_json_capture().await;
+    let (gw_url, _h2) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+
+    // Act
+    let resp = reqwest::Client::new()
+        .post(format!("{gw_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "input": [{"type": "message", "role": "user", "content": "hi"}],
+            "tools": [{"type": "web_search_preview"}],
+            "store": false,
+            "stream": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // Assert — gateway tools need executor normalization even when persistence is disabled.
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    assert!(body["id"].as_str().unwrap_or("").starts_with("resp_"));
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0]["tools"][0]["type"], "function");
+    assert_eq!(requests[0]["tools"][0]["name"], "web_search");
+}
+
+#[tokio::test]
+async fn test_store_false_proxies_large_json_body_to_vllm() {
+    // Arrange
+    let (llm_url, requests, _h1) = spawn_mock_vllm_json_capture().await;
+    let (gw_url, _h2) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+    let prompt = "x".repeat(100 * 1024);
+
+    // Act
+    let resp = reqwest::Client::new()
+        .post(format!("{gw_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "input": [{"type": "message", "role": "user", "content": prompt}],
+            "store": false,
+            "stream": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // Assert — the gateway keeps this below-limit request on the proxy path.
+    assert_eq!(resp.status(), 200);
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0]["store"], false);
+    assert_eq!(requests[0]["stream"], false);
+    assert_eq!(requests[0]["input"][0]["content"].as_str().unwrap().len(), 100 * 1024);
 }
 
 #[tokio::test]

@@ -182,10 +182,7 @@ impl ResponseAccumulator {
         for line in rx {
             acc.process_sse_line(&line);
         }
-        acc.finalize_all();
-        if acc.status == ResponseStatus::InProgress {
-            acc.status = ResponseStatus::Completed;
-        }
+        acc.finish_stream();
         acc
     }
 
@@ -211,9 +208,16 @@ impl ResponseAccumulator {
         }
     }
 
-    fn process_sse_line(&mut self, line: &str) {
+    pub(crate) fn process_sse_line(&mut self, line: &str) {
         if let Some(frame) = normalize_sse_line(line) {
             self.process_event(&frame);
+        }
+    }
+
+    pub(crate) fn finish_stream(&mut self) {
+        self.finalize_all();
+        if self.status == ResponseStatus::InProgress {
+            self.status = ResponseStatus::Completed;
         }
     }
 
@@ -278,6 +282,16 @@ impl ResponseAccumulator {
             (SSEEventType::ResponseCompleted, EventPayload::Response { usage, .. }) => {
                 self.finalize_all();
                 self.status = ResponseStatus::Completed;
+                self.usage = *usage;
+            }
+            (SSEEventType::ResponseFailed, EventPayload::Response { usage, .. }) => {
+                self.finalize_all();
+                self.status = ResponseStatus::Error;
+                self.usage = *usage;
+            }
+            (SSEEventType::ResponseIncomplete, EventPayload::Response { usage, .. }) => {
+                self.finalize_all();
+                self.status = ResponseStatus::Incomplete;
                 self.usage = *usage;
             }
             _ => {}
@@ -434,6 +448,7 @@ mod tests {
                 item_type: "message".into(),
                 output_index: 0,
                 name: None,
+                namespace: None,
                 call_id: None,
             },
             sequence_number: Some(1),
@@ -500,6 +515,36 @@ mod tests {
         assert_eq!(acc.status, ResponseStatus::Completed);
         assert!(acc.usage.is_some());
         assert_eq!(acc.usage.unwrap().total_tokens, 15);
+    }
+
+    #[test]
+    fn test_process_event_failed_sets_error_status() {
+        let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::ResponseFailed,
+            payload: EventPayload::Response {
+                id: "resp_1".into(),
+                status: "failed".into(),
+                usage: None,
+            },
+            sequence_number: Some(4),
+        });
+        assert_eq!(acc.status, ResponseStatus::Error);
+    }
+
+    #[test]
+    fn test_process_event_incomplete_sets_incomplete_status() {
+        let mut acc = ResponseAccumulator::new("resp_1".into(), None);
+        acc.process_event(&EventFrame {
+            event_type: SSEEventType::ResponseIncomplete,
+            payload: EventPayload::Response {
+                id: "resp_1".into(),
+                status: "incomplete".into(),
+                usage: None,
+            },
+            sequence_number: Some(4),
+        });
+        assert_eq!(acc.status, ResponseStatus::Incomplete);
     }
 
     #[test]
@@ -625,6 +670,7 @@ mod tests {
                 item_type: "function_call".into(),
                 output_index: 0,
                 name: Some("get_weather".into()),
+                namespace: Some("mcp__weather".into()),
                 call_id: Some("call_abc".into()),
             },
             sequence_number: Some(1),
@@ -680,6 +726,7 @@ mod tests {
             assert_eq!(fc.id, "fc_1");
             assert_eq!(fc.call_id, "call_abc");
             assert_eq!(fc.name, "get_weather");
+            assert_eq!(fc.namespace.as_deref(), Some("mcp__weather"));
             assert_eq!(fc.arguments, r#"{"location":"Paris"}"#);
             assert_eq!(fc.status, MessageStatus::Completed);
         } else {
@@ -698,6 +745,7 @@ mod tests {
                 item_type: "function_call".into(),
                 output_index: 0,
                 name: Some("search".into()),
+                namespace: None,
                 call_id: Some("call_1".into()),
             },
             sequence_number: Some(1),
@@ -746,6 +794,7 @@ mod tests {
                 item_type: "function_call".into(),
                 output_index: 0,
                 name: Some("get_weather".into()),
+                namespace: None,
                 call_id: Some("call_1".into()),
             },
             sequence_number: Some(1),
@@ -769,6 +818,7 @@ mod tests {
                 item_type: "function_call".into(),
                 output_index: 1,
                 name: Some("get_time".into()),
+                namespace: None,
                 call_id: Some("call_2".into()),
             },
             sequence_number: Some(3),
@@ -811,6 +861,7 @@ mod tests {
                 item_type: "message".into(),
                 output_index: 0,
                 name: None,
+                namespace: None,
                 call_id: None,
             },
             sequence_number: Some(1),
@@ -833,6 +884,7 @@ mod tests {
                 item_type: "function_call".into(),
                 output_index: 1,
                 name: Some("lookup".into()),
+                namespace: None,
                 call_id: Some("call_x".into()),
             },
             sequence_number: Some(3),
@@ -875,6 +927,7 @@ mod tests {
                 item_type: "function_call".into(),
                 output_index: 0,
                 name: Some("old_name".into()),
+                namespace: None,
                 call_id: Some("old_call".into()),
             },
             sequence_number: Some(1),
@@ -912,6 +965,7 @@ mod tests {
                 item_type: "function_call".into(),
                 output_index: 0,
                 name: Some("tool".into()),
+                namespace: None,
                 call_id: Some("c1".into()),
             },
             sequence_number: Some(1),
@@ -968,6 +1022,7 @@ mod tests {
                 item_type: "function_call".into(),
                 output_index: 0,
                 name: Some("partial".into()),
+                namespace: None,
                 call_id: Some("c1".into()),
             },
             sequence_number: Some(1),

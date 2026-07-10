@@ -1,0 +1,29 @@
+[
+  {
+    "type": "namespace",
+    "name": "mcp__agentic_fixture",
+    "description": "Codex namespace fixture for cassette recording.",
+    "tools": [
+      {
+        "type": "function",
+        "name": "add_numbers",
+        "description": "Add a list of numbers and return the total.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "numbers": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 1
+            }
+          },
+          "required": ["numbers"],
+          "additionalProperties": false
+        },
+        "strict": true
+      }
+    ]
+  }
+]

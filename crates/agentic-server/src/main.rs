@@ -22,6 +22,10 @@ struct CommonArgs {
     #[arg(long, default_value_t = 2.0, global = true)]
     llm_ready_interval_s: f64,
 
+    /// Skip the upstream /health readiness probe. Useful for hosted OpenAI-compatible providers.
+    #[arg(long, env = "SKIP_LLM_READY_CHECK", default_value_t = false, global = true)]
+    skip_llm_ready_check: bool,
+
     /// `SQLite` or `PostgreSQL` URL for conversation and response storage.
     /// Defaults to a local `SQLite` file.
     #[arg(
@@ -69,6 +73,7 @@ fn build_config(llm_api_base: String, common: &CommonArgs) -> Config {
         openai_api_key: common.openai_api_key.clone(),
         llm_ready_timeout_s: common.llm_ready_timeout_s,
         llm_ready_interval_s: common.llm_ready_interval_s,
+        skip_llm_ready_check: common.skip_llm_ready_check,
         db_url: Some(common.db_url.clone()),
     }
 }
@@ -133,5 +138,16 @@ mod tests {
         let cli = Cli::parse_from(["agentic-server", "serve", "--llm-ready-timeout-s", "0.1", "model-a"]);
         assert!((cli.common.llm_ready_timeout_s - 0.1).abs() < f64::EPSILON);
         assert!(matches!(cli.command, Some(Commands::Serve { .. })));
+    }
+
+    #[test]
+    fn skip_llm_ready_check_can_be_set_from_cli() {
+        let cli = Cli::parse_from([
+            "agentic-server",
+            "--llm-api-base",
+            "http://localhost:8000",
+            "--skip-llm-ready-check",
+        ]);
+        assert!(cli.common.skip_llm_ready_check);
     }
 }

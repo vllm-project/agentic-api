@@ -1,12 +1,13 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 use crate::events::EventPayload;
 use crate::executor::error::ExecutorError;
+use crate::tool::{ToolRegistry, ToolType};
 use crate::types::event::MessageStatus;
 use crate::utils::uuid7_str;
 
-use super::input::{InputContent, InputMessage, InputMessageContent, InputTextContent};
+use super::input::{InputContent, InputItem, InputMessage, InputMessageContent, InputTextContent};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputTextContent {
@@ -79,9 +80,16 @@ impl From<OutputMessage> for InputMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionToolCall {
+    #[serde(default)]
     pub id: String,
+    #[serde(default)]
     pub call_id: String,
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<String>,
+    #[serde(default)]
     pub arguments: String,
     #[serde(default = "default_completed_status")]
     #[serde(deserialize_with = "deserialize_status_or_default")]
@@ -94,7 +102,7 @@ fn default_completed_status() -> MessageStatus {
 
 fn deserialize_status_or_default<'de, D>(deserializer: D) -> Result<MessageStatus, D::Error>
 where
-    D: serde::Deserializer<'de>,
+    D: Deserializer<'de>,
 {
     let opt: Option<MessageStatus> = Option::deserialize(deserializer)?;
     Ok(opt.unwrap_or(MessageStatus::Completed))
@@ -105,7 +113,11 @@ impl TryFrom<&EventPayload> for FunctionToolCall {
 
     fn try_from(payload: &EventPayload) -> Result<Self, Self::Error> {
         let EventPayload::OutputItemAdded {
-            item_id, call_id, name, ..
+            item_id,
+            call_id,
+            name,
+            namespace,
+            ..
         } = payload
         else {
             return Err(ExecutorError::ParseError("expected OutputItemAdded payload".into()));
@@ -119,9 +131,79 @@ impl TryFrom<&EventPayload> for FunctionToolCall {
             id,
             call_id: call_id.as_deref().unwrap_or_default().to_owned(),
             name: name.as_deref().unwrap_or_default().to_owned(),
+            namespace: namespace.clone(),
             arguments: String::new(),
             status: MessageStatus::InProgress,
         })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WebSearchCallStatus {
+    InProgress,
+    Completed,
+    Failed,
+}
+
+impl WebSearchCallStatus {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::InProgress => "in_progress",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebSearchSource {
+    pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebSearchActionSearch {
+    #[serde(rename = "type")]
+    pub type_: String,
+    pub query: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<WebSearchSource>,
+}
+
+impl WebSearchActionSearch {
+    #[must_use]
+    pub fn new(query: impl Into<String>, sources: Vec<WebSearchSource>) -> Self {
+        Self {
+            type_: "search".to_owned(),
+            query: query.into(),
+            sources,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebSearchCall {
+    pub id: String,
+    pub status: WebSearchCallStatus,
+    pub action: WebSearchActionSearch,
+}
+
+impl WebSearchCall {
+    #[must_use]
+    pub fn new(
+        id: impl Into<String>,
+        status: WebSearchCallStatus,
+        query: impl Into<String>,
+        sources: Vec<WebSearchSource>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            status,
+            action: WebSearchActionSearch::new(query, sources),
+        }
     }
 }
 
@@ -240,15 +322,40 @@ pub enum OutputItem {
     Message(OutputMessage),
     #[serde(rename = "function_call")]
     FunctionCall(FunctionToolCall),
+    #[serde(rename = "web_search_call")]
+    WebSearchCall(WebSearchCall),
     #[serde(rename = "reasoning")]
     Reasoning(ReasoningOutput),
     #[serde(other)]
     Unknown,
 }
 
+impl OutputItem {
+    #[must_use]
+    pub fn requires_client_action(&self, registry: &ToolRegistry) -> bool {
+        match self {
+            Self::FunctionCall(call) => registry
+                .lookup(&call.name)
+                .is_none_or(|entry| entry.tool_type == ToolType::Function),
+            Self::Message(_) | Self::WebSearchCall(_) | Self::Reasoning(_) | Self::Unknown => false,
+        }
+    }
+
+    #[must_use]
+    pub fn to_input_item(&self) -> Option<InputItem> {
+        match self {
+            Self::Message(message) => Some(InputItem::Message(message.clone().into())),
+            Self::Reasoning(reasoning) => Some(InputItem::Reasoning(reasoning.clone())),
+            Self::FunctionCall(call) => Some(InputItem::FunctionCall(call.clone())),
+            Self::WebSearchCall(_) | Self::Unknown => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::io::InputItem;
 
     #[test]
     fn reasoning_output_round_trips_through_serde() {
@@ -274,7 +381,6 @@ mod tests {
 
     #[test]
     fn reasoning_input_round_trips_through_serde() {
-        use crate::types::io::input::InputItem;
         let reasoning = ReasoningOutput::new("rs_1");
         let item = InputItem::Reasoning(reasoning);
         let json = serde_json::to_value(&item).unwrap();
@@ -306,5 +412,61 @@ mod tests {
         assert_eq!(items.len(), 2);
         assert!(matches!(items[0], OutputItem::Reasoning(_)));
         assert!(matches!(items[1], OutputItem::Message(_)));
+    }
+
+    #[test]
+    fn codex_response_items_round_trip_supported_shapes() {
+        let function_call = serde_json::json!({
+            "type": "function_call",
+            "id": "fc_1",
+            "call_id": "call_1",
+            "name": "run",
+            "namespace": "mcp__shell",
+            "arguments": "{\"cmd\":\"pwd\"}",
+            "status": "completed"
+        });
+        let item: OutputItem = serde_json::from_value(function_call).unwrap();
+        if let OutputItem::FunctionCall(call) = &item {
+            assert_eq!(call.namespace.as_deref(), Some("mcp__shell"));
+            assert_eq!(call.name, "run");
+        } else {
+            panic!("expected function call");
+        }
+        assert_eq!(serde_json::to_value(&item).unwrap()["namespace"], "mcp__shell");
+
+        let future_item = serde_json::json!({
+            "type": "future_item",
+            "id": "future_1",
+            "payload": {"a": 1}
+        });
+        let item: OutputItem = serde_json::from_value(future_item).unwrap();
+        assert!(matches!(item, OutputItem::Unknown));
+
+        let unknown = serde_json::json!({"type": "new_item", "payload": {"a": 1}});
+        let item: InputItem = serde_json::from_value(unknown).unwrap();
+        assert!(matches!(item, InputItem::Unknown));
+    }
+
+    #[test]
+    fn known_items_with_new_nested_content_preserve_message_with_unknown_part() {
+        let message = serde_json::json!({
+            "type": "message",
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_file",
+                    "file_id": "file_1"
+                }
+            ]
+        });
+
+        let item: InputItem = serde_json::from_value(message).unwrap();
+        let InputItem::Message(message) = &item else {
+            panic!("expected message item");
+        };
+        let InputMessageContent::Parts(parts) = &message.content else {
+            panic!("expected message parts");
+        };
+        assert!(matches!(parts.as_slice(), [InputContent::Unknown]));
     }
 }

@@ -1,0 +1,5 @@
+{
+  "agentic_plain_echo": "{\"echo\":\"plain fixture\",\"characters\":13}",
+  "add_numbers": "{\"sum\":8,\"count\":2}",
+  "agentic_ns__mcp__agentic_fixture__add_numbers": "{\"sum\":8,\"count\":2}"
+}

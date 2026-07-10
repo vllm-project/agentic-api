@@ -1,5 +1,6 @@
 //! Conversation history item stored in the database.
 
+use serde_json::Value;
 use tracing::warn;
 
 use super::super::pool::{DbPool, DbResult, DbTransaction};
@@ -49,21 +50,31 @@ impl Item {
         if let Some(kind) = self.stored_item_kind() {
             match kind {
                 ItemKind::Input => {
-                    if let Some(input) = self.as_input().filter(|input| !matches!(input, InputItem::Unknown)) {
+                    if let Some(input) = self.as_input() {
                         return Some(InOutItem::Input(input));
                     }
                 }
                 ItemKind::Output => {
-                    if let Some(output) = self.as_output().filter(|output| !matches!(output, OutputItem::Unknown)) {
+                    if let Some(output) = self.as_output() {
                         return Some(InOutItem::Output(output));
                     }
                 }
             }
         }
 
-        match (self.as_input(), self.as_output()) {
-            (Some(input), _) if !matches!(input, InputItem::Unknown) => Some(InOutItem::Input(input)),
-            (_, Some(output)) if !matches!(output, OutputItem::Unknown) => Some(InOutItem::Output(output)),
+        let output = self.as_output();
+        if output.as_ref().is_some_and(|item| !matches!(item, OutputItem::Unknown)) {
+            return output.map(InOutItem::Output);
+        }
+
+        let input = self.as_input();
+        if input.as_ref().is_some_and(|item| !matches!(item, InputItem::Unknown)) {
+            return input.map(InOutItem::Input);
+        }
+
+        match (input, output) {
+            (Some(input), _) => Some(InOutItem::Input(input)),
+            (_, Some(output)) => Some(InOutItem::Output(output)),
             _ => {
                 warn!(item_id = %self.id, "unrecognized item type in stored data");
                 None
@@ -72,7 +83,7 @@ impl Item {
     }
 
     fn stored_item_kind(&self) -> Option<ItemKind> {
-        let value = deserialize_from_str_opt::<serde_json::Value>(&self.data)?;
+        let value = deserialize_from_str_opt::<Value>(&self.data)?;
         ItemKind::from_stored_str(value.get(STORED_ITEM_KIND_KEY)?.as_str()?)
     }
 }
@@ -158,7 +169,8 @@ pub async fn conversation_item_count(tx: &mut DbTransaction<'_>, conversation_id
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::io::{OutputItem, ReasoningOutput, ReasoningTextContent};
+    use crate::types::event::MessageStatus;
+    use crate::types::io::{InputItem, OutputItem, ReasoningOutput, ReasoningTextContent};
 
     #[test]
     fn test_item_basic() {
@@ -206,5 +218,128 @@ mod tests {
             item.as_inout(),
             Some(InOutItem::Output(OutputItem::Reasoning(_)))
         ));
+    }
+
+    #[test]
+    fn test_legacy_output_message_rehydrates_as_output_before_unknown_input() {
+        let item = Item {
+            id: "item_message".to_string(),
+            data: serde_json::json!({
+                "type": "message",
+                "id": "msg_1",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": "hello", "annotations": []}]
+            })
+            .to_string(),
+            created_at: 1_704_067_200,
+            conversation_id: None,
+            seq: None,
+        };
+
+        let stored = item.as_inout().expect("stored item");
+        assert!(matches!(stored, InOutItem::Output(OutputItem::Message(_))));
+
+        let inputs = InOutItem::into_input_items(vec![stored]);
+        assert!(matches!(inputs[0], InputItem::Message(_)));
+    }
+
+    #[test]
+    fn test_namespaced_function_call_rehydrates_without_storage_marker() {
+        let stored = InOutItem::Output(OutputItem::FunctionCall(crate::types::io::FunctionToolCall {
+            id: "fc_1".to_string(),
+            call_id: "call_1".to_string(),
+            name: "run".to_string(),
+            namespace: Some("mcp__shell".to_string()),
+            arguments: "{\"cmd\":\"pwd\"}".to_string(),
+            status: MessageStatus::Completed,
+        }));
+        let item = Item {
+            id: "item_function_call".to_string(),
+            data: String::try_from(&stored).expect("serialization failed"),
+            created_at: 1_704_067_200,
+            conversation_id: None,
+            seq: None,
+        };
+
+        let inputs = InOutItem::into_input_items(vec![item.as_inout().expect("stored item")]);
+        let value = serde_json::to_value(&inputs[0]).expect("input value");
+
+        assert_eq!(value["type"], "function_call");
+        assert_eq!(value["namespace"], "mcp__shell");
+        assert_eq!(value["name"], "run");
+        assert!(value.get(STORED_ITEM_KIND_KEY).is_none());
+
+        println!("namespace round-trip: mcp__shell.run -> storage -> input function_call");
+        println!("storage marker stripped: _agentic_item_kind absent");
+    }
+
+    #[test]
+    fn test_multiple_namespaced_function_calls_rehydrate_without_storage_marker() {
+        let stored_items = [
+            InOutItem::Output(OutputItem::FunctionCall(crate::types::io::FunctionToolCall {
+                id: "fc_1".to_string(),
+                call_id: "call_1".to_string(),
+                name: "run".to_string(),
+                namespace: Some("mcp__shell".to_string()),
+                arguments: "{\"cmd\":\"pwd\"}".to_string(),
+                status: MessageStatus::Completed,
+            })),
+            InOutItem::Output(OutputItem::FunctionCall(crate::types::io::FunctionToolCall {
+                id: "fc_2".to_string(),
+                call_id: "call_2".to_string(),
+                name: "run".to_string(),
+                namespace: Some("mcp__git".to_string()),
+                arguments: "{\"args\":[\"status\",\"--short\"]}".to_string(),
+                status: MessageStatus::Completed,
+            })),
+        ];
+        let rows: Vec<InOutItem> = stored_items
+            .iter()
+            .enumerate()
+            .map(|(idx, stored)| Item {
+                id: format!("item_function_call_{idx}"),
+                data: String::try_from(stored).expect("serialization failed"),
+                created_at: 1_704_067_200,
+                conversation_id: None,
+                seq: Some(idx.try_into().expect("seq")),
+            })
+            .map(|item| item.as_inout().expect("stored item"))
+            .collect();
+
+        let inputs = InOutItem::into_input_items(rows);
+        let values = serde_json::to_value(&inputs).expect("input values");
+
+        assert_eq!(values[0]["type"], "function_call");
+        assert_eq!(values[0]["namespace"], "mcp__shell");
+        assert_eq!(values[0]["name"], "run");
+        assert_eq!(values[0]["call_id"], "call_1");
+        assert!(values[0].get(STORED_ITEM_KIND_KEY).is_none());
+
+        assert_eq!(values[1]["type"], "function_call");
+        assert_eq!(values[1]["namespace"], "mcp__git");
+        assert_eq!(values[1]["name"], "run");
+        assert_eq!(values[1]["call_id"], "call_2");
+        assert!(values[1].get(STORED_ITEM_KIND_KEY).is_none());
+
+        println!("namespace round-trip: mcp__shell.run -> call_1");
+        println!("namespace round-trip: mcp__git.run -> call_2");
+        println!("same tool name preserved under separate namespaces");
+    }
+
+    #[test]
+    fn test_unknown_rehydrated_items_are_omitted() {
+        let stored = InOutItem::Output(OutputItem::Unknown);
+        let item = Item {
+            id: "item_unknown".to_string(),
+            data: String::try_from(&stored).expect("serialization failed"),
+            created_at: 1_704_067_200,
+            conversation_id: None,
+            seq: None,
+        };
+
+        let inputs = InOutItem::into_input_items(vec![item.as_inout().expect("stored item")]);
+
+        assert!(inputs.is_empty());
     }
 }

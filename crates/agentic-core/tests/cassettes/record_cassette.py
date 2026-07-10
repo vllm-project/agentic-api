@@ -27,18 +27,26 @@ Usage:
     python tests/cassettes/record_cassette.py --turns 3 --mode conv --branch-from 1 --branch-turn-number 2 --no-stream --output path/to/cassette.yaml
     python tests/cassettes/record_cassette.py --turns 5 --mode conv --branch-from 1 --branch-turn-number 3 --branch-from 2 --branch-turn-number 5 --no-stream --output path/to/cassette.yaml
     python tests/cassettes/record_cassette.py --turns 2 --mode responses --vllm http://localhost:8000 --model Qwen/Qwen3-30B-A3B-FP8 --no-stream --output path/to/cassette.yaml
+    python tests/cassettes/record_cassette.py --turns 2 --mode responses --transport websocket --vllm http://localhost:3018 --model Qwen/Qwen3.6-35B-A3B --output path/to/ws-cassette.yaml
+    python tests/cassettes/record_cassette.py --turns 2 --mode responses --vllm http://localhost:8000 --model Qwen/Qwen3-30B-A3B-FP8 --max-output-tokens 1024 --no-stream --output path/to/cassette.yaml
 """
 
+import base64
+import hashlib
 import json
 import logging
 import os
+import secrets
 import socket
+import ssl
+import struct
 import sys
 import threading
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncGenerator
+from urllib.parse import urlparse
 
 import click
 import httpx
@@ -303,13 +311,251 @@ def _send_streaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | 
                     payload = json.loads(line[5:].strip())
                     if payload.get("type") == "response.completed":
                         response_data = payload.get("response")
+                    elif payload.get("object") == "response" and payload.get("status") == "completed":
+                        response_data = payload
                 except Exception:
                     pass
     print()
     return response_data
 
 
-def _send(client: httpx.Client, body: dict, stream: bool, proxy_url: str) -> dict | None:
+class WebSocketClient:
+    """Small stdlib websocket client for cassette recording."""
+
+    def __init__(self, url: str, headers: dict[str, str]) -> None:
+        self.url = url
+        self.headers = headers
+        self.sock: socket.socket | ssl.SSLSocket | None = None
+
+    def __enter__(self) -> "WebSocketClient":
+        parsed = urlparse(self.url)
+        if parsed.scheme not in {"ws", "wss"}:
+            raise ValueError(f"websocket URL must use ws:// or wss://, got {self.url}")
+
+        host = parsed.hostname or ""
+        port = parsed.port or (443 if parsed.scheme == "wss" else 80)
+        path = parsed.path or "/"
+        if parsed.query:
+            path = f"{path}?{parsed.query}"
+
+        raw_sock = socket.create_connection((host, port), timeout=TIMEOUT)
+        if parsed.scheme == "wss":
+            context = ssl.create_default_context()
+            self.sock = context.wrap_socket(raw_sock, server_hostname=host)
+        else:
+            self.sock = raw_sock
+
+        key = base64.b64encode(secrets.token_bytes(16)).decode("ascii")
+        host_header = host if parsed.port is None else f"{host}:{port}"
+        request_headers = [
+            f"GET {path} HTTP/1.1",
+            f"Host: {host_header}",
+            "Upgrade: websocket",
+            "Connection: Upgrade",
+            f"Sec-WebSocket-Key: {key}",
+            "Sec-WebSocket-Version: 13",
+        ]
+        for name, value in self.headers.items():
+            request_headers.append(f"{name}: {value}")
+        request = "\r\n".join(request_headers) + "\r\n\r\n"
+        self.sock.sendall(request.encode("utf-8"))
+
+        response = self._read_http_response()
+        status_line, _, header_text = response.partition("\r\n")
+        if " 101 " not in status_line:
+            raise RuntimeError(f"websocket upgrade failed: {status_line}\n{header_text}")
+        accept = _headers_from_text(header_text).get("sec-websocket-accept")
+        expected = base64.b64encode(
+            hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()
+        ).decode("ascii")
+        if accept != expected:
+            raise RuntimeError("websocket upgrade failed: invalid Sec-WebSocket-Accept")
+        return self
+
+    def __exit__(self, _exc_type: object, _exc: object, _tb: object) -> None:
+        try:
+            self.send_close()
+        finally:
+            if self.sock is not None:
+                self.sock.close()
+
+    def _read_exact(self, size: int) -> bytes:
+        assert self.sock is not None
+        chunks = bytearray()
+        while len(chunks) < size:
+            chunk = self.sock.recv(size - len(chunks))
+            if not chunk:
+                raise EOFError("websocket closed")
+            chunks.extend(chunk)
+        return bytes(chunks)
+
+    def _read_http_response(self) -> str:
+        assert self.sock is not None
+        data = bytearray()
+        while b"\r\n\r\n" not in data:
+            chunk = self.sock.recv(4096)
+            if not chunk:
+                raise EOFError("websocket closed during handshake")
+            data.extend(chunk)
+        return data.decode("iso-8859-1")
+
+    def send_text(self, text: str) -> None:
+        self._send_frame(0x1, text.encode("utf-8"))
+
+    def send_close(self) -> None:
+        if self.sock is not None:
+            try:
+                self._send_frame(0x8, b"")
+            except OSError:
+                pass
+
+    def _send_frame(self, opcode: int, payload: bytes) -> None:
+        assert self.sock is not None
+        header = bytearray([0x80 | opcode])
+        length = len(payload)
+        if length < 126:
+            header.append(0x80 | length)
+        elif length <= 0xFFFF:
+            header.append(0x80 | 126)
+            header.extend(struct.pack("!H", length))
+        else:
+            header.append(0x80 | 127)
+            header.extend(struct.pack("!Q", length))
+        mask = secrets.token_bytes(4)
+        header.extend(mask)
+        masked = bytes(byte ^ mask[i % 4] for i, byte in enumerate(payload))
+        self.sock.sendall(bytes(header) + masked)
+
+    def receive_text(self) -> str | None:
+        message = bytearray()
+        while True:
+            first, second = self._read_exact(2)
+            fin = bool(first & 0x80)
+            opcode = first & 0x0F
+            masked = bool(second & 0x80)
+            length = second & 0x7F
+            if length == 126:
+                length = struct.unpack("!H", self._read_exact(2))[0]
+            elif length == 127:
+                length = struct.unpack("!Q", self._read_exact(8))[0]
+            mask = self._read_exact(4) if masked else b""
+            payload = self._read_exact(length)
+            if masked:
+                payload = bytes(byte ^ mask[i % 4] for i, byte in enumerate(payload))
+
+            if opcode == 0x8:
+                return None
+            if opcode == 0x9:
+                self._send_frame(0xA, payload)
+                continue
+            if opcode == 0xA:
+                continue
+            if opcode in {0x1, 0x0}:
+                message.extend(payload)
+                if fin:
+                    return message.decode("utf-8")
+
+
+def _headers_from_text(header_text: str) -> dict[str, str]:
+    headers = {}
+    for line in header_text.split("\r\n"):
+        if ":" not in line:
+            continue
+        name, value = line.split(":", 1)
+        headers[name.strip().lower()] = value.strip()
+    return headers
+
+
+def _websocket_url(base_url: str) -> str:
+    parsed = urlparse(base_url.rstrip("/"))
+    if parsed.scheme in {"ws", "wss"}:
+        root = base_url.rstrip("/")
+    elif parsed.scheme == "http":
+        root = "ws://" + base_url.rstrip("/")[len("http://"):]
+    elif parsed.scheme == "https":
+        root = "wss://" + base_url.rstrip("/")[len("https://"):]
+    else:
+        raise ValueError(f"unsupported websocket base URL: {base_url}")
+    return f"{root}/v1/responses"
+
+
+def _send_websocket(
+    body: dict,
+    target_base_url: str,
+    headers: dict[str, str],
+    output_file: Path,
+) -> dict | None:
+    turn_num = _turn_number(output_file)
+    wire_body = dict(body)
+    wire_body["type"] = "response.create"
+    # WebSocket mode streams by transport; OpenAI's Responses WebSocket API
+    # does not use HTTP-only fields such as `stream`.
+    wire_body.pop("stream", None)
+    wire_body["store"] = True
+    websocket_url = _websocket_url(target_base_url)
+
+    turn: dict[str, Any] = {
+        "filename": f"t{turn_num}",
+        "request": {
+            "method": "WEBSOCKET",
+            "path": "/v1/responses",
+            "query_params": {},
+            "body": wire_body,
+            "headers": _filter_request_headers(headers),
+            "transport": "websocket",
+        },
+        "response": {
+            "status_code": 101,
+            "headers": {"transport": "websocket"},
+            "websocket": [],
+            "sse": [],
+        },
+    }
+
+    response_data = None
+    print("\n[WebSocket response]")
+    with WebSocketClient(websocket_url, headers) as ws:
+        ws.send_text(json.dumps(wire_body, separators=(",", ":")))
+        while True:
+            message = ws.receive_text()
+            if message is None:
+                break
+            print(message)
+            turn["response"]["websocket"].append(message)
+            try:
+                event = json.loads(message)
+            except json.JSONDecodeError:
+                continue
+            turn["response"]["sse"].append(
+                f"data: {json.dumps(event, separators=(',', ':'))}\n"
+            )
+            event_type = event.get("type")
+            if event_type == "response.completed":
+                response_data = event.get("response")
+                break
+            if event_type == "error":
+                response_data = event
+                break
+    turn["response"]["sse"].append("data: [DONE]\n")
+    _append_turn(output_file, turn)
+    print(f"  [recorded turn {turn_num} -> {output_file.name}]")
+    return response_data
+
+
+def _send(
+    client: httpx.Client,
+    body: dict,
+    stream: bool,
+    proxy_url: str,
+    transport: str = "http",
+    target_base_url: str = "",
+    headers: dict[str, str] | None = None,
+    output_file: Path | None = None,
+) -> dict | None:
+    if transport == "websocket":
+        if output_file is None:
+            raise ValueError("output_file is required for websocket recording")
+        return _send_websocket(body, target_base_url, headers or {}, output_file)
     return (
         _send_streaming(client, body, proxy_url)
         if stream
@@ -521,9 +767,14 @@ def run_responses(
     store: bool,
     branches: list[tuple[int, int | None]],
     proxy_url: str,
+    transport: str = "http",
+    target_base_url: str = "",
+    headers: dict[str, str] | None = None,
+    output_file: Path | None = None,
     tools: list | None = None,
     tool_choice: Any = None,
     tool_outputs: dict[str, str] | None = None,
+    max_output_tokens: int | None = None,
 ) -> None:
     response_ids: dict[int, str] = {}
     responses: dict[int, dict] = {}
@@ -562,10 +813,21 @@ def run_responses(
             input_value = prompt
 
         body: dict = {"model": model, "input": input_value, "stream": stream, "store": store}
+        if max_output_tokens is not None:
+            body["max_output_tokens"] = max_output_tokens
         if previous_response_id and store:
             body["previous_response_id"] = previous_response_id
         _inject_tools(body, tools, tool_choice)
-        response_data = _send(client, body, stream, proxy_url)
+        response_data = _send(
+            client,
+            body,
+            stream,
+            proxy_url,
+            transport,
+            target_base_url,
+            headers,
+            output_file,
+        )
         response_id = response_data.get("id") if response_data else None
         previous_response_id = response_id if store else None
         last_response = response_data
@@ -602,8 +864,19 @@ def run_responses(
             "store": store,
             "previous_response_id": branch_resp_id,
         }
+        if max_output_tokens is not None:
+            body["max_output_tokens"] = max_output_tokens
         _inject_tools(body, tools, tool_choice)
-        _send(client, body, stream, proxy_url)
+        _send(
+            client,
+            body,
+            stream,
+            proxy_url,
+            transport,
+            target_base_url,
+            headers,
+            output_file,
+        )
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -646,6 +919,13 @@ def run_responses(
     default=True,
     show_default=True,
     help="Use streaming responses.",
+)
+@click.option(
+    "--transport",
+    type=click.Choice(["http", "websocket"]),
+    default="http",
+    show_default=True,
+    help="Wire transport to record. websocket is supported for --mode responses.",
 )
 @click.option(
     "--model", default=MODEL, show_default=True, help="Model name to pass in requests."
@@ -699,6 +979,13 @@ def run_responses(
     "When provided, function_call_output items are automatically injected "
     "between turns (required for OpenAI Responses API).",
 )
+@click.option(
+    "--max-output-tokens",
+    type=int,
+    default=1024,
+    show_default=True,
+    help="max_output_tokens for Responses requests. Use 0 to omit the field.",
+)
 def main(
     turns: int,
     output: str,
@@ -706,6 +993,7 @@ def main(
     branch_from: tuple[int, ...],
     branch_turn_number: tuple[int, ...],
     stream: bool,
+    transport: str,
     model: str,
     no_store: bool,
     proxy_port: int,
@@ -714,6 +1002,7 @@ def main(
     tools_file: str | None,
     tool_choice_raw: str | None,
     tool_outputs_file: str | None,
+    max_output_tokens: int,
 ) -> None:
     """Interactive multi-turn cassette recorder (proxy embedded)."""
     if branch_turn_number and not branch_from:
@@ -733,6 +1022,12 @@ def main(
         raise click.UsageError(
             f"--vllm is only supported with --mode responses (got --mode {mode})."
         )
+    if transport == "websocket" and mode != "responses":
+        raise click.UsageError(
+            f"--transport websocket is only supported with --mode responses (got --mode {mode})."
+        )
+    if max_output_tokens < 0:
+        raise click.UsageError("--max-output-tokens must be >= 0.")
 
     tools: list | None = None
     if tools_file:
@@ -774,29 +1069,74 @@ def main(
     output_file = Path(output).resolve()
     proxy_url = f"http://{PROXY_HOST}:{proxy_port}"
     store = not no_store
+    if transport == "websocket":
+        stream = True
+        store = True
+    response_max_output_tokens = max_output_tokens or None
 
-    click.echo(f"Mode: {mode} | Turns: {turns} | Stream: {stream} | Model: {model}")
+    click.echo(
+        f"Mode: {mode} | Turns: {turns} | Stream: {stream} | Transport: {transport} | Model: {model} | "
+        f"Max output tokens: {response_max_output_tokens or 'backend default'}"
+    )
     click.echo(f"Output:  {output_file}")
     click.echo(backend_label)
-    click.echo(f"Proxy:   {proxy_url}  (requests go through here for recording)")
-
-    server = _start_proxy(output_file, target, proxy_port)
-    click.echo(f"Proxy ready on {proxy_url}\n")
-
-    try:
+    if transport == "websocket":
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text("", encoding="utf-8")
+        click.echo(f"WebSocket: {_websocket_url(target)}")
         with httpx.Client(headers=headers) as client:
-            if mode == "conv":
-                run_conv(client, turns, model, stream, store, branches, proxy_url)
-            elif mode == "isolation":
-                run_isolation(client, turns, model, stream, store, proxy_url)
-            elif mode == "mixed":
-                run_mixed(client, turns, model, stream, store, proxy_url)
-            elif mode == "responses":
-                run_responses(client, turns, model, stream, store, branches, proxy_url, tools, tool_choice, tool_outputs)
-            elif mode == "store_true_then_store_false":
-                run_store_true_then_store_false(client, turns, model, stream, proxy_url)
-    finally:
-        _stop_proxy(server)
+            run_responses(
+                client,
+                turns,
+                model,
+                stream,
+                store,
+                branches,
+                proxy_url,
+                transport,
+                target,
+                headers,
+                output_file,
+                tools,
+                tool_choice,
+                tool_outputs,
+                response_max_output_tokens,
+            )
+    else:
+        click.echo(f"Proxy:   {proxy_url}  (requests go through here for recording)")
+        server = _start_proxy(output_file, target, proxy_port)
+        click.echo(f"Proxy ready on {proxy_url}\n")
+
+        try:
+            with httpx.Client(headers=headers) as client:
+                if mode == "conv":
+                    run_conv(client, turns, model, stream, store, branches, proxy_url)
+                elif mode == "isolation":
+                    run_isolation(client, turns, model, stream, store, proxy_url)
+                elif mode == "mixed":
+                    run_mixed(client, turns, model, stream, store, proxy_url)
+                elif mode == "responses":
+                    run_responses(
+                        client,
+                        turns,
+                        model,
+                        stream,
+                        store,
+                        branches,
+                        proxy_url,
+                        transport,
+                        target,
+                        headers,
+                        output_file,
+                        tools,
+                        tool_choice,
+                        tool_outputs,
+                        response_max_output_tokens,
+                    )
+                elif mode == "store_true_then_store_false":
+                    run_store_true_then_store_false(client, turns, model, stream, proxy_url)
+        finally:
+            _stop_proxy(server)
 
     click.echo(f"\nAll turns recorded -> {output_file}")
 

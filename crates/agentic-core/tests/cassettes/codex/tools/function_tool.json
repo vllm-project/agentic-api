@@ -1,0 +1,18 @@
+[
+  {
+    "type": "function",
+    "name": "agentic_plain_echo",
+    "description": "Echo text for Codex cassette recording.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": ["text"],
+      "additionalProperties": false
+    },
+    "strict": true
+  }
+]

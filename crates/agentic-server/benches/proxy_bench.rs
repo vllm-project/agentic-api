@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::Request;
@@ -6,7 +7,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Router, serve};
 use bytes::Bytes;
-use criterion::{Criterion, criterion_group};
+use criterion::{BenchmarkId, Criterion, criterion_group};
 use futures::stream;
 use http::StatusCode;
 use tokio::net::TcpListener;
@@ -18,7 +19,9 @@ use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHand
 use agentic_core::proxy::ProxyState;
 use agentic_core::storage::{ConversationStore, ResponseStore};
 use agentic_server::app::{AppState, ServerConfig, build_router};
-use std::sync::Arc;
+
+const CONTENT_TYPE_JSON: &str = "application/json";
+const PROMPT_SIZES: [usize; 3] = [1024, 10 * 1024, 100 * 1024];
 
 fn bench_config(llm_url: &str) -> Config {
     Config {
@@ -26,6 +29,7 @@ fn bench_config(llm_url: &str) -> Config {
         openai_api_key: Some("bench-key".to_owned()),
         llm_ready_timeout_s: 5.0,
         llm_ready_interval_s: 0.1,
+        skip_llm_ready_check: false,
         db_url: None,
     }
 }
@@ -57,8 +61,9 @@ async fn responses_handler(req: Request) -> Response {
             .into_response();
     }
 
+    // Keep the mock response fixed so prompt-size runs isolate request upload overhead.
     let out = r#"{"id":"resp_bench","object":"response","status":"completed"}"#;
-    (StatusCode::OK, [("content-type", "application/json")], out).into_response()
+    (StatusCode::OK, [("content-type", CONTENT_TYPE_JSON)], out).into_response()
 }
 
 async fn spawn_llm() -> String {
@@ -82,13 +87,13 @@ async fn spawn_gateway(config: Config) -> String {
         ResponseHandler::new(ResponseStore::disabled()),
         Arc::new(reqwest::Client::new()),
         config.llm_api_base.clone(),
-        config.openai_api_key.clone(),
     ));
     let state = AppState {
         proxy_state,
         exec_ctx,
         shutdown_token: CancellationToken::new(),
         llm_api_base: config.llm_api_base,
+        openai_api_key: config.openai_api_key,
     };
     let server_config = ServerConfig::from_env();
     let router = build_router(state, &server_config);
@@ -100,6 +105,104 @@ async fn spawn_gateway(config: Config) -> String {
     });
 
     format!("http://{addr}")
+}
+
+fn responses_url(base_url: &str) -> String {
+    format!("{base_url}/v1/responses")
+}
+
+fn request_body(prompt_bytes: usize, stream: bool) -> Bytes {
+    let prompt = "x".repeat(prompt_bytes);
+    let body = serde_json::json!({
+        "model": "bench-model",
+        "input": [{"role": "user", "content": prompt}],
+        "store": false,
+        "stream": stream
+    });
+    Bytes::from(serde_json::to_vec(&body).expect("benchmark request body serializes"))
+}
+
+async fn post_response(client: reqwest::Client, url: String, body: Bytes) -> usize {
+    let resp = client
+        .post(url)
+        .header("content-type", CONTENT_TYPE_JSON)
+        .body(body)
+        .send()
+        .await
+        .expect("benchmark request succeeds");
+
+    resp.bytes().await.expect("benchmark response body").len()
+}
+
+fn bench_single_request(c: &mut Criterion, rt: &Runtime, client: &reqwest::Client, llm_url: &str, gateway_url: &str) {
+    let non_stream_body = request_body(5, false);
+    let stream_body = request_body(5, true);
+
+    let mut group = c.benchmark_group("non_stream");
+
+    group.bench_function("direct", |b| {
+        let url = responses_url(llm_url);
+        let body = non_stream_body.clone();
+        b.to_async(rt)
+            .iter(|| post_response(client.clone(), url.clone(), body.clone()));
+    });
+
+    group.bench_function("proxied", |b| {
+        let url = responses_url(gateway_url);
+        let body = non_stream_body.clone();
+        b.to_async(rt)
+            .iter(|| post_response(client.clone(), url.clone(), body.clone()));
+    });
+
+    group.finish();
+
+    let mut group = c.benchmark_group("stream");
+
+    group.bench_function("direct", |b| {
+        let url = responses_url(llm_url);
+        let body = stream_body.clone();
+        b.to_async(rt)
+            .iter(|| post_response(client.clone(), url.clone(), body.clone()));
+    });
+
+    group.bench_function("proxied", |b| {
+        let url = responses_url(gateway_url);
+        let body = stream_body.clone();
+        b.to_async(rt)
+            .iter(|| post_response(client.clone(), url.clone(), body.clone()));
+    });
+
+    group.finish();
+}
+
+fn bench_prompt_size(c: &mut Criterion, rt: &Runtime, client: &reqwest::Client, llm_url: &str, gateway_url: &str) {
+    let mut group = c.benchmark_group("non_stream/prompt_bytes");
+
+    for prompt_bytes in PROMPT_SIZES {
+        group.bench_with_input(
+            BenchmarkId::new("direct", prompt_bytes),
+            &prompt_bytes,
+            |b, &prompt_bytes| {
+                let url = responses_url(llm_url);
+                let body = request_body(prompt_bytes, false);
+                b.to_async(rt)
+                    .iter(|| post_response(client.clone(), url.clone(), body.clone()));
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("proxied", prompt_bytes),
+            &prompt_bytes,
+            |b, &prompt_bytes| {
+                let url = responses_url(gateway_url);
+                let body = request_body(prompt_bytes, false);
+                b.to_async(rt)
+                    .iter(|| post_response(client.clone(), url.clone(), body.clone()));
+            },
+        );
+    }
+
+    group.finish();
 }
 
 fn proxy_benchmarks(c: &mut Criterion) {
@@ -114,79 +217,8 @@ fn proxy_benchmarks(c: &mut Criterion) {
 
     let client = reqwest::Client::new();
 
-    let non_stream_body = serde_json::json!({
-        "model": "bench-model",
-        "input": [{"role": "user", "content": "hello"}]
-    });
-    let stream_body = serde_json::json!({
-        "model": "bench-model",
-        "input": [{"role": "user", "content": "hello"}],
-        "stream": true
-    });
-
-    let mut group = c.benchmark_group("non_stream");
-
-    group.bench_function("direct", |b| {
-        let url = format!("{llm_url}/v1/responses");
-        let body = non_stream_body.clone();
-        b.to_async(&rt).iter(|| {
-            let client = client.clone();
-            let url = url.clone();
-            let body = body.clone();
-            async move {
-                let resp = client.post(&url).json(&body).send().await.unwrap();
-                resp.bytes().await.unwrap()
-            }
-        });
-    });
-
-    group.bench_function("proxied", |b| {
-        let url = format!("{gateway_url}/v1/responses");
-        let body = non_stream_body.clone();
-        b.to_async(&rt).iter(|| {
-            let client = client.clone();
-            let url = url.clone();
-            let body = body.clone();
-            async move {
-                let resp = client.post(&url).json(&body).send().await.unwrap();
-                resp.bytes().await.unwrap()
-            }
-        });
-    });
-
-    group.finish();
-
-    let mut group = c.benchmark_group("stream");
-
-    group.bench_function("direct", |b| {
-        let url = format!("{llm_url}/v1/responses");
-        let body = stream_body.clone();
-        b.to_async(&rt).iter(|| {
-            let client = client.clone();
-            let url = url.clone();
-            let body = body.clone();
-            async move {
-                let resp = client.post(&url).json(&body).send().await.unwrap();
-                resp.bytes().await.unwrap()
-            }
-        });
-    });
-
-    group.bench_function("proxied", |b| {
-        let url = format!("{gateway_url}/v1/responses");
-        let body = stream_body.clone();
-        b.to_async(&rt).iter(|| {
-            let client = client.clone();
-            let url = url.clone();
-            let body = body.clone();
-            async move {
-                let resp = client.post(&url).json(&body).send().await.unwrap();
-                resp.bytes().await.unwrap()
-            }
-        });
-    });
-
-    group.finish();
+    bench_single_request(c, &rt, &client, &llm_url, &gateway_url);
+    bench_prompt_size(c, &rt, &client, &llm_url, &gateway_url);
 }
 
 criterion_group!(proxy_benches, proxy_benchmarks);

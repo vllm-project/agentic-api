@@ -1,0 +1,83 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Use web search to look up potato, then summarize in one sentence.
+      max_output_tokens: 1024
+      model: openai/gpt-oss-20b
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - type: web_search_preview
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'data: {"item":{"action":{"query":"potato","type":"search"},"id":"ws_a3d629517d172d02","status":"in_progress","type":"web_search_call"},"output_index":1,"type":"response.output_item.added"}
+
+      '
+    - '
+
+      '
+    - 'data: {"item_id":"ws_a3d629517d172d02","output_index":1,"type":"response.web_search_call.in_progress"}
+
+      '
+    - '
+
+      '
+    - 'data: {"item_id":"ws_a3d629517d172d02","output_index":1,"type":"response.web_search_call.searching"}
+
+      '
+    - '
+
+      '
+    - 'data: {"item":{"action":{"query":"potato","sources":[{"title":"Potato - Wikipedia","url":"https://en.wikipedia.org/wiki/Potato"},{"title":"Potatoes
+      | Potato Nutrition | Types of Potatoes | Recipes","url":"https://potatogoodness.com/"},{"title":"Potato
+      Facts","url":"https://www.idahopotatomuseum.com/potato-facts/"},{"title":"Idaho
+      Potato Commission","url":"https://idahopotato.com/"},{"title":"Home of U.S.
+      Potato Farmers | Potatoes USA","url":"https://potatoesusa.com/"}],"type":"search"},"id":"ws_a3d629517d172d02","status":"completed","type":"web_search_call"},"item_id":"ws_a3d629517d172d02","output_index":1,"type":"response.web_search_call.completed"}
+
+      '
+    - '
+
+      '
+    - 'data: {"item":{"action":{"query":"potato","sources":[{"title":"Potato - Wikipedia","url":"https://en.wikipedia.org/wiki/Potato"},{"title":"Potatoes
+      | Potato Nutrition | Types of Potatoes | Recipes","url":"https://potatogoodness.com/"},{"title":"Potato
+      Facts","url":"https://www.idahopotatomuseum.com/potato-facts/"},{"title":"Idaho
+      Potato Commission","url":"https://idahopotato.com/"},{"title":"Home of U.S.
+      Potato Farmers | Potatoes USA","url":"https://potatoesusa.com/"}],"type":"search"},"id":"ws_a3d629517d172d02","status":"completed","type":"web_search_call"},"output_index":1,"type":"response.output_item.done"}
+
+      '
+    - '
+
+      '
+    - 'data: {"id":"resp_019f356e-aacf-7ea3-87c6-0748df339cd1","object":"response","created_at":1783307877,"model":"openai/gpt-oss-20b","status":"completed","output":[{"type":"reasoning","id":"msg_815a472615ab7df0","content":[{"type":"reasoning_text","text":"We
+      need to search web for potato. Use web_search tool."}],"summary":[],"encrypted_content":null,"status":null},{"type":"web_search_call","id":"ws_a3d629517d172d02","status":"completed","action":{"type":"search","query":"potato","sources":[{"url":"https://en.wikipedia.org/wiki/Potato","title":"Potato
+      - Wikipedia"},{"url":"https://potatogoodness.com/","title":"Potatoes | Potato
+      Nutrition | Types of Potatoes | Recipes"},{"url":"https://www.idahopotatomuseum.com/potato-facts/","title":"Potato
+      Facts"},{"url":"https://idahopotato.com/","title":"Idaho Potato Commission"},{"url":"https://potatoesusa.com/","title":"Home
+      of U.S. Potato Farmers | Potatoes USA"}]}},{"type":"reasoning","id":"msg_9140dcbc9d275c62","content":[{"type":"reasoning_text","text":"Now
+      summarize in one sentence. Use Wikipedia info."}],"summary":[],"encrypted_content":null,"status":null},{"type":"message","id":"msg_82bdc0607bd9472b","role":"assistant","status":"completed","content":[{"type":"output_text","text":"The
+      potato (Solanum tuberosum) is a starchy tuberous vegetable native to the Americas,
+      domesticated in the Andes 7,000–10,000 years ago, that has become a global staple
+      food cultivated worldwide in over 5,000 varieties.","annotations":[]}]}],"usage":{"input_tokens":2233,"output_tokens":123,"total_tokens":2356,"input_tokens_details":{"cached_tokens":512},"output_tokens_details":{"reasoning_tokens":40}},"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200

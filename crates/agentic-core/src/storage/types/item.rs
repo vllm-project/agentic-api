@@ -87,11 +87,9 @@ impl InOutItem {
         history
             .into_iter()
             .filter_map(|i| match i {
+                InOutItem::Input(item) if item.is_unknown() => None,
                 InOutItem::Input(item) => Some(item),
-                InOutItem::Output(OutputItem::Message(msg)) => Some(InputItem::Message(msg.into())),
-                InOutItem::Output(OutputItem::Reasoning(r)) => Some(InputItem::Reasoning(r)),
-                InOutItem::Output(OutputItem::FunctionCall(f)) => Some(InputItem::FunctionCall(f)),
-                InOutItem::Output(OutputItem::Unknown) => None,
+                InOutItem::Output(output) => output.to_input_item(),
             })
             .collect()
     }
@@ -203,6 +201,7 @@ mod tests {
             id: "fc_1".to_string(),
             call_id: "call_abc".to_string(),
             name: "my_tool".to_string(),
+            namespace: None,
             arguments: "{}".to_string(),
             status: MessageStatus::Completed,
         };

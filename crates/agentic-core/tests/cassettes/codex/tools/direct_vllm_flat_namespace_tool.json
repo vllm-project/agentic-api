@@ -1,0 +1,22 @@
+[
+  {
+    "type": "function",
+    "name": "agentic_ns__mcp__agentic_fixture__add_numbers",
+    "description": "Flattened form of mcp__agentic_fixture.add_numbers for direct vLLM recording.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "numbers": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1
+        }
+      },
+      "required": ["numbers"],
+      "additionalProperties": false
+    },
+    "strict": true
+  }
+]

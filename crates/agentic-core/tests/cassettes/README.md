@@ -15,10 +15,10 @@ The recorder is interactive. For each turn it prompts you to type the input mess
 
 ```bash
 # interactive -- type each prompt when asked
-python tests/cassettes/record_cassette.py --mode responses --turns 2 --no-stream --vllm http://localhost:5050 --model Qwen/Qwen3-30B-A3B-FP8 --output out.yaml
+python tests/cassettes/record_cassette.py --mode responses --turns 2 --no-stream --vllm http://localhost:5050 --model Qwen/Qwen3-30B-A3B-FP8 --max-output-tokens 1024 --output out.yaml
 
 # non-interactive -- pipe prompts in (one line per turn)
-printf 'First prompt\nSecond prompt\n' | python tests/cassettes/record_cassette.py --mode responses --turns 2 --no-stream --vllm http://localhost:5050 --model Qwen/Qwen3-30B-A3B-FP8 --output out.yaml
+printf 'First prompt\nSecond prompt\n' | python tests/cassettes/record_cassette.py --mode responses --turns 2 --no-stream --vllm http://localhost:5050 --model Qwen/Qwen3-30B-A3B-FP8 --max-output-tokens 1024 --output out.yaml
 ```
 
 The recorder scripts (`record_reasoning_cassettes.sh`, `record_tool_call_cassettes.sh`, etc.) use `printf` to feed fixed prompts per test so no manual input is needed.
@@ -46,6 +46,7 @@ The recorder scripts (`record_reasoning_cassettes.sh`, `record_tool_call_cassett
 --openai URL           OpenAI upstream (default https://api.openai.com)
 --tools FILE           JSON file containing a tools array (responses mode only)
 --tool-choice VALUE    "auto", "none", "required", or JSON e.g. '{"type":"function","name":"foo"}'
+--max-output-tokens N  max_output_tokens for Responses requests (default 1024; use 0 to omit)
 --proxy-port PORT      Local proxy port (default 7070)
 --branch-from TURN     Branch from this turn's response id (repeatable)
 --branch-turn-number N First turn number for the corresponding branch (repeatable)
@@ -68,6 +69,7 @@ turns:
       input: Reply with exactly one word: HELLO
       stream: false
       store: true
+      max_output_tokens: 1024
     headers:
       content-type: application/json
     query_params: {}

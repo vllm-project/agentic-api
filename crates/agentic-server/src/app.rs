@@ -64,6 +64,9 @@ pub struct AppState {
     pub shutdown_token: CancellationToken,
     /// vLLM base URL — used by the `/ready` health probe.
     pub llm_api_base: String,
+    /// Server-configured API key; used as fallback when the request carries no
+    /// `Authorization` header on the executor path.
+    pub openai_api_key: Option<String>,
 }
 
 pub fn build_router(state: AppState, server_config: &ServerConfig) -> Router {

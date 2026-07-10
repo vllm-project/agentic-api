@@ -273,6 +273,7 @@ mod tests {
             openai_api_key: Some("test-key".to_owned()),
             llm_ready_timeout_s: 5.0,
             llm_ready_interval_s: 0.1,
+            skip_llm_ready_check: false,
             db_url: None,
         }
     }

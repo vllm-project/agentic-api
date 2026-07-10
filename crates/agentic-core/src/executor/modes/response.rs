@@ -72,9 +72,9 @@ impl ResponseHandler {
         let metadata = ResponseMetadata {
             model: ctx.enriched_request.model,
             previous_response_id: ctx.original_request.previous_response_id,
-            effective_tools: ctx.original_request.tools,
-            effective_tool_choice: ctx.original_request.tool_choice,
-            effective_instructions: ctx.original_request.instructions,
+            effective_tools: ctx.enriched_request.tools,
+            effective_tool_choice: ctx.enriched_request.tool_choice.unwrap_or_default(),
+            effective_instructions: ctx.enriched_request.instructions,
         };
 
         let mut new_items = Vec::with_capacity(ctx.new_input_items.len() + output_items.len());
@@ -96,7 +96,7 @@ impl ResponseHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::io::{ResponsesInput, ToolChoice};
+    use crate::types::io::ResponsesInput;
     use crate::types::request_response::RequestPayload;
 
     fn disabled_handler() -> ResponseHandler {
@@ -111,7 +111,7 @@ mod tests {
             previous_response_id: previous_response_id.map(str::to_string),
             conversation_id: None,
             tools: None,
-            tool_choice: ToolChoice::Auto,
+            tool_choice: None,
             stream: false,
             store: true,
             include: None,

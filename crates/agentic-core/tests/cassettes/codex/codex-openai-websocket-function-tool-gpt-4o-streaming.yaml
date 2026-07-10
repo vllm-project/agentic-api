@@ -1,0 +1,193 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: You must call the agentic_plain_echo tool with text exactly "plain fixture"
+        before answering.
+      model: gpt-4o
+      store: true
+      tools:
+      - description: Echo text for Codex cassette recording.
+        name: agentic_plain_echo
+        parameters:
+          additionalProperties: false
+          properties:
+            text:
+              type: string
+          required:
+          - text
+          type: object
+        strict: true
+        type: function
+      type: response.create
+    headers:
+      Authorization: Bearer ***
+    method: WEBSOCKET
+    path: /v1/responses
+    query_params: {}
+    transport: websocket
+  response:
+    headers:
+      transport: websocket
+    sse:
+    - 'data: {"type":"response.created","response":{"id":"resp_03e9d52dbd37942c006a464048787c81999414a2d9ca457760","object":"response","created_at":1782988872,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Echo
+      text for Codex cassette recording.","name":"agentic_plain_echo","parameters":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_03e9d52dbd37942c006a464048787c81999414a2d9ca457760","object":"response","created_at":1782988872,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Echo
+      text for Codex cassette recording.","name":"agentic_plain_echo","parameters":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","type":"function_call","status":"in_progress","arguments":"","call_id":"call_cMDh2TO5i8NcEVEXOR5TWGcD","name":"agentic_plain_echo"},"output_index":0,"sequence_number":2}
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"{\"","item_id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","obfuscation":"t1lqI50hzxUp0i","output_index":0,"sequence_number":3}
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"text","item_id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","obfuscation":"oYrCl6XRQ0s2","output_index":0,"sequence_number":4}
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"\":\"","item_id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","obfuscation":"xtAyl8uvi5wZj","output_index":0,"sequence_number":5}
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"plain","item_id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","obfuscation":"0hLzC0kbhyv","output_index":0,"sequence_number":6}
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":" fixture","item_id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","obfuscation":"ts4Cs6Q1","output_index":0,"sequence_number":7}
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"\"}","item_id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","obfuscation":"g9Rgp3NnwXc5O1","output_index":0,"sequence_number":8}
+
+      '
+    - 'data: {"type":"response.function_call_arguments.done","arguments":"{\"text\":\"plain
+      fixture\"}","item_id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","output_index":0,"sequence_number":9}
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","type":"function_call","status":"completed","arguments":"{\"text\":\"plain
+      fixture\"}","call_id":"call_cMDh2TO5i8NcEVEXOR5TWGcD","name":"agentic_plain_echo"},"output_index":0,"sequence_number":10}
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_03e9d52dbd37942c006a464048787c81999414a2d9ca457760","object":"response","created_at":1782988872,"status":"completed","background":false,"completed_at":1782988874,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[{"id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","type":"function_call","status":"completed","arguments":"{\"text\":\"plain
+      fixture\"}","call_id":"call_cMDh2TO5i8NcEVEXOR5TWGcD","name":"agentic_plain_echo"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Echo
+      text for Codex cassette recording.","name":"agentic_plain_echo","parameters":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":60,"input_tokens_details":{"cached_tokens":0},"output_tokens":18,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":78},"user":null,"metadata":{}},"sequence_number":11}
+
+      '
+    - 'data: [DONE]
+
+      '
+    status_code: 101
+    websocket:
+    - '{"type":"response.created","response":{"id":"resp_03e9d52dbd37942c006a464048787c81999414a2d9ca457760","object":"response","created_at":1782988872,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Echo
+      text for Codex cassette recording.","name":"agentic_plain_echo","parameters":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}'
+    - '{"type":"response.in_progress","response":{"id":"resp_03e9d52dbd37942c006a464048787c81999414a2d9ca457760","object":"response","created_at":1782988872,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Echo
+      text for Codex cassette recording.","name":"agentic_plain_echo","parameters":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}'
+    - '{"type":"response.output_item.added","item":{"id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","type":"function_call","status":"in_progress","arguments":"","call_id":"call_cMDh2TO5i8NcEVEXOR5TWGcD","name":"agentic_plain_echo"},"output_index":0,"sequence_number":2}'
+    - '{"type":"response.function_call_arguments.delta","delta":"{\"","item_id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","obfuscation":"t1lqI50hzxUp0i","output_index":0,"sequence_number":3}'
+    - '{"type":"response.function_call_arguments.delta","delta":"text","item_id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","obfuscation":"oYrCl6XRQ0s2","output_index":0,"sequence_number":4}'
+    - '{"type":"response.function_call_arguments.delta","delta":"\":\"","item_id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","obfuscation":"xtAyl8uvi5wZj","output_index":0,"sequence_number":5}'
+    - '{"type":"response.function_call_arguments.delta","delta":"plain","item_id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","obfuscation":"0hLzC0kbhyv","output_index":0,"sequence_number":6}'
+    - '{"type":"response.function_call_arguments.delta","delta":" fixture","item_id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","obfuscation":"ts4Cs6Q1","output_index":0,"sequence_number":7}'
+    - '{"type":"response.function_call_arguments.delta","delta":"\"}","item_id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","obfuscation":"g9Rgp3NnwXc5O1","output_index":0,"sequence_number":8}'
+    - '{"type":"response.function_call_arguments.done","arguments":"{\"text\":\"plain
+      fixture\"}","item_id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","output_index":0,"sequence_number":9}'
+    - '{"type":"response.output_item.done","item":{"id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","type":"function_call","status":"completed","arguments":"{\"text\":\"plain
+      fixture\"}","call_id":"call_cMDh2TO5i8NcEVEXOR5TWGcD","name":"agentic_plain_echo"},"output_index":0,"sequence_number":10}'
+    - '{"type":"response.completed","response":{"id":"resp_03e9d52dbd37942c006a464048787c81999414a2d9ca457760","object":"response","created_at":1782988872,"status":"completed","background":false,"completed_at":1782988874,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[{"id":"fc_03e9d52dbd37942c006a46404a8b9c8199aaaa66d60edec576","type":"function_call","status":"completed","arguments":"{\"text\":\"plain
+      fixture\"}","call_id":"call_cMDh2TO5i8NcEVEXOR5TWGcD","name":"agentic_plain_echo"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Echo
+      text for Codex cassette recording.","name":"agentic_plain_echo","parameters":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":60,"input_tokens_details":{"cached_tokens":0},"output_tokens":18,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":78},"user":null,"metadata":{}},"sequence_number":11}'
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: call_cMDh2TO5i8NcEVEXOR5TWGcD
+        output: '{"echo":"plain fixture","characters":13}'
+        type: function_call_output
+      - content: Use the tool output. Return only the echo string.
+        role: user
+        type: message
+      model: gpt-4o
+      previous_response_id: resp_03e9d52dbd37942c006a464048787c81999414a2d9ca457760
+      store: true
+      tools:
+      - description: Echo text for Codex cassette recording.
+        name: agentic_plain_echo
+        parameters:
+          additionalProperties: false
+          properties:
+            text:
+              type: string
+          required:
+          - text
+          type: object
+        strict: true
+        type: function
+      type: response.create
+    headers:
+      Authorization: Bearer ***
+    method: WEBSOCKET
+    path: /v1/responses
+    query_params: {}
+    transport: websocket
+  response:
+    headers:
+      transport: websocket
+    sse:
+    - 'data: {"type":"response.created","response":{"id":"resp_03e9d52dbd37942c006a46404bb4ec8199b90d69fc8c62e84f","object":"response","created_at":1782988875,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_03e9d52dbd37942c006a464048787c81999414a2d9ca457760","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Echo
+      text for Codex cassette recording.","name":"agentic_plain_echo","parameters":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_03e9d52dbd37942c006a46404bb4ec8199b90d69fc8c62e84f","object":"response","created_at":1782988875,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_03e9d52dbd37942c006a464048787c81999414a2d9ca457760","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Echo
+      text for Codex cassette recording.","name":"agentic_plain_echo","parameters":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_03e9d52dbd37942c006a46404c9a688199ac9dfa9daf518c72","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":2}
+
+      '
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_03e9d52dbd37942c006a46404c9a688199ac9dfa9daf518c72","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"plain","item_id":"msg_03e9d52dbd37942c006a46404c9a688199ac9dfa9daf518c72","logprobs":[],"obfuscation":"HXTrFy3Udej","output_index":0,"sequence_number":4}
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" fixture","item_id":"msg_03e9d52dbd37942c006a46404c9a688199ac9dfa9daf518c72","logprobs":[],"obfuscation":"bwJtKhua","output_index":0,"sequence_number":5}
+
+      '
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_03e9d52dbd37942c006a46404c9a688199ac9dfa9daf518c72","logprobs":[],"output_index":0,"sequence_number":6,"text":"plain
+      fixture"}
+
+      '
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_03e9d52dbd37942c006a46404c9a688199ac9dfa9daf518c72","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"plain
+      fixture"},"sequence_number":7}
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_03e9d52dbd37942c006a46404c9a688199ac9dfa9daf518c72","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"plain
+      fixture"}],"role":"assistant"},"output_index":0,"sequence_number":8}
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_03e9d52dbd37942c006a46404bb4ec8199b90d69fc8c62e84f","object":"response","created_at":1782988875,"status":"completed","background":false,"completed_at":1782988876,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[{"id":"msg_03e9d52dbd37942c006a46404c9a688199ac9dfa9daf518c72","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"plain
+      fixture"}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_03e9d52dbd37942c006a464048787c81999414a2d9ca457760","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Echo
+      text for Codex cassette recording.","name":"agentic_plain_echo","parameters":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":113,"input_tokens_details":{"cached_tokens":0},"output_tokens":4,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":117},"user":null,"metadata":{}},"sequence_number":9}
+
+      '
+    - 'data: [DONE]
+
+      '
+    status_code: 101
+    websocket:
+    - '{"type":"response.created","response":{"id":"resp_03e9d52dbd37942c006a46404bb4ec8199b90d69fc8c62e84f","object":"response","created_at":1782988875,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_03e9d52dbd37942c006a464048787c81999414a2d9ca457760","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Echo
+      text for Codex cassette recording.","name":"agentic_plain_echo","parameters":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}'
+    - '{"type":"response.in_progress","response":{"id":"resp_03e9d52dbd37942c006a46404bb4ec8199b90d69fc8c62e84f","object":"response","created_at":1782988875,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_03e9d52dbd37942c006a464048787c81999414a2d9ca457760","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Echo
+      text for Codex cassette recording.","name":"agentic_plain_echo","parameters":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}'
+    - '{"type":"response.output_item.added","item":{"id":"msg_03e9d52dbd37942c006a46404c9a688199ac9dfa9daf518c72","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":2}'
+    - '{"type":"response.content_part.added","content_index":0,"item_id":"msg_03e9d52dbd37942c006a46404c9a688199ac9dfa9daf518c72","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"plain","item_id":"msg_03e9d52dbd37942c006a46404c9a688199ac9dfa9daf518c72","logprobs":[],"obfuscation":"HXTrFy3Udej","output_index":0,"sequence_number":4}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" fixture","item_id":"msg_03e9d52dbd37942c006a46404c9a688199ac9dfa9daf518c72","logprobs":[],"obfuscation":"bwJtKhua","output_index":0,"sequence_number":5}'
+    - '{"type":"response.output_text.done","content_index":0,"item_id":"msg_03e9d52dbd37942c006a46404c9a688199ac9dfa9daf518c72","logprobs":[],"output_index":0,"sequence_number":6,"text":"plain
+      fixture"}'
+    - '{"type":"response.content_part.done","content_index":0,"item_id":"msg_03e9d52dbd37942c006a46404c9a688199ac9dfa9daf518c72","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"plain
+      fixture"},"sequence_number":7}'
+    - '{"type":"response.output_item.done","item":{"id":"msg_03e9d52dbd37942c006a46404c9a688199ac9dfa9daf518c72","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"plain
+      fixture"}],"role":"assistant"},"output_index":0,"sequence_number":8}'
+    - '{"type":"response.completed","response":{"id":"resp_03e9d52dbd37942c006a46404bb4ec8199b90d69fc8c62e84f","object":"response","created_at":1782988875,"status":"completed","background":false,"completed_at":1782988876,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[{"id":"msg_03e9d52dbd37942c006a46404c9a688199ac9dfa9daf518c72","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"plain
+      fixture"}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_03e9d52dbd37942c006a464048787c81999414a2d9ca457760","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Echo
+      text for Codex cassette recording.","name":"agentic_plain_echo","parameters":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},"strict":true}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":113,"input_tokens_details":{"cached_tokens":0},"output_tokens":4,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":117},"user":null,"metadata":{}},"sequence_number":9}'

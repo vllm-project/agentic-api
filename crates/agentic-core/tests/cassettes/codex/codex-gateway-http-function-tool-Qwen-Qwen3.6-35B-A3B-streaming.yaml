@@ -1,0 +1,116 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: You must call the agentic_plain_echo tool with text exactly "plain fixture"
+        before answering.
+      model: Qwen/Qwen3.6-35B-A3B
+      store: true
+      stream: true
+      tools:
+      - description: Echo text for Codex cassette recording.
+        name: agentic_plain_echo
+        parameters:
+          additionalProperties: false
+          properties:
+            text:
+              type: string
+          required:
+          - text
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'data: {"id":"resp_019f226a-8ab1-7533-b933-1ef4ee3fa207","object":"response","created_at":1782988836,"model":"Qwen/Qwen3.6-35B-A3B","status":"completed","output":[{"content":[{"text":"The
+      user wants me to call the `agentic_plain_echo` tool with the text \"plain fixture\"
+      before providing any answer.\nI will first call the tool as requested.\nThen
+      I will provide the response.\n\nPlan:\n1. Call `agentic_plain_echo` with text=\"plain
+      fixture\".\n2. Acknowledge the tool call and answer the user.\n\nConstraint
+      Checklist & Confidence Score:\n1. Call agentic_plain_echo? Yes.\n2. Text exactly
+      \"plain fixture\"? Yes.\n3. Before answering? Yes.\n\nConfidence Score: 5/5\n\nMental
+      Sandbox:\n- I need to make sure the tool call comes first.\n- The text must
+      be exactly \"plain fixture\" (case sensitive usually, unless specified otherwise,
+      but here it says \"exactly\").\n\nStep-by-step:\n1. `agentic_plain_echo(text=\"plain
+      fixture\")`\n2. Response.\n\nI will proceed.","type":"reasoning_text"}],"encrypted_content":null,"id":"rs_019f226a-8ff6-7592-86ca-61f4e89c5ee5","status":null,"summary":[],"type":"reasoning"},{"content":[{"annotations":[],"text":"\n\n","type":"output_text"}],"id":"msg_019f226a-9023-7b83-9be4-df6688e853f8","role":"assistant","status":"completed","type":"message"},{"arguments":"{\"text\":
+      \"plain fixture\"}","call_id":"call_1a7b68d417284176a5d10c82","id":"fc_019f226a-9024-7c62-98f1-40d0b9a7ab7a","name":"agentic_plain_echo","status":"completed","type":"function_call"}],"usage":{"input_tokens":290,"output_tokens":229,"total_tokens":519,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":181}},"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: call_1a7b68d417284176a5d10c82
+        output: '{"echo":"plain fixture","characters":13}'
+        type: function_call_output
+      - content: Use the tool output. Return only the echo string.
+        role: user
+        type: message
+      model: Qwen/Qwen3.6-35B-A3B
+      previous_response_id: resp_019f226a-8ab1-7533-b933-1ef4ee3fa207
+      store: true
+      stream: true
+      tools:
+      - description: Echo text for Codex cassette recording.
+        name: agentic_plain_echo
+        parameters:
+          additionalProperties: false
+          properties:
+            text:
+              type: string
+          required:
+          - text
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'data: {"id":"resp_019f226a-90dc-77a2-a23f-7a12c31bc196","object":"response","created_at":1782988837,"model":"Qwen/Qwen3.6-35B-A3B","status":"completed","output":[{"content":[{"text":"The
+      user wants me to use the output of the tool call I just made.\nThe tool output
+      was `{\"echo\":\"plain fixture\",\"characters\":13}`.\nThe instruction is to
+      \"Return only the echo string.\"\nThe echo string is \"plain fixture\".\n\nI
+      should return just \"plain fixture\".\n\nWait, checking the instructions. \"Use
+      the tool output. Return only the echo string.\"\nTool output: `{\"echo\":\"plain
+      fixture\",\"characters\":13}`.\nThe `echo` value is `\"plain fixture\"`.\n\nI
+      will output `plain fixture`.","type":"reasoning_text"}],"encrypted_content":null,"id":"rs_019f226a-9425-7dd0-a4aa-b7aed5c4d2a4","status":null,"summary":[],"type":"reasoning"},{"content":[{"annotations":[],"text":"\n\nplain
+      fixture","type":"output_text"}],"id":"msg_019f226a-943c-75c1-93f3-abe2a54080cc","role":"assistant","status":"completed","type":"message"}],"usage":{"input_tokens":359,"output_tokens":126,"total_tokens":485,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":110}},"incomplete_details":null,"error":null,"previous_response_id":"resp_019f226a-8ab1-7533-b933-1ef4ee3fa207","conversation_id":null,"instructions":null}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200

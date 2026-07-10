@@ -88,6 +88,7 @@ pub enum SSEEventType {
     // Built-in tool calls
     FileSearchCallSearching,
     FileSearchCallCompleted,
+    WebSearchCallInProgress,
     WebSearchCallSearching,
     WebSearchCallCompleted,
 
@@ -113,6 +114,7 @@ pub enum EventPayload {
         item_type: SSEItemType,
         output_index: u32,
         name: Option<String>,
+        namespace: Option<String>,
         call_id: Option<String>,
     },
 

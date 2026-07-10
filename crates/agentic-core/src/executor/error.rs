@@ -2,6 +2,7 @@ use http::StatusCode;
 use thiserror::Error;
 
 use crate::StorageError;
+use crate::tool::ToolError;
 use crate::utils::common::serialize_to_vec_or_default;
 
 #[non_exhaustive]
@@ -54,6 +55,9 @@ pub enum ExecutorError {
 
     #[error("invalid request: {0}")]
     InvalidRequest(String),
+
+    #[error("tool error: {0}")]
+    Tool(#[from] ToolError),
 }
 
 impl ExecutorError {
@@ -63,7 +67,8 @@ impl ExecutorError {
         match self {
             Self::Storage(e) if e.is_not_found() => StatusCode::NOT_FOUND,
             Self::LLMRequest { status, .. } => *status,
-            Self::InvalidRequest(_) | Self::JsonError(_) => StatusCode::BAD_REQUEST,
+            Self::Tool(ToolError::Config(_)) | Self::InvalidRequest(_) | Self::JsonError(_) => StatusCode::BAD_REQUEST,
+            Self::Tool(ToolError::Execution(_)) => StatusCode::BAD_GATEWAY,
             Self::ParseError(_) => StatusCode::UNPROCESSABLE_ENTITY,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -75,7 +80,10 @@ impl ExecutorError {
         match self {
             Self::Storage(e) if e.is_not_found() => "not_found",
             Self::LLMRequest { .. } => "upstream_error",
-            Self::InvalidRequest(_) | Self::ParseError(_) | Self::JsonError(_) => "invalid_request_error",
+            Self::Tool(ToolError::Config(_)) | Self::InvalidRequest(_) | Self::ParseError(_) | Self::JsonError(_) => {
+                "invalid_request_error"
+            }
+            Self::Tool(ToolError::Execution(_)) => "tool_error",
             _ => "server_error",
         }
     }

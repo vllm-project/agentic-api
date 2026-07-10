@@ -1,0 +1,205 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: You must call mcp__agentic_fixture.add_numbers with numbers [8, 0] before
+        answering.
+      model: gpt-4o
+      store: true
+      tools:
+      - description: Codex namespace fixture for cassette recording.
+        name: mcp__agentic_fixture
+        tools:
+        - description: Add a list of numbers and return the total.
+          name: add_numbers
+          parameters:
+            additionalProperties: false
+            properties:
+              numbers:
+                items:
+                  type: number
+                minItems: 1
+                type: array
+            required:
+            - numbers
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      type: response.create
+    headers:
+      Authorization: Bearer ***
+    method: WEBSOCKET
+    path: /v1/responses
+    query_params: {}
+    transport: websocket
+  response:
+    headers:
+      transport: websocket
+    sse:
+    - 'data: {"type":"response.created","response":{"id":"resp_0fb6cf9318a38085006a46404e5b4881988ef1c9e2c1cd076b","object":"response","created_at":1782988878,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"namespace","description":"Codex
+      namespace fixture for cassette recording.","name":"mcp__agentic_fixture","tools":[{"type":"function","description":"Add
+      a list of numbers and return the total.","name":"add_numbers","parameters":{"type":"object","properties":{"numbers":{"type":"array","items":{"type":"number"},"minItems":1}},"required":["numbers"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0fb6cf9318a38085006a46404e5b4881988ef1c9e2c1cd076b","object":"response","created_at":1782988878,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"namespace","description":"Codex
+      namespace fixture for cassette recording.","name":"mcp__agentic_fixture","tools":[{"type":"function","description":"Add
+      a list of numbers and return the total.","name":"add_numbers","parameters":{"type":"object","properties":{"numbers":{"type":"array","items":{"type":"number"},"minItems":1}},"required":["numbers"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","type":"function_call","status":"in_progress","arguments":"","call_id":"call_tXWze9eLIu2utxbDkwDs3xSs","name":"add_numbers","namespace":"mcp__agentic_fixture"},"output_index":0,"sequence_number":2}
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"{\"","item_id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","obfuscation":"oxmRNwpYqcpItd","output_index":0,"sequence_number":3}
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"numbers","item_id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","obfuscation":"3TxgfW7sm","output_index":0,"sequence_number":4}
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"\":[","item_id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","obfuscation":"IMi5Txtnn4qtS","output_index":0,"sequence_number":5}
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"8","item_id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","obfuscation":"y3ZIWhcXIU9F3Xv","output_index":0,"sequence_number":6}
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":",","item_id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","obfuscation":"1OQ2wTvXlYFj3pD","output_index":0,"sequence_number":7}
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"0","item_id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","obfuscation":"KXnoiElKkc7FdzC","output_index":0,"sequence_number":8}
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"]}","item_id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","obfuscation":"YWJhdIQFRNGz2N","output_index":0,"sequence_number":9}
+
+      '
+    - 'data: {"type":"response.function_call_arguments.done","arguments":"{\"numbers\":[8,0]}","item_id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","output_index":0,"sequence_number":10}
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","type":"function_call","status":"completed","arguments":"{\"numbers\":[8,0]}","call_id":"call_tXWze9eLIu2utxbDkwDs3xSs","name":"add_numbers","namespace":"mcp__agentic_fixture"},"output_index":0,"sequence_number":11}
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_0fb6cf9318a38085006a46404e5b4881988ef1c9e2c1cd076b","object":"response","created_at":1782988878,"status":"completed","background":false,"completed_at":1782988879,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[{"id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","type":"function_call","status":"completed","arguments":"{\"numbers\":[8,0]}","call_id":"call_tXWze9eLIu2utxbDkwDs3xSs","name":"add_numbers","namespace":"mcp__agentic_fixture"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"namespace","description":"Codex
+      namespace fixture for cassette recording.","name":"mcp__agentic_fixture","tools":[{"type":"function","description":"Add
+      a list of numbers and return the total.","name":"add_numbers","parameters":{"type":"object","properties":{"numbers":{"type":"array","items":{"type":"number"},"minItems":1}},"required":["numbers"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":86,"input_tokens_details":{"cached_tokens":0},"output_tokens":21,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":107},"user":null,"metadata":{}},"sequence_number":12}
+
+      '
+    - 'data: [DONE]
+
+      '
+    status_code: 101
+    websocket:
+    - '{"type":"response.created","response":{"id":"resp_0fb6cf9318a38085006a46404e5b4881988ef1c9e2c1cd076b","object":"response","created_at":1782988878,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"namespace","description":"Codex
+      namespace fixture for cassette recording.","name":"mcp__agentic_fixture","tools":[{"type":"function","description":"Add
+      a list of numbers and return the total.","name":"add_numbers","parameters":{"type":"object","properties":{"numbers":{"type":"array","items":{"type":"number"},"minItems":1}},"required":["numbers"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}'
+    - '{"type":"response.in_progress","response":{"id":"resp_0fb6cf9318a38085006a46404e5b4881988ef1c9e2c1cd076b","object":"response","created_at":1782988878,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"namespace","description":"Codex
+      namespace fixture for cassette recording.","name":"mcp__agentic_fixture","tools":[{"type":"function","description":"Add
+      a list of numbers and return the total.","name":"add_numbers","parameters":{"type":"object","properties":{"numbers":{"type":"array","items":{"type":"number"},"minItems":1}},"required":["numbers"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}'
+    - '{"type":"response.output_item.added","item":{"id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","type":"function_call","status":"in_progress","arguments":"","call_id":"call_tXWze9eLIu2utxbDkwDs3xSs","name":"add_numbers","namespace":"mcp__agentic_fixture"},"output_index":0,"sequence_number":2}'
+    - '{"type":"response.function_call_arguments.delta","delta":"{\"","item_id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","obfuscation":"oxmRNwpYqcpItd","output_index":0,"sequence_number":3}'
+    - '{"type":"response.function_call_arguments.delta","delta":"numbers","item_id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","obfuscation":"3TxgfW7sm","output_index":0,"sequence_number":4}'
+    - '{"type":"response.function_call_arguments.delta","delta":"\":[","item_id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","obfuscation":"IMi5Txtnn4qtS","output_index":0,"sequence_number":5}'
+    - '{"type":"response.function_call_arguments.delta","delta":"8","item_id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","obfuscation":"y3ZIWhcXIU9F3Xv","output_index":0,"sequence_number":6}'
+    - '{"type":"response.function_call_arguments.delta","delta":",","item_id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","obfuscation":"1OQ2wTvXlYFj3pD","output_index":0,"sequence_number":7}'
+    - '{"type":"response.function_call_arguments.delta","delta":"0","item_id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","obfuscation":"KXnoiElKkc7FdzC","output_index":0,"sequence_number":8}'
+    - '{"type":"response.function_call_arguments.delta","delta":"]}","item_id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","obfuscation":"YWJhdIQFRNGz2N","output_index":0,"sequence_number":9}'
+    - '{"type":"response.function_call_arguments.done","arguments":"{\"numbers\":[8,0]}","item_id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","output_index":0,"sequence_number":10}'
+    - '{"type":"response.output_item.done","item":{"id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","type":"function_call","status":"completed","arguments":"{\"numbers\":[8,0]}","call_id":"call_tXWze9eLIu2utxbDkwDs3xSs","name":"add_numbers","namespace":"mcp__agentic_fixture"},"output_index":0,"sequence_number":11}'
+    - '{"type":"response.completed","response":{"id":"resp_0fb6cf9318a38085006a46404e5b4881988ef1c9e2c1cd076b","object":"response","created_at":1782988878,"status":"completed","background":false,"completed_at":1782988879,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[{"id":"fc_0fb6cf9318a38085006a46404f1f548198a56c2a98e63dfc68","type":"function_call","status":"completed","arguments":"{\"numbers\":[8,0]}","call_id":"call_tXWze9eLIu2utxbDkwDs3xSs","name":"add_numbers","namespace":"mcp__agentic_fixture"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"namespace","description":"Codex
+      namespace fixture for cassette recording.","name":"mcp__agentic_fixture","tools":[{"type":"function","description":"Add
+      a list of numbers and return the total.","name":"add_numbers","parameters":{"type":"object","properties":{"numbers":{"type":"array","items":{"type":"number"},"minItems":1}},"required":["numbers"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":86,"input_tokens_details":{"cached_tokens":0},"output_tokens":21,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":107},"user":null,"metadata":{}},"sequence_number":12}'
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: call_tXWze9eLIu2utxbDkwDs3xSs
+        output: '{"sum":8,"count":2}'
+        type: function_call_output
+      - content: Use the tool output. Return only the sum.
+        role: user
+        type: message
+      model: gpt-4o
+      previous_response_id: resp_0fb6cf9318a38085006a46404e5b4881988ef1c9e2c1cd076b
+      store: true
+      tools:
+      - description: Codex namespace fixture for cassette recording.
+        name: mcp__agentic_fixture
+        tools:
+        - description: Add a list of numbers and return the total.
+          name: add_numbers
+          parameters:
+            additionalProperties: false
+            properties:
+              numbers:
+                items:
+                  type: number
+                minItems: 1
+                type: array
+            required:
+            - numbers
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      type: response.create
+    headers:
+      Authorization: Bearer ***
+    method: WEBSOCKET
+    path: /v1/responses
+    query_params: {}
+    transport: websocket
+  response:
+    headers:
+      transport: websocket
+    sse:
+    - 'data: {"type":"response.created","response":{"id":"resp_0fb6cf9318a38085006a464050412881989f4c26a7c275d3ce","object":"response","created_at":1782988880,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0fb6cf9318a38085006a46404e5b4881988ef1c9e2c1cd076b","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"namespace","description":"Codex
+      namespace fixture for cassette recording.","name":"mcp__agentic_fixture","tools":[{"type":"function","description":"Add
+      a list of numbers and return the total.","name":"add_numbers","parameters":{"type":"object","properties":{"numbers":{"type":"array","items":{"type":"number"},"minItems":1}},"required":["numbers"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0fb6cf9318a38085006a464050412881989f4c26a7c275d3ce","object":"response","created_at":1782988880,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0fb6cf9318a38085006a46404e5b4881988ef1c9e2c1cd076b","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"namespace","description":"Codex
+      namespace fixture for cassette recording.","name":"mcp__agentic_fixture","tools":[{"type":"function","description":"Add
+      a list of numbers and return the total.","name":"add_numbers","parameters":{"type":"object","properties":{"numbers":{"type":"array","items":{"type":"number"},"minItems":1}},"required":["numbers"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_0fb6cf9318a38085006a464051028481989e88959f142a891e","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":2}
+
+      '
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0fb6cf9318a38085006a464051028481989e88959f142a891e","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"8","item_id":"msg_0fb6cf9318a38085006a464051028481989e88959f142a891e","logprobs":[],"obfuscation":"rwaQFz1hRa6ezgR","output_index":0,"sequence_number":4}
+
+      '
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0fb6cf9318a38085006a464051028481989e88959f142a891e","logprobs":[],"output_index":0,"sequence_number":5,"text":"8"}
+
+      '
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0fb6cf9318a38085006a464051028481989e88959f142a891e","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"8"},"sequence_number":6}
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_0fb6cf9318a38085006a464051028481989e88959f142a891e","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"8"}],"role":"assistant"},"output_index":0,"sequence_number":7}
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_0fb6cf9318a38085006a464050412881989f4c26a7c275d3ce","object":"response","created_at":1782988880,"status":"completed","background":false,"completed_at":1782988881,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[{"id":"msg_0fb6cf9318a38085006a464051028481989e88959f142a891e","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"8"}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0fb6cf9318a38085006a46404e5b4881988ef1c9e2c1cd076b","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"namespace","description":"Codex
+      namespace fixture for cassette recording.","name":"mcp__agentic_fixture","tools":[{"type":"function","description":"Add
+      a list of numbers and return the total.","name":"add_numbers","parameters":{"type":"object","properties":{"numbers":{"type":"array","items":{"type":"number"},"minItems":1}},"required":["numbers"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":143,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":146},"user":null,"metadata":{}},"sequence_number":8}
+
+      '
+    - 'data: [DONE]
+
+      '
+    status_code: 101
+    websocket:
+    - '{"type":"response.created","response":{"id":"resp_0fb6cf9318a38085006a464050412881989f4c26a7c275d3ce","object":"response","created_at":1782988880,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0fb6cf9318a38085006a46404e5b4881988ef1c9e2c1cd076b","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"namespace","description":"Codex
+      namespace fixture for cassette recording.","name":"mcp__agentic_fixture","tools":[{"type":"function","description":"Add
+      a list of numbers and return the total.","name":"add_numbers","parameters":{"type":"object","properties":{"numbers":{"type":"array","items":{"type":"number"},"minItems":1}},"required":["numbers"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}'
+    - '{"type":"response.in_progress","response":{"id":"resp_0fb6cf9318a38085006a464050412881989f4c26a7c275d3ce","object":"response","created_at":1782988880,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0fb6cf9318a38085006a46404e5b4881988ef1c9e2c1cd076b","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"namespace","description":"Codex
+      namespace fixture for cassette recording.","name":"mcp__agentic_fixture","tools":[{"type":"function","description":"Add
+      a list of numbers and return the total.","name":"add_numbers","parameters":{"type":"object","properties":{"numbers":{"type":"array","items":{"type":"number"},"minItems":1}},"required":["numbers"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}'
+    - '{"type":"response.output_item.added","item":{"id":"msg_0fb6cf9318a38085006a464051028481989e88959f142a891e","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":2}'
+    - '{"type":"response.content_part.added","content_index":0,"item_id":"msg_0fb6cf9318a38085006a464051028481989e88959f142a891e","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"8","item_id":"msg_0fb6cf9318a38085006a464051028481989e88959f142a891e","logprobs":[],"obfuscation":"rwaQFz1hRa6ezgR","output_index":0,"sequence_number":4}'
+    - '{"type":"response.output_text.done","content_index":0,"item_id":"msg_0fb6cf9318a38085006a464051028481989e88959f142a891e","logprobs":[],"output_index":0,"sequence_number":5,"text":"8"}'
+    - '{"type":"response.content_part.done","content_index":0,"item_id":"msg_0fb6cf9318a38085006a464051028481989e88959f142a891e","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"8"},"sequence_number":6}'
+    - '{"type":"response.output_item.done","item":{"id":"msg_0fb6cf9318a38085006a464051028481989e88959f142a891e","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"8"}],"role":"assistant"},"output_index":0,"sequence_number":7}'
+    - '{"type":"response.completed","response":{"id":"resp_0fb6cf9318a38085006a464050412881989f4c26a7c275d3ce","object":"response","created_at":1782988880,"status":"completed","background":false,"completed_at":1782988881,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4o-2024-08-06","moderation":null,"output":[{"id":"msg_0fb6cf9318a38085006a464051028481989e88959f142a891e","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"8"}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0fb6cf9318a38085006a46404e5b4881988ef1c9e2c1cd076b","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"namespace","description":"Codex
+      namespace fixture for cassette recording.","name":"mcp__agentic_fixture","tools":[{"type":"function","description":"Add
+      a list of numbers and return the total.","name":"add_numbers","parameters":{"type":"object","properties":{"numbers":{"type":"array","items":{"type":"number"},"minItems":1}},"required":["numbers"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":143,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":146},"user":null,"metadata":{}},"sequence_number":8}'

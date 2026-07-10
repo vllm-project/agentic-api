@@ -1,0 +1,1701 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: You must call mcp__agentic_fixture.add_numbers with numbers [8, 0] before
+        answering.
+      model: Qwen/Qwen3.6-35B-A3B
+      store: true
+      tools:
+      - description: Codex namespace fixture for cassette recording.
+        name: mcp__agentic_fixture
+        tools:
+        - description: Add a list of numbers and return the total.
+          name: add_numbers
+          parameters:
+            additionalProperties: false
+            properties:
+              numbers:
+                items:
+                  type: number
+                minItems: 1
+                type: array
+            required:
+            - numbers
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      type: response.create
+    headers: {}
+    method: WEBSOCKET
+    path: /v1/responses
+    query_params: {}
+    transport: websocket
+  response:
+    headers:
+      transport: websocket
+    sse:
+    - 'data: {"response":{"background":false,"completed_at":null,"conversation":null,"created_at":1782988845,"error":null,"frequency_penalty":0.0,"id":"resp_019f226a-b20d-75d0-bb78-0db0d4530e41","incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"metadata":{},"model":"Qwen/Qwen3.6-35B-A3B","object":"response","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"default","status":"in_progress","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"description":"Add
+      a list of numbers and return the total.","name":"agentic_ns__mcp__agentic_fixture__add_numbers","parameters":{"additionalProperties":false,"properties":{"numbers":{"items":{"type":"number"},"minItems":1,"type":"array"}},"required":["numbers"],"type":"object"},"strict":true,"type":"function"}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null},"sequence_number":0,"type":"response.created"}
+
+      '
+    - 'data: {"response":{"background":false,"completed_at":null,"conversation":null,"created_at":1782988845,"error":null,"frequency_penalty":0.0,"id":"resp_019f226a-b20d-75d0-bb78-0db0d4530e41","incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"metadata":{},"model":"Qwen/Qwen3.6-35B-A3B","object":"response","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"default","status":"in_progress","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"description":"Add
+      a list of numbers and return the total.","name":"agentic_ns__mcp__agentic_fixture__add_numbers","parameters":{"additionalProperties":false,"properties":{"numbers":{"items":{"type":"number"},"minItems":1,"type":"array"}},"required":["numbers"],"type":"object"},"strict":true,"type":"function"}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null},"sequence_number":1,"type":"response.in_progress"}
+
+      '
+    - 'data: {"item":{"content":[],"id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","summary":[],"type":"reasoning"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
+
+      '
+    - 'data: {"content_index":0,"delta":"Thinking","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":3,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" Process:\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":4,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"1. ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":5,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" **Analyze","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":6,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" User Input**:","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":7,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" The user explicitly","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":8,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" requires","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":9,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" me to call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":10,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" the","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":11,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" tool `m","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":12,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"cp__ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":13,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"entic_fixture.add","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":14,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"_numbers` with","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":15,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" the argument","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":16,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" `numbers`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":17,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" set","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":18,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" to `[8","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":19,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":", 0","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":20,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"]`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":21,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" *","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":22,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"before* answering","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":23,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":".\n2","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":24,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":".  **","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":25,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"Identify Tool","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":26,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"**: The","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":27,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" tool","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":28,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" is `ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":29,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"entic_ns__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":30,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"mcp__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":31,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"agentic_fixture","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":32,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"__add_numbers","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":33,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"`.\n3","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":34,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":".  **","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":35,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"Check Parameters**:","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":36,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" `","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":37,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"numbers` is","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":38,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" an array of","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":39,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" numbers, required","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":40,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":".","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":41,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" User","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":42,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" provided `[8","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":43,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":", 0","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":44,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"]`.\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":45,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"4. ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":46,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" **Construct","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":47,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" Tool Call**:","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":48,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" I","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":49,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" need","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":50,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" to generate","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":51,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" a","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":52,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" tool call with","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":53,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" the exact function","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":54,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" name and parameters","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":55,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":".\n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":56,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" - Function:","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":57,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" `agentic","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":58,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"_ns__m","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":59,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"cp__ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":60,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"entic_fixture__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":61,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"add_numbers`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":62,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":63,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" Arguments: `","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":64,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"{\"numbers\":","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":65,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" [8,","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":66,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" 0]","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":67,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"}`\n5","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":68,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":".  **","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":69,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"Execute Tool Call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":70,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"**: I","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":71,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" will output","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":72,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" the tool call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":73,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" block","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":74,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":". After","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":75,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" receiving the result","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":76,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":", I will","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":77,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" provide the final","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":78,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" answer.\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":79,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"   - Wait","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":80,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":", the prompt","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":81,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" says \"You","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":82,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" must call m","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":83,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"cp__ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":84,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"entic_fixture.add","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":85,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"_numbers with numbers","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":86,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" [8,","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":87,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" 0]","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":88,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" before answering.\"","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":89,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":90,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"   - I","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":91,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" will just call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":92,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" the tool now","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":93,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":".\n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":94,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" - Parameters","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":95,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":": `{\"","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":96,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"numbers\": [","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":97,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"8, ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":98,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"0]}`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":99,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":100,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" Let","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":101,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"''s generate","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":102,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" the tool call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":103,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":".\u2705\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":104,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"   - Tool","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":105,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" name","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":106,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" matches","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":107,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":":","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":108,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" `agentic","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":109,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"_ns__m","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":110,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"cp__ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":111,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"entic_fixture__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":112,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"add_numbers`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":113,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":114,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" Args","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":115,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":": `{\"","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":116,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"numbers\": [","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":117,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"8, ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":118,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"0]}`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":119,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":120,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" Ready","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":121,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":". \n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":122,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"   - I","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":123,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"''ll","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":124,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" output the tool","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":125,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" call.","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":126,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\ud83d\udc47","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":127,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\ud83c\udffc\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":128,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"   - Note","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":129,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":": The","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":130,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" user","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":131,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" prompt","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":132,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" says \"m","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":133,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"cp__ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":134,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"entic_fixture.add","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":135,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"_numbers\", but","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":136,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" the registered","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":137,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" tool name","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":138,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" is `ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":139,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"entic_ns__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":140,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"mcp__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":141,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"agentic_fixture","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":142,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"__add_numbers","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":143,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"`. I will","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":144,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" use the registered","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":145,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" tool","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":146,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" name.\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":147,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"   - Proceed","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":148,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":". \n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":149,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" - Output matches","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":150,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" tool call format","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":151,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":". \n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":152,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"   - [","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":153,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"Self","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":154,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"-Correction","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":155,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"/Verification during","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":156,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" thought]\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":157,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"   - Check","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":158,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" function","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":159,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" definition: `","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":160,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"agentic_ns","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":161,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"__mcp","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":162,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"__agentic","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":163,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"_fixture__add","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":164,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"_numbers`\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":165,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"   - Parameters","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":166,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":": `numbers","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":167,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"` (array","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":168,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" of numbers,","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":169,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" minItems ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":170,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"1,","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":171,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" required)\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":172,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"   - User","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":173,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" wants","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":174,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" `[","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":175,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"8, ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":176,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"0]`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":177,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":178,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" All good.","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":179,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" \n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":180,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"   - Generate","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":181,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":".","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":182,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" \n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":183,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" [","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":184,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"Output","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":185,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" Generation] ->","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":186,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" `","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":187,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"{\"name","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":188,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\": \"ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":189,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"entic_ns__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":190,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"mcp__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":191,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"agentic_fixture","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":192,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"__add_numbers","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":193,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\", \"arguments","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":194,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\": {\"numbers","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":195,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\": [8","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":196,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":", 0","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":197,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"]}}`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":198,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" ->","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":199,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" Wait, standard","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":200,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" format for","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":201,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" tool calls in","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":202,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" this environment is","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":203,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" usually just the","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":204,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" function call block","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":205,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":". I will","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":206,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" produce it correctly","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":207,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":".\n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":208,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" - Done","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":209,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":". \n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":210,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" - Proceeds","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":211,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":". \n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":212,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" - [Output","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":213,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"] Tool","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":214,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" call.","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":215,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" \n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":216,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" (Self-C","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":217,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"orrection/","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":218,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"Refinement during","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":219,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" thought) I","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":220,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" should just output","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":221,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" the tool call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":222,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" exactly","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":223,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" as requested.","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":224,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":225,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"   - `","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":226,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":227,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":": default","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":228,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":":","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":229,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"agentic_ns","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":230,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"__mcp","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":231,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"__agentic","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":232,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"_fixture__add","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":233,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"_numbers{\"","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":234,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"numbers\": [","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":235,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"8, ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":236,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"0]}`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":237,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" -> Standard","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":238,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" format. I","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":239,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"''ll follow the","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":240,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" system","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":241,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"''s expected format","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":242,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":".\n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":243,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" - Actually,","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":244,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" the prompt says","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":245,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" \"You must","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":246,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" call mcp","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":247,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"__agentic","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":248,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"_fixture.add_numbers","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":249,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" with numbers [","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":250,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"8, ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":251,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"0] before","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":252,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" answering.\" I","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":253,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" will just generate","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":254,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" the tool call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":255,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":".\n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":256,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" - Let","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":257,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"''s do it","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":258,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":". \n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":259,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" - [Done","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":260,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"] \n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":261,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" - Output matches","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":262,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":".","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":263,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" \n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":264,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" Proceeds.","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":265,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" \n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":266,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" *Self-C","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":267,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"orrection/","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":268,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"Note during generation","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":269,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"*: I will","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":270,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" just produce","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":271,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" the tool call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":272,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" block. The","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":273,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" system will execute","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":274,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" it. I","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":275,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" don","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":276,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"''t need to","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":277,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" overthink it","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":278,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":".\n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":279,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" - Tool:","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":280,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" `agentic","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":281,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"_ns__m","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":282,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"cp__ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":283,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"entic_fixture__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":284,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"add_numbers`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":285,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":286,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" Args: `","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":287,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"{\"numbers\":","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":288,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" [8,","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":289,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" 0]","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":290,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"}`\n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":291,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" - Done","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":292,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":". \n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":293,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" - [Output","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":294,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" Generation] ->","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":295,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" *Proceeds","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":296,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":297,"text":"Thinking
+      Process:\n1.  **Analyze User Input**: The user explicitly requires me to call
+      the tool `mcp__agentic_fixture.add_numbers` with the argument `numbers` set
+      to `[8, 0]` *before* answering.\n2.  **Identify Tool**: The tool is `agentic_ns__mcp__agentic_fixture__add_numbers`.\n3.  **Check
+      Parameters**: `numbers` is an array of numbers, required. User provided `[8,
+      0]`.\n4.  **Construct Tool Call**: I need to generate a tool call with the exact
+      function name and parameters.\n   - Function: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   -
+      Arguments: `{\"numbers\": [8, 0]}`\n5.  **Execute Tool Call**: I will output
+      the tool call block. After receiving the result, I will provide the final answer.\n   -
+      Wait, the prompt says \"You must call mcp__agentic_fixture.add_numbers with
+      numbers [8, 0] before answering.\"\n   - I will just call the tool now.\n   -
+      Parameters: `{\"numbers\": [8, 0]}`\n   - Let''s generate the tool call.\u2705\n   -
+      Tool name matches: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   - Args:
+      `{\"numbers\": [8, 0]}`\n   - Ready. \n   - I''ll output the tool call.\ud83d\udc47\ud83c\udffc\n   -
+      Note: The user prompt says \"mcp__agentic_fixture.add_numbers\", but the registered
+      tool name is `agentic_ns__mcp__agentic_fixture__add_numbers`. I will use the
+      registered tool name.\n   - Proceed. \n   - Output matches tool call format.
+      \n   - [Self-Correction/Verification during thought]\n   - Check function definition:
+      `agentic_ns__mcp__agentic_fixture__add_numbers`\n   - Parameters: `numbers`
+      (array of numbers, minItems 1, required)\n   - User wants `[8, 0]`\n   - All
+      good. \n   - Generate. \n   - [Output Generation] -> `{\"name\": \"agentic_ns__mcp__agentic_fixture__add_numbers\",
+      \"arguments\": {\"numbers\": [8, 0]}}` -> Wait, standard format for tool calls
+      in this environment is usually just the function call block. I will produce
+      it correctly.\n   - Done. \n   - Proceeds. \n   - [Output] Tool call. \n   -
+      (Self-Correction/Refinement during thought) I should just output the tool call
+      exactly as requested.\n   - `call: default:agentic_ns__mcp__agentic_fixture__add_numbers{\"numbers\":
+      [8, 0]}` -> Standard format. I''ll follow the system''s expected format.\n   -
+      Actually, the prompt says \"You must call mcp__agentic_fixture.add_numbers with
+      numbers [8, 0] before answering.\" I will just generate the tool call.\n   -
+      Let''s do it. \n   - [Done] \n   - Output matches. \n   - Proceeds. \n   - *Self-Correction/Note
+      during generation*: I will just produce the tool call block. The system will
+      execute it. I don''t need to overthink it.\n   - Tool: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   -
+      Args: `{\"numbers\": [8, 0]}`\n   - Done. \n   - [Output Generation] -> *Proceeds","type":"response.reasoning_text.done"}
+
+      '
+    - 'data: {"item":{"content":[{"text":"Thinking Process:\n1.  **Analyze User Input**:
+      The user explicitly requires me to call the tool `mcp__agentic_fixture.add_numbers`
+      with the argument `numbers` set to `[8, 0]` *before* answering.\n2.  **Identify
+      Tool**: The tool is `agentic_ns__mcp__agentic_fixture__add_numbers`.\n3.  **Check
+      Parameters**: `numbers` is an array of numbers, required. User provided `[8,
+      0]`.\n4.  **Construct Tool Call**: I need to generate a tool call with the exact
+      function name and parameters.\n   - Function: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   -
+      Arguments: `{\"numbers\": [8, 0]}`\n5.  **Execute Tool Call**: I will output
+      the tool call block. After receiving the result, I will provide the final answer.\n   -
+      Wait, the prompt says \"You must call mcp__agentic_fixture.add_numbers with
+      numbers [8, 0] before answering.\"\n   - I will just call the tool now.\n   -
+      Parameters: `{\"numbers\": [8, 0]}`\n   - Let''s generate the tool call.\u2705\n   -
+      Tool name matches: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   - Args:
+      `{\"numbers\": [8, 0]}`\n   - Ready. \n   - I''ll output the tool call.\ud83d\udc47\ud83c\udffc\n   -
+      Note: The user prompt says \"mcp__agentic_fixture.add_numbers\", but the registered
+      tool name is `agentic_ns__mcp__agentic_fixture__add_numbers`. I will use the
+      registered tool name.\n   - Proceed. \n   - Output matches tool call format.
+      \n   - [Self-Correction/Verification during thought]\n   - Check function definition:
+      `agentic_ns__mcp__agentic_fixture__add_numbers`\n   - Parameters: `numbers`
+      (array of numbers, minItems 1, required)\n   - User wants `[8, 0]`\n   - All
+      good. \n   - Generate. \n   - [Output Generation] -> `{\"name\": \"agentic_ns__mcp__agentic_fixture__add_numbers\",
+      \"arguments\": {\"numbers\": [8, 0]}}` -> Wait, standard format for tool calls
+      in this environment is usually just the function call block. I will produce
+      it correctly.\n   - Done. \n   - Proceeds. \n   - [Output] Tool call. \n   -
+      (Self-Correction/Refinement during thought) I should just output the tool call
+      exactly as requested.\n   - `call: default:agentic_ns__mcp__agentic_fixture__add_numbers{\"numbers\":
+      [8, 0]}` -> Standard format. I''ll follow the system''s expected format.\n   -
+      Actually, the prompt says \"You must call mcp__agentic_fixture.add_numbers with
+      numbers [8, 0] before answering.\" I will just generate the tool call.\n   -
+      Let''s do it. \n   - [Done] \n   - Output matches. \n   - Proceeds. \n   - *Self-Correction/Note
+      during generation*: I will just produce the tool call block. The system will
+      execute it. I don''t need to overthink it.\n   - Tool: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   -
+      Args: `{\"numbers\": [8, 0]}`\n   - Done. \n   - [Output Generation] -> *Proceeds","type":"reasoning_text"}],"id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","summary":[],"type":"reasoning"},"output_index":0,"sequence_number":298,"type":"response.output_item.done"}
+
+      '
+    - 'data: {"item":{"content":[],"id":"msg_019f226a-c165-7f71-903b-428bef5f7dd5","role":"assistant","status":"in_progress","type":"message"},"output_index":1,"sequence_number":299,"type":"response.output_item.added"}
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_019f226a-c165-7f71-903b-428bef5f7dd5","output_index":1,"part":{"annotations":[],"logprobs":[],"text":"","type":"output_text"},"sequence_number":300,"type":"response.content_part.added"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\n\n","item_id":"msg_019f226a-c165-7f71-903b-428bef5f7dd5","logprobs":[],"output_index":1,"sequence_number":301,"type":"response.output_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_019f226a-c165-7f71-903b-428bef5f7dd5","logprobs":[],"output_index":1,"sequence_number":302,"text":"\n\n","type":"response.output_text.done"}
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_019f226a-c165-7f71-903b-428bef5f7dd5","output_index":1,"part":{"annotations":[],"logprobs":[],"text":"\n\n","type":"output_text"},"sequence_number":303,"type":"response.content_part.done"}
+
+      '
+    - 'data: {"item":{"content":[{"annotations":[],"logprobs":[],"text":"\n\n","type":"output_text"}],"id":"msg_019f226a-c165-7f71-903b-428bef5f7dd5","role":"assistant","status":"completed","type":"message"},"output_index":1,"sequence_number":304,"type":"response.output_item.done"}
+
+      '
+    - 'data: {"item":{"arguments":"","call_id":"call_8862878637354570a6a8d216","id":"fc_019f226a-c166-7db0-89e4-68a17cd5ab89","name":"add_numbers","namespace":"mcp__agentic_fixture","status":"in_progress","type":"function_call"},"output_index":2,"sequence_number":305,"type":"response.output_item.added"}
+
+      '
+    - 'data: {"content_index":0,"delta":"{}","item_id":"fc_019f226a-c166-7db0-89e4-68a17cd5ab89","output_index":2,"sequence_number":306,"type":"response.function_call_arguments.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"{","item_id":"fc_019f226a-c166-7db0-89e4-68a17cd5ab89","output_index":2,"sequence_number":307,"type":"response.function_call_arguments.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\"numbers\": [8, 0]","item_id":"fc_019f226a-c166-7db0-89e4-68a17cd5ab89","output_index":2,"sequence_number":308,"type":"response.function_call_arguments.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"}","item_id":"fc_019f226a-c166-7db0-89e4-68a17cd5ab89","output_index":2,"sequence_number":309,"type":"response.function_call_arguments.delta"}
+
+      '
+    - 'data: {"arguments":"{\"numbers\": [8, 0]}","content_index":0,"item_id":"fc_019f226a-c166-7db0-89e4-68a17cd5ab89","output_index":2,"sequence_number":310,"type":"response.function_call_arguments.done"}
+
+      '
+    - 'data: {"item":{"arguments":"{\"numbers\": [8, 0]}","call_id":"call_8862878637354570a6a8d216","id":"fc_019f226a-c166-7db0-89e4-68a17cd5ab89","name":"add_numbers","namespace":"mcp__agentic_fixture","status":"completed","type":"function_call"},"output_index":2,"sequence_number":311,"type":"response.output_item.done"}
+
+      '
+    - 'data: {"response":{"background":false,"completed_at":1782988849,"conversation":null,"created_at":1782988845,"error":null,"frequency_penalty":0.0,"id":"resp_019f226a-b20d-75d0-bb78-0db0d4530e41","incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"metadata":{},"model":"Qwen/Qwen3.6-35B-A3B","object":"response","output":[{"content":[{"text":"Thinking
+      Process:\n1.  **Analyze User Input**: The user explicitly requires me to call
+      the tool `mcp__agentic_fixture.add_numbers` with the argument `numbers` set
+      to `[8, 0]` *before* answering.\n2.  **Identify Tool**: The tool is `agentic_ns__mcp__agentic_fixture__add_numbers`.\n3.  **Check
+      Parameters**: `numbers` is an array of numbers, required. User provided `[8,
+      0]`.\n4.  **Construct Tool Call**: I need to generate a tool call with the exact
+      function name and parameters.\n   - Function: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   -
+      Arguments: `{\"numbers\": [8, 0]}`\n5.  **Execute Tool Call**: I will output
+      the tool call block. After receiving the result, I will provide the final answer.\n   -
+      Wait, the prompt says \"You must call mcp__agentic_fixture.add_numbers with
+      numbers [8, 0] before answering.\"\n   - I will just call the tool now.\n   -
+      Parameters: `{\"numbers\": [8, 0]}`\n   - Let''s generate the tool call.\u2705\n   -
+      Tool name matches: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   - Args:
+      `{\"numbers\": [8, 0]}`\n   - Ready. \n   - I''ll output the tool call.\ud83d\udc47\ud83c\udffc\n   -
+      Note: The user prompt says \"mcp__agentic_fixture.add_numbers\", but the registered
+      tool name is `agentic_ns__mcp__agentic_fixture__add_numbers`. I will use the
+      registered tool name.\n   - Proceed. \n   - Output matches tool call format.
+      \n   - [Self-Correction/Verification during thought]\n   - Check function definition:
+      `agentic_ns__mcp__agentic_fixture__add_numbers`\n   - Parameters: `numbers`
+      (array of numbers, minItems 1, required)\n   - User wants `[8, 0]`\n   - All
+      good. \n   - Generate. \n   - [Output Generation] -> `{\"name\": \"agentic_ns__mcp__agentic_fixture__add_numbers\",
+      \"arguments\": {\"numbers\": [8, 0]}}` -> Wait, standard format for tool calls
+      in this environment is usually just the function call block. I will produce
+      it correctly.\n   - Done. \n   - Proceeds. \n   - [Output] Tool call. \n   -
+      (Self-Correction/Refinement during thought) I should just output the tool call
+      exactly as requested.\n   - `call: default:agentic_ns__mcp__agentic_fixture__add_numbers{\"numbers\":
+      [8, 0]}` -> Standard format. I''ll follow the system''s expected format.\n   -
+      Actually, the prompt says \"You must call mcp__agentic_fixture.add_numbers with
+      numbers [8, 0] before answering.\" I will just generate the tool call.\n   -
+      Let''s do it. \n   - [Done] \n   - Output matches. \n   - Proceeds. \n   - *Self-Correction/Note
+      during generation*: I will just produce the tool call block. The system will
+      execute it. I don''t need to overthink it.\n   - Tool: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   -
+      Args: `{\"numbers\": [8, 0]}`\n   - Done. \n   - [Output Generation] -> *Proceeds","type":"reasoning_text"}],"id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","summary":[],"type":"reasoning"},{"content":[{"annotations":[],"logprobs":[],"text":"\n\n","type":"output_text"}],"id":"msg_019f226a-c165-7f71-903b-428bef5f7dd5","role":"assistant","status":"completed","type":"message"},{"arguments":"{\"numbers\":
+      [8, 0]}","call_id":"call_8862878637354570a6a8d216","id":"fc_019f226a-c166-7db0-89e4-68a17cd5ab89","name":"add_numbers","namespace":"mcp__agentic_fixture","status":"completed","type":"function_call"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"default","status":"completed","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"description":"Add
+      a list of numbers and return the total.","name":"agentic_ns__mcp__agentic_fixture__add_numbers","parameters":{"additionalProperties":false,"properties":{"numbers":{"items":{"type":"number"},"minItems":1,"type":"array"}},"required":["numbers"],"type":"object"},"strict":true,"type":"function"}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":320,"input_tokens_details":{"cached_tokens":0},"output_tokens":820,"output_tokens_details":{"reasoning_tokens":749},"total_tokens":1140},"user":null},"sequence_number":312,"type":"response.completed"}
+
+      '
+    - 'data: [DONE]
+
+      '
+    status_code: 101
+    websocket:
+    - '{"response":{"background":false,"completed_at":null,"conversation":null,"created_at":1782988845,"error":null,"frequency_penalty":0.0,"id":"resp_019f226a-b20d-75d0-bb78-0db0d4530e41","incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"metadata":{},"model":"Qwen/Qwen3.6-35B-A3B","object":"response","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"default","status":"in_progress","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"description":"Add
+      a list of numbers and return the total.","name":"agentic_ns__mcp__agentic_fixture__add_numbers","parameters":{"additionalProperties":false,"properties":{"numbers":{"items":{"type":"number"},"minItems":1,"type":"array"}},"required":["numbers"],"type":"object"},"strict":true,"type":"function"}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null},"sequence_number":0,"type":"response.created"}'
+    - '{"response":{"background":false,"completed_at":null,"conversation":null,"created_at":1782988845,"error":null,"frequency_penalty":0.0,"id":"resp_019f226a-b20d-75d0-bb78-0db0d4530e41","incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"metadata":{},"model":"Qwen/Qwen3.6-35B-A3B","object":"response","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"default","status":"in_progress","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"description":"Add
+      a list of numbers and return the total.","name":"agentic_ns__mcp__agentic_fixture__add_numbers","parameters":{"additionalProperties":false,"properties":{"numbers":{"items":{"type":"number"},"minItems":1,"type":"array"}},"required":["numbers"],"type":"object"},"strict":true,"type":"function"}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null},"sequence_number":1,"type":"response.in_progress"}'
+    - '{"item":{"content":[],"id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","summary":[],"type":"reasoning"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}'
+    - '{"content_index":0,"delta":"Thinking","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":3,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" Process:\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":4,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"1. ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":5,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" **Analyze","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":6,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" User Input**:","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":7,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" The user explicitly","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":8,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" requires","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":9,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" me to call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":10,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" the","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":11,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" tool `m","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":12,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"cp__ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":13,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"entic_fixture.add","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":14,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"_numbers` with","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":15,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" the argument","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":16,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" `numbers`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":17,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" set","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":18,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" to `[8","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":19,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":", 0","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":20,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"]`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":21,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" *","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":22,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"before* answering","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":23,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":".\n2","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":24,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":".  **","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":25,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"Identify Tool","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":26,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"**: The","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":27,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" tool","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":28,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" is `ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":29,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"entic_ns__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":30,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"mcp__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":31,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"agentic_fixture","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":32,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"__add_numbers","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":33,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"`.\n3","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":34,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":".  **","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":35,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"Check Parameters**:","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":36,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" `","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":37,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"numbers` is","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":38,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" an array of","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":39,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" numbers, required","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":40,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":".","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":41,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" User","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":42,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" provided `[8","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":43,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":", 0","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":44,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"]`.\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":45,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"4. ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":46,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" **Construct","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":47,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" Tool Call**:","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":48,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" I","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":49,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" need","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":50,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" to generate","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":51,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" a","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":52,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" tool call with","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":53,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" the exact function","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":54,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" name and parameters","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":55,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":".\n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":56,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" - Function:","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":57,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" `agentic","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":58,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"_ns__m","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":59,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"cp__ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":60,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"entic_fixture__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":61,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"add_numbers`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":62,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"\n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":63,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" Arguments: `","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":64,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"{\"numbers\":","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":65,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" [8,","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":66,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" 0]","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":67,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"}`\n5","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":68,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":".  **","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":69,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"Execute Tool Call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":70,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"**: I","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":71,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" will output","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":72,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" the tool call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":73,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" block","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":74,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":". After","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":75,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" receiving the result","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":76,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":", I will","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":77,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" provide the final","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":78,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" answer.\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":79,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"   - Wait","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":80,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":", the prompt","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":81,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" says \"You","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":82,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" must call m","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":83,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"cp__ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":84,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"entic_fixture.add","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":85,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"_numbers with numbers","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":86,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" [8,","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":87,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" 0]","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":88,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" before answering.\"","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":89,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":90,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"   - I","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":91,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" will just call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":92,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" the tool now","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":93,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":".\n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":94,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" - Parameters","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":95,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":": `{\"","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":96,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"numbers\": [","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":97,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"8, ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":98,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"0]}`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":99,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"\n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":100,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" Let","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":101,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"''s generate","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":102,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" the tool call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":103,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":".✅\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":104,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"   - Tool","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":105,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" name","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":106,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" matches","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":107,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":":","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":108,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" `agentic","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":109,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"_ns__m","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":110,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"cp__ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":111,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"entic_fixture__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":112,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"add_numbers`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":113,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"\n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":114,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" Args","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":115,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":": `{\"","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":116,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"numbers\": [","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":117,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"8, ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":118,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"0]}`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":119,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"\n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":120,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" Ready","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":121,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":". \n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":122,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"   - I","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":123,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"''ll","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":124,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" output the tool","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":125,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" call.","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":126,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"👇","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":127,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"🏼\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":128,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"   - Note","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":129,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":": The","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":130,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" user","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":131,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" prompt","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":132,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" says \"m","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":133,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"cp__ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":134,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"entic_fixture.add","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":135,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"_numbers\", but","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":136,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" the registered","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":137,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" tool name","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":138,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" is `ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":139,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"entic_ns__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":140,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"mcp__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":141,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"agentic_fixture","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":142,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"__add_numbers","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":143,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"`. I will","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":144,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" use the registered","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":145,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" tool","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":146,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" name.\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":147,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"   - Proceed","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":148,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":". \n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":149,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" - Output matches","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":150,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" tool call format","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":151,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":". \n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":152,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"   - [","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":153,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"Self","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":154,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"-Correction","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":155,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"/Verification during","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":156,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" thought]\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":157,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"   - Check","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":158,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" function","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":159,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" definition: `","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":160,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"agentic_ns","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":161,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"__mcp","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":162,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"__agentic","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":163,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"_fixture__add","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":164,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"_numbers`\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":165,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"   - Parameters","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":166,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":": `numbers","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":167,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"` (array","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":168,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" of numbers,","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":169,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" minItems ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":170,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"1,","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":171,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" required)\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":172,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"   - User","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":173,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" wants","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":174,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" `[","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":175,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"8, ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":176,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"0]`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":177,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"\n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":178,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" All good.","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":179,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" \n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":180,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"   - Generate","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":181,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":".","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":182,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" \n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":183,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" [","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":184,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"Output","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":185,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" Generation] ->","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":186,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" `","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":187,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"{\"name","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":188,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"\": \"ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":189,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"entic_ns__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":190,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"mcp__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":191,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"agentic_fixture","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":192,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"__add_numbers","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":193,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"\", \"arguments","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":194,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"\": {\"numbers","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":195,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"\": [8","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":196,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":", 0","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":197,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"]}}`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":198,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" ->","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":199,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" Wait, standard","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":200,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" format for","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":201,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" tool calls in","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":202,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" this environment is","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":203,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" usually just the","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":204,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" function call block","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":205,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":". I will","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":206,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" produce it correctly","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":207,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":".\n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":208,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" - Done","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":209,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":". \n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":210,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" - Proceeds","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":211,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":". \n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":212,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" - [Output","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":213,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"] Tool","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":214,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" call.","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":215,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" \n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":216,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" (Self-C","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":217,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"orrection/","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":218,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"Refinement during","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":219,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" thought) I","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":220,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" should just output","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":221,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" the tool call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":222,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" exactly","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":223,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" as requested.","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":224,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"\n","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":225,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"   - `","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":226,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":227,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":": default","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":228,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":":","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":229,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"agentic_ns","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":230,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"__mcp","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":231,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"__agentic","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":232,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"_fixture__add","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":233,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"_numbers{\"","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":234,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"numbers\": [","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":235,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"8, ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":236,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"0]}`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":237,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" -> Standard","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":238,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" format. I","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":239,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"''ll follow the","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":240,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" system","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":241,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"''s expected format","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":242,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":".\n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":243,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" - Actually,","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":244,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" the prompt says","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":245,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" \"You must","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":246,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" call mcp","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":247,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"__agentic","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":248,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"_fixture.add_numbers","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":249,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" with numbers [","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":250,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"8, ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":251,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"0] before","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":252,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" answering.\" I","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":253,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" will just generate","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":254,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" the tool call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":255,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":".\n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":256,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" - Let","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":257,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"''s do it","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":258,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":". \n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":259,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" - [Done","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":260,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"] \n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":261,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" - Output matches","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":262,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":".","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":263,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" \n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":264,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" Proceeds.","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":265,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" \n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":266,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" *Self-C","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":267,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"orrection/","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":268,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"Note during generation","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":269,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"*: I will","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":270,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" just produce","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":271,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" the tool call","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":272,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" block. The","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":273,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" system will execute","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":274,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" it. I","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":275,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" don","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":276,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"''t need to","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":277,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" overthink it","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":278,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":".\n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":279,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" - Tool:","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":280,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" `agentic","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":281,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"_ns__m","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":282,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"cp__ag","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":283,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"entic_fixture__","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":284,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"add_numbers`","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":285,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"\n   -","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":286,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" Args: `","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":287,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"{\"numbers\":","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":288,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" [8,","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":289,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" 0]","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":290,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"}`\n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":291,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" - Done","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":292,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":". \n  ","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":293,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" - [Output","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":294,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" Generation] ->","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":295,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" *Proceeds","item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":296,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"item_id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","output_index":0,"sequence_number":297,"text":"Thinking
+      Process:\n1.  **Analyze User Input**: The user explicitly requires me to call
+      the tool `mcp__agentic_fixture.add_numbers` with the argument `numbers` set
+      to `[8, 0]` *before* answering.\n2.  **Identify Tool**: The tool is `agentic_ns__mcp__agentic_fixture__add_numbers`.\n3.  **Check
+      Parameters**: `numbers` is an array of numbers, required. User provided `[8,
+      0]`.\n4.  **Construct Tool Call**: I need to generate a tool call with the exact
+      function name and parameters.\n   - Function: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   -
+      Arguments: `{\"numbers\": [8, 0]}`\n5.  **Execute Tool Call**: I will output
+      the tool call block. After receiving the result, I will provide the final answer.\n   -
+      Wait, the prompt says \"You must call mcp__agentic_fixture.add_numbers with
+      numbers [8, 0] before answering.\"\n   - I will just call the tool now.\n   -
+      Parameters: `{\"numbers\": [8, 0]}`\n   - Let''s generate the tool call.✅\n   -
+      Tool name matches: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   - Args:
+      `{\"numbers\": [8, 0]}`\n   - Ready. \n   - I''ll output the tool call.👇🏼\n   -
+      Note: The user prompt says \"mcp__agentic_fixture.add_numbers\", but the registered
+      tool name is `agentic_ns__mcp__agentic_fixture__add_numbers`. I will use the
+      registered tool name.\n   - Proceed. \n   - Output matches tool call format.
+      \n   - [Self-Correction/Verification during thought]\n   - Check function definition:
+      `agentic_ns__mcp__agentic_fixture__add_numbers`\n   - Parameters: `numbers`
+      (array of numbers, minItems 1, required)\n   - User wants `[8, 0]`\n   - All
+      good. \n   - Generate. \n   - [Output Generation] -> `{\"name\": \"agentic_ns__mcp__agentic_fixture__add_numbers\",
+      \"arguments\": {\"numbers\": [8, 0]}}` -> Wait, standard format for tool calls
+      in this environment is usually just the function call block. I will produce
+      it correctly.\n   - Done. \n   - Proceeds. \n   - [Output] Tool call. \n   -
+      (Self-Correction/Refinement during thought) I should just output the tool call
+      exactly as requested.\n   - `call: default:agentic_ns__mcp__agentic_fixture__add_numbers{\"numbers\":
+      [8, 0]}` -> Standard format. I''ll follow the system''s expected format.\n   -
+      Actually, the prompt says \"You must call mcp__agentic_fixture.add_numbers with
+      numbers [8, 0] before answering.\" I will just generate the tool call.\n   -
+      Let''s do it. \n   - [Done] \n   - Output matches. \n   - Proceeds. \n   - *Self-Correction/Note
+      during generation*: I will just produce the tool call block. The system will
+      execute it. I don''t need to overthink it.\n   - Tool: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   -
+      Args: `{\"numbers\": [8, 0]}`\n   - Done. \n   - [Output Generation] -> *Proceeds","type":"response.reasoning_text.done"}'
+    - '{"item":{"content":[{"text":"Thinking Process:\n1.  **Analyze User Input**:
+      The user explicitly requires me to call the tool `mcp__agentic_fixture.add_numbers`
+      with the argument `numbers` set to `[8, 0]` *before* answering.\n2.  **Identify
+      Tool**: The tool is `agentic_ns__mcp__agentic_fixture__add_numbers`.\n3.  **Check
+      Parameters**: `numbers` is an array of numbers, required. User provided `[8,
+      0]`.\n4.  **Construct Tool Call**: I need to generate a tool call with the exact
+      function name and parameters.\n   - Function: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   -
+      Arguments: `{\"numbers\": [8, 0]}`\n5.  **Execute Tool Call**: I will output
+      the tool call block. After receiving the result, I will provide the final answer.\n   -
+      Wait, the prompt says \"You must call mcp__agentic_fixture.add_numbers with
+      numbers [8, 0] before answering.\"\n   - I will just call the tool now.\n   -
+      Parameters: `{\"numbers\": [8, 0]}`\n   - Let''s generate the tool call.✅\n   -
+      Tool name matches: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   - Args:
+      `{\"numbers\": [8, 0]}`\n   - Ready. \n   - I''ll output the tool call.👇🏼\n   -
+      Note: The user prompt says \"mcp__agentic_fixture.add_numbers\", but the registered
+      tool name is `agentic_ns__mcp__agentic_fixture__add_numbers`. I will use the
+      registered tool name.\n   - Proceed. \n   - Output matches tool call format.
+      \n   - [Self-Correction/Verification during thought]\n   - Check function definition:
+      `agentic_ns__mcp__agentic_fixture__add_numbers`\n   - Parameters: `numbers`
+      (array of numbers, minItems 1, required)\n   - User wants `[8, 0]`\n   - All
+      good. \n   - Generate. \n   - [Output Generation] -> `{\"name\": \"agentic_ns__mcp__agentic_fixture__add_numbers\",
+      \"arguments\": {\"numbers\": [8, 0]}}` -> Wait, standard format for tool calls
+      in this environment is usually just the function call block. I will produce
+      it correctly.\n   - Done. \n   - Proceeds. \n   - [Output] Tool call. \n   -
+      (Self-Correction/Refinement during thought) I should just output the tool call
+      exactly as requested.\n   - `call: default:agentic_ns__mcp__agentic_fixture__add_numbers{\"numbers\":
+      [8, 0]}` -> Standard format. I''ll follow the system''s expected format.\n   -
+      Actually, the prompt says \"You must call mcp__agentic_fixture.add_numbers with
+      numbers [8, 0] before answering.\" I will just generate the tool call.\n   -
+      Let''s do it. \n   - [Done] \n   - Output matches. \n   - Proceeds. \n   - *Self-Correction/Note
+      during generation*: I will just produce the tool call block. The system will
+      execute it. I don''t need to overthink it.\n   - Tool: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   -
+      Args: `{\"numbers\": [8, 0]}`\n   - Done. \n   - [Output Generation] -> *Proceeds","type":"reasoning_text"}],"id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","summary":[],"type":"reasoning"},"output_index":0,"sequence_number":298,"type":"response.output_item.done"}'
+    - '{"item":{"content":[],"id":"msg_019f226a-c165-7f71-903b-428bef5f7dd5","role":"assistant","status":"in_progress","type":"message"},"output_index":1,"sequence_number":299,"type":"response.output_item.added"}'
+    - '{"content_index":0,"item_id":"msg_019f226a-c165-7f71-903b-428bef5f7dd5","output_index":1,"part":{"annotations":[],"logprobs":[],"text":"","type":"output_text"},"sequence_number":300,"type":"response.content_part.added"}'
+    - '{"content_index":0,"delta":"\n\n","item_id":"msg_019f226a-c165-7f71-903b-428bef5f7dd5","logprobs":[],"output_index":1,"sequence_number":301,"type":"response.output_text.delta"}'
+    - '{"content_index":0,"item_id":"msg_019f226a-c165-7f71-903b-428bef5f7dd5","logprobs":[],"output_index":1,"sequence_number":302,"text":"\n\n","type":"response.output_text.done"}'
+    - '{"content_index":0,"item_id":"msg_019f226a-c165-7f71-903b-428bef5f7dd5","output_index":1,"part":{"annotations":[],"logprobs":[],"text":"\n\n","type":"output_text"},"sequence_number":303,"type":"response.content_part.done"}'
+    - '{"item":{"content":[{"annotations":[],"logprobs":[],"text":"\n\n","type":"output_text"}],"id":"msg_019f226a-c165-7f71-903b-428bef5f7dd5","role":"assistant","status":"completed","type":"message"},"output_index":1,"sequence_number":304,"type":"response.output_item.done"}'
+    - '{"item":{"arguments":"","call_id":"call_8862878637354570a6a8d216","id":"fc_019f226a-c166-7db0-89e4-68a17cd5ab89","name":"add_numbers","namespace":"mcp__agentic_fixture","status":"in_progress","type":"function_call"},"output_index":2,"sequence_number":305,"type":"response.output_item.added"}'
+    - '{"content_index":0,"delta":"{}","item_id":"fc_019f226a-c166-7db0-89e4-68a17cd5ab89","output_index":2,"sequence_number":306,"type":"response.function_call_arguments.delta"}'
+    - '{"content_index":0,"delta":"{","item_id":"fc_019f226a-c166-7db0-89e4-68a17cd5ab89","output_index":2,"sequence_number":307,"type":"response.function_call_arguments.delta"}'
+    - '{"content_index":0,"delta":"\"numbers\": [8, 0]","item_id":"fc_019f226a-c166-7db0-89e4-68a17cd5ab89","output_index":2,"sequence_number":308,"type":"response.function_call_arguments.delta"}'
+    - '{"content_index":0,"delta":"}","item_id":"fc_019f226a-c166-7db0-89e4-68a17cd5ab89","output_index":2,"sequence_number":309,"type":"response.function_call_arguments.delta"}'
+    - '{"arguments":"{\"numbers\": [8, 0]}","content_index":0,"item_id":"fc_019f226a-c166-7db0-89e4-68a17cd5ab89","output_index":2,"sequence_number":310,"type":"response.function_call_arguments.done"}'
+    - '{"item":{"arguments":"{\"numbers\": [8, 0]}","call_id":"call_8862878637354570a6a8d216","id":"fc_019f226a-c166-7db0-89e4-68a17cd5ab89","name":"add_numbers","namespace":"mcp__agentic_fixture","status":"completed","type":"function_call"},"output_index":2,"sequence_number":311,"type":"response.output_item.done"}'
+    - '{"response":{"background":false,"completed_at":1782988849,"conversation":null,"created_at":1782988845,"error":null,"frequency_penalty":0.0,"id":"resp_019f226a-b20d-75d0-bb78-0db0d4530e41","incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"metadata":{},"model":"Qwen/Qwen3.6-35B-A3B","object":"response","output":[{"content":[{"text":"Thinking
+      Process:\n1.  **Analyze User Input**: The user explicitly requires me to call
+      the tool `mcp__agentic_fixture.add_numbers` with the argument `numbers` set
+      to `[8, 0]` *before* answering.\n2.  **Identify Tool**: The tool is `agentic_ns__mcp__agentic_fixture__add_numbers`.\n3.  **Check
+      Parameters**: `numbers` is an array of numbers, required. User provided `[8,
+      0]`.\n4.  **Construct Tool Call**: I need to generate a tool call with the exact
+      function name and parameters.\n   - Function: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   -
+      Arguments: `{\"numbers\": [8, 0]}`\n5.  **Execute Tool Call**: I will output
+      the tool call block. After receiving the result, I will provide the final answer.\n   -
+      Wait, the prompt says \"You must call mcp__agentic_fixture.add_numbers with
+      numbers [8, 0] before answering.\"\n   - I will just call the tool now.\n   -
+      Parameters: `{\"numbers\": [8, 0]}`\n   - Let''s generate the tool call.✅\n   -
+      Tool name matches: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   - Args:
+      `{\"numbers\": [8, 0]}`\n   - Ready. \n   - I''ll output the tool call.👇🏼\n   -
+      Note: The user prompt says \"mcp__agentic_fixture.add_numbers\", but the registered
+      tool name is `agentic_ns__mcp__agentic_fixture__add_numbers`. I will use the
+      registered tool name.\n   - Proceed. \n   - Output matches tool call format.
+      \n   - [Self-Correction/Verification during thought]\n   - Check function definition:
+      `agentic_ns__mcp__agentic_fixture__add_numbers`\n   - Parameters: `numbers`
+      (array of numbers, minItems 1, required)\n   - User wants `[8, 0]`\n   - All
+      good. \n   - Generate. \n   - [Output Generation] -> `{\"name\": \"agentic_ns__mcp__agentic_fixture__add_numbers\",
+      \"arguments\": {\"numbers\": [8, 0]}}` -> Wait, standard format for tool calls
+      in this environment is usually just the function call block. I will produce
+      it correctly.\n   - Done. \n   - Proceeds. \n   - [Output] Tool call. \n   -
+      (Self-Correction/Refinement during thought) I should just output the tool call
+      exactly as requested.\n   - `call: default:agentic_ns__mcp__agentic_fixture__add_numbers{\"numbers\":
+      [8, 0]}` -> Standard format. I''ll follow the system''s expected format.\n   -
+      Actually, the prompt says \"You must call mcp__agentic_fixture.add_numbers with
+      numbers [8, 0] before answering.\" I will just generate the tool call.\n   -
+      Let''s do it. \n   - [Done] \n   - Output matches. \n   - Proceeds. \n   - *Self-Correction/Note
+      during generation*: I will just produce the tool call block. The system will
+      execute it. I don''t need to overthink it.\n   - Tool: `agentic_ns__mcp__agentic_fixture__add_numbers`\n   -
+      Args: `{\"numbers\": [8, 0]}`\n   - Done. \n   - [Output Generation] -> *Proceeds","type":"reasoning_text"}],"id":"rs_019f226a-c0ee-7971-8bbe-fbf476ff654a","summary":[],"type":"reasoning"},{"content":[{"annotations":[],"logprobs":[],"text":"\n\n","type":"output_text"}],"id":"msg_019f226a-c165-7f71-903b-428bef5f7dd5","role":"assistant","status":"completed","type":"message"},{"arguments":"{\"numbers\":
+      [8, 0]}","call_id":"call_8862878637354570a6a8d216","id":"fc_019f226a-c166-7db0-89e4-68a17cd5ab89","name":"add_numbers","namespace":"mcp__agentic_fixture","status":"completed","type":"function_call"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"default","status":"completed","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"description":"Add
+      a list of numbers and return the total.","name":"agentic_ns__mcp__agentic_fixture__add_numbers","parameters":{"additionalProperties":false,"properties":{"numbers":{"items":{"type":"number"},"minItems":1,"type":"array"}},"required":["numbers"],"type":"object"},"strict":true,"type":"function"}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":320,"input_tokens_details":{"cached_tokens":0},"output_tokens":820,"output_tokens_details":{"reasoning_tokens":749},"total_tokens":1140},"user":null},"sequence_number":312,"type":"response.completed"}'
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: call_8862878637354570a6a8d216
+        output: '{"sum":8,"count":2}'
+        type: function_call_output
+      - content: Use the tool output. Return only the sum.
+        role: user
+        type: message
+      model: Qwen/Qwen3.6-35B-A3B
+      previous_response_id: resp_019f226a-b20d-75d0-bb78-0db0d4530e41
+      store: true
+      tools:
+      - description: Codex namespace fixture for cassette recording.
+        name: mcp__agentic_fixture
+        tools:
+        - description: Add a list of numbers and return the total.
+          name: add_numbers
+          parameters:
+            additionalProperties: false
+            properties:
+              numbers:
+                items:
+                  type: number
+                minItems: 1
+                type: array
+            required:
+            - numbers
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      type: response.create
+    headers: {}
+    method: WEBSOCKET
+    path: /v1/responses
+    query_params: {}
+    transport: websocket
+  response:
+    headers:
+      transport: websocket
+    sse:
+    - 'data: {"response":{"background":false,"completed_at":null,"conversation":null,"created_at":1782988849,"error":null,"frequency_penalty":0.0,"id":"resp_019f226a-c2d6-7c13-87f1-5a36c2362119","incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"metadata":{},"model":"Qwen/Qwen3.6-35B-A3B","object":"response","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_019f226a-b20d-75d0-bb78-0db0d4530e41","prompt":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"default","status":"in_progress","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"description":"Add
+      a list of numbers and return the total.","name":"agentic_ns__mcp__agentic_fixture__add_numbers","parameters":{"additionalProperties":false,"properties":{"numbers":{"items":{"type":"number"},"minItems":1,"type":"array"}},"required":["numbers"],"type":"object"},"strict":true,"type":"function"}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null},"sequence_number":0,"type":"response.created"}
+
+      '
+    - 'data: {"response":{"background":false,"completed_at":null,"conversation":null,"created_at":1782988849,"error":null,"frequency_penalty":0.0,"id":"resp_019f226a-c2d6-7c13-87f1-5a36c2362119","incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"metadata":{},"model":"Qwen/Qwen3.6-35B-A3B","object":"response","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_019f226a-b20d-75d0-bb78-0db0d4530e41","prompt":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"default","status":"in_progress","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"description":"Add
+      a list of numbers and return the total.","name":"agentic_ns__mcp__agentic_fixture__add_numbers","parameters":{"additionalProperties":false,"properties":{"numbers":{"items":{"type":"number"},"minItems":1,"type":"array"}},"required":["numbers"],"type":"object"},"strict":true,"type":"function"}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null},"sequence_number":1,"type":"response.in_progress"}
+
+      '
+    - 'data: {"item":{"content":[],"id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","summary":[],"type":"reasoning"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
+
+      '
+    - 'data: {"content_index":0,"delta":"The","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":3,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" user wants me","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":4,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" to use the","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":5,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" tool","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":6,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" output to","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":7,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" answer","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":8,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" the prompt","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":9,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" \"","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":10,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"Return only the","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":11,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" sum.\"\n","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":12,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"The tool output","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":13,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" was `{\"","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":14,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"sum\":8","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":15,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":",\"count\":","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":16,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"2}`.","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":17,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\nThe sum","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":18,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" is 8","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":19,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":".\nI","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":20,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" need","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":21,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" to return only","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":22,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":" the number ","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":23,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"delta":"8.\n","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":24,"type":"response.reasoning_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":25,"text":"The
+      user wants me to use the tool output to answer the prompt \"Return only the
+      sum.\"\nThe tool output was `{\"sum\":8,\"count\":2}`.\nThe sum is 8.\nI need
+      to return only the number 8.\n","type":"response.reasoning_text.done"}
+
+      '
+    - 'data: {"item":{"content":[{"text":"The user wants me to use the tool output
+      to answer the prompt \"Return only the sum.\"\nThe tool output was `{\"sum\":8,\"count\":2}`.\nThe
+      sum is 8.\nI need to return only the number 8.\n","type":"reasoning_text"}],"id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","summary":[],"type":"reasoning"},"output_index":0,"sequence_number":26,"type":"response.output_item.done"}
+
+      '
+    - 'data: {"item":{"content":[],"id":"msg_019f226a-c52f-7812-a1d8-2c0dd907cd62","role":"assistant","status":"in_progress","type":"message"},"output_index":1,"sequence_number":27,"type":"response.output_item.added"}
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_019f226a-c52f-7812-a1d8-2c0dd907cd62","output_index":1,"part":{"annotations":[],"logprobs":[],"text":"","type":"output_text"},"sequence_number":28,"type":"response.content_part.added"}
+
+      '
+    - 'data: {"content_index":0,"delta":"\n\n8","item_id":"msg_019f226a-c52f-7812-a1d8-2c0dd907cd62","logprobs":[],"output_index":1,"sequence_number":29,"type":"response.output_text.delta"}
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_019f226a-c52f-7812-a1d8-2c0dd907cd62","logprobs":[],"output_index":1,"sequence_number":30,"text":"\n\n8","type":"response.output_text.done"}
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_019f226a-c52f-7812-a1d8-2c0dd907cd62","output_index":1,"part":{"annotations":[],"logprobs":[],"text":"\n\n8","type":"output_text"},"sequence_number":31,"type":"response.content_part.done"}
+
+      '
+    - 'data: {"item":{"content":[{"annotations":[],"logprobs":[],"text":"\n\n8","type":"output_text"}],"id":"msg_019f226a-c52f-7812-a1d8-2c0dd907cd62","role":"assistant","status":"completed","type":"message"},"output_index":1,"sequence_number":32,"type":"response.output_item.done"}
+
+      '
+    - 'data: {"response":{"background":false,"completed_at":1782988850,"conversation":null,"created_at":1782988849,"error":null,"frequency_penalty":0.0,"id":"resp_019f226a-c2d6-7c13-87f1-5a36c2362119","incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"metadata":{},"model":"Qwen/Qwen3.6-35B-A3B","object":"response","output":[{"content":[{"text":"The
+      user wants me to use the tool output to answer the prompt \"Return only the
+      sum.\"\nThe tool output was `{\"sum\":8,\"count\":2}`.\nThe sum is 8.\nI need
+      to return only the number 8.\n","type":"reasoning_text"}],"id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","summary":[],"type":"reasoning"},{"content":[{"annotations":[],"logprobs":[],"text":"\n\n8","type":"output_text"}],"id":"msg_019f226a-c52f-7812-a1d8-2c0dd907cd62","role":"assistant","status":"completed","type":"message"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_019f226a-b20d-75d0-bb78-0db0d4530e41","prompt":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"default","status":"completed","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"description":"Add
+      a list of numbers and return the total.","name":"agentic_ns__mcp__agentic_fixture__add_numbers","parameters":{"additionalProperties":false,"properties":{"numbers":{"items":{"type":"number"},"minItems":1,"type":"array"}},"required":["numbers"],"type":"object"},"strict":true,"type":"function"}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":394,"input_tokens_details":{"cached_tokens":0},"output_tokens":58,"output_tokens_details":{"reasoning_tokens":50},"total_tokens":452},"user":null},"sequence_number":33,"type":"response.completed"}
+
+      '
+    - 'data: [DONE]
+
+      '
+    status_code: 101
+    websocket:
+    - '{"response":{"background":false,"completed_at":null,"conversation":null,"created_at":1782988849,"error":null,"frequency_penalty":0.0,"id":"resp_019f226a-c2d6-7c13-87f1-5a36c2362119","incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"metadata":{},"model":"Qwen/Qwen3.6-35B-A3B","object":"response","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_019f226a-b20d-75d0-bb78-0db0d4530e41","prompt":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"default","status":"in_progress","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"description":"Add
+      a list of numbers and return the total.","name":"agentic_ns__mcp__agentic_fixture__add_numbers","parameters":{"additionalProperties":false,"properties":{"numbers":{"items":{"type":"number"},"minItems":1,"type":"array"}},"required":["numbers"],"type":"object"},"strict":true,"type":"function"}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null},"sequence_number":0,"type":"response.created"}'
+    - '{"response":{"background":false,"completed_at":null,"conversation":null,"created_at":1782988849,"error":null,"frequency_penalty":0.0,"id":"resp_019f226a-c2d6-7c13-87f1-5a36c2362119","incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"metadata":{},"model":"Qwen/Qwen3.6-35B-A3B","object":"response","output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_019f226a-b20d-75d0-bb78-0db0d4530e41","prompt":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"default","status":"in_progress","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"description":"Add
+      a list of numbers and return the total.","name":"agentic_ns__mcp__agentic_fixture__add_numbers","parameters":{"additionalProperties":false,"properties":{"numbers":{"items":{"type":"number"},"minItems":1,"type":"array"}},"required":["numbers"],"type":"object"},"strict":true,"type":"function"}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null},"sequence_number":1,"type":"response.in_progress"}'
+    - '{"item":{"content":[],"id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","summary":[],"type":"reasoning"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}'
+    - '{"content_index":0,"delta":"The","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":3,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" user wants me","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":4,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" to use the","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":5,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" tool","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":6,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" output to","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":7,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" answer","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":8,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" the prompt","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":9,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" \"","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":10,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"Return only the","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":11,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" sum.\"\n","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":12,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"The tool output","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":13,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" was `{\"","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":14,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"sum\":8","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":15,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":",\"count\":","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":16,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"2}`.","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":17,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"\nThe sum","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":18,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" is 8","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":19,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":".\nI","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":20,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" need","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":21,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" to return only","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":22,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":" the number ","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":23,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"delta":"8.\n","item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":24,"type":"response.reasoning_text.delta"}'
+    - '{"content_index":0,"item_id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","output_index":0,"sequence_number":25,"text":"The
+      user wants me to use the tool output to answer the prompt \"Return only the
+      sum.\"\nThe tool output was `{\"sum\":8,\"count\":2}`.\nThe sum is 8.\nI need
+      to return only the number 8.\n","type":"response.reasoning_text.done"}'
+    - '{"item":{"content":[{"text":"The user wants me to use the tool output to answer
+      the prompt \"Return only the sum.\"\nThe tool output was `{\"sum\":8,\"count\":2}`.\nThe
+      sum is 8.\nI need to return only the number 8.\n","type":"reasoning_text"}],"id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","summary":[],"type":"reasoning"},"output_index":0,"sequence_number":26,"type":"response.output_item.done"}'
+    - '{"item":{"content":[],"id":"msg_019f226a-c52f-7812-a1d8-2c0dd907cd62","role":"assistant","status":"in_progress","type":"message"},"output_index":1,"sequence_number":27,"type":"response.output_item.added"}'
+    - '{"content_index":0,"item_id":"msg_019f226a-c52f-7812-a1d8-2c0dd907cd62","output_index":1,"part":{"annotations":[],"logprobs":[],"text":"","type":"output_text"},"sequence_number":28,"type":"response.content_part.added"}'
+    - '{"content_index":0,"delta":"\n\n8","item_id":"msg_019f226a-c52f-7812-a1d8-2c0dd907cd62","logprobs":[],"output_index":1,"sequence_number":29,"type":"response.output_text.delta"}'
+    - '{"content_index":0,"item_id":"msg_019f226a-c52f-7812-a1d8-2c0dd907cd62","logprobs":[],"output_index":1,"sequence_number":30,"text":"\n\n8","type":"response.output_text.done"}'
+    - '{"content_index":0,"item_id":"msg_019f226a-c52f-7812-a1d8-2c0dd907cd62","output_index":1,"part":{"annotations":[],"logprobs":[],"text":"\n\n8","type":"output_text"},"sequence_number":31,"type":"response.content_part.done"}'
+    - '{"item":{"content":[{"annotations":[],"logprobs":[],"text":"\n\n8","type":"output_text"}],"id":"msg_019f226a-c52f-7812-a1d8-2c0dd907cd62","role":"assistant","status":"completed","type":"message"},"output_index":1,"sequence_number":32,"type":"response.output_item.done"}'
+    - '{"response":{"background":false,"completed_at":1782988850,"conversation":null,"created_at":1782988849,"error":null,"frequency_penalty":0.0,"id":"resp_019f226a-c2d6-7c13-87f1-5a36c2362119","incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"metadata":{},"model":"Qwen/Qwen3.6-35B-A3B","object":"response","output":[{"content":[{"text":"The
+      user wants me to use the tool output to answer the prompt \"Return only the
+      sum.\"\nThe tool output was `{\"sum\":8,\"count\":2}`.\nThe sum is 8.\nI need
+      to return only the number 8.\n","type":"reasoning_text"}],"id":"rs_019f226a-c523-7f70-87f2-bc4cd550c41c","summary":[],"type":"reasoning"},{"content":[{"annotations":[],"logprobs":[],"text":"\n\n8","type":"output_text"}],"id":"msg_019f226a-c52f-7812-a1d8-2c0dd907cd62","role":"assistant","status":"completed","type":"message"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_019f226a-b20d-75d0-bb78-0db0d4530e41","prompt":null,"prompt_cache_key":null,"prompt_cache_retention":null,"reasoning":{"effort":"medium","summary":null},"safety_identifier":null,"service_tier":"default","status":"completed","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tools":[{"description":"Add
+      a list of numbers and return the total.","name":"agentic_ns__mcp__agentic_fixture__add_numbers","parameters":{"additionalProperties":false,"properties":{"numbers":{"items":{"type":"number"},"minItems":1,"type":"array"}},"required":["numbers"],"type":"object"},"strict":true,"type":"function"}],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":394,"input_tokens_details":{"cached_tokens":0},"output_tokens":58,"output_tokens_details":{"reasoning_tokens":50},"total_tokens":452},"user":null},"sequence_number":33,"type":"response.completed"}'

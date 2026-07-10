@@ -9,11 +9,13 @@ use serde::Deserialize;
 
 use agentic_core::executor::accumulator::ResponseAccumulator;
 use agentic_core::types::event::MessageStatus;
-use agentic_core::types::io::OutputItem;
+use agentic_core::types::io::{FunctionToolCall, OutputItem};
 
 const CASSETTE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/events");
 const TOOL_CALLS_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/tool_calls");
 const REASONING_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/reasoning/responses");
+const CODEX_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/codex");
+const WEB_SEARCH_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/web_search");
 
 // --- Legacy event cassette format ---
 
@@ -57,6 +59,8 @@ struct Turn {
 struct TurnResponse {
     #[allow(dead_code)]
     headers: serde_yml::Value,
+    #[allow(dead_code)]
+    status_code: Option<u16>,
     #[serde(default)]
     sse: Vec<String>,
     body: Option<serde_json::Value>,
@@ -76,6 +80,14 @@ fn load_reasoning_cassette(filename: &str) -> TurnCassette {
     load_turn_cassette_from(REASONING_DIR, filename)
 }
 
+fn load_codex_cassette(filename: &str) -> TurnCassette {
+    load_turn_cassette_from(CODEX_DIR, filename)
+}
+
+fn load_web_search_cassette(filename: &str) -> TurnCassette {
+    load_turn_cassette_from(WEB_SEARCH_DIR, filename)
+}
+
 /// Extracts `data: ...` lines from raw SSE entries (which may include
 /// `event:` lines and blank separators).
 fn extract_data_lines(sse_entries: &[String]) -> Vec<String> {
@@ -85,6 +97,70 @@ fn extract_data_lines(sse_entries: &[String]) -> Vec<String> {
         .filter(|line| line.starts_with("data: "))
         .map(ToString::to_string)
         .collect()
+}
+
+fn response_body_from_data_line(line: &str) -> Option<serde_json::Value> {
+    let data = line.strip_prefix("data: ")?;
+    if data == "[DONE]" {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_str(data).ok()?;
+    if let Some(response) = value.get("response").and_then(serde_json::Value::as_object) {
+        return Some(serde_json::Value::Object(response.clone()));
+    }
+    if value.get("object").and_then(serde_json::Value::as_str) == Some("response") {
+        return Some(value);
+    }
+    None
+}
+
+fn process_completed_response_object_from_sse(
+    cassette: &TurnCassette,
+    turn_idx: usize,
+    model: &str,
+) -> Vec<OutputItem> {
+    let data_lines = extract_data_lines(&cassette.turns[turn_idx].response.sse);
+    let response = data_lines
+        .iter()
+        .filter_map(|line| response_body_from_data_line(line))
+        .find(|value| value.get("status").and_then(serde_json::Value::as_str) == Some("completed"))
+        .unwrap_or_else(|| panic!("turn {} must contain a completed response object", turn_idx + 1));
+    let body = serde_json::to_string(&response).unwrap();
+    let acc = ResponseAccumulator::from_json(&body, None).unwrap();
+    let payload = acc.finalize(model, None, None);
+    assert_eq!(payload.status, "completed");
+    payload.output
+}
+
+fn process_codex_streaming_turn(cassette: &TurnCassette, turn_idx: usize, model: &str) -> Vec<OutputItem> {
+    let data_lines = extract_data_lines(&cassette.turns[turn_idx].response.sse);
+    assert!(
+        !data_lines.is_empty(),
+        "Codex cassette turn {} must have SSE data lines",
+        turn_idx + 1
+    );
+    let acc = ResponseAccumulator::from_sse_lines(data_lines, None);
+    let payload = acc.finalize(model, None, None);
+    assert_eq!(payload.status, "completed");
+    payload.output
+}
+
+fn first_function_call(output: &[OutputItem]) -> &FunctionToolCall {
+    output
+        .iter()
+        .find_map(|item| {
+            if let OutputItem::FunctionCall(call) = item {
+                Some(call)
+            } else {
+                None
+            }
+        })
+        .expect("output must contain a function call")
+}
+
+fn turn_request_body(turn: &Turn) -> serde_json::Value {
+    let body = turn.request.get("body").expect("turn request must have body");
+    serde_json::to_value(body).expect("request body must convert to JSON")
 }
 
 // === Legacy cassette tests ===
@@ -469,6 +545,168 @@ fn test_reasoning_cassette_gpt_oss_streaming() {
     );
 }
 
+// === Codex integration cassettes ===
+
+#[test]
+fn test_codex_gateway_http_cassettes_parse_completed_response_objects() {
+    let cases = [
+        (
+            "codex-gateway-http-function-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+            None,
+            "agentic_plain_echo",
+        ),
+        (
+            "codex-gateway-http-namespace-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+            Some("mcp__agentic_fixture"),
+            "add_numbers",
+        ),
+    ];
+
+    for (filename, expected_namespace, expected_name) in cases {
+        let cassette = load_codex_cassette(filename);
+        assert_eq!(cassette.turns.len(), 2, "{filename} should have two turns");
+
+        let output = process_completed_response_object_from_sse(&cassette, 0, "Qwen/Qwen3.6-35B-A3B");
+        let call = first_function_call(&output);
+        assert_eq!(call.namespace.as_deref(), expected_namespace, "{filename} namespace");
+        assert_eq!(call.name, expected_name, "{filename} function name");
+        assert_eq!(call.status, MessageStatus::Completed);
+        assert!(!call.call_id.is_empty(), "{filename} call_id must be populated");
+        assert!(!call.arguments.is_empty(), "{filename} arguments must be populated");
+    }
+}
+
+#[test]
+fn test_codex_gateway_websocket_cassettes_preserve_function_and_namespace_calls() {
+    let cases = [
+        (
+            "codex-gateway-websocket-function-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+            None,
+            "agentic_plain_echo",
+        ),
+        (
+            "codex-gateway-websocket-namespace-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+            Some("mcp__agentic_fixture"),
+            "add_numbers",
+        ),
+    ];
+
+    for (filename, expected_namespace, expected_name) in cases {
+        let cassette = load_codex_cassette(filename);
+        assert_eq!(cassette.turns.len(), 2, "{filename} should have two turns");
+
+        let output = process_codex_streaming_turn(&cassette, 0, "Qwen/Qwen3.6-35B-A3B");
+        let call = first_function_call(&output);
+        assert_eq!(call.namespace.as_deref(), expected_namespace, "{filename} namespace");
+        assert_eq!(call.name, expected_name, "{filename} function name");
+        assert_eq!(call.status, MessageStatus::Completed);
+    }
+}
+
+#[test]
+fn test_codex_direct_vllm_http_cassettes_capture_upstream_tool_shapes() {
+    let cases = [
+        (
+            "codex-direct-vllm-http-function-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+            None,
+            "agentic_plain_echo",
+        ),
+        (
+            "codex-direct-vllm-http-flat-namespace-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+            None,
+            "agentic_ns__mcp__agentic_fixture__add_numbers",
+        ),
+    ];
+
+    for (filename, expected_namespace, expected_name) in cases {
+        let cassette = load_codex_cassette(filename);
+        assert_eq!(cassette.turns.len(), 2, "{filename} should have two turns");
+
+        let output = process_codex_streaming_turn(&cassette, 0, "Qwen/Qwen3.6-35B-A3B");
+        let call = first_function_call(&output);
+        assert_eq!(call.namespace.as_deref(), expected_namespace, "{filename} namespace");
+        assert_eq!(call.name, expected_name, "{filename} function name");
+        assert_eq!(call.status, MessageStatus::Completed);
+    }
+}
+
+#[test]
+fn test_codex_openai_baseline_cassettes_accept_namespace_on_http_and_websocket() {
+    let cases = [
+        (
+            "codex-openai-https-function-tool-gpt-4o-streaming.yaml",
+            None,
+            "agentic_plain_echo",
+        ),
+        (
+            "codex-openai-https-namespace-tool-gpt-4o-streaming.yaml",
+            Some("mcp__agentic_fixture"),
+            "add_numbers",
+        ),
+        (
+            "codex-openai-websocket-function-tool-gpt-4o-streaming.yaml",
+            None,
+            "agentic_plain_echo",
+        ),
+        (
+            "codex-openai-websocket-namespace-tool-gpt-4o-streaming.yaml",
+            Some("mcp__agentic_fixture"),
+            "add_numbers",
+        ),
+    ];
+
+    for (filename, expected_namespace, expected_name) in cases {
+        let cassette = load_codex_cassette(filename);
+        assert_eq!(cassette.turns.len(), 2, "{filename} should have two turns");
+
+        let output = process_codex_streaming_turn(&cassette, 0, "gpt-4o");
+        let call = first_function_call(&output);
+        assert_eq!(call.namespace.as_deref(), expected_namespace, "{filename} namespace");
+        assert_eq!(call.name, expected_name, "{filename} function name");
+        assert_eq!(call.status, MessageStatus::Completed);
+    }
+}
+
+#[test]
+fn test_codex_cassette_second_turns_are_tool_output_continuations() {
+    let cassettes = [
+        "codex-direct-vllm-http-flat-namespace-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+        "codex-direct-vllm-http-function-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+        "codex-gateway-http-function-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+        "codex-gateway-http-namespace-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+        "codex-gateway-websocket-function-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+        "codex-gateway-websocket-namespace-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+        "codex-openai-https-function-tool-gpt-4o-streaming.yaml",
+        "codex-openai-https-namespace-tool-gpt-4o-streaming.yaml",
+        "codex-openai-websocket-function-tool-gpt-4o-streaming.yaml",
+        "codex-openai-websocket-namespace-tool-gpt-4o-streaming.yaml",
+    ];
+
+    for filename in cassettes {
+        let cassette = load_codex_cassette(filename);
+        assert_eq!(cassette.turns.len(), 2, "{filename} should have two turns");
+        let turn2_body = turn_request_body(&cassette.turns[1]);
+        assert!(
+            turn2_body
+                .get("previous_response_id")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|id| !id.is_empty()),
+            "{filename} turn 2 must include previous_response_id"
+        );
+
+        let input = turn2_body
+            .get("input")
+            .and_then(serde_json::Value::as_array)
+            .unwrap_or_else(|| panic!("{filename} turn 2 input must be an array"));
+        assert!(
+            input
+                .iter()
+                .any(|item| item.get("type").and_then(serde_json::Value::as_str) == Some("function_call_output")),
+            "{filename} turn 2 must include a function_call_output"
+        );
+    }
+}
+
 // === Stateful multi-turn cassette tests (previous_response_id chaining) ===
 //
 // These cassettes are recorded against gpt-oss-20b with `store=true` and
@@ -534,6 +772,35 @@ fn has_reasoning(output: &[OutputItem]) -> bool {
     output.iter().any(|item| matches!(item, OutputItem::Reasoning(_)))
 }
 
+fn assert_completed_potato_web_search(output: &[OutputItem]) {
+    assert_eq!(
+        count_function_calls(output),
+        0,
+        "raw web_search function call should not leak"
+    );
+    let web_search = output
+        .iter()
+        .find_map(|item| match item {
+            OutputItem::WebSearchCall(call) => Some(call),
+            _ => None,
+        })
+        .expect("cassette output should include a web_search_call item");
+    assert_eq!(web_search.status.as_str(), "completed");
+    assert_eq!(web_search.action.query, "potato");
+    assert!(
+        web_search
+            .action
+            .sources
+            .iter()
+            .any(|source| source.url == "https://en.wikipedia.org/wiki/Potato"),
+        "recorded web_search_call should include the Wikipedia potato source"
+    );
+    assert!(
+        output.iter().any(|item| matches!(item, OutputItem::Message(_))),
+        "cassette output should include a final assistant message"
+    );
+}
+
 /// Extracts the `arguments` JSON string from the first function call in output items.
 fn get_first_fc_arguments(output: &[OutputItem]) -> String {
     output
@@ -546,6 +813,55 @@ fn get_first_fc_arguments(output: &[OutputItem]) -> String {
             }
         })
         .expect("output must contain at least one function call")
+}
+
+#[test]
+fn test_web_search_gateway_cassette_nonstreaming() {
+    let cassette = load_web_search_cassette("gpt_oss_web_search_nonstreaming.yaml");
+    assert_eq!(cassette.turns.len(), 1);
+    let body = cassette.turns[0].request.as_mapping().unwrap();
+    assert_eq!(body["body"]["tools"][0]["type"].as_str().unwrap(), "web_search_preview");
+    assert_eq!(body["body"]["max_output_tokens"].as_i64().unwrap(), 1024);
+
+    let output = process_nonstreaming_turn(&cassette, 0, "openai/gpt-oss-20b");
+    assert!(
+        has_reasoning(&output),
+        "gpt-oss web_search cassette should include reasoning"
+    );
+    assert_completed_potato_web_search(&output);
+}
+
+#[test]
+fn test_web_search_gateway_cassette_streaming() {
+    let cassette = load_web_search_cassette("gpt_oss_web_search_streaming.yaml");
+    assert_eq!(cassette.turns.len(), 1);
+    let body = cassette.turns[0].request.as_mapping().unwrap();
+    assert_eq!(body["body"]["tools"][0]["type"].as_str().unwrap(), "web_search_preview");
+    assert_eq!(body["body"]["max_output_tokens"].as_i64().unwrap(), 1024);
+
+    let data_lines = extract_data_lines(&cassette.turns[0].response.sse);
+    let events: Vec<serde_json::Value> = data_lines
+        .iter()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .filter(|data| *data != "[DONE]")
+        .filter_map(|data| serde_json::from_str(data).ok())
+        .collect();
+    let event_types: Vec<&str> = events.iter().filter_map(|event| event["type"].as_str()).collect();
+    assert!(event_types.contains(&"response.web_search_call.in_progress"));
+    assert!(event_types.contains(&"response.web_search_call.searching"));
+    assert!(event_types.contains(&"response.web_search_call.completed"));
+
+    let final_payload = events
+        .iter()
+        .find(|event| event["object"] == "response")
+        .expect("streaming web_search cassette should include final response payload");
+    let output: Vec<OutputItem> = serde_json::from_value(final_payload["output"].clone())
+        .expect("final response payload output should deserialize");
+    assert!(
+        has_reasoning(&output),
+        "gpt-oss web_search cassette should include reasoning"
+    );
+    assert_completed_potato_web_search(&output);
 }
 
 // ═══════════════════════════════════════════════════════════════════

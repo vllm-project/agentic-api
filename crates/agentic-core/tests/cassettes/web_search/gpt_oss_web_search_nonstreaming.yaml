@@ -1,0 +1,95 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Use web search to look up potato, then summarize in one sentence.
+      max_output_tokens: 1024
+      model: openai/gpt-oss-20b
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search_preview
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1783307879
+      error: null
+      id: resp_019f356e-aacf-7ea3-87c6-075c2fcc1eb2
+      incomplete_details: null
+      instructions: null
+      model: openai/gpt-oss-20b
+      object: response
+      output:
+      - content:
+        - text: 'User: "Use web search to look up potato, then summarize in one sentence."
+            We need to call web_search. Use search query "potato". Provide let''s
+            say count=5. Ask for news? Might not need. We just want general info.
+            Probably get definition. Use general web search. Use appropriate countries.
+            Use English. Use default. Ok.'
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_8c5223df3fb54ba8
+        status: null
+        summary: []
+        type: reasoning
+      - action:
+          query: potato
+          sources:
+          - title: Potato - Wikipedia
+            url: https://en.wikipedia.org/wiki/Potato
+          - title: Potatoes | Potato Nutrition | Types of Potatoes | Recipes
+            url: https://potatogoodness.com/
+          - title: Potato Facts
+            url: https://www.idahopotatomuseum.com/potato-facts/
+          - title: Idaho Potato Commission
+            url: https://idahopotato.com/
+          - title: Home of U.S. Potato Farmers | Potatoes USA
+            url: https://potatoesusa.com/
+          type: search
+        id: ws_b67561c650733812
+        status: completed
+        type: web_search_call
+      - content:
+        - text: 'We have a summary from Wikipedia. Enough.
+
+
+            Now produce one sentence summary: "Potato is a starchy tuberous vegetable
+            native to the Americas, cultivated from Solanum tuberosum, and is a staple
+            food worldwide." Provide brief.'
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_9d6b942ea84e3e00
+        status: null
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: Potato (Solanum tuberosum) is a starchy, underground tuber native
+            to the Americas that has been domesticated for thousands of years and
+            is today a staple food in many cultures worldwide.
+          type: output_text
+        id: msg_a8af96caf08bdc00
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: null
+      status: completed
+      usage:
+        input_tokens: 2285
+        input_tokens_details:
+          cached_tokens: 352
+        output_tokens: 204
+        output_tokens_details:
+          reasoning_tokens: 135
+        total_tokens: 2489
+    headers:
+      content-type: application/json
+    status_code: 200

@@ -136,7 +136,7 @@ fn make_request(input: &str, stream: bool, prev_id: Option<String>) -> RequestPa
         previous_response_id: prev_id,
         conversation_id: None,
         tools: None,
-        tool_choice: ToolChoice::Auto,
+        tool_choice: Some(ToolChoice::Auto),
         stream,
         store: true,
         include: None,
@@ -153,13 +153,7 @@ fn build_exec_ctx(rt: &tokio::runtime::Runtime, mock_url: String) -> (Arc<Execut
     let conv_handler = ConversationHandler::new(ConversationStore::new(pool.clone()));
     let resp_handler = ResponseHandler::new(ResponseStore::new(pool.clone()));
     let client = Arc::new(reqwest::Client::new());
-    let exec_ctx = Arc::new(ExecutionContext::new(
-        conv_handler,
-        resp_handler,
-        client,
-        mock_url,
-        None,
-    ));
+    let exec_ctx = Arc::new(ExecutionContext::new(conv_handler, resp_handler, client, mock_url));
     (exec_ctx, pool)
 }
 
