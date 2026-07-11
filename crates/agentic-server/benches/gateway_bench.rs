@@ -159,6 +159,7 @@ async fn spawn_gateway(llm_url: &str) -> (Arc<reqwest::Client>, String) {
         llm_ready_interval_s: 0.1,
         skip_llm_ready_check: false,
         db_url: Some(format!("sqlite://{}", db_path.display())),
+        sqlite: agentic_core::config::SqliteConfig::default(),
     };
 
     let proxy_state = ProxyState::new(config.clone()).unwrap();

@@ -90,8 +90,8 @@ impl Item {
 
 /// Create items in a transaction with optional conversation context.
 ///
-/// If `conversation_id` and `seq_start` are provided, items are created with sequence numbers.
-/// Otherwise, items are created without conversation context.
+/// If `conversation_id` is provided, the next sequence range is computed in the insert statement so
+/// concurrent `SQLite` writers do not take a stale read snapshot before writing.
 ///
 /// # Errors
 /// Returns `DbResult::Err` if the database insertion fails.
@@ -99,10 +99,13 @@ pub async fn create_in_tx(
     tx: &mut DbTransaction<'_>,
     items: Vec<(String, String)>,
     conversation_id: Option<&str>,
-    seq_start: Option<i64>,
 ) -> DbResult<Vec<Item>> {
     if items.is_empty() {
         return Ok(Vec::new());
+    }
+
+    if let Some(conversation_id) = conversation_id {
+        return create_in_tx_with_next_conversation_seq(tx, items, conversation_id).await;
     }
 
     let now = utcnow_str();
@@ -112,10 +115,41 @@ pub async fn create_in_tx(
         format!("INSERT INTO items (id, data, created_at, conversation_id, seq) VALUES {values_clause} RETURNING *");
 
     let mut query = sqlx::query_as::<_, Item>(&sql);
+    for (id, data) in &items {
+        query = query.bind(id).bind(data).bind(now).bind(None::<&str>).bind(None::<i64>);
+    }
+
+    query.fetch_all(&mut **tx).await
+}
+
+async fn create_in_tx_with_next_conversation_seq(
+    tx: &mut DbTransaction<'_>,
+    items: Vec<(String, String)>,
+    conversation_id: &str,
+) -> DbResult<Vec<Item>> {
+    let now = utcnow_str();
+    let placeholders: Vec<&str> = vec!["(?, ?, ?, ?, (SELECT start + ? FROM next_seq))"; items.len()];
+    let values_clause = placeholders.join(", ");
+    let sql = format!(
+        "WITH next_seq AS ( \
+             SELECT COALESCE(MAX(seq), -1) + 1 AS start \
+             FROM items \
+             WHERE conversation_id = ? \
+         ) \
+         INSERT INTO items (id, data, created_at, conversation_id, seq) \
+         VALUES {values_clause} \
+         RETURNING *"
+    );
+
+    let mut query = sqlx::query_as::<_, Item>(&sql).bind(conversation_id);
     #[allow(clippy::cast_possible_wrap)]
     for (idx, (id, data)) in items.iter().enumerate() {
-        let seq = seq_start.map(|start| start + idx as i64);
-        query = query.bind(id).bind(data).bind(now).bind(conversation_id).bind(seq);
+        query = query
+            .bind(id)
+            .bind(data)
+            .bind(now)
+            .bind(conversation_id)
+            .bind(idx as i64);
     }
 
     query.fetch_all(&mut **tx).await
@@ -147,23 +181,6 @@ pub async fn get_items_by_conversation(pool: &DbPool, conversation_id: &str) -> 
         .bind(conversation_id)
         .fetch_all(pool)
         .await
-}
-
-/// Get next sequence number for items in a conversation, within a transaction.
-///
-/// Reading inside the transaction ensures concurrent writers serialize on the same
-/// connection and cannot both claim the same sequence range.
-///
-/// # Errors
-/// Returns `DbResult::Err` if the database query fails.
-pub async fn conversation_item_count(tx: &mut DbTransaction<'_>, conversation_id: &str) -> DbResult<Option<i64>> {
-    let max_seq: Option<i64> = sqlx::query_scalar("SELECT MAX(seq) FROM items WHERE conversation_id = ?")
-        .bind(conversation_id)
-        .fetch_optional(&mut **tx)
-        .await?
-        .flatten();
-
-    Ok(Some(max_seq.unwrap_or(-1) + 1))
 }
 
 #[cfg(test)]

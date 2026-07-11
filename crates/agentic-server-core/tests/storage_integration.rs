@@ -1,8 +1,11 @@
 mod support;
 
+use agentic_core::config::SqliteConfig;
 use agentic_core::storage::InOutItem;
 use agentic_core::storage::ResponseMetadata;
-use agentic_core::storage::{ConversationStore, ResponseStore};
+use agentic_core::storage::{
+    ConversationStore, ResponseStore, create_pool_with_schema, create_pool_with_schema_and_sqlite_config,
+};
 use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::{InputItem, InputMessage, InputMessageContent, OutputItem, OutputMessage};
 use std::sync::Arc;
@@ -297,6 +300,172 @@ async fn test_conversation_concurrent_turns() {
 
     let rehydrated = store.rehydrate(&conv_id).await.expect("rehydrate failed");
     assert_eq!(rehydrated.len(), 2);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_sqlite_multi_pool_mixed_read_write_concurrency() {
+    let db_path = std::env::temp_dir().join(format!("mixed_rw_{}.db", uuid::Uuid::now_v7()));
+    let db_url = format!("sqlite://{}", db_path.display());
+
+    let writer_pool_a = create_pool_with_schema(Some(&db_url))
+        .await
+        .expect("failed to create writer pool a");
+    let writer_pool_b = create_pool_with_schema(Some(&db_url))
+        .await
+        .expect("failed to create writer pool b");
+    let reader_pool = create_pool_with_schema(Some(&db_url))
+        .await
+        .expect("failed to create reader pool");
+
+    let writer_store_a = ConversationStore::new(Arc::clone(&writer_pool_a));
+    let writer_store_b = ConversationStore::new(writer_pool_b);
+    let reader_store = ConversationStore::new(reader_pool);
+    let conversation = writer_store_a.create().await.expect("create conversation failed");
+    let conv_id = conversation.conversation_id;
+    let metadata = Arc::new(ResponseMetadata::default());
+    let barrier = Arc::new(tokio::sync::Barrier::new(10));
+
+    let spawn_writer = |writer_idx: usize, writer_store: ConversationStore| {
+        let writer_conv_id = conv_id.clone();
+        let writer_metadata = Arc::clone(&metadata);
+        let writer_barrier = Arc::clone(&barrier);
+        tokio::spawn(async move {
+            writer_barrier.wait().await;
+            for idx in 0..50 {
+                writer_store
+                    .persist(
+                        &writer_conv_id,
+                        &format!("resp_lock_writer_{writer_idx}_{idx}"),
+                        None,
+                        vec![create_input_item(&format!("writer {writer_idx} item {idx}"))],
+                        writer_metadata.as_ref(),
+                    )
+                    .await
+                    .map_err(|err| format!("writer {writer_idx} write {idx} failed: {err:?}"))?;
+                tokio::task::yield_now().await;
+            }
+            Ok::<(), String>(())
+        })
+    };
+    let writers = vec![spawn_writer(0, writer_store_a.clone()), spawn_writer(1, writer_store_b)];
+
+    let mut readers = Vec::new();
+    for reader_idx in 0..8 {
+        let reader_store = reader_store.clone();
+        let reader_conv_id = conv_id.clone();
+        let reader_barrier = Arc::clone(&barrier);
+        readers.push(tokio::spawn(async move {
+            reader_barrier.wait().await;
+            for iter in 0..100 {
+                reader_store
+                    .rehydrate(&reader_conv_id)
+                    .await
+                    .map_err(|err| format!("reader {reader_idx} iteration {iter} failed: {err:?}"))?;
+                tokio::task::yield_now().await;
+            }
+            Ok::<(), String>(())
+        }));
+    }
+
+    for writer in writers {
+        writer.await.expect("writer task panicked").expect("writer task failed");
+    }
+    for reader in readers {
+        reader.await.expect("reader task panicked").expect("reader task failed");
+    }
+
+    let final_items = ConversationStore::new(Arc::clone(&writer_pool_a))
+        .rehydrate(&conv_id)
+        .await
+        .expect("final rehydrate failed");
+    assert_eq!(final_items.len(), 100);
+
+    let seqs: Vec<i64> = sqlx::query_scalar("SELECT seq FROM items WHERE conversation_id = ? ORDER BY seq ASC")
+        .bind(&conv_id)
+        .fetch_all(writer_pool_a.as_ref())
+        .await
+        .expect("sequence query failed");
+    assert_eq!(seqs, (0..100).collect::<Vec<_>>());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_sqlite_same_pool_mixed_read_write_concurrency() {
+    let db_path = std::env::temp_dir().join(format!("same_pool_mixed_rw_{}.db", uuid::Uuid::now_v7()));
+    let db_url = format!("sqlite://{}", db_path.display());
+    let sqlite_config = SqliteConfig {
+        max_connections: 4,
+        ..SqliteConfig::default()
+    };
+    let pool = create_pool_with_schema_and_sqlite_config(Some(&db_url), sqlite_config)
+        .await
+        .expect("failed to create pool");
+    assert_eq!(pool.options().get_max_connections(), 4);
+
+    let store = ConversationStore::new(Arc::clone(&pool));
+    let conversation = store.create().await.expect("create conversation failed");
+    let conv_id = conversation.conversation_id;
+    let metadata = Arc::new(ResponseMetadata::default());
+    let barrier = Arc::new(tokio::sync::Barrier::new(10));
+
+    let spawn_writer = |writer_idx: usize| {
+        let writer_store = store.clone();
+        let writer_conv_id = conv_id.clone();
+        let writer_metadata = Arc::clone(&metadata);
+        let writer_barrier = Arc::clone(&barrier);
+        tokio::spawn(async move {
+            writer_barrier.wait().await;
+            for idx in 0..50 {
+                writer_store
+                    .persist(
+                        &writer_conv_id,
+                        &format!("resp_same_pool_writer_{writer_idx}_{idx}"),
+                        None,
+                        vec![create_input_item(&format!("same pool writer {writer_idx} item {idx}"))],
+                        writer_metadata.as_ref(),
+                    )
+                    .await
+                    .map_err(|err| format!("writer {writer_idx} write {idx} failed: {err:?}"))?;
+                tokio::task::yield_now().await;
+            }
+            Ok::<(), String>(())
+        })
+    };
+    let writers = vec![spawn_writer(0), spawn_writer(1)];
+
+    let mut readers = Vec::new();
+    for reader_idx in 0..8 {
+        let reader_store = store.clone();
+        let reader_conv_id = conv_id.clone();
+        let reader_barrier = Arc::clone(&barrier);
+        readers.push(tokio::spawn(async move {
+            reader_barrier.wait().await;
+            for iter in 0..100 {
+                reader_store
+                    .rehydrate(&reader_conv_id)
+                    .await
+                    .map_err(|err| format!("reader {reader_idx} iteration {iter} failed: {err:?}"))?;
+                tokio::task::yield_now().await;
+            }
+            Ok::<(), String>(())
+        }));
+    }
+
+    for writer in writers {
+        writer.await.expect("writer task panicked").expect("writer task failed");
+    }
+    for reader in readers {
+        reader.await.expect("reader task panicked").expect("reader task failed");
+    }
+
+    let final_items = store.rehydrate(&conv_id).await.expect("final rehydrate failed");
+    assert_eq!(final_items.len(), 100);
+
+    let seqs: Vec<i64> = sqlx::query_scalar("SELECT seq FROM items WHERE conversation_id = ? ORDER BY seq ASC")
+        .bind(&conv_id)
+        .fetch_all(pool.as_ref())
+        .await
+        .expect("sequence query failed");
+    assert_eq!(seqs, (0..100).collect::<Vec<_>>());
 }
 
 // Store-level error handling edge cases

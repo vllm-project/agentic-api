@@ -23,7 +23,10 @@ pub use conversation::ConversationStore;
 pub use models::Conversation as DbConversation;
 pub use models::Item;
 pub use models::Response as DbResponse;
-pub use pool::{DbPool, DbResult, DbTransaction, create_pool, create_pool_with_schema};
+pub use pool::{
+    DbPool, DbResult, DbTransaction, create_pool, create_pool_with_schema, create_pool_with_schema_and_sqlite_config,
+    create_pool_with_sqlite_config,
+};
 pub use response::ResponseStore;
 pub use schema::{PoolWithSchema, SchemaManager};
 pub use types::{ConversationData, InOutItem, ItemKind, ResponseData, ResponseMetadata, StorageError, StoreResult};

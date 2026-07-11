@@ -111,13 +111,12 @@ impl ResponseStore {
             let data_str = String::try_from(&any_item)?;
             items_.push((item_id, data_str));
         }
+        let history_item_ids_json = serialize_to_string(&item_ids)?;
+        let metadata_json = String::try_from(metadata)?;
 
         let mut tx = pool.begin().await?;
 
-        item::create_in_tx(&mut tx, items_, None, None).await?;
-
-        let history_item_ids_json = serialize_to_string(&item_ids)?;
-        let metadata_json = String::try_from(metadata)?;
+        item::create_in_tx(&mut tx, items_, None).await?;
 
         response::create_in_tx(
             &mut tx,

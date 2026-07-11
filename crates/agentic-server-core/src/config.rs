@@ -1,3 +1,45 @@
+pub const DEFAULT_SQLITE_MAX_CONNECTIONS: u32 = 4;
+pub const DEFAULT_SQLITE_JOURNAL_SIZE_LIMIT_BYTES: u64 = 6_144_000;
+pub const DEFAULT_SQLITE_MMAP_SIZE_BYTES: u64 = 268_435_456;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SqliteTempStore {
+    Default,
+    File,
+    #[default]
+    Memory,
+}
+
+impl SqliteTempStore {
+    #[must_use]
+    pub fn as_pragma_value(self) -> &'static str {
+        match self {
+            Self::Default => "DEFAULT",
+            Self::File => "FILE",
+            Self::Memory => "MEMORY",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SqliteConfig {
+    pub max_connections: u32,
+    pub journal_size_limit_bytes: u64,
+    pub temp_store: SqliteTempStore,
+    pub mmap_size_bytes: u64,
+}
+
+impl Default for SqliteConfig {
+    fn default() -> Self {
+        Self {
+            max_connections: DEFAULT_SQLITE_MAX_CONNECTIONS,
+            journal_size_limit_bytes: DEFAULT_SQLITE_JOURNAL_SIZE_LIMIT_BYTES,
+            temp_store: SqliteTempStore::default(),
+            mmap_size_bytes: DEFAULT_SQLITE_MMAP_SIZE_BYTES,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub llm_api_base: String,
@@ -8,6 +50,7 @@ pub struct Config {
     /// Database URL for conversation and response storage.
     /// `None` means stateful features are disabled; all requests are proxied.
     pub db_url: Option<String>,
+    pub sqlite: SqliteConfig,
 }
 
 #[must_use]

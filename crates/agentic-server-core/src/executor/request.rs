@@ -4,7 +4,7 @@ use std::time::Duration;
 use crate::config::Config;
 use crate::error::Error;
 use crate::executor::modes::{ConversationHandler, ResponseHandler};
-use crate::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
+use crate::storage::{ConversationStore, ResponseStore, create_pool_with_schema_and_sqlite_config};
 use crate::tool::{GatewayExecutor, ToolType, WebSearchHandler};
 use crate::types::io::InputItem;
 use crate::types::request_response::{RequestPayload, ResponsePayload};
@@ -144,7 +144,7 @@ impl ExecutionContext {
     /// migration fails.
     pub async fn from_config(cfg: &Config) -> Result<Self, Error> {
         let db_url = cfg.db_url.as_deref().unwrap_or("sqlite://./agentic_api.db");
-        let pool = create_pool_with_schema(Some(db_url))
+        let pool = create_pool_with_schema_and_sqlite_config(Some(db_url), cfg.sqlite)
             .await
             .map_err(|e| Error::Config(format!("failed to open database '{db_url}': {e}")))?;
 

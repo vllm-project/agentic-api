@@ -9,6 +9,7 @@
 //! | `concurrent_conversation_persist_independent`| N writers each to their **own** conversation         |
 //! | `concurrent_conversation_rehydrate`          | N readers of the **same** conversation               |
 //! | `concurrent_conversation_rehydrate_independent` | N readers each on their **own** conversation      |
+//! | `concurrent_conversation_mixed_read_write` | 1 writer and N readers across independent `SQLite` pools |
 //! | `concurrent_response_persist`               | N independent response writes in parallel            |
 //! | `concurrent_response_rehydrate`             | N readers of the **same** response                  |
 //!
@@ -294,6 +295,81 @@ fn bench_concurrent_conversation_rehydrate_independent(c: &mut Criterion, store:
     group.finish();
 }
 
+fn bench_concurrent_conversation_mixed_read_write(c: &mut Criterion) {
+    let mut group = c.benchmark_group("concurrent_conversation_mixed_read_write");
+
+    for concurrency in concurrency_levels() {
+        group.throughput(Throughput::Elements((concurrency + 1) as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(concurrency),
+            &concurrency,
+            |b, &concurrency| {
+                b.to_async(Runtime::new().unwrap()).iter_batched(
+                    || async move {
+                        let db_path =
+                            std::env::temp_dir().join(format!("storage_mixed_rw_{}.db", uuid::Uuid::now_v7()));
+                        let db_url = format!("sqlite://{}", db_path.display());
+                        let writer_pool = create_pool_with_schema(Some(&db_url)).await.expect("writer pool");
+                        let reader_pool = create_pool_with_schema(Some(&db_url)).await.expect("reader pool");
+                        let writer_store = ConversationStore::new(writer_pool);
+                        let reader_store = ConversationStore::new(reader_pool);
+                        let conversation_id = writer_store
+                            .create()
+                            .await
+                            .expect("create conversation")
+                            .conversation_id;
+                        writer_store
+                            .persist(&conversation_id, &next_id(), None, make_items(), &make_metadata())
+                            .await
+                            .expect("seed conversation");
+                        (Arc::new(writer_store), Arc::new(reader_store), conversation_id)
+                    },
+                    |setup| async move {
+                        let (writer_store, reader_store, conversation_id) = setup.await;
+                        let writer_id = conversation_id.clone();
+                        let writer = {
+                            let writer_store = writer_store.clone();
+                            tokio::spawn(async move {
+                                writer_store
+                                    .persist(
+                                        &writer_id,
+                                        &next_id(),
+                                        None,
+                                        black_box(make_items()),
+                                        &black_box(make_metadata()),
+                                    )
+                                    .await
+                                    .expect("mixed writer failed");
+                            })
+                        };
+
+                        let readers: Vec<_> = (0..concurrency)
+                            .map(|_| {
+                                let reader_store = reader_store.clone();
+                                let reader_id = conversation_id.clone();
+                                tokio::spawn(async move {
+                                    reader_store
+                                        .rehydrate(&black_box(reader_id))
+                                        .await
+                                        .expect("mixed reader failed")
+                                })
+                            })
+                            .collect();
+
+                        writer.await.expect("writer task panicked");
+                        for reader in readers {
+                            reader.await.expect("reader task panicked");
+                        }
+                    },
+                    criterion::BatchSize::SmallInput,
+                );
+            },
+        );
+    }
+
+    group.finish();
+}
+
 fn bench_concurrent_response_persist(c: &mut Criterion, store: &ResponseStore) {
     let store = Arc::new(store.clone());
     let mut group = c.benchmark_group("concurrent_response_persist");
@@ -409,6 +485,7 @@ fn init_benches(c: &mut Criterion) {
     bench_concurrent_conversation_persist_independent(c, &conversation_store);
     bench_concurrent_conversation_rehydrate(c, &conversation_store);
     bench_concurrent_conversation_rehydrate_independent(c, &conversation_store);
+    bench_concurrent_conversation_mixed_read_write(c);
     bench_concurrent_response_persist(c, &response_store);
     bench_concurrent_response_rehydrate(c, &response_store);
 

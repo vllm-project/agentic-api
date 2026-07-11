@@ -108,17 +108,12 @@ impl ConversationStore {
             let data_str = String::try_from(&any_item)?;
             items_.push((item_id, data_str));
         }
+        let history_item_ids_json = serialize_to_string(&item_ids)?;
+        let metadata_json = String::try_from(metadata)?;
 
         let mut tx = pool.begin().await?;
 
-        let seq_start = item::conversation_item_count(&mut tx, conversation_id)
-            .await?
-            .ok_or_else(|| StorageError::not_found("Conversation", conversation_id))?;
-
-        item::create_in_tx(&mut tx, items_, Some(conversation_id), Some(seq_start)).await?;
-
-        let history_item_ids_json = serialize_to_string(&item_ids)?;
-        let metadata_json = String::try_from(metadata)?;
+        item::create_in_tx(&mut tx, items_, Some(conversation_id)).await?;
 
         response::create_in_tx(
             &mut tx,
