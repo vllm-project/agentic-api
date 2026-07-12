@@ -1,6 +1,6 @@
 //! Database connection pooling and initialization.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use sqlx::AnyConnection;
 use sqlx::any::AnyPoolOptions;
@@ -10,6 +10,10 @@ use crate::config::SqliteConfig;
 const SQLITE_MEMORY_MAX_CONNECTIONS: u32 = 1;
 const DEFAULT_MAX_CONNECTIONS: u32 = 10;
 const SQLITE_BUSY_TIMEOUT_MS: u64 = 5_000;
+const SQLITE_WAL_MAX_ATTEMPTS: u32 = 5;
+const SQLITE_WAL_RETRY_DELAY: Duration = Duration::from_secs(1);
+const SQLITE_BUSY: i32 = 5;
+const SQLITE_LOCKED: i32 = 6;
 
 /// Generic database pool type supporting `SQLite`, `PostgreSQL`, and `MySQL`.
 pub type DbPool = sqlx::Pool<sqlx::Any>;
@@ -104,6 +108,37 @@ async fn configure_sqlite_connection(conn: &mut AnyConnection, config: SqliteCon
     Ok(())
 }
 
+async fn enable_sqlite_wal(pool: &DbPool) -> DbResult<()> {
+    enable_sqlite_wal_with_retry(pool, SQLITE_WAL_MAX_ATTEMPTS, SQLITE_WAL_RETRY_DELAY).await
+}
+
+async fn enable_sqlite_wal_with_retry(pool: &DbPool, max_attempts: u32, retry_delay: Duration) -> DbResult<()> {
+    debug_assert!(max_attempts > 0);
+
+    for attempt in 1..=max_attempts {
+        match sqlx::query("PRAGMA journal_mode = WAL").execute(pool).await {
+            Ok(_) => return Ok(()),
+            Err(error) if attempt < max_attempts && sqlite_is_busy_or_locked(&error) => {
+                tokio::time::sleep(retry_delay).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
+    unreachable!("WAL retry loop always returns on success or final failure")
+}
+
+fn sqlite_is_busy_or_locked(error: &sqlx::Error) -> bool {
+    let sqlx::Error::Database(database_error) = error else {
+        return false;
+    };
+    let Some(code) = database_error.code().and_then(|code| code.parse::<i32>().ok()) else {
+        return false;
+    };
+
+    matches!(code & 0xff, SQLITE_BUSY | SQLITE_LOCKED)
+}
+
 /// Creates a connection pool for the database.
 ///
 /// Initializes a connection pool with sensible defaults:
@@ -156,7 +191,7 @@ pub async fn create_pool_with_sqlite_config(
     }
     let pool = options.connect(&url).await?;
     if sqlite_should_enable_wal(&url) {
-        sqlx::query("PRAGMA journal_mode = WAL").execute(&pool).await?;
+        enable_sqlite_wal(&pool).await?;
     }
 
     // Wrap in Arc for thread-safe sharing across async tasks
@@ -203,6 +238,7 @@ mod tests {
         DEFAULT_SQLITE_JOURNAL_SIZE_LIMIT_BYTES, DEFAULT_SQLITE_MAX_CONNECTIONS, DEFAULT_SQLITE_MMAP_SIZE_BYTES,
         SqliteTempStore,
     };
+    use sqlx::Connection;
 
     #[test]
     fn test_prepare_sqlite_url_without_params() {
@@ -371,6 +407,59 @@ mod tests {
         assert_eq!(journal_size_limit, 131_072);
         assert_eq!(temp_store, 1);
         assert_eq!(mmap_size, 1_048_576);
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_wal_preflight_retries_locked_database() {
+        sqlx::any::install_default_drivers();
+
+        let db_path = std::env::temp_dir().join(format!("wal_retry_{}.db", uuid::Uuid::now_v7()));
+        let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
+        let mut lock_conn = AnyConnection::connect(&db_url)
+            .await
+            .expect("failed to open lock connection");
+        sqlx::query("CREATE TABLE locked_write (id INTEGER PRIMARY KEY)")
+            .execute(&mut lock_conn)
+            .await
+            .expect("failed to create test table");
+        sqlx::query("BEGIN EXCLUSIVE")
+            .execute(&mut lock_conn)
+            .await
+            .expect("failed to acquire exclusive lock");
+
+        let pool = AnyPoolOptions::new()
+            .max_connections(1)
+            .after_connect(|conn, _meta| {
+                Box::pin(async move {
+                    sqlx::query("PRAGMA busy_timeout = 20").execute(&mut *conn).await?;
+                    Ok(())
+                })
+            })
+            .connect(&db_url)
+            .await
+            .expect("failed to create test pool");
+
+        let wal_pool = pool.clone();
+        let wal_task = tokio::spawn(async move {
+            enable_sqlite_wal_with_retry(&wal_pool, SQLITE_WAL_MAX_ATTEMPTS, Duration::from_millis(50)).await
+        });
+
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        sqlx::query("ROLLBACK")
+            .execute(&mut lock_conn)
+            .await
+            .expect("failed to release exclusive lock");
+
+        wal_task
+            .await
+            .expect("WAL preflight task panicked")
+            .expect("WAL preflight should retry after SQLITE_BUSY");
+
+        let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+            .fetch_one(&pool)
+            .await
+            .expect("journal_mode query failed");
+        assert_eq!(journal_mode.to_lowercase(), "wal");
     }
 
     #[tokio::test]
