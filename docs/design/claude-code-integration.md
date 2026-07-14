@@ -211,7 +211,7 @@ This design touches the shared execution loop, which other contributors own and 
 
 Option A's core refactor is not this doc's decision. Factoring the loop off `RequestPayload`/`ResponsePayload` to an API-agnostic shape is owned by the pending Layering ADR (tool-framework.md Future Work); the merged #83 unified the dispatch/`LoopDecision` loop but left it typed to Responses. Messages is a consumer of the shared-loop shape, not its driver — the API-agnostic representation should be settled by that ADR, with the loop's owners, and this work sequenced after it. A Messages PR should not unilaterally reshape the core.
 
-The streaming `GatewayAccumulator` (see [Open questions](#open-questions)) is likewise unbuilt and gated on #89; Messages consumes it when it lands.
+Stage 2's streaming has **no hard dependency** on other in-flight work. The hide-the-gateway-call logic already exists on `main` (blocking via `public_output_items`, streaming via `emit_gateway_*_events`), so Messages reuses it as-is. The proposed `GatewayAccumulator` (tool-framework.md Future Work) would eventually unify those two paths — it becomes worthwhile once #89 lands a second gateway frame type (MCP) — and Messages would consume it then, but that is a later consolidation, not a prerequisite.
 
 And whatever API-agnostic shape emerges has to be validated against Interactions' needs too (ROADMAP §5), not just Messages and Responses — otherwise Interactions inherits a two-client abstraction. That check belongs in the Layering ADR, which is another reason not to bake a Messages-flavored core here.
 
@@ -223,7 +223,7 @@ Still open, pending code review or an experiment:
 
 1. **Loop coupling to Responses types.** The tool loop takes `RequestPayload` and returns `ResponsePayload` (`engine.rs`); Option A needs these factored to an API-agnostic core. This is the biggest unknown, and per [Coordination](#coordination--dependencies) it's a decision for the Layering ADR and the loop's owners, not this doc.
 2. **`tool_use` ID round-tripping.** Confirm vLLM emits stable `tool_use.id`s that survive the loop, analogous to Codex `call_id` restoration.
-3. **Streaming fidelity when injecting gateway tool results.** Emitting correct Anthropic SSE (`content_block_start` / `input_json_delta` / `content_block_stop`, contiguous `index`) when the gateway resolves a gateway-owned `tool_use` mid-stream — the same hide-the-call concern the Responses path faces. The proposed `GatewayAccumulator` (tool-framework.md Future Work, not yet built, gated on #89) would be the shared home for this; Messages is a consumer of that refactor, not its driver.
+3. **Streaming fidelity when injecting gateway tool results.** Emitting correct Anthropic SSE (`content_block_start` / `input_json_delta` / `content_block_stop`, contiguous `index`) when the gateway resolves a gateway-owned `tool_use` mid-stream — the same hide-the-call concern the Responses path faces, and reusing the same `emit_gateway_*_events` logic already on `main`. The proposed `GatewayAccumulator` (tool-framework.md Future Work) would later unify the blocking and streaming variants, but Messages does not depend on it.
 
 Settled by the Stage 0 spike:
 
