@@ -392,8 +392,18 @@ pub(super) fn append_input_item(input: &mut ResponsesInput, item: InputItem) {
 }
 
 pub(super) fn append_output_items_to_input(input: &mut ResponsesInput, output_items: &[OutputItem]) {
-    for input_item in output_items.iter().filter_map(OutputItem::to_input_item) {
-        append_input_item(input, input_item);
+    for item in output_items {
+        // Reasoning items are ephemeral to the turn that produced them. Feeding a
+        // prior round's reasoning back into the next inference round causes some
+        // reasoning parsers (e.g. Qwen3) to re-emit that content wrapped in
+        // `<think>` tags on the visible text channel, leaking it into the answer.
+        // Carry forward only messages and tool calls; reasoning stays out of the loop.
+        if matches!(item, OutputItem::Reasoning(_)) {
+            continue;
+        }
+        if let Some(input_item) = item.to_input_item() {
+            append_input_item(input, input_item);
+        }
     }
 }
 
@@ -483,6 +493,50 @@ mod tests {
         // cap only matters when the model is still requesting tools.
         let decision = classify_round(false, &[], MAX - 1, MAX);
         assert!(matches!(decision, LoopDecision::Done));
+    }
+
+    #[test]
+    fn carry_forward_drops_reasoning_keeps_messages_and_calls() {
+        // A prior round's reasoning must NOT be fed back into the next inference
+        // round: some reasoning parsers re-emit it as `<think>` on the visible
+        // text channel, leaking it into the answer. Messages and function calls
+        // still carry forward so the loop keeps full non-reasoning context.
+        use super::append_output_items_to_input;
+        use crate::types::event::MessageStatus;
+        use crate::types::io::ResponsesInput;
+        use crate::types::io::output::{OutputItem, OutputMessage, ReasoningOutput};
+
+        let output = vec![
+            OutputItem::Reasoning(ReasoningOutput::new("rs_1")),
+            OutputItem::Message(OutputMessage::new("msg_1", MessageStatus::Completed)),
+            OutputItem::FunctionCall(FunctionToolCall {
+                id: "fc_1".to_owned(),
+                call_id: "call_1".to_owned(),
+                name: "web_search".to_owned(),
+                arguments: "{}".to_owned(),
+                status: MessageStatus::Completed,
+                namespace: None,
+            }),
+        ];
+
+        let mut input = ResponsesInput::Items(vec![]);
+        append_output_items_to_input(&mut input, &output);
+
+        let ResponsesInput::Items(items) = input else {
+            panic!("expected items input");
+        };
+        assert!(
+            !items.iter().any(|i| matches!(i, InputItem::Reasoning(_))),
+            "reasoning must not be carried back into the loop"
+        );
+        assert!(
+            items.iter().any(|i| matches!(i, InputItem::Message(_))),
+            "message should carry forward"
+        );
+        assert!(
+            items.iter().any(|i| matches!(i, InputItem::FunctionCall(_))),
+            "function call should carry forward"
+        );
     }
 
     use std::pin::Pin;
