@@ -30,7 +30,8 @@ The recorder scripts (`record_reasoning_cassettes.sh`, `record_tool_call_cassett
 
 | Mode | Description |
 |------|-------------|
-| `responses` | Chains turns via `previous_response_id`. Only mode supported with `--vllm`. Common mode for gateway-backed built-in tool cassettes. |
+| `responses` | Chains turns via `previous_response_id`. Supported with `--vllm`. Common mode for gateway-backed built-in tool cassettes. |
+| `messages` | Anthropic Messages API (`/v1/messages`). Stateless: resends the full `messages` history each turn. With `--tool-outputs`, a turn following a `tool_use` feeds back matching `tool_result` blocks (keyed by tool name) instead of prompting. Supported with `--vllm`. |
 | `conv` | Creates a conversation object, passes `conversation` id each turn. |
 | `isolation` | Two independent conversations (A and B) recorded into one cassette. |
 | `mixed` | Turn 1 uses `conversation` id, turns 2+ switch to `previous_response_id`. |

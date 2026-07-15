@@ -1,0 +1,13 @@
+[
+  {
+    "name": "web_search",
+    "description": "Search the web for current information. Executed server-side by the gateway.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": { "type": "string", "description": "the search query" }
+      },
+      "required": ["query"]
+    }
+  }
+]
