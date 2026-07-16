@@ -10,10 +10,20 @@ This repository is Rust-first under the `vllm-project` GitHub organization.
 - **Docs** -- MkDocs documentation in `docs/`.
 - **Python gateway code has been removed** as part of the migration plan.
 
+## Terminology
+
+- Read and follow [`TERMINOLOGY.md`](TERMINOLOGY.md) when naming API, state, tool, streaming, MCP, or reasoning
+  concepts in code, documentation, issues, and pull requests.
+- Treat `TERMINOLOGY.md` as normative for preferred prose. Preserve exact field names and item types when discussing
+  a wire protocol.
+- When local wording conflicts with current OpenAI documentation, prefer the OpenAI term unless this repository has a
+  distinct implementation concept documented in `TERMINOLOGY.md`.
+
 ## Project Structure
 
 ```
 .
+├── TERMINOLOGY.md              # Normative project vocabulary
 ├── crates/agentic-server/       # Axum binary, transport handlers, and configuration
 ├── crates/agentic-server-core/  # Protocol types, execution, tools, and persistence
 ├── crates/agentic-praxis/       # Praxis integration
