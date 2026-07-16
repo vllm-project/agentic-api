@@ -436,6 +436,52 @@ fn text_sse_response(text: &str) -> support::MockResponse {
     ])
 }
 
+fn text_sse_response_with_output_index(text: &str, output_index: u32) -> support::MockResponse {
+    sse_response([
+        serde_json::json!({
+            "type": "response.created",
+            "response": {"id": "resp_final", "status": "in_progress", "usage": null}
+        }),
+        serde_json::json!({
+            "type": "response.in_progress",
+            "response": {"id": "resp_final", "status": "in_progress", "usage": null}
+        }),
+        serde_json::json!({
+            "type": "response.output_item.added",
+            "output_index": output_index,
+            "item": {
+                "id": "msg_final",
+                "type": "message",
+                "role": "assistant",
+                "status": "in_progress",
+                "content": []
+            }
+        }),
+        serde_json::json!({
+            "type": "response.output_text.delta",
+            "item_id": "msg_final",
+            "output_index": output_index,
+            "content_index": 0,
+            "delta": text
+        }),
+        serde_json::json!({
+            "type": "response.output_item.done",
+            "output_index": output_index,
+            "item": {
+                "id": "msg_final",
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": text, "annotations": []}]
+            }
+        }),
+        serde_json::json!({
+            "type": "response.completed",
+            "response": {"id": "resp_final", "status": "completed", "usage": null}
+        }),
+    ])
+}
+
 fn mixed_web_search_and_client_function_response() -> support::MockResponse {
     support::MockResponse::Json(
         serde_json::json!({
@@ -924,6 +970,106 @@ async fn stream_emits_web_search_lifecycle_events_before_final_payload() {
     let output = completed_event["response"]["output"].as_array().unwrap();
     assert!(output.iter().any(|item| item["type"] == "web_search_call"));
     assert!(output.iter().any(|item| item["type"] == "message"));
+}
+
+#[tokio::test]
+async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence() {
+    let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
+    let llm = support::MockServer::start_deque(vec![
+        web_search_function_call_sse_response(),
+        text_sse_response_with_output_index("Use async carefully.", 0),
+    ])
+    .await;
+    let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
+    let web_search: ResponsesTool = serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).unwrap();
+    let payload = RequestPayload {
+        model: "test-model".to_owned(),
+        input: ResponsesInput::Text("look up rust async".to_owned()),
+        instructions: None,
+        previous_response_id: None,
+        conversation_id: None,
+        tools: Some(vec![web_search]),
+        tool_choice: None,
+        stream: true,
+        store: true,
+        include: None,
+        temperature: None,
+        top_p: None,
+        max_output_tokens: Some(1024),
+        truncation: None,
+        metadata: None,
+    };
+
+    let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();
+    let Either::Right(stream) = result else {
+        panic!("expected streaming response");
+    };
+    let chunks: Vec<String> = stream.collect().await;
+    captured_you.recv().await.expect("mock You.com should receive request");
+
+    let json_events: Vec<serde_json::Value> = chunks
+        .iter()
+        .filter_map(|chunk| {
+            let data = chunk.trim_end_matches('\n').strip_prefix("data: ")?;
+            (data != "[DONE]").then(|| serde_json::from_str(data).ok())?
+        })
+        .collect();
+    let event_types: Vec<&str> = json_events.iter().filter_map(|event| event["type"].as_str()).collect();
+    assert_eq!(
+        event_types
+            .iter()
+            .filter(|event_type| **event_type == "response.created")
+            .count(),
+        1,
+        "multi-round stream should expose one logical response.created: {event_types:?}"
+    );
+    assert_eq!(
+        event_types
+            .iter()
+            .filter(|event_type| **event_type == "response.in_progress")
+            .count(),
+        1,
+        "multi-round stream should expose one logical response.in_progress: {event_types:?}"
+    );
+
+    let sequence_numbers: Vec<u64> = json_events
+        .iter()
+        .map(|event| {
+            event["sequence_number"]
+                .as_u64()
+                .unwrap_or_else(|| panic!("event missing sequence_number: {event}"))
+        })
+        .collect();
+    assert_eq!(
+        sequence_numbers,
+        (0..u64::try_from(sequence_numbers.len()).unwrap()).collect::<Vec<_>>(),
+        "public sequence_number must be contiguous across upstream, synthetic, and terminal frames"
+    );
+
+    let output_events: Vec<(&str, u64)> = json_events
+        .iter()
+        .filter_map(|event| Some((event["type"].as_str()?, event["output_index"].as_u64()?)))
+        .collect();
+    assert!(
+        output_events.contains(&("response.output_item.added", 0)),
+        "synthetic web_search_call should occupy output_index 0: {output_events:?}"
+    );
+    assert!(
+        output_events.contains(&("response.output_item.done", 0)),
+        "synthetic web_search_call done should occupy output_index 0: {output_events:?}"
+    );
+    assert!(
+        output_events.contains(&("response.output_item.added", 1)),
+        "round-two message should be rebased to output_index 1: {output_events:?}"
+    );
+    assert!(
+        output_events.contains(&("response.output_text.delta", 1)),
+        "round-two text delta should be rebased to output_index 1: {output_events:?}"
+    );
+    assert!(
+        output_events.contains(&("response.output_item.done", 1)),
+        "round-two message done should be rebased to output_index 1: {output_events:?}"
+    );
 }
 
 #[tokio::test]

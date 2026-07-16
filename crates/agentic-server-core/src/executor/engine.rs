@@ -13,8 +13,8 @@ use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
 use super::gateway::{
-    LoopDecision, append_gateway_calls_to_new_input, append_output_items_to_input, append_tool_outputs, classify_round,
-    execute_and_emit_output_calls, has_client_owned_calls, public_output_items,
+    GatewayStreamAccumulator, LoopDecision, append_gateway_calls_to_new_input, append_output_items_to_input,
+    append_tool_outputs, classify_round, execute_and_emit_output_calls, has_client_owned_calls, public_output_items,
 };
 use crate::executor::error::ExecutorResult;
 use crate::executor::inference::DONE_MARKER;
@@ -106,6 +106,7 @@ async fn run_until_gateway_tools_complete(
     auth: Option<&str>,
     stream_upstream: bool,
     stream_events: Option<&mpsc::UnboundedSender<String>>,
+    mut stream_accumulator: Option<&mut GatewayStreamAccumulator>,
 ) -> ExecutorResult<(ResponsePayload, RequestContext)> {
     let registry: ToolRegistry = match ctx.enriched_request.tools.as_ref() {
         Some(tools) => ToolRegistry::build_with_handlers(tools, &exec_ctx.gateway_executors).await?,
@@ -115,8 +116,18 @@ async fn run_until_gateway_tools_complete(
     let mut combined_usage: Option<ResponseUsage> = None;
 
     for round in 0..MAX_GATEWAY_TOOL_ROUNDS {
+        let output_offset = combined_output.len();
         let mut payload: ResponsePayload = if stream_upstream {
-            fetch_stream_payload(&ctx, exec_ctx, auth, &registry, stream_events).await?
+            fetch_stream_payload(
+                &ctx,
+                exec_ctx,
+                auth,
+                &registry,
+                stream_events,
+                stream_accumulator.as_deref_mut(),
+                output_offset,
+            )
+            .await?
         } else {
             fetch_blocking_payload(&ctx, exec_ctx, auth).await?
         };
@@ -124,8 +135,14 @@ async fn run_until_gateway_tools_complete(
         accumulate_usage(&mut combined_usage, payload.usage.take());
         let current_output = std::mem::take(&mut payload.output);
         let has_client_owned = has_client_owned_calls(&current_output, &registry);
-        let gateway_results =
-            execute_and_emit_output_calls(&current_output, &registry, combined_output.len(), stream_events).await?;
+        let gateway_results = execute_and_emit_output_calls(
+            &current_output,
+            &registry,
+            output_offset,
+            stream_events,
+            stream_accumulator.as_deref_mut(),
+        )
+        .await?;
         let public_output = public_output_items(&current_output, &registry, &gateway_results);
         combined_output.extend(public_output);
 
@@ -198,7 +215,7 @@ async fn run_blocking(
     exec_ctx: &ExecutionContext,
     auth: Option<&str>,
 ) -> ExecutorResult<ResponsePayload> {
-    let (payload, ctx) = run_until_gateway_tools_complete(ctx, exec_ctx, auth, false, None).await?;
+    let (payload, ctx) = run_until_gateway_tools_complete(ctx, exec_ctx, auth, false, None, None).await?;
 
     let ch = exec_ctx.conv_handler.clone();
     let rh = exec_ctx.resp_handler.clone();
@@ -214,14 +231,17 @@ fn run_stream(ctx: RequestContext, exec_ctx: Arc<ExecutionContext>, auth: Option
         let (event_tx, mut event_rx) = mpsc::unbounded_channel();
         let exec_ctx_for_run = Arc::clone(&exec_ctx);
         let mut run_handle = AbortOnDrop::new(tokio::spawn(async move {
+            let mut stream_accumulator = GatewayStreamAccumulator::new();
             run_until_gateway_tools_complete(
                 ctx,
                 exec_ctx_for_run.as_ref(),
                 auth.as_deref(),
                 true,
                 Some(&event_tx),
+                Some(&mut stream_accumulator),
             )
             .await
+            .map(|(payload, ctx)| (payload, ctx, stream_accumulator))
         }));
 
         loop {
@@ -242,8 +262,11 @@ fn run_stream(ctx: RequestContext, exec_ctx: Arc<ExecutionContext>, auth: Option
                             yield error_sse_chunk(&e.to_string());
                             yield DONE_MARKER.to_string();
                         }
-                        Ok(Ok((payload, ctx))) => {
-                            yield payload.as_terminal_response_chunk();
+                        Ok(Ok((payload, ctx, mut stream_accumulator))) => {
+                            match stream_accumulator.terminal_response_chunk(&payload) {
+                                Ok(chunk) => yield chunk,
+                                Err(e) => yield error_sse_chunk(&e.to_string()),
+                            }
                             yield DONE_MARKER.to_string();
 
                             let ch = exec_ctx.conv_handler.clone();
