@@ -8,11 +8,20 @@ use tokio::sync::mpsc;
 use crate::events::{EventPayload, SSEEventType, SSEItemType, normalize_sse_line};
 use crate::executor::accumulator::ResponseAccumulator;
 use crate::executor::error::{ExecutorError, ExecutorResult};
+use crate::executor::gateway::GatewayStreamAccumulator;
 use crate::executor::inference::{call_inference, fetch_response_json};
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::tool::ToolRegistry;
 use crate::types::request_response::ResponsePayload;
 use crate::utils::common::{deserialize_from_str, serialize_to_string};
+
+struct StreamEmitContext<'a> {
+    request: &'a RequestContext,
+    registry: &'a ToolRegistry,
+    sender: &'a mpsc::UnboundedSender<String>,
+    accumulator: &'a mut GatewayStreamAccumulator,
+    output_offset: usize,
+}
 
 pub(super) async fn fetch_blocking_payload(
     ctx: &RequestContext,
@@ -43,6 +52,8 @@ pub(super) async fn fetch_stream_payload(
     auth: Option<&str>,
     registry: &ToolRegistry,
     stream_events: Option<&mpsc::UnboundedSender<String>>,
+    stream_accumulator: Option<&mut GatewayStreamAccumulator>,
+    output_offset: usize,
 ) -> ExecutorResult<ResponsePayload> {
     let url = exec_ctx.responses_url();
     let upstream_request = ctx.enriched_request.to_upstream_request(true)?;
@@ -57,15 +68,21 @@ pub(super) async fn fetch_stream_payload(
     let mut acc = ResponseAccumulator::new(ctx.response_id.clone(), ctx.conversation_id.clone());
     let mut hidden_gateway_item_ids = HashSet::new();
     let mut pending_unnamed_function_events = HashMap::<String, Vec<String>>::new();
+    let mut stream_accumulator = stream_accumulator;
     while let Some(line_result) = line_stream.next().await {
         let line = line_result?;
         log_upstream_failure(&line, &ctx.response_id);
-        if let Some(sender) = stream_events {
-            emit_upstream_stream_event(
-                &line,
-                ctx,
+        if let (Some(sender), Some(accumulator)) = (stream_events, stream_accumulator.as_deref_mut()) {
+            let mut emit_ctx = StreamEmitContext {
+                request: ctx,
                 registry,
                 sender,
+                accumulator,
+                output_offset,
+            };
+            emit_upstream_stream_event(
+                &line,
+                &mut emit_ctx,
                 &mut hidden_gateway_item_ids,
                 &mut pending_unnamed_function_events,
             )?;
@@ -121,9 +138,7 @@ fn log_upstream_failure(line: &str, gateway_response_id: &str) {
 
 fn emit_upstream_stream_event(
     line: &str,
-    ctx: &RequestContext,
-    registry: &ToolRegistry,
-    sender: &mpsc::UnboundedSender<String>,
+    emit_ctx: &mut StreamEmitContext<'_>,
     hidden_gateway_item_ids: &mut HashSet<String>,
     pending_unnamed_function_events: &mut HashMap<String, Vec<String>>,
 ) -> ExecutorResult<()> {
@@ -138,8 +153,13 @@ fn emit_upstream_stream_event(
     let Some(frame) = normalize_sse_line(line) else {
         return Ok(());
     };
-    if should_hide_upstream_event(frame.event_type, &frame.payload, registry, hidden_gateway_item_ids)
-        || is_terminal_response_event(frame.event_type)
+    if should_hide_upstream_event(
+        frame.event_type,
+        &frame.payload,
+        emit_ctx.registry,
+        hidden_gateway_item_ids,
+    ) || is_terminal_response_event(frame.event_type)
+        || !emit_ctx.accumulator.should_emit_lifecycle(frame.event_type)
     {
         drop_pending_function_events(&frame.payload, pending_unnamed_function_events);
         return Ok(());
@@ -147,39 +167,29 @@ fn emit_upstream_stream_event(
     if defer_or_flush_function_event(
         line,
         &frame.payload,
-        ctx,
-        registry,
-        sender,
+        emit_ctx,
         hidden_gateway_item_ids,
         pending_unnamed_function_events,
     )? {
         return Ok(());
     }
 
-    emit_stream_line(data, ctx, registry, sender)
+    emit_stream_line(data, emit_ctx)
 }
 
-fn emit_stream_line(
-    data: &str,
-    ctx: &RequestContext,
-    registry: &ToolRegistry,
-    sender: &mpsc::UnboundedSender<String>,
-) -> ExecutorResult<()> {
+fn emit_stream_line(data: &str, emit_ctx: &mut StreamEmitContext<'_>) -> ExecutorResult<()> {
     let mut value = serde_json::from_str::<Value>(data).map_err(ExecutorError::JsonError)?;
-    apply_context_response_ids(&mut value, ctx);
-    registry.restore_stream_event_value(&mut value);
-    let event_json = serialize_to_string(&value).map_err(ExecutorError::JsonError)?;
-    sender
-        .send(format!("data: {event_json}\n\n"))
-        .map_err(|_| ExecutorError::StreamError("stream receiver closed while emitting upstream event".to_owned()))
+    apply_context_response_ids(&mut value, emit_ctx.request);
+    emit_ctx.registry.restore_stream_event_value(&mut value);
+    emit_ctx
+        .accumulator
+        .emit_event(emit_ctx.sender, &mut value, emit_ctx.output_offset)
 }
 
 fn defer_or_flush_function_event(
     line: &str,
     payload: &EventPayload,
-    ctx: &RequestContext,
-    registry: &ToolRegistry,
-    sender: &mpsc::UnboundedSender<String>,
+    emit_ctx: &mut StreamEmitContext<'_>,
     hidden_gateway_item_ids: &mut HashSet<String>,
     pending_unnamed_function_events: &mut HashMap<String, Vec<String>>,
 ) -> ExecutorResult<bool> {
@@ -206,12 +216,12 @@ fn defer_or_flush_function_event(
             Ok(true)
         }
         EventPayload::FunctionCallArgsDone { item_id, name, .. } => {
-            if registry.is_gateway_owned_name(name) {
+            if emit_ctx.registry.is_gateway_owned_name(name) {
                 hidden_gateway_item_ids.insert(item_id.clone());
                 pending_unnamed_function_events.remove(item_id);
                 return Ok(true);
             }
-            flush_pending_function_events(item_id, ctx, registry, sender, pending_unnamed_function_events)?;
+            flush_pending_function_events(item_id, emit_ctx, pending_unnamed_function_events)?;
             Ok(false)
         }
         EventPayload::OutputItemDone {
@@ -223,13 +233,13 @@ fn defer_or_flush_function_event(
             if item
                 .get("name")
                 .and_then(Value::as_str)
-                .is_some_and(|name| registry.is_gateway_owned_name(name))
+                .is_some_and(|name| emit_ctx.registry.is_gateway_owned_name(name))
             {
                 hidden_gateway_item_ids.insert(item_id.clone());
                 pending_unnamed_function_events.remove(item_id);
                 return Ok(true);
             }
-            flush_pending_function_events(item_id, ctx, registry, sender, pending_unnamed_function_events)?;
+            flush_pending_function_events(item_id, emit_ctx, pending_unnamed_function_events)?;
             Ok(false)
         }
         _ => Ok(false),
@@ -238,9 +248,7 @@ fn defer_or_flush_function_event(
 
 fn flush_pending_function_events(
     item_id: &str,
-    ctx: &RequestContext,
-    registry: &ToolRegistry,
-    sender: &mpsc::UnboundedSender<String>,
+    emit_ctx: &mut StreamEmitContext<'_>,
     pending_unnamed_function_events: &mut HashMap<String, Vec<String>>,
 ) -> ExecutorResult<()> {
     let Some(lines) = pending_unnamed_function_events.remove(item_id) else {
@@ -250,7 +258,7 @@ fn flush_pending_function_events(
         let Some(data) = line.strip_prefix("data: ") else {
             continue;
         };
-        emit_stream_line(data.trim(), ctx, registry, sender)?;
+        emit_stream_line(data.trim(), emit_ctx)?;
     }
     Ok(())
 }

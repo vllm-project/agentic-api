@@ -246,7 +246,7 @@ impl ResponsePayload {
         format!("data: {json_str}\n\n")
     }
 
-    fn terminal_event_type(&self) -> &'static str {
+    pub(crate) fn terminal_event_type(&self) -> &'static str {
         match self.status.as_str() {
             "incomplete" => "response.incomplete",
             "failed" | "error" => "response.failed",
