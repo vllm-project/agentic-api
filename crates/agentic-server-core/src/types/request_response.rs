@@ -88,6 +88,18 @@ impl RequestPayload {
     /// flat name collides with a top-level function tool or another namespace
     /// member.
     pub fn to_upstream_request(&self, stream: bool) -> Result<UpstreamRequest<'_>, ToolError> {
+        let has_gateway_owned_tool = self.declares_gateway_owned_tool();
+        if has_gateway_owned_tool && self.parallel_tool_calls == Some(true) {
+            return Err(ToolError::Config(
+                "parallel_tool_calls must be false when using built-in tools".into(),
+            ));
+        }
+        let parallel_tool_calls = if has_gateway_owned_tool {
+            Some(false)
+        } else {
+            self.parallel_tool_calls
+        };
+
         let renamed_tools = self
             .tools
             .as_deref()
@@ -112,7 +124,21 @@ impl RequestPayload {
             max_output_tokens: self.max_output_tokens,
             truncation: self.truncation.as_deref(),
             metadata: self.metadata.as_ref(),
-            parallel_tool_calls: self.parallel_tool_calls,
+            parallel_tool_calls,
+        })
+    }
+
+    fn declares_gateway_owned_tool(&self) -> bool {
+        self.tools.as_deref().is_some_and(|tools| {
+            tools.iter().any(|tool| {
+                matches!(
+                    tool,
+                    ResponsesTool::Mcp(_)
+                        | ResponsesTool::WebSearch(_)
+                        | ResponsesTool::FileSearch(_)
+                        | ResponsesTool::CodeInterpreter(_)
+                )
+            })
         })
     }
 }
@@ -228,6 +254,73 @@ mod tests {
         .unwrap();
 
         let upstream = payload.to_upstream_request(false).expect("valid upstream request");
+        let value = serde_json::to_value(upstream).unwrap();
+        assert_eq!(value["parallel_tool_calls"], false);
+    }
+
+    #[test]
+    fn to_upstream_request_allows_parallel_tool_calls_for_client_function_tools() {
+        let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test",
+            "input": "hi",
+            "parallel_tool_calls": true,
+            "tools": [{"type": "function", "name": "get_weather"}]
+        }))
+        .unwrap();
+
+        let upstream = payload
+            .to_upstream_request(false)
+            .expect("function tools allow parallel calls");
+        let value = serde_json::to_value(upstream).unwrap();
+        assert_eq!(value["parallel_tool_calls"], true);
+    }
+
+    #[test]
+    fn to_upstream_request_sets_serial_tool_calls_for_builtin_tools() {
+        let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test",
+            "input": "hi",
+            "tools": [{"type": "web_search_preview"}]
+        }))
+        .unwrap();
+
+        let upstream = payload
+            .to_upstream_request(false)
+            .expect("built-in tools default to serial tool calls");
+        let value = serde_json::to_value(upstream).unwrap();
+        assert_eq!(value["parallel_tool_calls"], false);
+    }
+
+    #[test]
+    fn to_upstream_request_rejects_parallel_tool_calls_for_builtin_tools() {
+        let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test",
+            "input": "hi",
+            "parallel_tool_calls": true,
+            "tools": [{"type": "web_search_preview"}]
+        }))
+        .unwrap();
+
+        let Err(err) = payload.to_upstream_request(false) else {
+            panic!("built-in tools should reject parallel_tool_calls=true");
+        };
+
+        assert!(err.to_string().contains("parallel_tool_calls must be false"));
+    }
+
+    #[test]
+    fn to_upstream_request_allows_builtin_tools_with_serial_tool_calls() {
+        let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test",
+            "input": "hi",
+            "parallel_tool_calls": false,
+            "tools": [{"type": "web_search_preview"}]
+        }))
+        .unwrap();
+
+        let upstream = payload
+            .to_upstream_request(false)
+            .expect("serial built-in tool request is valid");
         let value = serde_json::to_value(upstream).unwrap();
         assert_eq!(value["parallel_tool_calls"], false);
     }
