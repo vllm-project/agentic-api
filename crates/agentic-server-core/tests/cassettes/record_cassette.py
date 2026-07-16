@@ -320,6 +320,68 @@ def _send_streaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | 
     return response_data
 
 
+def _send_messages_nonstreaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | None:
+    """Send an Anthropic Messages request (non-streaming) and return the message object."""
+    resp = client.post(f"{proxy_url}/v1/messages", json=body, timeout=300)
+    resp.raise_for_status()
+    data = resp.json()
+    print(f"\n[Message]\n{json.dumps(data, indent=2)}\n")
+    return data
+
+
+def _send_messages_streaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | None:
+    """Send an Anthropic Messages request (streaming) and reconstruct the final message.
+
+    Anthropic SSE sends the message envelope in `message_start`, then mutates it via
+    `content_block_start`/`content_block_delta`/`content_block_stop` and `message_delta`.
+    We accumulate those into the final message object so callers can chain the next turn.
+    """
+    message: dict | None = None
+    blocks: dict[int, dict] = {}
+    print("\n[Streaming message]")
+    with client.stream("POST", f"{proxy_url}/v1/messages", json=body, timeout=300) as resp:
+        resp.raise_for_status()
+        for line in resp.iter_lines():
+            if not line or not line.startswith("data:"):
+                continue
+            print(line)
+            try:
+                event = json.loads(line[5:].strip())
+            except Exception:
+                continue
+            etype = event.get("type")
+            if etype == "message_start":
+                message = event.get("message", {})
+            elif etype == "content_block_start":
+                blocks[event["index"]] = event.get("content_block", {})
+            elif etype == "content_block_delta":
+                blk = blocks.setdefault(event["index"], {})
+                delta = event.get("delta", {})
+                if delta.get("type") == "text_delta":
+                    blk["type"] = blk.get("type", "text")
+                    blk["text"] = blk.get("text", "") + delta.get("text", "")
+                elif delta.get("type") == "input_json_delta":
+                    blk["type"] = blk.get("type", "tool_use")
+                    blk["_partial_json"] = blk.get("_partial_json", "") + delta.get("partial_json", "")
+                elif delta.get("type") == "thinking_delta":
+                    blk["type"] = blk.get("type", "thinking")
+                    blk["thinking"] = blk.get("thinking", "") + delta.get("thinking", "")
+            elif etype == "message_delta" and message is not None:
+                message.update({k: v for k, v in event.get("delta", {}).items()})
+    print()
+    if message is not None:
+        # Finalize accumulated tool_use input from partial JSON.
+        for blk in blocks.values():
+            if blk.get("type") == "tool_use" and "_partial_json" in blk:
+                raw = blk.pop("_partial_json")
+                try:
+                    blk["input"] = json.loads(raw) if raw else {}
+                except Exception:
+                    blk["input"] = {}
+        message["content"] = [blocks[i] for i in sorted(blocks)]
+    return message
+
+
 class WebSocketClient:
     """Small stdlib websocket client for cassette recording."""
 
@@ -760,6 +822,70 @@ def run_mixed(
         previous_response_id = response_data.get("id") if response_data else None
 
 
+def run_messages(
+    client: httpx.Client,
+    turns: int,
+    model: str,
+    stream: bool,
+    proxy_url: str,
+    tools: list | None,
+    tool_choice: Any,
+    tool_outputs: dict[str, str] | None,
+    max_tokens: int,
+) -> None:
+    """Record Anthropic Messages turns.
+
+    Messages is stateless: the client resends the full `messages` history each
+    turn. Between turns we append the model's assistant `content` and — for any
+    `tool_use` block — a matching `tool_result` block (fake output from
+    `--tool-outputs`, keyed by tool name), mirroring how a gateway tool loop
+    feeds results back. A turn with pending tool_use consumes those outputs
+    instead of prompting for a new user message.
+    """
+    history: list[dict] = []
+    for turn in range(1, turns + 1):
+        pending_tool_use = [
+            b
+            for msg in history[-1:]
+            if msg.get("role") == "assistant"
+            for b in (msg.get("content") or [])
+            if isinstance(b, dict) and b.get("type") == "tool_use"
+        ]
+        if pending_tool_use and tool_outputs:
+            # Feed tool_result blocks back for the prior turn's tool_use calls.
+            results = []
+            for call in pending_tool_use:
+                out = tool_outputs.get(call.get("name"), "{}")
+                results.append({"type": "tool_result", "tool_use_id": call.get("id"), "content": out})
+            history.append({"role": "user", "content": results})
+            click.echo(f"  [fed back {len(results)} tool_result(s) for {[c.get('name') for c in pending_tool_use]}]")
+        else:
+            prompt = _prompt(f"Turn {turn}/{turns} — enter prompt: ")
+            history.append({"role": "user", "content": prompt})
+
+        body: dict = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": history,
+            "stream": stream,
+        }
+        if tools is not None:
+            body["tools"] = tools
+        if tool_choice is not None:
+            body["tool_choice"] = tool_choice
+
+        message = (
+            _send_messages_streaming(client, body, proxy_url)
+            if stream
+            else _send_messages_nonstreaming(client, body, proxy_url)
+        )
+        if not message:
+            click.echo("  [no message returned — stopping]")
+            break
+        # Append the assistant turn so the next request carries full history.
+        history.append({"role": "assistant", "content": message.get("content", [])})
+
+
 def run_responses(
     client: httpx.Client,
     turns: int,
@@ -896,7 +1022,7 @@ def run_responses(
 )
 @click.option(
     "--mode",
-    type=click.Choice(["conv", "isolation", "mixed", "responses", "store_true_then_store_false"]),
+    type=click.Choice(["conv", "isolation", "mixed", "responses", "messages", "store_true_then_store_false"]),
     default="conv",
     show_default=True,
     help="Recording mode.",
@@ -1028,9 +1154,9 @@ def main(
     backend_count = sum(bool(url) for url in (openai_url, vllm_url, gateway_url))
     if backend_count > 1:
         raise click.UsageError("--openai, --vllm, and --gateway are mutually exclusive.")
-    if vllm_url and mode != "responses":
+    if vllm_url and mode not in ("responses", "messages"):
         raise click.UsageError(
-            f"--vllm is only supported with --mode responses (got --mode {mode})."
+            f"--vllm is only supported with --mode responses or --mode messages (got --mode {mode})."
         )
     if transport == "websocket" and mode != "responses":
         raise click.UsageError(
@@ -1146,6 +1272,18 @@ def main(
                         tool_choice,
                         tool_outputs,
                         response_max_output_tokens,
+                    )
+                elif mode == "messages":
+                    run_messages(
+                        client,
+                        turns,
+                        model,
+                        stream,
+                        proxy_url,
+                        tools,
+                        tool_choice,
+                        tool_outputs,
+                        response_max_output_tokens or 1024,
                     )
                 elif mode == "store_true_then_store_false":
                     run_store_true_then_store_false(client, turns, model, stream, proxy_url)

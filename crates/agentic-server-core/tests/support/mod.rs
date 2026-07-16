@@ -370,6 +370,7 @@ pub fn make_request(
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     }
 }
 

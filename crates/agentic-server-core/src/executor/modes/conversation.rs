@@ -142,6 +142,7 @@ mod tests {
             truncation: None,
             metadata: None,
             parallel_tool_calls: None,
+            cache_salt: None,
         };
         RequestContext {
             enriched_request: req.clone(),

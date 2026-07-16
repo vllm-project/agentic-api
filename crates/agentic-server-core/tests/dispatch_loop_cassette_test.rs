@@ -128,6 +128,7 @@ fn request(text: &str, tools: Option<Vec<ResponsesTool>>) -> RequestPayload {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     }
 }
 

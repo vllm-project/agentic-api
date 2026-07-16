@@ -1,0 +1,169 @@
+turns:
+- filename: t1
+  request:
+    body:
+      max_tokens: 1024
+      messages:
+      - content: What is the latest stable Rust release? Use web_search.
+        role: user
+      model: qwen3
+      stream: false
+      tools:
+      - description: Search the web for current information. Executed server-side
+          by the gateway.
+        input_schema:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    body:
+      content:
+      - signature: 117259e4fcb34ad489f5d32ddfa9d735
+        thinking: '
+
+          Okay, the user is asking for the latest stable Rust release. I need to figure
+          out how to get that information. They mentioned using web_search, so I should
+          use the provided function for that.
+
+
+          First, I''ll check if there''s any recent information I already know. But
+          since Rust updates frequently, it''s better to search the web to ensure
+          the answer is up-to-date. The web_search function will fetch the latest
+          data.
+
+
+          The query parameter should be specific. Maybe "latest stable Rust release"
+          or something similar. I''ll structure the tool call with that query. Let
+          me make sure the JSON is correctly formatted with the function name and
+          arguments. No other functions are available, so just web_search is needed
+          here.
+
+          '
+        type: thinking
+      - id: chatcmpl-tool-9d4984b2f02acb7b
+        input:
+          query: latest stable rust release
+        name: web_search
+        type: tool_use
+      id: chatcmpl-9b544781812c6990
+      model: qwen3
+      role: assistant
+      stop_reason: tool_use
+      type: message
+      usage:
+        input_tokens: 175
+        output_tokens: 172
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      max_tokens: 1024
+      messages:
+      - content: What is the latest stable Rust release? Use web_search.
+        role: user
+      - content:
+        - signature: 117259e4fcb34ad489f5d32ddfa9d735
+          thinking: '
+
+            Okay, the user is asking for the latest stable Rust release. I need to
+            figure out how to get that information. They mentioned using web_search,
+            so I should use the provided function for that.
+
+
+            First, I''ll check if there''s any recent information I already know.
+            But since Rust updates frequently, it''s better to search the web to ensure
+            the answer is up-to-date. The web_search function will fetch the latest
+            data.
+
+
+            The query parameter should be specific. Maybe "latest stable Rust release"
+            or something similar. I''ll structure the tool call with that query. Let
+            me make sure the JSON is correctly formatted with the function name and
+            arguments. No other functions are available, so just web_search is needed
+            here.
+
+            '
+          type: thinking
+        - id: chatcmpl-tool-9d4984b2f02acb7b
+          input:
+            query: latest stable rust release
+          name: web_search
+          type: tool_use
+        role: assistant
+      - content:
+        - content: The latest stable Rust release is version 1.89.0.
+          tool_use_id: chatcmpl-tool-9d4984b2f02acb7b
+          type: tool_result
+        role: user
+      model: qwen3
+      stream: false
+      tools:
+      - description: Search the web for current information. Executed server-side
+          by the gateway.
+        input_schema:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    body:
+      content:
+      - signature: 92532a89d15b4799be0b26d90b00fc80
+        thinking: "\nOkay, the user asked for the latest stable Rust release, and\
+          \ I used the web_search tool to find it. The response from the tool says\
+          \ it's version 1.89.0. I need to confirm that this is correct and present\
+          \ it clearly.\n\nFirst, I should check if there's any possibility of outdated\
+          \ information. Since the tool's response is recent, it's likely accurate.\
+          \ Rust's versioning is usually straightforward, with each stable release\
+          \ getting a new number. \n\nI should format the answer to highlight the\
+          \ version number. Maybe add a brief note about the release, like when it\
+          \ was released or any major features, but the user didn't ask for details,\
+          \ just the version. So keeping it concise is best. \n\nAlso, make sure the\
+          \ response is friendly and offers further help. The user might want to know\
+          \ how to update or check their current version. But since they didn't ask,\
+          \ maybe just a simple answer with the version number and a mention that\
+          \ it's the latest stable release.\n"
+        type: thinking
+      - text: '
+
+
+          The latest stable release of Rust is **1.89.0**. This is the most recent
+          version available for general use, with updates and improvements from the
+          Rust development team. Let me know if you need further details! 🚀'
+        type: text
+      id: chatcmpl-85be1992ba1e62ce
+      model: qwen3
+      role: assistant
+      stop_reason: end_turn
+      type: message
+      usage:
+        input_tokens: 374
+        output_tokens: 258
+    headers:
+      content-type: application/json
+    status_code: 200

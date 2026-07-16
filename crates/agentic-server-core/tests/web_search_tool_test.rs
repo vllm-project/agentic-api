@@ -585,6 +585,7 @@ async fn execute_runs_web_search_and_sends_tool_output_back_to_model() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     };
 
     let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();
@@ -669,6 +670,7 @@ async fn execute_relaxes_forced_tool_choice_after_web_search_result() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     };
 
     let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();
@@ -717,6 +719,7 @@ async fn execute_returns_mixed_client_tool_calls_without_followup_model_request(
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     };
 
     let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();
@@ -764,6 +767,7 @@ async fn execute_returns_mixed_client_tool_calls_without_followup_model_request(
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     };
     let continuation = ExecuteRequest::new(continuation_payload, exec_ctx).run().await.unwrap();
     assert!(matches!(continuation, Either::Left(_)));
@@ -834,6 +838,7 @@ async fn execute_accumulates_usage_across_web_search_model_rounds() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     };
 
     let result = ExecuteRequest::new(payload, exec_ctx).run().await.unwrap();
@@ -877,6 +882,7 @@ async fn stream_emits_web_search_lifecycle_events_before_final_payload() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     };
 
     let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();
@@ -959,6 +965,7 @@ async fn stream_hides_web_search_function_events_when_name_arrives_on_done() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     };
 
     let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();
@@ -1025,6 +1032,7 @@ async fn execute_runs_multiple_web_search_calls_concurrently() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     };
 
     let result = tokio::time::timeout(Duration::from_secs(2), ExecuteRequest::new(payload, exec_ctx).run())
@@ -1073,6 +1081,7 @@ async fn execute_feeds_web_search_execution_errors_back_to_model() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     };
 
     let result = ExecuteRequest::new(payload, exec_ctx).run().await.unwrap();
@@ -1123,6 +1132,7 @@ async fn execute_returns_incomplete_after_max_gateway_tool_rounds() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     };
 
     // Budget exhausted while the model keeps requesting tools → the response is
@@ -1173,6 +1183,7 @@ async fn execute_feeds_invalid_web_search_arguments_back_to_model() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     };
 
     let result = ExecuteRequest::new(payload, exec_ctx).run().await.unwrap();
@@ -1230,6 +1241,7 @@ async fn execute_runs_large_gateway_fanout_without_hard_cap() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     };
 
     let result = ExecuteRequest::new(payload, exec_ctx)
@@ -1293,6 +1305,7 @@ async fn stream_error_events_escape_error_messages() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     };
 
     let result = ExecuteRequest::new(payload, exec_ctx).run().await.unwrap();
@@ -1368,6 +1381,7 @@ async fn incomplete_turn_persists_a_consistent_conversation_for_continuation() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     };
 
     let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();
@@ -1394,6 +1408,7 @@ async fn incomplete_turn_persists_a_consistent_conversation_for_continuation() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     };
     let _ = ExecuteRequest::new(continuation_payload, exec_ctx).run().await.unwrap();
 
@@ -1464,6 +1479,7 @@ async fn stream_returns_incomplete_after_max_gateway_tool_rounds() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        cache_salt: None,
     };
 
     let result = ExecuteRequest::new(payload, exec_ctx).run().await.unwrap();
