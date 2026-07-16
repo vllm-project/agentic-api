@@ -133,6 +133,34 @@ async fn test_store_false_with_web_search_reaches_executor() {
 }
 
 #[tokio::test]
+async fn test_gateway_normalization_preserves_parallel_tool_calls() {
+    // Arrange
+    let (llm_url, requests, _h1) = spawn_mock_vllm_json_capture().await;
+    let (gw_url, _h2) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+
+    // Act
+    let resp = reqwest::Client::new()
+        .post(format!("{gw_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "input": [{"type": "message", "role": "user", "content": "hi"}],
+            "tools": [{"type": "web_search_preview"}],
+            "parallel_tool_calls": false,
+            "store": false,
+            "stream": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // Assert
+    assert_eq!(resp.status(), 200);
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0]["parallel_tool_calls"], false);
+}
+
+#[tokio::test]
 async fn test_store_false_proxies_large_json_body_to_vllm() {
     // Arrange
     let (llm_url, requests, _h1) = spawn_mock_vllm_json_capture().await;

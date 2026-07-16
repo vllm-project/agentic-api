@@ -28,6 +28,7 @@ pub struct RequestPayload {
     pub max_output_tokens: Option<u32>,
     pub truncation: Option<String>,
     pub metadata: Option<Value>,
+    pub parallel_tool_calls: Option<bool>,
 }
 
 fn default_true() -> bool {
@@ -61,6 +62,8 @@ pub struct UpstreamRequest<'a> {
     pub truncation: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<&'a Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parallel_tool_calls: Option<bool>,
 }
 
 // serde's `skip_serializing_if` requires a `&Option<T>` receiver, so the
@@ -109,6 +112,7 @@ impl RequestPayload {
             max_output_tokens: self.max_output_tokens,
             truncation: self.truncation.as_deref(),
             metadata: self.metadata.as_ref(),
+            parallel_tool_calls: self.parallel_tool_calls,
         })
     }
 }
@@ -212,6 +216,20 @@ mod tests {
         let value = serde_json::to_value(upstream).unwrap();
         assert_eq!(value["instructions"], "rules");
         assert_eq!(value["input"], "hi");
+    }
+
+    #[test]
+    fn to_upstream_request_preserves_parallel_tool_calls() {
+        let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test",
+            "input": "hi",
+            "parallel_tool_calls": false
+        }))
+        .unwrap();
+
+        let upstream = payload.to_upstream_request(false).expect("valid upstream request");
+        let value = serde_json::to_value(upstream).unwrap();
+        assert_eq!(value["parallel_tool_calls"], false);
     }
 
     #[test]
