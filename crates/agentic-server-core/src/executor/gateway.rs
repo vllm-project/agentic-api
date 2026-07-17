@@ -99,6 +99,28 @@ pub(super) struct GatewayStreamAccumulator {
     emitted_in_progress: bool,
 }
 
+pub(super) struct GatewayStreamContext<'a> {
+    sender: &'a mpsc::UnboundedSender<String>,
+    accumulator: &'a mut GatewayStreamAccumulator,
+}
+
+impl<'a> GatewayStreamContext<'a> {
+    pub(super) fn new(
+        sender: &'a mpsc::UnboundedSender<String>,
+        accumulator: &'a mut GatewayStreamAccumulator,
+    ) -> Self {
+        Self { sender, accumulator }
+    }
+
+    pub(super) fn emit_event(&mut self, event: &mut Value, output_offset: usize) -> ExecutorResult<()> {
+        self.accumulator.emit_event(self.sender, event, output_offset)
+    }
+
+    pub(super) fn should_emit_lifecycle(&mut self, event_type: SSEEventType) -> bool {
+        self.accumulator.should_emit_lifecycle(event_type)
+    }
+}
+
 impl GatewayStreamAccumulator {
     pub(super) fn new() -> Self {
         Self {
@@ -148,6 +170,18 @@ impl GatewayStreamAccumulator {
         self.normalize_event(&mut event, 0);
         let event_json = serialize_to_string(&event).map_err(ExecutorError::JsonError)?;
         Ok(format!("data: {event_json}\n\n"))
+    }
+
+    pub(super) fn error_chunk(&mut self, message: &str) -> String {
+        let mut event = serde_json::json!({
+            "type": "error",
+            "error": {
+                "message": message,
+            },
+        });
+        self.normalize_event(&mut event, 0);
+        let event_json = serialize_to_string(&event).unwrap_or_else(|_| "{\"type\":\"error\"}".to_owned());
+        format!("data: {event_json}\n\n")
     }
 
     fn normalize_event(&mut self, event: &mut Value, output_offset: usize) {
@@ -358,15 +392,8 @@ fn output_item_value(item: &OutputItem) -> ExecutorResult<serde_json::Value> {
 
 fn emit_gateway_start_events(
     plans: &[GatewayCallEventPlan],
-    stream_events: Option<&mpsc::UnboundedSender<String>>,
-    stream_accumulator: Option<&mut GatewayStreamAccumulator>,
+    stream_context: &mut GatewayStreamContext<'_>,
 ) -> ExecutorResult<()> {
-    let Some(sender) = stream_events else {
-        return Ok(());
-    };
-    let Some(stream_accumulator) = stream_accumulator else {
-        return Ok(());
-    };
     for plan in plans {
         let Some(output_item) = &plan.started_output else {
             continue;
@@ -377,7 +404,7 @@ fn emit_gateway_start_events(
                 "output_index": plan.output_index,
                 "item": item
         });
-        stream_accumulator.emit_event(sender, &mut added_event, 0)?;
+        stream_context.emit_event(&mut added_event, 0)?;
         match output_item {
             OutputItem::WebSearchCall(web_search_call) => {
                 let mut in_progress_event = serde_json::json!({
@@ -385,13 +412,13 @@ fn emit_gateway_start_events(
                         "item_id": web_search_call.id,
                         "output_index": plan.output_index
                 });
-                stream_accumulator.emit_event(sender, &mut in_progress_event, 0)?;
+                stream_context.emit_event(&mut in_progress_event, 0)?;
                 let mut searching_event = serde_json::json!({
                         "type": "response.web_search_call.searching",
                         "item_id": web_search_call.id,
                         "output_index": plan.output_index
                 });
-                stream_accumulator.emit_event(sender, &mut searching_event, 0)?;
+                stream_context.emit_event(&mut searching_event, 0)?;
             }
             OutputItem::McpToolCall(mcp_tool_call) => {
                 let mut in_progress_event = serde_json::json!({
@@ -399,7 +426,7 @@ fn emit_gateway_start_events(
                         "item_id": mcp_tool_call.id,
                         "output_index": plan.output_index
                 });
-                stream_accumulator.emit_event(sender, &mut in_progress_event, 0)?;
+                stream_context.emit_event(&mut in_progress_event, 0)?;
             }
             OutputItem::Message(_)
             | OutputItem::FunctionCall(_)
@@ -414,15 +441,8 @@ fn emit_gateway_start_events(
 fn emit_gateway_completed_events(
     results: &[GatewayCallResult],
     plans: &[GatewayCallEventPlan],
-    stream_events: Option<&mpsc::UnboundedSender<String>>,
-    stream_accumulator: Option<&mut GatewayStreamAccumulator>,
+    stream_context: &mut GatewayStreamContext<'_>,
 ) -> ExecutorResult<()> {
-    let Some(sender) = stream_events else {
-        return Ok(());
-    };
-    let Some(stream_accumulator) = stream_accumulator else {
-        return Ok(());
-    };
     for result in results {
         let Some(public_output) = &result.public_output else {
             continue;
@@ -449,13 +469,13 @@ fn emit_gateway_completed_events(
                 "output_index": output_index,
                 "item": item.clone()
         });
-        stream_accumulator.emit_event(sender, &mut completed_event, 0)?;
+        stream_context.emit_event(&mut completed_event, 0)?;
         let mut done_event = serde_json::json!({
                 "type": "response.output_item.done",
                 "output_index": output_index,
                 "item": item
         });
-        stream_accumulator.emit_event(sender, &mut done_event, 0)?;
+        stream_context.emit_event(&mut done_event, 0)?;
     }
     Ok(())
 }
@@ -464,20 +484,16 @@ pub(super) async fn execute_and_emit_output_calls(
     output_items: &[OutputItem],
     registry: &ToolRegistry,
     output_offset: usize,
-    stream_events: Option<&mpsc::UnboundedSender<String>>,
-    stream_accumulator: Option<&mut GatewayStreamAccumulator>,
+    stream_context: Option<&mut GatewayStreamContext<'_>>,
 ) -> ExecutorResult<Vec<GatewayCallResult>> {
     let event_plans = gateway_event_plans(output_items, registry, output_offset);
-    if let Some(accumulator) = stream_accumulator {
-        emit_gateway_start_events(&event_plans, stream_events, Some(accumulator))?;
+    if let Some(stream_context) = stream_context {
+        emit_gateway_start_events(&event_plans, stream_context)?;
         let gateway_results = execute_output_calls(output_items, registry).await?;
-        emit_gateway_completed_events(&gateway_results, &event_plans, stream_events, Some(accumulator))?;
+        emit_gateway_completed_events(&gateway_results, &event_plans, stream_context)?;
         Ok(gateway_results)
     } else {
-        emit_gateway_start_events(&event_plans, stream_events, None)?;
-        let gateway_results = execute_output_calls(output_items, registry).await?;
-        emit_gateway_completed_events(&gateway_results, &event_plans, stream_events, None)?;
-        Ok(gateway_results)
+        execute_output_calls(output_items, registry).await
     }
 }
 
