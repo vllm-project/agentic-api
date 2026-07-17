@@ -133,17 +133,9 @@ impl RequestPayload {
     }
 
     fn declares_built_in_tool(&self) -> bool {
-        self.tools.as_deref().is_some_and(|tools| {
-            tools.iter().any(|tool| {
-                matches!(
-                    tool,
-                    ResponsesTool::Mcp(_)
-                        | ResponsesTool::WebSearch(_)
-                        | ResponsesTool::FileSearch(_)
-                        | ResponsesTool::CodeInterpreter(_)
-                )
-            })
-        })
+        self.tools
+            .as_deref()
+            .is_some_and(|tools| tools.iter().any(ResponsesTool::is_gateway_owned))
     }
 }
 
@@ -316,52 +308,80 @@ mod tests {
 
     #[test]
     fn to_upstream_request_sets_serial_tool_calls_for_builtin_tools() {
-        let payload: RequestPayload = serde_json::from_value(serde_json::json!({
-            "model": "test",
-            "input": "hi",
-            "tools": [{"type": "web_search_preview"}]
-        }))
-        .unwrap();
+        for tool in builtin_tool_declarations() {
+            let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+                "model": "test",
+                "input": "hi",
+                "tools": [tool]
+            }))
+            .unwrap();
 
-        let upstream = payload
-            .to_upstream_request(false)
-            .expect("built-in tools default to serial tool calls");
-        let value = serde_json::to_value(upstream).unwrap();
-        assert_eq!(value["parallel_tool_calls"], false);
+            let upstream = payload
+                .to_upstream_request(false)
+                .expect("built-in tools default to serial tool calls");
+            let value = serde_json::to_value(upstream).unwrap();
+            assert_eq!(value["parallel_tool_calls"], false);
+        }
     }
 
     #[test]
     fn to_upstream_request_rejects_parallel_tool_calls_for_builtin_tools() {
-        let payload: RequestPayload = serde_json::from_value(serde_json::json!({
-            "model": "test",
-            "input": "hi",
-            "parallel_tool_calls": true,
-            "tools": [{"type": "web_search_preview"}]
-        }))
-        .unwrap();
+        for tool in builtin_tool_declarations() {
+            let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+                "model": "test",
+                "input": "hi",
+                "parallel_tool_calls": true,
+                "tools": [tool]
+            }))
+            .unwrap();
 
-        let Err(err) = payload.to_upstream_request(false) else {
-            panic!("built-in tools should reject parallel_tool_calls=true");
-        };
+            let Err(err) = payload.to_upstream_request(false) else {
+                panic!("built-in tools should reject parallel_tool_calls=true");
+            };
 
-        assert!(err.to_string().contains("parallel_tool_calls must be false"));
+            assert!(err.to_string().contains("parallel_tool_calls must be false"));
+        }
     }
 
     #[test]
     fn to_upstream_request_allows_builtin_tools_with_serial_tool_calls() {
-        let payload: RequestPayload = serde_json::from_value(serde_json::json!({
-            "model": "test",
-            "input": "hi",
-            "parallel_tool_calls": false,
-            "tools": [{"type": "web_search_preview"}]
-        }))
-        .unwrap();
+        for tool in builtin_tool_declarations() {
+            let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+                "model": "test",
+                "input": "hi",
+                "parallel_tool_calls": false,
+                "tools": [tool]
+            }))
+            .unwrap();
 
-        let upstream = payload
-            .to_upstream_request(false)
-            .expect("serial built-in tool request is valid");
-        let value = serde_json::to_value(upstream).unwrap();
-        assert_eq!(value["parallel_tool_calls"], false);
+            let upstream = payload
+                .to_upstream_request(false)
+                .expect("serial built-in tool request is valid");
+            let value = serde_json::to_value(upstream).unwrap();
+            assert_eq!(value["parallel_tool_calls"], false);
+        }
+    }
+
+    fn builtin_tool_declarations() -> Vec<Value> {
+        vec![
+            serde_json::json!({
+                "type": "function",
+                "name": "read_mcp_resource",
+                "metadata": {
+                    "server_label": "repo",
+                    "server_url": "http://localhost:9001/mcp"
+                }
+            }),
+            serde_json::json!({
+                "type": "mcp",
+                "name": "read_mcp_resource",
+                "server_label": "repo",
+                "server_url": "http://localhost:9001/mcp"
+            }),
+            serde_json::json!({"type": "web_search_preview"}),
+            serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_abc"]}),
+            serde_json::json!({"type": "code_interpreter"}),
+        ]
     }
 
     #[test]
