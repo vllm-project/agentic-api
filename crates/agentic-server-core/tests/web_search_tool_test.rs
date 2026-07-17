@@ -1097,17 +1097,12 @@ fn assert_contiguous_sequence_numbers(json_events: &[serde_json::Value], message
     );
 }
 
-fn assert_output_event_indices(json_events: &[serde_json::Value], expected_events: &[(&str, u64)]) {
+fn assert_output_event_indices_in_order(json_events: &[serde_json::Value], expected_events: &[(&str, u64)]) {
     let output_events: Vec<(&str, u64)> = json_events
         .iter()
         .filter_map(|event| Some((event["type"].as_str()?, event["output_index"].as_u64()?)))
         .collect();
-    for (event_type, output_index) in expected_events {
-        assert!(
-            output_events.contains(&(*event_type, *output_index)),
-            "expected {event_type} at output_index {output_index}: {output_events:?}"
-        );
-    }
+    assert_eq!(output_events, expected_events);
 }
 
 #[tokio::test]
@@ -1163,10 +1158,13 @@ async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence()
         &json_events,
         "public sequence_number must be contiguous across upstream, synthetic, and terminal frames",
     );
-    assert_output_event_indices(
+    assert_output_event_indices_in_order(
         &json_events,
         &[
             ("response.output_item.added", 0),
+            ("response.web_search_call.in_progress", 0),
+            ("response.web_search_call.searching", 0),
+            ("response.web_search_call.completed", 0),
             ("response.output_item.done", 0),
             ("response.output_item.added", 1),
             ("response.output_text.delta", 1),
@@ -1175,9 +1173,13 @@ async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence()
             ("response.output_text.delta", 2),
             ("response.output_item.done", 2),
             ("response.output_item.added", 3),
+            ("response.web_search_call.in_progress", 3),
+            ("response.web_search_call.searching", 3),
+            ("response.web_search_call.completed", 3),
             ("response.output_item.done", 3),
             ("response.output_item.added", 4),
             ("response.output_text.delta", 4),
+            ("response.output_item.done", 4),
         ],
     );
 }
