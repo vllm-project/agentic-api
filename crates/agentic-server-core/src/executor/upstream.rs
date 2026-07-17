@@ -3,23 +3,21 @@ use std::sync::Arc;
 
 use futures::StreamExt;
 use serde_json::Value;
-use tokio::sync::mpsc;
 
 use crate::events::{EventPayload, SSEEventType, SSEItemType, normalize_sse_line};
 use crate::executor::accumulator::ResponseAccumulator;
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::gateway::GatewayStreamAccumulator;
+use crate::executor::gateway::GatewayStreamContext;
 use crate::executor::inference::{call_inference, fetch_response_json};
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::tool::ToolRegistry;
 use crate::types::request_response::ResponsePayload;
 use crate::utils::common::{deserialize_from_str, serialize_to_string};
 
-struct StreamEmitContext<'a> {
+struct StreamEmitContext<'a, 'stream> {
     request: &'a RequestContext,
     registry: &'a ToolRegistry,
-    sender: &'a mpsc::UnboundedSender<String>,
-    accumulator: &'a mut GatewayStreamAccumulator,
+    stream: &'a mut GatewayStreamContext<'stream>,
     output_offset: usize,
 }
 
@@ -51,8 +49,7 @@ pub(super) async fn fetch_stream_payload(
     exec_ctx: &ExecutionContext,
     auth: Option<&str>,
     registry: &ToolRegistry,
-    stream_events: Option<&mpsc::UnboundedSender<String>>,
-    stream_accumulator: Option<&mut GatewayStreamAccumulator>,
+    stream_context: Option<&mut GatewayStreamContext<'_>>,
     output_offset: usize,
 ) -> ExecutorResult<ResponsePayload> {
     let url = exec_ctx.responses_url();
@@ -68,16 +65,15 @@ pub(super) async fn fetch_stream_payload(
     let mut acc = ResponseAccumulator::new(ctx.response_id.clone(), ctx.conversation_id.clone());
     let mut hidden_gateway_item_ids = HashSet::new();
     let mut pending_unnamed_function_events = HashMap::<String, Vec<String>>::new();
-    let mut stream_accumulator = stream_accumulator;
+    let mut stream_context = stream_context;
     while let Some(line_result) = line_stream.next().await {
         let line = line_result?;
         log_upstream_failure(&line, &ctx.response_id);
-        if let (Some(sender), Some(accumulator)) = (stream_events, stream_accumulator.as_deref_mut()) {
+        if let Some(stream) = stream_context.as_deref_mut() {
             let mut emit_ctx = StreamEmitContext {
                 request: ctx,
                 registry,
-                sender,
-                accumulator,
+                stream,
                 output_offset,
             };
             emit_upstream_stream_event(
@@ -138,7 +134,7 @@ fn log_upstream_failure(line: &str, gateway_response_id: &str) {
 
 fn emit_upstream_stream_event(
     line: &str,
-    emit_ctx: &mut StreamEmitContext<'_>,
+    emit_ctx: &mut StreamEmitContext<'_, '_>,
     hidden_gateway_item_ids: &mut HashSet<String>,
     pending_unnamed_function_events: &mut HashMap<String, Vec<String>>,
 ) -> ExecutorResult<()> {
@@ -159,7 +155,7 @@ fn emit_upstream_stream_event(
         emit_ctx.registry,
         hidden_gateway_item_ids,
     ) || is_terminal_response_event(frame.event_type)
-        || !emit_ctx.accumulator.should_emit_lifecycle(frame.event_type)
+        || !emit_ctx.stream.should_emit_lifecycle(frame.event_type)
     {
         drop_pending_function_events(&frame.payload, pending_unnamed_function_events);
         return Ok(());
@@ -177,19 +173,17 @@ fn emit_upstream_stream_event(
     emit_stream_line(data, emit_ctx)
 }
 
-fn emit_stream_line(data: &str, emit_ctx: &mut StreamEmitContext<'_>) -> ExecutorResult<()> {
+fn emit_stream_line(data: &str, emit_ctx: &mut StreamEmitContext<'_, '_>) -> ExecutorResult<()> {
     let mut value = serde_json::from_str::<Value>(data).map_err(ExecutorError::JsonError)?;
     apply_context_response_ids(&mut value, emit_ctx.request);
     emit_ctx.registry.restore_stream_event_value(&mut value);
-    emit_ctx
-        .accumulator
-        .emit_event(emit_ctx.sender, &mut value, emit_ctx.output_offset)
+    emit_ctx.stream.emit_event(&mut value, emit_ctx.output_offset)
 }
 
 fn defer_or_flush_function_event(
     line: &str,
     payload: &EventPayload,
-    emit_ctx: &mut StreamEmitContext<'_>,
+    emit_ctx: &mut StreamEmitContext<'_, '_>,
     hidden_gateway_item_ids: &mut HashSet<String>,
     pending_unnamed_function_events: &mut HashMap<String, Vec<String>>,
 ) -> ExecutorResult<bool> {
@@ -248,7 +242,7 @@ fn defer_or_flush_function_event(
 
 fn flush_pending_function_events(
     item_id: &str,
-    emit_ctx: &mut StreamEmitContext<'_>,
+    emit_ctx: &mut StreamEmitContext<'_, '_>,
     pending_unnamed_function_events: &mut HashMap<String, Vec<String>>,
 ) -> ExecutorResult<()> {
     let Some(lines) = pending_unnamed_function_events.remove(item_id) else {

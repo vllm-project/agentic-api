@@ -482,6 +482,89 @@ fn text_sse_response_with_output_index(text: &str, output_index: u32) -> support
     ])
 }
 
+fn two_messages_then_web_search_sse_response() -> support::MockResponse {
+    sse_response([
+        serde_json::json!({
+            "type": "response.created",
+            "response": {"id": "resp_mid", "status": "in_progress", "usage": null}
+        }),
+        serde_json::json!({
+            "type": "response.in_progress",
+            "response": {"id": "resp_mid", "status": "in_progress", "usage": null}
+        }),
+        serde_json::json!({
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {"id": "msg_mid_0", "type": "message", "role": "assistant", "status": "in_progress", "content": []}
+        }),
+        serde_json::json!({
+            "type": "response.output_text.delta",
+            "item_id": "msg_mid_0",
+            "output_index": 0,
+            "content_index": 0,
+            "delta": "First result."
+        }),
+        serde_json::json!({
+            "type": "response.output_item.done",
+            "output_index": 0,
+            "item": {
+                "id": "msg_mid_0",
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": "First result.", "annotations": []}]
+            }
+        }),
+        serde_json::json!({
+            "type": "response.output_item.added",
+            "output_index": 1,
+            "item": {"id": "msg_mid_1", "type": "message", "role": "assistant", "status": "in_progress", "content": []}
+        }),
+        serde_json::json!({
+            "type": "response.output_text.delta",
+            "item_id": "msg_mid_1",
+            "output_index": 1,
+            "content_index": 0,
+            "delta": "Second result."
+        }),
+        serde_json::json!({
+            "type": "response.output_item.done",
+            "output_index": 1,
+            "item": {
+                "id": "msg_mid_1",
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": "Second result.", "annotations": []}]
+            }
+        }),
+        serde_json::json!({
+            "type": "response.output_item.added",
+            "output_index": 2,
+            "item": {
+                "id": "fc_search_mid",
+                "type": "function_call",
+                "call_id": "call_search_mid",
+                "name": "web_search",
+                "arguments": "",
+                "status": "in_progress"
+            }
+        }),
+        serde_json::json!({
+            "type": "response.function_call_arguments.done",
+            "item_id": "fc_search_mid",
+            "output_index": 2,
+            "call_id": "call_search_mid",
+            "name": "web_search",
+            "arguments": "{\"query\":\"tokio streams\",\"count\":2}"
+        }),
+        serde_json::json!({
+            "type": "response.completed",
+            "response": {"id": "resp_mid", "status": "completed", "usage": null}
+        }),
+    ])
+}
+
 fn mixed_web_search_and_client_function_response() -> support::MockResponse {
     support::MockResponse::Json(
         serde_json::json!({
@@ -984,11 +1067,61 @@ async fn stream_emits_web_search_lifecycle_events_before_final_payload() {
     assert!(output.iter().any(|item| item["type"] == "message"));
 }
 
+fn assert_single_logical_lifecycle(json_events: &[serde_json::Value]) {
+    let event_types: Vec<&str> = json_events.iter().filter_map(|event| event["type"].as_str()).collect();
+    assert_eq!(
+        event_types
+            .iter()
+            .filter(|event_type| **event_type == "response.created")
+            .count(),
+        1,
+        "multi-round stream should expose one logical response.created: {event_types:?}"
+    );
+    assert_eq!(
+        event_types
+            .iter()
+            .filter(|event_type| **event_type == "response.in_progress")
+            .count(),
+        1,
+        "multi-round stream should expose one logical response.in_progress: {event_types:?}"
+    );
+}
+
+fn assert_contiguous_sequence_numbers(json_events: &[serde_json::Value], message: &str) {
+    let sequence_numbers: Vec<u64> = json_events
+        .iter()
+        .map(|event| {
+            event["sequence_number"]
+                .as_u64()
+                .unwrap_or_else(|| panic!("event missing sequence_number: {event}"))
+        })
+        .collect();
+    assert_eq!(
+        sequence_numbers,
+        (0..u64::try_from(sequence_numbers.len()).unwrap()).collect::<Vec<_>>(),
+        "{message}"
+    );
+}
+
+fn assert_output_event_indices(json_events: &[serde_json::Value], expected_events: &[(&str, u64)]) {
+    let output_events: Vec<(&str, u64)> = json_events
+        .iter()
+        .filter_map(|event| Some((event["type"].as_str()?, event["output_index"].as_u64()?)))
+        .collect();
+    for (event_type, output_index) in expected_events {
+        assert!(
+            output_events.contains(&(*event_type, *output_index)),
+            "expected {event_type} at output_index {output_index}: {output_events:?}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence() {
     let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
     let llm = support::MockServer::start_deque(vec![
         web_search_function_call_sse_response(),
+        two_messages_then_web_search_sse_response(),
         text_sse_response_with_output_index("Use async carefully.", 0),
     ])
     .await;
@@ -1019,6 +1152,10 @@ async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence()
     };
     let chunks: Vec<String> = stream.collect().await;
     captured_you.recv().await.expect("mock You.com should receive request");
+    captured_you
+        .recv()
+        .await
+        .expect("mock You.com should receive second request");
 
     let json_events: Vec<serde_json::Value> = chunks
         .iter()
@@ -1027,61 +1164,27 @@ async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence()
             (data != "[DONE]").then(|| serde_json::from_str(data).ok())?
         })
         .collect();
-    let event_types: Vec<&str> = json_events.iter().filter_map(|event| event["type"].as_str()).collect();
-    assert_eq!(
-        event_types
-            .iter()
-            .filter(|event_type| **event_type == "response.created")
-            .count(),
-        1,
-        "multi-round stream should expose one logical response.created: {event_types:?}"
+    assert_single_logical_lifecycle(&json_events);
+    assert_contiguous_sequence_numbers(
+        &json_events,
+        "public sequence_number must be contiguous across upstream, synthetic, and terminal frames",
     );
-    assert_eq!(
-        event_types
-            .iter()
-            .filter(|event_type| **event_type == "response.in_progress")
-            .count(),
-        1,
-        "multi-round stream should expose one logical response.in_progress: {event_types:?}"
-    );
-
-    let sequence_numbers: Vec<u64> = json_events
-        .iter()
-        .map(|event| {
-            event["sequence_number"]
-                .as_u64()
-                .unwrap_or_else(|| panic!("event missing sequence_number: {event}"))
-        })
-        .collect();
-    assert_eq!(
-        sequence_numbers,
-        (0..u64::try_from(sequence_numbers.len()).unwrap()).collect::<Vec<_>>(),
-        "public sequence_number must be contiguous across upstream, synthetic, and terminal frames"
-    );
-
-    let output_events: Vec<(&str, u64)> = json_events
-        .iter()
-        .filter_map(|event| Some((event["type"].as_str()?, event["output_index"].as_u64()?)))
-        .collect();
-    assert!(
-        output_events.contains(&("response.output_item.added", 0)),
-        "synthetic web_search_call should occupy output_index 0: {output_events:?}"
-    );
-    assert!(
-        output_events.contains(&("response.output_item.done", 0)),
-        "synthetic web_search_call done should occupy output_index 0: {output_events:?}"
-    );
-    assert!(
-        output_events.contains(&("response.output_item.added", 1)),
-        "round-two message should be rebased to output_index 1: {output_events:?}"
-    );
-    assert!(
-        output_events.contains(&("response.output_text.delta", 1)),
-        "round-two text delta should be rebased to output_index 1: {output_events:?}"
-    );
-    assert!(
-        output_events.contains(&("response.output_item.done", 1)),
-        "round-two message done should be rebased to output_index 1: {output_events:?}"
+    assert_output_event_indices(
+        &json_events,
+        &[
+            ("response.output_item.added", 0),
+            ("response.output_item.done", 0),
+            ("response.output_item.added", 1),
+            ("response.output_text.delta", 1),
+            ("response.output_item.done", 1),
+            ("response.output_item.added", 2),
+            ("response.output_text.delta", 2),
+            ("response.output_item.done", 2),
+            ("response.output_item.added", 3),
+            ("response.output_item.done", 3),
+            ("response.output_item.added", 4),
+            ("response.output_text.delta", 4),
+        ],
     );
 }
 
@@ -1635,13 +1738,29 @@ async fn stream_returns_incomplete_after_max_gateway_tool_rounds() {
     };
     let chunks: Vec<String> = stream.collect().await;
 
-    let final_event = chunks
+    let json_events: Vec<serde_json::Value> = chunks
         .iter()
         .filter_map(|chunk| {
             let data = chunk.trim_end_matches('\n').strip_prefix("data: ")?;
             (data != "[DONE]").then(|| serde_json::from_str::<serde_json::Value>(data).ok())?
         })
-        .next_back()
+        .collect();
+    let sequence_numbers: Vec<u64> = json_events
+        .iter()
+        .map(|event| {
+            event["sequence_number"]
+                .as_u64()
+                .unwrap_or_else(|| panic!("event missing sequence_number: {event}"))
+        })
+        .collect();
+    assert_eq!(
+        sequence_numbers,
+        (0..u64::try_from(sequence_numbers.len()).unwrap()).collect::<Vec<_>>(),
+        "incomplete terminal stream should keep sequence_number contiguous"
+    );
+
+    let final_event = json_events
+        .last()
         .expect("stream should carry a final response payload");
     // The terminal SSE event wraps the payload: {"type":"response.incomplete","response":{...}}
     let response = &final_event["response"];
