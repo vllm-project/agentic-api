@@ -1,0 +1,8111 @@
+turns:
+- filename: t1
+  request:
+    body:
+      max_tokens: 700
+      messages:
+      - content: First call web_search for the latest Rust version, then a SEPARATE
+          web_search for its release date, one at a time, then answer briefly.
+        role: user
+      model: qwen3
+      stream: true
+      tools:
+      - description: Search the web.
+        input_schema:
+          properties:
+            query:
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: message_start
+
+      '
+    - 'data: {"type":"message_start","message":{"id":"chatcmpl-8b7b79a8ec82657a","type":"message","role":"assistant","content":[],"model":"qwen3","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":174,"output_tokens":0}}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_start
+
+      '
+    - 'data: {"type":"content_block_start","content_block":{"type":"thinking","thinking":""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"\n"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"Okay"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      user"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      wants"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      me"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      to"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      first"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      search"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      for"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      latest"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Rust"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      version"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      using"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      web"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"_search"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      then"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      do"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      another"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      separate"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      web"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"_search"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      for"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      its"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      release"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      date"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Let"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      me"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      start"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      with"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      first"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      query"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":".\n\n"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"For"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      first"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      search"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      query"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      should"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      be"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      \""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"latest"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Rust"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      version"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"\"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      That"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      should"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      get"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      me"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      information"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      on"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      what"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      current"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      stable"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      version"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      is"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Once"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      I"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      have"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      that"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      next"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      step"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      is"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      to"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      search"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      for"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      release"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      date"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      of"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      that"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      specific"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      version"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      But"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      I"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      need"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      to"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      make"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      sure"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      I"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      do"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      these"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      as"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      separate"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      searches"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      as"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      per"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      user"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"''s"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      instruction"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      So"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      I"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"''ll"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      call"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      web"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"_search"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      function"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      with"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      first"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      query"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      then"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      wait"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      for"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      result"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      before"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      proceeding"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      to"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      second"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      search"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Let"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      me"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      structure"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      tool"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      calls"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      correctly"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      making"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      sure"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      each"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      is"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      in"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      its"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      own"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      XML"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      tags"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      and"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      in"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      sequence"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":".\n"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"signature_delta","signature":"b012540666064fc299929d8872408088"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_stop
+
+      '
+    - 'data: {"type":"content_block_stop","index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_start
+
+      '
+    - 'data: {"type":"content_block_start","content_block":{"type":"text","text":""},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"\n\n"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_stop
+
+      '
+    - 'data: {"type":"content_block_stop","index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_start
+
+      '
+    - 'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"chatcmpl-tool-9eb40806dc51de97","name":"web_search","input":{}},"index":2}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\""},"index":2}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"query"},"index":2}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"\":"},"index":2}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      \""},"index":2}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"latest"},"index":2}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      Rust"},"index":2}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      version"},"index":2}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"\"}"},"index":2}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_stop
+
+      '
+    - 'data: {"type":"content_block_stop","index":2}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_start
+
+      '
+    - 'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"chatcmpl-tool-953805f2e70f765d","name":"web_search","input":{}},"index":3}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\""},"index":3}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"query"},"index":3}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"\":"},"index":3}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      \""},"index":3}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"R"},"index":3}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"ust"},"index":3}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      release"},"index":3}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      date"},"index":3}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"\"}"},"index":3}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_stop
+
+      '
+    - 'data: {"type":"content_block_stop","index":3}
+
+      '
+    - '
+
+      '
+    - 'event: message_delta
+
+      '
+    - 'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":174,"output_tokens":199}}
+
+      '
+    - '
+
+      '
+    - 'event: message_stop
+
+      '
+    - 'data: {"type":"message_stop"}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      max_tokens: 700
+      messages:
+      - content: First call web_search for the latest Rust version, then a SEPARATE
+          web_search for its release date, one at a time, then answer briefly.
+        role: user
+      - content:
+        - id: chatcmpl-tool-9eb40806dc51de97
+          input:
+            query: latest Rust version
+          name: web_search
+          type: tool_use
+        - id: chatcmpl-tool-953805f2e70f765d
+          input:
+            query: Rust release date
+          name: web_search
+          type: tool_use
+        role: assistant
+      - content:
+        - content: '{"metadata":{"latency":0.5584540367126465,"query":"latest Rust
+            version","search_uuid":"0efb64b2-4f70-4d76-8871-bd51fa070c53"},"query":"latest
+            Rust version","results":{"news":[{"description":"Mighty Morphin Power
+            Rangers #2 Reveals Its Heart, But Is Held Back From Its Potential (Review)","page_age":"2026-07-16T01:01:33","thumbnail_url":"https://comicbook.com/wp-content/uploads/sites/4/2026/07/Mighty-Morphin-Power-Rangers-2.jpg?resize=2000,1125","title":"Mighty
+            Morphin Power Rangers #2 Reveals Its Heart, But Is Held Back From Its
+            Potential (Review)","url":"https://comicbook.com/comics/review/mighty-morphin-power-rangers-2-reveals-its-heart-but-is-held-back-from-its-potential-review/"},{"description":"You''re
+            not the only one with a key.","page_age":"2026-07-02T19:16:23","thumbnail_url":"https://s.yimg.com/lo/mysterio/api/f10abddbbcbcd6170a27a53c5c0de04d74d64574a1892e3ee431b5e6cea30578/lightyear_networkapi/resizefill_w1200;quality_80;format_webp/https:%2F%2Fmedia.zenfs.com%2Fen%2Fpc_gamer_708%2F2e8f245e655fc750d4cd765499c51a76","title":"Rust
+            gets even more cutthroat by adding its own version of apartment rentals","url":"https://tech.yahoo.com/gaming/articles/rust-gets-even-more-cutthroat-191623715.html"},{"description":"Malicious
+            jscrambler 8.14.0 runs hidden binaries during npm install on Windows,
+            macOS, and Linux, with no fix available as of July 11, 2026.","page_age":"2026-07-13T06:46:39","thumbnail_url":"https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhodiWPXDsex6YL7v4e2n_D5MJFMht76GRRmHTdiG61tfEmsoZyow4tkiS3ORACILDl2fNP27YQkw1XLSBKGcom-DhCVzzPDdkdSgeMGdxcVL_rgO70x5LqZcjxKAPTtFOquB8LwSBPWrSpflqCzns-cFZ_EVm0WZfV7wSoPM3S-7_IGtCT3AjxY0rfITU/s1700-e365/npm-js.jpg","title":"Compromised
+            jscrambler 8.14.0 npm Release Drops Rust Infostealer During Install","url":"https://thehackernews.com/2026/07/compromised-jscrambler-8140-npm-release.html"},{"description":"Eagerly
+            anticipating the next Rust Mobile beta? Be sure to check in this August
+            as Level Infinite schedule their next closed beta.","page_age":"2026-07-09T15:55:00","thumbnail_url":"https://media.pocketgamer.com/artwork/na-36888-1783610707/rust-mobile-beta-two-keyart.jpg","title":"Rust
+            Mobile will offer even more equipment and game options in its upcoming
+            second beta","url":"https://www.pocketgamer.com/rust-mobile/second-closed-beta-coming-this-summer/"},{"description":"After
+            an opening-round 65 at the Scottish Open, Rory McIlroy explained the reason
+            he doesn''t feel rusty despite having played only four times since winning
+            the Masters","page_age":"2026-07-09T15:33:03","thumbnail_url":"https://s.yimg.com/os/en/golf_digest_articles_737/d8524d67d05a25ed4c13358404640eef","title":"Rory
+            McIlroy says he''s benefiting from a lighter schedule. Here''s why","url":"https://sports.yahoo.com/articles/rory-mcilroy-says-hes-benefiting-153303945.html"},{"description":"The
+            Atlanta Braves have two players recovering from injuries officially in
+            the rehab stage of their recoveries","page_age":"2026-07-13T19:27:08","thumbnail_url":"https://images2.minutemediacdn.com/image/upload/c_crop,x_0,y_0,w_3974,h_2235/c_fill,w_1440,ar_1440:810,f_auto,q_auto,g_auto/shape/cover/sport/01kxee2snea8t7jbaqgy-a7f2d87fe57f1668d64f6ddf872e9c44.webp","title":"Ha-Seong
+            Kim Sharp in First Braves Rehab Game, Acuña Rusty","url":"https://www.si.com/mlb/braves/onsi/ha-seong-kim-sharp-first-braves-rehab-game-acuna-rusty"},{"description":"Plans
+            to extend Zakynthos'' iconic Navagio Beach by 30 metres aim to preserve
+            its rusting shipwreck for future generations, as visitors continue to
+            be barred from the popular island attraction because ...","page_age":"2026-07-13T12:56:57","thumbnail_url":"https://s.yimg.com/lo/mysterio/api/0fc2ca54e2ad166ca5429f663256f69579db7930cf4e28828ddd9ba0f023ecfd/lightyear_networkapi/resizefill_w1024_h576;quality_80;format_webp/https:%2F%2Fmedia.zenfs.com%2Fen%2Feuronews_us_news_articles_566%2F8b2deb640dc4a5a47e8a99ec6f49105b","title":"Greece''s
+            famous ‘Shipwreck Beach’ to be extended to save its iconic wreck","url":"https://www.yahoo.com/news/world/articles/greeces-famous-shipwreck-beach-extended-125657791.html"},{"description":"Ohio
+            tops CNBC''s rankings for the first time in 2026, with the Buckeye State
+            culminating a yearslong climb as the place to do business in America.","page_age":"2026-07-09T18:10:56","thumbnail_url":"https://image.cnbcfm.com/api/v1/image/108330101-1783012419076-gettyimages-2267146157-SOFTBANK_DATA_CENTER.jpeg?v=1783434396&w=1920&h=1080","title":"Ohio
+            is America''s Top State for Business in 2026, capping yearslong rise with
+            first No. 1 finish","url":"https://www.cnbc.com/2026/07/09/ohio-no-1-americas-top-states-for-business-rankings.html"},{"description":"At
+            the Open Source Summit in Mumbai, Torvalds discusses the pain and power
+            of AI in the kernel, and why Linux no longer supports ''museum'' technology.","page_age":"2026-07-08T21:09:50","thumbnail_url":"https://s.yimg.com/lo/mysterio/api/78cc427d8d85d82723b419f8f03c12e49e1d28279ae0e60443122d1cfbde8784/lightyear_networkapi/resizefill_w1200;quality_80;format_webp/https:%2F%2Fmedia.zenfs.com%2Fen%2Fzdnet_articles_730%2F133ed8711fa74a3a05edae71b635e7b9","title":"''I''m
+            not a programmer'' anymore: Linus Torvalds on the only two tools he uses
+            now","url":"https://tech.yahoo.com/ai/articles/im-not-programmer-anymore-linus-210950038.html"},{"description":"Sen.
+            Sheldon Whitehouse says whistleblowers have alleged numerous problems
+            with rushed reconstruction of the Kennedy Center.","page_age":"2026-07-12T21:40:39","thumbnail_url":"https://ca-times.brightspotcdn.com/dims4/default/5f6c940/2147483647/strip/true/crop/5915x3105+0+419/resize/1200x630!/quality/75/?url=https%3A%2F%2Fcalifornia-times-brightspot.s3.amazonaws.com%2F45%2F71%2Fe499b7894ff8a069cf35076ab381%2F318521025cb8478fbc006f8cdb2bbd3a.jpg","title":"Democrat
+            announces whistleblower allegations of construction problems at Kennedy
+            Center","url":"https://www.latimes.com/world-nation/story/2026-07-12/democrat-announces-whistleblower-allegations-of-construction-problems-at-kennedy-center"}],"web":[{"description":"Click
+            here to be redirected to the latest Rust release announcement.","favicon_url":"https://you.com/favicon?domain=blog.rust-lang.org&size=128","page_age":"2026-07-09T05:20:01","snippets":[],"title":"Announcing
+            Rust 1.97.0","url":"https://blog.rust-lang.org/releases/latest/"},{"description":"Rust
+            Versions # Stable: 1.95.0 Beta: 1.96.0 (28 May, 2026, 8 days left) Nightly:
+            1.97.0 (9 July, 2026, 50 days left) Ongoing Stabilization PRs # Stabilize
+            core::range::{legacy, RangeFull, RangeTo} (4 days old) T-compiler - Relevant
+            to the compiler team, which will review and decide on the PR/issue.","favicon_url":"https://you.com/favicon?domain=releases.rs&size=128","page_age":"2026-06-02T03:45:04","snippets":["T-rustdoc
+            - Relevant to the rustdoc team, which will review and decide on the PR/issue.","T-rustdoc-frontend
+            - Relevant to the rustdoc-frontend team, which will review and decide
+            on the web UI/UX output.","T-rust-analyzer - Relevant to the rust-analyzer
+            team, which will review and decide on the PR/issue.","T-rustdoc-internals
+            - Relevant to the rustdoc internals team, which will review and decide
+            on the PR/issue."],"title":"Rust Versions | Rust Changelogs","url":"https://releases.rs/"},{"description":"Empowering
+            everyone to build reliable and efficient software. - Releases · rust-lang/rust","favicon_url":"https://you.com/favicon?domain=github.com&size=128","original_thumbnail_url":"https://opengraph.githubassets.com/965c2fcedff6dbee97c6e81ff9e86ca7d93ba06b36c08dd84d449d801ca3195b/rust-lang/rust","snippets":["Empowering
+            everyone to build reliable and efficient software. - rust-lang/rust","Allow
+            a dependency to specify both a git repository and an alternate registry.
+            Just like with crates.io, the git repository will be used locally, but
+            the registry version will be used when published. Added target.''cfg(..)''.rustdocflags
+            support in configuration.","Refer to Rust''s platform support page for
+            more information on Rust''s tiered platform support. Relax T: Ord bound
+            for some BinaryHeap methods. ... Stabilize the config include key. The
+            top-level include config key allows loading additional config files, enabling
+            better organization, sharing, and management of Cargo configurations across
+            projects and environments. docs #16284 · Stabilize the pubtime field in
+            registry index. This records when a crate version was published and enables
+            time-based dependency resolution in the future.","Putting the #[test]
+            attribute in these places is no longer ignored, and will now result in
+            an error; this may also result in errors when generating rustdoc. Error
+            when test attribute is applied to structs · Cargo now sets the CARGO_CFG_DEBUG_ASSERTIONS
+            environment variable in more situations. This will cause crates depending
+            on static-init versions 1.0.1 to 1.0.3 to fail compilation with \"failed
+            to resolve: use of unresolved module or unlinked crate parking_lot\"."],"thumbnail_url":"https://opengraph.githubassets.com/965c2fcedff6dbee97c6e81ff9e86ca7d93ba06b36c08dd84d449d801ca3195b/rust-lang/rust","title":"Releases
+            · rust-lang/rust","url":"https://github.com/rust-lang/rust/releases"},{"description":"Check
+            end-of-life, release policy and support schedule for Rust.","favicon_url":"https://you.com/favicon?domain=endoflife.date&size=128","original_thumbnail_url":"https://endoflife.date/assets/logo-512x512.png","page_age":"2026-07-11T05:20:01","snippets":["Rust
+            uses editions to make backwards-incompatible changes. Editions are a mechanism
+            for opt-in changes that may otherwise pose a backwards compatibility risk.
+            Since editions are opt-in, existing crates won’t use the changes unless
+            they explicitly migrate to the new edition. Each crate chooses its edition
+            within its Cargo.toml file. Editions are skin-deep, and as a result -
+            you can always use an older edition alongside a supported version of the
+            compiler.","More information is available on the Rust website. You should
+            be running one of the supported release numbers listed above in the rightmost
+            column. ... You can submit an improvement to this page on GitHub . This
+            page has also a corresponding Talk Page 💬. A JSON version of this page
+            is available at /api/v1/products/rust/ 📡. See the API Documentation 📖
+            for more information.","Rust is an open source multi-paradigm, general-purpose
+            programming language that emphasizes performance, type safety, and concurrency.
+            It enforces memory safety, meaning that all references point to valid
+            memory, without requiring the use of automated memory management techniques
+            such as garbage collection · A new stable release is produced every six
+            weeks. Only the latest stable release receives patches."],"thumbnail_url":"https://endoflife.date/assets/logo-512x512.png","title":"Rust
+            | endoflife.date","url":"https://endoflife.date/rust"},{"description":"The
+            only aim in Rust is to survive. Everything wants you to die - the island’s
+            wildlife, other inhabitants, the environment, and other survivors. Do
+            whatever it takes to last another night. Rust Steam charts, data, update
+            history.","favicon_url":"https://you.com/favicon?domain=steamdb.info&size=128","original_thumbnail_url":"https://steamdb.info/app/252490.png?_=57609173","snippets":[],"thumbnail_url":"https://steamdb.info/app/252490.png?_=57609173","title":"Rust
+            Price history · SteamDB","url":"https://steamdb.info/app/252490/patchnotes/"},{"description":"Redirecting
+            to /","favicon_url":"https://you.com/favicon?domain=rust-lang.org&size=128","snippets":[],"title":"Rust
+            Programming Language","url":"https://rust-lang.org/en-US/"},{"description":"Allow
+            a dependency to specify both a git repository and an alternate registry.
+            Just like with crates.io, the git repository will be used locally, but
+            the registry version will be used when published. Added target.''cfg(..)''.rustdocflags
+            support in configuration.","favicon_url":"https://you.com/favicon?domain=doc.rust-lang.org&size=128","page_age":"2026-05-28T00:00:00","snippets":["Refer
+            to Rust’s platform support page for more information on Rust’s tiered
+            platform support. Relax T: Ord bound for some BinaryHeap methods. ...
+            Stabilize the config include key. The top-level include config key allows
+            loading additional config files, enabling better organization, sharing,
+            and management of Cargo configurations across projects and environments.
+            docs #16284 · Stabilize the pubtime field in registry index. This records
+            when a crate version was published and enables time-based dependency resolution
+            in the future.","Putting the #[test] attribute in these places is no longer
+            ignored, and will now result in an error; this may also result in errors
+            when generating rustdoc. Error when test attribute is applied to structs
+            · Cargo now sets the CARGO_CFG_DEBUG_ASSERTIONS environment variable in
+            more situations. This will cause crates depending on static-init versions
+            1.0.1 to 1.0.3 to fail compilation with “failed to resolve: use of unresolved
+            module or unlinked crate parking_lot”. See the linked issue for details.","Add
+            future incompatibility lint for temporary lifetime shortening in Rust
+            1.92 ... cargo publish no longer keeps .crate tarballs as final build
+            artifacts when build.build-dir is set. These tarballs were previously
+            included due to an oversight and are now treated as intermediate artifacts.
+            To get .crate tarballs as final artifacts, use cargo package. In a future
+            version, this change will apply regardless of build.build-dir.","Usage
+            of #[bench] without #![feature(custom_test_frameworks)] already triggered
+            a deny-by-default future-incompatibility lint since Rust 1.77, but will
+            now become a hard error. Add warn-by-default dangerous_implicit_autorefs
+            lint against implicit autoref of raw pointer dereference. The lint will
+            be bumped to deny-by-default in the next version of Rust."],"title":"Rust
+            Release Notes","url":"https://doc.rust-lang.org/beta/releases.html"},{"description":"975
+            votes, 67 comments. Empowering everyone to build reliable and efficient
+            software.","favicon_url":"https://you.com/favicon?domain=www.reddit.com&size=128","original_thumbnail_url":"https://external-preview.redd.it/rust-1-96-0-is-out-v0-CI5itE2KlGAV4vsTeO9oZsPhsFkQe2fnOR17HHynxAs.jpeg?width=1080&amp;crop=smart&amp;auto=webp&amp;s=28b32b990e90e234feecb5ad39639b766655a30e","page_age":"2026-05-28T19:12:02","snippets":["How
+            to find out the latest stable Rust version supporting a certain target?
+            r/rust • · upvote · · comments · What''s the best way to track when a
+            Rust feature has been released? r/rust • · upvotes · · comments · Rust
+            Release Video: Rust 1.89.0 · r/rust • ·","If a user had use third_party_crate::*;
+            and the only item they use from that crate is now available in the prelude,
+            that use statement is dead code. Might be counterintuitive, but Rust considers
+            the first declaration of a symbol to be the canonical one, and anything
+            after it to either an error (if explicitly used) or dead code (if implicitly
+            through a glob pattern).","Ahh, I see what you mean now in the reference:
+            \"Items and named imports are allowed to shadow names from glob imports
+            in the same namespace. That is, if there is a name already defined by
+            another item in the same namespace, the glob import will be shadowed.\"
+            - https://doc.rust-lang.org/reference/items/use-declarations.html#r-items.use.glob.shadowing","Macros
+            have always been a bit of a problem in Rust; there are a lot of things
+            that work differently about macros than other things in the import system."],"thumbnail_url":"https://external-preview.redd.it/rust-1-96-0-is-out-v0-CI5itE2KlGAV4vsTeO9oZsPhsFkQe2fnOR17HHynxAs.jpeg?width=1080&amp;crop=smart&amp;auto=webp&amp;s=28b32b990e90e234feecb5ad39639b766655a30e","title":"r/rust
+            on Reddit: Rust 1.96.0 is out","url":"https://www.reddit.com/r/rust/comments/1tqd97o/rust_1960_is_out/"},{"description":"The
+            only aim in Rust is to survive. Everything wants you to die - the island’s
+            wildlife and other inhabitants, the environment, other survivors. Do whatever
+            it takes to last another night.","favicon_url":"https://you.com/favicon?domain=rust.facepunch.com&size=128","original_thumbnail_url":"https://files.facepunch.com/lewis/1b2411b1/og-image.jpg","page_age":"2026-05-07T00:30:03","snippets":["What’s
+            changed on Rust in each patch.","Removed all obsolete and generic versions
+            of BaseEntity.ClientRPC, ClientRPCEx, ClientRPCPlayer, ServerRPC and ServerRPCList
+            calls - switch to existing methods or write your own via *RPCStart->*RPCWrite->*RPCSend"],"thumbnail_url":"https://files.facepunch.com/lewis/1b2411b1/og-image.jpg","title":"Changes
+            - Rust - facepunch","url":"https://rust.facepunch.com/changes"},{"description":"Empowering
+            everyone to build reliable and efficient software. - rust-lang/rust","favicon_url":"https://you.com/favicon?domain=github.com&size=128","original_thumbnail_url":"https://opengraph.githubassets.com/48c59e4644f44114fd3ccc60b5e6d6f6d6f94f2f994d8d230822965280321e16/rust-lang/rust","snippets":["Empowering
+            everyone to build reliable and efficient software. - rust/RELEASES.md
+            at main · rust-lang/rust","rust-lang / rust Public · There was an error
+            while loading. Please reload this page. Notifications · You must be signed
+            in to change notification settings · Fork 15.2k · Star 114k · main · /
+            Copy path · Blame · More file actions · Blame · More file actions ·"],"thumbnail_url":"https://opengraph.githubassets.com/48c59e4644f44114fd3ccc60b5e6d6f6d6f94f2f994d8d230822965280321e16/rust-lang/rust","title":"rust/RELEASES.md
+            at main · rust-lang/rust","url":"https://github.com/rust-lang/rust/blob/main/RELEASES.md"}]}}'
+          tool_use_id: chatcmpl-tool-9eb40806dc51de97
+          type: tool_result
+        - content: '{"metadata":{"latency":0.49584054946899414,"query":"Rust release
+            date","search_uuid":"79f792d7-5f24-4893-9598-ecafddd19e03"},"query":"Rust
+            release date","results":{"news":[{"description":"Malicious jscrambler
+            8.14.0 runs hidden binaries during npm install on Windows, macOS, and
+            Linux, with no fix available as of July 11, 2026.","page_age":"2026-07-13T06:46:39","thumbnail_url":"https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhodiWPXDsex6YL7v4e2n_D5MJFMht76GRRmHTdiG61tfEmsoZyow4tkiS3ORACILDl2fNP27YQkw1XLSBKGcom-DhCVzzPDdkdSgeMGdxcVL_rgO70x5LqZcjxKAPTtFOquB8LwSBPWrSpflqCzns-cFZ_EVm0WZfV7wSoPM3S-7_IGtCT3AjxY0rfITU/s1700-e365/npm-js.jpg","title":"Compromised
+            jscrambler 8.14.0 npm Release Drops Rust Infostealer During Install","url":"https://thehackernews.com/2026/07/compromised-jscrambler-8140-npm-release.html"},{"description":"News,
+            Reviews, Release Date, Trailers, Gameplay and more for Rust of New York","page_age":"2026-06-19T07:01:46","thumbnail_url":"https://kotaku.com/app/uploads/2025/07/kotaku-1200x900-1.jpg","title":"Rust
+            of New York - Kotaku","url":"https://kotaku.com/games/rust-of-new-york"},{"description":"Former
+            Metallica bassist Jason Newsted has taken to the road with his new group
+            The Chophouse Band. This is the initial U.S. tour for the quintet who
+            will","page_age":"2026-07-13T20:17:08","thumbnail_url":"https://jambands.com/wp-content/uploads/2026/07/Untitled-5-copy-1.jpg","title":"Jason
+            Newsted Joins Blackberry Smoke for Thin Lizzy and Black Sabbath Covers","url":"https://jambands.com/news/2026/07/13/jason-newsted-joins-blackberry-smoke-for-thin-lizzy-and-black-sabbath-covers/"},{"description":"An
+            update to the markets of Kylian Mbappe has led experts to update predictions
+            and odds for the France-Spain match on Monday, July 13, 2026.","page_age":"2026-07-14T01:05:43","thumbnail_url":"https://www.cleveland.com/resizer/v2/6SUL5MB3LNBGDPRNBM2IGYLNCE.png?auth=df6cb126e65c0fbe7f26cc7aca2a127f7008843ca1d6ea12d89b270c8076fa3e&width=1280&smart=true&quality=90","title":"Experts
+            release updated France–Spain World Cup prediction following recent injury
+            updates","url":"https://www.cleveland.com/betting/2026/07/experts-release-updated-francespain-world-cup-prediction-following-recent-injury-updates.html"},{"description":"Eagerly
+            anticipating the next Rust Mobile beta? Be sure to check in this August
+            as Level Infinite schedule their next closed beta.","page_age":"2026-07-09T15:55:00","thumbnail_url":"https://media.pocketgamer.com/artwork/na-36888-1783610707/rust-mobile-beta-two-keyart.jpg","title":"Rust
+            Mobile will offer even more equipment and game options in its upcoming
+            second beta","url":"https://www.pocketgamer.com/rust-mobile/second-closed-beta-coming-this-summer/"},{"description":"","page_age":"2026-07-09T20:41:41","thumbnail_url":"https://s.yimg.com/lo/mysterio/api/ccd3149e6d28d0a8011ef15a1deba35a23af9e45cc1656e5c267bff653e40949/lightyear_networkapi/resizefill_w750_h422;quality_80;format_webp/https:%2F%2Fmedia.zenfs.com%2Fen%2Fwwl_tegna_articles_542%2F88975b78afc24dced4e23500fb2c5105","title":"Ye
+            to perform in New Orleans for 1st time in 13 years","url":"https://www.yahoo.com/entertainment/music/articles/ye-perform-orleans-1st-time-204141739.html"},{"description":"The
+            fifth movie in the beloved Pixar franchise was a box-office hit. Here''s
+            when fans may be able to watch it at home.","page_age":"2026-07-09T23:21:00","thumbnail_url":"https://s.yimg.com/lo/mysterio/api/162f0a7a939c253856cf784cb1c6f91706180b05782bf893007bc97cf39b3c3f/lightyear_networkapi/resizefill_w1200;quality_80;format_webp/https:%2F%2Fmedia.zenfs.com%2Fen%2Fparade_250%2F07ed5638c77a95b6cf9eef9a846f4b99","title":"Expected
+            Streaming Date for ''Toy Story 5'' on Disney+ Revealed: September or October","url":"https://www.yahoo.com/entertainment/movies/articles/expected-streaming-date-toy-story-232100132.html"},{"description":"\"An
+            intimate story of reconciliation.\"","page_age":"2026-07-12T17:06:00","thumbnail_url":"https://hips.hearstapps.com/hmg-prod/images/a3e5a966-b321-4274-8455-9f9e1b930f6b.jpg?crop=0.577xw:0.433xh;0.309xw,0.171xh&resize=1200:*","title":"\"Extraordinary\"
+            Oasis movie from Peaky Blinders boss confirms earlier UK release date","url":"https://www.digitalspy.com/movies/a71909275/oasis-dont-look-back-in-anger-earlier-release/"},{"description":"A
+            guide to keeping your canned food fresh.","page_age":"2026-07-13T15:25:00","thumbnail_url":"https://s.yimg.com/lo/mysterio/api/57677327d0c3507a29784df57beb50f487569cc758a4b22869c2fef681128833/lightyear_networkapi/resizefill_w1200;quality_80;format_webp/https:%2F%2Fmedia.zenfs.com%2Fen%2Fsouthern_living_806%2Fa849fcecb19ef12d2163ebc9886c7bff","title":"That
+            Date On Your Canned Food Might Not Mean What You Think","url":"https://www.yahoo.com/lifestyle/articles/date-canned-food-might-not-152500031.html"},{"description":"\"Obsession,\"
+            the hit horror film starring Michael Johnston and Inde Navarrette, will
+            start streaming on Peacock following its release in May.","page_age":"2026-07-10T16:11:22","thumbnail_url":"https://s.yimg.com/lo/mysterio/api/879a365d1acffa6e6118e648e43bb306b09c41302e1c05c2003a0a38ce91725a/lightyear_networkapi/resizefill_w900_h599;quality_80;format_webp/https:%2F%2Fmedia.zenfs.com%2Fen%2Funited_press_international_articles_356%2F16fb0e5d150d45e45928ed12af3485ef","title":"Horror
+            hit ''Obsession'' to start streaming July 17 on Peacock","url":"https://www.yahoo.com/entertainment/movies/articles/horror-hit-obsession-start-streaming-161122339.html"}],"web":[{"description":"Console
+            versions of Rust were first announced in 2019 by Facepunch and Double
+            Eleven at X019, Microsoft''s Xbox announcement event. The game was set
+            for release in 2020, but in December 2020, the release date was pushed
+            back to 2021 with Double Eleven citing the COVID-19 pandemic as having
+            impeded ...","favicon_url":"https://you.com/favicon?domain=en.wikipedia.org&size=128","page_age":"2026-06-05T21:35:00","snippets":["Console
+            versions of Rust were first announced in 2019 by Facepunch and Double
+            Eleven at X019, Microsoft''s Xbox announcement event. The game was set
+            for release in 2020, but in December 2020, the release date was pushed
+            back to 2021 with Double Eleven citing the COVID-19 pandemic as having
+            impeded development.","In early March 2021, Rust''s console edition entered
+            a closed beta that players could participate in. However, no specific
+            release date was given until later in March, when it was announced that
+            the game would be released for PlayStation 4 and Xbox One on 21 May 2021.","On
+            13 September 2023 Garry Newman announced works on Rust 2. In April 2025,
+            Double Eleven announced that they were working on a native version for
+            PlayStation 5 and Xbox Series X/S. The release date was later announced
+            in May, with the game launching for early access on 19 June 2025 and the
+            full release on 26 June 2025.","Rust is a 2018 multiplayer survival video
+            game developed by Facepunch Studios. It was first released in early access
+            in December 2013 and received its full release in February 2018. Rust
+            is available on Windows and macOS. Console versions for PlayStation 4
+            and Xbox One developed in conjunction with Double Eleven were released
+            in May 2021.","Rust supports modded servers which can add additional content.
+            The game functions on a system of ''Wipes'' in which servers reset player
+            progress weekly, biweekly or monthly following a set monthly schedule
+            enforced by Facepunch known as ''Force Wipe''. Force Wipes reset not only
+            player structures but also resets player crafting blueprints effectively
+            fully restarting player progress on the first Thursday of each month for
+            the release of a new update."],"title":"Rust (video game) - Wikipedia","url":"https://en.wikipedia.org/wiki/Rust_(video_game)"},{"description":"The
+            only aim in Rust is to survive. Everything wants you to die - the island’s
+            wildlife, other inhabitants, the environment, and other survivors. Do
+            whatever it takes to last another night.","favicon_url":"https://you.com/favicon?domain=store.steampowered.com&size=128","original_thumbnail_url":"https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/252490/c05e66e166b0fc5fc2a06711d7bfa1b4cb2f45f6/capsule_616x353.jpg?t=1781536981","page_age":"2026-07-06T13:03:04","snippets":["The
+            only aim in Rust is to survive. Everything wants you to die - the island’s
+            wildlife, other inhabitants, the environment, and other survivors. Do
+            whatever it takes to last another night. Recent Reviews: Very Positive
+            (11,427) - 81% of the 11,427 user reviews in the last 30 days are positive.
+            English Reviews: Very Positive (526,958) - 86% of the 526,958 user reviews
+            for this game are positive. Release Date: Feb 8, 2018 ·","Title: Rust
+            Genre: Action, Adventure, Indie, Massively Multiplayer, RPG · Developer:
+            Facepunch Studios · Publisher: Facepunch Studios Release Date: Feb 8,
+            2018 · Visit the website Discord X YouTube TikTok Facebook Twitch Instagram
+            Bilibili Douyin QQ · QQ 1043317996 Bluesky View update history Read related
+            news View discussions Visit the Workshop Find Community Groups ·","Rust
+            now enters its 13th year of continued expansion and has had over 395 content
+            updates, with a guaranteed content patch every month.","There are no rules
+            in Rust but the ones you make for yourself. Craft tools, armour, and weapons
+            to defend yourself. Cooperate with friends, make alliances, and build
+            a settlement together."],"thumbnail_url":"https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/252490/c05e66e166b0fc5fc2a06711d7bfa1b4cb2f45f6/capsule_616x353.jpg?t=1781536981","title":"Rust
+            on Steam","url":"https://store.steampowered.com/app/252490/Rust/"},{"description":"Rust
+            Versions # Stable: 1.95.0 Beta: 1.96.0 (28 May, 2026, 8 days left) Nightly:
+            1.97.0 (9 July, 2026, 50 days left) Ongoing Stabilization PRs # Stabilize
+            core::range::{legacy, RangeFull, RangeTo} (4 days old) T-compiler - Relevant
+            to the compiler team, which will review and decide on the PR/issue.","favicon_url":"https://you.com/favicon?domain=releases.rs&size=128","page_age":"2026-06-02T03:45:04","snippets":["T-rustdoc
+            - Relevant to the rustdoc team, which will review and decide on the PR/issue.","T-rustdoc-frontend
+            - Relevant to the rustdoc-frontend team, which will review and decide
+            on the web UI/UX output.","T-rust-analyzer - Relevant to the rust-analyzer
+            team, which will review and decide on the PR/issue.","T-rustdoc-internals
+            - Relevant to the rustdoc internals team, which will review and decide
+            on the PR/issue."],"title":"Rust Versions | Rust Changelogs","url":"https://releases.rs/"},{"description":"Rust:
+            Directed by Joel Souza. With Alec Baldwin, Josh Hopkins, Patrick Scott
+            McDermott, Travis Fimmel. An orphaned boy of 13 left to fend for himself
+            and his younger brother in 1880s Wyoming is sentenced to hang for the
+            accidental killing of a local rancher. His estranged grandfather breaks
+            ...","favicon_url":"https://you.com/favicon?domain=www.imdb.com&size=128","original_thumbnail_url":"https://m.media-amazon.com/images/M/MV5BYzkzMzVmMGItYjFmOC00MzU2LThmNDItMzY4MDRkYzM1MDZjXkEyXkFqcGc@._V1_FMjpg_UX1000_.jpg","page_age":"2025-05-02T00:00:00","snippets":["Rust:
+            Directed by Joel Souza. With Alec Baldwin, Josh Hopkins, Patrick Scott
+            McDermott, Travis Fimmel. An orphaned boy of 13 left to fend for himself
+            and his younger brother in 1880s Wyoming is sentenced to hang for the
+            accidental killing of a local rancher. His estranged grandfather breaks
+            him out of jail and they go on the run to Mexico.","Joel Souza''s Rust,
+            finally seeing release in 2025 after a tumultuous and tragic production,
+            arrives with a weight of expectation and somber reflection. The film itself,
+            a Western centered on an outlaw grandfather and his estranged grandson
+            on the run, attempts to capture the rugged beauty and inherent dangers
+            of the American frontier.","This creates a complex and often uncomfortable
+            viewing experience, where appreciation for the filmmaking is intertwined
+            with a profound sense of loss and the ethical considerations surrounding
+            its release. Despite the inherent challenges, Rust as a film showcases
+            moments of genuine cinematic merit.","Ultimately, Rust is a film that
+            exists in a complex space, its narrative achievements forever intertwined
+            with the real-life tragedy that marred its production. While Joel Souza
+            manages to deliver a Western with moments of compelling storytelling and
+            strong performances, the film''s release serves as a stark reminder of
+            the human cost of filmmaking."],"thumbnail_url":"https://m.media-amazon.com/images/M/MV5BYzkzMzVmMGItYjFmOC00MzU2LThmNDItMzY4MDRkYzM1MDZjXkEyXkFqcGc@._V1_FMjpg_UX1000_.jpg","title":"Rust
+            (2024) ⭐ 5.7 | Drama, Western","url":"https://www.imdb.com/title/tt11001074/"},{"description":"Check
+            end-of-life, release policy and support schedule for Rust.","favicon_url":"https://you.com/favicon?domain=endoflife.date&size=128","original_thumbnail_url":"https://endoflife.date/assets/logo-512x512.png","page_age":"2026-07-11T05:20:01","snippets":["Rust
+            is an open source multi-paradigm, general-purpose programming language
+            that emphasizes performance, type safety, and concurrency. It enforces
+            memory safety, meaning that all references point to valid memory, without
+            requiring the use of automated memory management techniques such as garbage
+            collection · A new stable release is produced every six weeks.","Only
+            the latest stable release receives patches. Each new stable release spends
+            the preceding six-week period as the Beta release. Rust uses editions
+            to make backwards-incompatible changes. Editions are a mechanism for opt-in
+            changes that may otherwise pose a backwards compatibility risk.","Each
+            crate chooses its edition within its Cargo.toml file. Editions are skin-deep,
+            and as a result - you can always use an older edition alongside a supported
+            version of the compiler. Editions are expected to be released every three
+            years. ... Rust 2015, the default edition from Rust 1.0.","More information
+            is available on the Rust website. You should be running one of the supported
+            release numbers listed above in the rightmost column."],"thumbnail_url":"https://endoflife.date/assets/logo-512x512.png","title":"Rust
+            | endoflife.date","url":"https://endoflife.date/rust"},{"description":"Click
+            here to be redirected to the latest Rust release announcement.","favicon_url":"https://you.com/favicon?domain=blog.rust-lang.org&size=128","page_age":"2026-07-09T05:20:01","snippets":[],"title":"Announcing
+            Rust 1.97.0","url":"https://blog.rust-lang.org/releases/latest/"},{"description":"This
+            helps manage resources such ... or released automatically. Object lifetime
+            refers to the period of time during which a reference is valid; that is,
+            the time between the object creation and destruction. These lifetimes
+            are implicitly associated with all Rust reference ...","favicon_url":"https://you.com/favicon?domain=en.wikipedia.org&size=128","original_thumbnail_url":"https://upload.wikimedia.org/wikipedia/commons/thumb/d/d5/Rust_programming_language_black_logo.svg/1280px-Rust_programming_language_black_logo.svg.png","page_age":"2026-07-15T10:24:11","snippets":["This
+            helps manage resources such as file handles, network sockets, and locks,
+            since when objects are dropped, the resources associated with them are
+            closed or released automatically. Object lifetime refers to the period
+            of time during which a reference is valid; that is, the time between the
+            object creation and destruction. These lifetimes are implicitly associated
+            with all Rust reference types.","Editions are released to allow making
+            limited breaking changes, such as promoting await to a keyword to support
+            async/await features. Crates targeting different editions can interoperate
+            with each other, so a crate can upgrade to a new edition even if its callers
+            or its dependencies still target older editions. Migration to a new edition
+            can be assisted with automated tooling. rust-analyzer is a set of utilities
+            that provides integrated development environments (IDEs) and text editors
+            with information about a Rust project through the Language Server Protocol.","Anderson,
+            Brian (2012-01-24). \"[rust-dev] The Rust compiler 0.1 is unleashed\".
+            rust-dev (Mailing list). Archived from the original on 2012-01-24. Retrieved
+            2025-01-07. ... Anthony, Sebastian (2012-01-24). \"Mozilla releases Rust
+            0.1, the language that will eventually usurp Firefox''s C++\".","Rust
+            Magazine. Retrieved 2023-02-07. ... Sei, Mark (2018-10-10). \"Fedora 29
+            new features: Startis now officially in Fedora\". Marksei, Weekly sysadmin
+            pills. Archived from the original on 2019-04-13. Retrieved 2019-05-13.
+            ... Proven, Liam (2022-07-12). \"Oracle Linux 9 released, with some interesting
+            additions\".","Software developer Graydon Hoare created Rust in 2006 while
+            working at Mozilla, which officially sponsored the project in 2009. The
+            first stable release, Rust 1.0, was published in May 2015."],"thumbnail_url":"https://upload.wikimedia.org/wikipedia/commons/thumb/d/d5/Rust_programming_language_black_logo.svg/1280px-Rust_programming_language_black_logo.svg.png","title":"Rust
+            (programming language) - Wikipedia","url":"https://en.wikipedia.org/wiki/Rust_(programming_language)"},{"description":"Rust
+            was a limited release in 2025 on Friday, May 2, 2025. There were 16 other
+            movies released on the same date, including Thunderbolts*, Off the Record
+            and A Tooth Fairy Tale. As a limited theatrical release, Rust will only
+            be shown in select movie theaters across major markets.","favicon_url":"https://you.com/favicon?domain=www.movieinsider.com&size=128","page_age":"2025-08-31T17:43:12","snippets":["Rust
+            on DVD July 22, 2025 starring Alec Baldwin, Frances Fisher, Josh Hopkins,
+            Travis Fimmel. Western outlaw Harland Rust (Baldwin), who has a bounty
+            on his head, discovers his 13 year-old grandson is convicted of an accidental
+            murder","Please check Fandango and Atom Tickets to see if the film is
+            playing in your area. Sometimes, limited theatrical releases are simulatenously
+            released to buy or rent on video on demand services like Prime Video and
+            Apple TV. ... Rust was released on DVD & Blu-ray on Tuesday, July 22,
+            2025 .","Western outlaw Harland Rust (Baldwin), who has a bounty on his
+            head, discovers his 13 year-old grandson is convicted of an accidental
+            murder and sentenced to hang. Rust travels to Kansas to break his Grandson
+            out of prison, and the two fugitives must escape bounty hunters and a
+            legandary U.S.","A look at the Rust behind-the-scenes crew and production
+            team. The film''s director Joel Souza last directed Crown Vic and Celestia."],"title":"Everything
+            You Need to Know About Rust Movie (2025): Aug. 31, 2025 ...","url":"https://www.movieinsider.com/m18454/rust"},{"description":"Rust
+            (2024) - Movies, TV, Celebs, and more","favicon_url":"https://you.com/favicon?domain=www.imdb.com&size=128","original_thumbnail_url":"https://m.media-amazon.com/images/M/MV5BYzkzMzVmMGItYjFmOC00MzU2LThmNDItMzY4MDRkYzM1MDZjXkEyXkFqcGc@._V1_FMjpg_UX1000_.jpg","snippets":["Release
+            date (13) Also known as (AKA) (24)Edit · United Kingdom · July 7, 2024(DVD)
+            Poland · November 20, 2024(Camerimage International Film Festival, premiere)
+            Germany · May 1, 2025 · United States · May 2, 2025(internet) United States
+            · May 2, 2025(limited) 8 moreSee all · (original title) Rust ·","Rust
+            (2024) - Movies, TV, Celebs, and more..."],"thumbnail_url":"https://m.media-amazon.com/images/M/MV5BYzkzMzVmMGItYjFmOC00MzU2LThmNDItMzY4MDRkYzM1MDZjXkEyXkFqcGc@._V1_FMjpg_UX1000_.jpg","title":"Rust
+            (2024) - Release info - IMDb","url":"https://www.imdb.com/title/tt11001074/releaseinfo/"},{"description":"Rust
+            Console Edition will be released on May 21, 2021, for PS4 and Xbox One.
+            It will also be playable on PS5 and Xbox Series X/S via backward compatibility.","favicon_url":"https://you.com/favicon?domain=www.ign.com&size=128","original_thumbnail_url":"https://assets1.ignimgs.com/2021/01/14/rust-how-to-play-with-friends-1610656889028_160w.jpg?width=1280&amp;format=jpg&amp;auto=webp&amp;quality=80","page_age":"2021-03-27T16:05:58","snippets":["Rust,
+            the competitive online multiplayer survival game that was first released
+            in early access on PC in 2013, is officially coming to PlayStation 4 and
+            Xbox One (and PS5 and Xbox Series X/S via backward compatibility) on May
+            21, 2021.","This means that Rust Console Edition will follow its own update
+            roadmap that differs from the PC version that will \"provide an optimal
+            player experience while gradually introducing players to the vast amount
+            of game play and content that makes Rust an incredible experience.\" While
+            Double Eleven isn''t quite ready to reveal the roadmap, the studio promises
+            some of it will be shown closer to the release of the game in May."],"thumbnail_url":"https://assets1.ignimgs.com/2021/01/14/rust-how-to-play-with-friends-1610656889028_160w.jpg?width=1280&amp;format=jpg&amp;auto=webp&amp;quality=80","title":"Rust
+            Console Edition Release Date Announced for PS4 and Xbox One - IGN","url":"https://www.ign.com/articles/rust-console-edition-release-date-announced-for-ps4-and-xbox-one"}]}}'
+          tool_use_id: chatcmpl-tool-953805f2e70f765d
+          type: tool_result
+        role: user
+      model: qwen3
+      stream: true
+      tools:
+      - description: Search the web.
+        input_schema:
+          properties:
+            query:
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: message_start
+
+      '
+    - 'data: {"type":"message_start","message":{"id":"chatcmpl-804cb26caacf6e54","type":"message","role":"assistant","content":[],"model":"qwen3","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":12128,"output_tokens":0}}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_start
+
+      '
+    - 'data: {"type":"content_block_start","content_block":{"type":"thinking","thinking":""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"\n"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"Okay"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      let"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"''s"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      tackle"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      this"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      step"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      by"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      step"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      The"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      user"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      asked"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      for"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      latest"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Rust"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      version"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      and"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      its"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      release"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      date"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      requiring"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      two"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      separate"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      web"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      searches"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      \n\n"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"First"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      I"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      need"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      to"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      process"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      results"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      from"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      first"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      search"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      for"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      latest"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Rust"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      version"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      The"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      web"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      search"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      results"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      mention"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      \""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"Ann"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"ouncing"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Rust"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"7"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"\""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      and"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      \""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"R"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"ust"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Versions"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      |"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Rust"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Ch"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"angel"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"ogs"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"\""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      which"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      lists"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"5"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      as"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      stable"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"6"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      as"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      beta"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      and"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"7"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      as"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      nightly"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      However"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      blog"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      post"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      from"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      July"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"6"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      mentions"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Rust"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"7"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      as"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      latest"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      So"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      latest"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      stable"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      version"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      is"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      likely"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"7"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":".\n\n"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"Next"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      second"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      search"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      for"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      release"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      date"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      The"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      results"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      include"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      a"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Wikipedia"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      entry"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      stating"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      that"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Rust"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      was"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      published"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      in"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      May"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"5"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      but"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      that"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"''s"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      initial"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      release"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      The"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      more"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      recent"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      info"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      from"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      blog"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      post"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      \""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"Ann"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"ouncing"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Rust"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"7"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"\""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      might"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      have"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      release"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      date"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      However"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      exact"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      date"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      isn"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"''t"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      specified"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      in"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      snippets"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Another"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      result"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      mentions"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      \""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"R"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"ust"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Console"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Edition"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"\""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      released"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      on"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      May"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      but"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      that"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"''s"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      for"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      game"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      not"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      programming"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      language"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      The"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Wikipedia"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      article"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      on"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      programming"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      language"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      notes"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      that"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Rust"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      was"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      in"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      May"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"5"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      but"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      latest"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      version"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"''s"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      specific"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      release"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      date"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      isn"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"''t"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      clear"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      However"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      blog"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      post"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      from"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      July"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"6"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      indicates"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      that"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"7"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      is"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      latest"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      but"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      exact"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      release"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      date"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      isn"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"''t"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      provided"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      \n\n"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"Wait"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      user"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      might"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      be"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      referring"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      to"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Rust"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      programming"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      language"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      not"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      game"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      The"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      game"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Rust"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      has"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      a"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      different"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      release"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      date"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      The"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      user"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      probably"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      wants"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      latest"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      version"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      of"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      programming"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      language"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      The"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      latest"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      version"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      from"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      search"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      is"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"7"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      but"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      release"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      date"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      isn"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"''t"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      explicitly"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      stated"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      However"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      \""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"R"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"ust"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Versions"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      |"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Rust"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Ch"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"angel"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"ogs"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"\""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      page"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      shows"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      that"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"7"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      is"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      nightly"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      version"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      as"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      of"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      July"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"6"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      The"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      stable"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      version"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      might"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      be"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"5"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      but"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      blog"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      post"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      mentions"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"7"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      as"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      latest"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      There"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"''s"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      some"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      confusion"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      here"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      \n\n"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"To"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      clarify"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      latest"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      stable"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      version"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      as"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      of"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      search"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      results"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      is"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"7"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      released"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      on"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      July"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"6"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      The"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      release"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      date"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      for"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      programming"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      language"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"''s"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      latest"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      version"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      is"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      July"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"6"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      The"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      game"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      Rust"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"''s"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      release"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      date"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      is"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      different"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      but"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      user"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      likely"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      meant"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      language"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      So"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      answer"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      should"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      state"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      latest"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      version"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      as"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"1"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"7"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"."},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      and"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      its"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      release"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      date"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      as"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      July"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"9"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":","},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"
+      "},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"0"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"2"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"6"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":".\n"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"signature_delta","signature":"1beffd2c452945a2bb6ca613ebe0a61f"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_stop
+
+      '
+    - 'data: {"type":"content_block_stop","index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_start
+
+      '
+    - 'data: {"type":"content_block_start","content_block":{"type":"text","text":""},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"\n\n"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"The"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":" latest"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":" Rust"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":" version"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":" is"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":" **"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"1"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"."},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"9"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"7"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"."},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"0"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"**,"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":" released"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":" on"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":" **"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"July"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":" "},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"9"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":","},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":" "},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"2"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"0"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"2"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"6"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"**"},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"."},"index":1}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_stop
+
+      '
+    - 'data: {"type":"content_block_stop","index":1}
+
+      '
+    - '
+
+      '
+    - 'event: message_delta
+
+      '
+    - 'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":12128,"output_tokens":612}}
+
+      '
+    - '
+
+      '
+    - 'event: message_stop
+
+      '
+    - 'data: {"type":"message_stop"}
+
+      '
+    - '
+
+      '
+    status_code: 200

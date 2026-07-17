@@ -223,3 +223,80 @@ async fn messages_returns_anthropic_error_for_unreachable_upstream() {
         })
     );
 }
+
+/// Mock vLLM `/v1/messages` that returns a canned Anthropic message and records
+/// how many times it was called (to prove routing).
+async fn spawn_mock_vllm_messages(body: &'static str) -> (String, Arc<Mutex<usize>>, tokio::task::JoinHandle<()>) {
+    let calls = Arc::new(Mutex::new(0usize));
+    let route_calls = Arc::clone(&calls);
+    let app = Router::new().route(
+        "/v1/messages",
+        post(move |_body: Bytes| {
+            let route_calls = Arc::clone(&route_calls);
+            async move {
+                *route_calls.lock().await += 1;
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header("content-type", "application/json")
+                    .body(axum::body::Body::from(body))
+                    .unwrap()
+                    .into_response()
+            }
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (format!("http://{addr}"), calls, handle)
+}
+
+// A request declaring a gateway-owned `web_search` tool routes to the native
+// loop (hits vLLM /v1/messages) and returns an Anthropic message. The model
+// answers directly here (end_turn) so no search backend is needed.
+#[tokio::test]
+async fn messages_with_web_search_tool_routes_to_native_loop() {
+    let final_msg = r#"{"id":"m","type":"message","role":"assistant","model":"qwen3","content":[{"type":"text","text":"Rust 1.89.0."}],"stop_reason":"end_turn","usage":{"input_tokens":5,"output_tokens":3}}"#;
+    let (llm_url, calls, _upstream) = spawn_mock_vllm_messages(final_msg).await;
+    let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+    let body = br#"{"model":"qwen3","max_tokens":256,"stream":false,"messages":[{"role":"user","content":"latest rust?"}],"tools":[{"name":"web_search","description":"s","input_schema":{"type":"object","properties":{"query":{"type":"string"}}}}]}"#;
+
+    let response = reqwest::Client::new()
+        .post(format!("{gateway_url}/v1/messages"))
+        .body(body.to_vec())
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    // The loop called vLLM /v1/messages upstream (native, not the Responses path).
+    assert_eq!(*calls.lock().await, 1, "native loop should call /v1/messages");
+    let json: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(json["type"], "message");
+    assert_eq!(json["role"], "assistant");
+    assert_eq!(json["content"][0]["text"], "Rust 1.89.0.");
+    assert_eq!(json["stop_reason"], "end_turn");
+}
+
+// A request with NO gateway-owned tool stays on the transparent proxy — the
+// native loop is never engaged.
+#[tokio::test]
+async fn messages_without_gateway_tool_uses_proxy() {
+    let (llm_url, requests, _upstream) =
+        spawn_recording_upstream(StatusCode::OK, "application/json", r#"{"id":"proxied"}"#).await;
+    let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+    // A custom (client-owned) tool only — not gateway-owned.
+    let body = br#"{"model":"qwen3","max_tokens":64,"stream":false,"messages":[{"role":"user","content":"hi"}],"tools":[{"name":"get_weather","input_schema":{"type":"object"}}]}"#;
+
+    let response = reqwest::Client::new()
+        .post(format!("{gateway_url}/v1/messages"))
+        .body(body.to_vec())
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    // Proxied verbatim (the recording upstream echoes the raw body path).
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].body.as_ref(), body);
+}

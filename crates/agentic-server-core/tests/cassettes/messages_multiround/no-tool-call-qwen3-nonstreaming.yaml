@@ -1,0 +1,61 @@
+turns:
+- filename: t1
+  request:
+    body:
+      max_tokens: 300
+      messages:
+      - content: What is 2+2? Answer directly, do not use any tools.
+        role: user
+      model: qwen3
+      stream: false
+      tools:
+      - description: Search the web.
+        input_schema:
+          properties:
+            query:
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    body:
+      content:
+      - signature: c1d6d688f8bc4af68d663d69116b7451
+        thinking: '
+
+          Okay, the user is asking "What is 2+2?" and they want the answer directly
+          without using any tools. Let me think.
+
+
+          First, this is a basic arithmetic problem. 2 plus 2 equals 4. I don''t need
+          to use any functions or search the web because it''s a straightforward question.
+          The user specified not to use any tools, so I should just provide the answer
+          immediately. No need to call the web_search function here. I''ll make sure
+          to state the answer clearly and concisely.
+
+          '
+        type: thinking
+      - text: '
+
+
+          2 + 2 equals 4.'
+        type: text
+      id: chatcmpl-987513aee54aaf68
+      model: qwen3
+      role: assistant
+      stop_reason: end_turn
+      type: message
+      usage:
+        input_tokens: 159
+        output_tokens: 121
+    headers:
+      content-type: application/json
+    status_code: 200

@@ -1,0 +1,502 @@
+turns:
+- filename: t1
+  request:
+    body:
+      max_tokens: 1024
+      messages:
+      - content: Use web_search to find the latest Rust version, then use web_search
+          again to find the latest Python version, then state both.
+        role: user
+      model: qwen3
+      stream: false
+      tools:
+      - description: Search the web for current information.
+        input_schema:
+          properties:
+            query:
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    body:
+      content:
+      - signature: 0cc32e0f10bf4334b6fe996d239343f7
+        thinking: "\nOkay, the user wants me to find the latest Rust version and the\
+          \ latest Python version using web_search. Let me start by figuring out how\
+          \ to structure the queries.\n\nFirst, for Rust. The latest version is probably\
+          \ announced on their official website or maybe a news blog. So I should\
+          \ search for \"latest Rust version\" or \"Rust programming language latest\
+          \ release\". Maybe the official Rust website has a \"Downloads\" section\
+          \ that lists the current stable version. Alternatively, checking a reliable\
+          \ tech news site might have the latest info.\n\nNext, Python. Similarly,\
+          \ the Python website's \"Downloads\" page would have the latest version.\
+          \ But I should confirm if there's a recent release. Maybe search for \"\
+          latest Python version\" or \"Python programming language latest release\"\
+          . Also, checking the Python Software Foundation's official site would be\
+          \ the most accurate source.\n\nWait, the user wants me to use web_search\
+          \ twice, once for each language. So I need to make two separate function\
+          \ calls. The first one for Rust, the second for Python. Each time, the query\
+          \ should be specific enough to get the latest version. Let me make sure\
+          \ the search terms are clear. Maybe \"Rust latest stable version\" and \"\
+          Python latest version\". \n\nI should also consider that sometimes the latest\
+          \ version might be a development release, but the user probably wants the\
+          \ stable one. So including \"stable\" in the search might help. But maybe\
+          \ the official sites automatically show the latest stable. Hmm. Alternatively,\
+          \ check for the most recent major or minor version. \n\nOnce I get the results\
+          \ from the web searches, I can extract the version numbers and present them.\
+          \ But since I can't execute the searches, I need to simulate the process.\
+          \ However, in a real scenario, the function would return the search results,\
+          \ and I'd parse them to find the versions. \n\nSo the steps are: first call\
+          \ web_search with \"latest Rust version\", then call web_search again with\
+          \ \"latest Python version\", then compile both results and state them. Alright,\
+          \ that's the plan.\n"
+        type: thinking
+      - id: chatcmpl-tool-b6ddcc2891299003
+        input:
+          query: latest Rust version
+        name: web_search
+        type: tool_use
+      - id: chatcmpl-tool-a5945cf518d40532
+        input:
+          query: latest Python version
+        name: web_search
+        type: tool_use
+      id: chatcmpl-9507c0d7a9ac4107
+      model: qwen3
+      role: assistant
+      stop_reason: tool_use
+      type: message
+      usage:
+        input_tokens: 172
+        output_tokens: 459
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      max_tokens: 1024
+      messages:
+      - content: Use web_search to find the latest Rust version, then use web_search
+          again to find the latest Python version, then state both.
+        role: user
+      - content:
+        - id: chatcmpl-tool-b6ddcc2891299003
+          input:
+            query: latest Rust version
+          name: web_search
+          type: tool_use
+        - id: chatcmpl-tool-a5945cf518d40532
+          input:
+            query: latest Python version
+          name: web_search
+          type: tool_use
+        role: assistant
+      - content:
+        - content: '{"metadata":{"latency":0.4433350563049317,"query":"latest Rust
+            version","search_uuid":"57f85555-8b1c-4f25-83af-39f502deb78a"},"query":"latest
+            Rust version","results":{"news":[{"description":"Mighty Morphin Power
+            Rangers #2 Reveals Its Heart, But Is Held Back From Its Potential (Review)","page_age":"2026-07-16T01:01:33","thumbnail_url":"https://comicbook.com/wp-content/uploads/sites/4/2026/07/Mighty-Morphin-Power-Rangers-2.jpg?resize=2000,1125","title":"Mighty
+            Morphin Power Rangers #2 Reveals Its Heart, But Is Held Back From Its
+            Potential (Review)","url":"https://comicbook.com/comics/review/mighty-morphin-power-rangers-2-reveals-its-heart-but-is-held-back-from-its-potential-review/"},{"description":"You''re
+            not the only one with a key.","page_age":"2026-07-02T19:16:23","thumbnail_url":"https://s.yimg.com/lo/mysterio/api/f10abddbbcbcd6170a27a53c5c0de04d74d64574a1892e3ee431b5e6cea30578/lightyear_networkapi/resizefill_w1200;quality_80;format_webp/https:%2F%2Fmedia.zenfs.com%2Fen%2Fpc_gamer_708%2F2e8f245e655fc750d4cd765499c51a76","title":"Rust
+            gets even more cutthroat by adding its own version of apartment rentals","url":"https://tech.yahoo.com/gaming/articles/rust-gets-even-more-cutthroat-191623715.html"},{"description":"Malicious
+            jscrambler 8.14.0 runs hidden binaries during npm install on Windows,
+            macOS, and Linux, with no fix available as of July 11, 2026.","page_age":"2026-07-13T06:46:39","thumbnail_url":"https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEhodiWPXDsex6YL7v4e2n_D5MJFMht76GRRmHTdiG61tfEmsoZyow4tkiS3ORACILDl2fNP27YQkw1XLSBKGcom-DhCVzzPDdkdSgeMGdxcVL_rgO70x5LqZcjxKAPTtFOquB8LwSBPWrSpflqCzns-cFZ_EVm0WZfV7wSoPM3S-7_IGtCT3AjxY0rfITU/s1700-e365/npm-js.jpg","title":"Compromised
+            jscrambler 8.14.0 npm Release Drops Rust Infostealer During Install","url":"https://thehackernews.com/2026/07/compromised-jscrambler-8140-npm-release.html"},{"description":"Eagerly
+            anticipating the next Rust Mobile beta? Be sure to check in this August
+            as Level Infinite schedule their next closed beta.","page_age":"2026-07-09T15:55:00","thumbnail_url":"https://media.pocketgamer.com/artwork/na-36888-1783610707/rust-mobile-beta-two-keyart.jpg","title":"Rust
+            Mobile will offer even more equipment and game options in its upcoming
+            second beta","url":"https://www.pocketgamer.com/rust-mobile/second-closed-beta-coming-this-summer/"},{"description":"After
+            an opening-round 65 at the Scottish Open, Rory McIlroy explained the reason
+            he doesn''t feel rusty despite having played only four times since winning
+            the Masters","page_age":"2026-07-09T15:33:03","thumbnail_url":"https://s.yimg.com/os/en/golf_digest_articles_737/d8524d67d05a25ed4c13358404640eef","title":"Rory
+            McIlroy says he''s benefiting from a lighter schedule. Here''s why","url":"https://sports.yahoo.com/articles/rory-mcilroy-says-hes-benefiting-153303945.html"},{"description":"The
+            Atlanta Braves have two players recovering from injuries officially in
+            the rehab stage of their recoveries","page_age":"2026-07-13T19:27:08","thumbnail_url":"https://images2.minutemediacdn.com/image/upload/c_crop,x_0,y_0,w_3974,h_2235/c_fill,w_1440,ar_1440:810,f_auto,q_auto,g_auto/shape/cover/sport/01kxee2snea8t7jbaqgy-a7f2d87fe57f1668d64f6ddf872e9c44.webp","title":"Ha-Seong
+            Kim Sharp in First Braves Rehab Game, Acuña Rusty","url":"https://www.si.com/mlb/braves/onsi/ha-seong-kim-sharp-first-braves-rehab-game-acuna-rusty"},{"description":"Plans
+            to extend Zakynthos'' iconic Navagio Beach by 30 metres aim to preserve
+            its rusting shipwreck for future generations, as visitors continue to
+            be barred from the popular island attraction because ...","page_age":"2026-07-13T12:56:57","thumbnail_url":"https://s.yimg.com/lo/mysterio/api/0fc2ca54e2ad166ca5429f663256f69579db7930cf4e28828ddd9ba0f023ecfd/lightyear_networkapi/resizefill_w1024_h576;quality_80;format_webp/https:%2F%2Fmedia.zenfs.com%2Fen%2Feuronews_us_news_articles_566%2F8b2deb640dc4a5a47e8a99ec6f49105b","title":"Greece''s
+            famous ‘Shipwreck Beach’ to be extended to save its iconic wreck","url":"https://www.yahoo.com/news/world/articles/greeces-famous-shipwreck-beach-extended-125657791.html"},{"description":"Ohio
+            tops CNBC''s rankings for the first time in 2026, with the Buckeye State
+            culminating a yearslong climb as the place to do business in America.","page_age":"2026-07-09T18:10:56","thumbnail_url":"https://image.cnbcfm.com/api/v1/image/108330101-1783012419076-gettyimages-2267146157-SOFTBANK_DATA_CENTER.jpeg?v=1783434396&w=1920&h=1080","title":"Ohio
+            is America''s Top State for Business in 2026, capping yearslong rise with
+            first No. 1 finish","url":"https://www.cnbc.com/2026/07/09/ohio-no-1-americas-top-states-for-business-rankings.html"},{"description":"At
+            the Open Source Summit in Mumbai, Torvalds discusses the pain and power
+            of AI in the kernel, and why Linux no longer supports ''museum'' technology.","page_age":"2026-07-08T21:09:50","thumbnail_url":"https://s.yimg.com/lo/mysterio/api/78cc427d8d85d82723b419f8f03c12e49e1d28279ae0e60443122d1cfbde8784/lightyear_networkapi/resizefill_w1200;quality_80;format_webp/https:%2F%2Fmedia.zenfs.com%2Fen%2Fzdnet_articles_730%2F133ed8711fa74a3a05edae71b635e7b9","title":"''I''m
+            not a programmer'' anymore: Linus Torvalds on the only two tools he uses
+            now","url":"https://tech.yahoo.com/ai/articles/im-not-programmer-anymore-linus-210950038.html"},{"description":"Sen.
+            Sheldon Whitehouse says whistleblowers have alleged numerous problems
+            with rushed reconstruction of the Kennedy Center.","page_age":"2026-07-12T21:40:39","thumbnail_url":"https://ca-times.brightspotcdn.com/dims4/default/5f6c940/2147483647/strip/true/crop/5915x3105+0+419/resize/1200x630!/quality/75/?url=https%3A%2F%2Fcalifornia-times-brightspot.s3.amazonaws.com%2F45%2F71%2Fe499b7894ff8a069cf35076ab381%2F318521025cb8478fbc006f8cdb2bbd3a.jpg","title":"Democrat
+            announces whistleblower allegations of construction problems at Kennedy
+            Center","url":"https://www.latimes.com/world-nation/story/2026-07-12/democrat-announces-whistleblower-allegations-of-construction-problems-at-kennedy-center"}],"web":[{"description":"Click
+            here to be redirected to the latest Rust release announcement.","favicon_url":"https://you.com/favicon?domain=blog.rust-lang.org&size=128","page_age":"2026-07-09T05:20:01","snippets":[],"title":"Announcing
+            Rust 1.97.0","url":"https://blog.rust-lang.org/releases/latest/"},{"description":"Rust
+            Versions # Stable: 1.95.0 Beta: 1.96.0 (28 May, 2026, 8 days left) Nightly:
+            1.97.0 (9 July, 2026, 50 days left) Ongoing Stabilization PRs # Stabilize
+            core::range::{legacy, RangeFull, RangeTo} (4 days old) T-compiler - Relevant
+            to the compiler team, which will review and decide on the PR/issue.","favicon_url":"https://you.com/favicon?domain=releases.rs&size=128","page_age":"2026-06-02T03:45:04","snippets":["T-rustdoc
+            - Relevant to the rustdoc team, which will review and decide on the PR/issue.","T-rustdoc-frontend
+            - Relevant to the rustdoc-frontend team, which will review and decide
+            on the web UI/UX output.","T-rust-analyzer - Relevant to the rust-analyzer
+            team, which will review and decide on the PR/issue.","T-rustdoc-internals
+            - Relevant to the rustdoc internals team, which will review and decide
+            on the PR/issue."],"title":"Rust Versions | Rust Changelogs","url":"https://releases.rs/"},{"description":"Empowering
+            everyone to build reliable and efficient software. - Releases · rust-lang/rust","favicon_url":"https://you.com/favicon?domain=github.com&size=128","original_thumbnail_url":"https://opengraph.githubassets.com/965c2fcedff6dbee97c6e81ff9e86ca7d93ba06b36c08dd84d449d801ca3195b/rust-lang/rust","snippets":["Empowering
+            everyone to build reliable and efficient software. - rust-lang/rust","Allow
+            a dependency to specify both a git repository and an alternate registry.
+            Just like with crates.io, the git repository will be used locally, but
+            the registry version will be used when published. Added target.''cfg(..)''.rustdocflags
+            support in configuration.","Refer to Rust''s platform support page for
+            more information on Rust''s tiered platform support. Relax T: Ord bound
+            for some BinaryHeap methods. ... Stabilize the config include key. The
+            top-level include config key allows loading additional config files, enabling
+            better organization, sharing, and management of Cargo configurations across
+            projects and environments. docs #16284 · Stabilize the pubtime field in
+            registry index. This records when a crate version was published and enables
+            time-based dependency resolution in the future.","Putting the #[test]
+            attribute in these places is no longer ignored, and will now result in
+            an error; this may also result in errors when generating rustdoc. Error
+            when test attribute is applied to structs · Cargo now sets the CARGO_CFG_DEBUG_ASSERTIONS
+            environment variable in more situations. This will cause crates depending
+            on static-init versions 1.0.1 to 1.0.3 to fail compilation with \"failed
+            to resolve: use of unresolved module or unlinked crate parking_lot\"."],"thumbnail_url":"https://opengraph.githubassets.com/965c2fcedff6dbee97c6e81ff9e86ca7d93ba06b36c08dd84d449d801ca3195b/rust-lang/rust","title":"Releases
+            · rust-lang/rust","url":"https://github.com/rust-lang/rust/releases"},{"description":"Check
+            end-of-life, release policy and support schedule for Rust.","favicon_url":"https://you.com/favicon?domain=endoflife.date&size=128","original_thumbnail_url":"https://endoflife.date/assets/logo-512x512.png","page_age":"2026-07-11T05:20:01","snippets":["Rust
+            uses editions to make backwards-incompatible changes. Editions are a mechanism
+            for opt-in changes that may otherwise pose a backwards compatibility risk.
+            Since editions are opt-in, existing crates won’t use the changes unless
+            they explicitly migrate to the new edition. Each crate chooses its edition
+            within its Cargo.toml file. Editions are skin-deep, and as a result -
+            you can always use an older edition alongside a supported version of the
+            compiler.","More information is available on the Rust website. You should
+            be running one of the supported release numbers listed above in the rightmost
+            column. ... You can submit an improvement to this page on GitHub . This
+            page has also a corresponding Talk Page 💬. A JSON version of this page
+            is available at /api/v1/products/rust/ 📡. See the API Documentation 📖
+            for more information.","Rust is an open source multi-paradigm, general-purpose
+            programming language that emphasizes performance, type safety, and concurrency.
+            It enforces memory safety, meaning that all references point to valid
+            memory, without requiring the use of automated memory management techniques
+            such as garbage collection · A new stable release is produced every six
+            weeks. Only the latest stable release receives patches."],"thumbnail_url":"https://endoflife.date/assets/logo-512x512.png","title":"Rust
+            | endoflife.date","url":"https://endoflife.date/rust"},{"description":"The
+            only aim in Rust is to survive. Everything wants you to die - the island’s
+            wildlife, other inhabitants, the environment, and other survivors. Do
+            whatever it takes to last another night. Rust Steam charts, data, update
+            history.","favicon_url":"https://you.com/favicon?domain=steamdb.info&size=128","original_thumbnail_url":"https://steamdb.info/app/252490.png?_=57609173","snippets":[],"thumbnail_url":"https://steamdb.info/app/252490.png?_=57609173","title":"Rust
+            Price history · SteamDB","url":"https://steamdb.info/app/252490/patchnotes/"},{"description":"Redirecting
+            to /","favicon_url":"https://you.com/favicon?domain=rust-lang.org&size=128","snippets":[],"title":"Rust
+            Programming Language","url":"https://rust-lang.org/en-US/"},{"description":"Allow
+            a dependency to specify both a git repository and an alternate registry.
+            Just like with crates.io, the git repository will be used locally, but
+            the registry version will be used when published. Added target.''cfg(..)''.rustdocflags
+            support in configuration.","favicon_url":"https://you.com/favicon?domain=doc.rust-lang.org&size=128","page_age":"2026-05-28T00:00:00","snippets":["Refer
+            to Rust’s platform support page for more information on Rust’s tiered
+            platform support. Relax T: Ord bound for some BinaryHeap methods. ...
+            Stabilize the config include key. The top-level include config key allows
+            loading additional config files, enabling better organization, sharing,
+            and management of Cargo configurations across projects and environments.
+            docs #16284 · Stabilize the pubtime field in registry index. This records
+            when a crate version was published and enables time-based dependency resolution
+            in the future.","Putting the #[test] attribute in these places is no longer
+            ignored, and will now result in an error; this may also result in errors
+            when generating rustdoc. Error when test attribute is applied to structs
+            · Cargo now sets the CARGO_CFG_DEBUG_ASSERTIONS environment variable in
+            more situations. This will cause crates depending on static-init versions
+            1.0.1 to 1.0.3 to fail compilation with “failed to resolve: use of unresolved
+            module or unlinked crate parking_lot”. See the linked issue for details.","Add
+            future incompatibility lint for temporary lifetime shortening in Rust
+            1.92 ... cargo publish no longer keeps .crate tarballs as final build
+            artifacts when build.build-dir is set. These tarballs were previously
+            included due to an oversight and are now treated as intermediate artifacts.
+            To get .crate tarballs as final artifacts, use cargo package. In a future
+            version, this change will apply regardless of build.build-dir.","Usage
+            of #[bench] without #![feature(custom_test_frameworks)] already triggered
+            a deny-by-default future-incompatibility lint since Rust 1.77, but will
+            now become a hard error. Add warn-by-default dangerous_implicit_autorefs
+            lint against implicit autoref of raw pointer dereference. The lint will
+            be bumped to deny-by-default in the next version of Rust."],"title":"Rust
+            Release Notes","url":"https://doc.rust-lang.org/beta/releases.html"},{"description":"975
+            votes, 67 comments. Empowering everyone to build reliable and efficient
+            software.","favicon_url":"https://you.com/favicon?domain=www.reddit.com&size=128","original_thumbnail_url":"https://external-preview.redd.it/rust-1-96-0-is-out-v0-CI5itE2KlGAV4vsTeO9oZsPhsFkQe2fnOR17HHynxAs.jpeg?width=1080&amp;crop=smart&amp;auto=webp&amp;s=28b32b990e90e234feecb5ad39639b766655a30e","page_age":"2026-05-28T19:12:02","snippets":["How
+            to find out the latest stable Rust version supporting a certain target?
+            r/rust • · upvote · · comments · What''s the best way to track when a
+            Rust feature has been released? r/rust • · upvotes · · comments · Rust
+            Release Video: Rust 1.89.0 · r/rust • ·","If a user had use third_party_crate::*;
+            and the only item they use from that crate is now available in the prelude,
+            that use statement is dead code. Might be counterintuitive, but Rust considers
+            the first declaration of a symbol to be the canonical one, and anything
+            after it to either an error (if explicitly used) or dead code (if implicitly
+            through a glob pattern).","Ahh, I see what you mean now in the reference:
+            \"Items and named imports are allowed to shadow names from glob imports
+            in the same namespace. That is, if there is a name already defined by
+            another item in the same namespace, the glob import will be shadowed.\"
+            - https://doc.rust-lang.org/reference/items/use-declarations.html#r-items.use.glob.shadowing","Macros
+            have always been a bit of a problem in Rust; there are a lot of things
+            that work differently about macros than other things in the import system."],"thumbnail_url":"https://external-preview.redd.it/rust-1-96-0-is-out-v0-CI5itE2KlGAV4vsTeO9oZsPhsFkQe2fnOR17HHynxAs.jpeg?width=1080&amp;crop=smart&amp;auto=webp&amp;s=28b32b990e90e234feecb5ad39639b766655a30e","title":"r/rust
+            on Reddit: Rust 1.96.0 is out","url":"https://www.reddit.com/r/rust/comments/1tqd97o/rust_1960_is_out/"},{"description":"The
+            only aim in Rust is to survive. Everything wants you to die - the island’s
+            wildlife and other inhabitants, the environment, other survivors. Do whatever
+            it takes to last another night.","favicon_url":"https://you.com/favicon?domain=rust.facepunch.com&size=128","original_thumbnail_url":"https://files.facepunch.com/lewis/1b2411b1/og-image.jpg","page_age":"2026-05-07T00:30:03","snippets":["What’s
+            changed on Rust in each patch.","Removed all obsolete and generic versions
+            of BaseEntity.ClientRPC, ClientRPCEx, ClientRPCPlayer, ServerRPC and ServerRPCList
+            calls - switch to existing methods or write your own via *RPCStart->*RPCWrite->*RPCSend"],"thumbnail_url":"https://files.facepunch.com/lewis/1b2411b1/og-image.jpg","title":"Changes
+            - Rust - facepunch","url":"https://rust.facepunch.com/changes"},{"description":"Empowering
+            everyone to build reliable and efficient software. - rust-lang/rust","favicon_url":"https://you.com/favicon?domain=github.com&size=128","original_thumbnail_url":"https://opengraph.githubassets.com/48c59e4644f44114fd3ccc60b5e6d6f6d6f94f2f994d8d230822965280321e16/rust-lang/rust","snippets":["Empowering
+            everyone to build reliable and efficient software. - rust/RELEASES.md
+            at main · rust-lang/rust","rust-lang / rust Public · There was an error
+            while loading. Please reload this page. Notifications · You must be signed
+            in to change notification settings · Fork 15.2k · Star 114k · main · /
+            Copy path · Blame · More file actions · Blame · More file actions ·"],"thumbnail_url":"https://opengraph.githubassets.com/48c59e4644f44114fd3ccc60b5e6d6f6d6f94f2f994d8d230822965280321e16/rust-lang/rust","title":"rust/RELEASES.md
+            at main · rust-lang/rust","url":"https://github.com/rust-lang/rust/blob/main/RELEASES.md"}]}}'
+          tool_use_id: chatcmpl-tool-b6ddcc2891299003
+          type: tool_result
+        - content: '{"metadata":{"latency":0.6569726467132568,"query":"latest Python
+            version","search_uuid":"b10d1cae-8b00-4670-9a54-dc111057bc42"},"query":"latest
+            Python version","results":{"news":[{"description":"MicroPython, for the
+            uninitiated, is a pared-down version of python meant to run on today’s
+            powerful microcontollers. As impressive as it was for its day, the SNES
+            is not quite in their leagu…","page_age":"2026-07-11T20:00:04","thumbnail_url":"https://hackaday.com/wp-content/uploads/2026/07/micropython-snes-featured.jpg","title":"MicroPython
+            Is This Summer’s Hottest Title For The SNES, Thanks To Claude Fable","url":"https://hackaday.com/2026/07/11/micropython-is-this-summers-hottest-title-for-the-snes-thanks-to-claude-fable/"},{"description":"According
+            to the Bible, the world’s first con man was a snake. It deceived Adam
+            and Eve, leading them to commit the first sin, which is how we wound up
+            living in this messed-up world we have now. I me...","page_age":"2026-06-18T04:05:09","thumbnail_url":"https://s.yimg.com/os/en/florida_phoenix_articles_551/e96f29c562fad941f13b2581d88cb610","title":"Python
+            captures by Florida scientists overshadowed by hoopla over annual amateur
+            contest","url":"https://www.yahoo.com/news/science/articles/python-captures-florida-scientists-overshadowed-040509842.html"},{"description":"OpenAI
+            made a number of clarification changes to its crawler help documentation
+            to say that version number of the user-agent string may be updated and
+            it may use a user-agent string with an additional robots.txt marker.","page_age":"2026-07-14T00:00:00","thumbnail_url":"https://images.seroundtable.com/openai-crawl-hero-y3OTfea5.jpg","title":"OpenAI
+            Clarifies Its Crawlers Can Update Its User Agent String","url":"https://www.seroundtable.com/openai-crawlers-user-agent-string-41649.html"},{"description":"Animals
+            can be pushed into smaller spaces or into new overlaps with other species.","page_age":"2026-07-13T04:04:00","thumbnail_url":"https://s.yimg.com/lo/mysterio/api/6a13994e2d586ae458adaf2da3629e14bb4e8908b4f75aba4fbb5d86e12b6d50/lightyear_networkapi/resizefill_w1200;quality_80;format_webp/https:%2F%2Fmedia.zenfs.com%2Fen%2Fthe_cool_down_737%2Fb3edbcfc04087444b34eab1547098e52","title":"Video
+            shows crocodile attacking python in dramatic reptile-versus-reptile clash","url":"https://www.yahoo.com/news/science/articles/video-shows-crocodile-attacking-python-040400952.html"},{"description":"The
+            state''s annual Florida Python Challenge began Friday with hunters seeking
+            to nab snakes and big prize money. The 10-day challenge, held from July
+            10-19, 2026,","page_age":"2026-07-10T00:00:00","thumbnail_url":"https://ewscripps.brightspotcdn.com/dims4/default/d6f73ca/2147483647/strip/true/crop/1280x672+0+64/resize/1200x630!/quality/90/?url=http%3A%2F%2Fewscripps-brightspot.s3.amazonaws.com%2Fab%2F98%2Ffdd9499942eb81fce8d9b735506f%2Fpythonchallenge.jpg","title":"Florida
+            Python Challenge kicks off: 10-day hunt offers $10,000 prize to remove
+            invasive snakes","url":"https://www.wptv.com/news/protecting-paradise/florida-python-challenge-kicks-off-10-day-hunt-offers-10-000-prize-to-remove-invasive-snakes"},{"description":"A
+            SLITHERING nightmare has been unleashed on a Chinese village after nearly
+            900 snakes escaped a flooded breeding farm. Extreme weather brought by
+            a devastating typhoon caused the farm to collapse …","page_age":"2026-07-09T08:45:51","thumbnail_url":"https://www.the-sun.com/wp-content/uploads/sites/6/2026/07/5613d154-5bb7-4893-a274-c2ea2656718a.jpg?quality=90&strip=all&w=735&h=876&crop=1","title":"Horror
+            vid show snakes including venomous cobras plague flooded village","url":"https://www.the-sun.com/news/16660533/hundreds-of-escaped-snakes-plague-flooded-village/"},{"description":"Spread
+            the love“`html Updating Python is a crucial task for both novice and seasoned
+            programmers. Whether you’re maintaining compatibility with the latest
+            packages or enhancing the performance and security of your projects, knowing
+            how to update Python effectively can significantly impact your work. This
+            article will guide you through the essential steps and considerations
+            involved in the update process, ensuring you have a smooth experience
+            while keeping your Python environment up-to-date. 1. Understanding the
+            Importance of Updating Python Before diving into the how-to, it’s vital
+            to grasp why updating Python is essential. Each new version of Python
+            introduces bug fixes, […]","page_age":"2026-06-13T06:31:32","thumbnail_url":"https://www.thetechedvocate.org/wp-content/uploads/2026/06/featured-image-1781332277831.png","title":"How
+            to update Python","url":"https://www.thetechedvocate.org/how-to-update-python/"},{"description":"The
+            snake did not attack the chickens, apparently.","page_age":"2026-06-19T16:58:00","thumbnail_url":"https://s.yimg.com/ny/api/res/1.2/HieO9CdA3rapbowQ7nZ7.A--/YXBwaWQ9aGlnaGxhbmRlcjt3PTEyMDA7aD02NzU7Y2Y9d2VicA--/https://media.zenfs.com/en/the_cool_down_737/bd3f72c398872124de06684c519649da","title":"Resident
+            locks cat in chicken coop to save it from stray dogs, then finds python
+            too full to move","url":"https://www.yahoo.com/news/world/articles/resident-locks-cat-chicken-coop-165800255.html"},{"description":"Wildman’s
+            Pizza, Pasta, and Python is doing its part to combat the invasive species.","page_age":"2026-07-15T20:30:00","thumbnail_url":"https://www.popsci.com/wp-content/uploads/2026/07/Burmese-Python-Coiled.jpg?quality=85&w=1200","title":"Florida
+            man will trade pizza for pythons","url":"https://www.popsci.com/environment/python-for-pizza-restaurant-florida/"},{"description":"Audiences
+            attending the national tour of \"Monty Python''s Spamalot\" at the Denver
+            Center for the Performing Arts next month will see plenty of outrageous
+            comedy on stage, but much of the magic begins behind the curtain.","page_age":"2026-07-15T18:14:55","thumbnail_url":"https://assets1.cbsnewsstatic.com/hub/i/r/2026/07/15/40768a7f-ae7e-4d04-bac0-6df6e29012bb/thumbnail/1200x630/df50cea8c6151314b2e730acf6ba7a84/killer-rabbit.jpg","title":"Go
+            backstage for prop tour of \"Spamalot,\" coming to Denver Center for the
+            Performing Arts","url":"https://www.cbsnews.com/colorado/news/spamalot-denver-monty-python-props-buell-theatre/"}],"web":[{"description":"Historically,
+            most, but not all, Python releases have also been GPL-compatible. The
+            Licenses page details GPL-compatibility and Terms and Conditions. ...
+            For most Unix systems, you must download and compile the source code.
+            The same source code archive can also be used to build the Windows and
+            Mac versions, and is the starting point for ports to all other platforms.
+            Download the latest ...","favicon_url":"https://you.com/favicon?domain=www.python.org&size=128","original_thumbnail_url":"https://www.python.org/static/opengraph-icon-200x200.png","snippets":["Historically,
+            most, but not all, Python releases have also been GPL-compatible. The
+            Licenses page details GPL-compatibility and Terms and Conditions. ...
+            For most Unix systems, you must download and compile the source code.
+            The same source code archive can also be used to build the Windows and
+            Mac versions, and is the starting point for ports to all other platforms.
+            Download the latest Python 3 source.","The official home of the Python
+            Programming Language","See Status of Python versions for all an overview
+            of all versions, including unsupported.","Python versions before 3.14
+            are also signed using OpenPGP private keys of the respective release manager.
+            In this case, verification through the release manager''s public key is
+            also possible."],"thumbnail_url":"https://www.python.org/static/opengraph-icon-200x200.png","title":"Download
+            Python | Python.org","url":"https://www.python.org/downloads/"},{"description":"The
+            main branch is currently the future Python 3.16, and is the only branch
+            that accepts new features. The latest release for each Python version
+            can be found on the download page.(See below for a ...","favicon_url":"https://you.com/favicon?domain=devguide.python.org&size=128","original_thumbnail_url":"https://devguide.python.org/_static/og-image-200x200.png","page_age":"2026-05-27T13:42:06","snippets":["Python
+            releases go through five phases, as described in PEP 602. Release managers
+            can adjust specific dates as needed. ... Before the first beta, the next
+            full release can accept new features, bug fixes, and security fixes. ...
+            After the first beta, no new features can go in, but feature fixes (including
+            significant changes to new features), bug fixes, and security fixes are
+            accepted for the upcoming feature release. ... Once a version has been
+            fully released, bug fixes and security fixes are accepted.","(See below
+            for a chart with older versions. Another useful visualization is endoflife.date/python.)","After
+            two years (18 months for versions before 3.13), only security fixes are
+            accepted and no more binaries are released.","New source-only versions
+            can be released as needed."],"thumbnail_url":"https://devguide.python.org/_static/og-image-200x200.png","title":"Status
+            of Python versions","url":"https://devguide.python.org/versions/"},{"description":"Learn
+            what the latest Python version is, why upgrading matters, and how to check
+            and update Python on Linux, macOS, and Windows.","favicon_url":"https://you.com/favicon?domain=phoenixnap.com&size=128","original_thumbnail_url":"https://phoenixnap.com/kb/wp-content/uploads/2026/03/the-latest-version-of-python.png","page_age":"2026-03-12T05:59:17","snippets":["Python
+            is one of the most widely used programming languages for web development,
+            automation, data science, and system administration. Because the language
+            evolves quickly, new versions regularly introduce performance improvements,
+            security fixes, and new features. The latest stable Python version ensures
+            better performance, improved compatibility with modern libraries, and
+            ongoing security support.","This guide will explain the current Python
+            release, why updating matters, and how to check and upgrade your installed
+            version. As of February 2026, the latest stable version of Python is Python
+            3.14.3, released on February 3, 2026.","Python versions typically receive
+            about 2 years of regular bugfix releases, followed by about 3 additional
+            years of security-only updates, for a total of roughly 5 years of support.
+            Running the latest stable Python version improves reliability, performance,
+            and security.","To check your Python version, run the following command
+            in your terminal: ... The command prints the installed version. If the
+            installed version is older than the current stable release, consider upgrading
+            to access the latest features and security updates."],"thumbnail_url":"https://phoenixnap.com/kb/wp-content/uploads/2026/03/the-latest-version-of-python.png","title":"The
+            Latest Version of Python | phoenixNAP KB","url":"https://phoenixnap.com/kb/latest-python-version"},{"description":"Python
+            3.14 is the latest release, packed with features like free-threaded mode,
+            JIT compiler, lazy annotations, and a modern colorized REPL. Learn more
+            about what’s new and why upgrading matters.","favicon_url":"https://you.com/favicon?domain=www.liquidweb.com&size=128","original_thumbnail_url":"https://res.cloudinary.com/lwcom/images/w_1024,h_1024,c_scale/f_auto,q_auto/v1776926892/prod/python-logo-3/python-logo-3.png?_i=AA","page_age":"2026-01-14T21:46:37","snippets":["Python
+            continues to evolve, bringing powerful new features, enhanced security,
+            and performance improvements with every release. The latest major version,
+            Python 3.14 was officially released on October 7, 2025.","Better compatibility
+            to support the latest libraries and frameworks. If you’re boxed into an
+            older Python version, there are multiple workarounds and best practices
+            to consider.","Software companies like Python release upgrades to ensure
+            that users can work with a more efficient, secure, and feature-rich version
+            while keeping up with industry advancements. ... Protect your applications
+            from exploits. Optimize processing speed. Modernize the language. Phase
+            out outdated functionalities. Maintain a clean and efficient codebase.
+            Align with the latest standards and user needs.","To check your current
+            Python version, use the following commands: ... You can download the latest
+            version of Python from the official Python website."],"thumbnail_url":"https://res.cloudinary.com/lwcom/images/w_1024,h_1024,c_scale/f_auto,q_auto/v1776926892/prod/python-logo-3/python-logo-3.png?_i=AA","title":"Latest
+            Python Version (2025) – What''s New in Python 3.14?","url":"https://www.liquidweb.com/blog/latest-python-version/"},{"description":"The
+            official home of the Python Programming Language","favicon_url":"https://you.com/favicon?domain=www.python.org&size=128","original_thumbnail_url":"https://www.python.org/static/opengraph-icon-200x200.png","snippets":["Python
+            releases are now listed on the downloads page.","The Python Software Foundation
+            is the organization behind Python."],"thumbnail_url":"https://www.python.org/static/opengraph-icon-200x200.png","title":"Releases
+            | Python.org","url":"https://www.python.org/download/releases/"},{"description":"The
+            official home of the Python Programming Language","favicon_url":"https://you.com/favicon?domain=www.python.org&size=128","original_thumbnail_url":"https://www.python.org/static/opengraph-icon-200x200.png","snippets":["Note:
+            Python 3.12.0 has been superseded by Python 3.12.13.","Python 3.12.0 is
+            the newest major release of the Python programming language, and it contains
+            many new features and optimizations.","Support for the buffer protocol
+            in Python code (PEP 688).","Support for the Linux perf profiler to report
+            Python function names in traces."],"thumbnail_url":"https://www.python.org/static/opengraph-icon-200x200.png","title":"Python
+            Release Python 3.12.0 | Python.org","url":"https://www.python.org/downloads/release/python-3120/"},{"description":"The
+            official home of the Python Programming Language","favicon_url":"https://you.com/favicon?domain=www.python.org&size=128","original_thumbnail_url":"https://www.python.org/static/opengraph-icon-200x200.png","snippets":["Python>>>
+            Downloads>>> Windows · Latest Python install manager - Python install
+            manager 26.3 · Latest Python 3 Release - Python 3.14.6 · Python install
+            manager 26.3 - June 30, 2026 · Download Installer (MSIX) Download MSI
+            package · Python 3.13.14 - June 10, 2026 ·","Note that Python 3.13.14
+            cannot be used on Windows 7 or earlier.","Download using the Python install
+            manager.","Note that Python 3.13.13 cannot be used on Windows 7 or earlier."],"thumbnail_url":"https://www.python.org/static/opengraph-icon-200x200.png","title":"Python
+            Releases for Windows | Python.org","url":"https://www.python.org/downloads/windows/"},{"description":"Check
+            end-of-life, release policy and support schedule for Python.","favicon_url":"https://you.com/favicon?domain=endoflife.date&size=128","original_thumbnail_url":"https://endoflife.date/assets/logo-512x512.png","page_age":"2026-07-14T11:10:29","snippets":["A
+            Python release only supports a Windows platform while Microsoft considers
+            the platform under extended support. Python 3.8 was the last version to
+            support Windows 7.","A JSON version of this page is available at /api/v1/products/python/
+            📡. See the API Documentation 📖 for more information.","python --version
+            # or alternatively python3 --version","Python is an interpreted, high-level,
+            general-purpose programming language."],"thumbnail_url":"https://endoflife.date/assets/logo-512x512.png","title":"Python
+            | endoflife.date","url":"https://endoflife.date/python"},{"description":"The
+            official home of the Python Programming Language","favicon_url":"https://you.com/favicon?domain=www.python.org&size=128","original_thumbnail_url":"https://www.python.org/static/opengraph-icon-200x200.png","snippets":["Python
+            1.4, released on 25 October 1996 · The latest, and unreleased, documentation
+            for versions of Python still under development: Development version ·
+            Python 3.x · The Python Software Foundation is the organization behind
+            Python.","For unreleased (in development) documentation, see In development
+            versions. ... The Python Software Foundation is the organization behind
+            Python.","Some previous versions of the documentation remain available
+            online.","Use the list below to select a version to view."],"thumbnail_url":"https://www.python.org/static/opengraph-icon-200x200.png","title":"Python
+            documentation by version | Python.org","url":"https://www.python.org/doc/versions/"},{"description":"Before
+            removing or installing anything, ... local versions of Python: I write
+            a bunch of small scripts that don''t use any third-party libraries, and
+            don''t need a dedicated virtual environment. I want to have a python command
+            on my system that always points to the latest point release ...","favicon_url":"https://you.com/favicon?domain=www.mostlypython.com&size=128","original_thumbnail_url":"https://storage.ghost.io/c/b0/88/b088fa59-ac78-44d9-9662-4c7568d7cb9a/content/images/2025/08/status_python_versions_bordered-1.png","page_age":"2025-08-07T16:30:08","snippets":["Before
+            removing or installing anything, I want to re-evaluate my needs for local
+            versions of Python: I write a bunch of small scripts that don''t use any
+            third-party libraries, and don''t need a dedicated virtual environment.
+            I want to have a python command on my system that always points to the
+            latest point release of the most recent stable version of Python.","My
+            work has become more varied and complex, but the tools for managing different
+            Python versions have gotten much better. So, I should end up with a simpler
+            setup even though my needs have gotten more complicated. It''s also a
+            good to check out Python''s status page, and see what the latest point
+            releases are for each major release:","$ uv python install Installed Python
+            3.13.5 in 930ms + cpython-3.13.5-macos-aarch64-none (python3.13) If you
+            don''t specify a version, uv will install the latest stable release.","$
+            uv python upgrade All versions already on latest supported patch release"],"thumbnail_url":"https://storage.ghost.io/c/b0/88/b088fa59-ac78-44d9-9662-4c7568d7cb9a/content/images/2025/08/status_python_versions_bordered-1.png","title":"Updating
+            Python","url":"https://www.mostlypython.com/updating-python/"}]}}'
+          tool_use_id: chatcmpl-tool-a5945cf518d40532
+          type: tool_result
+        role: user
+      model: qwen3
+      stream: false
+      tools:
+      - description: Search the web for current information.
+        input_schema:
+          properties:
+            query:
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    body:
+      content:
+      - signature: fd138160af0449b3905a43ed4d0ec899
+        thinking: '
+
+          Okay, let''s see. The user asked to find the latest Rust and Python versions
+          using web searches. First, I need to check the tool responses.
+
+
+          For Rust, the search results show a blog post titled "Announcing Rust 1.97.0"
+          and another mention of Rust 1.95.0 and 1.96.0. The latest stable version
+          seems to be 1.97.0. The web results also mention Rust 1.97.0 as the latest
+          release.
+
+
+          For Python, the results mention Python 3.14.6 and Python 3.13.14. However,
+          there''s a note about Python 3.12.0 being superseded by 3.12.13. The latest
+          stable version appears to be 3.14.6. Another source says Python 3.14 is
+          the latest, released in 2025. But the most recent version in the search
+          results is 3.14.6.
+
+
+          Wait, but some sources might have different update times. The user wants
+          the latest, so I should confirm which is more recent. The Python.org download
+          page lists 3.14.6 as the latest. So, the answer should be Rust 1.97.0 and
+          Python 3.14.6.
+
+          '
+        type: thinking
+      - text: "\n\nThe latest versions are:\n\n- **Rust**: 1.97.0  \n- **Python**:\
+          \ 3.14.6  \n\nThese are the most recent stable releases as of the latest\
+          \ search results."
+        type: text
+      id: chatcmpl-a486c6f7b0bbcb55
+      model: qwen3
+      role: assistant
+      stop_reason: end_turn
+      type: message
+      usage:
+        input_tokens: 10609
+        output_tokens: 331
+    headers:
+      content-type: application/json
+    status_code: 200

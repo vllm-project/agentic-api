@@ -1,5 +1,6 @@
 pub mod event;
 pub mod io;
+pub mod messages;
 pub mod request_response;
 pub mod tools;
 
