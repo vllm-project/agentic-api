@@ -10,6 +10,7 @@ use super::function::insert_function_entry;
 use super::mcp::{insert_mcp_entry, maybe_mcp_function};
 use super::web_search::insert_web_search_entry;
 use super::{CodexNamespaceHandler, GatewayExecutor, NamespaceMap, ToolError, ToolOutput};
+use crate::events::WireEvent;
 use crate::types::io::OutputItem;
 use crate::types::io::output::FunctionToolCall;
 use crate::types::tools::{CodeInterpreterToolParam, FileSearchToolParam, ResponsesTool};
@@ -118,9 +119,8 @@ fn insert_code_interpreter_entry(
 #[derive(Debug, Default)]
 pub struct ToolRegistry {
     entries: HashMap<String, ToolEntry>,
-    /// Built once from the declared tools, so `restore_final_payload_output`
-    /// and `restore_stream_event_value` — the latter called once per SSE line
-    /// during streaming — don't rebuild it on every call.
+    /// Built once from the declared tools, so final payload and streaming event
+    /// restoration don't rebuild it on every call.
     namespace_map: Option<NamespaceMap>,
 }
 
@@ -199,6 +199,10 @@ impl ToolRegistry {
 
     pub fn restore_stream_event_value(&self, value: &mut Value) -> bool {
         CodexNamespaceHandler.restore_response_value(value, self.namespace_map.as_ref())
+    }
+
+    pub fn restore_stream_event_wire(&self, wire: &mut WireEvent) -> bool {
+        CodexNamespaceHandler.restore_response_wire(wire, self.namespace_map.as_ref())
     }
 
     /// Returns the subset of `calls` whose names map to gateway-owned tools.

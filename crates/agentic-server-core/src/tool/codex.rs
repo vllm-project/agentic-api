@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 
+use crate::events::WireEvent;
 use crate::types::io::{FunctionTool, FunctionToolCall, OutputItem, ToolChoice};
 use crate::types::tools::{CodexNamespaceMember, CodexNamespaceToolParam, NonEmptyToolName, ResponsesTool};
 
@@ -281,6 +282,14 @@ impl CodexNamespaceHandler {
         };
         restore_response_value_with_map(value, map)
     }
+
+    #[must_use]
+    pub fn restore_response_wire(&self, wire: &mut WireEvent, map: Option<&NamespaceMap>) -> bool {
+        let Some(map) = map else {
+            return false;
+        };
+        restore_response_map_with_map(&mut wire.rest, map)
+    }
 }
 
 impl ToolHandler for CodexNamespaceHandler {
@@ -496,6 +505,24 @@ fn restore_call_value_with_map(value: &mut Value, map: &NamespaceMap) -> bool {
         "restored upstream namespace function call"
     );
     true
+}
+
+fn restore_response_map_with_map(object: &mut Map<String, Value>, map: &NamespaceMap) -> bool {
+    let mut changed = false;
+    if let Some(item) = object.get_mut("item") {
+        changed |= restore_call_value_with_map(item, map);
+    }
+    for key in ["response", "payload"] {
+        if let Some(nested) = object.get_mut(key) {
+            changed |= restore_response_value_with_map(nested, map);
+        }
+    }
+    if let Some(Value::Array(items)) = object.get_mut("output") {
+        for item in items {
+            changed |= restore_call_value_with_map(item, map);
+        }
+    }
+    changed
 }
 
 #[cfg(test)]

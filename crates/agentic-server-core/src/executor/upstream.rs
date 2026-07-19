@@ -4,15 +4,15 @@ use std::sync::Arc;
 use futures::StreamExt;
 use serde_json::Value;
 
-use crate::events::{EventPayload, SSEEventType, SSEItemType, normalize_sse_line};
+use crate::events::{EventFrame, EventPayload, SSEEventType, SSEItemType, WireEvent, normalize_sse_line};
 use crate::executor::accumulator::ResponseAccumulator;
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::gateway::GatewayStreamContext;
+use crate::executor::gateway_accumulator::GatewayStreamContext;
 use crate::executor::inference::{call_inference, fetch_response_json};
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::tool::ToolRegistry;
 use crate::types::request_response::ResponsePayload;
-use crate::utils::common::{deserialize_from_str, serialize_to_string};
+use crate::utils::common::serialize_to_string;
 
 struct StreamEmitContext<'a, 'stream> {
     request: &'a RequestContext,
@@ -64,26 +64,28 @@ pub(super) async fn fetch_stream_payload(
     ));
     let mut acc = ResponseAccumulator::new(ctx.response_id.clone(), ctx.conversation_id.clone());
     let mut hidden_gateway_item_ids = HashSet::new();
-    let mut pending_unnamed_function_events = HashMap::<String, Vec<String>>::new();
+    let mut pending_unnamed_function_events = HashMap::<String, Vec<EventFrame>>::new();
     let mut stream_context = stream_context;
     while let Some(line_result) = line_stream.next().await {
         let line = line_result?;
-        log_upstream_failure(&line, &ctx.response_id);
-        if let Some(stream) = stream_context.as_deref_mut() {
-            let mut emit_ctx = StreamEmitContext {
-                request: ctx,
-                registry,
-                stream,
-                output_offset,
-            };
-            emit_upstream_stream_event(
-                &line,
-                &mut emit_ctx,
-                &mut hidden_gateway_item_ids,
-                &mut pending_unnamed_function_events,
-            )?;
+        if let Some(mut frame) = normalize_sse_line(&line) {
+            log_upstream_failure(&frame, &ctx.response_id);
+            if let Some(stream) = stream_context.as_deref_mut() {
+                let mut emit_ctx = StreamEmitContext {
+                    request: ctx,
+                    registry,
+                    stream,
+                    output_offset,
+                };
+                emit_upstream_stream_event(
+                    &mut frame,
+                    &mut emit_ctx,
+                    &mut hidden_gateway_item_ids,
+                    &mut pending_unnamed_function_events,
+                )?;
+            }
+            acc.process_event(&frame);
         }
-        acc.process_sse_line(&line);
     }
     acc.finish_stream();
     let mut payload = acc.finalize(
@@ -95,21 +97,12 @@ pub(super) async fn fetch_stream_payload(
     Ok(payload)
 }
 
-fn log_upstream_failure(line: &str, gateway_response_id: &str) {
-    let Some(frame) = normalize_sse_line(line) else {
-        return;
-    };
+fn log_upstream_failure(frame: &EventFrame, gateway_response_id: &str) {
     if frame.event_type != SSEEventType::ResponseFailed {
         return;
     }
 
-    let Some(data) = line.strip_prefix("data: ") else {
-        return;
-    };
-    let Ok(event) = deserialize_from_str::<Value>(data) else {
-        return;
-    };
-    let response = &event["response"];
+    let response = frame.wire.rest.get("response").unwrap_or(&Value::Null);
     let error = &response["error"];
     let error_code = error.get("code").and_then(Value::as_str).unwrap_or_default();
     let error_message = error
@@ -133,36 +126,23 @@ fn log_upstream_failure(line: &str, gateway_response_id: &str) {
 }
 
 fn emit_upstream_stream_event(
-    line: &str,
+    frame: &mut EventFrame,
     emit_ctx: &mut StreamEmitContext<'_, '_>,
     hidden_gateway_item_ids: &mut HashSet<String>,
-    pending_unnamed_function_events: &mut HashMap<String, Vec<String>>,
+    pending_unnamed_function_events: &mut HashMap<String, Vec<EventFrame>>,
 ) -> ExecutorResult<()> {
-    let Some(data) = line.strip_prefix("data: ") else {
-        return Ok(());
-    };
-    let data = data.trim();
-    if data == "[DONE]" {
-        return Ok(());
-    }
-
-    let Some(frame) = normalize_sse_line(line) else {
-        return Ok(());
-    };
     if should_hide_upstream_event(
         frame.event_type,
         &frame.payload,
         emit_ctx.registry,
         hidden_gateway_item_ids,
     ) || is_terminal_response_event(frame.event_type)
-        || !emit_ctx.stream.should_emit_lifecycle(frame.event_type)
     {
         drop_pending_function_events(&frame.payload, pending_unnamed_function_events);
         return Ok(());
     }
     if defer_or_flush_function_event(
-        line,
-        &frame.payload,
+        frame,
         emit_ctx,
         hidden_gateway_item_ids,
         pending_unnamed_function_events,
@@ -170,24 +150,22 @@ fn emit_upstream_stream_event(
         return Ok(());
     }
 
-    emit_stream_line(data, emit_ctx)
+    emit_stream_frame(frame, emit_ctx)
 }
 
-fn emit_stream_line(data: &str, emit_ctx: &mut StreamEmitContext<'_, '_>) -> ExecutorResult<()> {
-    let mut value = serde_json::from_str::<Value>(data).map_err(ExecutorError::JsonError)?;
-    apply_context_response_ids(&mut value, emit_ctx.request);
-    emit_ctx.registry.restore_stream_event_value(&mut value);
-    emit_ctx.stream.emit_event(&mut value, emit_ctx.output_offset)
+fn emit_stream_frame(frame: &mut EventFrame, emit_ctx: &mut StreamEmitContext<'_, '_>) -> ExecutorResult<()> {
+    apply_context_response_ids(&mut frame.wire, emit_ctx.request);
+    emit_ctx.registry.restore_stream_event_wire(&mut frame.wire);
+    emit_ctx.stream.process_event(frame, emit_ctx.output_offset)
 }
 
 fn defer_or_flush_function_event(
-    line: &str,
-    payload: &EventPayload,
+    frame: &mut EventFrame,
     emit_ctx: &mut StreamEmitContext<'_, '_>,
     hidden_gateway_item_ids: &mut HashSet<String>,
-    pending_unnamed_function_events: &mut HashMap<String, Vec<String>>,
+    pending_unnamed_function_events: &mut HashMap<String, Vec<EventFrame>>,
 ) -> ExecutorResult<bool> {
-    match payload {
+    match &frame.payload {
         EventPayload::OutputItemAdded {
             item_id,
             item_type,
@@ -197,7 +175,7 @@ fn defer_or_flush_function_event(
             pending_unnamed_function_events
                 .entry(item_id.clone())
                 .or_default()
-                .push(line.to_owned());
+                .push(frame.clone());
             Ok(true)
         }
         EventPayload::FunctionCallArgsDelta { item_id, .. }
@@ -206,7 +184,7 @@ fn defer_or_flush_function_event(
             pending_unnamed_function_events
                 .entry(item_id.clone())
                 .or_default()
-                .push(line.to_owned());
+                .push(frame.clone());
             Ok(true)
         }
         EventPayload::FunctionCallArgsDone { item_id, name, .. } => {
@@ -243,23 +221,20 @@ fn defer_or_flush_function_event(
 fn flush_pending_function_events(
     item_id: &str,
     emit_ctx: &mut StreamEmitContext<'_, '_>,
-    pending_unnamed_function_events: &mut HashMap<String, Vec<String>>,
+    pending_unnamed_function_events: &mut HashMap<String, Vec<EventFrame>>,
 ) -> ExecutorResult<()> {
-    let Some(lines) = pending_unnamed_function_events.remove(item_id) else {
+    let Some(frames) = pending_unnamed_function_events.remove(item_id) else {
         return Ok(());
     };
-    for line in lines {
-        let Some(data) = line.strip_prefix("data: ") else {
-            continue;
-        };
-        emit_stream_line(data.trim(), emit_ctx)?;
+    for mut frame in frames {
+        emit_stream_frame(&mut frame, emit_ctx)?;
     }
     Ok(())
 }
 
 fn drop_pending_function_events(
     payload: &EventPayload,
-    pending_unnamed_function_events: &mut HashMap<String, Vec<String>>,
+    pending_unnamed_function_events: &mut HashMap<String, Vec<EventFrame>>,
 ) {
     match payload {
         EventPayload::OutputItemDone { item_id, .. }
@@ -319,8 +294,8 @@ fn is_terminal_response_event(event_type: SSEEventType) -> bool {
     )
 }
 
-fn apply_context_response_ids(value: &mut Value, ctx: &RequestContext) {
-    let Some(response) = value.get_mut("response").and_then(Value::as_object_mut) else {
+fn apply_context_response_ids(wire: &mut WireEvent, ctx: &RequestContext) {
+    let Some(response) = wire.rest.get_mut("response").and_then(Value::as_object_mut) else {
         return;
     };
     response.insert("id".to_owned(), Value::String(ctx.response_id.clone()));

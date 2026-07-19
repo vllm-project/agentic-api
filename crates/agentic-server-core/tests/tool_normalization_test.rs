@@ -6,6 +6,7 @@
 use serde::Deserialize;
 use serde_json::Value;
 
+use agentic_core::events::WireEvent;
 use agentic_core::executor::RequestContext;
 use agentic_core::tool::{
     CodexNamespaceHandler, GatewayExecutors, ToolRegistry, ToolType, model_visible_namespace_member_name,
@@ -414,6 +415,41 @@ fn codex_namespace_cassettes_flatten_to_safe_upstream_function_name() {
             );
         }
     }
+}
+
+#[tokio::test]
+async fn tool_registry_restores_wire_event_namespace_losslessly() {
+    let tools: Vec<ResponsesTool> = serde_json::from_value(serde_json::json!([
+        {
+            "type": "namespace",
+            "name": "mcp__agentic_fixture",
+            "tools": [{"type": "function", "name": "add_numbers"}]
+        }
+    ]))
+    .unwrap();
+    let registry = ToolRegistry::build_with_handlers(&tools, &GatewayExecutors::default())
+        .await
+        .expect("valid registry");
+    let mut wire = WireEvent::new("response.output_item.done");
+    wire.output_index = Some(0);
+    wire.rest.insert(
+        "item".to_owned(),
+        serde_json::json!({
+            "type": "function_call",
+            "name": "agentic_ns__mcp__agentic_fixture__add_numbers",
+            "call_id": "call_1",
+            "arguments": "{\"numbers\":[8,0]}",
+            "provider_extra": {"kept": true}
+        }),
+    );
+
+    assert!(registry.restore_stream_event_wire(&mut wire));
+
+    let item = &wire.rest["item"];
+    assert_eq!(item["namespace"], "mcp__agentic_fixture");
+    assert_eq!(item["name"], "add_numbers");
+    assert_eq!(item["arguments"], "{\"numbers\":[8,0]}");
+    assert_eq!(item["provider_extra"]["kept"], true);
 }
 
 #[test]

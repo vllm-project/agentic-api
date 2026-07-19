@@ -136,6 +136,19 @@ fn test_unknown_event_type() {
 }
 
 #[test]
+fn test_wire_event_preserves_unknown_fields() {
+    let line = r#"data: {"type":"response.output_text.delta","sequence_number":4,"output_index":2,"item_id":"msg_1","content_index":0,"delta":"hello","provider_extra":{"nested":true},"future_array":[1,2]}"#;
+    let frame = normalize_sse_line(line).unwrap();
+    let wire = serde_json::to_value(&frame.wire).unwrap();
+
+    assert_eq!(wire["type"], "response.output_text.delta");
+    assert_eq!(wire["sequence_number"], 4);
+    assert_eq!(wire["output_index"], 2);
+    assert_eq!(wire["provider_extra"]["nested"], true);
+    assert_eq!(wire["future_array"], serde_json::json!([1, 2]));
+}
+
+#[test]
 fn test_malformed_json_returns_none() {
     assert!(normalize_sse_line("data: {not valid json}").is_none());
     assert!(normalize_sse_line("data: ").is_none());
