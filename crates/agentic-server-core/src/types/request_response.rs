@@ -287,23 +287,33 @@ mod tests {
     }
 
     #[test]
-    fn to_upstream_request_sets_serial_tool_calls_for_mixed_builtin_and_function_tools() {
-        let payload: RequestPayload = serde_json::from_value(serde_json::json!({
-            "model": "test",
-            "input": "hi",
-            "tools": [
-                {"type": "function", "name": "get_weather"},
-                {"type": "web_search_preview"}
-            ]
-        }))
-        .unwrap();
+    fn to_upstream_request_validates_parallel_tool_calls_for_mixed_tools() {
+        for built_in_tool in builtin_tool_declarations() {
+            for (parallel_tool_calls, should_reject) in [(false, false), (true, true)] {
+                let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+                    "model": "test",
+                    "input": "hi",
+                    "parallel_tool_calls": parallel_tool_calls,
+                    "tools": [
+                        {"type": "function", "name": "get_weather"},
+                        built_in_tool.clone()
+                    ]
+                }))
+                .unwrap();
 
-        let upstream = payload
-            .to_upstream_request(false)
-            .expect("mixed built-in and function tools default to serial tool calls");
-        let value = serde_json::to_value(upstream).unwrap();
-        assert_eq!(value["parallel_tool_calls"], false);
-        assert_eq!(value["tools"].as_array().expect("upstream tools").len(), 2);
+                let result = payload.to_upstream_request(false);
+                if should_reject {
+                    let err = result.expect_err("built-in tools should reject parallel tool calls");
+                    assert!(err.to_string().contains("parallel_tool_calls must be false"));
+                } else {
+                    let value =
+                        serde_json::to_value(result.expect("mixed built-in and function tools allow serial calls"))
+                            .unwrap();
+                    assert_eq!(value["parallel_tool_calls"], false);
+                    assert_eq!(value["tools"].as_array().expect("upstream tools").len(), 2);
+                }
+            }
+        }
     }
 
     #[test]
