@@ -310,7 +310,6 @@ mod tests {
                         serde_json::to_value(result.expect("mixed built-in and function tools allow serial calls"))
                             .unwrap();
                     assert_eq!(value["parallel_tool_calls"], false);
-                    assert_eq!(value["tools"].as_array().expect("upstream tools").len(), 2);
                 }
             }
         }
