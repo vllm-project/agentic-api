@@ -12,6 +12,7 @@ pub mod rehydrate;
 pub mod request;
 
 mod gateway;
+pub mod gateway_accumulator;
 mod upstream;
 
 pub use engine::{BoxStream, ExecuteRequest, create_conversation, execute};

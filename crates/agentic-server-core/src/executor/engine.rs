@@ -13,10 +13,10 @@ use tokio::sync::{Mutex, mpsc};
 use tracing::{debug, warn};
 
 use super::gateway::{
-    GatewayStreamAccumulator, GatewayStreamContext, LoopDecision, append_gateway_calls_to_new_input,
-    append_output_items_to_input, append_tool_outputs, classify_round, execute_and_emit_output_calls,
-    has_client_owned_calls, public_output_items,
+    LoopDecision, append_gateway_calls_to_new_input, append_output_items_to_input, append_tool_outputs, classify_round,
+    execute_and_emit_output_calls, has_client_owned_calls, public_output_items,
 };
+use super::gateway_accumulator::{GatewayStreamAccumulator, GatewayStreamContext};
 use crate::executor::error::ExecutorResult;
 use crate::executor::inference::DONE_MARKER;
 use crate::executor::persist::persist_if_needed;
@@ -255,7 +255,7 @@ fn run_stream(ctx: RequestContext, exec_ctx: Arc<ExecutionContext>, auth: Option
                             // cancelled by the client disconnect.
                             let ch = exec_ctx.conv_handler.clone();
                             let rh = exec_ctx.resp_handler.clone();
-                            if let Err(e) = persist_if_needed(payload, ctx, ch, rh).await {
+                            if let Err(e) = persist_if_needed(payload.clone(), ctx, ch, rh).await {
                                 warn!("persist failed: {e}");
                             }
 

@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use super::types::{EventFrame, EventPayload, SSEEventType, SSEItemType};
+use super::types::{EventFrame, EventPayload, SSEEventType, SSEItemType, WireEvent};
 use crate::utils::common::{deserialize_from_str_opt, deserialize_from_value_opt};
 
 /// Normalize a raw SSE data line into a typed [`EventFrame`].
@@ -15,21 +15,18 @@ pub fn normalize_sse_line(line: &str) -> Option<EventFrame> {
         return None;
     }
 
-    let json: Value = deserialize_from_str_opt(data_str)?;
+    let wire: WireEvent = deserialize_from_str_opt(data_str)?;
+    let json = wire.to_value();
 
-    let event_type = json
-        .get("type")
-        .and_then(Value::as_str)
-        .map_or(SSEEventType::Other, classify_event_type);
-
-    let sequence_number = json.get("sequence_number").and_then(Value::as_u64);
+    let event_type = classify_event_type(&wire.event_type);
 
     let payload = extract_payload(event_type, &json);
 
     Some(EventFrame {
         event_type,
         payload,
-        sequence_number,
+        sequence_number: wire.sequence_number,
+        wire,
     })
 }
 

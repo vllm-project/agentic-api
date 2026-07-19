@@ -2,16 +2,14 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use futures::stream as futures_stream;
-use serde_json::Value;
-use tokio::sync::mpsc;
 
 use crate::events::SSEEventType;
 use crate::executor::error::{ExecutorError, ExecutorResult};
+use crate::executor::gateway_accumulator::{GatewayStreamContext, synthetic_event};
 use crate::executor::request::RequestContext;
 use crate::tool::{GatewayDispatchResult, ToolError, ToolOutput, ToolRegistry, ToolType};
 use crate::types::io::output::{FunctionToolCall, GatewayCallStatus};
 use crate::types::io::{InputItem, OutputItem, ResponsesInput};
-use crate::types::request_response::ResponsePayload;
 use crate::utils::common::serialize_to_string;
 
 /// Max gateway tool calls executing at once within a round. A sliding window:
@@ -91,118 +89,6 @@ struct GatewayCallEventPlan {
     call_id: String,
     output_index: u32,
     started_output: Option<OutputItem>,
-}
-
-pub(super) struct GatewayStreamAccumulator {
-    next_sequence_number: u64,
-    emitted_created: bool,
-    emitted_in_progress: bool,
-}
-
-pub(super) struct GatewayStreamContext<'a> {
-    sender: &'a mpsc::UnboundedSender<String>,
-    accumulator: &'a mut GatewayStreamAccumulator,
-}
-
-impl<'a> GatewayStreamContext<'a> {
-    pub(super) fn new(
-        sender: &'a mpsc::UnboundedSender<String>,
-        accumulator: &'a mut GatewayStreamAccumulator,
-    ) -> Self {
-        Self { sender, accumulator }
-    }
-
-    pub(super) fn emit_event(&mut self, event: &mut Value, output_offset: usize) -> ExecutorResult<()> {
-        self.accumulator.emit_event(self.sender, event, output_offset)
-    }
-
-    pub(super) fn should_emit_lifecycle(&mut self, event_type: SSEEventType) -> bool {
-        self.accumulator.should_emit_lifecycle(event_type)
-    }
-}
-
-impl GatewayStreamAccumulator {
-    pub(super) fn new() -> Self {
-        Self {
-            next_sequence_number: 0,
-            emitted_created: false,
-            emitted_in_progress: false,
-        }
-    }
-
-    pub(super) fn should_emit_lifecycle(&mut self, event_type: SSEEventType) -> bool {
-        match event_type {
-            SSEEventType::ResponseCreated => {
-                if self.emitted_created {
-                    false
-                } else {
-                    self.emitted_created = true;
-                    true
-                }
-            }
-            SSEEventType::ResponseInProgress => {
-                if self.emitted_in_progress {
-                    false
-                } else {
-                    self.emitted_in_progress = true;
-                    true
-                }
-            }
-            _ => true,
-        }
-    }
-
-    pub(super) fn emit_event(
-        &mut self,
-        sender: &mpsc::UnboundedSender<String>,
-        event: &mut Value,
-        output_offset: usize,
-    ) -> ExecutorResult<()> {
-        self.normalize_event(event, output_offset);
-        emit_sse_json(sender, event)
-    }
-
-    pub(super) fn terminal_response_chunk(&mut self, payload: &ResponsePayload) -> ExecutorResult<String> {
-        let mut event = serde_json::json!({
-            "type": payload.terminal_event_type(),
-            "response": payload,
-        });
-        self.normalize_event(&mut event, 0);
-        let event_json = serialize_to_string(&event).map_err(ExecutorError::JsonError)?;
-        Ok(format!("data: {event_json}\n\n"))
-    }
-
-    pub(super) fn error_chunk(&mut self, message: &str) -> String {
-        let mut event = serde_json::json!({
-            "type": "error",
-            "error": {
-                "message": message,
-            },
-        });
-        self.normalize_event(&mut event, 0);
-        let event_json = serialize_to_string(&event).unwrap_or_else(|_| "{\"type\":\"error\"}".to_owned());
-        format!("data: {event_json}\n\n")
-    }
-
-    fn normalize_event(&mut self, event: &mut Value, output_offset: usize) {
-        event["sequence_number"] = Value::from(self.take_sequence_number());
-        rebase_output_index(event, output_offset);
-    }
-
-    fn take_sequence_number(&mut self) -> u64 {
-        let sequence_number = self.next_sequence_number;
-        self.next_sequence_number = self.next_sequence_number.saturating_add(1);
-        sequence_number
-    }
-}
-
-fn rebase_output_index(value: &mut Value, output_offset: usize) {
-    let Some(offset) = u64::try_from(output_offset).ok().filter(|offset| *offset > 0) else {
-        return;
-    };
-    if let Some(index) = value.get("output_index").and_then(Value::as_u64) {
-        value["output_index"] = Value::from(index.saturating_add(offset));
-    }
 }
 
 fn function_calls(output_items: &[OutputItem]) -> Vec<FunctionToolCall> {
@@ -379,13 +265,6 @@ fn gateway_event_plans(
     plans
 }
 
-fn emit_sse_json(sender: &mpsc::UnboundedSender<String>, event: &serde_json::Value) -> ExecutorResult<()> {
-    let event_json = serialize_to_string(&event).map_err(ExecutorError::JsonError)?;
-    sender
-        .send(format!("data: {event_json}\n\n"))
-        .map_err(|_| ExecutorError::StreamError("stream receiver closed while emitting gateway event".to_owned()))
-}
-
 fn output_item_value(item: &OutputItem) -> ExecutorResult<serde_json::Value> {
     serde_json::to_value(item).map_err(ExecutorError::JsonError)
 }
@@ -399,34 +278,42 @@ fn emit_gateway_start_events(
             continue;
         };
         let item = output_item_value(output_item)?;
-        let mut added_event = serde_json::json!({
-                "type": "response.output_item.added",
-                "output_index": plan.output_index,
-                "item": item
-        });
-        stream_context.emit_event(&mut added_event, 0)?;
+        let mut added_event = synthetic_event(
+            SSEEventType::OutputItemAdded,
+            [
+                ("output_index".to_owned(), serde_json::json!(plan.output_index)),
+                ("item".to_owned(), item),
+            ],
+        );
+        stream_context.process_event(&mut added_event, 0)?;
         match output_item {
             OutputItem::WebSearchCall(web_search_call) => {
-                let mut in_progress_event = serde_json::json!({
-                        "type": "response.web_search_call.in_progress",
-                        "item_id": web_search_call.id,
-                        "output_index": plan.output_index
-                });
-                stream_context.emit_event(&mut in_progress_event, 0)?;
-                let mut searching_event = serde_json::json!({
-                        "type": "response.web_search_call.searching",
-                        "item_id": web_search_call.id,
-                        "output_index": plan.output_index
-                });
-                stream_context.emit_event(&mut searching_event, 0)?;
+                let mut in_progress_event = synthetic_event(
+                    SSEEventType::WebSearchCallInProgress,
+                    [
+                        ("item_id".to_owned(), serde_json::json!(web_search_call.id)),
+                        ("output_index".to_owned(), serde_json::json!(plan.output_index)),
+                    ],
+                );
+                stream_context.process_event(&mut in_progress_event, 0)?;
+                let mut searching_event = synthetic_event(
+                    SSEEventType::WebSearchCallSearching,
+                    [
+                        ("item_id".to_owned(), serde_json::json!(web_search_call.id)),
+                        ("output_index".to_owned(), serde_json::json!(plan.output_index)),
+                    ],
+                );
+                stream_context.process_event(&mut searching_event, 0)?;
             }
             OutputItem::McpToolCall(mcp_tool_call) => {
-                let mut in_progress_event = serde_json::json!({
-                        "type": "response.mcp_tool_call.in_progress",
-                        "item_id": mcp_tool_call.id,
-                        "output_index": plan.output_index
-                });
-                stream_context.emit_event(&mut in_progress_event, 0)?;
+                let mut in_progress_event = synthetic_event(
+                    SSEEventType::McpToolCallInProgress,
+                    [
+                        ("item_id".to_owned(), serde_json::json!(mcp_tool_call.id)),
+                        ("output_index".to_owned(), serde_json::json!(plan.output_index)),
+                    ],
+                );
+                stream_context.process_event(&mut in_progress_event, 0)?;
             }
             OutputItem::Message(_)
             | OutputItem::FunctionCall(_)
@@ -453,9 +340,9 @@ fn emit_gateway_completed_events(
             .map_or(0, |plan| plan.output_index);
         let (event_type, item_id) = match public_output {
             OutputItem::WebSearchCall(web_search_call) => {
-                ("response.web_search_call.completed", web_search_call.id.as_str())
+                (SSEEventType::WebSearchCallCompleted, web_search_call.id.as_str())
             }
-            OutputItem::McpToolCall(mcp_tool_call) => ("response.mcp_tool_call.completed", mcp_tool_call.id.as_str()),
+            OutputItem::McpToolCall(mcp_tool_call) => (SSEEventType::McpToolCallCompleted, mcp_tool_call.id.as_str()),
             OutputItem::Message(_)
             | OutputItem::FunctionCall(_)
             | OutputItem::CustomToolCall(_)
@@ -463,19 +350,23 @@ fn emit_gateway_completed_events(
             | OutputItem::Unknown => continue,
         };
         let item = output_item_value(public_output)?;
-        let mut completed_event = serde_json::json!({
-                "type": event_type,
-                "item_id": item_id,
-                "output_index": output_index,
-                "item": item.clone()
-        });
-        stream_context.emit_event(&mut completed_event, 0)?;
-        let mut done_event = serde_json::json!({
-                "type": "response.output_item.done",
-                "output_index": output_index,
-                "item": item
-        });
-        stream_context.emit_event(&mut done_event, 0)?;
+        let mut completed_event = synthetic_event(
+            event_type,
+            [
+                ("item_id".to_owned(), serde_json::json!(item_id)),
+                ("output_index".to_owned(), serde_json::json!(output_index)),
+                ("item".to_owned(), item.clone()),
+            ],
+        );
+        stream_context.process_event(&mut completed_event, 0)?;
+        let mut done_event = synthetic_event(
+            SSEEventType::OutputItemDone,
+            [
+                ("output_index".to_owned(), serde_json::json!(output_index)),
+                ("item".to_owned(), item),
+            ],
+        );
+        stream_context.process_event(&mut done_event, 0)?;
     }
     Ok(())
 }
@@ -484,17 +375,17 @@ pub(super) async fn execute_and_emit_output_calls(
     output_items: &[OutputItem],
     registry: &ToolRegistry,
     output_offset: usize,
-    stream_context: Option<&mut GatewayStreamContext<'_>>,
+    mut stream_context: Option<&mut GatewayStreamContext<'_>>,
 ) -> ExecutorResult<Vec<GatewayCallResult>> {
     let event_plans = gateway_event_plans(output_items, registry, output_offset);
-    if let Some(stream_context) = stream_context {
+    if let Some(stream_context) = &mut stream_context {
         emit_gateway_start_events(&event_plans, stream_context)?;
-        let gateway_results = execute_output_calls(output_items, registry).await?;
-        emit_gateway_completed_events(&gateway_results, &event_plans, stream_context)?;
-        Ok(gateway_results)
-    } else {
-        execute_output_calls(output_items, registry).await
     }
+    let gateway_results = execute_output_calls(output_items, registry).await?;
+    if let Some(stream_context) = &mut stream_context {
+        emit_gateway_completed_events(&gateway_results, &event_plans, stream_context)?;
+    }
+    Ok(gateway_results)
 }
 
 pub(super) fn append_input_item(input: &mut ResponsesInput, item: InputItem) {
