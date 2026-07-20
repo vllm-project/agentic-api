@@ -6,11 +6,11 @@ set -euo pipefail
 # Records YAML replay cassettes for Codex CLI-shaped tool calls.
 #
 # Default matrix:
-#   - gateway HTTP/SSE: function + Codex namespace tools
-#   - gateway WebSocket: function + Codex namespace tools
-#   - direct vLLM HTTP/SSE: function + flattened namespace function
-#   - direct OpenAI HTTPS/SSE: function + Codex namespace tools
-#   - direct OpenAI WebSocket: function + Codex namespace tools
+#   - gateway HTTP/SSE: function + Codex namespace + custom tools
+#   - gateway WebSocket: function + Codex namespace + custom tools
+#   - direct vLLM HTTP/SSE: function + flattened namespace function + custom tool
+#   - direct OpenAI HTTPS/SSE: function + Codex namespace + custom tools
+#   - direct OpenAI WebSocket: function + Codex namespace + custom tools
 #
 # Direct vLLM expects the flattened function shape. Set VLLM_URL or V_API_BASE
 # explicitly before recording direct vLLM cassettes.
@@ -32,6 +32,7 @@ GATEWAY_CASSETTE_MODEL="${GATEWAY_CASSETTE_MODEL:-$V_MODEL}"
 
 OPENAI_URL="${OPENAI_URL:-https://api.openai.com}"
 OPENAI_MODEL="${OPENAI_MODEL:-gpt-4o}"
+OPENAI_CUSTOM_MODEL="${OPENAI_CUSTOM_MODEL:-gpt-5.6}"
 
 TOOL_TURNS="${TOOL_TURNS:-2}"
 PROXY_PORT_BASE="${PROXY_PORT_BASE:-7070}"
@@ -39,6 +40,7 @@ TARGET="${1:-all}"
 
 FUNCTION_TOOL="${TOOLS_DIR}/function_tool.json"
 NAMESPACE_TOOL="${TOOLS_DIR}/namespace_tool.json"
+CUSTOM_TOOL="${TOOLS_DIR}/custom_tool.json"
 DIRECT_VLLM_FLAT_NAMESPACE_TOOL="${TOOLS_DIR}/direct_vllm_flat_namespace_tool.json"
 TOOL_OUTPUTS="${TOOLS_DIR}/tool_outputs.json"
 
@@ -49,6 +51,7 @@ model_slug() {
 GATEWAY_MODEL_SLUG="$(model_slug "$GATEWAY_CASSETTE_MODEL")"
 V_MODEL_SLUG="$(model_slug "$V_MODEL")"
 OPENAI_MODEL_SLUG="$(model_slug "$OPENAI_MODEL")"
+OPENAI_CUSTOM_MODEL_SLUG="$(model_slug "$OPENAI_CUSTOM_MODEL")"
 
 next_proxy_port="$PROXY_PORT_BASE"
 
@@ -59,14 +62,21 @@ Usage: $(basename "$0") [target]
 Targets:
   all                  all cassettes used by Codex cassette tests
   gateway              gateway-http + gateway-ws
-  gateway-http         gateway HTTP/SSE function + namespace
-  gateway-ws           gateway WebSocket function + namespace
+  gateway-http         gateway HTTP/SSE function + namespace + custom
+  gateway-ws           gateway WebSocket function + namespace + custom
+  gateway-custom       gateway HTTP/SSE + WebSocket custom only
+  gateway-http-custom  gateway HTTP/SSE custom only
+  gateway-ws-custom    gateway WebSocket custom only
   direct-vllm          same as direct-vllm-http
-  direct-vllm-http     direct vLLM HTTP/SSE function + flattened namespace
+  direct-vllm-http     direct vLLM HTTP/SSE function + flattened namespace + custom
+  direct-vllm-custom   direct vLLM HTTP/SSE custom only
   direct-vllm-ws       direct vLLM WebSocket function + flattened namespace
   openai               same as openai-https
-  openai-https         direct OpenAI HTTPS/SSE function
-  openai-ws            direct OpenAI WebSocket function
+  openai-https         direct OpenAI HTTPS/SSE function + custom
+  openai-ws            direct OpenAI WebSocket function + custom
+  openai-custom        direct OpenAI HTTPS/SSE + WebSocket custom only
+  openai-https-custom  direct OpenAI HTTPS/SSE custom only
+  openai-ws-custom     direct OpenAI WebSocket custom only
   openai-namespace     direct OpenAI HTTPS/SSE raw namespace, if accepted
   openai-ws-namespace  direct OpenAI WebSocket raw namespace, if accepted
   experimental-all     all plus direct-vllm-ws
@@ -80,6 +90,7 @@ Environment:
   V_MODEL or MODEL       direct vLLM model, default: ${V_MODEL}
   OPENAI_URL             OpenAI base URL, default: ${OPENAI_URL}
   OPENAI_MODEL           OpenAI model, default: ${OPENAI_MODEL}
+  OPENAI_CUSTOM_MODEL    OpenAI custom-tool model, default: ${OPENAI_CUSTOM_MODEL}
   OPENAI_API_KEY         required for openai* targets
   TOOL_TURNS             1 or 2, default: ${TOOL_TURNS}
   PROXY_PORT_BASE        first embedded recorder proxy port, default: ${PROXY_PORT_BASE}
@@ -174,6 +185,19 @@ run_recording() {
       --output "$output_path"
 }
 
+record_gateway_http_custom() {
+  run_recording \
+    "gateway HTTP/SSE custom tool" \
+    "codex-gateway-http-custom-tool-${GATEWAY_MODEL_SLUG}-streaming.yaml" \
+    "http" \
+    "--vllm" \
+    "$GATEWAY_URL" \
+    "$GATEWAY_MODEL" \
+    "$CUSTOM_TOOL" \
+    'You must call the agentic_raw_echo custom tool with exactly CUSTOM_CASSETTE_OK before answering.' \
+    'Use the custom tool output. Return only CUSTOM_CASSETTE_OUTPUT_OK.'
+}
+
 record_gateway_http() {
   run_recording \
     "gateway HTTP/SSE function tool" \
@@ -196,6 +220,21 @@ record_gateway_http() {
     "$NAMESPACE_TOOL" \
     'You must call mcp__agentic_fixture.add_numbers with numbers [8, 0] before answering.' \
     'Use the tool output. Return only the sum.'
+
+  record_gateway_http_custom
+}
+
+record_gateway_ws_custom() {
+  run_recording \
+    "gateway WebSocket custom tool" \
+    "codex-gateway-websocket-custom-tool-${GATEWAY_MODEL_SLUG}-streaming.yaml" \
+    "websocket" \
+    "--vllm" \
+    "$GATEWAY_URL" \
+    "$GATEWAY_MODEL" \
+    "$CUSTOM_TOOL" \
+    'You must call the agentic_raw_echo custom tool with exactly CUSTOM_CASSETTE_OK before answering.' \
+    'Use the custom tool output. Return only CUSTOM_CASSETTE_OUTPUT_OK.'
 }
 
 record_gateway_ws() {
@@ -220,6 +259,23 @@ record_gateway_ws() {
     "$NAMESPACE_TOOL" \
     'You must call mcp__agentic_fixture.add_numbers with numbers [8, 0] before answering.' \
     'Use the tool output. Return only the sum.'
+
+  record_gateway_ws_custom
+}
+
+record_direct_vllm_http_custom() {
+  require_direct_vllm_url
+
+  run_recording \
+    "direct vLLM HTTP/SSE custom tool" \
+    "codex-direct-vllm-http-custom-tool-${V_MODEL_SLUG}-streaming.yaml" \
+    "http" \
+    "--vllm" \
+    "$VLLM_URL" \
+    "$V_MODEL" \
+    "$CUSTOM_TOOL" \
+    'You must call the agentic_raw_echo custom tool with exactly CUSTOM_CASSETTE_OK before answering.' \
+    'Use the custom tool output. Return only CUSTOM_CASSETTE_OUTPUT_OK.'
 }
 
 record_direct_vllm_http() {
@@ -246,6 +302,8 @@ record_direct_vllm_http() {
     "$DIRECT_VLLM_FLAT_NAMESPACE_TOOL" \
     'You must call agentic_ns__mcp__agentic_fixture__add_numbers with numbers [8, 0] before answering.' \
     'Use the tool output. Return only the sum.'
+
+  record_direct_vllm_http_custom
 }
 
 record_direct_vllm_ws() {
@@ -287,6 +345,23 @@ record_openai_https() {
     "$FUNCTION_TOOL" \
     'You must call the agentic_plain_echo tool with text exactly "plain fixture" before answering.' \
     'Use the tool output. Return only the echo string.'
+
+  record_openai_https_custom
+}
+
+record_openai_https_custom() {
+  require_openai_key
+
+  run_recording \
+    "direct OpenAI HTTPS/SSE custom tool" \
+    "codex-openai-https-custom-tool-${OPENAI_CUSTOM_MODEL_SLUG}-streaming.yaml" \
+    "http" \
+    "--openai" \
+    "$OPENAI_URL" \
+    "$OPENAI_CUSTOM_MODEL" \
+    "$CUSTOM_TOOL" \
+    'You must call the agentic_raw_echo custom tool with exactly CUSTOM_CASSETTE_OK before answering.' \
+    'Use the custom tool output. Return only CUSTOM_CASSETTE_OUTPUT_OK.'
 }
 
 record_openai_ws() {
@@ -302,6 +377,23 @@ record_openai_ws() {
     "$FUNCTION_TOOL" \
     'You must call the agentic_plain_echo tool with text exactly "plain fixture" before answering.' \
     'Use the tool output. Return only the echo string.'
+
+  record_openai_ws_custom
+}
+
+record_openai_ws_custom() {
+  require_openai_key
+
+  run_recording \
+    "direct OpenAI WebSocket custom tool" \
+    "codex-openai-websocket-custom-tool-${OPENAI_CUSTOM_MODEL_SLUG}-streaming.yaml" \
+    "websocket" \
+    "--openai" \
+    "$OPENAI_URL" \
+    "$OPENAI_CUSTOM_MODEL" \
+    "$CUSTOM_TOOL" \
+    'You must call the agentic_raw_echo custom tool with exactly CUSTOM_CASSETTE_OK before answering.' \
+    'Use the custom tool output. Return only CUSTOM_CASSETTE_OUTPUT_OK.'
 }
 
 record_openai_namespace_https() {
@@ -359,8 +451,21 @@ case "$TARGET" in
   gateway-ws)
     record_gateway_ws
     ;;
+  gateway-custom)
+    record_gateway_http_custom
+    record_gateway_ws_custom
+    ;;
+  gateway-http-custom)
+    record_gateway_http_custom
+    ;;
+  gateway-ws-custom)
+    record_gateway_ws_custom
+    ;;
   direct-vllm | direct-vllm-http)
     record_direct_vllm_http
+    ;;
+  direct-vllm-custom | direct-vllm-http-custom)
+    record_direct_vllm_http_custom
     ;;
   direct-vllm-ws)
     record_direct_vllm_ws
@@ -370,6 +475,16 @@ case "$TARGET" in
     ;;
   openai-ws)
     record_openai_ws
+    ;;
+  openai-custom)
+    record_openai_https_custom
+    record_openai_ws_custom
+    ;;
+  openai-https-custom)
+    record_openai_https_custom
+    ;;
+  openai-ws-custom)
+    record_openai_ws_custom
     ;;
   openai-namespace)
     record_openai_namespace_https

@@ -12,7 +12,7 @@ use crate::executor::inference::{call_inference, fetch_response_json};
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::tool::ToolRegistry;
 use crate::types::request_response::ResponsePayload;
-use crate::utils::common::serialize_to_string;
+use crate::utils::common::{deserialize_from_str, serialize_to_string};
 
 pub(super) async fn fetch_blocking_payload(
     ctx: &RequestContext,
@@ -59,6 +59,7 @@ pub(super) async fn fetch_stream_payload(
     let mut pending_unnamed_function_events = HashMap::<String, Vec<String>>::new();
     while let Some(line_result) = line_stream.next().await {
         let line = line_result?;
+        log_upstream_failure(&line, &ctx.response_id);
         if let Some(sender) = stream_events {
             emit_upstream_stream_event(
                 &line,
@@ -79,6 +80,43 @@ pub(super) async fn fetch_stream_payload(
     );
     ctx.inject_ids(&mut payload);
     Ok(payload)
+}
+
+fn log_upstream_failure(line: &str, gateway_response_id: &str) {
+    let Some(frame) = normalize_sse_line(line) else {
+        return;
+    };
+    if frame.event_type != SSEEventType::ResponseFailed {
+        return;
+    }
+
+    let Some(data) = line.strip_prefix("data: ") else {
+        return;
+    };
+    let Ok(event) = deserialize_from_str::<Value>(data) else {
+        return;
+    };
+    let response = &event["response"];
+    let error = &response["error"];
+    let error_code = error.get("code").and_then(Value::as_str).unwrap_or_default();
+    let error_message = error
+        .get("message")
+        .and_then(Value::as_str)
+        .or_else(|| error.as_str())
+        .unwrap_or_default();
+    let incomplete_reason = response["incomplete_details"]
+        .get("reason")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+
+    tracing::warn!(
+        response_id = %gateway_response_id,
+        upstream_response_id = response["id"].as_str().unwrap_or_default(),
+        error_code,
+        error_message,
+        incomplete_reason,
+        "upstream response failed"
+    );
 }
 
 fn emit_upstream_stream_event(
@@ -230,6 +268,8 @@ fn drop_pending_function_events(
         EventPayload::OutputItemAdded { .. }
         | EventPayload::TextDelta { .. }
         | EventPayload::TextDone { .. }
+        | EventPayload::CustomToolCallInputDelta { .. }
+        | EventPayload::CustomToolCallInputDone { .. }
         | EventPayload::ReasoningDelta { .. }
         | EventPayload::ReasoningDone { .. }
         | EventPayload::Response { .. }

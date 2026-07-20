@@ -19,16 +19,29 @@ const CODEX_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/co
 const MCP_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/mcp");
 
 const CODEX_CASSETTES: &[&str] = &[
+    "codex-direct-vllm-http-custom-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
     "codex-direct-vllm-http-flat-namespace-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
     "codex-direct-vllm-http-function-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+    "codex-gateway-http-custom-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
     "codex-gateway-http-function-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
     "codex-gateway-http-namespace-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+    "codex-gateway-websocket-custom-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
     "codex-gateway-websocket-function-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
     "codex-gateway-websocket-namespace-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+    "codex-openai-https-custom-tool-gpt-5.6-streaming.yaml",
     "codex-openai-https-function-tool-gpt-4o-streaming.yaml",
     "codex-openai-https-namespace-tool-gpt-4o-streaming.yaml",
+    "codex-openai-websocket-custom-tool-gpt-5.6-streaming.yaml",
     "codex-openai-websocket-function-tool-gpt-4o-streaming.yaml",
     "codex-openai-websocket-namespace-tool-gpt-4o-streaming.yaml",
+];
+
+const CODEX_CUSTOM_CASSETTES: &[&str] = &[
+    "codex-direct-vllm-http-custom-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+    "codex-gateway-http-custom-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+    "codex-gateway-websocket-custom-tool-Qwen-Qwen3.6-35B-A3B-streaming.yaml",
+    "codex-openai-https-custom-tool-gpt-5.6-streaming.yaml",
+    "codex-openai-websocket-custom-tool-gpt-5.6-streaming.yaml",
 ];
 
 const CODEX_NAMESPACE_CASSETTES: &[&str] = &[
@@ -299,6 +312,57 @@ fn codex_request_payloads_parse_all_recorded_shapes() {
                     "{filename} turn {i}: websocket cassette should not contain HTTP-only stream field"
                 );
             }
+        }
+    }
+}
+
+#[tokio::test]
+async fn codex_custom_cassettes_preserve_native_upstream_shape_and_client_ownership() {
+    for filename in CODEX_CUSTOM_CASSETTES {
+        let cassette = load_codex_cassette(filename);
+        assert_eq!(cassette.turns.len(), 2, "{filename} should have two turns");
+
+        for (i, turn) in cassette.turns.iter().enumerate() {
+            let json = request_body_from_turn(turn);
+            let payload: RequestPayload = serde_json::from_value(json.clone())
+                .unwrap_or_else(|e| panic!("{filename} turn {i}: RequestPayload parse failed: {e}\nJSON: {json}"));
+            let tools = payload.tools.as_ref().expect("custom cassette should declare tools");
+            assert!(
+                tools.iter().any(|tool| matches!(
+                    tool,
+                    ResponsesTool::Custom(custom)
+                        if custom.name.as_str() == "agentic_raw_echo"
+                            && custom.format.as_ref().and_then(|format| format.get("syntax")).and_then(Value::as_str)
+                                == Some("lark")
+                )),
+                "{filename} turn {i}: expected native custom grammar declaration"
+            );
+
+            let registry = ToolRegistry::build_with_handlers(tools, &GatewayExecutors::default())
+                .await
+                .unwrap_or_else(|err| panic!("{filename} turn {i}: registry failed: {err}"));
+            assert!(
+                registry.lookup("agentic_raw_echo").is_none(),
+                "{filename} turn {i}: custom tool must remain client-owned"
+            );
+
+            let upstream = upstream_request_value(payload, false);
+            let upstream_tools = upstream
+                .get("tools")
+                .and_then(Value::as_array)
+                .unwrap_or_else(|| panic!("{filename} turn {i}: upstream request should contain tools"));
+            assert!(
+                upstream_tools.iter().any(|tool| {
+                    tool.get("type").and_then(Value::as_str) == Some("custom")
+                        && tool.get("name").and_then(Value::as_str) == Some("agentic_raw_echo")
+                        && tool
+                            .get("format")
+                            .and_then(|format| format.get("definition"))
+                            .and_then(Value::as_str)
+                            == Some("start: \"CUSTOM_CASSETTE_OK\"")
+                }),
+                "{filename} turn {i}: custom declaration must be forwarded natively"
+            );
         }
     }
 }

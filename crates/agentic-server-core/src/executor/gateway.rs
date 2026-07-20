@@ -107,8 +107,7 @@ fn is_gateway_owned_call(call: &FunctionToolCall, registry: &ToolRegistry) -> bo
 }
 
 pub(super) fn has_client_owned_calls(output_items: &[OutputItem], registry: &ToolRegistry) -> bool {
-    let calls = function_calls(output_items);
-    !registry.client_owned(&calls).is_empty()
+    output_items.iter().any(|item| item.requires_client_action(registry))
 }
 
 fn execution_error_output(call: &FunctionToolCall, message: &str) -> ExecutorResult<ToolOutput> {
@@ -317,7 +316,11 @@ fn emit_gateway_start_events(
                 });
                 emit_sse_json(sender, &in_progress_event)?;
             }
-            OutputItem::Message(_) | OutputItem::FunctionCall(_) | OutputItem::Reasoning(_) | OutputItem::Unknown => {}
+            OutputItem::Message(_)
+            | OutputItem::FunctionCall(_)
+            | OutputItem::CustomToolCall(_)
+            | OutputItem::Reasoning(_)
+            | OutputItem::Unknown => {}
         }
     }
     Ok(())
@@ -344,9 +347,11 @@ fn emit_gateway_completed_events(
                 ("response.web_search_call.completed", web_search_call.id.as_str())
             }
             OutputItem::McpToolCall(mcp_tool_call) => ("response.mcp_tool_call.completed", mcp_tool_call.id.as_str()),
-            OutputItem::Message(_) | OutputItem::FunctionCall(_) | OutputItem::Reasoning(_) | OutputItem::Unknown => {
-                continue;
-            }
+            OutputItem::Message(_)
+            | OutputItem::FunctionCall(_)
+            | OutputItem::CustomToolCall(_)
+            | OutputItem::Reasoning(_)
+            | OutputItem::Unknown => continue,
         };
         let item = output_item_value(public_output)?;
         let completed_event = serde_json::json!({

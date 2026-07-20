@@ -49,6 +49,8 @@ fn classify_event_type(type_str: &str) -> SSEEventType {
         "response.content_part.done" => SSEEventType::ContentPartDone,
         "response.function_call_arguments.delta" => SSEEventType::FunctionCallArgumentsDelta,
         "response.function_call_arguments.done" => SSEEventType::FunctionCallArgumentsDone,
+        "response.custom_tool_call_input.delta" => SSEEventType::CustomToolCallInputDelta,
+        "response.custom_tool_call_input.done" => SSEEventType::CustomToolCallInputDone,
         "response.reasoning_text.delta" => SSEEventType::ReasoningTextDelta,
         "response.reasoning_text.done" => SSEEventType::ReasoningTextDone,
         "response.reasoning_part.added" => SSEEventType::ReasoningPartAdded,
@@ -83,6 +85,8 @@ fn extract_payload(event_type: SSEEventType, json: &Value) -> EventPayload {
 
         SSEEventType::FunctionCallArgumentsDelta => extract_fn_call_args_delta(json),
         SSEEventType::FunctionCallArgumentsDone => extract_fn_call_args_done(json),
+        SSEEventType::CustomToolCallInputDelta => extract_custom_tool_call_input_delta(json),
+        SSEEventType::CustomToolCallInputDone => extract_custom_tool_call_input_done(json),
 
         SSEEventType::ReasoningTextDelta | SSEEventType::ReasoningSummaryTextDelta => extract_reasoning_delta(json),
         SSEEventType::ReasoningTextDone | SSEEventType::ReasoningSummaryTextDone => extract_reasoning_done(json),
@@ -180,6 +184,22 @@ fn extract_fn_call_args_done(json: &Value) -> EventPayload {
         call_id: json_str_opt(json, "call_id"),
         item_id: json_str(json, "item_id"),
         name: json_str(json, "name"),
+        output_index: json_u32(json, "output_index"),
+    }
+}
+
+fn extract_custom_tool_call_input_delta(json: &Value) -> EventPayload {
+    EventPayload::CustomToolCallInputDelta {
+        delta: json_str(json, "delta"),
+        item_id: json_str(json, "item_id"),
+        output_index: json_u32(json, "output_index"),
+    }
+}
+
+fn extract_custom_tool_call_input_done(json: &Value) -> EventPayload {
+    EventPayload::CustomToolCallInputDone {
+        input: json_str(json, "input"),
+        item_id: json_str(json, "item_id"),
         output_index: json_u32(json, "output_index"),
     }
 }

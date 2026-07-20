@@ -18,8 +18,8 @@ use crate::events::{EventFrame, EventPayload, SSEEventType, SSEItemType, normali
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::types::event::{MessageStatus, ResponseStatus};
 use crate::types::io::{
-    ApplyDone, FunctionToolCall, OutputItem, OutputMessage, OutputTextContent, ReasoningOutput, ReasoningTextContent,
-    ResponseUsage,
+    ApplyDone, CustomToolCall, FunctionToolCall, OutputItem, OutputMessage, OutputTextContent, ReasoningOutput,
+    ReasoningTextContent, ResponseUsage,
 };
 use crate::types::request_response::{IncompleteDetails, ResponsePayload};
 use crate::utils::common::{deserialize_from_str, deserialize_from_value_opt};
@@ -31,6 +31,7 @@ enum InFlight {
     Message { item: OutputMessage, text: String },
     Reasoning { item: ReasoningOutput, text: String },
     FunctionCall { item: FunctionToolCall, arguments: String },
+    CustomToolCall { item: CustomToolCall, input: String },
 }
 
 impl std::fmt::Debug for InFlight {
@@ -39,6 +40,7 @@ impl std::fmt::Debug for InFlight {
             Self::Message { .. } => write!(f, "InFlight::Message {{ .. }}"),
             Self::Reasoning { .. } => write!(f, "InFlight::Reasoning {{ .. }}"),
             Self::FunctionCall { .. } => write!(f, "InFlight::FunctionCall {{ .. }}"),
+            Self::CustomToolCall { .. } => write!(f, "InFlight::CustomToolCall {{ .. }}"),
         }
     }
 }
@@ -66,6 +68,13 @@ impl InFlight {
                 item.status = MessageStatus::Completed;
                 output.push(OutputItem::Message(item));
             }
+            Self::CustomToolCall { mut item, input } => {
+                if item.input.is_empty() {
+                    item.input = input;
+                }
+                item.status = Some(MessageStatus::Completed);
+                output.push(OutputItem::CustomToolCall(item));
+            }
         }
     }
 }
@@ -79,6 +88,7 @@ pub struct ResponseAccumulator {
     usage: Option<ResponseUsage>,
     status: ResponseStatus,
     incomplete_details: Option<IncompleteDetails>,
+    error: Option<serde_json::Value>,
     /// In-flight output items keyed by `item_id`, in insertion order.
     in_flight: IndexMap<String, InFlight>,
 }
@@ -94,6 +104,7 @@ impl ResponseAccumulator {
             usage: None,
             status: ResponseStatus::InProgress,
             incomplete_details: None,
+            error: None,
             in_flight: IndexMap::new(),
         }
     }
@@ -123,6 +134,8 @@ impl ResponseAccumulator {
             .map_or(ResponseStatus::Completed, |s| s.parse().unwrap_or_default());
 
         let usage = deserialize_from_value_opt::<ResponseUsage>(json["usage"].take());
+        let incomplete_details = deserialize_from_value_opt::<IncompleteDetails>(json["incomplete_details"].take());
+        let error = (!json["error"].is_null()).then(|| json["error"].take());
 
         Ok(Self {
             response_id,
@@ -130,7 +143,8 @@ impl ResponseAccumulator {
             output,
             usage,
             status,
-            incomplete_details: None,
+            incomplete_details,
+            error,
             in_flight: IndexMap::new(),
         })
     }
@@ -210,8 +224,30 @@ impl ResponseAccumulator {
 
     pub(crate) fn process_sse_line(&mut self, line: &str) {
         if let Some(frame) = normalize_sse_line(line) {
+            if matches!(
+                frame.event_type,
+                SSEEventType::ResponseFailed | SSEEventType::ResponseIncomplete
+            ) {
+                self.capture_terminal_details(line);
+            }
             self.process_event(&frame);
         }
+    }
+
+    fn capture_terminal_details(&mut self, line: &str) {
+        let Some(data) = line.strip_prefix("data: ") else {
+            return;
+        };
+        let Ok(mut event) = deserialize_from_str::<serde_json::Value>(data) else {
+            return;
+        };
+        let Some(response) = event.get_mut("response") else {
+            return;
+        };
+
+        self.incomplete_details =
+            deserialize_from_value_opt::<IncompleteDetails>(response["incomplete_details"].take());
+        self.error = (!response["error"].is_null()).then(|| response["error"].take());
     }
 
     pub(crate) fn finish_stream(&mut self) {
@@ -245,6 +281,14 @@ impl ResponseAccumulator {
                                 arguments: String::with_capacity(128),
                             })
                     }
+                    SSEItemType::CustomToolCall => {
+                        CustomToolCall::try_from(payload)
+                            .ok()
+                            .map(|item| InFlight::CustomToolCall {
+                                item,
+                                input: String::with_capacity(256),
+                            })
+                    }
                     SSEItemType::Message => OutputMessage::try_from(payload).ok().map(|item| InFlight::Message {
                         item,
                         text: String::with_capacity(256),
@@ -255,6 +299,15 @@ impl ResponseAccumulator {
                     self.in_flight.insert(item_id.clone(), inflight);
                 }
             }
+            (
+                SSEEventType::OutputItemDone,
+                EventPayload::OutputItemDone {
+                    item_id,
+                    item_type: SSEItemType::CustomToolCall,
+                    item,
+                    ..
+                },
+            ) => self.complete_custom_tool_call(item_id, item),
             (SSEEventType::OutputItemDone, EventPayload::OutputItemDone { item, .. }) => {
                 if let Some(output_item @ (OutputItem::WebSearchCall(_) | OutputItem::McpToolCall(_))) =
                     deserialize_from_value_opt::<OutputItem>(item.clone())
@@ -282,27 +335,60 @@ impl ResponseAccumulator {
                     item.apply_done(&frame.payload, arguments);
                 }
             }
+            (SSEEventType::CustomToolCallInputDelta, EventPayload::CustomToolCallInputDelta { delta, item_id, .. }) => {
+                if let Some(InFlight::CustomToolCall { input, .. }) = self.in_flight.get_mut(item_id) {
+                    input.push_str(delta);
+                }
+            }
+            (SSEEventType::CustomToolCallInputDone, EventPayload::CustomToolCallInputDone { item_id, .. }) => {
+                if let Some(InFlight::CustomToolCall { item, input }) = self.in_flight.get_mut(item_id) {
+                    item.apply_done(&frame.payload, input);
+                }
+            }
             (SSEEventType::OutputTextDelta, EventPayload::TextDelta { delta, item_id, .. }) => {
                 if let Some(InFlight::Message { text, .. }) = self.in_flight.get_mut(item_id) {
                     text.push_str(delta);
                 }
             }
             (SSEEventType::ResponseCompleted, EventPayload::Response { usage, .. }) => {
-                self.finalize_all();
-                self.status = ResponseStatus::Completed;
-                self.usage = *usage;
+                self.finish_response(ResponseStatus::Completed, *usage);
             }
             (SSEEventType::ResponseFailed, EventPayload::Response { usage, .. }) => {
-                self.finalize_all();
-                self.status = ResponseStatus::Error;
-                self.usage = *usage;
+                self.finish_response(ResponseStatus::Error, *usage);
             }
             (SSEEventType::ResponseIncomplete, EventPayload::Response { usage, .. }) => {
-                self.finalize_all();
-                self.status = ResponseStatus::Incomplete;
-                self.usage = *usage;
+                self.finish_response(ResponseStatus::Incomplete, *usage);
             }
             _ => {}
+        }
+    }
+
+    fn finish_response(&mut self, status: ResponseStatus, usage: Option<ResponseUsage>) {
+        self.finalize_all();
+        self.status = status;
+        self.usage = usage;
+    }
+
+    fn complete_custom_tool_call(&mut self, item_id: &str, raw_item: &serde_json::Value) {
+        let Some(OutputItem::CustomToolCall(mut call)) = deserialize_from_value_opt::<OutputItem>(raw_item.clone())
+        else {
+            return;
+        };
+
+        if let Some(InFlight::CustomToolCall { item, input }) = self.in_flight.get_mut(item_id) {
+            if call.input.is_empty() {
+                call.input = if item.input.is_empty() {
+                    std::mem::take(input)
+                } else {
+                    std::mem::take(&mut item.input)
+                };
+            } else {
+                input.clear();
+            }
+            *item = call;
+        } else {
+            // Some Responses-compatible providers omit `output_item.added`.
+            self.output.push(OutputItem::CustomToolCall(call));
         }
     }
 
@@ -334,7 +420,7 @@ impl ResponseAccumulator {
             output: self.output,
             usage: self.usage,
             incomplete_details: self.incomplete_details,
-            error: None,
+            error: self.error,
             previous_response_id: previous_response_id.map(str::to_string),
             conversation_id: self.conversation_id,
             instructions: instructions.map(str::to_string),
@@ -360,6 +446,22 @@ mod tests {
         acc.mark_incomplete("Stream interrupted");
         assert_eq!(acc.status, ResponseStatus::Incomplete);
         assert!(acc.incomplete_details.is_some());
+    }
+
+    #[test]
+    fn test_accumulator_preserves_streamed_failure_details() {
+        let acc = ResponseAccumulator::from_sse_lines(
+            [r#"data: {"type":"response.failed","response":{"id":"resp_failed","status":"failed","error":{"code":"tool_catalog_too_large","message":"Too many tools"},"incomplete_details":{"reason":"upstream_error"}}}"#.to_owned()],
+            None,
+        );
+        let payload = acc.finalize("test-model", None, None);
+
+        assert_eq!(payload.status, "error");
+        assert_eq!(payload.error.as_ref().unwrap()["code"], "tool_catalog_too_large");
+        assert_eq!(
+            payload.incomplete_details.unwrap().reason.as_deref(),
+            Some("upstream_error")
+        );
     }
 
     #[test]
@@ -1120,5 +1222,28 @@ mod tests {
         }
 
         assert_eq!(acc.usage.unwrap().total_tokens, 15);
+    }
+
+    #[test]
+    fn test_custom_tool_call_accumulates_freeform_input() {
+        let lines = vec![
+            r#"data: {"type":"response.created","response":{"id":"resp_custom"}}"#.to_string(),
+            r#"data: {"type":"response.output_item.added","output_index":0,"item":{"id":"ctc_1","type":"custom_tool_call","call_id":"call_1","name":"apply_patch","input":"","status":"in_progress"}}"#.to_string(),
+            r#"data: {"type":"response.custom_tool_call_input.delta","item_id":"ctc_1","output_index":0,"delta":"*** Begin"}"#.to_string(),
+            r#"data: {"type":"response.custom_tool_call_input.delta","item_id":"ctc_1","output_index":0,"delta":" Patch"}"#.to_string(),
+            r#"data: {"type":"response.custom_tool_call_input.done","item_id":"ctc_1","output_index":0,"input":""}"#.to_string(),
+            r#"data: {"type":"response.output_item.done","output_index":0,"item":{"id":"ctc_1","type":"custom_tool_call","call_id":"call_1","name":"apply_patch","input":"","status":"completed"}}"#.to_string(),
+            r#"data: {"type":"response.completed","response":{"id":"resp_custom","status":"completed","usage":null}}"#.to_string(),
+        ];
+
+        let acc = ResponseAccumulator::from_sse_lines(lines, None);
+        assert_eq!(acc.output.len(), 1);
+        let OutputItem::CustomToolCall(call) = &acc.output[0] else {
+            panic!("expected CustomToolCall");
+        };
+        assert_eq!(call.call_id, "call_1");
+        assert_eq!(call.name, "apply_patch");
+        assert_eq!(call.input, "*** Begin Patch");
+        assert_eq!(call.status, Some(MessageStatus::Completed));
     }
 }

@@ -641,23 +641,27 @@ def _inject_tools(body: dict, tools: list | None, tool_choice: Any) -> None:
         body["tool_choice"] = tool_choice
 
 
-def _extract_function_calls(response_data: dict | None) -> list[dict]:
-    """Extract function_call items from a response's output array."""
+def _extract_tool_calls(response_data: dict | None) -> list[dict]:
+    """Extract client-owned function and custom tool calls from a response."""
     if not response_data:
         return []
     output = response_data.get("output", [])
-    return [item for item in output if item.get("type") == "function_call"]
+    return [
+        item
+        for item in output
+        if item.get("type") in {"function_call", "custom_tool_call"}
+    ]
 
 
 def _build_tool_output_input(
-    function_calls: list[dict],
+    tool_calls: list[dict],
     tool_outputs: dict[str, str],
     user_prompt: str | None,
 ) -> list[dict]:
-    """Build an input list with function_call_output items followed by optional user message.
+    """Build tool output items followed by an optional user message.
 
     Args:
-        function_calls: function_call items from the previous response.
+        tool_calls: function_call or custom_tool_call items from the previous response.
         tool_outputs: mapping of tool name -> fake JSON output string.
         user_prompt: the next user message (None for tool-output-only turns).
 
@@ -665,21 +669,31 @@ def _build_tool_output_input(
         A list suitable for the `input` field of the next request.
     """
     input_items: list[dict] = []
-    for fc in function_calls:
-        call_id = fc.get("call_id", "")
-        name = fc.get("name", "")
-        output = tool_outputs.get(name, json.dumps({"result": f"mock output for {name}"}))
-        input_items.append({
-            "type": "function_call_output",
-            "call_id": call_id,
-            "output": output,
-        })
+    for call in tool_calls:
+        call_id = call.get("call_id", "")
+        name = call.get("name", "")
+        output = tool_outputs.get(
+            name, json.dumps({"result": f"mock output for {name}"})
+        )
+        input_items.append(
+            {
+                "type": (
+                    "custom_tool_call_output"
+                    if call.get("type") == "custom_tool_call"
+                    else "function_call_output"
+                ),
+                "call_id": call_id,
+                "output": output,
+            }
+        )
     if user_prompt:
-        input_items.append({
-            "type": "message",
-            "role": "user",
-            "content": user_prompt,
-        })
+        input_items.append(
+            {
+                "type": "message",
+                "role": "user",
+                "content": user_prompt,
+            }
+        )
     return input_items
 
 
@@ -930,12 +944,15 @@ def run_responses(
             )
         prompt = _prompt(f"Turn {turn}/{turns} — enter prompt: ")
 
-        # Build input: if previous response had function calls and we have tool_outputs,
-        # inject function_call_output items before the user message.
-        pending_calls = _extract_function_calls(last_response) if tool_outputs else []
+        # Inject matching function/custom output items before the user message.
+        pending_calls = _extract_tool_calls(last_response) if tool_outputs else []
         if pending_calls and tool_outputs:
-            input_value: Any = _build_tool_output_input(pending_calls, tool_outputs, prompt if prompt else None)
-            click.echo(f"  [injecting {len(pending_calls)} tool output(s) before user message]")
+            input_value: Any = _build_tool_output_input(
+                pending_calls, tool_outputs, prompt if prompt else None
+            )
+            click.echo(
+                f"  [injecting {len(pending_calls)} tool output(s) before user message]"
+            )
         else:
             input_value = prompt
 
@@ -977,7 +994,7 @@ def run_responses(
             f"Turn {turns + 1} (extra branch from turn {branch_from}) — enter prompt: "
         )
 
-        pending_calls = _extract_function_calls(branch_response) if tool_outputs else []
+        pending_calls = _extract_tool_calls(branch_response) if tool_outputs else []
         if pending_calls and tool_outputs:
             input_value = _build_tool_output_input(pending_calls, tool_outputs, prompt if prompt else None)
             click.echo(f"  [injecting {len(pending_calls)} tool output(s) before user message]")
@@ -1110,7 +1127,7 @@ def run_responses(
     default=None,
     type=click.Path(exists=True),
     help="Path to a JSON file mapping tool names to fake output strings. "
-    "When provided, function_call_output items are automatically injected "
+    "When provided, matching function_call_output or custom_tool_call_output items are injected "
     "between turns (required for OpenAI Responses API).",
 )
 @click.option(

@@ -164,6 +164,9 @@ impl ToolRegistry {
                 ResponsesTool::FileSearch(p) => insert_file_search_entry(&mut entries, p, None),
                 ResponsesTool::CodeInterpreter(p) => insert_code_interpreter_entry(&mut entries, p, None),
                 ResponsesTool::Namespace(p) => insert_namespace_entries(&mut entries, p),
+                ResponsesTool::Custom(p) => {
+                    tracing::debug!(name = %p.name, "client-owned custom tool skipped in function registry");
+                }
                 ResponsesTool::Unknown => {
                     tracing::debug!("unknown tool declared but skipped in registry");
                 }

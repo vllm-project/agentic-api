@@ -385,6 +385,7 @@ fn typed_top_level_tool_names(tools: &[ResponsesTool]) -> HashSet<String> {
             | ResponsesTool::FileSearch(_)
             | ResponsesTool::CodeInterpreter(_)
             | ResponsesTool::Namespace(_)
+            | ResponsesTool::Custom(_)
             | ResponsesTool::Unknown => None,
         })
         .collect()

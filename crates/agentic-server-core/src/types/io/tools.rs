@@ -23,6 +23,9 @@ pub enum ToolChoice {
         namespace: Option<String>,
         name: NonEmptyToolName,
     },
+    Custom {
+        name: NonEmptyToolName,
+    },
 }
 
 impl Serialize for ToolChoice {
@@ -43,6 +46,12 @@ impl Serialize for ToolChoice {
                 map.serialize_entry("name", name.as_str())?;
                 map.end()
             }
+            Self::Custom { name } => {
+                let mut map = serializer.serialize_map(Some(2))?;
+                map.serialize_entry("type", "custom")?;
+                map.serialize_entry("name", name.as_str())?;
+                map.end()
+            }
         }
     }
 }
@@ -60,7 +69,7 @@ impl<'de> Deserialize<'de> for ToolChoice {
                 "required" => Ok(Self::Required),
                 other => Err(de::Error::unknown_variant(
                     other,
-                    &["auto", "none", "required", "function"],
+                    &["auto", "none", "required", "function", "custom"],
                 )),
             },
             Value::Object(object) => {
@@ -74,6 +83,15 @@ impl<'de> Deserialize<'de> for ToolChoice {
                     return Ok(Self::Function { namespace, name });
                 }
 
+                if object.get("type").and_then(Value::as_str) == Some("custom") {
+                    let name = object
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| de::Error::missing_field("name"))?;
+                    let name = NonEmptyToolName::try_from(name).map_err(de::Error::custom)?;
+                    return Ok(Self::Custom { name });
+                }
+
                 if let Some(function) = object.get("function").and_then(Value::as_object) {
                     let namespace = function.get("namespace").and_then(Value::as_str).map(str::to_string);
                     let name = function
@@ -84,9 +102,13 @@ impl<'de> Deserialize<'de> for ToolChoice {
                     return Ok(Self::Function { namespace, name });
                 }
 
-                Err(de::Error::custom("expected tool_choice string or function object"))
+                Err(de::Error::custom(
+                    "expected tool_choice string, function object, or custom object",
+                ))
             }
-            _ => Err(de::Error::custom("expected tool_choice string or function object")),
+            _ => Err(de::Error::custom(
+                "expected tool_choice string, function object, or custom object",
+            )),
         }
     }
 }
@@ -139,6 +161,34 @@ mod tests {
                 "function": {
                     "name": ""
                 }
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn custom_tool_choice_round_trips() {
+        let expected = serde_json::json!({
+            "type": "custom",
+            "name": "apply_patch"
+        });
+
+        let choice: ToolChoice = serde_json::from_value(expected.clone()).unwrap();
+        assert_eq!(
+            choice,
+            ToolChoice::Custom {
+                name: NonEmptyToolName::try_from("apply_patch").unwrap()
+            }
+        );
+        assert_eq!(serde_json::to_value(choice).unwrap(), expected);
+    }
+
+    #[test]
+    fn custom_tool_choice_rejects_empty_name() {
+        assert!(
+            serde_json::from_value::<ToolChoice>(serde_json::json!({
+                "type": "custom",
+                "name": ""
             }))
             .is_err()
         );

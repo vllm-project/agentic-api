@@ -4,12 +4,13 @@ pub mod tools;
 pub mod usage;
 
 pub use input::{
-    FunctionToolResultMessage, InputContent, InputImageContent, InputItem, InputMessage, InputMessageContent,
-    InputTextContent, ResponsesInput,
+    CustomToolCallOutputMessage, FunctionToolResultMessage, InputContent, InputImageContent, InputItem, InputMessage,
+    InputMessageContent, InputTextContent, ResponsesInput,
 };
 pub use output::{
-    ApplyDone, FunctionToolCall, GatewayCallStatus, McpToolCall, OutputItem, OutputMessage, OutputTextContent,
-    ReasoningOutput, ReasoningTextContent, WebSearchActionSearch, WebSearchCall, WebSearchCallStatus, WebSearchSource,
+    ApplyDone, CustomToolCall, FunctionToolCall, GatewayCallStatus, McpToolCall, OutputItem, OutputMessage,
+    OutputTextContent, ReasoningOutput, ReasoningTextContent, WebSearchActionSearch, WebSearchCall,
+    WebSearchCallStatus, WebSearchSource,
 };
 pub use tools::{FunctionTool, ToolChoice};
 pub(crate) use tools::{resolve_tool_choice, resolve_tools};

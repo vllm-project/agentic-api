@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
-use super::output::{FunctionToolCall, ReasoningOutput};
+use super::output::{CustomToolCall, FunctionToolCall, ReasoningOutput};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InputTextContent {
@@ -52,6 +53,15 @@ pub struct FunctionToolResultMessage {
     pub output: String,
 }
 
+/// Client result for a freeform custom tool call.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomToolCallOutputMessage {
+    pub call_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub output: Value,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum InputItem {
@@ -63,6 +73,12 @@ pub enum InputItem {
     FunctionCall(FunctionToolCall),
     #[serde(rename = "function_call_output")]
     FunctionCallOutput(FunctionToolResultMessage),
+    /// The model's freeform invocation, retained when rehydrating the matching
+    /// client-provided `custom_tool_call_output` on the next turn.
+    #[serde(rename = "custom_tool_call")]
+    CustomToolCall(CustomToolCall),
+    #[serde(rename = "custom_tool_call_output")]
+    CustomToolCallOutput(CustomToolCallOutputMessage),
     #[serde(rename = "reasoning")]
     Reasoning(ReasoningOutput),
     #[serde(other)]

@@ -1,0 +1,203 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: You must call the agentic_raw_echo custom tool with exactly CUSTOM_CASSETTE_OK
+        before answering.
+      max_output_tokens: 1024
+      model: gpt-5.6
+      store: true
+      tools:
+      - description: Emit the requested cassette token as raw text.
+        format:
+          definition: 'start: "CUSTOM_CASSETTE_OK"'
+          syntax: lark
+          type: grammar
+        name: agentic_raw_echo
+        type: custom
+      type: response.create
+    headers:
+      Authorization: Bearer ***
+    method: WEBSOCKET
+    path: /v1/responses
+    query_params: {}
+    transport: websocket
+  response:
+    headers:
+      transport: websocket
+    sse:
+    - 'data: {"type":"response.created","response":{"id":"resp_0cc22e5ff5a51d07006a57774fa420819bab31d9f4c89d2460","object":"response","created_at":1784117071,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"custom","description":"Emit
+      the requested cassette token as raw text.","format":{"type":"grammar","definition":"start:
+      \"CUSTOM_CASSETTE_OK\"","syntax":"lark"},"name":"agentic_raw_echo"}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0cc22e5ff5a51d07006a57774fa420819bab31d9f4c89d2460","object":"response","created_at":1784117071,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"custom","description":"Emit
+      the requested cassette token as raw text.","format":{"type":"grammar","definition":"start:
+      \"CUSTOM_CASSETTE_OK\"","syntax":"lark"},"name":"agentic_raw_echo"}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","type":"custom_tool_call","status":"in_progress","call_id":"call_C6XCDhG8bY915tmJgOL7yhcX","input":"","name":"agentic_raw_echo"},"output_index":0,"sequence_number":2}
+
+      '
+    - 'data: {"type":"response.custom_tool_call_input.delta","delta":"CUSTOM","item_id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","obfuscation":"bqzPCrvZ1I","output_index":0,"sequence_number":3}
+
+      '
+    - 'data: {"type":"response.custom_tool_call_input.delta","delta":"_C","item_id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","obfuscation":"hEJyawa3qcAQ1Z","output_index":0,"sequence_number":4}
+
+      '
+    - 'data: {"type":"response.custom_tool_call_input.delta","delta":"AS","item_id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","obfuscation":"zxDGOnaUUqPWQU","output_index":0,"sequence_number":5}
+
+      '
+    - 'data: {"type":"response.custom_tool_call_input.delta","delta":"SET","item_id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","obfuscation":"83BUlOwaEmbhL","output_index":0,"sequence_number":6}
+
+      '
+    - 'data: {"type":"response.custom_tool_call_input.delta","delta":"TE","item_id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","obfuscation":"XQNYcPfz4MANYK","output_index":0,"sequence_number":7}
+
+      '
+    - 'data: {"type":"response.custom_tool_call_input.delta","delta":"_OK","item_id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","obfuscation":"8ThfiCWMH16yh","output_index":0,"sequence_number":8}
+
+      '
+    - 'data: {"type":"response.custom_tool_call_input.done","input":"CUSTOM_CASSETTE_OK","item_id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","output_index":0,"sequence_number":9}
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","type":"custom_tool_call","status":"completed","call_id":"call_C6XCDhG8bY915tmJgOL7yhcX","input":"CUSTOM_CASSETTE_OK","name":"agentic_raw_echo"},"output_index":0,"sequence_number":10}
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_0cc22e5ff5a51d07006a57774fa420819bab31d9f4c89d2460","object":"response","created_at":1784117071,"status":"completed","background":false,"completed_at":1784117073,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","type":"custom_tool_call","status":"completed","call_id":"call_C6XCDhG8bY915tmJgOL7yhcX","input":"CUSTOM_CASSETTE_OK","name":"agentic_raw_echo"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"custom","description":"Emit
+      the requested cassette token as raw text.","format":{"type":"grammar","definition":"start:
+      \"CUSTOM_CASSETTE_OK\"","syntax":"lark"},"name":"agentic_raw_echo"}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":118,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":19,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":137},"user":null,"metadata":{}},"sequence_number":11}
+
+      '
+    - 'data: [DONE]
+
+      '
+    status_code: 101
+    websocket:
+    - '{"type":"response.created","response":{"id":"resp_0cc22e5ff5a51d07006a57774fa420819bab31d9f4c89d2460","object":"response","created_at":1784117071,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"custom","description":"Emit
+      the requested cassette token as raw text.","format":{"type":"grammar","definition":"start:
+      \"CUSTOM_CASSETTE_OK\"","syntax":"lark"},"name":"agentic_raw_echo"}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}'
+    - '{"type":"response.in_progress","response":{"id":"resp_0cc22e5ff5a51d07006a57774fa420819bab31d9f4c89d2460","object":"response","created_at":1784117071,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"custom","description":"Emit
+      the requested cassette token as raw text.","format":{"type":"grammar","definition":"start:
+      \"CUSTOM_CASSETTE_OK\"","syntax":"lark"},"name":"agentic_raw_echo"}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}'
+    - '{"type":"response.output_item.added","item":{"id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","type":"custom_tool_call","status":"in_progress","call_id":"call_C6XCDhG8bY915tmJgOL7yhcX","input":"","name":"agentic_raw_echo"},"output_index":0,"sequence_number":2}'
+    - '{"type":"response.custom_tool_call_input.delta","delta":"CUSTOM","item_id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","obfuscation":"bqzPCrvZ1I","output_index":0,"sequence_number":3}'
+    - '{"type":"response.custom_tool_call_input.delta","delta":"_C","item_id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","obfuscation":"hEJyawa3qcAQ1Z","output_index":0,"sequence_number":4}'
+    - '{"type":"response.custom_tool_call_input.delta","delta":"AS","item_id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","obfuscation":"zxDGOnaUUqPWQU","output_index":0,"sequence_number":5}'
+    - '{"type":"response.custom_tool_call_input.delta","delta":"SET","item_id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","obfuscation":"83BUlOwaEmbhL","output_index":0,"sequence_number":6}'
+    - '{"type":"response.custom_tool_call_input.delta","delta":"TE","item_id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","obfuscation":"XQNYcPfz4MANYK","output_index":0,"sequence_number":7}'
+    - '{"type":"response.custom_tool_call_input.delta","delta":"_OK","item_id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","obfuscation":"8ThfiCWMH16yh","output_index":0,"sequence_number":8}'
+    - '{"type":"response.custom_tool_call_input.done","input":"CUSTOM_CASSETTE_OK","item_id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","output_index":0,"sequence_number":9}'
+    - '{"type":"response.output_item.done","item":{"id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","type":"custom_tool_call","status":"completed","call_id":"call_C6XCDhG8bY915tmJgOL7yhcX","input":"CUSTOM_CASSETTE_OK","name":"agentic_raw_echo"},"output_index":0,"sequence_number":10}'
+    - '{"type":"response.completed","response":{"id":"resp_0cc22e5ff5a51d07006a57774fa420819bab31d9f4c89d2460","object":"response","created_at":1784117071,"status":"completed","background":false,"completed_at":1784117073,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"ctc_0cc22e5ff5a51d07006a5777511f2c819b8bc60ff17ff7efb9","type":"custom_tool_call","status":"completed","call_id":"call_C6XCDhG8bY915tmJgOL7yhcX","input":"CUSTOM_CASSETTE_OK","name":"agentic_raw_echo"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"custom","description":"Emit
+      the requested cassette token as raw text.","format":{"type":"grammar","definition":"start:
+      \"CUSTOM_CASSETTE_OK\"","syntax":"lark"},"name":"agentic_raw_echo"}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":118,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":19,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":137},"user":null,"metadata":{}},"sequence_number":11}'
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: call_C6XCDhG8bY915tmJgOL7yhcX
+        output: CUSTOM_CASSETTE_OUTPUT_OK
+        type: custom_tool_call_output
+      - content: Use the custom tool output. Return only CUSTOM_CASSETTE_OUTPUT_OK.
+        role: user
+        type: message
+      max_output_tokens: 1024
+      model: gpt-5.6
+      previous_response_id: resp_0cc22e5ff5a51d07006a57774fa420819bab31d9f4c89d2460
+      store: true
+      tools:
+      - description: Emit the requested cassette token as raw text.
+        format:
+          definition: 'start: "CUSTOM_CASSETTE_OK"'
+          syntax: lark
+          type: grammar
+        name: agentic_raw_echo
+        type: custom
+      type: response.create
+    headers:
+      Authorization: Bearer ***
+    method: WEBSOCKET
+    path: /v1/responses
+    query_params: {}
+    transport: websocket
+  response:
+    headers:
+      transport: websocket
+    sse:
+    - 'data: {"type":"response.created","response":{"id":"resp_0cc22e5ff5a51d07006a577752504c819ba34a36048d25634a","object":"response","created_at":1784117074,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0cc22e5ff5a51d07006a57774fa420819bab31d9f4c89d2460","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"custom","description":"Emit
+      the requested cassette token as raw text.","format":{"type":"grammar","definition":"start:
+      \"CUSTOM_CASSETTE_OK\"","syntax":"lark"},"name":"agentic_raw_echo"}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0cc22e5ff5a51d07006a577752504c819ba34a36048d25634a","object":"response","created_at":1784117074,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0cc22e5ff5a51d07006a57774fa420819bab31d9f4c89d2460","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"custom","description":"Emit
+      the requested cassette token as raw text.","format":{"type":"grammar","definition":"start:
+      \"CUSTOM_CASSETTE_OK\"","syntax":"lark"},"name":"agentic_raw_echo"}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"},"output_index":0,"sequence_number":2}
+
+      '
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"CUSTOM","item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","logprobs":[],"obfuscation":"Ewpkt50DGO","output_index":0,"sequence_number":4}
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"_C","item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","logprobs":[],"obfuscation":"otwMdrsynKvAGt","output_index":0,"sequence_number":5}
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"AS","item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","logprobs":[],"obfuscation":"HLOOlz6CEcIgWg","output_index":0,"sequence_number":6}
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"SET","item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","logprobs":[],"obfuscation":"WRIzRDeM2z5CN","output_index":0,"sequence_number":7}
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"TE","item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","logprobs":[],"obfuscation":"i7Uy5XYm2CiHsZ","output_index":0,"sequence_number":8}
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"_OUTPUT","item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","logprobs":[],"obfuscation":"El1jsdO23","output_index":0,"sequence_number":9}
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"_OK","item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","logprobs":[],"obfuscation":"YSNw6oHufbClv","output_index":0,"sequence_number":10}
+
+      '
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","logprobs":[],"output_index":0,"sequence_number":11,"text":"CUSTOM_CASSETTE_OUTPUT_OK"}
+
+      '
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"CUSTOM_CASSETTE_OUTPUT_OK"},"sequence_number":12}
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"CUSTOM_CASSETTE_OUTPUT_OK"}],"phase":"final_answer","role":"assistant"},"output_index":0,"sequence_number":13}
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_0cc22e5ff5a51d07006a577752504c819ba34a36048d25634a","object":"response","created_at":1784117074,"status":"completed","background":false,"completed_at":1784117075,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"CUSTOM_CASSETTE_OUTPUT_OK"}],"phase":"final_answer","role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0cc22e5ff5a51d07006a57774fa420819bab31d9f4c89d2460","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"custom","description":"Emit
+      the requested cassette token as raw text.","format":{"type":"grammar","definition":"start:
+      \"CUSTOM_CASSETTE_OK\"","syntax":"lark"},"name":"agentic_raw_echo"}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":177,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":11,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":188},"user":null,"metadata":{}},"sequence_number":14}
+
+      '
+    - 'data: [DONE]
+
+      '
+    status_code: 101
+    websocket:
+    - '{"type":"response.created","response":{"id":"resp_0cc22e5ff5a51d07006a577752504c819ba34a36048d25634a","object":"response","created_at":1784117074,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0cc22e5ff5a51d07006a57774fa420819bab31d9f4c89d2460","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"custom","description":"Emit
+      the requested cassette token as raw text.","format":{"type":"grammar","definition":"start:
+      \"CUSTOM_CASSETTE_OK\"","syntax":"lark"},"name":"agentic_raw_echo"}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}'
+    - '{"type":"response.in_progress","response":{"id":"resp_0cc22e5ff5a51d07006a577752504c819ba34a36048d25634a","object":"response","created_at":1784117074,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0cc22e5ff5a51d07006a57774fa420819bab31d9f4c89d2460","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"custom","description":"Emit
+      the requested cassette token as raw text.","format":{"type":"grammar","definition":"start:
+      \"CUSTOM_CASSETTE_OK\"","syntax":"lark"},"name":"agentic_raw_echo"}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}'
+    - '{"type":"response.output_item.added","item":{"id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"},"output_index":0,"sequence_number":2}'
+    - '{"type":"response.content_part.added","content_index":0,"item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"CUSTOM","item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","logprobs":[],"obfuscation":"Ewpkt50DGO","output_index":0,"sequence_number":4}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"_C","item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","logprobs":[],"obfuscation":"otwMdrsynKvAGt","output_index":0,"sequence_number":5}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"AS","item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","logprobs":[],"obfuscation":"HLOOlz6CEcIgWg","output_index":0,"sequence_number":6}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"SET","item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","logprobs":[],"obfuscation":"WRIzRDeM2z5CN","output_index":0,"sequence_number":7}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"TE","item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","logprobs":[],"obfuscation":"i7Uy5XYm2CiHsZ","output_index":0,"sequence_number":8}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"_OUTPUT","item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","logprobs":[],"obfuscation":"El1jsdO23","output_index":0,"sequence_number":9}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"_OK","item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","logprobs":[],"obfuscation":"YSNw6oHufbClv","output_index":0,"sequence_number":10}'
+    - '{"type":"response.output_text.done","content_index":0,"item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","logprobs":[],"output_index":0,"sequence_number":11,"text":"CUSTOM_CASSETTE_OUTPUT_OK"}'
+    - '{"type":"response.content_part.done","content_index":0,"item_id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"CUSTOM_CASSETTE_OUTPUT_OK"},"sequence_number":12}'
+    - '{"type":"response.output_item.done","item":{"id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"CUSTOM_CASSETTE_OUTPUT_OK"}],"phase":"final_answer","role":"assistant"},"output_index":0,"sequence_number":13}'
+    - '{"type":"response.completed","response":{"id":"resp_0cc22e5ff5a51d07006a577752504c819ba34a36048d25634a","object":"response","created_at":1784117074,"status":"completed","background":false,"completed_at":1784117075,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":1024,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"msg_0cc22e5ff5a51d07006a5777536894819b84effb97c58b37ad","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"CUSTOM_CASSETTE_OUTPUT_OK"}],"phase":"final_answer","role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0cc22e5ff5a51d07006a57774fa420819bab31d9f4c89d2460","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"custom","description":"Emit
+      the requested cassette token as raw text.","format":{"type":"grammar","definition":"start:
+      \"CUSTOM_CASSETTE_OK\"","syntax":"lark"},"name":"agentic_raw_echo"}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":177,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":11,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":188},"user":null,"metadata":{}},"sequence_number":14}'

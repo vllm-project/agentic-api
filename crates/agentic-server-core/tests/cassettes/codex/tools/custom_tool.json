@@ -1,0 +1,12 @@
+[
+  {
+    "type": "custom",
+    "name": "agentic_raw_echo",
+    "description": "Emit the requested cassette token as raw text.",
+    "format": {
+      "type": "grammar",
+      "syntax": "lark",
+      "definition": "start: \"CUSTOM_CASSETTE_OK\""
+    }
+  }
+]

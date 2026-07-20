@@ -1,5 +1,6 @@
 {
   "agentic_plain_echo": "{\"echo\":\"plain fixture\",\"characters\":13}",
+  "agentic_raw_echo": "CUSTOM_CASSETTE_OUTPUT_OK",
   "add_numbers": "{\"sum\":8,\"count\":2}",
   "agentic_ns__mcp__agentic_fixture__add_numbers": "{\"sum\":8,\"count\":2}"
 }

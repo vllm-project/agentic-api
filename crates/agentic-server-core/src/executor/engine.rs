@@ -23,7 +23,7 @@ use crate::executor::rehydrate::rehydrate_conversation;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::upstream::{fetch_blocking_payload, fetch_stream_payload};
 use crate::tool::ToolRegistry;
-use crate::types::io::{ResponseUsage, ToolChoice};
+use crate::types::io::{OutputItem, ResponseUsage, ToolChoice};
 use crate::types::request_response::{IncompleteDetails, RequestPayload, ResponsePayload};
 use crate::utils::common::serialize_to_string;
 
@@ -123,6 +123,17 @@ async fn run_until_gateway_tools_complete(
         registry.restore_final_payload_output(&mut payload.output);
         accumulate_usage(&mut combined_usage, payload.usage.take());
         let current_output = std::mem::take(&mut payload.output);
+        for item in &current_output {
+            if let OutputItem::CustomToolCall(call) = item {
+                debug!(
+                    response_id = %ctx.response_id,
+                    call_id = %call.call_id,
+                    name = %call.name,
+                    input_bytes = call.input.len(),
+                    "custom tool call requires client execution"
+                );
+            }
+        }
         let has_client_owned = has_client_owned_calls(&current_output, &registry);
         let gateway_results =
             execute_and_emit_output_calls(&current_output, &registry, combined_output.len(), stream_events).await?;
@@ -243,14 +254,19 @@ fn run_stream(ctx: RequestContext, exec_ctx: Arc<ExecutionContext>, auth: Option
                             yield DONE_MARKER.to_string();
                         }
                         Ok(Ok((payload, ctx))) => {
-                            yield payload.as_terminal_response_chunk();
-                            yield DONE_MARKER.to_string();
-
+                            // Codex may close its WebSocket as soon as it receives
+                            // `response.completed`. Persist before exposing that
+                            // event so a custom call/output continuation cannot be
+                            // cancelled by the client disconnect.
+                            let terminal_event = payload.as_terminal_response_chunk();
                             let ch = exec_ctx.conv_handler.clone();
                             let rh = exec_ctx.resp_handler.clone();
                             if let Err(e) = persist_if_needed(payload, ctx, ch, rh).await {
                                 warn!("persist failed: {e}");
                             }
+
+                            yield terminal_event;
+                            yield DONE_MARKER.to_string();
                         }
                     }
                     break;

@@ -95,6 +95,10 @@ pub enum ResponsesTool {
     CodeInterpreter(CodeInterpreterToolParam),
     #[serde(rename = "namespace")]
     Namespace(CodexNamespaceToolParam),
+    /// A freeform tool declaration. Unlike a function tool, calls carry raw
+    /// text in `custom_tool_call.input` rather than JSON arguments.
+    #[serde(rename = "custom")]
+    Custom(CustomToolParam),
     #[serde(rename = "unknown", other)]
     Unknown,
 }
@@ -117,6 +121,23 @@ pub struct FunctionToolParam {
     pub strict: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub defer_loading: Option<bool>,
+    #[serde(default)]
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
+}
+
+/// Parameters for a freeform (`type: "custom"`) tool.
+///
+/// `format` is deliberately opaque: Codex currently sends grammar formats,
+/// and preserving unknown format fields keeps the gateway wire-compatible
+/// with future client and upstream versions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomToolParam {
+    pub name: NonEmptyToolName,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<Value>,
     #[serde(default)]
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
@@ -225,13 +246,9 @@ impl ResponsesTool {
             Self::FileSearch(_) => Some("file_search"),
             Self::CodeInterpreter(_) => Some("code_interpreter"),
             Self::Namespace(_) => Some("namespace"),
+            Self::Custom(_) => Some("custom"),
             Self::Unknown => None,
         }
-    }
-
-    #[must_use]
-    pub fn to_raw_value(&self) -> Value {
-        serde_json::to_value(self).unwrap_or(Value::Null)
     }
 }
 
@@ -398,5 +415,27 @@ mod tests {
         assert_eq!(serialized[0]["tools"][0]["type"], "function");
         assert_eq!(serialized[0]["tools"][1], serde_json::json!({"type": "unknown"}));
         assert_eq!(serialized[1], serde_json::json!({"type": "unknown"}));
+    }
+
+    #[test]
+    fn custom_tool_shape_round_trips_without_interpreting_its_format() {
+        let tool: ResponsesTool = serde_json::from_value(serde_json::json!({
+            "type": "custom",
+            "name": "apply_patch",
+            "description": "Apply a patch.",
+            "format": {
+                "type": "grammar",
+                "syntax": "lark",
+                "definition": "start: patch",
+                "future_option": true
+            }
+        }))
+        .unwrap();
+
+        assert!(matches!(tool, ResponsesTool::Custom(_)));
+        let serialized = serde_json::to_value(tool).unwrap();
+        assert_eq!(serialized["type"], "custom");
+        assert_eq!(serialized["format"]["syntax"], "lark");
+        assert_eq!(serialized["format"]["future_option"], true);
     }
 }

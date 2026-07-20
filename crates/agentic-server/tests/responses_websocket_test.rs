@@ -292,7 +292,7 @@ async fn recv_until_completed(ws: &mut WebSocketStream<MaybeTlsStream<TcpStream>
         let event = recv_json(ws).await;
         let is_done = matches!(
             event.get("type").and_then(Value::as_str),
-            Some("response.completed" | "error")
+            Some("response.completed" | "response.failed" | "response.incomplete" | "error")
         );
         events.push(event);
         if is_done {
@@ -357,6 +357,31 @@ fn sse_response(response_id: &str, message_id: &str, text: &str) -> String {
     format!("data: {created}\n\ndata: {added}\n\ndata: {delta}\n\ndata: {completed}\n\ndata: [DONE]\n\n")
 }
 
+fn sse_failed_response() -> String {
+    let created = json!({
+        "type": "response.created",
+        "sequence_number": 0,
+        "response": {"id": "resp_failed_upstream", "status": "in_progress"}
+    });
+    let failed = json!({
+        "type": "response.failed",
+        "sequence_number": 1,
+        "response": {
+            "id": "resp_failed_upstream",
+            "status": "failed",
+            "error": {
+                "code": "tool_catalog_too_large",
+                "message": "Too many tools"
+            },
+            "incomplete_details": {
+                "reason": "upstream_error"
+            },
+            "usage": null
+        }
+    });
+    format!("data: {created}\n\ndata: {failed}\n\ndata: [DONE]\n\n")
+}
+
 fn sse_function_call_response(response_id: &str, call_name: &str) -> String {
     let created = json!({
         "type": "response.created",
@@ -397,6 +422,62 @@ fn sse_function_call_response(response_id: &str, call_name: &str) -> String {
     format!("data: {created}\n\ndata: {added}\n\ndata: {done}\n\ndata: {completed}\n\ndata: [DONE]\n\n")
 }
 
+fn sse_custom_tool_call_response() -> String {
+    let created = json!({
+        "type": "response.created",
+        "sequence_number": 0,
+        "response": {"id": "resp_custom", "status": "in_progress"}
+    });
+    let added = json!({
+        "type": "response.output_item.added",
+        "sequence_number": 1,
+        "output_index": 0,
+        "item": {
+            "id": "ctc_upstream_1",
+            "type": "custom_tool_call",
+            "status": "in_progress",
+            "name": "apply_patch",
+            "call_id": "call_custom_1",
+            "input": ""
+        }
+    });
+    let delta = json!({
+        "type": "response.custom_tool_call_input.delta",
+        "sequence_number": 2,
+        "output_index": 0,
+        "item_id": "ctc_upstream_1",
+        "delta": "*** Begin Patch\n*** End Patch"
+    });
+    let input_done = json!({
+        "type": "response.custom_tool_call_input.done",
+        "sequence_number": 3,
+        "output_index": 0,
+        "item_id": "ctc_upstream_1",
+        "input": "*** Begin Patch\n*** End Patch"
+    });
+    let item_done = json!({
+        "type": "response.output_item.done",
+        "sequence_number": 4,
+        "output_index": 0,
+        "item": {
+            "id": "ctc_upstream_1",
+            "type": "custom_tool_call",
+            "status": "completed",
+            "name": "apply_patch",
+            "call_id": "call_custom_1",
+            "input": "*** Begin Patch\n*** End Patch"
+        }
+    });
+    let completed = json!({
+        "type": "response.completed",
+        "sequence_number": 5,
+        "response": {"id": "resp_custom", "status": "completed", "usage": null}
+    });
+    format!(
+        "data: {created}\n\ndata: {added}\n\ndata: {delta}\n\ndata: {input_done}\n\ndata: {item_done}\n\ndata: {completed}\n\ndata: [DONE]\n\n"
+    )
+}
+
 fn web_search_function_call_sse_response() -> String {
     let created = json!({
         "type": "response.created",
@@ -431,6 +512,76 @@ fn web_search_function_call_sse_response() -> String {
         "response": {"id": "resp_tool_call", "status": "completed", "usage": null}
     });
     format!("data: {created}\n\ndata: {added}\n\ndata: {done}\n\ndata: {completed}\n\ndata: [DONE]\n\n")
+}
+
+#[tokio::test]
+async fn test_websocket_generate_false_prewarm_persists_context_without_inference() {
+    let mock = MockResponsesServer::start(vec![sse_response("resp_upstream_1", "msg_upstream_1", "READY")]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "model": "test-model",
+            "instructions": "Follow the warmup rules.",
+            "input": [{"type": "message", "role": "user", "content": "warmup prefix"}],
+            "tools": [{
+                "type": "custom",
+                "name": "apply_patch",
+                "description": "Apply a patch."
+            }],
+            "generate": false,
+            "store": false,
+            "stream": true
+        }),
+    )
+    .await;
+
+    let prewarm = recv_until_completed(&mut ws).await;
+    assert_eq!(
+        prewarm
+            .iter()
+            .map(|event| event["type"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["response.created", "response.completed"]
+    );
+    let prewarm_response = &prewarm.last().unwrap()["response"];
+    let prewarm_response_id = prewarm_response["id"].as_str().unwrap().to_owned();
+    assert_eq!(prewarm_response["status"], "completed");
+    assert_eq!(prewarm_response["output"], json!([]));
+    assert!(mock.request_bodies().await.is_empty());
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "model": "test-model",
+            "instructions": "Follow the warmup rules.",
+            "previous_response_id": prewarm_response_id,
+            "input": [{"type": "message", "role": "user", "content": "first turn"}],
+            "store": false,
+            "stream": true
+        }),
+    )
+    .await;
+
+    let turn = recv_until_completed(&mut ws).await;
+    assert_eq!(
+        turn.last().unwrap()["response"]["output"][0]["content"][0]["text"],
+        "READY"
+    );
+
+    let requests = mock.request_bodies().await;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0]["instructions"], "Follow the warmup rules.");
+    assert_eq!(requests[0]["input"][0]["content"], "warmup prefix");
+    assert_eq!(requests[0]["input"][1]["content"], "first turn");
+    assert_eq!(requests[0]["tools"][0]["type"], "custom");
+    assert_eq!(requests[0]["tools"][0]["name"], "apply_patch");
+    assert!(requests[0].get("generate").is_none());
 }
 
 #[tokio::test]
@@ -477,6 +628,34 @@ async fn test_websocket_first_turn_forwards_incremental_events_and_final_payload
     assert_eq!(requests[0]["stream"], true);
     assert_eq!(requests[0]["input"][0]["content"], "hi");
     assert!(requests[0].get("type").is_none());
+}
+
+#[tokio::test]
+async fn test_websocket_preserves_upstream_failure_details() {
+    let mock = MockResponsesServer::start(vec![sse_failed_response()]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "model": "test-model",
+            "input": "fail",
+            "store": true,
+            "stream": true
+        }),
+    )
+    .await;
+
+    let events = recv_until_completed(&mut ws).await;
+    let failed = events.last().unwrap();
+    assert_eq!(failed["type"], "response.failed");
+    assert_eq!(failed["response"]["status"], "error");
+    assert_eq!(failed["response"]["error"]["code"], "tool_catalog_too_large");
+    assert_eq!(failed["response"]["error"]["message"], "Too many tools");
+    assert_eq!(failed["response"]["incomplete_details"]["reason"], "upstream_error");
 }
 
 #[tokio::test]
@@ -623,6 +802,93 @@ async fn test_websocket_restores_namespace_tool_call_events() {
         requests[0]["tools"][0]["name"],
         "agentic_ns__mcp__agentic_fixture__add_numbers"
     );
+}
+
+#[tokio::test]
+async fn test_websocket_custom_tool_round_trip_and_continuation() {
+    let mock = MockResponsesServer::start(vec![
+        sse_custom_tool_call_response(),
+        sse_response("resp_after_custom", "msg_after_custom", "CUSTOM TOOL COMPLETE"),
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "model": "test-model",
+            "input": [{"type": "message", "role": "user", "content": "apply the patch"}],
+            "tools": [{
+                "type": "custom",
+                "name": "apply_patch",
+                "description": "Apply a patch.",
+                "format": {
+                    "type": "grammar",
+                    "syntax": "lark",
+                    "definition": "start: patch"
+                }
+            }],
+            "store": true,
+            "stream": true
+        }),
+    )
+    .await;
+
+    let first_events = recv_until_completed(&mut ws).await;
+    let event_types = first_events
+        .iter()
+        .filter_map(|event| event["type"].as_str())
+        .collect::<Vec<_>>();
+    assert!(event_types.contains(&"response.custom_tool_call_input.delta"));
+    assert!(event_types.contains(&"response.custom_tool_call_input.done"));
+    let first_completed = first_events.last().unwrap();
+    assert_eq!(first_completed["response"]["output"][0]["type"], "custom_tool_call");
+    assert_eq!(
+        first_completed["response"]["output"][0]["input"],
+        "*** Begin Patch\n*** End Patch"
+    );
+    let previous_response_id = first_completed["response"]["id"].as_str().unwrap();
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "model": "test-model",
+            "previous_response_id": previous_response_id,
+            "input": [{
+                "type": "custom_tool_call_output",
+                "call_id": "call_custom_1",
+                "output": "Done!"
+            }],
+            "store": true,
+            "stream": true
+        }),
+    )
+    .await;
+
+    let second_events = recv_until_completed(&mut ws).await;
+    assert_eq!(
+        second_events.last().unwrap()["response"]["output"][0]["content"][0]["text"],
+        "CUSTOM TOOL COMPLETE"
+    );
+
+    let requests = mock.request_bodies().await;
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0]["tools"][0]["type"], "custom");
+    assert_eq!(requests[0]["tools"][0]["format"]["syntax"], "lark");
+    let continuation = requests[1]["input"].as_array().unwrap();
+    assert!(continuation.iter().any(|item| {
+        item["type"] == "custom_tool_call"
+            && item["call_id"] == "call_custom_1"
+            && item["input"] == "*** Begin Patch\n*** End Patch"
+    }));
+    assert!(continuation.iter().any(|item| {
+        item["type"] == "custom_tool_call_output" && item["call_id"] == "call_custom_1" && item["output"] == "Done!"
+    }));
+    assert_eq!(requests[1]["tools"][0]["type"], "custom");
 }
 
 #[tokio::test]

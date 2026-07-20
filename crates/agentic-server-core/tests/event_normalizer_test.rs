@@ -682,3 +682,34 @@ fn test_call_id_from_output_item_added() {
         panic!("expected OutputItemAdded");
     }
 }
+
+#[test]
+fn test_custom_tool_input_stream_events_are_typed() {
+    let delta = normalize_sse_line(
+        r#"data: {"type":"response.custom_tool_call_input.delta","delta":"*** Begin","item_id":"ctc_1","output_index":2,"sequence_number":7}"#,
+    )
+    .unwrap();
+    assert_eq!(delta.event_type, SSEEventType::CustomToolCallInputDelta);
+    assert!(matches!(
+        delta.payload,
+        EventPayload::CustomToolCallInputDelta {
+            ref delta,
+            ref item_id,
+            output_index: 2
+        } if delta == "*** Begin" && item_id == "ctc_1"
+    ));
+
+    let done = normalize_sse_line(
+        r#"data: {"type":"response.custom_tool_call_input.done","input":"*** Begin Patch","item_id":"ctc_1","output_index":2,"sequence_number":8}"#,
+    )
+    .unwrap();
+    assert_eq!(done.event_type, SSEEventType::CustomToolCallInputDone);
+    assert!(matches!(
+        done.payload,
+        EventPayload::CustomToolCallInputDone {
+            ref input,
+            ref item_id,
+            output_index: 2
+        } if input == "*** Begin Patch" && item_id == "ctc_1"
+    ));
+}

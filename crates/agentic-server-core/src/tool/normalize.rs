@@ -24,7 +24,7 @@ impl ResponsesTool {
             Self::FileSearch(_) => Some(ToolType::FileSearch),
             Self::CodeInterpreter(_) => Some(ToolType::CodeInterpreter),
             Self::Namespace(_) => Some(ToolType::CodexNamespace),
-            Self::Unknown => None,
+            Self::Custom(_) | Self::Unknown => None,
         }
     }
 
@@ -33,17 +33,21 @@ impl ResponsesTool {
         self.tool_type().is_some_and(ToolType::is_gateway_owned)
     }
 
-    /// Normalise this tool declaration to the `FunctionTool` wire format that vLLM understands.
+    /// Normalise function-like tool declarations to the `FunctionTool` wire format that vLLM understands.
     ///
     /// - `Function` variants convert via [`From<&FunctionToolParam>`] for `FunctionTool`.
-    ///   Returns `None` and logs at `debug` level if the name is empty.
+    ///   Returns an empty list and logs at `debug` level if the name is empty.
     /// - `Mcp` variants convert gateway MCP built-ins to the function specs
     ///   vLLM can call.
+    /// - `Custom` variants return no function tools because
+    ///   `RequestPayload::to_upstream_request()` forwards their native
+    ///   Responses declarations separately.
     /// - Unimplemented variants (`FileSearch`, `CodeInterpreter`) return
-    ///   `None` and emit a `tracing::debug!`.
+    ///   an empty list and emit a `tracing::debug!`.
     ///
-    /// This is the entry point called by `RequestPayload::to_upstream_request()` so that
-    /// vLLM always receives a `Vec<FunctionTool>`, never a raw `ResponsesTool` enum.
+    /// `RequestPayload::to_upstream_request()` uses this conversion for
+    /// function-like tools while preserving native custom declarations in its
+    /// heterogeneous upstream tool list.
     #[must_use]
     pub fn to_function_tools(&self) -> Vec<FunctionTool> {
         match self {
@@ -76,6 +80,10 @@ impl ResponsesTool {
                 |param| CodexNamespaceHandler.normalize(&param),
                 vec![],
             ),
+            Self::Custom(p) => {
+                tracing::debug!(name = %p.name, "custom tool retained for native upstream forwarding");
+                vec![]
+            }
             Self::Unknown => {
                 tracing::debug!("unknown tool skipped in normalize");
                 vec![]
