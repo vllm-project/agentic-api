@@ -1,0 +1,11 @@
+{
+  "profile": "approximate",
+  "pairs": 12,
+  "warm_replica_returns": 12,
+  "high_hit_pairs": 12,
+  "mean_cache_hit_pct": 99.08312039681346,
+  "cold_mean_ms": 1280.998,
+  "continuation_mean_ms": 314.24291666666664,
+  "continuation_ci95_ms": 15.159492720963872,
+  "raw_csv": "approximate.csv"
+}

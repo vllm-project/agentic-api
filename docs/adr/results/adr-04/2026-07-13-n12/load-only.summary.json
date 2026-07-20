@@ -1,0 +1,11 @@
+{
+  "profile": "load-only",
+  "pairs": 12,
+  "warm_replica_returns": 6,
+  "high_hit_pairs": 6,
+  "mean_cache_hit_pct": 49.54156019840673,
+  "cold_mean_ms": 1283.3775,
+  "continuation_mean_ms": 810.9575833333333,
+  "continuation_ci95_ms": 313.7860410725008,
+  "raw_csv": "load-only.csv"
+}

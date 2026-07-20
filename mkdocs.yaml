@@ -94,6 +94,8 @@ nav:
   - API Reference: api/index.md
   - Developing:
     - Getting Started: developing/getting-started.md
+  - ADRs:
+    - KV-affine Continuation: adr/ADR-04_kv_affine_continuation.md
   - Community: community/index.md
 
 extra:
