@@ -14,6 +14,7 @@
 //! (#119/#132); kept deliberately parallel for a future consolidation. Reuses
 //! only the neutral tool layer via [`crate::types::messages::tool_seam`].
 
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -25,7 +26,7 @@ use crate::executor::inference::{BoxStream, call_inference};
 use crate::executor::request::ExecutionContext;
 use crate::tool::ToolRegistry;
 use crate::types::messages::tool_seam;
-use crate::utils::common::{serialize_to_string, serialize_to_vec_or_default};
+use crate::utils::common::serialize_to_string;
 
 // Shared with the non-streaming loop so the two Messages loops can't drift.
 use crate::executor::messages_loop::{GATEWAY_TOOL_TIMEOUT, MAX_GATEWAY_TOOL_ROUNDS};
@@ -76,9 +77,13 @@ pub fn run_messages_stream(
                 }
                 return;
             }
-            let calls = acc.take_gateway_calls();
+            // Reconstruct the FULL assistant turn (thinking/text/signature +
+            // gateway tool_use, in order) for the next round's history — not just
+            // the gateway tool_use (F3, streaming half). The gateway calls are
+            // derived from the same buffered blocks for dispatch.
+            let (assistant_content, calls) = acc.take_round();
             let resolved = execute_gateway_calls(&calls, &registry).await;
-            append_round_to_history(&mut request, &resolved);
+            append_round_to_history(&mut request, &assistant_content, &resolved);
         }
 
         // Round budget exhausted.
@@ -93,6 +98,59 @@ struct StreamedCall {
     input_json: String,
 }
 
+/// One assistant content block buffered across a round, so the full turn
+/// (`thinking`/`text`/`signature`/`tool_use`, in order) can be reconstructed for
+/// the next round's history — F3. The client-facing SSE is still forwarded live;
+/// this is a parallel record for the fed-back conversation state.
+struct BufferedBlock {
+    /// The `content_block` skeleton from `content_block_start`, mutated by deltas.
+    block: Value,
+    /// Accumulated `input_json_delta` fragments for a `tool_use` block.
+    input_json: String,
+    /// Gateway-owned `tool_use` (drives the loop; suppressed from the client).
+    is_gateway_tool: bool,
+}
+
+impl BufferedBlock {
+    fn apply_delta(&mut self, delta: &Value) {
+        match delta.get("type").and_then(Value::as_str) {
+            Some("text_delta") => append_str(&mut self.block, "text", delta.get("text")),
+            Some("thinking_delta") => append_str(&mut self.block, "thinking", delta.get("thinking")),
+            Some("signature_delta") => append_str(&mut self.block, "signature", delta.get("signature")),
+            Some("input_json_delta") => {
+                if let Some(partial) = delta.get("partial_json").and_then(Value::as_str) {
+                    self.input_json.push_str(partial);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// The finished assistant content block. For `tool_use`, parse the
+    /// accumulated arguments (best-effort — a malformed fragment falls back to
+    /// `{}`; the paired error `tool_result` records the failure).
+    fn to_block(&self) -> Value {
+        let mut block = self.block.clone();
+        if block.get("type").and_then(Value::as_str) == Some("tool_use") {
+            block["input"] = tool_seam::parse_tool_input(&self.input_json).unwrap_or_else(|_| json!({}));
+        }
+        block
+    }
+}
+
+/// Append a streamed string fragment onto a string field of `block`, creating it
+/// if absent.
+fn append_str(block: &mut Value, field: &str, fragment: Option<&Value>) {
+    let Some(fragment) = fragment.and_then(Value::as_str) else {
+        return;
+    };
+    let combined = match block.get(field).and_then(Value::as_str) {
+        Some(existing) => format!("{existing}{fragment}"),
+        None => fragment.to_owned(),
+    };
+    block[field] = Value::from(combined);
+}
+
 /// State machine that turns per-round Anthropic SSE into one client-visible
 /// message. Fed line-by-line via [`Self::push`].
 struct MessagesStreamAccumulator {
@@ -101,14 +159,13 @@ struct MessagesStreamAccumulator {
     next_index: u32,
     /// Map upstream (per-round) block index → client index, for the blocks we
     /// forward this round. Cleared each round.
-    index_map: std::collections::HashMap<u64, u32>,
+    index_map: HashMap<u64, u32>,
     /// Upstream indices belonging to a suppressed gateway `tool_use` this round.
-    suppressed_indices: std::collections::HashSet<u64>,
-    /// Gateway calls reconstructed this round (id/name known at `block_start`,
-    /// input accumulated from `input_json_delta`).
-    calls: Vec<StreamedCall>,
-    /// Upstream index → position in `calls`, to route `input_json_delta`.
-    call_by_index: std::collections::HashMap<u64, usize>,
+    suppressed_indices: HashSet<u64>,
+    /// Every assistant block this round, keyed by upstream index (ordered), so
+    /// the full turn — `thinking`/`text`/`signature` + gateway `tool_use` — can
+    /// be reconstructed for the next round's history (F3). Cleared each round.
+    blocks: BTreeMap<u64, BufferedBlock>,
     /// Did this round end with `stop_reason: tool_use`?
     ended_on_tool_use: bool,
     /// Did this round surface a client-owned `tool_use`? If so the loop cannot
@@ -124,10 +181,9 @@ impl MessagesStreamAccumulator {
         Self {
             message_started: false,
             next_index: 0,
-            index_map: std::collections::HashMap::new(),
-            suppressed_indices: std::collections::HashSet::new(),
-            calls: Vec::new(),
-            call_by_index: std::collections::HashMap::new(),
+            index_map: HashMap::new(),
+            suppressed_indices: HashSet::new(),
+            blocks: BTreeMap::new(),
             ended_on_tool_use: false,
             has_client_tool_use: false,
             final_message_delta: None,
@@ -137,21 +193,45 @@ impl MessagesStreamAccumulator {
     fn begin_round(&mut self) {
         self.index_map.clear();
         self.suppressed_indices.clear();
-        self.call_by_index.clear();
-        self.calls.clear();
+        self.blocks.clear();
         self.ended_on_tool_use = false;
         self.has_client_tool_use = false;
+        // F6: clear the previous round's terminal so a clean-EOF round can't
+        // re-emit a stale stop_reason.
+        self.final_message_delta = None;
     }
 
-    fn take_gateway_calls(&mut self) -> Vec<StreamedCall> {
-        std::mem::take(&mut self.calls)
+    /// Number of gateway `tool_use` blocks buffered this round.
+    fn gateway_call_count(&self) -> usize {
+        self.blocks.values().filter(|b| b.is_gateway_tool).count()
+    }
+
+    /// Consume this round's buffered blocks, returning (full assistant content in
+    /// order, gateway calls to dispatch). The assistant content preserves
+    /// `thinking`/`text`/`signature` and the gateway `tool_use` blocks (F3); the
+    /// calls are the gateway `tool_use` blocks reconstructed for dispatch.
+    fn take_round(&mut self) -> (Vec<Value>, Vec<StreamedCall>) {
+        let blocks = std::mem::take(&mut self.blocks);
+        let mut assistant_content = Vec::with_capacity(blocks.len());
+        let mut calls = Vec::new();
+        for buffered in blocks.values() {
+            assistant_content.push(buffered.to_block());
+            if buffered.is_gateway_tool {
+                calls.push(StreamedCall {
+                    id: buffered.block["id"].as_str().unwrap_or_default().to_owned(),
+                    name: buffered.block["name"].as_str().unwrap_or_default().to_owned(),
+                    input_json: buffered.input_json.clone(),
+                });
+            }
+        }
+        (assistant_content, calls)
     }
 
     /// The loop should continue only when the round asked for a gateway tool AND
     /// did not also surface a client-owned tool (which the client must handle,
     /// making the round terminal — E7).
     fn should_continue_loop(&self) -> bool {
-        self.ended_on_tool_use && !self.calls.is_empty() && !self.has_client_tool_use
+        self.ended_on_tool_use && self.gateway_call_count() > 0 && !self.has_client_tool_use
     }
 
     /// Translate one upstream SSE line into zero or more client SSE lines.
@@ -196,17 +276,22 @@ impl MessagesStreamAccumulator {
         let block_type = event["content_block"]["type"].as_str().unwrap_or_default();
         let name = event["content_block"]["name"].as_str().unwrap_or_default();
 
+        // Buffer every block for history reconstruction (F3), preserving order.
+        let is_gateway_tool = block_type == "tool_use" && tool_seam::is_gateway_owned_tool_name(name);
+        self.blocks.insert(
+            up_index,
+            BufferedBlock {
+                block: event["content_block"].clone(),
+                input_json: String::new(),
+                is_gateway_tool,
+            },
+        );
+
         if block_type == "tool_use" {
-            if tool_seam::is_gateway_owned_tool_name(name) {
-                // Suppress gateway-owned tool_use blocks; buffer them for dispatch.
+            if is_gateway_tool {
+                // Suppress gateway-owned tool_use from the client; it stays in the
+                // buffered history only and drives the loop.
                 self.suppressed_indices.insert(up_index);
-                let id = event["content_block"]["id"].as_str().unwrap_or_default().to_owned();
-                self.call_by_index.insert(up_index, self.calls.len());
-                self.calls.push(StreamedCall {
-                    id,
-                    name: name.to_owned(),
-                    input_json: String::new(),
-                });
                 return Vec::new();
             }
             // A client-owned tool_use: the client must execute it, so this round
@@ -224,13 +309,13 @@ impl MessagesStreamAccumulator {
 
     fn on_block_delta(&mut self, event: &mut Value) -> Vec<String> {
         let up_index = event.get("index").and_then(Value::as_u64).unwrap_or(0);
-        // Buffer input_json_delta for a suppressed gateway call.
-        if let Some(pos) = self.call_by_index.get(&up_index) {
-            if let Some(partial) = event["delta"]["partial_json"].as_str() {
-                self.calls[*pos].input_json.push_str(partial);
-            }
-            return Vec::new();
+        // Accumulate the delta into the buffered block (for history — F3),
+        // regardless of whether it is forwarded to the client.
+        if let Some(buffered) = self.blocks.get_mut(&up_index) {
+            buffered.apply_delta(&event["delta"]);
         }
+        // A suppressed gateway tool_use is not forwarded to the client (its
+        // input_json_delta was just buffered above).
         if self.suppressed_indices.contains(&up_index) {
             return Vec::new();
         }
@@ -265,13 +350,13 @@ impl MessagesStreamAccumulator {
 }
 
 fn sse(event: &str, value: &Value) -> String {
-    let json = String::from_utf8(serialize_to_vec_or_default(value)).unwrap_or_default();
+    let json = serialize_to_string(value).unwrap_or_default();
     format!("event: {event}\ndata: {json}\n\n")
 }
 
 fn error_sse(message: &str) -> String {
     let event = json!({"type": "error", "error": {"type": "api_error", "message": message}});
-    let json = String::from_utf8(serialize_to_vec_or_default(&event)).unwrap_or_default();
+    let json = serialize_to_string(&event).unwrap_or_default();
     format!("event: error\ndata: {json}\n\n")
 }
 
@@ -279,34 +364,45 @@ fn error_sse(message: &str) -> String {
 /// become error `tool_result`s (E5).
 async fn execute_gateway_calls(calls: &[StreamedCall], registry: &ToolRegistry) -> Vec<ResolvedStreamCall> {
     let futures = calls.iter().map(|c| async move {
-        let input: Value = serde_json::from_str(&c.input_json).unwrap_or_else(|_| json!({}));
-        let call = tool_seam::tool_use_to_call(&c.id, &c.name, &input);
-        let output = match tokio::time::timeout(GATEWAY_TOOL_TIMEOUT, registry.dispatch(&call)).await {
-            Ok(Some(result)) => match result.output {
-                Ok(o) => o.output,
-                Err(e) => format!("tool execution failed: {e}"),
-            },
-            Ok(None) => format!("no handler for tool '{}'", c.name),
-            Err(_) => format!("gateway tool '{}' timed out after {GATEWAY_TOOL_TIMEOUT:?}", c.name),
+        // F4: reject a malformed/incomplete reconstructed input rather than
+        // coercing to {} and dispatching the tool with args the model never sent.
+        let (output, is_error) = match tool_seam::parse_tool_input(&c.input_json) {
+            Ok(input) => {
+                let call = tool_seam::tool_use_to_call(&c.id, &c.name, &input);
+                match tokio::time::timeout(GATEWAY_TOOL_TIMEOUT, registry.dispatch(&call)).await {
+                    Ok(Some(result)) => match result.output {
+                        Ok(o) => (o.output, false),
+                        Err(e) => (format!("tool execution failed: {e}"), true),
+                    },
+                    Ok(None) => (format!("no handler for tool '{}'", c.name), true),
+                    Err(_) => (
+                        format!("gateway tool '{}' timed out after {GATEWAY_TOOL_TIMEOUT:?}", c.name),
+                        true,
+                    ),
+                }
+            }
+            Err(reason) => (format!("{reason}; tool was not run"), true),
         };
         ResolvedStreamCall {
-            tool_use_block: tool_seam::call_to_tool_use_block(&call),
-            tool_result_block: tool_seam::tool_result_block(&c.id, &output),
+            tool_result_block: tool_seam::tool_result_block(&c.id, &output, is_error),
         }
     });
     futures::future::join_all(futures).await
 }
 
+/// The `tool_result` block for one executed gateway call, fed back next round.
+/// (The assistant turn — including this call's `tool_use` block — is reconstructed
+/// from the accumulator's buffered blocks in [`MessagesStreamAccumulator::take_round`].)
 struct ResolvedStreamCall {
-    tool_use_block: Value,
     tool_result_block: Value,
 }
 
-fn append_round_to_history(request: &mut Value, resolved: &[ResolvedStreamCall]) {
-    let assistant = json!({
-        "role": "assistant",
-        "content": resolved.iter().map(|r| r.tool_use_block.clone()).collect::<Vec<_>>()
-    });
+/// Append the model's full assistant turn (`thinking`/`text`/`signature` +
+/// gateway `tool_use`, order preserved — F3) and a following user turn of `tool_result`s,
+/// so the next upstream round sees the complete conversation state. These stay
+/// internal — the client never sees the gateway call (hide-the-call).
+fn append_round_to_history(request: &mut Value, assistant_content: &[Value], resolved: &[ResolvedStreamCall]) {
+    let assistant = json!({ "role": "assistant", "content": assistant_content });
     let user = json!({
         "role": "user",
         "content": resolved.iter().map(|r| r.tool_result_block.clone()).collect::<Vec<_>>()
@@ -381,7 +477,7 @@ mod tests {
         assert!(!s.contains("tool_use"), "gateway tool_use must not surface: {s}");
         assert!(!s.contains("message_stop"), "intermediate terminal suppressed");
         assert!(s.contains("thinking"), "thinking forwarded");
-        let calls = acc.take_gateway_calls();
+        let (_assistant, calls) = acc.take_round();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "web_search");
         assert_eq!(calls[0].input_json, "{\"query\":\"rust\"}");
@@ -441,5 +537,124 @@ mod tests {
             !acc.should_continue_loop(),
             "mixed round is terminal — loop must not continue"
         );
+    }
+
+    // F6 (repro): begin_round() must reset final_message_delta. Round 1 ends on a
+    // tool_use terminal; round 2 ends WITHOUT a message_delta (clean EOF). finish()
+    // must NOT emit round 1's stale stop_reason: tool_use.
+    #[test]
+    fn repro_f6_begin_round_resets_stale_terminal() {
+        let mut acc = MessagesStreamAccumulator::new();
+        // Round 1: a gateway tool round → sets final_message_delta = tool_use terminal.
+        acc.begin_round();
+        acc.push(&line(&json!({"type": "message_start", "message": {"id": "m"}})));
+        acc.push(&line(&json!({"type": "content_block_start", "index": 0, "content_block": {"type": "tool_use", "name": "web_search", "id": "t"}})));
+        acc.push(&line(&json!({"type": "content_block_stop", "index": 0})));
+        acc.push(&line(
+            &json!({"type": "message_delta", "delta": {"stop_reason": "tool_use"}}),
+        ));
+        // Round 2: text, but upstream ends with NO message_delta (cut short).
+        acc.begin_round();
+        acc.push(&line(
+            &json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text"}}),
+        ));
+        acc.push(&line(
+            &json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "hi"}}),
+        ));
+        acc.push(&line(&json!({"type": "content_block_stop", "index": 0})));
+        let out = acc.finish().join("");
+        assert!(
+            !out.contains(r#""stop_reason":"tool_use""#),
+            "must not emit round 1's stale tool_use terminal: {out}"
+        );
+    }
+
+    // F3 (repro): the assistant turn fed into the next round's history must
+    // preserve the model's thinking/text/signature blocks in order, not just the
+    // gateway tool_use. (This is the streaming half of Maral's F3 — "also repeated
+    // in messages_stream.rs".)
+    #[test]
+    fn repro_f3_stream_history_preserves_thinking_text_and_signature() {
+        let mut acc = MessagesStreamAccumulator::new();
+        acc.begin_round();
+        acc.push(&line(&json!({"type": "message_start", "message": {"id": "m"}})));
+        // thinking idx0 (with a signature delta)
+        acc.push(&line(
+            &json!({"type": "content_block_start", "index": 0, "content_block": {"type": "thinking", "thinking": ""}}),
+        ));
+        acc.push(&line(&json!({"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": "let me search"}})));
+        acc.push(&line(&json!({"type": "content_block_delta", "index": 0, "delta": {"type": "signature_delta", "signature": "SIG=="}})));
+        acc.push(&line(&json!({"type": "content_block_stop", "index": 0})));
+        // text idx1
+        acc.push(&line(
+            &json!({"type": "content_block_start", "index": 1, "content_block": {"type": "text", "text": ""}}),
+        ));
+        acc.push(&line(&json!({"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "Searching..."}})));
+        acc.push(&line(&json!({"type": "content_block_stop", "index": 1})));
+        // gateway tool_use idx2 (suppressed from client, but must appear in history)
+        acc.push(&line(&json!({"type": "content_block_start", "index": 2, "content_block": {"type": "tool_use", "id": "tid", "name": "web_search", "input": {}}})));
+        acc.push(&line(&json!({"type": "content_block_delta", "index": 2, "delta": {"type": "input_json_delta", "partial_json": "{\"query\":\"rust\"}"}})));
+        acc.push(&line(&json!({"type": "content_block_stop", "index": 2})));
+        acc.push(&line(
+            &json!({"type": "message_delta", "delta": {"stop_reason": "tool_use"}}),
+        ));
+
+        let (assistant, _calls) = acc.take_round();
+        let types: Vec<&str> = assistant.iter().filter_map(|b| b["type"].as_str()).collect();
+        assert_eq!(
+            types,
+            vec!["thinking", "text", "tool_use"],
+            "full assistant turn preserved in order, not just the gateway tool_use: {assistant:?}"
+        );
+        assert_eq!(assistant[0]["thinking"], "let me search", "thinking text reconstructed");
+        assert_eq!(
+            assistant[0]["signature"], "SIG==",
+            "signature preserved for the next round"
+        );
+        assert_eq!(assistant[1]["text"], "Searching...", "text reconstructed");
+        assert_eq!(
+            assistant[2]["input"]["query"], "rust",
+            "gateway call input reconstructed"
+        );
+    }
+
+    // F4 (repro): a malformed/incomplete input_json for a gateway call must NOT
+    // silently become `{}` and dispatch the tool with args the model never sent.
+    #[tokio::test]
+    async fn repro_f4_malformed_partial_json_is_not_dispatched_with_empty_args() {
+        let mut acc = MessagesStreamAccumulator::new();
+        acc.begin_round();
+        acc.push(&line(&json!({"type": "message_start", "message": {"id": "m"}})));
+        acc.push(&line(&json!({"type": "content_block_start", "index": 0, "content_block": {"type": "tool_use", "name": "web_search", "id": "t"}})));
+        // Incomplete partial_json (stream cut mid-arguments).
+        acc.push(&line(&json!({"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": "{\"query\":"}})));
+        let (_assistant, calls) = acc.take_round();
+        assert_eq!(calls.len(), 1);
+        // The reconstructed input is invalid JSON.
+        assert!(
+            serde_json::from_str::<serde_json::Value>(&calls[0].input_json).is_err(),
+            "incomplete partial_json is invalid JSON"
+        );
+        // After the fix, execute_gateway_calls must NOT coerce invalid input to
+        // {} and dispatch — it must produce an error tool_result. Assert the
+        // reconstructed call is flagged invalid rather than silently dispatchable.
+        let resolved = execute_gateway_calls(&calls, &no_op_registry().await).await;
+        let content = resolved[0].tool_result_block["content"].as_str().unwrap_or_default();
+        assert!(
+            content.contains("invalid") || content.contains("malformed") || content.contains("could not"),
+            "malformed args must yield an error tool_result, not an empty-arg dispatch: {content:?}"
+        );
+    }
+
+    /// Registry with no gateway executors — dispatch of any call returns None, so
+    /// the ONLY way `execute_gateway_calls` can produce a non-"no handler" result
+    /// for a malformed input is by rejecting the args before dispatch (the fix).
+    async fn no_op_registry() -> ToolRegistry {
+        ToolRegistry::build_with_handlers(
+            &[],
+            &crate::tool::GatewayExecutors::from_env(std::sync::Arc::new(reqwest::Client::new())),
+        )
+        .await
+        .unwrap()
     }
 }

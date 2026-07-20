@@ -96,14 +96,50 @@ pub fn tool_use_to_call(id: &str, name: &str, input: &Value) -> FunctionToolCall
 }
 
 /// Build the Anthropic `tool_result` content block fed back to the model on the
-/// next round, from a dispatched tool's output.
+/// next round, from a dispatched tool's output. `is_error` marks a failed/invalid
+/// call so the model knows the tool did not run normally.
 #[must_use]
-pub fn tool_result_block(tool_use_id: &str, output: &str) -> Value {
+pub fn tool_result_block(tool_use_id: &str, output: &str, is_error: bool) -> Value {
     json!({
         "type": "tool_result",
         "tool_use_id": tool_use_id,
         "content": output,
+        "is_error": is_error,
     })
+}
+
+/// Parse a reconstructed `tool_use` input (a JSON string) into the object the
+/// tool expects. Returns `Err` for malformed/incomplete JSON or a non-object —
+/// the caller must NOT dispatch with fabricated `{}` args the model never sent
+/// (F4); it should feed back an error `tool_result` instead.
+///
+/// # Errors
+/// Returns a human-readable reason when the input is not a valid JSON object.
+pub fn parse_tool_input(input_json: &str) -> Result<Value, String> {
+    let value: Value =
+        serde_json::from_str(input_json).map_err(|e| format!("could not parse tool arguments as JSON: {e}"))?;
+    if value.is_object() {
+        Ok(value)
+    } else {
+        Err("tool arguments must be a JSON object".to_owned())
+    }
+}
+
+/// Split an assistant turn's content blocks into (client-visible, gateway
+/// `tool_use` present?). Gateway-owned `tool_use` blocks are removed so the
+/// client never sees a call it cannot execute (hide-the-call); every other
+/// block — text, thinking, signature, client-owned `tool_use` — is preserved in
+/// order. Used for the client-facing response on a mixed round (F5).
+#[must_use]
+pub fn strip_gateway_tool_use(content: &[Value]) -> Vec<Value> {
+    content
+        .iter()
+        .filter(|b| {
+            !(b.get("type").and_then(Value::as_str) == Some("tool_use")
+                && is_gateway_owned_tool_name(b.get("name").and_then(Value::as_str).unwrap_or_default()))
+        })
+        .cloned()
+        .collect()
 }
 
 /// Build the assistant `tool_use` content block that mirrors a call the gateway
@@ -196,10 +232,41 @@ mod tests {
 
     #[test]
     fn tool_result_block_pairs_by_id() {
-        let block = tool_result_block("toolu_1", "the answer");
+        let block = tool_result_block("toolu_1", "the answer", false);
         assert_eq!(block["type"], "tool_result");
         assert_eq!(block["tool_use_id"], "toolu_1");
         assert_eq!(block["content"], "the answer");
+        assert_eq!(block["is_error"], false);
+        // Error results carry is_error: true (F4).
+        assert_eq!(tool_result_block("t", "bad args", true)["is_error"], true);
+    }
+
+    #[test]
+    fn parse_tool_input_rejects_malformed_and_non_object() {
+        assert!(parse_tool_input(r#"{"query":"x"}"#).is_ok());
+        assert!(parse_tool_input(r#"{"query":"#).is_err(), "incomplete JSON rejected");
+        assert!(parse_tool_input(r#""just a string""#).is_err(), "non-object rejected");
+    }
+
+    #[test]
+    fn strip_gateway_tool_use_removes_only_gateway_calls() {
+        let content = vec![
+            json!({"type": "text", "text": "hi"}),
+            json!({"type": "tool_use", "name": "web_search", "id": "g"}),
+            json!({"type": "tool_use", "name": "get_weather", "id": "c"}),
+        ];
+        let out = strip_gateway_tool_use(&content);
+        let names: Vec<&str> = out
+            .iter()
+            .filter(|b| b["type"] == "tool_use")
+            .filter_map(|b| b["name"].as_str())
+            .collect();
+        assert_eq!(
+            names,
+            vec!["get_weather"],
+            "gateway web_search stripped, client + text kept"
+        );
+        assert_eq!(out.len(), 2);
     }
 
     // M1 reverse: stringified args -> object; call_id preferred as the block id.

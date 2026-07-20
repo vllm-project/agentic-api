@@ -35,12 +35,10 @@ pub(super) const MAX_GATEWAY_TOOL_ROUNDS: usize = 10;
 /// the streaming loop; matches the Responses loop's `gateway::GATEWAY_TOOL_TIMEOUT`.
 pub(super) const GATEWAY_TOOL_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// A gateway-owned `tool_use` extracted from the assistant turn, plus the
-/// executed result to feed back.
+/// The `tool_result` block for one executed gateway call, fed back next round.
+/// (The model's own `tool_use` block is carried forward via the preserved
+/// assistant content, not reconstructed here — see `append_round_to_history`.)
 struct ResolvedCall {
-    /// The original assistant `tool_use` block (echoed back in history).
-    tool_use_block: Value,
-    /// The `tool_result` block to feed back next round.
     tool_result_block: Value,
 }
 
@@ -98,16 +96,28 @@ pub async fn run_messages_loop(
             }
         }
 
-        // Terminal: the model didn't ask for a gateway tool (or asked for a
-        // client tool we must hand back, or stopped for another reason).
-        if gateway_calls.is_empty() || has_client_tool_use || stop_reason != Some("tool_use") {
+        // Terminal when the model didn't ask for a gateway tool, or stopped for
+        // another reason. A client-owned tool_use is also terminal (the client
+        // must run it) — but the gateway tool_use, if any, must still be hidden
+        // (F5): strip gateway blocks from the client-facing content.
+        if gateway_calls.is_empty() || stop_reason != Some("tool_use") {
+            return Ok(message);
+        }
+        if has_client_tool_use {
+            // Strip the gateway tool_use from the client-facing content (compute
+            // before mutating to end the immutable borrow of `message`).
+            let stripped = tool_seam::strip_gateway_tool_use(content);
+            let mut message = message;
+            message["content"] = Value::Array(stripped);
             return Ok(message);
         }
 
-        // Execute all gateway-owned calls (bounded, concurrent) and append the
-        // assistant turn + a user turn of tool_results for the next round.
+        // Pure gateway-tool round: execute the calls, then feed the model's FULL
+        // assistant turn (thinking/text/tool_use, order preserved — F3) plus the
+        // tool_results back for the next round. Gateway blocks stay internal.
+        let assistant_content = content.clone();
         let resolved = execute_gateway_calls(&gateway_calls, registry).await;
-        append_round_to_history(&mut request, &resolved);
+        append_round_to_history(&mut request, &assistant_content, &resolved);
     }
 
     // Round budget exhausted — re-run once more is not attempted; return the
@@ -129,37 +139,44 @@ async fn execute_gateway_calls(gateway_calls: &[Value], registry: &ToolRegistry)
     let futures = gateway_calls.iter().map(|block| async move {
         let id = block.get("id").and_then(Value::as_str).unwrap_or_default();
         let name = block.get("name").and_then(Value::as_str).unwrap_or_default();
-        let input = block.get("input").cloned().unwrap_or_else(|| json!({}));
-        let call = tool_seam::tool_use_to_call(id, name, &input);
 
-        let output = match tokio::time::timeout(GATEWAY_TOOL_TIMEOUT, registry.dispatch(&call)).await {
-            Ok(Some(result)) => match result.output {
-                Ok(tool_output) => tool_output.output,
-                Err(e) => format!("tool execution failed: {e}"),
-            },
-            // Unknown tool (no handler) — shouldn't happen for gateway-owned, but
-            // feed it back rather than dropping the call.
-            Ok(None) => format!("no handler for tool '{name}'"),
-            Err(_) => format!("gateway tool '{name}' timed out after {GATEWAY_TOOL_TIMEOUT:?}"),
+        // F4: reject a malformed/absent input rather than dispatching with args
+        // the model never supplied. The block's `input` is already-parsed JSON
+        // here (non-streaming), so validate it's an object.
+        let input = block.get("input").cloned().unwrap_or(Value::Null);
+        let (output, is_error) = if input.is_object() {
+            let call = tool_seam::tool_use_to_call(id, name, &input);
+            match tokio::time::timeout(GATEWAY_TOOL_TIMEOUT, registry.dispatch(&call)).await {
+                Ok(Some(result)) => match result.output {
+                    Ok(tool_output) => (tool_output.output, false),
+                    Err(e) => (format!("tool execution failed: {e}"), true),
+                },
+                Ok(None) => (format!("no handler for tool '{name}'"), true),
+                Err(_) => (
+                    format!("gateway tool '{name}' timed out after {GATEWAY_TOOL_TIMEOUT:?}"),
+                    true,
+                ),
+            }
+        } else {
+            (
+                "invalid tool arguments (not a JSON object); tool was not run".to_owned(),
+                true,
+            )
         };
 
         ResolvedCall {
-            tool_use_block: tool_seam::call_to_tool_use_block(&call),
-            tool_result_block: tool_seam::tool_result_block(id, &output),
+            tool_result_block: tool_seam::tool_result_block(id, &output, is_error),
         }
     });
     join_all(futures).await
 }
 
-/// Append the assistant turn (its gateway `tool_use` blocks) and a following
-/// user turn (the matching `tool_result` blocks) to the request `messages` so
-/// the next upstream round sees the resolved calls. These stay internal — the
-/// client never sees them (hide-the-call).
-fn append_round_to_history(request: &mut Value, resolved: &[ResolvedCall]) {
-    let assistant = json!({
-        "role": "assistant",
-        "content": resolved.iter().map(|r| r.tool_use_block.clone()).collect::<Vec<_>>()
-    });
+/// Append the model's assistant turn (preserving its `thinking`/`text`/`tool_use`
+/// blocks in order — F3) and a following user turn of `tool_result`s to the
+/// request `messages`, so the next upstream round sees the full conversation
+/// state. These stay internal — the client never sees them (hide-the-call).
+fn append_round_to_history(request: &mut Value, assistant_content: &[Value], resolved: &[ResolvedCall]) {
+    let assistant = json!({ "role": "assistant", "content": assistant_content });
     let user = json!({
         "role": "user",
         "content": resolved.iter().map(|r| r.tool_result_block.clone()).collect::<Vec<_>>()

@@ -214,6 +214,97 @@ async fn messages_loop_hides_gateway_tool_and_surfaces_final_text() {
     assert_eq!(result["stop_reason"], "end_turn");
 }
 
+// ── Repro tests for Maral's #131 review (currently FAILING — proves each bug) ──
+
+// F3: the assistant turn fed back on the next round must preserve preceding
+// thinking/text/signature blocks, not just the gateway tool_use. Dropping them
+// loses conversation state and breaks extended-thinking round-tripping.
+#[tokio::test]
+async fn repro_f3_next_round_preserves_thinking_and_text_blocks() {
+    // Round 0: assistant emits thinking + text + a gateway tool_use.
+    let round0 = serde_json::json!({
+        "id": "m", "type": "message", "role": "assistant", "model": "qwen3",
+        "content": [
+            {"type": "thinking", "thinking": "let me search", "signature": "sig_abc"},
+            {"type": "text", "text": "I'll look that up."},
+            {"type": "tool_use", "id": "t1", "name": "web_search", "input": {"query": "rust"}}
+        ],
+        "stop_reason": "tool_use", "usage": {"input_tokens": 5, "output_tokens": 3}
+    });
+    let round1 = serde_json::json!({
+        "id": "m2", "type": "message", "role": "assistant", "model": "qwen3",
+        "content": [{"type": "text", "text": "Rust 1.89.0."}],
+        "stop_reason": "end_turn", "usage": {"input_tokens": 5, "output_tokens": 3}
+    });
+    let (vllm_url, upstream, _v) = spawn_mock_vllm_messages(vec![round0, round1]).await;
+    let (search_url, _rx, _s) = spawn_mock_search().await;
+    let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
+    let request = web_search_request();
+    let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
+    let registry = ToolRegistry::build_with_handlers(&registry_tools(Some(&tools)), &exec_ctx.gateway_executors)
+        .await
+        .unwrap();
+    run_messages_loop(request, &registry, &exec_ctx, None).await.unwrap();
+
+    // Inspect the assistant turn the loop appended for round 2.
+    let reqs = upstream.requests.lock().await;
+    let round2_msgs = reqs[1]["messages"].as_array().expect("round-2 messages");
+    let assistant = round2_msgs
+        .iter()
+        .rev()
+        .find(|m| m["role"] == "assistant")
+        .expect("round-2 has a reconstructed assistant turn");
+    let block_types: Vec<&str> = assistant["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|b| b["type"].as_str())
+        .collect();
+    // The model's thinking + text must be carried forward alongside the tool_use.
+    assert!(
+        block_types.contains(&"thinking"),
+        "thinking preserved in history: {block_types:?}"
+    );
+    assert!(
+        block_types.contains(&"text"),
+        "text preserved in history: {block_types:?}"
+    );
+    assert!(block_types.contains(&"tool_use"), "tool_use present: {block_types:?}");
+}
+
+// F5: mixed gateway + client tool_use — the non-streaming path must NOT expose
+// the gateway tool_use (hide-the-call), matching streaming. One consistent
+// policy: surface the client tool_use, suppress the gateway one, stop the loop.
+#[tokio::test]
+async fn repro_f5_mixed_call_hides_gateway_tool_use() {
+    let body = serde_json::json!({
+        "id": "m", "type": "message", "role": "assistant", "model": "qwen3",
+        "content": [
+            {"type": "tool_use", "id": "g1", "name": "web_search", "input": {"query": "x"}},
+            {"type": "tool_use", "id": "c1", "name": "get_weather", "input": {"city": "SF"}}
+        ],
+        "stop_reason": "tool_use", "usage": {"input_tokens": 5, "output_tokens": 3}
+    });
+    let mut request = web_search_request();
+    request["tools"] = serde_json::json!([
+        {"name": "web_search", "description": "s", "input_schema": {"type": "object"}},
+        {"name": "get_weather", "description": "w", "input_schema": {"type": "object"}}
+    ]);
+    let (result, _calls) = run_against(vec![body], request).await;
+    let names: Vec<&str> = result["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|b| b["type"] == "tool_use")
+        .filter_map(|b| b["name"].as_str())
+        .collect();
+    assert!(names.contains(&"get_weather"), "client tool_use surfaces: {names:?}");
+    assert!(
+        !names.contains(&"web_search"),
+        "gateway tool_use must be hidden: {names:?}"
+    );
+}
+
 /// Build a registry + `exec_ctx` for a canned single-turn upstream (no search
 /// hit expected).
 async fn run_against(bodies: Vec<Value>, request: Value) -> (Value, usize) {
