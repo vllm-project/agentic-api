@@ -6,10 +6,33 @@ use crate::utils::common::serialize_to_value_or_custom_default;
 use super::codex::CodexNamespaceHandler;
 use super::function::FunctionHandler;
 use super::handler::{ToolHandler, ToolOutput};
-use super::mcp::McpHandler;
+use super::mcp::{McpHandler, maybe_mcp_function};
+use super::registry::ToolType;
 use super::web_search::web_search_function_tool;
 
 impl ResponsesTool {
+    /// Return the gateway routing type this declaration would register as.
+    #[must_use]
+    pub fn tool_type(&self) -> Option<ToolType> {
+        match self {
+            Self::Function(p) => match maybe_mcp_function(p) {
+                Some(params) if !params.is_empty() => Some(ToolType::Mcp),
+                _ => Some(ToolType::Function),
+            },
+            Self::Mcp(_) => Some(ToolType::Mcp),
+            Self::WebSearch(_) => Some(ToolType::WebSearch),
+            Self::FileSearch(_) => Some(ToolType::FileSearch),
+            Self::CodeInterpreter(_) => Some(ToolType::CodeInterpreter),
+            Self::Namespace(_) => Some(ToolType::CodexNamespace),
+            Self::Custom(_) | Self::Unknown => None,
+        }
+    }
+
+    #[must_use]
+    pub fn is_gateway_owned(&self) -> bool {
+        self.tool_type().is_some_and(ToolType::is_gateway_owned)
+    }
+
     /// Normalise function-like tool declarations to the `FunctionTool` wire format that vLLM understands.
     ///
     /// - `Function` variants convert via [`From<&FunctionToolParam>`] for `FunctionTool`.

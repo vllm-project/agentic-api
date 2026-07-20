@@ -369,6 +369,7 @@ pub fn make_request(
         max_output_tokens: None,
         truncation: None,
         metadata: None,
+        parallel_tool_calls: None,
         cache_salt: None,
     }
 }

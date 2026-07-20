@@ -145,6 +145,7 @@ fn make_request(input: &str, stream: bool, prev_id: Option<String>) -> RequestPa
         max_output_tokens: None,
         truncation: None,
         metadata: None,
+        parallel_tool_calls: None,
         cache_salt: None,
     }
 }
