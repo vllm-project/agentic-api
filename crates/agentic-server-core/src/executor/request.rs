@@ -7,7 +7,13 @@ use crate::executor::modes::{ConversationHandler, ResponseHandler};
 use crate::storage::{ConversationStore, ResponseStore, create_pool_with_schema_and_sqlite_config};
 use crate::tool::{GatewayExecutor, GatewayExecutors};
 use crate::types::io::InputItem;
+use crate::types::messages::GatewayToolMap;
 use crate::types::request_response::{RequestPayload, ResponsePayload};
+
+/// Env var configuring client-tool → gateway-executor aliases for `/v1/messages`
+/// (e.g. `WebSearch=web_search`). Empty/unset means no aliases — client
+/// functions stay client-owned (the ownership doctrine's default).
+const GATEWAY_TOOL_ALIASES_ENV: &str = "MESSAGES_GATEWAY_TOOL_ALIASES";
 
 /// Context built by `rehydrate_conversation`, threaded through the execute pipeline.
 #[derive(Debug)]
@@ -48,6 +54,9 @@ pub struct ExecutionContext {
     pub resp_handler: ResponseHandler,
     pub client: Arc<reqwest::Client>,
     pub gateway_executors: GatewayExecutors,
+    /// Client-tool → gateway-executor aliases for the `/v1/messages` loop
+    /// (e.g. Claude Code's `WebSearch` → `web_search`). Empty unless configured.
+    pub messages_gateway_tools: GatewayToolMap,
     /// Base URL for the LLM backend, e.g. `"http://localhost:8000"`.
     pub llm_base_url: String,
     /// Maximum wait time for the next SSE chunk.  `Duration::ZERO` disables the timeout.
@@ -81,6 +90,7 @@ impl ExecutionContext {
             resp_handler,
             client,
             gateway_executors,
+            messages_gateway_tools: messages_gateway_tools_from_env(),
             llm_base_url,
             streaming_timeout: Duration::from_secs(30),
         }
@@ -117,8 +127,17 @@ impl ExecutionContext {
             resp_handler,
             client,
             gateway_executors,
+            messages_gateway_tools: messages_gateway_tools_from_env(),
             llm_base_url: cfg.llm_api_base.clone(),
             streaming_timeout: Duration::from_secs(30),
         })
     }
+}
+
+/// Load the `/v1/messages` gateway-tool alias map from the environment.
+fn messages_gateway_tools_from_env() -> GatewayToolMap {
+    std::env::var(GATEWAY_TOOL_ALIASES_ENV)
+        .ok()
+        .map(|raw| GatewayToolMap::from_env_str(&raw))
+        .unwrap_or_default()
 }

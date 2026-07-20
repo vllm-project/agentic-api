@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHandler, run_messages_stream};
 use agentic_core::storage::{ConversationStore, ResponseStore};
 use agentic_core::tool::{ToolRegistry, WebSearchHandler};
-use agentic_core::types::messages::{ToolParam, registry_tools};
+use agentic_core::types::messages::{GatewayToolMap, ToolParam, registry_tools};
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
@@ -143,9 +143,12 @@ async fn messages_stream_presents_one_message_and_hides_gateway_tool() {
     });
     let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
     let registry = Arc::new(
-        ToolRegistry::build_with_handlers(&registry_tools(Some(&tools)), &exec_ctx.gateway_executors)
-            .await
-            .unwrap(),
+        ToolRegistry::build_with_handlers(
+            &registry_tools(Some(&tools), &GatewayToolMap::default()),
+            &exec_ctx.gateway_executors,
+        )
+        .await
+        .unwrap(),
     );
 
     let stream = run_messages_stream(request, registry, Arc::clone(&exec_ctx), None);
@@ -214,9 +217,12 @@ async fn messages_stream_multiround_single_lifecycle() {
     });
     let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
     let registry = Arc::new(
-        ToolRegistry::build_with_handlers(&registry_tools(Some(&tools)), &exec_ctx.gateway_executors)
-            .await
-            .unwrap(),
+        ToolRegistry::build_with_handlers(
+            &registry_tools(Some(&tools), &GatewayToolMap::default()),
+            &exec_ctx.gateway_executors,
+        )
+        .await
+        .unwrap(),
     );
 
     let stream = run_messages_stream(request, registry, Arc::clone(&exec_ctx), None);

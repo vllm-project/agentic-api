@@ -47,7 +47,7 @@ pub fn run_messages_stream(
     request["stream"] = Value::Bool(true);
 
     Box::pin(stream! {
-        let mut acc = MessagesStreamAccumulator::new();
+        let mut acc = MessagesStreamAccumulator::new(exec_ctx.messages_gateway_tools.clone());
 
         for _round in 0..MAX_GATEWAY_TOOL_ROUNDS {
             let body = match serialize_to_string(&request) {
@@ -82,7 +82,7 @@ pub fn run_messages_stream(
             // the gateway tool_use (F3, streaming half). The gateway calls are
             // derived from the same buffered blocks for dispatch.
             let (assistant_content, calls) = acc.take_round();
-            let resolved = execute_gateway_calls(&calls, &registry).await;
+            let resolved = execute_gateway_calls(&calls, &registry, &exec_ctx.messages_gateway_tools).await;
             append_round_to_history(&mut request, &assistant_content, &resolved);
         }
 
@@ -174,10 +174,14 @@ struct MessagesStreamAccumulator {
     has_client_tool_use: bool,
     /// Buffered terminal `message_delta` from the final round (emitted by `finish`).
     final_message_delta: Option<Value>,
+    /// Operator-configured client-tool → gateway-executor aliases, so a client
+    /// tool like Claude Code's `WebSearch` is classified gateway-owned (and
+    /// suppressed) the same way the built-in `web_search` is.
+    gateway_map: tool_seam::GatewayToolMap,
 }
 
 impl MessagesStreamAccumulator {
-    fn new() -> Self {
+    fn new(gateway_map: tool_seam::GatewayToolMap) -> Self {
         Self {
             message_started: false,
             next_index: 0,
@@ -187,6 +191,7 @@ impl MessagesStreamAccumulator {
             ended_on_tool_use: false,
             has_client_tool_use: false,
             final_message_delta: None,
+            gateway_map,
         }
     }
 
@@ -277,7 +282,7 @@ impl MessagesStreamAccumulator {
         let name = event["content_block"]["name"].as_str().unwrap_or_default();
 
         // Buffer every block for history reconstruction (F3), preserving order.
-        let is_gateway_tool = block_type == "tool_use" && tool_seam::is_gateway_owned_tool_name(name);
+        let is_gateway_tool = block_type == "tool_use" && self.gateway_map.is_gateway_owned(name);
         self.blocks.insert(
             up_index,
             BufferedBlock {
@@ -362,13 +367,17 @@ fn error_sse(message: &str) -> String {
 
 /// Execute reconstructed gateway calls (concurrent, per-call timeout). Errors
 /// become error `tool_result`s (E5).
-async fn execute_gateway_calls(calls: &[StreamedCall], registry: &ToolRegistry) -> Vec<ResolvedStreamCall> {
+async fn execute_gateway_calls(
+    calls: &[StreamedCall],
+    registry: &ToolRegistry,
+    gateway_map: &tool_seam::GatewayToolMap,
+) -> Vec<ResolvedStreamCall> {
     let futures = calls.iter().map(|c| async move {
         // F4: reject a malformed/incomplete reconstructed input rather than
         // coercing to {} and dispatching the tool with args the model never sent.
         let (output, is_error) = match tool_seam::parse_tool_input(&c.input_json) {
             Ok(input) => {
-                let call = tool_seam::tool_use_to_call(&c.id, &c.name, &input);
+                let call = tool_seam::tool_use_to_call(&c.id, &c.name, &input, gateway_map);
                 match tokio::time::timeout(GATEWAY_TOOL_TIMEOUT, registry.dispatch(&call)).await {
                     Ok(Some(result)) => match result.output {
                         Ok(o) => (o.output, false),
@@ -421,11 +430,16 @@ mod tests {
         format!("data: {v}")
     }
 
+    /// Accumulator with the default gateway map (built-in `web_search` only).
+    fn acc() -> MessagesStreamAccumulator {
+        MessagesStreamAccumulator::new(tool_seam::GatewayToolMap::default())
+    }
+
     // A single non-tool round: message_start forwarded once, blocks pass through
     // with contiguous indices, terminal emitted by finish().
     #[test]
     fn single_round_text_passes_through() {
-        let mut acc = MessagesStreamAccumulator::new();
+        let mut acc = acc();
         acc.begin_round();
         let mut out = Vec::new();
         out.extend(acc.push(&line(&json!({"type": "message_start", "message": {"id": "m"}}))));
@@ -453,7 +467,7 @@ mod tests {
     // its input reconstructed, thinking/text forwarded, and no terminal leaks.
     #[test]
     fn gateway_tool_round_suppresses_tool_use_and_reconstructs_call() {
-        let mut acc = MessagesStreamAccumulator::new();
+        let mut acc = acc();
         acc.begin_round();
         let mut out = Vec::new();
         out.extend(acc.push(&line(&json!({"type": "message_start", "message": {"id": "m"}}))));
@@ -487,7 +501,7 @@ mod tests {
     // thinking=0, round 2 text=1) — no reset/collision.
     #[test]
     fn indices_are_contiguous_across_rounds() {
-        let mut acc = MessagesStreamAccumulator::new();
+        let mut acc = acc();
         // round 1: thinking (idx0) + suppressed tool_use (idx1)
         acc.begin_round();
         acc.push(&line(&json!({"type": "message_start", "message": {"id": "m"}})));
@@ -512,7 +526,7 @@ mod tests {
     // The client-owned tool_use is forwarded; the gateway one is suppressed.
     #[test]
     fn mixed_client_and_gateway_tool_use_stops_the_loop() {
-        let mut acc = MessagesStreamAccumulator::new();
+        let mut acc = acc();
         acc.begin_round();
         acc.push(&line(&json!({"type": "message_start", "message": {"id": "m"}})));
         // gateway tool_use (idx0) — suppressed
@@ -544,7 +558,7 @@ mod tests {
     // must NOT emit round 1's stale stop_reason: tool_use.
     #[test]
     fn repro_f6_begin_round_resets_stale_terminal() {
-        let mut acc = MessagesStreamAccumulator::new();
+        let mut acc = acc();
         // Round 1: a gateway tool round → sets final_message_delta = tool_use terminal.
         acc.begin_round();
         acc.push(&line(&json!({"type": "message_start", "message": {"id": "m"}})));
@@ -575,7 +589,7 @@ mod tests {
     // in messages_stream.rs".)
     #[test]
     fn repro_f3_stream_history_preserves_thinking_text_and_signature() {
-        let mut acc = MessagesStreamAccumulator::new();
+        let mut acc = acc();
         acc.begin_round();
         acc.push(&line(&json!({"type": "message_start", "message": {"id": "m"}})));
         // thinking idx0 (with a signature delta)
@@ -622,7 +636,7 @@ mod tests {
     // silently become `{}` and dispatch the tool with args the model never sent.
     #[tokio::test]
     async fn repro_f4_malformed_partial_json_is_not_dispatched_with_empty_args() {
-        let mut acc = MessagesStreamAccumulator::new();
+        let mut acc = acc();
         acc.begin_round();
         acc.push(&line(&json!({"type": "message_start", "message": {"id": "m"}})));
         acc.push(&line(&json!({"type": "content_block_start", "index": 0, "content_block": {"type": "tool_use", "name": "web_search", "id": "t"}})));
@@ -638,7 +652,8 @@ mod tests {
         // After the fix, execute_gateway_calls must NOT coerce invalid input to
         // {} and dispatch — it must produce an error tool_result. Assert the
         // reconstructed call is flagged invalid rather than silently dispatchable.
-        let resolved = execute_gateway_calls(&calls, &no_op_registry().await).await;
+        let resolved =
+            execute_gateway_calls(&calls, &no_op_registry().await, &tool_seam::GatewayToolMap::default()).await;
         let content = resolved[0].tool_result_block["content"].as_str().unwrap_or_default();
         assert!(
             content.contains("invalid") || content.contains("malformed") || content.contains("could not"),

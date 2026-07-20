@@ -83,12 +83,13 @@ pub async fn run_messages_loop(
         let Some(content) = content else {
             return Ok(message);
         };
+        let gateway_map = &exec_ctx.messages_gateway_tools;
         let mut gateway_calls: Vec<Value> = Vec::new();
         let mut has_client_tool_use = false;
         for block in content {
             if block.get("type").and_then(Value::as_str) == Some("tool_use") {
                 let name = block.get("name").and_then(Value::as_str).unwrap_or_default();
-                if tool_seam::is_gateway_owned_tool_name(name) {
+                if gateway_map.is_gateway_owned(name) {
                     gateway_calls.push(block.clone());
                 } else {
                     has_client_tool_use = true;
@@ -106,7 +107,7 @@ pub async fn run_messages_loop(
         if has_client_tool_use {
             // Strip the gateway tool_use from the client-facing content (compute
             // before mutating to end the immutable borrow of `message`).
-            let stripped = tool_seam::strip_gateway_tool_use(content);
+            let stripped = tool_seam::strip_gateway_tool_use(content, gateway_map);
             let mut message = message;
             message["content"] = Value::Array(stripped);
             return Ok(message);
@@ -116,7 +117,7 @@ pub async fn run_messages_loop(
         // assistant turn (thinking/text/tool_use, order preserved — F3) plus the
         // tool_results back for the next round. Gateway blocks stay internal.
         let assistant_content = content.clone();
-        let resolved = execute_gateway_calls(&gateway_calls, registry).await;
+        let resolved = execute_gateway_calls(&gateway_calls, registry, gateway_map).await;
         append_round_to_history(&mut request, &assistant_content, &resolved);
     }
 
@@ -135,7 +136,11 @@ pub async fn run_messages_loop(
 
 /// Execute the gateway-owned `tool_use` blocks concurrently, each bounded by the
 /// per-call timeout. A failure or timeout becomes an error `tool_result` (E5).
-async fn execute_gateway_calls(gateway_calls: &[Value], registry: &ToolRegistry) -> Vec<ResolvedCall> {
+async fn execute_gateway_calls(
+    gateway_calls: &[Value],
+    registry: &ToolRegistry,
+    gateway_map: &tool_seam::GatewayToolMap,
+) -> Vec<ResolvedCall> {
     let futures = gateway_calls.iter().map(|block| async move {
         let id = block.get("id").and_then(Value::as_str).unwrap_or_default();
         let name = block.get("name").and_then(Value::as_str).unwrap_or_default();
@@ -145,7 +150,7 @@ async fn execute_gateway_calls(gateway_calls: &[Value], registry: &ToolRegistry)
         // here (non-streaming), so validate it's an object.
         let input = block.get("input").cloned().unwrap_or(Value::Null);
         let (output, is_error) = if input.is_object() {
-            let call = tool_seam::tool_use_to_call(id, name, &input);
+            let call = tool_seam::tool_use_to_call(id, name, &input, gateway_map);
             match tokio::time::timeout(GATEWAY_TOOL_TIMEOUT, registry.dispatch(&call)).await {
                 Ok(Some(result)) => match result.output {
                     Ok(tool_output) => (tool_output.output, false),

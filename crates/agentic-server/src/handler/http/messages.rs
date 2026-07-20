@@ -72,14 +72,19 @@ fn messages_error_response(err: &ExecutorError) -> Response {
 async fn execute_messages(state: &AppState, headers: &HeaderMap, req: &MessagesRequest, body: &Bytes) -> Response {
     let auth = extract_client_key(headers, state.openai_api_key.as_deref());
 
-    // Build the request-scoped registry from the declared tools (M6).
-    let registry =
-        match ToolRegistry::build_with_handlers(&registry_tools(req.tools.as_ref()), &state.exec_ctx.gateway_executors)
-            .await
-        {
-            Ok(r) => r,
-            Err(e) => return messages_error_response(&ExecutorError::from(e)),
-        };
+    // Build the request-scoped registry from the declared tools (M6). Gateway
+    // ownership (incl. configured aliases like Claude Code's `WebSearch`) is
+    // resolved against the operator-configured map.
+    let gateway_map = &state.exec_ctx.messages_gateway_tools;
+    let registry = match ToolRegistry::build_with_handlers(
+        &registry_tools(req.tools.as_ref(), gateway_map),
+        &state.exec_ctx.gateway_executors,
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => return messages_error_response(&ExecutorError::from(e)),
+    };
 
     // Parse the raw body to a JSON Value the loop forwards upstream untouched —
     // preserving every Anthropic field (tool_choice, stop_sequences, …).
@@ -109,7 +114,7 @@ pub async fn messages(State(state): State<AppState>, request: Request) -> Respon
     // Route to the loop only when a gateway-owned tool is declared; everything
     // else keeps the transparent proxy path.
     if let Ok(req) = serde_json::from_slice::<MessagesRequest>(&bytes) {
-        let route_to_loop = has_gateway_tool(req.tools.as_ref());
+        let route_to_loop = has_gateway_tool(req.tools.as_ref(), &state.exec_ctx.messages_gateway_tools);
         debug!(
             route = if route_to_loop { "messages_loop" } else { "proxy" },
             stream = req.stream,

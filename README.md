@@ -120,6 +120,34 @@ Then launch Codex:
 codex --disable image_generation -c model_provider=agentic-api -m Qwen/Qwen3-30B-A3B-FP8
 ```
 
+## 🧑‍💻 Claude Code on your own GPUs
+
+Agentic API serves the Anthropic Messages protocol at `/v1/messages`, so Claude Code (CLI or Agent SDK) runs against open models. Point it at the gateway:
+
+```bash
+export ANTHROPIC_BASE_URL="http://localhost:9000"
+export ANTHROPIC_API_KEY="<your-key>"
+export ANTHROPIC_MODEL="Qwen/Qwen3-30B-A3B-FP8"   # match the served model
+
+claude -p "summarize the files in this directory"
+```
+
+Claude Code's own tools (Bash, Edit, Read, …) stay **client-owned** — Claude Code runs them, as usual.
+
+### Running Claude Code's web search on the gateway
+
+Claude Code declares web search as a client tool named `WebSearch`, so by default it runs client-side. To have the gateway execute it instead — server-side against your configured search backend, hidden from the model like any gateway tool — opt in with one env var when starting the gateway:
+
+```bash
+YOU_API_KEY=<you.com-key> YOU_API_BASE_URL=<you.com-base-url> \
+MESSAGES_GATEWAY_TOOL_ALIASES="WebSearch=web_search" \
+  cargo run -p agentic-server -- --llm-api-base http://0.0.0.0:5050
+```
+
+`MESSAGES_GATEWAY_TOOL_ALIASES` maps a client tool name to a gateway executor (`name=executor`, comma-separated). It is **empty by default** — a client function is only executed server-side when you configure it, mirroring the [tool ownership model](#-tool-ownership-model). The gateway adapts Claude Code's `WebSearch` arguments (`allowed_domains`/`blocked_domains`) to the executor's schema automatically.
+
+> Note: the search executor treats include/exclude domain lists as mutually exclusive, so a `WebSearch` call that sets both `allowed_domains` and `blocked_domains` returns an error result to the model.
+
 ## 🧩 Tool Ownership Model
 
 Every tool call has exactly one execution path, so nothing runs by accident:
