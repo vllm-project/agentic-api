@@ -526,7 +526,6 @@ mod tests {
                 status: "in_progress".into(),
                 usage: None,
             },
-            sequence_number: Some(0),
             wire: WireEvent::new("test"),
         };
         acc.process_event(&frame);
@@ -543,7 +542,6 @@ mod tests {
                 status: "in_progress".into(),
                 usage: None,
             },
-            sequence_number: Some(0),
             wire: WireEvent::new("test"),
         };
         acc.process_event(&frame);
@@ -564,7 +562,6 @@ mod tests {
                 namespace: None,
                 call_id: None,
             },
-            sequence_number: Some(1),
             wire: WireEvent::new("test"),
         });
 
@@ -576,7 +573,6 @@ mod tests {
                 output_index: 0,
                 content_index: 0,
             },
-            sequence_number: Some(2),
             wire: WireEvent::new("test"),
         });
         acc.process_event(&EventFrame {
@@ -587,7 +583,6 @@ mod tests {
                 output_index: 0,
                 content_index: 0,
             },
-            sequence_number: Some(3),
             wire: WireEvent::new("test"),
         });
 
@@ -598,7 +593,6 @@ mod tests {
                 status: "completed".into(),
                 usage: None,
             },
-            sequence_number: Some(4),
             wire: WireEvent::new("test"),
         });
 
@@ -657,7 +651,6 @@ mod tests {
                     ..Default::default()
                 }),
             },
-            sequence_number: Some(9),
             wire: WireEvent::new("test"),
         };
         acc.process_event(&frame);
@@ -684,7 +677,6 @@ mod tests {
                 status: "failed".into(),
                 usage: None,
             },
-            sequence_number: Some(4),
             wire,
         });
         assert_eq!(acc.status, ResponseStatus::Error);
@@ -711,7 +703,6 @@ mod tests {
                 status: "incomplete".into(),
                 usage: None,
             },
-            sequence_number: Some(4),
             wire: WireEvent::new("test"),
         });
         assert_eq!(acc.status, ResponseStatus::Incomplete);
@@ -723,7 +714,6 @@ mod tests {
         let frame = EventFrame {
             event_type: SSEEventType::ContentPartAdded,
             payload: EventPayload::Raw(serde_json::json!({"type": "response.content_part.added"})),
-            sequence_number: Some(3),
             wire: WireEvent::new("test"),
         };
         acc.process_event(&frame);
@@ -844,7 +834,6 @@ mod tests {
                 namespace: Some("mcp__weather".into()),
                 call_id: Some("call_abc".into()),
             },
-            sequence_number: Some(1),
             wire: WireEvent::new("test"),
         });
 
@@ -856,7 +845,6 @@ mod tests {
                 item_id: "fc_1".into(),
                 output_index: 0,
             },
-            sequence_number: Some(2),
             wire: WireEvent::new("test"),
         });
 
@@ -868,7 +856,6 @@ mod tests {
                 item_id: "fc_1".into(),
                 output_index: 0,
             },
-            sequence_number: Some(3),
             wire: WireEvent::new("test"),
         });
 
@@ -881,7 +868,6 @@ mod tests {
                 name: "get_weather".into(),
                 output_index: 0,
             },
-            sequence_number: Some(4),
             wire: WireEvent::new("test"),
         });
 
@@ -892,7 +878,6 @@ mod tests {
                 status: "completed".into(),
                 usage: None,
             },
-            sequence_number: Some(5),
             wire: WireEvent::new("test"),
         });
 
@@ -924,7 +909,6 @@ mod tests {
                 namespace: None,
                 call_id: Some("call_1".into()),
             },
-            sequence_number: Some(1),
             wire: WireEvent::new("test"),
         });
 
@@ -936,7 +920,6 @@ mod tests {
                 item_id: "fc_1".into(),
                 output_index: 0,
             },
-            sequence_number: Some(2),
             wire: WireEvent::new("test"),
         });
 
@@ -949,7 +932,6 @@ mod tests {
                 name: "search".into(),
                 output_index: 0,
             },
-            sequence_number: Some(3),
             wire: WireEvent::new("test"),
         });
 
@@ -976,7 +958,6 @@ mod tests {
                 namespace: None,
                 call_id: Some("call_1".into()),
             },
-            sequence_number: Some(1),
             wire: WireEvent::new("test"),
         });
         acc.process_event(&EventFrame {
@@ -988,7 +969,6 @@ mod tests {
                 name: "get_weather".into(),
                 output_index: 0,
             },
-            sequence_number: Some(2),
             wire: WireEvent::new("test"),
         });
 
@@ -1002,7 +982,6 @@ mod tests {
                 namespace: None,
                 call_id: Some("call_2".into()),
             },
-            sequence_number: Some(3),
             wire: WireEvent::new("test"),
         });
         acc.process_event(&EventFrame {
@@ -1014,7 +993,6 @@ mod tests {
                 name: "get_time".into(),
                 output_index: 1,
             },
-            sequence_number: Some(4),
             wire: WireEvent::new("test"),
         });
 
@@ -1025,7 +1003,6 @@ mod tests {
                 status: "completed".into(),
                 usage: None,
             },
-            sequence_number: Some(5),
             wire: WireEvent::new("test"),
         });
 
@@ -1048,7 +1025,6 @@ mod tests {
                 namespace: None,
                 call_id: None,
             },
-            sequence_number: Some(1),
             wire: WireEvent::new("test"),
         });
         acc.process_event(&EventFrame {
@@ -1059,7 +1035,6 @@ mod tests {
                 output_index: 0,
                 content_index: 0,
             },
-            sequence_number: Some(2),
             wire: WireEvent::new("test"),
         });
 
@@ -1073,7 +1048,6 @@ mod tests {
                 namespace: None,
                 call_id: Some("call_x".into()),
             },
-            sequence_number: Some(3),
             wire: WireEvent::new("test"),
         });
         acc.process_event(&EventFrame {
@@ -1085,7 +1059,6 @@ mod tests {
                 name: "lookup".into(),
                 output_index: 1,
             },
-            sequence_number: Some(4),
             wire: WireEvent::new("test"),
         });
 
@@ -1096,7 +1069,6 @@ mod tests {
                 status: "completed".into(),
                 usage: None,
             },
-            sequence_number: Some(5),
             wire: WireEvent::new("test"),
         });
 
@@ -1119,7 +1091,6 @@ mod tests {
                 namespace: None,
                 call_id: Some("old_call".into()),
             },
-            sequence_number: Some(1),
             wire: WireEvent::new("test"),
         });
 
@@ -1132,7 +1103,6 @@ mod tests {
                 name: "new_name".into(),
                 output_index: 0,
             },
-            sequence_number: Some(2),
             wire: WireEvent::new("test"),
         });
 
@@ -1159,7 +1129,6 @@ mod tests {
                 namespace: None,
                 call_id: Some("c1".into()),
             },
-            sequence_number: Some(1),
             wire: WireEvent::new("test"),
         });
 
@@ -1172,7 +1141,6 @@ mod tests {
                 name: "tool".into(),
                 output_index: 0,
             },
-            sequence_number: Some(2),
             wire: WireEvent::new("test"),
         });
 
@@ -1197,7 +1165,6 @@ mod tests {
                 item_id: String::new(),
                 output_index: 0,
             },
-            sequence_number: Some(1),
             wire: WireEvent::new("test"),
         });
 
@@ -1219,7 +1186,6 @@ mod tests {
                 namespace: None,
                 call_id: Some("c1".into()),
             },
-            sequence_number: Some(1),
             wire: WireEvent::new("test"),
         });
         acc.process_event(&EventFrame {
@@ -1230,7 +1196,6 @@ mod tests {
                 item_id: "fc_1".into(),
                 output_index: 0,
             },
-            sequence_number: Some(2),
             wire: WireEvent::new("test"),
         });
 
@@ -1241,7 +1206,6 @@ mod tests {
                 status: "completed".into(),
                 usage: None,
             },
-            sequence_number: Some(3),
             wire: WireEvent::new("test"),
         });
 

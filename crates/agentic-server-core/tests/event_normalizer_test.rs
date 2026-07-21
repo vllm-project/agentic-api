@@ -8,7 +8,7 @@ fn test_text_delta() {
     let line = r#"data: {"type":"response.output_text.delta","delta":"hello","item_id":"msg_1","output_index":0,"content_index":0,"sequence_number":4}"#;
     let frame = normalize_sse_line(line).unwrap();
     assert_eq!(frame.event_type, SSEEventType::OutputTextDelta);
-    assert_eq!(frame.sequence_number, Some(4));
+    assert_eq!(frame.sequence_number(), Some(4));
     if let EventPayload::TextDelta {
         delta,
         item_id,
@@ -30,7 +30,7 @@ fn test_function_call_args_delta() {
     let line = r#"data: {"type":"response.function_call_arguments.delta","delta":"{\"city\":","call_id":"call_abc","item_id":"fc_1","output_index":0,"sequence_number":7}"#;
     let frame = normalize_sse_line(line).unwrap();
     assert_eq!(frame.event_type, SSEEventType::FunctionCallArgumentsDelta);
-    assert_eq!(frame.sequence_number, Some(7));
+    assert_eq!(frame.sequence_number(), Some(7));
     if let EventPayload::FunctionCallArgsDelta {
         delta,
         call_id,
@@ -159,7 +159,7 @@ fn test_response_created() {
     let line = r#"data: {"type":"response.created","response":{"id":"resp_abc","status":"in_progress","usage":null},"sequence_number":0}"#;
     let frame = normalize_sse_line(line).unwrap();
     assert_eq!(frame.event_type, SSEEventType::ResponseCreated);
-    assert_eq!(frame.sequence_number, Some(0));
+    assert_eq!(frame.sequence_number(), Some(0));
     if let EventPayload::Response { id, status, .. } = &frame.payload {
         assert_eq!(id, "resp_abc");
         assert_eq!(status, "in_progress");
@@ -226,7 +226,7 @@ fn test_no_sequence_number() {
     let line =
         r#"data: {"type":"response.output_text.delta","delta":"x","item_id":"m","output_index":0,"content_index":0}"#;
     let frame = normalize_sse_line(line).unwrap();
-    assert_eq!(frame.sequence_number, None);
+    assert_eq!(frame.sequence_number(), None);
 }
 
 #[test]
@@ -455,7 +455,7 @@ fn test_sequence_numbers_increasing() {
     let mut last_seq: Option<u64> = None;
     for line in SIMULATED_SSE {
         if let Some(frame) = normalize_sse_line(line) {
-            if let Some(seq) = frame.sequence_number {
+            if let Some(seq) = frame.sequence_number() {
                 if let Some(prev) = last_seq {
                     assert!(seq > prev, "sequence {seq} should be > {prev}");
                 }

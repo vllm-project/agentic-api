@@ -5,7 +5,7 @@ use futures::stream as futures_stream;
 
 use crate::events::SSEEventType;
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::gateway_accumulator::{GatewayStreamContext, synthetic_event};
+use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, emit_sse_frame, synthetic_event};
 use crate::executor::request::RequestContext;
 use crate::tool::{GatewayDispatchResult, ToolError, ToolOutput, ToolRegistry, ToolType};
 use crate::types::io::output::{FunctionToolCall, GatewayCallStatus};
@@ -271,7 +271,8 @@ fn output_item_value(item: &OutputItem) -> ExecutorResult<serde_json::Value> {
 
 fn emit_gateway_start_events(
     plans: &[GatewayCallEventPlan],
-    stream_context: &mut GatewayStreamContext<'_>,
+    stream_accumulator: &mut GatewayStreamAccumulator,
+    stream_sender: &tokio::sync::mpsc::UnboundedSender<String>,
 ) -> ExecutorResult<()> {
     for plan in plans {
         let Some(output_item) = &plan.started_output else {
@@ -284,8 +285,8 @@ fn emit_gateway_start_events(
                 ("output_index".to_owned(), serde_json::json!(plan.output_index)),
                 ("item".to_owned(), item),
             ],
-        );
-        stream_context.process_event(&mut added_event, 0)?;
+        )?;
+        emit_gateway_event(&mut added_event, stream_accumulator, stream_sender)?;
         match output_item {
             OutputItem::WebSearchCall(web_search_call) => {
                 let mut in_progress_event = synthetic_event(
@@ -294,16 +295,16 @@ fn emit_gateway_start_events(
                         ("item_id".to_owned(), serde_json::json!(web_search_call.id)),
                         ("output_index".to_owned(), serde_json::json!(plan.output_index)),
                     ],
-                );
-                stream_context.process_event(&mut in_progress_event, 0)?;
+                )?;
+                emit_gateway_event(&mut in_progress_event, stream_accumulator, stream_sender)?;
                 let mut searching_event = synthetic_event(
                     SSEEventType::WebSearchCallSearching,
                     [
                         ("item_id".to_owned(), serde_json::json!(web_search_call.id)),
                         ("output_index".to_owned(), serde_json::json!(plan.output_index)),
                     ],
-                );
-                stream_context.process_event(&mut searching_event, 0)?;
+                )?;
+                emit_gateway_event(&mut searching_event, stream_accumulator, stream_sender)?;
             }
             OutputItem::McpToolCall(mcp_tool_call) => {
                 let mut in_progress_event = synthetic_event(
@@ -312,8 +313,8 @@ fn emit_gateway_start_events(
                         ("item_id".to_owned(), serde_json::json!(mcp_tool_call.id)),
                         ("output_index".to_owned(), serde_json::json!(plan.output_index)),
                     ],
-                );
-                stream_context.process_event(&mut in_progress_event, 0)?;
+                )?;
+                emit_gateway_event(&mut in_progress_event, stream_accumulator, stream_sender)?;
             }
             OutputItem::Message(_)
             | OutputItem::FunctionCall(_)
@@ -328,7 +329,8 @@ fn emit_gateway_start_events(
 fn emit_gateway_completed_events(
     results: &[GatewayCallResult],
     plans: &[GatewayCallEventPlan],
-    stream_context: &mut GatewayStreamContext<'_>,
+    stream_accumulator: &mut GatewayStreamAccumulator,
+    stream_sender: &tokio::sync::mpsc::UnboundedSender<String>,
 ) -> ExecutorResult<()> {
     for result in results {
         let Some(public_output) = &result.public_output else {
@@ -357,16 +359,16 @@ fn emit_gateway_completed_events(
                 ("output_index".to_owned(), serde_json::json!(output_index)),
                 ("item".to_owned(), item.clone()),
             ],
-        );
-        stream_context.process_event(&mut completed_event, 0)?;
+        )?;
+        emit_gateway_event(&mut completed_event, stream_accumulator, stream_sender)?;
         let mut done_event = synthetic_event(
             SSEEventType::OutputItemDone,
             [
                 ("output_index".to_owned(), serde_json::json!(output_index)),
                 ("item".to_owned(), item),
             ],
-        );
-        stream_context.process_event(&mut done_event, 0)?;
+        )?;
+        emit_gateway_event(&mut done_event, stream_accumulator, stream_sender)?;
     }
     Ok(())
 }
@@ -375,17 +377,31 @@ pub(super) async fn execute_and_emit_output_calls(
     output_items: &[OutputItem],
     registry: &ToolRegistry,
     output_offset: usize,
-    mut stream_context: Option<&mut GatewayStreamContext<'_>>,
+    mut stream: Option<(
+        &mut GatewayStreamAccumulator,
+        &tokio::sync::mpsc::UnboundedSender<String>,
+    )>,
 ) -> ExecutorResult<Vec<GatewayCallResult>> {
     let event_plans = gateway_event_plans(output_items, registry, output_offset);
-    if let Some(stream_context) = &mut stream_context {
-        emit_gateway_start_events(&event_plans, stream_context)?;
+    if let Some((stream_accumulator, stream_sender)) = stream.as_mut() {
+        emit_gateway_start_events(&event_plans, stream_accumulator, stream_sender)?;
     }
     let gateway_results = execute_output_calls(output_items, registry).await?;
-    if let Some(stream_context) = &mut stream_context {
-        emit_gateway_completed_events(&gateway_results, &event_plans, stream_context)?;
+    if let Some((stream_accumulator, stream_sender)) = stream.as_mut() {
+        emit_gateway_completed_events(&gateway_results, &event_plans, stream_accumulator, stream_sender)?;
     }
     Ok(gateway_results)
+}
+
+fn emit_gateway_event(
+    frame: &mut crate::events::EventFrame,
+    stream_accumulator: &mut GatewayStreamAccumulator,
+    stream_sender: &tokio::sync::mpsc::UnboundedSender<String>,
+) -> ExecutorResult<()> {
+    if stream_accumulator.process_event(frame, 0) {
+        emit_sse_frame(stream_sender, frame)?;
+    }
+    Ok(())
 }
 
 pub(super) fn append_input_item(input: &mut ResponsesInput, item: InputItem) {

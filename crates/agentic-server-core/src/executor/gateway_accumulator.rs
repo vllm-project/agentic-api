@@ -1,36 +1,13 @@
-use serde_json::Value;
-use tokio::sync::mpsc;
-
 use crate::events::{EventFrame, EventPayload, SSEEventType, WireEvent, normalize_sse_line};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::types::request_response::ResponsePayload;
-use crate::utils::common::serialize_to_string;
+use crate::utils::common::{serialize_to_string, serialize_to_value};
+use serde_json::Value;
 
 pub struct GatewayStreamAccumulator {
     next_sequence_number: u64,
     emitted_created: bool,
     emitted_in_progress: bool,
-}
-
-pub(crate) struct GatewayStreamContext<'a> {
-    sender: &'a mpsc::UnboundedSender<String>,
-    accumulator: &'a mut GatewayStreamAccumulator,
-}
-
-impl<'a> GatewayStreamContext<'a> {
-    pub(crate) fn new(
-        sender: &'a mpsc::UnboundedSender<String>,
-        accumulator: &'a mut GatewayStreamAccumulator,
-    ) -> Self {
-        Self { sender, accumulator }
-    }
-
-    pub(crate) fn process_event(&mut self, frame: &mut EventFrame, output_offset: usize) -> ExecutorResult<()> {
-        if self.accumulator.process_event(frame, output_offset) {
-            emit_sse_frame(self.sender, frame)?;
-        }
-        Ok(())
-    }
 }
 
 impl GatewayStreamAccumulator {
@@ -48,27 +25,28 @@ impl GatewayStreamAccumulator {
         self.process_event(&mut frame, output_offset).then_some(frame)
     }
 
+    #[must_use]
     pub fn process_event(&mut self, frame: &mut EventFrame, output_offset: usize) -> bool {
         if !self.should_emit_lifecycle(frame.event_type) {
             return false;
         }
-        let sequence_number = Some(self.take_sequence_number());
-        frame.sequence_number = sequence_number;
-        frame.wire.sequence_number = sequence_number;
+        frame.wire.sequence_number = Some(self.take_sequence_number());
         rebase_output_index(&mut frame.wire, output_offset);
         true
     }
 
-    pub(crate) fn terminal_response_chunk(&mut self, payload: &ResponsePayload) -> ExecutorResult<String> {
+    pub(crate) fn terminal_response_chunk(&mut self, payload: &ResponsePayload) -> ExecutorResult<Option<String>> {
         let mut frame = terminal_response_frame(payload)?;
-        self.process_event(&mut frame, 0);
-        serialize_sse_frame(&frame)
+        if !self.process_event(&mut frame, 0) {
+            return Ok(None);
+        }
+        serialize_sse_frame(&frame).map(Some)
     }
 
     pub(crate) fn error_chunk(&mut self, message: &str) -> String {
         let mut frame = error_frame(message);
-        self.process_event(&mut frame, 0);
-        serialize_sse_frame(&frame).unwrap_or_else(|_| "data: {\"type\":\"error\"}\n\n".to_owned())
+        let _ = self.process_event(&mut frame, 0);
+        serialize_sse_frame(&frame).unwrap_or_else(|_| error_sse_chunk(message))
     }
 
     fn should_emit_lifecycle(&mut self, event_type: SSEEventType) -> bool {
@@ -117,12 +95,13 @@ fn terminal_response_frame(payload: &ResponsePayload) -> ExecutorResult<EventFra
         "response.in_progress" => SSEEventType::ResponseInProgress,
         _ => SSEEventType::ResponseCompleted,
     };
-    let mut wire = WireEvent::new(event_type.as_str());
-    wire.rest.insert(
+    let mut rest = serde_json::Map::new();
+    rest.insert(
         "response".to_owned(),
-        serde_json::to_value(payload).map_err(ExecutorError::JsonError)?,
+        serialize_to_value(payload).map_err(ExecutorError::JsonError)?,
     );
-    Ok(EventFrame::synthetic(event_type, wire))
+    EventFrame::synthetic(event_type, rest)
+        .ok_or_else(|| ExecutorError::StreamError("terminal response event has no wire representation".to_owned()))
 }
 
 fn error_frame(message: &str) -> EventFrame {
@@ -135,19 +114,27 @@ fn error_frame(message: &str) -> EventFrame {
     );
     EventFrame {
         event_type: SSEEventType::Other,
-        payload: EventPayload::Raw(wire.to_value()),
-        sequence_number: wire.sequence_number,
+        payload: EventPayload::None,
         wire,
     }
 }
 
-pub(super) fn synthetic_event(event_type: SSEEventType, rest: impl IntoIterator<Item = (String, Value)>) -> EventFrame {
-    let mut wire = WireEvent::new(event_type.as_str());
-    wire.rest.extend(rest);
-    EventFrame::synthetic(event_type, wire)
+pub(super) fn error_sse_chunk(message: &str) -> String {
+    serialize_sse_frame(&error_frame(message)).unwrap_or_else(|_| "data: {\"type\":\"error\"}\n\n".to_owned())
 }
 
-fn emit_sse_frame(sender: &mpsc::UnboundedSender<String>, frame: &EventFrame) -> ExecutorResult<()> {
+pub(super) fn synthetic_event(
+    event_type: SSEEventType,
+    rest: impl IntoIterator<Item = (String, Value)>,
+) -> ExecutorResult<EventFrame> {
+    EventFrame::synthetic(event_type, rest.into_iter().collect())
+        .ok_or_else(|| ExecutorError::StreamError("synthetic event has no wire representation".to_owned()))
+}
+
+pub(super) fn emit_sse_frame(
+    sender: &tokio::sync::mpsc::UnboundedSender<String>,
+    frame: &EventFrame,
+) -> ExecutorResult<()> {
     sender
         .send(serialize_sse_frame(frame)?)
         .map_err(|_| ExecutorError::StreamError("stream receiver closed while emitting gateway event".to_owned()))
@@ -172,9 +159,54 @@ mod tests {
             )
             .expect("line should normalize");
 
-        assert_eq!(frame.sequence_number, Some(0));
+        assert_eq!(frame.sequence_number(), Some(0));
         assert_eq!(frame.wire.sequence_number, Some(0));
         assert_eq!(frame.wire.output_index, Some(5));
         assert_eq!(frame.wire.rest["delta"], "hi");
+    }
+
+    #[test]
+    fn error_sse_chunk_escapes_error_messages() {
+        let chunk = error_sse_chunk("task failed: \"unexpected\"\nretry");
+        let data = chunk
+            .trim_end_matches('\n')
+            .strip_prefix("data: ")
+            .expect("SSE data prefix");
+        let event: serde_json::Value = serde_json::from_str(data).expect("valid error event JSON");
+
+        assert_eq!(event["type"], "error");
+        assert_eq!(event["error"]["message"], "task failed: \"unexpected\"\nretry");
+    }
+
+    #[test]
+    fn suppresses_redundant_in_progress_terminal_event() {
+        let mut accumulator = GatewayStreamAccumulator::new();
+        let mut lifecycle = accumulator
+            .process_sse_line(r#"data: {"type":"response.in_progress"}"#, 0)
+            .expect("first lifecycle event should be emitted");
+        assert!(!accumulator.process_event(&mut lifecycle, 0));
+
+        let payload: ResponsePayload = serde_json::from_value(serde_json::json!({
+            "id": "resp_1",
+            "object": "response",
+            "created_at": 0,
+            "model": "test",
+            "status": "in_progress",
+            "output": [],
+            "usage": null,
+            "incomplete_details": null,
+            "error": null,
+            "previous_response_id": null,
+            "conversation_id": null,
+            "instructions": null
+        }))
+        .expect("valid response payload");
+
+        assert_eq!(
+            accumulator
+                .terminal_response_chunk(&payload)
+                .expect("terminal event serializes"),
+            None
+        );
     }
 }

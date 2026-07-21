@@ -110,39 +110,76 @@ pub enum SSEEventType {
     Other,
 }
 
-impl SSEEventType {
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::ResponseCreated => "response.created",
-            Self::ResponseInProgress => "response.in_progress",
-            Self::ResponseCompleted => "response.completed",
-            Self::ResponseFailed => "response.failed",
-            Self::ResponseIncomplete => "response.incomplete",
-            Self::OutputItemAdded => "response.output_item.added",
-            Self::OutputItemDone => "response.output_item.done",
-            Self::OutputTextDelta => "response.output_text.delta",
-            Self::OutputTextDone => "response.output_text.done",
-            Self::ContentPartAdded => "response.content_part.added",
-            Self::ContentPartDone => "response.content_part.done",
-            Self::FunctionCallArgumentsDelta => "response.function_call_arguments.delta",
-            Self::FunctionCallArgumentsDone => "response.function_call_arguments.done",
-            Self::CustomToolCallInputDelta => "response.custom_tool_call_input.delta",
-            Self::CustomToolCallInputDone => "response.custom_tool_call_input.done",
-            Self::ReasoningTextDelta => "response.reasoning_text.delta",
-            Self::ReasoningTextDone => "response.reasoning_text.done",
-            Self::ReasoningPartAdded => "response.reasoning_part.added",
-            Self::ReasoningPartDone => "response.reasoning_part.done",
-            Self::ReasoningSummaryTextDelta => "response.reasoning_summary_text.delta",
-            Self::ReasoningSummaryTextDone => "response.reasoning_summary_text.done",
-            Self::FileSearchCallSearching => "response.file_search_call.searching",
-            Self::FileSearchCallCompleted => "response.file_search_call.completed",
-            Self::WebSearchCallInProgress => "response.web_search_call.in_progress",
-            Self::WebSearchCallSearching => "response.web_search_call.searching",
-            Self::WebSearchCallCompleted => "response.web_search_call.completed",
-            Self::McpToolCallInProgress => "response.mcp_tool_call.in_progress",
-            Self::McpToolCallCompleted => "response.mcp_tool_call.completed",
-            Self::Other => "unknown",
+impl From<&str> for SSEEventType {
+    fn from(value: &str) -> Self {
+        match value {
+            "response.created" => Self::ResponseCreated,
+            "response.in_progress" => Self::ResponseInProgress,
+            "response.completed" | "response.done" => Self::ResponseCompleted,
+            "response.failed" => Self::ResponseFailed,
+            "response.incomplete" => Self::ResponseIncomplete,
+            "response.output_item.added" => Self::OutputItemAdded,
+            "response.output_item.done" => Self::OutputItemDone,
+            "response.output_text.delta" => Self::OutputTextDelta,
+            "response.output_text.done" => Self::OutputTextDone,
+            "response.content_part.added" => Self::ContentPartAdded,
+            "response.content_part.done" => Self::ContentPartDone,
+            "response.function_call_arguments.delta" => Self::FunctionCallArgumentsDelta,
+            "response.function_call_arguments.done" => Self::FunctionCallArgumentsDone,
+            "response.custom_tool_call_input.delta" => Self::CustomToolCallInputDelta,
+            "response.custom_tool_call_input.done" => Self::CustomToolCallInputDone,
+            "response.reasoning_text.delta" => Self::ReasoningTextDelta,
+            "response.reasoning_text.done" => Self::ReasoningTextDone,
+            "response.reasoning_part.added" => Self::ReasoningPartAdded,
+            "response.reasoning_part.done" => Self::ReasoningPartDone,
+            "response.reasoning_summary_text.delta" => Self::ReasoningSummaryTextDelta,
+            "response.reasoning_summary_text.done" => Self::ReasoningSummaryTextDone,
+            "response.file_search_call.searching" => Self::FileSearchCallSearching,
+            "response.file_search_call.completed" => Self::FileSearchCallCompleted,
+            "response.web_search_call.in_progress" => Self::WebSearchCallInProgress,
+            "response.web_search_call.searching" => Self::WebSearchCallSearching,
+            "response.web_search_call.completed" => Self::WebSearchCallCompleted,
+            "response.mcp_tool_call.in_progress" => Self::McpToolCallInProgress,
+            "response.mcp_tool_call.completed" => Self::McpToolCallCompleted,
+            _ => Self::Other,
+        }
+    }
+}
+
+impl TryFrom<SSEEventType> for &'static str {
+    type Error = ();
+
+    fn try_from(value: SSEEventType) -> Result<Self, Self::Error> {
+        match value {
+            SSEEventType::ResponseCreated => Ok("response.created"),
+            SSEEventType::ResponseInProgress => Ok("response.in_progress"),
+            SSEEventType::ResponseCompleted => Ok("response.completed"),
+            SSEEventType::ResponseFailed => Ok("response.failed"),
+            SSEEventType::ResponseIncomplete => Ok("response.incomplete"),
+            SSEEventType::OutputItemAdded => Ok("response.output_item.added"),
+            SSEEventType::OutputItemDone => Ok("response.output_item.done"),
+            SSEEventType::OutputTextDelta => Ok("response.output_text.delta"),
+            SSEEventType::OutputTextDone => Ok("response.output_text.done"),
+            SSEEventType::ContentPartAdded => Ok("response.content_part.added"),
+            SSEEventType::ContentPartDone => Ok("response.content_part.done"),
+            SSEEventType::FunctionCallArgumentsDelta => Ok("response.function_call_arguments.delta"),
+            SSEEventType::FunctionCallArgumentsDone => Ok("response.function_call_arguments.done"),
+            SSEEventType::CustomToolCallInputDelta => Ok("response.custom_tool_call_input.delta"),
+            SSEEventType::CustomToolCallInputDone => Ok("response.custom_tool_call_input.done"),
+            SSEEventType::ReasoningTextDelta => Ok("response.reasoning_text.delta"),
+            SSEEventType::ReasoningTextDone => Ok("response.reasoning_text.done"),
+            SSEEventType::ReasoningPartAdded => Ok("response.reasoning_part.added"),
+            SSEEventType::ReasoningPartDone => Ok("response.reasoning_part.done"),
+            SSEEventType::ReasoningSummaryTextDelta => Ok("response.reasoning_summary_text.delta"),
+            SSEEventType::ReasoningSummaryTextDone => Ok("response.reasoning_summary_text.done"),
+            SSEEventType::FileSearchCallSearching => Ok("response.file_search_call.searching"),
+            SSEEventType::FileSearchCallCompleted => Ok("response.file_search_call.completed"),
+            SSEEventType::WebSearchCallInProgress => Ok("response.web_search_call.in_progress"),
+            SSEEventType::WebSearchCallSearching => Ok("response.web_search_call.searching"),
+            SSEEventType::WebSearchCallCompleted => Ok("response.web_search_call.completed"),
+            SSEEventType::McpToolCallInProgress => Ok("response.mcp_tool_call.in_progress"),
+            SSEEventType::McpToolCallCompleted => Ok("response.mcp_tool_call.completed"),
+            SSEEventType::Other => Err(()),
         }
     }
 }
@@ -168,16 +205,6 @@ impl WireEvent {
             output_index: None,
             rest: Map::new(),
         }
-    }
-
-    #[must_use]
-    pub fn into_value(self) -> Value {
-        serde_json::to_value(self).unwrap_or_else(|_| Value::Object(Map::new()))
-    }
-
-    #[must_use]
-    pub fn to_value(&self) -> Value {
-        serde_json::to_value(self).unwrap_or_else(|_| Value::Object(Map::new()))
     }
 }
 
@@ -277,20 +304,70 @@ pub enum EventPayload {
 pub struct EventFrame {
     pub event_type: SSEEventType,
     pub payload: EventPayload,
-    pub sequence_number: Option<u64>,
     pub wire: WireEvent,
 }
 
 impl EventFrame {
     #[must_use]
-    pub fn synthetic(event_type: SSEEventType, mut wire: WireEvent) -> Self {
-        event_type.as_str().clone_into(&mut wire.event_type);
-        let payload = EventPayload::Raw(wire.to_value());
-        Self {
+    pub fn synthetic(event_type: SSEEventType, rest: Map<String, Value>) -> Option<Self> {
+        let event_type_name = <&str>::try_from(event_type).ok()?;
+        Some(Self {
             event_type,
-            payload,
-            sequence_number: wire.sequence_number,
-            wire,
+            payload: EventPayload::None,
+            wire: WireEvent {
+                event_type: event_type_name.to_owned(),
+                sequence_number: None,
+                output_index: None,
+                rest,
+            },
+        })
+    }
+
+    #[must_use]
+    pub fn sequence_number(&self) -> Option<u64> {
+        self.wire.sequence_number
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SSEEventType;
+
+    #[test]
+    fn sse_event_type_wire_names_round_trip() {
+        for event_type in [
+            SSEEventType::ResponseCreated,
+            SSEEventType::ResponseInProgress,
+            SSEEventType::ResponseCompleted,
+            SSEEventType::ResponseFailed,
+            SSEEventType::ResponseIncomplete,
+            SSEEventType::OutputItemAdded,
+            SSEEventType::OutputItemDone,
+            SSEEventType::OutputTextDelta,
+            SSEEventType::OutputTextDone,
+            SSEEventType::ContentPartAdded,
+            SSEEventType::ContentPartDone,
+            SSEEventType::FunctionCallArgumentsDelta,
+            SSEEventType::FunctionCallArgumentsDone,
+            SSEEventType::CustomToolCallInputDelta,
+            SSEEventType::CustomToolCallInputDone,
+            SSEEventType::ReasoningTextDelta,
+            SSEEventType::ReasoningTextDone,
+            SSEEventType::ReasoningPartAdded,
+            SSEEventType::ReasoningPartDone,
+            SSEEventType::ReasoningSummaryTextDelta,
+            SSEEventType::ReasoningSummaryTextDone,
+            SSEEventType::FileSearchCallSearching,
+            SSEEventType::FileSearchCallCompleted,
+            SSEEventType::WebSearchCallInProgress,
+            SSEEventType::WebSearchCallSearching,
+            SSEEventType::WebSearchCallCompleted,
+            SSEEventType::McpToolCallInProgress,
+            SSEEventType::McpToolCallCompleted,
+        ] {
+            let wire_name = <&str>::try_from(event_type).expect("known event type has a wire name");
+            assert_eq!(SSEEventType::from(wire_name), event_type);
         }
+        assert!(<&str>::try_from(SSEEventType::Other).is_err());
     }
 }

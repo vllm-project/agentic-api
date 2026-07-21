@@ -1139,6 +1139,7 @@ async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence()
         truncation: None,
         cache_salt: None,
         metadata: None,
+        parallel_tool_calls: None,
     };
 
     let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();

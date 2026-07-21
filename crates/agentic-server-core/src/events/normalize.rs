@@ -15,54 +15,17 @@ pub fn normalize_sse_line(line: &str) -> Option<EventFrame> {
         return None;
     }
 
-    let wire: WireEvent = deserialize_from_str_opt(data_str)?;
-    let json = wire.to_value();
-
-    let event_type = classify_event_type(&wire.event_type);
+    let json: Value = deserialize_from_str_opt(data_str)?;
+    let event_type = SSEEventType::from(json.get("type")?.as_str()?);
 
     let payload = extract_payload(event_type, &json);
+    let wire: WireEvent = deserialize_from_value_opt(json)?;
 
     Some(EventFrame {
         event_type,
         payload,
-        sequence_number: wire.sequence_number,
         wire,
     })
-}
-
-/// Map a wire-format event type string to our enum.
-fn classify_event_type(type_str: &str) -> SSEEventType {
-    match type_str {
-        "response.created" => SSEEventType::ResponseCreated,
-        "response.in_progress" => SSEEventType::ResponseInProgress,
-        "response.completed" | "response.done" => SSEEventType::ResponseCompleted,
-        "response.failed" => SSEEventType::ResponseFailed,
-        "response.incomplete" => SSEEventType::ResponseIncomplete,
-        "response.output_item.added" => SSEEventType::OutputItemAdded,
-        "response.output_item.done" => SSEEventType::OutputItemDone,
-        "response.output_text.delta" => SSEEventType::OutputTextDelta,
-        "response.output_text.done" => SSEEventType::OutputTextDone,
-        "response.content_part.added" => SSEEventType::ContentPartAdded,
-        "response.content_part.done" => SSEEventType::ContentPartDone,
-        "response.function_call_arguments.delta" => SSEEventType::FunctionCallArgumentsDelta,
-        "response.function_call_arguments.done" => SSEEventType::FunctionCallArgumentsDone,
-        "response.custom_tool_call_input.delta" => SSEEventType::CustomToolCallInputDelta,
-        "response.custom_tool_call_input.done" => SSEEventType::CustomToolCallInputDone,
-        "response.reasoning_text.delta" => SSEEventType::ReasoningTextDelta,
-        "response.reasoning_text.done" => SSEEventType::ReasoningTextDone,
-        "response.reasoning_part.added" => SSEEventType::ReasoningPartAdded,
-        "response.reasoning_part.done" => SSEEventType::ReasoningPartDone,
-        "response.reasoning_summary_text.delta" => SSEEventType::ReasoningSummaryTextDelta,
-        "response.reasoning_summary_text.done" => SSEEventType::ReasoningSummaryTextDone,
-        "response.file_search_call.searching" => SSEEventType::FileSearchCallSearching,
-        "response.file_search_call.completed" => SSEEventType::FileSearchCallCompleted,
-        "response.web_search_call.in_progress" => SSEEventType::WebSearchCallInProgress,
-        "response.web_search_call.searching" => SSEEventType::WebSearchCallSearching,
-        "response.web_search_call.completed" => SSEEventType::WebSearchCallCompleted,
-        "response.mcp_tool_call.in_progress" => SSEEventType::McpToolCallInProgress,
-        "response.mcp_tool_call.completed" => SSEEventType::McpToolCallCompleted,
-        _ => SSEEventType::Other,
-    }
 }
 
 /// Extract a typed payload from the JSON body based on the classified event type.

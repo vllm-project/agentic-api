@@ -9,14 +9,14 @@ use std::sync::Arc;
 
 use async_stream::stream;
 use either::Either;
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
 use super::gateway::{
     LoopDecision, append_gateway_calls_to_new_input, append_output_items_to_input, append_tool_outputs, classify_round,
     execute_and_emit_output_calls, has_client_owned_calls, public_output_items,
 };
-use super::gateway_accumulator::{GatewayStreamAccumulator, GatewayStreamContext};
+use super::gateway_accumulator::{GatewayStreamAccumulator, error_sse_chunk};
 use crate::executor::error::ExecutorResult;
 use crate::executor::inference::DONE_MARKER;
 use crate::executor::persist::persist_if_needed;
@@ -94,7 +94,7 @@ async fn run_until_gateway_tools_complete(
     exec_ctx: &ExecutionContext,
     auth: Option<&str>,
     stream_upstream: bool,
-    mut stream_context: Option<GatewayStreamContext<'_>>,
+    mut stream: Option<(&mut GatewayStreamAccumulator, &mpsc::UnboundedSender<String>)>,
 ) -> ExecutorResult<(ResponsePayload, RequestContext)> {
     let registry: ToolRegistry = match ctx.enriched_request.tools.as_ref() {
         Some(tools) => ToolRegistry::build_with_handlers(tools, &exec_ctx.gateway_executors).await?,
@@ -106,7 +106,17 @@ async fn run_until_gateway_tools_complete(
     for round in 0..MAX_GATEWAY_TOOL_ROUNDS {
         let output_offset = combined_output.len();
         let mut payload: ResponsePayload = if stream_upstream {
-            fetch_stream_payload(&ctx, exec_ctx, auth, &registry, stream_context.as_mut(), output_offset).await?
+            fetch_stream_payload(
+                &ctx,
+                exec_ctx,
+                auth,
+                &registry,
+                stream
+                    .as_mut()
+                    .map(|(accumulator, sender)| (&mut **accumulator, *sender)),
+                output_offset,
+            )
+            .await?
         } else {
             fetch_blocking_payload(&ctx, exec_ctx, auth).await?
         };
@@ -125,8 +135,15 @@ async fn run_until_gateway_tools_complete(
             }
         }
         let has_client_owned = has_client_owned_calls(&current_output, &registry);
-        let gateway_results =
-            execute_and_emit_output_calls(&current_output, &registry, output_offset, stream_context.as_mut()).await?;
+        let gateway_results = execute_and_emit_output_calls(
+            &current_output,
+            &registry,
+            output_offset,
+            stream
+                .as_mut()
+                .map(|(accumulator, sender)| (&mut **accumulator, *sender)),
+        )
+        .await?;
         let public_output = public_output_items(&current_output, &registry, &gateway_results);
         combined_output.extend(public_output);
 
@@ -214,18 +231,18 @@ fn run_stream(ctx: RequestContext, exec_ctx: Arc<ExecutionContext>, auth: Option
     Box::pin(stream! {
         let (event_tx, mut event_rx) = mpsc::unbounded_channel();
         let exec_ctx_for_run = Arc::clone(&exec_ctx);
-        let stream_accumulator = Arc::new(Mutex::new(GatewayStreamAccumulator::new()));
-        let stream_accumulator_for_run = Arc::clone(&stream_accumulator);
+        let event_tx_for_run = event_tx.clone();
         let mut run_handle = AbortOnDrop::new(tokio::spawn(async move {
-            let mut stream_accumulator = stream_accumulator_for_run.lock().await;
-            run_until_gateway_tools_complete(
+            let mut stream_accumulator = GatewayStreamAccumulator::new();
+            let result = run_until_gateway_tools_complete(
                 ctx,
                 exec_ctx_for_run.as_ref(),
                 auth.as_deref(),
                 true,
-                Some(GatewayStreamContext::new(&event_tx, &mut stream_accumulator)),
+                Some((&mut stream_accumulator, &event_tx_for_run)),
             )
-            .await
+            .await;
+            (result, stream_accumulator)
         }));
 
         loop {
@@ -239,16 +256,14 @@ fn run_stream(ctx: RequestContext, exec_ctx: Arc<ExecutionContext>, auth: Option
                     }
                     match result {
                         Err(e) => {
-                            let mut stream_accumulator = stream_accumulator.lock().await;
-                            yield stream_accumulator.error_chunk(&format!("stream task failed: {e}"));
+                            yield error_sse_chunk(&format!("stream task failed: {e}"));
                             yield DONE_MARKER.to_string();
                         }
-                        Ok(Err(e)) => {
-                            let mut stream_accumulator = stream_accumulator.lock().await;
+                        Ok((Err(e), mut stream_accumulator)) => {
                             yield stream_accumulator.error_chunk(&e.to_string());
                             yield DONE_MARKER.to_string();
                         }
-                        Ok(Ok((payload, ctx))) => {
+                        Ok((Ok((payload, ctx)), mut stream_accumulator)) => {
                             // Codex may close its WebSocket as soon as it receives
                             // `response.completed`. Persist before exposing that
                             // event so a custom call/output continuation cannot be
@@ -259,12 +274,11 @@ fn run_stream(ctx: RequestContext, exec_ctx: Arc<ExecutionContext>, auth: Option
                                 warn!("persist failed: {e}");
                             }
 
-                            let mut stream_accumulator = stream_accumulator.lock().await;
                             match stream_accumulator.terminal_response_chunk(&payload) {
-                                Ok(chunk) => yield chunk,
+                                Ok(Some(chunk)) => yield chunk,
+                                Ok(None) => {}
                                 Err(e) => yield stream_accumulator.error_chunk(&e.to_string()),
                             }
-                            drop(stream_accumulator);
                             yield DONE_MARKER.to_string();
                         }
                     }

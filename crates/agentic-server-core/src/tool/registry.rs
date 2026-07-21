@@ -209,10 +209,6 @@ impl ToolRegistry {
         CodexNamespaceHandler.restore_output_items(output, self.namespace_map.as_ref());
     }
 
-    pub fn restore_stream_event_value(&self, value: &mut Value) -> bool {
-        CodexNamespaceHandler.restore_response_value(value, self.namespace_map.as_ref())
-    }
-
     pub fn restore_stream_event_wire(&self, wire: &mut WireEvent) -> bool {
         CodexNamespaceHandler.restore_response_wire(wire, self.namespace_map.as_ref())
     }

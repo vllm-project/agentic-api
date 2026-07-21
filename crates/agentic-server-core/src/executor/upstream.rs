@@ -7,17 +7,18 @@ use serde_json::Value;
 use crate::events::{EventFrame, EventPayload, SSEEventType, SSEItemType, WireEvent, normalize_sse_line};
 use crate::executor::accumulator::ResponseAccumulator;
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::gateway_accumulator::GatewayStreamContext;
+use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, emit_sse_frame};
 use crate::executor::inference::{call_inference, fetch_response_json};
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::tool::ToolRegistry;
 use crate::types::request_response::ResponsePayload;
 use crate::utils::common::serialize_to_string;
 
-struct StreamEmitContext<'a, 'stream> {
+struct StreamEmitContext<'a> {
     request: &'a RequestContext,
     registry: &'a ToolRegistry,
-    stream: &'a mut GatewayStreamContext<'stream>,
+    sender: &'a tokio::sync::mpsc::UnboundedSender<String>,
+    accumulator: &'a mut GatewayStreamAccumulator,
     output_offset: usize,
 }
 
@@ -49,7 +50,10 @@ pub(super) async fn fetch_stream_payload(
     exec_ctx: &ExecutionContext,
     auth: Option<&str>,
     registry: &ToolRegistry,
-    stream_context: Option<&mut GatewayStreamContext<'_>>,
+    mut stream: Option<(
+        &mut GatewayStreamAccumulator,
+        &tokio::sync::mpsc::UnboundedSender<String>,
+    )>,
     output_offset: usize,
 ) -> ExecutorResult<ResponsePayload> {
     let url = exec_ctx.responses_url();
@@ -65,16 +69,16 @@ pub(super) async fn fetch_stream_payload(
     let mut acc = ResponseAccumulator::new(ctx.response_id.clone(), ctx.conversation_id.clone());
     let mut hidden_gateway_item_ids = HashSet::new();
     let mut pending_unnamed_function_events = HashMap::<String, Vec<EventFrame>>::new();
-    let mut stream_context = stream_context;
     while let Some(line_result) = line_stream.next().await {
         let line = line_result?;
         if let Some(mut frame) = normalize_sse_line(&line) {
             log_upstream_failure(&frame, &ctx.response_id);
-            if let Some(stream) = stream_context.as_deref_mut() {
+            if let Some((accumulator, sender)) = stream.as_mut() {
                 let mut emit_ctx = StreamEmitContext {
                     request: ctx,
                     registry,
-                    stream,
+                    sender,
+                    accumulator,
                     output_offset,
                 };
                 emit_upstream_stream_event(
@@ -127,7 +131,7 @@ fn log_upstream_failure(frame: &EventFrame, gateway_response_id: &str) {
 
 fn emit_upstream_stream_event(
     frame: &mut EventFrame,
-    emit_ctx: &mut StreamEmitContext<'_, '_>,
+    emit_ctx: &mut StreamEmitContext<'_>,
     hidden_gateway_item_ids: &mut HashSet<String>,
     pending_unnamed_function_events: &mut HashMap<String, Vec<EventFrame>>,
 ) -> ExecutorResult<()> {
@@ -153,15 +157,18 @@ fn emit_upstream_stream_event(
     emit_stream_frame(frame, emit_ctx)
 }
 
-fn emit_stream_frame(frame: &mut EventFrame, emit_ctx: &mut StreamEmitContext<'_, '_>) -> ExecutorResult<()> {
+fn emit_stream_frame(frame: &mut EventFrame, emit_ctx: &mut StreamEmitContext<'_>) -> ExecutorResult<()> {
     apply_context_response_ids(&mut frame.wire, emit_ctx.request);
     emit_ctx.registry.restore_stream_event_wire(&mut frame.wire);
-    emit_ctx.stream.process_event(frame, emit_ctx.output_offset)
+    if emit_ctx.accumulator.process_event(frame, emit_ctx.output_offset) {
+        emit_sse_frame(emit_ctx.sender, frame)?;
+    }
+    Ok(())
 }
 
 fn defer_or_flush_function_event(
     frame: &mut EventFrame,
-    emit_ctx: &mut StreamEmitContext<'_, '_>,
+    emit_ctx: &mut StreamEmitContext<'_>,
     hidden_gateway_item_ids: &mut HashSet<String>,
     pending_unnamed_function_events: &mut HashMap<String, Vec<EventFrame>>,
 ) -> ExecutorResult<bool> {
@@ -220,7 +227,7 @@ fn defer_or_flush_function_event(
 
 fn flush_pending_function_events(
     item_id: &str,
-    emit_ctx: &mut StreamEmitContext<'_, '_>,
+    emit_ctx: &mut StreamEmitContext<'_>,
     pending_unnamed_function_events: &mut HashMap<String, Vec<EventFrame>>,
 ) -> ExecutorResult<()> {
     let Some(frames) = pending_unnamed_function_events.remove(item_id) else {
