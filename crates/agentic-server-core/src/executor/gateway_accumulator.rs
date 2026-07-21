@@ -30,22 +30,24 @@ impl GatewayStreamAccumulator {
         if !self.should_emit_lifecycle(frame.event_type) {
             return false;
         }
-        frame.wire.sequence_number = Some(self.take_sequence_number());
-        rebase_output_index(&mut frame.wire, output_offset);
+        self.stamp_event(frame, output_offset);
         true
     }
 
-    pub(crate) fn terminal_response_chunk(&mut self, payload: &ResponsePayload) -> ExecutorResult<Option<String>> {
+    fn stamp_event(&mut self, frame: &mut EventFrame, output_offset: usize) {
+        frame.wire.sequence_number = Some(self.take_sequence_number());
+        rebase_output_index(&mut frame.wire, output_offset);
+    }
+
+    pub(crate) fn terminal_response_chunk(&mut self, payload: &ResponsePayload) -> ExecutorResult<String> {
         let mut frame = terminal_response_frame(payload)?;
-        if !self.process_event(&mut frame, 0) {
-            return Ok(None);
-        }
-        serialize_sse_frame(&frame).map(Some)
+        self.stamp_event(&mut frame, 0);
+        serialize_sse_frame(&frame)
     }
 
     pub(crate) fn error_chunk(&mut self, message: &str) -> String {
         let mut frame = error_frame(message);
-        let _ = self.process_event(&mut frame, 0);
+        self.stamp_event(&mut frame, 0);
         serialize_sse_frame(&frame).unwrap_or_else(|_| error_sse_chunk(message))
     }
 
@@ -179,12 +181,11 @@ mod tests {
     }
 
     #[test]
-    fn suppresses_redundant_in_progress_terminal_event() {
+    fn emits_in_progress_terminal_event_after_lifecycle_event() {
         let mut accumulator = GatewayStreamAccumulator::new();
-        let mut lifecycle = accumulator
+        accumulator
             .process_sse_line(r#"data: {"type":"response.in_progress"}"#, 0)
             .expect("first lifecycle event should be emitted");
-        assert!(!accumulator.process_event(&mut lifecycle, 0));
 
         let payload: ResponsePayload = serde_json::from_value(serde_json::json!({
             "id": "resp_1",
@@ -202,11 +203,10 @@ mod tests {
         }))
         .expect("valid response payload");
 
-        assert_eq!(
-            accumulator
-                .terminal_response_chunk(&payload)
-                .expect("terminal event serializes"),
-            None
-        );
+        let chunk = accumulator
+            .terminal_response_chunk(&payload)
+            .expect("terminal event serializes");
+        assert!(chunk.contains("\"type\":\"response.in_progress\""));
+        assert!(chunk.contains("\"sequence_number\":1"));
     }
 }

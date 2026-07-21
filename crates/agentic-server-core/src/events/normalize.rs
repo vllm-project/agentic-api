@@ -16,7 +16,10 @@ pub fn normalize_sse_line(line: &str) -> Option<EventFrame> {
     }
 
     let json: Value = deserialize_from_str_opt(data_str)?;
-    let event_type = SSEEventType::from(json.get("type")?.as_str()?);
+    let event_type = json
+        .get("type")
+        .and_then(Value::as_str)
+        .map_or(SSEEventType::Other, SSEEventType::from);
 
     let payload = extract_payload(event_type, &json);
     let wire: WireEvent = deserialize_from_value_opt(json)?;

@@ -136,6 +136,14 @@ fn test_unknown_event_type() {
 }
 
 #[test]
+fn test_typeless_json_event_is_preserved() {
+    let frame = normalize_sse_line(r#"data: {"foo":1}"#).unwrap();
+
+    assert_eq!(frame.event_type, SSEEventType::Other);
+    assert_eq!(serde_json::to_value(frame.wire).unwrap(), serde_json::json!({"foo": 1}));
+}
+
+#[test]
 fn test_wire_event_preserves_unknown_fields() {
     let line = r#"data: {"type":"response.output_text.delta","sequence_number":4,"output_index":2,"item_id":"msg_1","content_index":0,"delta":"hello","provider_extra":{"nested":true},"future_array":[1,2]}"#;
     let frame = normalize_sse_line(line).unwrap();

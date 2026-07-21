@@ -71,8 +71,9 @@ pub(super) async fn fetch_stream_payload(
     let mut pending_unnamed_function_events = HashMap::<String, Vec<EventFrame>>::new();
     while let Some(line_result) = line_stream.next().await {
         let line = line_result?;
-        if let Some(mut frame) = normalize_sse_line(&line) {
+        if let Some(frame) = normalize_sse_line(&line) {
             log_upstream_failure(&frame, &ctx.response_id);
+            acc.process_event(&frame);
             if let Some((accumulator, sender)) = stream.as_mut() {
                 let mut emit_ctx = StreamEmitContext {
                     request: ctx,
@@ -82,13 +83,12 @@ pub(super) async fn fetch_stream_payload(
                     output_offset,
                 };
                 emit_upstream_stream_event(
-                    &mut frame,
+                    frame,
                     &mut emit_ctx,
                     &mut hidden_gateway_item_ids,
                     &mut pending_unnamed_function_events,
                 )?;
             }
-            acc.process_event(&frame);
         }
     }
     acc.finish_stream();
@@ -130,7 +130,7 @@ fn log_upstream_failure(frame: &EventFrame, gateway_response_id: &str) {
 }
 
 fn emit_upstream_stream_event(
-    frame: &mut EventFrame,
+    frame: EventFrame,
     emit_ctx: &mut StreamEmitContext<'_>,
     hidden_gateway_item_ids: &mut HashSet<String>,
     pending_unnamed_function_events: &mut HashMap<String, Vec<EventFrame>>,
@@ -145,16 +145,17 @@ fn emit_upstream_stream_event(
         drop_pending_function_events(&frame.payload, pending_unnamed_function_events);
         return Ok(());
     }
-    if defer_or_flush_function_event(
+    let Some(mut frame) = defer_or_flush_function_event(
         frame,
         emit_ctx,
         hidden_gateway_item_ids,
         pending_unnamed_function_events,
-    )? {
+    )?
+    else {
         return Ok(());
-    }
+    };
 
-    emit_stream_frame(frame, emit_ctx)
+    emit_stream_frame(&mut frame, emit_ctx)
 }
 
 fn emit_stream_frame(frame: &mut EventFrame, emit_ctx: &mut StreamEmitContext<'_>) -> ExecutorResult<()> {
@@ -167,11 +168,11 @@ fn emit_stream_frame(frame: &mut EventFrame, emit_ctx: &mut StreamEmitContext<'_
 }
 
 fn defer_or_flush_function_event(
-    frame: &mut EventFrame,
+    frame: EventFrame,
     emit_ctx: &mut StreamEmitContext<'_>,
     hidden_gateway_item_ids: &mut HashSet<String>,
     pending_unnamed_function_events: &mut HashMap<String, Vec<EventFrame>>,
-) -> ExecutorResult<bool> {
+) -> ExecutorResult<Option<EventFrame>> {
     match &frame.payload {
         EventPayload::OutputItemAdded {
             item_id,
@@ -179,29 +180,25 @@ fn defer_or_flush_function_event(
             name: None,
             ..
         } if *item_type == SSEItemType::FunctionCall => {
-            pending_unnamed_function_events
-                .entry(item_id.clone())
-                .or_default()
-                .push(frame.clone());
-            Ok(true)
+            let item_id = item_id.clone();
+            pending_unnamed_function_events.entry(item_id).or_default().push(frame);
+            Ok(None)
         }
         EventPayload::FunctionCallArgsDelta { item_id, .. }
             if pending_unnamed_function_events.contains_key(item_id) =>
         {
-            pending_unnamed_function_events
-                .entry(item_id.clone())
-                .or_default()
-                .push(frame.clone());
-            Ok(true)
+            let item_id = item_id.clone();
+            pending_unnamed_function_events.entry(item_id).or_default().push(frame);
+            Ok(None)
         }
         EventPayload::FunctionCallArgsDone { item_id, name, .. } => {
             if emit_ctx.registry.is_gateway_owned_name(name) {
                 hidden_gateway_item_ids.insert(item_id.clone());
                 pending_unnamed_function_events.remove(item_id);
-                return Ok(true);
+                return Ok(None);
             }
             flush_pending_function_events(item_id, emit_ctx, pending_unnamed_function_events)?;
-            Ok(false)
+            Ok(Some(frame))
         }
         EventPayload::OutputItemDone {
             item_id,
@@ -216,12 +213,12 @@ fn defer_or_flush_function_event(
             {
                 hidden_gateway_item_ids.insert(item_id.clone());
                 pending_unnamed_function_events.remove(item_id);
-                return Ok(true);
+                return Ok(None);
             }
             flush_pending_function_events(item_id, emit_ctx, pending_unnamed_function_events)?;
-            Ok(false)
+            Ok(Some(frame))
         }
-        _ => Ok(false),
+        _ => Ok(Some(frame)),
     }
 }
 

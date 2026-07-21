@@ -268,15 +268,15 @@ fn run_stream(ctx: RequestContext, exec_ctx: Arc<ExecutionContext>, auth: Option
                             // `response.completed`. Persist before exposing that
                             // event so a custom call/output continuation cannot be
                             // cancelled by the client disconnect.
+                            let terminal_chunk = stream_accumulator.terminal_response_chunk(&payload);
                             let ch = exec_ctx.conv_handler.clone();
                             let rh = exec_ctx.resp_handler.clone();
-                            if let Err(e) = persist_if_needed(payload.clone(), ctx, ch, rh).await {
+                            if let Err(e) = persist_if_needed(payload, ctx, ch, rh).await {
                                 warn!("persist failed: {e}");
                             }
 
-                            match stream_accumulator.terminal_response_chunk(&payload) {
-                                Ok(Some(chunk)) => yield chunk,
-                                Ok(None) => {}
+                            match terminal_chunk {
+                                Ok(chunk) => yield chunk,
                                 Err(e) => yield stream_accumulator.error_chunk(&e.to_string()),
                             }
                             yield DONE_MARKER.to_string();

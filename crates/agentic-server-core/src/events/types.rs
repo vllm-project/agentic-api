@@ -186,8 +186,8 @@ impl TryFrom<SSEEventType> for &'static str {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WireEvent {
-    #[serde(rename = "type")]
-    pub event_type: String,
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    pub event_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sequence_number: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -200,7 +200,7 @@ impl WireEvent {
     #[must_use]
     pub fn new(event_type: impl Into<String>) -> Self {
         Self {
-            event_type: event_type.into(),
+            event_type: Some(event_type.into()),
             sequence_number: None,
             output_index: None,
             rest: Map::new(),
@@ -315,7 +315,7 @@ impl EventFrame {
             event_type,
             payload: EventPayload::None,
             wire: WireEvent {
-                event_type: event_type_name.to_owned(),
+                event_type: Some(event_type_name.to_owned()),
                 sequence_number: None,
                 output_index: None,
                 rest,
