@@ -194,7 +194,7 @@ impl ResponseAccumulator {
     fn process_stream_chunks(rx: mpsc::Receiver<String>, conversation_id: Option<String>) -> Self {
         let mut acc = Self::new(uuid7_str("resp_"), conversation_id);
         for line in rx {
-            acc.process_sse_line(&line);
+            let _ = acc.process_sse_line(&line);
         }
         acc.finish_stream();
         acc
@@ -209,7 +209,7 @@ impl ResponseAccumulator {
     pub fn from_sse_lines(lines: impl IntoIterator<Item = String>, conversation_id: Option<&str>) -> Self {
         let mut acc = Self::new(uuid7_str("resp_"), conversation_id.map(str::to_string));
         for line in lines {
-            acc.process_sse_line(&line);
+            let _ = acc.process_sse_line(&line);
         }
         acc.finalize_all();
         acc
@@ -222,10 +222,11 @@ impl ResponseAccumulator {
         }
     }
 
-    pub(crate) fn process_sse_line(&mut self, line: &str) {
-        if let Some(frame) = normalize_sse_line(line) {
-            self.process_event(&frame);
-        }
+    pub(crate) fn process_sse_line(&mut self, line: &str) -> Option<EventFrame> {
+        let frame = normalize_sse_line(line)?;
+        self.capture_terminal_details_if_needed(&frame);
+        self.process_event(&frame);
+        Some(frame)
     }
 
     fn capture_terminal_details(&mut self, frame: &EventFrame) {
@@ -262,7 +263,6 @@ impl ResponseAccumulator {
     /// frame (e.g. [`StreamTee`](future)) can call this directly without
     /// re-parsing from a raw line.
     pub(crate) fn process_event(&mut self, frame: &EventFrame) {
-        self.capture_terminal_details_if_needed(frame);
         match (&frame.event_type, &frame.payload) {
             (SSEEventType::ResponseCreated, EventPayload::Response { id, .. }) if !id.is_empty() => {
                 self.response_id.clone_from(id);
@@ -662,14 +662,6 @@ mod tests {
     #[test]
     fn test_process_event_failed_sets_error_status() {
         let mut acc = ResponseAccumulator::new("resp_1".into(), None);
-        let mut wire = WireEvent::new("response.failed");
-        wire.rest.insert(
-            "response".to_owned(),
-            serde_json::json!({
-                "error": {"code": "tool_catalog_too_large"},
-                "incomplete_details": {"reason": "upstream_error"}
-            }),
-        );
         acc.process_event(&EventFrame {
             event_type: SSEEventType::ResponseFailed,
             payload: EventPayload::Response {
@@ -677,20 +669,9 @@ mod tests {
                 status: "failed".into(),
                 usage: None,
             },
-            wire,
+            wire: WireEvent::new("response.failed"),
         });
         assert_eq!(acc.status, ResponseStatus::Error);
-        assert_eq!(
-            acc.error
-                .as_ref()
-                .and_then(|error| error.get("code"))
-                .and_then(serde_json::Value::as_str),
-            Some("tool_catalog_too_large")
-        );
-        assert_eq!(
-            acc.incomplete_details.and_then(|details| details.reason),
-            Some("upstream_error".to_owned())
-        );
     }
 
     #[test]

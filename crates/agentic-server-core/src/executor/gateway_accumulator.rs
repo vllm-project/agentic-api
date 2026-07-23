@@ -10,6 +10,11 @@ pub struct GatewayStreamAccumulator {
     emitted_in_progress: bool,
 }
 
+pub(super) struct StreamEvent {
+    pub(super) content: String,
+    pub(super) sequence_number: u64,
+}
+
 impl GatewayStreamAccumulator {
     #[must_use]
     pub fn new() -> Self {
@@ -48,7 +53,7 @@ impl GatewayStreamAccumulator {
     pub(crate) fn error_chunk(&mut self, message: &str) -> String {
         let mut frame = error_frame(message);
         self.stamp_event(&mut frame, 0);
-        serialize_sse_frame(&frame).unwrap_or_else(|_| error_sse_chunk(message))
+        serialize_sse_frame(&frame).unwrap_or_else(|_| error_sse_chunk(message, frame.sequence_number().unwrap_or(0)))
     }
 
     fn should_emit_lifecycle(&mut self, event_type: SSEEventType) -> bool {
@@ -121,8 +126,11 @@ fn error_frame(message: &str) -> EventFrame {
     }
 }
 
-pub(super) fn error_sse_chunk(message: &str) -> String {
-    serialize_sse_frame(&error_frame(message)).unwrap_or_else(|_| "data: {\"type\":\"error\"}\n\n".to_owned())
+pub(super) fn error_sse_chunk(message: &str, sequence_number: u64) -> String {
+    let mut frame = error_frame(message);
+    frame.wire.sequence_number = Some(sequence_number);
+    serialize_sse_frame(&frame)
+        .unwrap_or_else(|_| format!("data: {{\"type\":\"error\",\"sequence_number\":{sequence_number}}}\n\n"))
 }
 
 pub(super) fn synthetic_event(
@@ -134,11 +142,17 @@ pub(super) fn synthetic_event(
 }
 
 pub(super) fn emit_sse_frame(
-    sender: &tokio::sync::mpsc::UnboundedSender<String>,
+    sender: &tokio::sync::mpsc::UnboundedSender<StreamEvent>,
     frame: &EventFrame,
 ) -> ExecutorResult<()> {
+    let sequence_number = frame
+        .sequence_number()
+        .ok_or_else(|| ExecutorError::StreamError("stream event has no sequence number".to_owned()))?;
     sender
-        .send(serialize_sse_frame(frame)?)
+        .send(StreamEvent {
+            content: serialize_sse_frame(frame)?,
+            sequence_number,
+        })
         .map_err(|_| ExecutorError::StreamError("stream receiver closed while emitting gateway event".to_owned()))
 }
 
@@ -169,7 +183,7 @@ mod tests {
 
     #[test]
     fn error_sse_chunk_escapes_error_messages() {
-        let chunk = error_sse_chunk("task failed: \"unexpected\"\nretry");
+        let chunk = error_sse_chunk("task failed: \"unexpected\"\nretry", 7);
         let data = chunk
             .trim_end_matches('\n')
             .strip_prefix("data: ")
@@ -177,6 +191,7 @@ mod tests {
         let event: serde_json::Value = serde_json::from_str(data).expect("valid error event JSON");
 
         assert_eq!(event["type"], "error");
+        assert_eq!(event["sequence_number"], 7);
         assert_eq!(event["error"]["message"], "task failed: \"unexpected\"\nretry");
     }
 

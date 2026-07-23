@@ -5,7 +5,7 @@ use futures::stream as futures_stream;
 
 use crate::events::SSEEventType;
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, emit_sse_frame, synthetic_event};
+use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent, emit_sse_frame, synthetic_event};
 use crate::executor::request::RequestContext;
 use crate::tool::{GatewayDispatchResult, ToolError, ToolOutput, ToolRegistry, ToolType};
 use crate::types::io::output::{FunctionToolCall, GatewayCallStatus};
@@ -85,7 +85,7 @@ pub(super) struct GatewayCallResult {
     pub(super) public_output: Option<OutputItem>,
 }
 
-struct GatewayCallEventPlan {
+pub(super) struct GatewayCallEventPlan {
     call_id: String,
     output_index: u32,
     started_output: Option<OutputItem>,
@@ -101,7 +101,7 @@ fn function_calls(output_items: &[OutputItem]) -> Vec<FunctionToolCall> {
         .collect()
 }
 
-fn is_gateway_owned_call(call: &FunctionToolCall, registry: &ToolRegistry) -> bool {
+pub(super) fn is_gateway_owned_call(call: &FunctionToolCall, registry: &ToolRegistry) -> bool {
     registry
         .lookup(&call.name)
         .is_some_and(|entry| entry.tool_type.is_gateway_owned())
@@ -235,7 +235,7 @@ pub(super) fn public_output_items(
         .collect()
 }
 
-fn gateway_event_plans(
+pub(super) fn gateway_event_plans(
     output_items: &[OutputItem],
     registry: &ToolRegistry,
     output_offset: usize,
@@ -269,10 +269,10 @@ fn output_item_value(item: &OutputItem) -> ExecutorResult<serde_json::Value> {
     serde_json::to_value(item).map_err(ExecutorError::JsonError)
 }
 
-fn emit_gateway_start_events(
+pub(super) fn emit_gateway_start_events(
     plans: &[GatewayCallEventPlan],
     stream_accumulator: &mut GatewayStreamAccumulator,
-    stream_sender: &tokio::sync::mpsc::UnboundedSender<String>,
+    stream_sender: &tokio::sync::mpsc::UnboundedSender<StreamEvent>,
 ) -> ExecutorResult<()> {
     for plan in plans {
         let Some(output_item) = &plan.started_output else {
@@ -326,11 +326,11 @@ fn emit_gateway_start_events(
     Ok(())
 }
 
-fn emit_gateway_completed_events(
+pub(super) fn emit_gateway_completed_events(
     results: &[GatewayCallResult],
     plans: &[GatewayCallEventPlan],
     stream_accumulator: &mut GatewayStreamAccumulator,
-    stream_sender: &tokio::sync::mpsc::UnboundedSender<String>,
+    stream_sender: &tokio::sync::mpsc::UnboundedSender<StreamEvent>,
 ) -> ExecutorResult<()> {
     for result in results {
         let Some(public_output) = &result.public_output else {
@@ -379,7 +379,7 @@ pub(super) async fn execute_and_emit_output_calls(
     output_offset: usize,
     mut stream: Option<(
         &mut GatewayStreamAccumulator,
-        &tokio::sync::mpsc::UnboundedSender<String>,
+        &tokio::sync::mpsc::UnboundedSender<StreamEvent>,
     )>,
 ) -> ExecutorResult<Vec<GatewayCallResult>> {
     let event_plans = gateway_event_plans(output_items, registry, output_offset);
@@ -396,7 +396,7 @@ pub(super) async fn execute_and_emit_output_calls(
 fn emit_gateway_event(
     frame: &mut crate::events::EventFrame,
     stream_accumulator: &mut GatewayStreamAccumulator,
-    stream_sender: &tokio::sync::mpsc::UnboundedSender<String>,
+    stream_sender: &tokio::sync::mpsc::UnboundedSender<StreamEvent>,
 ) -> ExecutorResult<()> {
     if stream_accumulator.process_event(frame, 0) {
         emit_sse_frame(stream_sender, frame)?;

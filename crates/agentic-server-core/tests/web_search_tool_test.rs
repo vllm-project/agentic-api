@@ -360,6 +360,11 @@ fn web_search_function_call_sse_response() -> support::MockResponse {
             "arguments": "{\"query\":\"rust async\",\"count\":2}"
         }),
         serde_json::json!({
+            "type": "provider.gateway_metadata",
+            "output_index": 0,
+            "metadata": {"trace_id": "trace_search"}
+        }),
+        serde_json::json!({
             "type": "response.completed",
             "response": {"id": "resp_tool_call", "status": "completed", "usage": null}
         }),
@@ -600,6 +605,90 @@ fn mixed_web_search_and_client_function_response() -> support::MockResponse {
         })
         .to_string(),
     )
+}
+
+fn mixed_web_search_and_client_function_sse_response() -> support::MockResponse {
+    sse_response([
+        serde_json::json!({
+            "type": "response.created",
+            "response": {"id": "resp_mixed_tool_call", "status": "in_progress", "usage": null}
+        }),
+        serde_json::json!({
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {
+                "id": "fc_search",
+                "type": "function_call",
+                "call_id": "call_search",
+                "name": "web_search",
+                "arguments": "",
+                "status": "in_progress"
+            }
+        }),
+        serde_json::json!({
+            "type": "response.function_call_arguments.done",
+            "item_id": "fc_search",
+            "output_index": 0,
+            "call_id": "call_search",
+            "name": "web_search",
+            "arguments": "{\"query\":\"rust async\",\"count\":2}"
+        }),
+        serde_json::json!({
+            "type": "response.output_item.added",
+            "output_index": 1,
+            "item": {
+                "id": "fc_weather",
+                "type": "function_call",
+                "call_id": "call_weather",
+                "arguments": "",
+                "status": "in_progress"
+            }
+        }),
+        serde_json::json!({
+            "type": "response.function_call_arguments.done",
+            "item_id": "fc_weather",
+            "output_index": 1,
+            "call_id": "call_weather",
+            "name": "get_weather",
+            "arguments": "{\"city\":\"San Francisco\"}"
+        }),
+        serde_json::json!({
+            "type": "response.output_item.done",
+            "output_index": 1,
+            "item": {
+                "id": "fc_weather",
+                "type": "function_call",
+                "call_id": "call_weather",
+                "name": "get_weather",
+                "arguments": "{\"city\":\"San Francisco\"}",
+                "status": "completed"
+            }
+        }),
+        serde_json::json!({
+            "type": "response.output_item.added",
+            "output_index": 2,
+            "item": {
+                "id": "fc_search_second",
+                "type": "function_call",
+                "call_id": "call_search_second",
+                "name": "web_search",
+                "arguments": "",
+                "status": "in_progress"
+            }
+        }),
+        serde_json::json!({
+            "type": "response.function_call_arguments.done",
+            "item_id": "fc_search_second",
+            "output_index": 2,
+            "call_id": "call_search_second",
+            "name": "web_search",
+            "arguments": "{\"query\":\"tokio streams\",\"count\":2}"
+        }),
+        serde_json::json!({
+            "type": "response.completed",
+            "response": {"id": "resp_mixed_tool_call", "status": "completed", "usage": null}
+        }),
+    ])
 }
 
 fn text_response_with_usage(text: &str, input_tokens: i64, output_tokens: i64) -> support::MockResponse {
@@ -1173,6 +1262,7 @@ async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence()
             ("response.web_search_call.searching", 0),
             ("response.web_search_call.completed", 0),
             ("response.output_item.done", 0),
+            ("provider.gateway_metadata", 0),
             ("response.output_item.added", 1),
             ("response.output_text.delta", 1),
             ("response.output_item.done", 1),
@@ -1256,6 +1346,99 @@ async fn stream_hides_web_search_function_events_when_name_arrives_on_done() {
     let output = completed_event["response"]["output"].as_array().unwrap();
     assert!(output.iter().any(|item| item["type"] == "web_search_call"));
     assert!(output.iter().any(|item| item["type"] == "message"));
+}
+
+#[tokio::test]
+async fn stream_orders_gateway_lifecycle_before_later_client_function_events() {
+    let (you_url, mut captured_you, _you_handle) = spawn_mock_you_waiting_for_two_searches().await;
+    let llm = support::MockServer::start_deque(vec![mixed_web_search_and_client_function_sse_response()]).await;
+    let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
+    let web_search: ResponsesTool = serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).unwrap();
+    let client_function: ResponsesTool = serde_json::from_value(serde_json::json!({
+        "type": "function",
+        "name": "get_weather",
+        "parameters": {
+            "type": "object",
+            "properties": {"city": {"type": "string"}}
+        }
+    }))
+    .unwrap();
+    let payload = RequestPayload {
+        model: "test-model".to_owned(),
+        input: ResponsesInput::Text("look up rust async and weather".to_owned()),
+        instructions: None,
+        previous_response_id: None,
+        conversation_id: None,
+        tools: Some(vec![web_search, client_function]),
+        tool_choice: None,
+        stream: true,
+        store: true,
+        include: None,
+        temperature: None,
+        top_p: None,
+        max_output_tokens: Some(1024),
+        truncation: None,
+        metadata: None,
+        parallel_tool_calls: None,
+        cache_salt: None,
+    };
+
+    let result = ExecuteRequest::new(payload, exec_ctx).run().await.unwrap();
+    let Either::Right(stream) = result else {
+        panic!("expected streaming response");
+    };
+    let chunks: Vec<String> = tokio::time::timeout(Duration::from_secs(2), stream.collect())
+        .await
+        .expect("interleaved gateway calls should execute concurrently");
+    captured_you
+        .recv()
+        .await
+        .expect("mock You.com should receive first request");
+    captured_you
+        .recv()
+        .await
+        .expect("mock You.com should receive second request");
+
+    let json_events: Vec<serde_json::Value> = chunks
+        .iter()
+        .filter_map(|chunk| {
+            let data = chunk.trim_end_matches('\n').strip_prefix("data: ")?;
+            (data != "[DONE]").then(|| serde_json::from_str(data).ok())?
+        })
+        .collect();
+    assert_contiguous_sequence_numbers(
+        &json_events,
+        "mixed-call stream must retain contiguous sequence numbers",
+    );
+    assert!(
+        json_events
+            .iter()
+            .any(|event| { event["item"]["type"] == "function_call" && event["item"]["name"] == "get_weather" })
+    );
+    assert!(
+        !json_events
+            .iter()
+            .any(|event| { event["item"]["type"] == "function_call" && event["item"]["name"] == "web_search" })
+    );
+
+    assert_output_event_indices_in_order(
+        &json_events,
+        &[
+            ("response.output_item.added", 0),
+            ("response.web_search_call.in_progress", 0),
+            ("response.web_search_call.searching", 0),
+            ("response.web_search_call.completed", 0),
+            ("response.output_item.done", 0),
+            ("response.output_item.added", 1),
+            ("response.function_call_arguments.done", 1),
+            ("response.output_item.done", 1),
+            ("response.output_item.added", 2),
+            ("response.web_search_call.in_progress", 2),
+            ("response.web_search_call.searching", 2),
+            ("response.web_search_call.completed", 2),
+            ("response.output_item.done", 2),
+        ],
+    );
 }
 
 #[tokio::test]
