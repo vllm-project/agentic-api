@@ -1,6 +1,10 @@
 <div align="center">
 
-# ⚡ Agentic API
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/White-Main-Logo.svg">
+  <source media="(prefers-color-scheme: light)" srcset="assets/Black-Main-Logo.svg">
+  <img alt="Agentic API" src="assets/Black-Main-Logo.svg" width="600">
+</picture>
 
 **The stateful, agentic API layer for [vLLM](https://github.com/vllm-project/vllm), written in Rust 🦀**
 
