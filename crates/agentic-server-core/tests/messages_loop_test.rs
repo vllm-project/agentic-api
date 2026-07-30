@@ -516,3 +516,46 @@ async fn messages_loop_handles_malformed_tool_input() {
     assert_eq!(calls, 2, "loop still ran the tool round + final");
     assert_eq!(result["stop_reason"], "end_turn");
 }
+
+// #116 (Stage 3 parity): a multi-block `system` (attribution block + instructions,
+// the shape Claude Code sends) must survive the gateway tool loop unchanged. The
+// loop only appends the assistant turn + tool_result to `messages`
+// (`append_round_to_history`) and must never touch `system` — so round 2's
+// upstream body must carry the identical `system` blocks it started with.
+#[tokio::test]
+async fn messages_loop_preserves_multi_block_system_across_rounds() {
+    let round0 = serde_json::json!({
+        "id": "m", "type": "message", "role": "assistant", "model": "qwen3",
+        "content": [{"type": "tool_use", "id": "t1", "name": "web_search", "input": {"query": "x"}}],
+        "stop_reason": "tool_use", "usage": {"input_tokens": 5, "output_tokens": 3}
+    });
+    let round1 = serde_json::json!({
+        "id": "m2", "type": "message", "role": "assistant", "model": "qwen3",
+        "content": [{"type": "text", "text": "Rust 1.89.0."}],
+        "stop_reason": "end_turn", "usage": {"input_tokens": 5, "output_tokens": 3}
+    });
+    let (vllm_url, upstream, _v) = spawn_mock_vllm_messages(vec![round0, round1]).await;
+    let (search_url, _rx, _s) = spawn_mock_search().await;
+    let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
+
+    let system = serde_json::json!([
+        {"type": "text", "text": "<attribution>session-1</attribution>"},
+        {"type": "text", "text": "You are helpful."}
+    ]);
+    let mut request = web_search_request();
+    request["system"] = system.clone();
+    let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
+    let registry = build_tool_registry(&tools, &exec_ctx).await;
+
+    let result = run_messages_loop(request, &registry, &exec_ctx, None).await.unwrap();
+    assert_eq!(result["stop_reason"], "end_turn");
+    assert_eq!(upstream.calls.load(Ordering::SeqCst), 2, "tool round + final round");
+
+    // Both upstream rounds must carry the identical multi-block `system`.
+    let reqs = upstream.requests.lock().await;
+    assert_eq!(reqs[0]["system"], system, "round 1 forwards the system blocks verbatim");
+    assert_eq!(
+        reqs[1]["system"], system,
+        "round 2 (after append_round_to_history) still carries the system blocks unchanged"
+    );
+}
