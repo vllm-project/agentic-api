@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+
+projects:
+  - name: agentic-api
+    environments:
+      - name: production
+        networking:
+          isolation: enabled
+        services:
+          - type: pserv
+            name: agentic-api
+            runtime: docker
+            plan: starter
+            dockerfilePath: ./Dockerfile
+            dockerContext: .
+            autoDeployTrigger: checksPass
+            maxShutdownDelaySeconds: 30
+            envVars:
+              - key: GATEWAY_PORT
+                value: "9000"
+              - key: DATABASE_URL
+                fromDatabase:
+                  name: agentic-api-postgres
+                  property: connectionString
+              - key: LLM_API_BASE
+                sync: false
+              - key: OPENAI_API_KEY
+                sync: false
+              - key: SKIP_LLM_READY_CHECK
+                sync: false
+        databases:
+          - name: agentic-api-postgres
+            plan: basic-256mb
+            ipAllowList: []

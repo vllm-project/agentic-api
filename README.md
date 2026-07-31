@@ -191,6 +191,9 @@ uv pip install -r docs/requirements.txt
 uv run mkdocs serve
 ```
 
+For deployment, see the [production container](docs/deploying/container.md) and
+[Render Blueprint](docs/deploying/render.md) guides.
+
 Design and migration decisions are tracked as ADRs in [docs/adr/](docs/adr/), with deeper design notes in [docs/design/](docs/design/). See the full [ROADMAP](ROADMAP.md) for where the project is heading, and [CONTRIBUTING](CONTRIBUTING.md) to get involved.
 
 ## 🗺️ Roadmap at a Glance

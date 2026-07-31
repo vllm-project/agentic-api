@@ -35,6 +35,15 @@ repos:
         types: [rust]
         pass_filenames: false
 
+-   repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.37.4
+    hooks:
+    -   id: check-jsonschema
+        name: Validate Render Blueprint
+        files: ^(render\.yaml|schemas/render-blueprint\.schema\.json)$
+        pass_filenames: false
+        args: [--schemafile, schemas/render-blueprint.schema.json, render.yaml]
+
 ci:
     skip: [rustfmt]
     autofix_commit_msg: '[pre-commit.ci] Auto format from pre-commit.com hooks'

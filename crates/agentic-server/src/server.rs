@@ -1,19 +1,17 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
 
 use agentic_core::config::Config;
 use agentic_core::error::Error;
 use agentic_core::executor::ExecutionContext;
 use agentic_core::proxy::ProxyState;
 use agentic_core::readiness::wait_llm_ready;
+use agentic_server::GATEWAY_DRAIN_TIMEOUT;
 use agentic_server::app::{AppState, ServerConfig, WebSocketTracker, build_router};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
-
-const GATEWAY_DRAIN_TIMEOUT: Duration = Duration::from_secs(8);
 
 async fn build_state(config: &Config, shutdown_token: CancellationToken) -> Result<AppState, Error> {
     let proxy_state = ProxyState::new(config.clone())?;

@@ -98,6 +98,7 @@ nav:
     - Getting Started: developing/getting-started.md
   - Deploying:
     - Container: deploying/container.md
+    - Render: deploying/render.md
   - Community: community/index.md
 
 extra:

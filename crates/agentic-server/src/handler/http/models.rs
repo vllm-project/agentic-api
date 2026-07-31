@@ -117,7 +117,17 @@ pub async fn ready(State(state): State<AppState>) -> impl IntoResponse {
         return StatusCode::SERVICE_UNAVAILABLE;
     };
 
-    match client.get(&url).send().await {
+    let mut request = client.get(&url);
+    if let Some(key) = state
+        .openai_api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+    {
+        request = request.bearer_auth(key);
+    }
+
+    match request.send().await {
         Ok(resp) if resp.status().is_success() => StatusCode::OK,
         Ok(resp) => {
             warn!("LLM backend not ready: {}", resp.status());

@@ -30,7 +30,7 @@ The image starts `agentic-server` in standalone mode. At minimum, set `LLM_API_B
 | `GATEWAY_PORT` | `9000` | Listen port |
 | `DATABASE_URL` | `sqlite://./agentic_api.db` | SQLite or PostgreSQL persistence URL |
 | `OPENAI_API_KEY` | none | Credential sent to the upstream service when the client does not supply one |
-| `SKIP_LLM_READY_CHECK` | `false` | Skip the startup probe for hosted providers without `/health` |
+| `SKIP_LLM_READY_CHECK` | `false` | Skip the startup probe for providers without `/health` |
 | `CORS_ALLOWED_ORIGINS` | none | Comma-separated browser origins |
 
 The container entrypoint rejects percent-encoded SQLite paths because SQLx decodes them before opening the database. Use a literal filesystem path or PostgreSQL instead.
