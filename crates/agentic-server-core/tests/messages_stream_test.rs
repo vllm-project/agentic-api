@@ -67,35 +67,39 @@ fn streams_at(path: &str) -> Vec<String> {
 struct UpstreamState {
     streams: Arc<Vec<String>>,
     calls: Arc<AtomicUsize>,
+    requests: Arc<tokio::sync::Mutex<Vec<Value>>>,
 }
 
-async fn spawn_mock_vllm_stream(streams: Vec<String>) -> (String, Arc<AtomicUsize>, tokio::task::JoinHandle<()>) {
-    let calls = Arc::new(AtomicUsize::new(0));
+async fn spawn_mock_vllm_stream(streams: Vec<String>) -> (String, UpstreamState, tokio::task::JoinHandle<()>) {
     let state = UpstreamState {
         streams: Arc::new(streams),
-        calls: Arc::clone(&calls),
+        calls: Arc::new(AtomicUsize::new(0)),
+        requests: Arc::new(tokio::sync::Mutex::new(Vec::new())),
     };
     let app = Router::new()
         .route(
             "/v1/messages",
-            post(|State(st): State<UpstreamState>, _body: axum::body::Bytes| async move {
-                let n = st.calls.fetch_add(1, Ordering::SeqCst);
-                let body = st.streams.get(n).cloned().unwrap_or_default();
-                Response::builder()
-                    .status(StatusCode::OK)
-                    .header("content-type", "text/event-stream")
-                    .body(axum::body::Body::from(body))
-                    .unwrap()
-                    .into_response()
-            }),
+            post(
+                |State(st): State<UpstreamState>, Json(request): Json<Value>| async move {
+                    let n = st.calls.fetch_add(1, Ordering::SeqCst);
+                    st.requests.lock().await.push(request);
+                    let body = st.streams.get(n).cloned().unwrap_or_default();
+                    Response::builder()
+                        .status(StatusCode::OK)
+                        .header("content-type", "text/event-stream")
+                        .body(axum::body::Body::from(body))
+                        .unwrap()
+                        .into_response()
+                },
+            ),
         )
-        .with_state(state);
+        .with_state(state.clone());
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let handle = tokio::spawn(async move {
         axum::serve(listener, app).await.ok();
     });
-    (format!("http://{addr}"), calls, handle)
+    (format!("http://{addr}"), state, handle)
 }
 
 async fn spawn_mock_search() -> (String, tokio::task::JoinHandle<()>) {
@@ -131,7 +135,7 @@ async fn build_exec_ctx(vllm_url: &str, search_url: &str) -> Arc<ExecutionContex
 
 #[tokio::test]
 async fn messages_stream_presents_one_message_and_hides_gateway_tool() {
-    let (vllm_url, calls, _v) = spawn_mock_vllm_stream(cassette_turn_streams()).await;
+    let (vllm_url, upstream, _v) = spawn_mock_vllm_stream(cassette_turn_streams()).await;
     let (search_url, _s) = spawn_mock_search().await;
     let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
 
@@ -155,7 +159,11 @@ async fn messages_stream_presents_one_message_and_hides_gateway_tool() {
     let sse = chunks.join("");
 
     // Two upstream rounds ran (tool round + final).
-    assert_eq!(calls.load(Ordering::SeqCst), 2, "one tool round + one final round");
+    assert_eq!(
+        upstream.calls.load(Ordering::SeqCst),
+        2,
+        "one tool round + one final round"
+    );
 
     // Exactly one logical message lifecycle.
     assert_eq!(
@@ -204,7 +212,7 @@ async fn messages_stream_presents_one_message_and_hides_gateway_tool() {
 // invariants hold across a tool round + a final round.
 #[tokio::test]
 async fn messages_stream_multiround_single_lifecycle() {
-    let (vllm_url, calls, _v) = spawn_mock_vllm_stream(streams_at(MULTIROUND)).await;
+    let (vllm_url, upstream, _v) = spawn_mock_vllm_stream(streams_at(MULTIROUND)).await;
     let (search_url, _s) = spawn_mock_search().await;
     let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
 
@@ -227,7 +235,7 @@ async fn messages_stream_multiround_single_lifecycle() {
     let sse = stream.collect::<Vec<_>>().await.join("");
 
     assert!(
-        calls.load(Ordering::SeqCst) >= 2,
+        upstream.calls.load(Ordering::SeqCst) >= 2,
         "at least a tool round + a final round"
     );
     assert_eq!(
@@ -263,5 +271,52 @@ async fn messages_stream_multiround_single_lifecycle() {
         idx,
         (0..idx.len() as u64).collect::<Vec<_>>(),
         "contiguous indices: {idx:?}"
+    );
+}
+
+#[tokio::test]
+async fn messages_stream_preserves_multi_block_system_across_rounds() {
+    let (vllm_url, upstream, _v) = spawn_mock_vllm_stream(cassette_turn_streams()).await;
+    let (search_url, _s) = spawn_mock_search().await;
+    let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
+
+    let system = serde_json::json!([
+        {"type": "text", "text": "<attribution>session-1</attribution>"},
+        {"type": "text", "text": "You are helpful."}
+    ]);
+    let request = serde_json::json!({
+        "model": "qwen3",
+        "max_tokens": 1024,
+        "stream": true,
+        "system": system,
+        "messages": [{"role": "user", "content": "What is the latest stable Rust release? Use web_search."}],
+        "tools": [{"name": "web_search", "description": "s",
+            "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}]
+    });
+    let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
+    let mut registry_tool_params = registry_tools(Some(&tools), &GatewayToolMap::default());
+    let mut gateway_executors = exec_ctx.gateway_executors.clone();
+    let registry = Arc::new(
+        ToolRegistry::build_with_handlers(&mut registry_tool_params, &mut gateway_executors)
+            .await
+            .unwrap(),
+    );
+
+    let stream = run_messages_stream(request, registry, Arc::clone(&exec_ctx), None);
+    let _chunks: Vec<String> = stream.collect().await;
+
+    assert_eq!(
+        upstream.calls.load(Ordering::SeqCst),
+        2,
+        "one tool round + one final round"
+    );
+    let requests = upstream.requests.lock().await;
+    assert_eq!(
+        requests[0]["system"], system,
+        "round 1 forwards the system blocks verbatim"
+    );
+    assert_eq!(
+        requests[1]["system"], system,
+        "round 2 still carries the system blocks unchanged"
     );
 }
