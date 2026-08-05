@@ -59,6 +59,7 @@ impl From<ConversationData> for StorageDbConversation {
             id: data.conversation_id,
             metadata: data.metadata,
             created_at: data.created_at,
+            tenant_id: None,
         }
     }
 }
@@ -73,6 +74,7 @@ mod tests {
             id: "conv_123".to_string(),
             metadata: None,
             created_at: 1_704_067_200,
+            tenant_id: None,
         };
 
         let conversation: ConversationData = db_row.into();

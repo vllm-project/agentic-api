@@ -1,5 +1,7 @@
 //! Response storage operations and queries.
 
+#![allow(clippy::missing_errors_doc)]
+
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -49,8 +51,12 @@ impl ResponseStore {
     ///
     /// Returns error if response not found, database query fails, or store is disabled.
     pub async fn get(&self, response_id: &str) -> StoreResult<ResponseData> {
+        self.get_for_tenant(response_id, None).await
+    }
+
+    pub async fn get_for_tenant(&self, response_id: &str, tenant_id: Option<&str>) -> StoreResult<ResponseData> {
         let pool = self.pool()?;
-        let row = response::get(pool, response_id)
+        let row = response::get_for_tenant(pool, response_id, tenant_id)
             .await?
             .ok_or_else(|| StorageError::not_found("Response", response_id))?;
         Ok(row.into())
@@ -64,9 +70,17 @@ impl ResponseStore {
     ///
     /// Returns error if database query fails or store is disabled.
     pub async fn rehydrate(&self, response_id: &str) -> StoreResult<Vec<InOutItem>> {
+        self.rehydrate_for_tenant(response_id, None).await
+    }
+
+    pub async fn rehydrate_for_tenant(
+        &self,
+        response_id: &str,
+        tenant_id: Option<&str>,
+    ) -> StoreResult<Vec<InOutItem>> {
         let pool = self.pool()?;
-        let response = self.get(response_id).await?;
-        let rows = item::get_items(pool, &response.history_item_ids).await?;
+        let response = self.get_for_tenant(response_id, tenant_id).await?;
+        let rows = item::get_items_for_tenant(pool, &response.history_item_ids, tenant_id).await?;
         let mut items_by_id: HashMap<String, InOutItem> = rows
             .into_iter()
             .filter_map(|row| {
@@ -98,27 +112,23 @@ impl ResponseStore {
         new_items: Vec<InOutItem>,
         metadata: &ResponseMetadata,
     ) -> StoreResult<()> {
-        self.persist_with_conversation_id(response_id, None, previous_response_id, new_items, metadata)
+        self.persist_with_conversation_id_for_tenant(response_id, None, previous_response_id, new_items, metadata, None)
             .await
     }
 
-    /// Persists a response while retaining its inherited conversation ID.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`StorageError`] if database operation fails or store is disabled.
-    pub(crate) async fn persist_with_conversation_id(
+    pub(crate) async fn persist_with_conversation_id_for_tenant(
         &self,
         response_id: &str,
         conversation_id: Option<&str>,
         previous_response_id: Option<&str>,
         new_items: Vec<InOutItem>,
         metadata: &ResponseMetadata,
+        tenant_id: Option<&str>,
     ) -> StoreResult<()> {
         let pool = self.pool()?;
 
         let mut item_ids: Vec<String> = match previous_response_id {
-            Some(prev_id) => self.get(prev_id).await?.history_item_ids,
+            Some(prev_id) => self.get_for_tenant(prev_id, tenant_id).await?.history_item_ids,
             None => Vec::new(),
         };
         let mut items_: Vec<(String, String)> = Vec::new();
@@ -133,15 +143,16 @@ impl ResponseStore {
 
         let mut tx = pool.begin().await?;
 
-        item::create_in_tx(&mut tx, items_, None).await?;
+        item::create_in_tx_with_tenant(&mut tx, items_, None, tenant_id).await?;
 
-        response::create_in_tx(
+        response::create_in_tx_with_tenant(
             &mut tx,
             response_id,
             conversation_id,
             previous_response_id,
             Some(&history_item_ids_json),
             Some(&metadata_json),
+            tenant_id,
         )
         .await?;
         tx.commit().await?;

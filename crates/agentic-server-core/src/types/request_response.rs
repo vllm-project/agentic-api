@@ -11,12 +11,13 @@ use super::tools::{CustomToolParam, ResponsesTool};
 use crate::tool::{CodexNamespaceHandler, ToolError};
 use crate::utils::common::serialize_to_string;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct RequestPayload {
     pub model: String,
     pub input: ResponsesInput,
     pub instructions: Option<String>,
     pub previous_response_id: Option<String>,
+    #[serde(rename = "conversation")]
     pub conversation_id: Option<String>,
     pub tools: Option<Vec<ResponsesTool>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -36,6 +37,75 @@ pub struct RequestPayload {
     pub cache_salt: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_management: Option<Vec<ContextManagement>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RequestPayloadWire {
+    model: String,
+    input: ResponsesInput,
+    instructions: Option<String>,
+    previous_response_id: Option<String>,
+    conversation: Option<String>,
+    #[serde(rename = "conversation_id")]
+    legacy_conversation_id: Option<String>,
+    tools: Option<Vec<ResponsesTool>>,
+    #[serde(default)]
+    tool_choice: Option<ToolChoice>,
+    #[serde(default)]
+    stream: bool,
+    #[serde(default = "default_true")]
+    store: bool,
+    include: Option<Vec<String>>,
+    temperature: Option<f64>,
+    top_p: Option<f64>,
+    max_output_tokens: Option<u32>,
+    truncation: Option<String>,
+    metadata: Option<Value>,
+    parallel_tool_calls: Option<bool>,
+    #[serde(default)]
+    cache_salt: Option<String>,
+    #[serde(default)]
+    context_management: Option<Vec<ContextManagement>>,
+}
+
+impl<'de> Deserialize<'de> for RequestPayload {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = RequestPayloadWire::deserialize(deserializer)?;
+        let conversation_id = match (wire.conversation, wire.legacy_conversation_id) {
+            (Some(conversation), Some(legacy_conversation)) if conversation != legacy_conversation => {
+                return Err(serde::de::Error::custom(
+                    "conversation and conversation_id must reference the same conversation",
+                ));
+            }
+            (Some(conversation), _) => Some(conversation),
+            (_, Some(legacy_conversation)) => Some(legacy_conversation),
+            (None, None) => None,
+        };
+
+        Ok(Self {
+            model: wire.model,
+            input: wire.input,
+            instructions: wire.instructions,
+            previous_response_id: wire.previous_response_id,
+            conversation_id,
+            tools: wire.tools,
+            tool_choice: wire.tool_choice,
+            stream: wire.stream,
+            store: wire.store,
+            include: wire.include,
+            temperature: wire.temperature,
+            top_p: wire.top_p,
+            max_output_tokens: wire.max_output_tokens,
+            truncation: wire.truncation,
+            metadata: wire.metadata,
+            parallel_tool_calls: wire.parallel_tool_calls,
+            cache_salt: wire.cache_salt,
+            context_management: wire.context_management,
+        })
+    }
 }
 
 fn default_true() -> bool {
@@ -252,8 +322,53 @@ pub struct ResponsePayload {
     pub incomplete_details: Option<IncompleteDetails>,
     pub error: Option<Value>,
     pub previous_response_id: Option<String>,
+    #[serde(
+        rename = "conversation",
+        alias = "conversation_id",
+        serialize_with = "serialize_conversation_reference",
+        deserialize_with = "deserialize_conversation_reference"
+    )]
     pub conversation_id: Option<String>,
     pub instructions: Option<String>,
+    #[serde(default)]
+    pub parallel_tool_calls: bool,
+    pub temperature: Option<f64>,
+    #[serde(default)]
+    pub tool_choice: ToolChoice,
+    #[serde(default)]
+    pub tools: Vec<ResponsesTool>,
+    pub top_p: Option<f64>,
+    pub truncation: Option<String>,
+    pub metadata: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum ConversationReference {
+    Id(String),
+    Object { id: String },
+}
+
+#[allow(clippy::ref_option)]
+fn serialize_conversation_reference<S>(value: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match value {
+        Some(id) => serde_json::json!({"id": id}).serialize(serializer),
+        None => serializer.serialize_none(),
+    }
+}
+
+fn deserialize_conversation_reference<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<ConversationReference>::deserialize(deserializer).map(|reference| {
+        reference.map(|reference| match reference {
+            ConversationReference::Id(id) | ConversationReference::Object { id } => id,
+        })
+    })
 }
 
 impl ResponsePayload {
@@ -326,6 +441,85 @@ impl From<ResponsesInput> for Vec<InputItem> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn conversation_wire_field_uses_standard_name_and_accepts_legacy_alias() {
+        let standard: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test-model",
+            "input": [],
+            "conversation": "conv_standard"
+        }))
+        .expect("standard conversation field");
+        let legacy: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test-model",
+            "input": [],
+            "conversation_id": "conv_legacy"
+        }))
+        .expect("legacy conversation field");
+        let matching_aliases: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test-model",
+            "input": [],
+            "conversation": "conv_same",
+            "conversation_id": "conv_same"
+        }))
+        .expect("matching conversation aliases");
+        let conflicting_aliases = serde_json::from_value::<RequestPayload>(serde_json::json!({
+            "model": "test-model",
+            "input": [],
+            "conversation": "conv_one",
+            "conversation_id": "conv_two"
+        }));
+
+        assert_eq!(standard.conversation_id.as_deref(), Some("conv_standard"));
+        assert_eq!(legacy.conversation_id.as_deref(), Some("conv_legacy"));
+        assert_eq!(matching_aliases.conversation_id.as_deref(), Some("conv_same"));
+        assert!(conflicting_aliases.is_err());
+        let serialized = serde_json::to_value(standard).expect("serialize standard conversation field");
+        assert_eq!(serialized["conversation"], "conv_standard");
+        assert!(serialized.get("conversation_id").is_none());
+    }
+
+    #[test]
+    fn response_conversation_serializes_as_standard_reference_and_accepts_legacy_shapes() {
+        let mut payload: ResponsePayload = serde_json::from_value(serde_json::json!({
+            "id": "resp_test",
+            "object": "response",
+            "created_at": 0,
+            "model": "test-model",
+            "status": "completed",
+            "output": [],
+            "usage": null,
+            "incomplete_details": null,
+            "error": null,
+            "previous_response_id": null,
+            "conversation": {"id": "conv_standard"},
+            "instructions": null
+        }))
+        .expect("standard response conversation reference");
+        assert_eq!(payload.conversation_id.as_deref(), Some("conv_standard"));
+
+        payload.conversation_id = Some("conv_serialized".to_owned());
+        let serialized = serde_json::to_value(payload).expect("serialize response payload");
+        assert_eq!(serialized["conversation"]["id"], "conv_serialized");
+        assert!(serialized.get("conversation_id").is_none());
+
+        let legacy: ResponsePayload = serde_json::from_value(serde_json::json!({
+            "id": "resp_legacy",
+            "object": "response",
+            "created_at": 0,
+            "model": "test-model",
+            "status": "completed",
+            "output": [],
+            "usage": null,
+            "incomplete_details": null,
+            "error": null,
+            "previous_response_id": null,
+            "conversation_id": "conv_legacy",
+            "instructions": null
+        }))
+        .expect("legacy response conversation reference");
+        assert_eq!(legacy.conversation_id.as_deref(), Some("conv_legacy"));
+    }
 
     #[test]
     fn compact_request_accepts_codex_compatibility_fields() {
@@ -657,6 +851,13 @@ mod tests {
             previous_response_id: None,
             conversation_id: None,
             instructions: None,
+            parallel_tool_calls: true,
+            temperature: None,
+            tool_choice: ToolChoice::Auto,
+            tools: Vec::new(),
+            top_p: None,
+            truncation: None,
+            metadata: None,
         };
 
         for (status, expected_type) in [
@@ -690,6 +891,13 @@ mod tests {
             previous_response_id: None,
             conversation_id: None,
             instructions: None,
+            parallel_tool_calls: true,
+            temperature: None,
+            tool_choice: ToolChoice::Auto,
+            tools: Vec::new(),
+            top_p: None,
+            truncation: None,
+            metadata: None,
         };
 
         let chunk = payload.as_created_response_chunk();

@@ -13,9 +13,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
 use agentic_core::ResponseUsage;
-use agentic_core::executor::{
-    BoxStream, ExecuteRequest, ExecutorError, RequestContext, persist_turn, rehydrate_conversation,
-};
+use agentic_core::executor::{BoxStream, ExecuteRequest, ExecutorError, RequestContext, persist_turn};
 use agentic_core::types::request_response::RequestPayload;
 use agentic_core::utils::common::utcnow_str;
 
@@ -117,6 +115,7 @@ async fn responses_ws_loop(
             &text,
             &shutdown_token,
             &mut queue,
+            principal.as_ref().map(AuthenticatedPrincipal::tenant_id),
         )
         .await
         {
@@ -196,6 +195,7 @@ where
 ///
 /// Any requests received from the client while the stream is active are
 /// pushed onto `queue` and processed by the caller in order after this returns.
+#[allow(clippy::too_many_arguments)]
 async fn handle_ws_text(
     sender: &mut WsSender,
     receiver: &mut WsReceiver,
@@ -204,6 +204,7 @@ async fn handle_ws_text(
     text: &str,
     shutdown_token: &CancellationToken,
     queue: &mut VecDeque<String>,
+    tenant_id: Option<String>,
 ) -> Result<(), WsError> {
     let value = serde_json::from_str::<Value>(text).map_err(WsError::InvalidJson)?;
 
@@ -231,12 +232,13 @@ async fn handle_ws_text(
 
     if generate == Some(false) {
         debug!("handling non-generating websocket request locally");
-        return complete_without_inference(sender, state, payload).await;
+        return complete_without_inference(sender, state, payload, tenant_id).await;
     }
 
     let auth = extract_bearer(headers, state.openai_api_key.as_deref());
     let result = ExecuteRequest::new(payload, Arc::clone(&state.exec_ctx))
         .with_auth(auth)
+        .with_tenant_id(tenant_id)
         .run()
         .await?;
     let Some(result) = keep_if_running(shutdown_token, result) else {
@@ -256,8 +258,9 @@ async fn complete_without_inference(
     sender: &mut WsSender,
     state: &AppState,
     payload: RequestPayload,
+    tenant_id: Option<String>,
 ) -> Result<(), WsError> {
-    let ctx = rehydrate_conversation(payload, &state.exec_ctx).await?;
+    let ctx = agentic_core::executor::rehydrate_conversation_for_tenant(payload, &state.exec_ctx, tenant_id).await?;
     let created_at = utcnow_str();
     let created_event = empty_response_event(&ctx, created_at, "response.created", "in_progress", 0, None);
     let completed_event = empty_response_event(
@@ -305,7 +308,7 @@ fn empty_response_event(
             "incomplete_details": null,
             "error": null,
             "previous_response_id": &ctx.original_request.previous_response_id,
-            "conversation_id": &ctx.conversation_id,
+            "conversation": ctx.conversation_id.as_ref().map(|id| serde_json::json!({"id": id})),
             "instructions": &ctx.enriched_request.instructions,
         },
     })

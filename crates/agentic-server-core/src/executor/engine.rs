@@ -24,7 +24,6 @@ use crate::events::EventFrame;
 use crate::executor::error::ExecutorResult;
 use crate::executor::inference::DONE_MARKER;
 use crate::executor::persist::persist_if_needed;
-use crate::executor::rehydrate::rehydrate_conversation;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::upstream::{emit_deferred_stream_events, fetch_blocking_payload, fetch_stream_payload};
 use crate::tool::ToolRegistry;
@@ -453,6 +452,7 @@ pub struct ExecuteRequest {
     payload: RequestPayload,
     exec_ctx: Arc<ExecutionContext>,
     client_auth: Option<String>,
+    tenant_id: Option<String>,
 }
 
 impl ExecuteRequest {
@@ -462,6 +462,7 @@ impl ExecuteRequest {
             payload,
             exec_ctx,
             client_auth: None,
+            tenant_id: None,
         }
     }
 
@@ -469,6 +470,12 @@ impl ExecuteRequest {
     #[must_use]
     pub fn with_auth(mut self, token: Option<String>) -> Self {
         self.client_auth = token;
+        self
+    }
+
+    #[must_use]
+    pub fn with_tenant_id(mut self, tenant_id: Option<String>) -> Self {
+        self.tenant_id = tenant_id;
         self
     }
 
@@ -490,7 +497,8 @@ impl ExecuteRequest {
             tools = self.payload.tools.as_ref().map_or(0, Vec::len),
             "executor received responses request"
         );
-        let ctx = rehydrate_conversation(self.payload, &self.exec_ctx).await?;
+        let ctx =
+            super::rehydrate::rehydrate_conversation_for_tenant(self.payload, &self.exec_ctx, self.tenant_id).await?;
         if ctx.original_request.stream {
             Ok(Either::Right(run_stream(ctx, self.exec_ctx, self.client_auth)))
         } else {

@@ -35,6 +35,7 @@ pub struct RequestContext {
     /// Conversation version captured with rehydrated history.
     /// `None` for non-conversation and `previous_response_id` execution.
     pub conversation_version: Option<ConversationVersion>,
+    pub tenant_id: Option<String>,
 }
 
 impl RequestContext {

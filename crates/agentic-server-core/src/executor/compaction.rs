@@ -1,5 +1,6 @@
+#![allow(clippy::missing_errors_doc)]
+
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::rehydrate::rehydrate_conversation;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::upstream::fetch_blocking_payload;
 use crate::types::event::MessageStatus;
@@ -199,6 +200,7 @@ pub(crate) async fn compact_items(
         response_id: uuid7_str("resp_"),
         conversation_id: None,
         conversation_version: None,
+        tenant_id: None,
     };
     let response = fetch_blocking_payload(&ctx, exec_ctx, auth).await?;
     let summary = completed_summary_text(&response)?;
@@ -263,6 +265,15 @@ pub async fn compact_response(
     exec_ctx: &ExecutionContext,
     auth: Option<&str>,
 ) -> ExecutorResult<CompactedResponse> {
+    compact_response_for_tenant(request, exec_ctx, auth, None).await
+}
+
+pub async fn compact_response_for_tenant(
+    request: CompactRequest,
+    exec_ctx: &ExecutionContext,
+    auth: Option<&str>,
+    tenant_id: Option<String>,
+) -> ExecutorResult<CompactedResponse> {
     if request.input.is_none() && request.previous_response_id.is_none() {
         return Err(ExecutorError::InvalidRequest(
             "compaction requires input or previous_response_id".to_owned(),
@@ -275,7 +286,7 @@ pub async fn compact_response(
         request.instructions,
     );
     payload.previous_response_id = request.previous_response_id;
-    let mut ctx = rehydrate_conversation(payload, exec_ctx).await?;
+    let mut ctx = crate::executor::rehydrate::rehydrate_conversation_for_tenant(payload, exec_ctx, tenant_id).await?;
     let model = ctx.enriched_request.model.clone();
     let instructions = ctx.enriched_request.instructions.clone();
     let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));

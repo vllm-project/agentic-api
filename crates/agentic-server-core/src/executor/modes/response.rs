@@ -31,7 +31,10 @@ impl ResponseHandler {
             .previous_response_id
             .as_deref()
             .ok_or_else(|| ExecutorError::InvalidRequest("previous_response_id is required for get".into()))?;
-        self.store.get(prev_id).await.map_err(ExecutorError::Storage)
+        self.store
+            .get_for_tenant(prev_id, ctx.tenant_id.as_deref())
+            .await
+            .map_err(ExecutorError::Storage)
     }
 
     /// Validates that the response for `previous_response_id` exists.
@@ -57,7 +60,10 @@ impl ResponseHandler {
         let Some(prev_id) = ctx.original_request.previous_response_id.as_deref() else {
             return Ok(vec![]);
         };
-        self.store.rehydrate(prev_id).await.map_err(ExecutorError::Storage)
+        self.store
+            .rehydrate_for_tenant(prev_id, ctx.tenant_id.as_deref())
+            .await
+            .map_err(ExecutorError::Storage)
     }
 
     /// Persists a response record — only the new items from this turn.
@@ -82,12 +88,13 @@ impl ResponseHandler {
         new_items.extend(output_items.into_iter().map(InOutItem::Output));
 
         self.store
-            .persist_with_conversation_id(
+            .persist_with_conversation_id_for_tenant(
                 &ctx.response_id,
                 ctx.conversation_id.as_deref(),
                 metadata.previous_response_id.as_deref(),
                 new_items,
                 &metadata,
+                ctx.tenant_id.as_deref(),
             )
             .await
             .map_err(ExecutorError::Storage)
@@ -132,6 +139,7 @@ mod tests {
             response_id: "resp_test".into(),
             conversation_id: None,
             conversation_version: None,
+            tenant_id: None,
         }
     }
 

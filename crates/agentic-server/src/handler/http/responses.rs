@@ -1,4 +1,4 @@
-use axum::extract::{Request, State};
+use axum::extract::{Extension, Request, State};
 use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
@@ -7,7 +7,7 @@ use tracing::debug;
 
 use std::sync::Arc;
 
-use agentic_core::executor::{ExecuteRequest, compact_response as execute_compaction};
+use agentic_core::executor::{ExecuteRequest, compact_response_for_tenant as execute_compaction};
 use agentic_core::proxy::{ProxyRequest, proxy_request};
 use agentic_core::types::request_response::{CompactRequest, RequestPayload};
 use agentic_core::types::tools::ResponsesTool;
@@ -16,6 +16,7 @@ use super::super::common::{
     convert_response, executor_error_response, extract_bearer, read_and_parse, read_json, sse_response,
 };
 use crate::app::AppState;
+use crate::auth::AuthenticatedPrincipal;
 
 async fn proxy_responses(state: &AppState, parts: Parts, body: Bytes) -> Response {
     let proxy_req = ProxyRequest {
@@ -26,10 +27,16 @@ async fn proxy_responses(state: &AppState, parts: Parts, body: Bytes) -> Respons
     convert_response(proxy_request(proxy_req, &state.proxy_state).await)
 }
 
-async fn execute_responses(state: &AppState, parts: Parts, payload: RequestPayload) -> Response {
+async fn execute_responses(
+    state: &AppState,
+    parts: Parts,
+    payload: RequestPayload,
+    tenant_id: Option<String>,
+) -> Response {
     let auth = extract_bearer(&parts.headers, state.openai_api_key.as_deref());
     match ExecuteRequest::new(payload, Arc::clone(&state.exec_ctx))
         .with_auth(auth)
+        .with_tenant_id(tenant_id)
         .run()
         .await
     {
@@ -46,7 +53,11 @@ fn has_gateway_tools(payload: &RequestPayload) -> bool {
         .is_some_and(|tools| tools.iter().any(|tool| !matches!(tool, ResponsesTool::Function(_))))
 }
 
-pub async fn responses(State(state): State<AppState>, req: Request) -> Response {
+pub async fn responses(
+    State(state): State<AppState>,
+    principal: Option<Extension<AuthenticatedPrincipal>>,
+    req: Request,
+) -> Response {
     let (parts, body) = req.into_parts();
     let (bytes, payload) = match read_and_parse(body).await {
         Ok(v) => v,
@@ -74,21 +85,27 @@ pub async fn responses(State(state): State<AppState>, req: Request) -> Response 
         "routing HTTP responses request"
     );
 
+    let tenant_id = principal.map(|Extension(principal)| principal.tenant_id());
     if should_execute {
-        execute_responses(&state, parts, payload).await
+        execute_responses(&state, parts, payload, tenant_id).await
     } else {
         proxy_responses(&state, parts, bytes).await
     }
 }
 
-pub async fn compact_response(State(state): State<AppState>, req: Request) -> Response {
+pub async fn compact_response(
+    State(state): State<AppState>,
+    principal: Option<Extension<AuthenticatedPrincipal>>,
+    req: Request,
+) -> Response {
     let (parts, body) = req.into_parts();
     let request: CompactRequest = match read_json(body).await {
         Ok(request) => request,
         Err(response) => return response,
     };
     let auth = extract_bearer(&parts.headers, state.openai_api_key.as_deref());
-    match execute_compaction(request, state.exec_ctx.as_ref(), auth.as_deref()).await {
+    let tenant_id = principal.map(|Extension(principal)| principal.tenant_id());
+    match execute_compaction(request, state.exec_ctx.as_ref(), auth.as_deref(), tenant_id).await {
         Ok(response) => axum::Json(response).into_response(),
         Err(error) => executor_error_response(error),
     }

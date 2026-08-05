@@ -326,6 +326,11 @@ impl AuthenticatedPrincipal {
     }
 
     #[must_use]
+    pub fn tenant_id(&self) -> String {
+        format!("{}:{}", self.issuer, self.subject)
+    }
+
+    #[must_use]
     pub fn expires_at(&self) -> u64 {
         self.expires_at
     }

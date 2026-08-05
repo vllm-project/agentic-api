@@ -6,8 +6,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::storage::StorageError;
+use crate::storage::models::Item as StorageDbItem;
 use crate::types::io::{InputItem, OutputItem};
-use crate::utils::common::serialize_to_value;
+use crate::utils::common::{deserialize_from_str_opt, serialize_to_value};
 
 pub(crate) const STORED_ITEM_KIND_KEY: &str = "_agentic_item_kind";
 
@@ -41,6 +42,20 @@ impl ItemKind {
 pub enum InOutItem {
     Input(InputItem),
     Output(OutputItem),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConversationItemData {
+    pub id: String,
+    pub item: Value,
+    pub created_at: i64,
+    pub sequence: i64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConversationItemPage {
+    pub data: Vec<ConversationItemData>,
+    pub has_more: bool,
 }
 
 fn serialized_values_equal<T: Serialize>(left: &T, right: &T) -> bool {
@@ -113,6 +128,22 @@ impl InOutItem {
                 InOutItem::Output(output) => output.to_input_item(),
             })
             .collect()
+    }
+}
+
+impl From<StorageDbItem> for ConversationItemData {
+    fn from(row: StorageDbItem) -> Self {
+        let mut item = deserialize_from_str_opt::<Value>(&row.data).unwrap_or(Value::Null);
+        if let Some(object) = item.as_object_mut() {
+            object.remove(STORED_ITEM_KIND_KEY);
+            object.insert("id".to_owned(), Value::String(row.id.clone()));
+        }
+        Self {
+            id: row.id,
+            item,
+            created_at: row.created_at,
+            sequence: row.seq.unwrap_or_default(),
+        }
     }
 }
 

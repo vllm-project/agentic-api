@@ -1,5 +1,7 @@
 //! Conversation history item stored in the database.
 
+#![allow(clippy::missing_errors_doc)]
+
 use serde_json::Value;
 use std::fmt::Write;
 use tracing::warn;
@@ -9,7 +11,7 @@ use super::super::types::item::{InOutItem, ItemKind, STORED_ITEM_KIND_KEY};
 use crate::types::io::{InputItem, OutputItem};
 use crate::utils::common::{deserialize_from_str_opt, utcnow_str};
 
-const ITEM_COLUMN_COUNT: usize = 5;
+const ITEM_COLUMN_COUNT: usize = 6;
 const SEQUENCE_COLUMN_INDEX: usize = 4;
 const MAX_BIND_PARAMETERS: usize = 999;
 const MAX_ITEMS_PER_INSERT: usize = MAX_BIND_PARAMETERS / ITEM_COLUMN_COUNT;
@@ -35,6 +37,8 @@ pub struct Item {
 
     /// Optional sequence number within conversation.
     pub seq: Option<i64>,
+
+    pub tenant_id: Option<String>,
 }
 
 impl Item {
@@ -132,6 +136,15 @@ pub async fn create_in_tx(
     items: Vec<(String, String)>,
     conversation_id: Option<&str>,
 ) -> DbResult<Vec<Item>> {
+    create_in_tx_with_tenant(tx, items, conversation_id, None).await
+}
+
+pub async fn create_in_tx_with_tenant(
+    tx: &mut DbTransaction<'_>,
+    items: Vec<(String, String)>,
+    conversation_id: Option<&str>,
+    tenant_id: Option<&str>,
+) -> DbResult<Vec<Item>> {
     if items.is_empty() {
         return Ok(Vec::new());
     }
@@ -139,9 +152,9 @@ pub async fn create_in_tx(
     let mut created = Vec::with_capacity(items.len());
     for batch in items.chunks(MAX_ITEMS_PER_INSERT) {
         let mut rows = if let Some(conversation_id) = conversation_id {
-            create_in_tx_with_next_conversation_seq(tx, batch, conversation_id).await?
+            create_in_tx_with_next_conversation_seq(tx, batch, conversation_id, tenant_id).await?
         } else {
-            create_in_tx_without_conversation(tx, batch).await?
+            create_in_tx_without_conversation(tx, batch, tenant_id).await?
         };
         created.append(&mut rows);
     }
@@ -151,15 +164,23 @@ pub async fn create_in_tx(
 async fn create_in_tx_without_conversation(
     tx: &mut DbTransaction<'_>,
     items: &[(String, String)],
+    tenant_id: Option<&str>,
 ) -> DbResult<Vec<Item>> {
     let now = utcnow_str();
     let values_clause = item_values_clause(items.len(), 1, false);
-    let sql =
-        format!("INSERT INTO items (id, data, created_at, conversation_id, seq) VALUES {values_clause} RETURNING *");
+    let sql = format!(
+        "INSERT INTO items (id, data, created_at, conversation_id, seq, tenant_id) VALUES {values_clause} RETURNING *"
+    );
 
     let mut query = sqlx::query_as::<_, Item>(&sql);
     for (id, data) in items {
-        query = query.bind(id).bind(data).bind(now).bind(None::<&str>).bind(None::<i64>);
+        query = query
+            .bind(id)
+            .bind(data)
+            .bind(now)
+            .bind(None::<&str>)
+            .bind(None::<i64>)
+            .bind(tenant_id);
     }
 
     query.fetch_all(&mut **tx).await
@@ -169,21 +190,31 @@ async fn create_in_tx_with_next_conversation_seq(
     tx: &mut DbTransaction<'_>,
     items: &[(String, String)],
     conversation_id: &str,
+    tenant_id: Option<&str>,
 ) -> DbResult<Vec<Item>> {
     let now = utcnow_str();
-    let values_clause = item_values_clause(items.len(), 2, true);
+    let (values_first_bind, sequence_query) = match tenant_id {
+        Some(_) => (
+            3,
+            "SELECT COALESCE(MAX(seq), -1) + 1 AS start FROM items WHERE conversation_id = $1 AND tenant_id = $2",
+        ),
+        None => (
+            2,
+            "SELECT COALESCE(MAX(seq), -1) + 1 AS start FROM items WHERE conversation_id = $1 AND tenant_id IS NULL",
+        ),
+    };
+    let values_clause = item_values_clause(items.len(), values_first_bind, true);
     let sql = format!(
-        "WITH next_seq AS ( \
-             SELECT COALESCE(MAX(seq), -1) + 1 AS start \
-             FROM items \
-             WHERE conversation_id = $1 \
-         ) \
-         INSERT INTO items (id, data, created_at, conversation_id, seq) \
+        "WITH next_seq AS ({sequence_query}) \
+         INSERT INTO items (id, data, created_at, conversation_id, seq, tenant_id) \
          VALUES {values_clause} \
          RETURNING *"
     );
 
     let mut query = sqlx::query_as::<_, Item>(&sql).bind(conversation_id);
+    if let Some(tenant_id) = tenant_id {
+        query = query.bind(tenant_id);
+    }
     #[allow(clippy::cast_possible_wrap)]
     for (idx, (id, data)) in items.iter().enumerate() {
         query = query
@@ -191,7 +222,8 @@ async fn create_in_tx_with_next_conversation_seq(
             .bind(data)
             .bind(now)
             .bind(conversation_id)
-            .bind(idx as i64);
+            .bind(idx as i64)
+            .bind(tenant_id);
     }
 
     query.fetch_all(&mut **tx).await
@@ -202,34 +234,119 @@ async fn create_in_tx_with_next_conversation_seq(
 /// # Errors
 /// Returns `DbResult::Err` if the database query fails.
 pub async fn get_items(pool: &DbPool, ids: &[String]) -> DbResult<Vec<Item>> {
+    get_items_for_tenant(pool, ids, None).await
+}
+
+pub async fn get_items_for_tenant(pool: &DbPool, ids: &[String], tenant_id: Option<&str>) -> DbResult<Vec<Item>> {
     if ids.is_empty() {
         return Ok(vec![]);
     }
     let mut rows = Vec::with_capacity(ids.len());
-    for batch in ids.chunks(MAX_BIND_PARAMETERS) {
+    let max_ids_per_batch = if tenant_id.is_some() {
+        MAX_BIND_PARAMETERS - 1
+    } else {
+        MAX_BIND_PARAMETERS
+    };
+    for batch in ids.chunks(max_ids_per_batch) {
         let placeholders = (1..=batch.len())
             .map(|index| format!("${index}"))
             .collect::<Vec<_>>()
             .join(", ");
-        let sql = format!("SELECT * FROM items WHERE id IN ({placeholders})");
+        let sql = match tenant_id {
+            Some(_) => format!(
+                "SELECT * FROM items WHERE id IN ({placeholders}) AND tenant_id = ${}",
+                batch.len() + 1
+            ),
+            None => format!("SELECT * FROM items WHERE id IN ({placeholders}) AND tenant_id IS NULL"),
+        };
         let mut query = sqlx::query_as::<_, Item>(&sql);
         for id in batch {
             query = query.bind(id);
+        }
+        if let Some(tenant_id) = tenant_id {
+            query = query.bind(tenant_id);
         }
         rows.extend(query.fetch_all(pool).await?);
     }
     Ok(rows)
 }
 
-/// Get items by conversation ID ordered by sequence.
-///
-/// # Errors
-/// Returns `DbResult::Err` if the database query fails.
+pub async fn get_item(
+    pool: &DbPool,
+    conversation_id: &str,
+    item_id: &str,
+    tenant_id: Option<&str>,
+) -> DbResult<Option<Item>> {
+    match tenant_id {
+        Some(tenant_id) => {
+            sqlx::query_as::<_, Item>("SELECT * FROM items WHERE id = $1 AND conversation_id = $2 AND tenant_id = $3")
+                .bind(item_id)
+                .bind(conversation_id)
+                .bind(tenant_id)
+                .fetch_optional(pool)
+                .await
+        }
+        None => {
+            sqlx::query_as::<_, Item>(
+                "SELECT * FROM items WHERE id = $1 AND conversation_id = $2 AND tenant_id IS NULL",
+            )
+            .bind(item_id)
+            .bind(conversation_id)
+            .fetch_optional(pool)
+            .await
+        }
+    }
+}
+
 pub async fn get_items_by_conversation(pool: &DbPool, conversation_id: &str) -> DbResult<Vec<Item>> {
-    sqlx::query_as::<_, Item>("SELECT * FROM items WHERE conversation_id = $1 ORDER BY seq ASC")
-        .bind(conversation_id)
-        .fetch_all(pool)
-        .await
+    get_items_by_conversation_for_tenant(pool, conversation_id, None).await
+}
+
+pub async fn get_items_by_conversation_for_tenant(
+    pool: &DbPool,
+    conversation_id: &str,
+    tenant_id: Option<&str>,
+) -> DbResult<Vec<Item>> {
+    match tenant_id {
+        Some(tenant_id) => {
+            sqlx::query_as::<_, Item>(
+                "SELECT * FROM items WHERE conversation_id = $1 AND tenant_id = $2 ORDER BY seq ASC",
+            )
+            .bind(conversation_id)
+            .bind(tenant_id)
+            .fetch_all(pool)
+            .await
+        }
+        None => {
+            sqlx::query_as::<_, Item>(
+                "SELECT * FROM items WHERE conversation_id = $1 AND tenant_id IS NULL ORDER BY seq ASC",
+            )
+            .bind(conversation_id)
+            .fetch_all(pool)
+            .await
+        }
+    }
+}
+
+pub async fn delete(pool: &DbPool, conversation_id: &str, item_id: &str, tenant_id: Option<&str>) -> DbResult<bool> {
+    let result = match tenant_id {
+        Some(tenant_id) => {
+            sqlx::query("DELETE FROM items WHERE id = $1 AND conversation_id = $2 AND tenant_id = $3")
+                .bind(item_id)
+                .bind(conversation_id)
+                .bind(tenant_id)
+                .execute(pool)
+                .await?
+        }
+        None => {
+            sqlx::query("DELETE FROM items WHERE id = $1 AND conversation_id = $2 AND tenant_id IS NULL")
+                .bind(item_id)
+                .bind(conversation_id)
+                .execute(pool)
+                .await?
+        }
+    };
+    Ok(result.rows_affected() > 0)
 }
 
 /// Returns the last stored item sequence for a conversation inside a transaction.
@@ -240,10 +357,29 @@ pub async fn last_conversation_sequence_in_tx(
     tx: &mut DbTransaction<'_>,
     conversation_id: &str,
 ) -> DbResult<Option<i64>> {
-    sqlx::query_scalar("SELECT MAX(seq) FROM items WHERE conversation_id = $1")
-        .bind(conversation_id)
-        .fetch_one(&mut **tx)
-        .await
+    last_conversation_sequence_in_tx_for_tenant(tx, conversation_id, None).await
+}
+
+pub async fn last_conversation_sequence_in_tx_for_tenant(
+    tx: &mut DbTransaction<'_>,
+    conversation_id: &str,
+    tenant_id: Option<&str>,
+) -> DbResult<Option<i64>> {
+    match tenant_id {
+        Some(tenant_id) => {
+            sqlx::query_scalar("SELECT MAX(seq) FROM items WHERE conversation_id = $1 AND tenant_id = $2")
+                .bind(conversation_id)
+                .bind(tenant_id)
+                .fetch_one(&mut **tx)
+                .await
+        }
+        None => {
+            sqlx::query_scalar("SELECT MAX(seq) FROM items WHERE conversation_id = $1 AND tenant_id IS NULL")
+                .bind(conversation_id)
+                .fetch_one(&mut **tx)
+                .await
+        }
+    }
 }
 
 #[cfg(test)]
@@ -256,7 +392,7 @@ mod tests {
     fn item_values_clause_numbers_plain_rows() {
         assert_eq!(
             item_values_clause(2, 1, false),
-            "($1, $2, $3, $4, $5), ($6, $7, $8, $9, $10)"
+            "($1, $2, $3, $4, $5, $6), ($7, $8, $9, $10, $11, $12)"
         );
     }
 
@@ -264,8 +400,8 @@ mod tests {
     fn item_values_clause_numbers_conversation_rows_after_cte_bind() {
         assert_eq!(
             item_values_clause(2, 2, true),
-            "($2, $3, $4, $5, (SELECT start + $6 FROM next_seq)), \
-             ($7, $8, $9, $10, (SELECT start + $11 FROM next_seq))"
+            "($2, $3, $4, $5, (SELECT start + $6 FROM next_seq), $7), \
+             ($8, $9, $10, $11, (SELECT start + $12 FROM next_seq), $13)"
         );
     }
 
@@ -336,6 +472,7 @@ mod tests {
             created_at: 1_704_067_200,
             conversation_id: Some("conv_456".to_string()),
             seq: Some(1),
+            tenant_id: None,
         };
 
         assert_eq!(item.id, "item_123");
@@ -351,6 +488,7 @@ mod tests {
             created_at: 1_704_067_200,
             conversation_id: None,
             seq: None,
+            tenant_id: None,
         };
 
         assert!(item.conversation_id.is_none());
@@ -368,6 +506,7 @@ mod tests {
             created_at: 1_704_067_200,
             conversation_id: None,
             seq: None,
+            tenant_id: None,
         };
 
         assert!(matches!(
@@ -391,6 +530,7 @@ mod tests {
             created_at: 1_704_067_200,
             conversation_id: None,
             seq: None,
+            tenant_id: None,
         };
 
         let stored = item.as_inout().expect("stored item");
@@ -416,6 +556,7 @@ mod tests {
             created_at: 1_704_067_200,
             conversation_id: None,
             seq: None,
+            tenant_id: None,
         };
 
         let inputs = InOutItem::into_input_items(vec![item.as_inout().expect("stored item")]);
@@ -459,6 +600,7 @@ mod tests {
                 created_at: 1_704_067_200,
                 conversation_id: None,
                 seq: Some(idx.try_into().expect("seq")),
+                tenant_id: None,
             })
             .map(|item| item.as_inout().expect("stored item"))
             .collect();
@@ -492,6 +634,7 @@ mod tests {
             created_at: 1_704_067_200,
             conversation_id: None,
             seq: None,
+            tenant_id: None,
         };
 
         let inputs = InOutItem::into_input_items(vec![item.as_inout().expect("stored item")]);

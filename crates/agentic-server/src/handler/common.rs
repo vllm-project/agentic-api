@@ -67,13 +67,6 @@ pub(super) async fn read_json<T: DeserializeOwned>(body: Body) -> Result<T, Resp
     serde_json::from_slice::<T>(&bytes).map_err(|error| executor_error_response(ExecutorError::from(error)))
 }
 
-pub(super) fn extract_store(bytes: &[u8]) -> bool {
-    serde_json::from_slice::<serde_json::Value>(bytes)
-        .ok()
-        .and_then(|j| j.get("store").and_then(serde_json::Value::as_bool))
-        .unwrap_or(true)
-}
-
 pub(super) fn extract_bearer(headers: &HeaderMap, config_key: Option<&str>) -> Option<String> {
     headers
         .get("authorization")

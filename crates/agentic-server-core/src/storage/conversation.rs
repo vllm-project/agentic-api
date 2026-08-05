@@ -1,12 +1,17 @@
 //! Conversation storage operations.
 
+#![allow(clippy::missing_errors_doc)]
+
 use std::convert::TryFrom;
 use std::sync::Arc;
+
+use serde_json::Value;
 
 use super::models::{conversation, item, response};
 use super::pool::DbPool;
 use super::types::{
-    ConversationData, ConversationSnapshot, ConversationVersion, InOutItem, ResponseMetadata, StorageError, StoreResult,
+    ConversationData, ConversationItemData, ConversationItemPage, ConversationSnapshot, ConversationVersion, InOutItem,
+    ResponseMetadata, StorageError, StoreResult,
 };
 use crate::utils::common::{serialize_to_string, uuid7_str};
 
@@ -44,8 +49,27 @@ impl ConversationStore {
     ///
     /// Returns error if database query fails.
     pub async fn create(&self) -> StoreResult<ConversationData> {
+        self.create_with_items_for_tenant(None, None, Vec::new()).await
+    }
+
+    pub async fn create_with_items_for_tenant(
+        &self,
+        tenant_id: Option<&str>,
+        metadata: Option<&Value>,
+        initial_items: Vec<InOutItem>,
+    ) -> StoreResult<ConversationData> {
         let pool = self.pool()?;
-        let row = conversation::create(pool, &uuid7_str("conv_")).await?;
+        let conversation_id = uuid7_str("conv_");
+        let metadata_json = metadata.map(serialize_to_string).transpose()?;
+        let items = serialize_items(initial_items)?;
+        let mut tx = pool.begin().await?;
+        let row =
+            conversation::create_with_metadata_in_tx(&mut tx, &conversation_id, tenant_id, metadata_json.as_deref())
+                .await?;
+        if !items.is_empty() {
+            item::create_in_tx_with_tenant(&mut tx, items, Some(&conversation_id), tenant_id).await?;
+        }
+        tx.commit().await?;
         Ok(row.into())
     }
 
@@ -55,8 +79,16 @@ impl ConversationStore {
     ///
     /// Returns error if database query fails.
     pub async fn get_or_create(&self, conversation_id: &str) -> StoreResult<ConversationData> {
+        self.get_or_create_for_tenant(conversation_id, None).await
+    }
+
+    pub async fn get_or_create_for_tenant(
+        &self,
+        conversation_id: &str,
+        tenant_id: Option<&str>,
+    ) -> StoreResult<ConversationData> {
         let pool = self.pool()?;
-        let row = conversation::get_or_create(pool, conversation_id).await?;
+        let row = conversation::get_or_create_for_tenant(pool, conversation_id, tenant_id).await?;
         Ok(row.into())
     }
 
@@ -66,11 +98,125 @@ impl ConversationStore {
     ///
     /// Returns error if conversation not found or database query fails.
     pub async fn get(&self, conversation_id: &str) -> StoreResult<ConversationData> {
+        self.get_for_tenant(conversation_id, None).await
+    }
+
+    pub async fn get_for_tenant(
+        &self,
+        conversation_id: &str,
+        tenant_id: Option<&str>,
+    ) -> StoreResult<ConversationData> {
         let pool = self.pool()?;
-        let row = conversation::get(pool, conversation_id)
+        let row = conversation::get_for_tenant(pool, conversation_id, tenant_id)
             .await?
             .ok_or_else(|| StorageError::not_found("Conversation", conversation_id))?;
         Ok(row.into())
+    }
+
+    pub async fn update_metadata_for_tenant(
+        &self,
+        conversation_id: &str,
+        tenant_id: Option<&str>,
+        metadata: Option<&Value>,
+    ) -> StoreResult<ConversationData> {
+        let pool = self.pool()?;
+        let metadata_json = metadata.map(serialize_to_string).transpose()?;
+        let row = conversation::update_metadata(pool, conversation_id, tenant_id, metadata_json.as_deref())
+            .await?
+            .ok_or_else(|| StorageError::not_found("Conversation", conversation_id))?;
+        Ok(row.into())
+    }
+
+    pub async fn delete_for_tenant(&self, conversation_id: &str, tenant_id: Option<&str>) -> StoreResult<()> {
+        let pool = self.pool()?;
+        if !conversation::delete(pool, conversation_id, tenant_id).await? {
+            return Err(StorageError::not_found("Conversation", conversation_id));
+        }
+        Ok(())
+    }
+
+    pub async fn append_items_for_tenant(
+        &self,
+        conversation_id: &str,
+        tenant_id: Option<&str>,
+        items: Vec<InOutItem>,
+    ) -> StoreResult<Vec<ConversationItemData>> {
+        let pool = self.pool()?;
+        self.get_for_tenant(conversation_id, tenant_id).await?;
+        let serialized = serialize_items(items)?;
+        let mut tx = pool.begin().await?;
+        match conversation::lock_in_tx_for_tenant(&mut tx, conversation_id, tenant_id).await {
+            Ok(()) => {}
+            Err(sqlx::Error::RowNotFound) => {
+                return Err(StorageError::not_found("Conversation", conversation_id));
+            }
+            Err(error) => return Err(error.into()),
+        }
+        let rows = item::create_in_tx_with_tenant(&mut tx, serialized, Some(conversation_id), tenant_id).await?;
+        tx.commit().await?;
+        Ok(rows.into_iter().map(ConversationItemData::from).collect())
+    }
+
+    pub async fn list_items_for_tenant(
+        &self,
+        conversation_id: &str,
+        tenant_id: Option<&str>,
+        after: Option<&str>,
+        limit: usize,
+        descending: bool,
+    ) -> StoreResult<ConversationItemPage> {
+        let pool = self.pool()?;
+        self.get_for_tenant(conversation_id, tenant_id).await?;
+        let mut rows = item::get_items_by_conversation_for_tenant(pool, conversation_id, tenant_id).await?;
+        if descending {
+            rows.reverse();
+        }
+        let start = match after {
+            Some(after) => rows
+                .iter()
+                .position(|row| row.id == after)
+                .map(|index| index + 1)
+                .ok_or_else(|| StorageError::not_found("Conversation item", after))?,
+            None => 0,
+        };
+        let end = start.saturating_add(limit).min(rows.len());
+        let has_more = end < rows.len();
+        Ok(ConversationItemPage {
+            data: rows[start..end]
+                .iter()
+                .cloned()
+                .map(ConversationItemData::from)
+                .collect(),
+            has_more,
+        })
+    }
+
+    pub async fn get_item_for_tenant(
+        &self,
+        conversation_id: &str,
+        item_id: &str,
+        tenant_id: Option<&str>,
+    ) -> StoreResult<ConversationItemData> {
+        let pool = self.pool()?;
+        self.get_for_tenant(conversation_id, tenant_id).await?;
+        let row = item::get_item(pool, conversation_id, item_id, tenant_id)
+            .await?
+            .ok_or_else(|| StorageError::not_found("Conversation item", item_id))?;
+        Ok(row.into())
+    }
+
+    pub async fn delete_item_for_tenant(
+        &self,
+        conversation_id: &str,
+        item_id: &str,
+        tenant_id: Option<&str>,
+    ) -> StoreResult<()> {
+        let pool = self.pool()?;
+        self.get_for_tenant(conversation_id, tenant_id).await?;
+        if !item::delete(pool, conversation_id, item_id, tenant_id).await? {
+            return Err(StorageError::not_found("Conversation item", item_id));
+        }
+        Ok(())
     }
 
     /// Rehydrates a conversation with all its items.
@@ -88,8 +234,17 @@ impl ConversationStore {
     ///
     /// Returns an error if a stored item is missing its sequence number or if the database query fails.
     pub async fn rehydrate_snapshot(&self, conversation_id: &str) -> StoreResult<ConversationSnapshot> {
+        self.rehydrate_snapshot_for_tenant(conversation_id, None).await
+    }
+
+    pub async fn rehydrate_snapshot_for_tenant(
+        &self,
+        conversation_id: &str,
+        tenant_id: Option<&str>,
+    ) -> StoreResult<ConversationSnapshot> {
         let pool = self.pool()?;
-        let rows = item::get_items_by_conversation(pool, conversation_id).await?;
+        self.get_for_tenant(conversation_id, tenant_id).await?;
+        let rows = item::get_items_by_conversation_for_tenant(pool, conversation_id, tenant_id).await?;
 
         let mut last_sequence = None;
         for row in &rows {
@@ -123,6 +278,7 @@ impl ConversationStore {
         self.persist_impl(
             conversation_id,
             None,
+            None,
             response_id,
             previous_response_id,
             new_items,
@@ -147,6 +303,7 @@ impl ConversationStore {
     ) -> StoreResult<()> {
         self.persist_impl(
             conversation_id,
+            None,
             Some(expected_version),
             response_id,
             previous_response_id,
@@ -156,9 +313,34 @@ impl ConversationStore {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub async fn persist_if_version_for_tenant(
+        &self,
+        conversation_id: &str,
+        tenant_id: Option<&str>,
+        expected_version: ConversationVersion,
+        response_id: &str,
+        previous_response_id: Option<&str>,
+        new_items: Vec<InOutItem>,
+        metadata: &ResponseMetadata,
+    ) -> StoreResult<()> {
+        self.persist_impl(
+            conversation_id,
+            tenant_id,
+            Some(expected_version),
+            response_id,
+            previous_response_id,
+            new_items,
+            metadata,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
     async fn persist_impl(
         &self,
         conversation_id: &str,
+        tenant_id: Option<&str>,
         expected_version: Option<ConversationVersion>,
         response_id: &str,
         previous_response_id: Option<&str>,
@@ -167,20 +349,14 @@ impl ConversationStore {
     ) -> StoreResult<()> {
         let pool = self.pool()?;
 
-        let mut item_ids: Vec<String> = Vec::new();
-        let mut items_: Vec<(String, String)> = Vec::new();
-        for any_item in new_items {
-            let item_id = uuid7_str("item_");
-            item_ids.push(item_id.clone());
-            let data_str = String::try_from(&any_item)?;
-            items_.push((item_id, data_str));
-        }
+        let items_ = serialize_items(new_items)?;
+        let item_ids: Vec<String> = items_.iter().map(|(id, _)| id.clone()).collect();
         let history_item_ids_json = serialize_to_string(&item_ids)?;
         let metadata_json = String::try_from(metadata)?;
 
         let mut tx = pool.begin().await?;
 
-        match conversation::lock_in_tx(&mut tx, conversation_id).await {
+        match conversation::lock_in_tx_for_tenant(&mut tx, conversation_id, tenant_id).await {
             Ok(()) => {}
             Err(sqlx::Error::RowNotFound) => {
                 return Err(StorageError::not_found("Conversation", conversation_id));
@@ -189,7 +365,7 @@ impl ConversationStore {
         }
         if let Some(expected_version) = expected_version {
             let current_version = ConversationVersion::from_last_sequence(
-                item::last_conversation_sequence_in_tx(&mut tx, conversation_id).await?,
+                item::last_conversation_sequence_in_tx_for_tenant(&mut tx, conversation_id, tenant_id).await?,
             );
             if current_version != expected_version {
                 return Err(StorageError::ConversationConflict {
@@ -197,19 +373,31 @@ impl ConversationStore {
                 });
             }
         }
-        item::create_in_tx(&mut tx, items_, Some(conversation_id)).await?;
+        item::create_in_tx_with_tenant(&mut tx, items_, Some(conversation_id), tenant_id).await?;
 
-        response::create_in_tx(
+        response::create_in_tx_with_tenant(
             &mut tx,
             response_id,
             Some(conversation_id),
             previous_response_id,
             Some(&history_item_ids_json),
             Some(&metadata_json),
+            tenant_id,
         )
         .await?;
         tx.commit().await?;
 
         Ok(())
     }
+}
+
+fn serialize_items(items: Vec<InOutItem>) -> StoreResult<Vec<(String, String)>> {
+    items
+        .into_iter()
+        .map(|item| {
+            let id = uuid7_str("item_");
+            let data = String::try_from(&item)?;
+            Ok((id, data))
+        })
+        .collect()
 }

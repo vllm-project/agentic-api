@@ -3,6 +3,8 @@
 //! Builds a [`RequestContext`] by loading prior turns from storage and
 //! injecting them into the enriched request before it is forwarded to the LLM.
 
+#![allow(clippy::missing_errors_doc)]
+
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::storage::InOutItem;
@@ -27,6 +29,14 @@ pub async fn rehydrate_conversation(
     request: RequestPayload,
     exec_ctx: &ExecutionContext,
 ) -> ExecutorResult<RequestContext> {
+    rehydrate_conversation_for_tenant(request, exec_ctx, None).await
+}
+
+pub async fn rehydrate_conversation_for_tenant(
+    request: RequestPayload,
+    exec_ctx: &ExecutionContext,
+    tenant_id: Option<String>,
+) -> ExecutorResult<RequestContext> {
     let response_id = uuid7_str("resp_");
     let new_input_items: Vec<InputItem> = Vec::from(&request.input);
 
@@ -39,11 +49,12 @@ pub async fn rehydrate_conversation(
         response_id,
         conversation_id: None,
         conversation_version: None,
+        tenant_id,
     };
 
     if ctx.original_request.conversation_id.is_some() && ctx.original_request.previous_response_id.is_some() {
         return Err(ExecutorError::InvalidRequest(
-            "provide only one of conversation_id or previous_response_id".into(),
+            "provide only one of conversation or previous_response_id".into(),
         ));
     }
 
@@ -92,17 +103,10 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
 
 /// Hydrates `ctx` from the conversation store.
 ///
-/// Gets or creates the conversation (depending on `store`) and rehydrates its
 /// history in parallel, then prepends the history items to the enriched request input.
 async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
     let (conv_data, snapshot) = tokio::try_join!(
-        async {
-            if ctx.original_request.store {
-                exec_ctx.conv_handler.get_or_create(ctx).await
-            } else {
-                exec_ctx.conv_handler.get(ctx).await
-            }
-        },
+        async { exec_ctx.conv_handler.get(ctx).await },
         exec_ctx.conv_handler.rehydrate_snapshot(ctx),
     )?;
 

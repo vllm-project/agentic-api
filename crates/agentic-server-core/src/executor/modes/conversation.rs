@@ -1,7 +1,12 @@
 //! Conversation storage handler — owns all conversation store operations.
 
+#![allow(clippy::missing_errors_doc)]
+
+use serde_json::Value;
+
 use crate::storage::{
-    ConversationData, ConversationSnapshot, ConversationStore, InOutItem, ResponseMetadata, StorageError,
+    ConversationData, ConversationItemData, ConversationItemPage, ConversationSnapshot, ConversationStore, InOutItem,
+    ResponseMetadata, StorageError,
 };
 use crate::types::io::OutputItem;
 
@@ -33,7 +38,10 @@ impl ConversationHandler {
             .conversation_id
             .as_deref()
             .ok_or_else(|| ExecutorError::InvalidRequest("conversation_id is required for get_or_create".into()))?;
-        self.store.get_or_create(conv_id).await.map_err(ExecutorError::Storage)
+        self.store
+            .get_or_create_for_tenant(conv_id, ctx.tenant_id.as_deref())
+            .await
+            .map_err(ExecutorError::Storage)
     }
 
     /// Gets an existing conversation.
@@ -49,7 +57,17 @@ impl ConversationHandler {
             .conversation_id
             .as_deref()
             .ok_or_else(|| ExecutorError::InvalidRequest("conversation_id is required for get".into()))?;
-        self.store.get(conv_id).await.map_err(ExecutorError::Storage)
+        self.store
+            .get_for_tenant(conv_id, ctx.tenant_id.as_deref())
+            .await
+            .map_err(ExecutorError::Storage)
+    }
+
+    pub async fn get_by_id(&self, conversation_id: &str, tenant_id: Option<&str>) -> ExecutorResult<ConversationData> {
+        self.store
+            .get_for_tenant(conversation_id, tenant_id)
+            .await
+            .map_err(ExecutorError::Storage)
     }
 
     /// Creates a brand-new conversation with a freshly generated ID.
@@ -58,6 +76,87 @@ impl ConversationHandler {
     /// Returns `ExecutorError` if the store is disabled or the database query fails.
     pub async fn create(&self) -> ExecutorResult<ConversationData> {
         self.store.create().await.map_err(ExecutorError::Storage)
+    }
+
+    pub async fn create_with_items(
+        &self,
+        tenant_id: Option<&str>,
+        metadata: Option<&Value>,
+        items: Vec<InOutItem>,
+    ) -> ExecutorResult<ConversationData> {
+        self.store
+            .create_with_items_for_tenant(tenant_id, metadata, items)
+            .await
+            .map_err(ExecutorError::Storage)
+    }
+
+    pub async fn update_metadata(
+        &self,
+        conversation_id: &str,
+        tenant_id: Option<&str>,
+        metadata: Option<&Value>,
+    ) -> ExecutorResult<ConversationData> {
+        self.store
+            .update_metadata_for_tenant(conversation_id, tenant_id, metadata)
+            .await
+            .map_err(ExecutorError::Storage)
+    }
+
+    pub async fn delete(&self, conversation_id: &str, tenant_id: Option<&str>) -> ExecutorResult<()> {
+        self.store
+            .delete_for_tenant(conversation_id, tenant_id)
+            .await
+            .map_err(ExecutorError::Storage)
+    }
+
+    pub async fn append_items(
+        &self,
+        conversation_id: &str,
+        tenant_id: Option<&str>,
+        items: Vec<InOutItem>,
+    ) -> ExecutorResult<Vec<ConversationItemData>> {
+        self.store
+            .append_items_for_tenant(conversation_id, tenant_id, items)
+            .await
+            .map_err(ExecutorError::Storage)
+    }
+
+    pub async fn list_items(
+        &self,
+        conversation_id: &str,
+        tenant_id: Option<&str>,
+        after: Option<&str>,
+        limit: usize,
+        descending: bool,
+    ) -> ExecutorResult<ConversationItemPage> {
+        self.store
+            .list_items_for_tenant(conversation_id, tenant_id, after, limit, descending)
+            .await
+            .map_err(ExecutorError::Storage)
+    }
+
+    pub async fn get_item(
+        &self,
+        conversation_id: &str,
+        item_id: &str,
+        tenant_id: Option<&str>,
+    ) -> ExecutorResult<ConversationItemData> {
+        self.store
+            .get_item_for_tenant(conversation_id, item_id, tenant_id)
+            .await
+            .map_err(ExecutorError::Storage)
+    }
+
+    pub async fn delete_item(
+        &self,
+        conversation_id: &str,
+        item_id: &str,
+        tenant_id: Option<&str>,
+    ) -> ExecutorResult<()> {
+        self.store
+            .delete_item_for_tenant(conversation_id, item_id, tenant_id)
+            .await
+            .map_err(ExecutorError::Storage)
     }
 
     /// Loads all history items for the conversation referenced by the request.
@@ -86,7 +185,7 @@ impl ConversationHandler {
             .as_deref()
             .ok_or_else(|| ExecutorError::InvalidRequest("conversation_id is required for rehydrate".into()))?;
         self.store
-            .rehydrate_snapshot(conv_id)
+            .rehydrate_snapshot_for_tenant(conv_id, ctx.tenant_id.as_deref())
             .await
             .map_err(ExecutorError::Storage)
     }
@@ -121,8 +220,9 @@ impl ConversationHandler {
         new_items.extend(output_items.into_iter().map(InOutItem::Output));
 
         self.store
-            .persist_if_version(
+            .persist_if_version_for_tenant(
                 &conversation_id,
+                ctx.tenant_id.as_deref(),
                 conversation_version,
                 &ctx.response_id,
                 metadata.previous_response_id.as_deref(),
@@ -176,6 +276,7 @@ mod tests {
             response_id: "resp_test".into(),
             conversation_id: conversation_id.map(str::to_string),
             conversation_version: None,
+            tenant_id: None,
         }
     }
 

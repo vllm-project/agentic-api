@@ -533,6 +533,13 @@ impl ResponseAccumulator {
             previous_response_id: previous_response_id.map(str::to_string),
             conversation_id: self.conversation_id,
             instructions: instructions.map(str::to_string),
+            parallel_tool_calls: true,
+            temperature: None,
+            tool_choice: crate::types::io::ToolChoice::Auto,
+            tools: Vec::new(),
+            top_p: None,
+            truncation: None,
+            metadata: None,
         }
     }
 }

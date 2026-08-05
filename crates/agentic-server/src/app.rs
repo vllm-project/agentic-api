@@ -16,7 +16,9 @@ use agentic_core::proxy::ProxyState;
 
 use crate::auth::{ANTHROPIC_COUNT_TOKENS_PATH, ANTHROPIC_MESSAGES_PATH, OidcAuthenticator, require_oidc};
 use crate::handler::{
-    compact_response, conversations, count_tokens, health, messages, models, ready, responses, responses_ws_with_auth,
+    compact_response, conversations, count_tokens, create_items, delete_conversation, delete_item, health, list_items,
+    messages, models, ready, responses, responses_ws_with_auth, retrieve_conversation, retrieve_item,
+    update_conversation,
 };
 
 #[derive(Clone, Default)]
@@ -178,6 +180,20 @@ pub fn build_router_with_auth(
     let public_routes = Router::new().route("/health", get(health)).route("/ready", get(ready));
     let protected_routes = Router::new()
         .route("/v1/conversations", post(conversations))
+        .route(
+            "/v1/conversations/{conversation_id}",
+            get(retrieve_conversation)
+                .post(update_conversation)
+                .delete(delete_conversation),
+        )
+        .route(
+            "/v1/conversations/{conversation_id}/items",
+            post(create_items).get(list_items),
+        )
+        .route(
+            "/v1/conversations/{conversation_id}/items/{item_id}",
+            get(retrieve_item).delete(delete_item),
+        )
         .route("/v1/models", get(models))
         .route(ANTHROPIC_MESSAGES_PATH, post(messages))
         .route(ANTHROPIC_COUNT_TOKENS_PATH, post(count_tokens))

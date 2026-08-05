@@ -83,6 +83,7 @@ mod tests {
                     .to_string(),
             ),
             created_at: 1_704_067_200,
+            tenant_id: None,
         };
 
         let response: ResponseData = db_row.into();
@@ -102,6 +103,7 @@ mod tests {
             history_item_ids: None,
             metadata: None,
             created_at: 1_704_067_200,
+            tenant_id: None,
         };
 
         let response: ResponseData = db_row.into();
@@ -195,6 +197,7 @@ mod tests {
             history_item_ids: Some(r#"["item_1","item_2","item_3"]"#.to_string()),
             metadata: Some(r#"{"model":"gpt-3.5"}"#.to_string()),
             created_at: 1_704_067_200,
+            tenant_id: None,
         };
 
         let response: ResponseData = db_row.into();

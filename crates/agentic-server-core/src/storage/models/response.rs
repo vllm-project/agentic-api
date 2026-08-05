@@ -1,5 +1,7 @@
 //! LLM API response stored in the database.
 
+#![allow(clippy::missing_errors_doc)]
+
 use super::super::pool::{DbPool, DbResult, DbTransaction};
 use crate::utils::common::{deserialize_from_string_opt, deserialize_from_string_opt_or_default, utcnow_str};
 
@@ -11,6 +13,8 @@ use crate::utils::common::{deserialize_from_string_opt, deserialize_from_string_
 pub struct Response {
     /// Unique response identifier.
     pub id: String,
+
+    pub tenant_id: Option<String>,
 
     /// Optional conversation this response belongs to.
     pub conversation_id: Option<String>,
@@ -40,11 +44,32 @@ pub async fn create_in_tx(
     history_item_ids: Option<&str>,
     metadata: Option<&str>,
 ) -> DbResult<Response> {
+    create_in_tx_with_tenant(
+        tx,
+        id,
+        conversation_id,
+        previous_response_id,
+        history_item_ids,
+        metadata,
+        None,
+    )
+    .await
+}
+
+pub async fn create_in_tx_with_tenant(
+    tx: &mut DbTransaction<'_>,
+    id: &str,
+    conversation_id: Option<&str>,
+    previous_response_id: Option<&str>,
+    history_item_ids: Option<&str>,
+    metadata: Option<&str>,
+    tenant_id: Option<&str>,
+) -> DbResult<Response> {
     let now = utcnow_str();
     sqlx::query_as::<_, Response>(
         "INSERT INTO responses \
-         (id, conversation_id, previous_response_id, history_item_ids, metadata, created_at) \
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+         (id, conversation_id, previous_response_id, history_item_ids, metadata, created_at, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
     )
     .bind(id)
     .bind(conversation_id)
@@ -52,6 +77,7 @@ pub async fn create_in_tx(
     .bind(history_item_ids)
     .bind(metadata)
     .bind(now)
+    .bind(tenant_id)
     .fetch_one(&mut **tx)
     .await
 }
@@ -61,10 +87,25 @@ pub async fn create_in_tx(
 /// # Errors
 /// Returns `DbResult::Err` if the database query fails.
 pub async fn get(pool: &DbPool, id: &str) -> DbResult<Option<Response>> {
-    sqlx::query_as::<_, Response>("SELECT * FROM responses WHERE id = $1")
-        .bind(id)
-        .fetch_optional(pool)
-        .await
+    get_for_tenant(pool, id, None).await
+}
+
+pub async fn get_for_tenant(pool: &DbPool, id: &str, tenant_id: Option<&str>) -> DbResult<Option<Response>> {
+    match tenant_id {
+        Some(tenant_id) => {
+            sqlx::query_as::<_, Response>("SELECT * FROM responses WHERE id = $1 AND tenant_id = $2")
+                .bind(id)
+                .bind(tenant_id)
+                .fetch_optional(pool)
+                .await
+        }
+        None => {
+            sqlx::query_as::<_, Response>("SELECT * FROM responses WHERE id = $1 AND tenant_id IS NULL")
+                .bind(id)
+                .fetch_optional(pool)
+                .await
+        }
+    }
 }
 
 impl Response {
@@ -89,6 +130,7 @@ mod tests {
     fn test_response_history_ids_empty() {
         let response = Response {
             id: "test".to_string(),
+            tenant_id: None,
             conversation_id: None,
             previous_response_id: None,
             history_item_ids: None,
@@ -104,6 +146,7 @@ mod tests {
     fn test_response_history_ids_valid() {
         let response = Response {
             id: "test".to_string(),
+            tenant_id: None,
             conversation_id: None,
             previous_response_id: None,
             history_item_ids: Some(r#"["item_1", "item_2"]"#.to_string()),
@@ -125,6 +168,7 @@ mod tests {
 
         let response = Response {
             id: "resp_1".to_string(),
+            tenant_id: None,
             conversation_id: None,
             previous_response_id: None,
             history_item_ids: None,

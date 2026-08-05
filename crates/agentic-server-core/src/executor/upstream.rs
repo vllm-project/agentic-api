@@ -410,6 +410,6 @@ fn apply_context_response_ids(wire: &mut WireEvent, ctx: &RequestContext) {
         );
     }
     if let Some(conversation_id) = &ctx.conversation_id {
-        response.insert("conversation_id".to_owned(), Value::String(conversation_id.clone()));
+        response.insert("conversation".to_owned(), Value::String(conversation_id.clone()));
     }
 }
