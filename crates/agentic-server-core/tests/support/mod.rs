@@ -323,7 +323,7 @@ pub fn text_response(text: &str) -> MockResponse {
             "incomplete_details": null,
             "error": null,
             "previous_response_id": null,
-            "conversation_id": null,
+            "conversation": null,
             "instructions": null
         })
         .to_string(),
@@ -355,15 +355,15 @@ pub fn make_request(
     store: bool,
     stream: bool,
     previous_response_id: Option<String>,
-    conversation_id: Option<String>,
+    conversation: Option<String>,
 ) -> RequestPayload {
-    RequestPayload {
+    let request = RequestPayload {
         model: "test-model".to_string(),
         input: serde_json::from_value(serde_json::to_value(input).expect("serialize Responses input"))
             .expect("request should contain valid Responses input"),
         instructions: None,
         previous_response_id,
-        conversation_id,
+        conversation_id: conversation,
         tools: None,
         tool_choice: None,
         stream,
@@ -377,7 +377,9 @@ pub fn make_request(
         parallel_tool_calls: None,
         cache_salt: None,
         context_management: None,
-    }
+    };
+    serde_json::from_value(serde_json::to_value(request).expect("serialize standard Responses request"))
+        .expect("deserialize standard Responses request")
 }
 
 pub fn unwrap_blocking(result: Either<ResponsePayload, BoxStream>) -> ResponsePayload {

@@ -789,6 +789,7 @@ async fn test_websocket_generate_false_prewarm_redacts_mcp_runtime_credentials()
         response_id: "resp_lookup".to_owned(),
         conversation_id: None,
         conversation_version: None,
+        tenant_id: None,
     };
     let stored = fixture
         .state
@@ -870,7 +871,7 @@ async fn websocket_conversation_conflict_ends_request_without_persisting_stale_t
             "type": "response.create",
             "model": "test-model",
             "input": [{"type": "message", "role": "user", "content": "stale turn"}],
-            "conversation_id": conversation_id,
+            "conversation": conversation_id,
             "store": true,
             "stream": true
         }),
@@ -948,7 +949,7 @@ async fn websocket_generate_false_conversation_conflict_rejects_stale_local_comp
             "type": "response.create",
             "model": "test-model",
             "input": [{"type": "message", "role": "user", "content": "stale local turn"}],
-            "conversation_id": conversation_id,
+            "conversation": conversation_id,
             "generate": false,
             "store": true,
             "stream": true
@@ -1550,6 +1551,71 @@ async fn test_websocket_continuation_rehydrates_previous_response() {
     assert_eq!(requests[1]["input"][1]["role"], "assistant");
     assert_eq!(requests[1]["input"][1]["content"][0]["text"], "HELLO");
     assert_eq!(requests[1]["input"][2]["content"], "continue");
+}
+
+#[tokio::test]
+async fn test_websocket_conversation_continuation_uses_standard_field_and_history() {
+    let mock = MockResponsesServer::start(vec![
+        sse_response("resp_ws_conversation_1", "msg_ws_conversation_1", "HELLO"),
+        sse_response("resp_ws_conversation_2", "msg_ws_conversation_2", "WORLD"),
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let conversation_id = create_conversation(&gateway_url).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    for input in ["first", "second"] {
+        send_json(
+            &mut ws,
+            json!({
+                "type": "response.create",
+                "model": "test-model",
+                "input": [{"type": "message", "role": "user", "content": input}],
+                "conversation": conversation_id,
+                "store": true,
+                "stream": true
+            }),
+        )
+        .await;
+        let events = recv_until_completed(&mut ws).await;
+        let response = &events.last().expect("completed response")["response"];
+        assert_eq!(response["conversation"]["id"], conversation_id);
+    }
+
+    let requests = mock.request_bodies().await;
+    assert_eq!(requests.len(), 2);
+    assert!(requests[0].get("conversation").is_none());
+    assert!(requests[1].get("conversation").is_none());
+    assert_eq!(requests[1]["input"].as_array().expect("history input").len(), 3);
+}
+
+#[tokio::test]
+async fn test_websocket_rejects_conversation_and_previous_response_id_together() {
+    let mock = MockResponsesServer::start(vec![]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let conversation_id = create_conversation(&gateway_url).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "model": "test-model",
+            "input": [{"type": "message", "role": "user", "content": "ambiguous"}],
+            "conversation": conversation_id,
+            "previous_response_id": "resp_ambiguous",
+            "store": true,
+            "stream": true
+        }),
+    )
+    .await;
+
+    let error = recv_json(&mut ws).await;
+    assert_eq!(error["type"], "error");
+    assert_eq!(error["status"], StatusCode::BAD_REQUEST.as_u16());
+    assert!(mock.request_bodies().await.is_empty());
 }
 
 #[tokio::test]

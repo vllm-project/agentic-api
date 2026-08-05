@@ -15,7 +15,6 @@ use support::{
 
 const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/text_only/conversation");
 
-/// Case 6 — two turns, non-streaming, via `conversation_id`.
 #[tokio::test]
 async fn test_two_turn_nonstreaming_conversation() {
     // Arrange
@@ -56,7 +55,6 @@ async fn test_two_turn_nonstreaming_conversation() {
     assert_eq!(output_text(&p2), expected_text(t2));
 }
 
-/// Case 7 — two turns, streaming, via `conversation_id`.
 #[tokio::test]
 async fn test_two_turn_streaming_conversation() {
     // Arrange
@@ -306,7 +304,7 @@ async fn test_multi_branch() {
 }
 
 #[tokio::test]
-async fn test_store_false_with_conversation_id_hydrates_and_persists() {
+async fn test_store_false_with_conversation_hydrates_and_persists() {
     let cassette = load_cassette(&format!("{DIR}/conv-store-false-followup-gpt-4o-nonstreaming.yaml"));
     let all: Vec<_> = cassette.turns.iter().collect();
     let fixture = TestFixture::new(&all).await;
@@ -334,7 +332,6 @@ async fn test_store_false_with_conversation_id_hydrates_and_persists() {
     assert_eq!(p1.status, "completed");
     assert_eq!(output_text(&p1), expected_text(t1));
 
-    // Turn 2: store=false but conversation_id passed — must rehydrate and persist locally
     let p2 = unwrap_blocking(
         execute(
             make_request(

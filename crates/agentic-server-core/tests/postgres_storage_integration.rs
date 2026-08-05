@@ -367,6 +367,71 @@ async fn postgres_concurrent_conversation_writes_have_contiguous_sequences() {
     second_pool.close().await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
+async fn postgres_concurrent_item_appends_have_contiguous_sequences() {
+    const WRITE_COUNT: usize = 12;
+
+    let database_url = std::env::var("TEST_POSTGRES_URL").expect("TEST_POSTGRES_URL must be set");
+    let postgres_config = PostgresConfig {
+        max_connections: u32::try_from(WRITE_COUNT).expect("test write count must fit in u32"),
+        acquire_timeout: Duration::from_secs(5),
+        lock_timeout: Duration::from_secs(1),
+        migration_timeout: Duration::from_secs(5),
+        statement_timeout: Duration::from_secs(5),
+        idle_timeout: Some(Duration::from_secs(30)),
+        max_lifetime: Some(Duration::from_secs(60)),
+    };
+    let first_pool = create_pool_with_schema_and_configs(Some(&database_url), SqliteConfig::default(), postgres_config)
+        .await
+        .expect("initialize PostgreSQL database");
+    let second_pool = create_pool_with_configs(Some(&database_url), SqliteConfig::default(), postgres_config)
+        .await
+        .expect("create independent PostgreSQL pool");
+    let conversation_store = ConversationStore::new(first_pool.clone());
+    let conversation = conversation_store.create().await.expect("create conversation");
+    let barrier = Arc::new(Barrier::new(WRITE_COUNT + 1));
+    let mut tasks = Vec::with_capacity(WRITE_COUNT);
+
+    for index in 0..WRITE_COUNT {
+        let barrier = Arc::clone(&barrier);
+        let pool = if index % 2 == 0 {
+            first_pool.clone()
+        } else {
+            second_pool.clone()
+        };
+        let conversation_id = conversation.conversation_id.clone();
+        tasks.push(tokio::spawn(async move {
+            let store = ConversationStore::new(pool);
+            barrier.wait().await;
+            store
+                .append_items_for_tenant(&conversation_id, None, vec![input_item(&format!("append {index}"))])
+                .await
+        }));
+    }
+
+    barrier.wait().await;
+    for task in tasks {
+        task.await
+            .expect("join concurrent append")
+            .expect("append concurrent item");
+    }
+
+    let rows =
+        agentic_core::storage::models::item::get_items_by_conversation(&first_pool, &conversation.conversation_id)
+            .await
+            .expect("load concurrent conversation items");
+    let sequences = rows
+        .iter()
+        .map(|row| row.seq.expect("conversation item sequence"))
+        .collect::<Vec<_>>();
+    let write_count = i64::try_from(WRITE_COUNT).expect("write count must fit in i64");
+    assert_eq!(sequences, (0..write_count).collect::<Vec<_>>());
+
+    first_pool.close().await;
+    second_pool.close().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
 #[allow(

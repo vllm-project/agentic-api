@@ -6,6 +6,7 @@ use axum::http::header;
 use axum::response::IntoResponse;
 use axum::routing::post;
 use http::StatusCode;
+use std::collections::VecDeque;
 use std::convert::Infallible;
 use std::future::Future;
 use std::path::PathBuf;
@@ -30,6 +31,8 @@ const COMPETING_RESPONSE_ID: &str = "resp_competing";
 const CONFLICT_MESSAGE: &str = "conversation changed while the response was being generated; retry the request";
 
 enum MockResponse {
+    StaticJson(String),
+    StaticSse(String),
     GatedJson {
         body: String,
         arrived: oneshot::Sender<()>,
@@ -45,6 +48,7 @@ enum MockResponse {
 
 struct MockResponsesServer {
     url: String,
+    requests: Arc<Mutex<Vec<serde_json::Value>>>,
     handle: tokio::task::JoinHandle<()>,
 }
 
@@ -101,17 +105,52 @@ impl MockResponsesServer {
     }
 
     async fn start(response: MockResponse) -> Self {
+        Self::start_with_responses(vec![response]).await
+    }
+
+    async fn start_static_json(responses: Vec<String>) -> Self {
+        Self::start_with_responses(responses.into_iter().map(MockResponse::StaticJson).collect()).await
+    }
+
+    async fn start_static_sse(responses: Vec<String>) -> Self {
+        Self::start_with_responses(responses.into_iter().map(MockResponse::StaticSse).collect()).await
+    }
+
+    async fn start_with_responses(responses: Vec<MockResponse>) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        let response = Arc::new(Mutex::new(Some(response)));
+        let response = Arc::new(Mutex::new(VecDeque::from(responses)));
         let route_response = Arc::clone(&response);
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let route_requests = Arc::clone(&requests);
         let app = Router::new().route(
             "/v1/responses",
-            post(move || {
+            post(move |body: Bytes| {
                 let response = Arc::clone(&route_response);
+                let requests = Arc::clone(&route_requests);
                 async move {
-                    let response = response.lock().await.take().expect("mock response already consumed");
+                    requests
+                        .lock()
+                        .await
+                        .push(serde_json::from_slice(&body).expect("mock request body should be JSON"));
+                    let response = response
+                        .lock()
+                        .await
+                        .pop_front()
+                        .expect("mock response queue exhausted");
                     match response {
+                        MockResponse::StaticJson(body) => axum::response::Response::builder()
+                            .status(StatusCode::OK)
+                            .header(header::CONTENT_TYPE, "application/json")
+                            .body(axum::body::Body::from(body))
+                            .unwrap()
+                            .into_response(),
+                        MockResponse::StaticSse(body) => axum::response::Response::builder()
+                            .status(StatusCode::OK)
+                            .header(header::CONTENT_TYPE, "text/event-stream; charset=utf-8")
+                            .body(axum::body::Body::from(body))
+                            .unwrap()
+                            .into_response(),
                         MockResponse::GatedJson { body, arrived, release } => {
                             let _ = arrived.send(());
                             let _ = release.await;
@@ -147,8 +186,13 @@ impl MockResponsesServer {
         let handle = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         Self {
             url: format!("http://{addr}"),
+            requests,
             handle,
         }
+    }
+
+    async fn request_bodies(&self) -> Vec<serde_json::Value> {
+        self.requests.lock().await.clone()
     }
 }
 
@@ -297,6 +341,227 @@ fn gated_sse_chunks() -> (String, String) {
         format!("data: {created}\n\ndata: {added}\n\ndata: {delta}\n\n"),
         format!("data: {completed}\n\ndata: [DONE]\n\n"),
     )
+}
+
+fn continuation_json_response(response_id: &str) -> String {
+    serde_json::json!({
+        "id": response_id,
+        "object": "response",
+        "status": "completed",
+        "model": "test-model",
+        "output": [{
+            "id": format!("msg_{response_id}"),
+            "type": "message",
+            "role": "assistant",
+            "status": "completed",
+            "content": [{"type": "output_text", "text": "ok", "annotations": []}]
+        }],
+        "created_at": 0
+    })
+    .to_string()
+}
+
+fn continuation_sse_response(response_id: &str) -> String {
+    let created = serde_json::json!({
+        "type": "response.created",
+        "sequence_number": 0,
+        "response": {"id": response_id, "status": "in_progress"}
+    });
+    let added = serde_json::json!({
+        "type": "response.output_item.added",
+        "sequence_number": 1,
+        "output_index": 0,
+        "item": {"id": format!("msg_{response_id}"), "type": "message"}
+    });
+    let delta = serde_json::json!({
+        "type": "response.output_text.delta",
+        "sequence_number": 2,
+        "item_id": format!("msg_{response_id}"),
+        "output_index": 0,
+        "content_index": 0,
+        "delta": "ok"
+    });
+    let completed = serde_json::json!({
+        "type": "response.completed",
+        "sequence_number": 3,
+        "response": {"id": response_id, "status": "completed", "usage": null}
+    });
+    format!("data: {created}\n\ndata: {added}\n\ndata: {delta}\n\ndata: {completed}\n\ndata: [DONE]\n\n")
+}
+
+#[tokio::test]
+async fn http_json_conversation_continuation_uses_standard_field_and_history() {
+    let mock = MockResponsesServer::start_static_json(vec![
+        continuation_json_response("resp_http_json_1"),
+        continuation_json_response("resp_http_json_2"),
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state).await;
+    let client = reqwest::Client::new();
+    let conversation_id = create_conversation(&client, &gateway_url).await;
+
+    for input in ["first", "second"] {
+        let response = client
+            .post(format!("{gateway_url}/v1/responses"))
+            .json(&serde_json::json!({
+                "model": "test-model",
+                "input": [{"type": "message", "role": "user", "content": input}],
+                "conversation": conversation_id,
+                "store": true,
+                "stream": false
+            }))
+            .send()
+            .await
+            .expect("blocking conversation request");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.json::<serde_json::Value>().await.expect("blocking response")["conversation"]["id"],
+            conversation_id
+        );
+    }
+
+    let requests = mock.request_bodies().await;
+    assert_eq!(requests.len(), 2);
+    assert!(requests[0].get("conversation").is_none());
+    assert!(requests[1].get("conversation").is_none());
+    assert_eq!(requests[1]["input"].as_array().expect("history input").len(), 3);
+}
+
+#[tokio::test]
+async fn http_accepts_legacy_conversation_id_input_alias() {
+    let mock = MockResponsesServer::start_static_json(vec![continuation_json_response("resp_http_legacy_alias")]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state).await;
+    let client = reqwest::Client::new();
+    let conversation_id = create_conversation(&client, &gateway_url).await;
+
+    let response = client
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test-model",
+            "input": [{"type": "message", "role": "user", "content": "legacy alias"}],
+            "conversation_id": conversation_id,
+            "store": true,
+            "stream": false
+        }))
+        .send()
+        .await
+        .expect("legacy conversation alias request");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .json::<serde_json::Value>()
+            .await
+            .expect("legacy alias response")["conversation"]["id"],
+        conversation_id
+    );
+}
+
+#[tokio::test]
+async fn http_sse_conversation_continuation_uses_standard_field_and_history() {
+    let mock = MockResponsesServer::start_static_sse(vec![
+        continuation_sse_response("resp_http_sse_1"),
+        continuation_sse_response("resp_http_sse_2"),
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state).await;
+    let client = reqwest::Client::new();
+    let conversation_id = create_conversation(&client, &gateway_url).await;
+
+    for input in ["first", "second"] {
+        let response = client
+            .post(format!("{gateway_url}/v1/responses"))
+            .json(&serde_json::json!({
+                "model": "test-model",
+                "input": [{"type": "message", "role": "user", "content": input}],
+                "conversation": conversation_id,
+                "store": true,
+                "stream": true
+            }))
+            .send()
+            .await
+            .expect("SSE conversation request");
+        assert_eq!(response.status(), StatusCode::OK);
+        let events = sse_events(&response.text().await.expect("SSE response"));
+        assert_eq!(events.last().expect("terminal SSE event")["type"], "response.completed");
+    }
+
+    let requests = mock.request_bodies().await;
+    assert_eq!(requests.len(), 2);
+    assert!(requests[0].get("conversation").is_none());
+    assert!(requests[1].get("conversation").is_none());
+    assert_eq!(requests[1]["input"].as_array().expect("history input").len(), 3);
+}
+
+#[tokio::test]
+async fn http_store_false_with_existing_conversation_still_persists_context() {
+    let mock = MockResponsesServer::start_static_json(vec![
+        continuation_json_response("resp_http_store_true"),
+        continuation_json_response("resp_http_store_false"),
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let pool = Arc::clone(&fixture.pool);
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state).await;
+    let client = reqwest::Client::new();
+    let conversation_id = create_conversation(&client, &gateway_url).await;
+
+    for (input, store) in [("first", true), ("second", false)] {
+        let response = client
+            .post(format!("{gateway_url}/v1/responses"))
+            .json(&serde_json::json!({
+                "model": "test-model",
+                "input": [{"type": "message", "role": "user", "content": input}],
+                "conversation": conversation_id,
+                "store": store,
+                "stream": false
+            }))
+            .send()
+            .await
+            .expect("conversation store request");
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    let response_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM responses")
+        .fetch_one(pool.as_ref())
+        .await
+        .expect("response count");
+    assert_eq!(response_count, 2);
+    let requests = mock.request_bodies().await;
+    assert_eq!(requests[1]["input"].as_array().expect("history input").len(), 3);
+}
+
+#[tokio::test]
+async fn http_rejects_conversation_and_previous_response_id_together() {
+    let (llm_url, _llm) = spawn_mock_llm().await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state).await;
+    let client = reqwest::Client::new();
+    let conversation_id = create_conversation(&client, &gateway_url).await;
+
+    for stream in [false, true] {
+        let response = client
+            .post(format!("{gateway_url}/v1/responses"))
+            .json(&serde_json::json!({
+                "model": "test-model",
+                "input": [{"type": "message", "role": "user", "content": "ambiguous"}],
+                "conversation": conversation_id,
+                "previous_response_id": "resp_ambiguous",
+                "store": true,
+                "stream": stream
+            }))
+            .send()
+            .await
+            .expect("ambiguous state request");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response.json::<serde_json::Value>().await.expect("ambiguous error")["error"]["code"],
+            "invalid_request_error"
+        );
+    }
 }
 
 async fn assert_only_competing_turn_persisted(pool: &Arc<DbPool>, conversation_id: &str) {
@@ -610,7 +875,7 @@ async fn http_json_conversation_conflict_rejects_stale_turn_without_persisting_i
                 .json(&serde_json::json!({
                     "model": "test-model",
                     "input": [{"type": "message", "role": "user", "content": "stale turn"}],
-                    "conversation_id": conversation_id,
+                    "conversation": conversation_id,
                     "store": true,
                     "stream": false
                 }))
@@ -649,7 +914,7 @@ async fn http_sse_conversation_conflict_terminates_after_observable_delta_withou
         .json(&serde_json::json!({
             "model": "test-model",
             "input": [{"type": "message", "role": "user", "content": "stale turn"}],
-            "conversation_id": conversation_id,
+            "conversation": conversation_id,
             "store": true,
             "stream": true
         }))

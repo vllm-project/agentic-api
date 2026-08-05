@@ -51,9 +51,26 @@ For a complete GitHub-backed deployment example, see
 ### `POST /v1/responses`
 
 HTTP Responses requests use the OpenAI-compatible Responses shape. Requests
-with `store=true`, `previous_response_id`, `conversation_id`, compaction input,
+with `store=true`, `previous_response_id`, `conversation`, compaction input,
 or `context_management` run through the executor. Other stateless `store=false`
 requests are passed directly to the configured vLLM backend.
+
+### Conversations
+
+The gateway exposes durable OpenAI-compatible conversation state:
+
+- `POST /v1/conversations` creates a conversation. Optional `metadata` and `items` are stored atomically.
+- `GET /v1/conversations/{conversation_id}` retrieves a conversation.
+- `POST /v1/conversations/{conversation_id}` replaces its metadata.
+- `DELETE /v1/conversations/{conversation_id}` deletes the conversation.
+- `GET` and `POST /v1/conversations/{conversation_id}/items` list or append items. Listing supports `after`, `limit`, and
+  `order=asc|desc` (the default is `desc`).
+- `GET` and `DELETE /v1/conversations/{conversation_id}/items/{item_id}` retrieve or delete one item.
+
+Responses requests reference this state with the standard `conversation` field. The legacy `conversation_id` request
+field remains accepted as a compatibility alias, but responses use `conversation`.
+
+When OIDC is enabled, conversations, items, and stored responses are isolated by the authenticated issuer and subject.
 
 ### `POST /v1/responses/compact`
 

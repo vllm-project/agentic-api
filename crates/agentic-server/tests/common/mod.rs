@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::Router;
@@ -10,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 use agentic_core::config::Config;
 use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHandler};
 use agentic_core::proxy::ProxyState;
-use agentic_core::storage::{ConversationStore, ResponseStore};
+use agentic_core::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
 use agentic_server::app::{AppState, ServerConfig, WebSocketTracker, build_router};
 
 pub fn test_config(llm_url: &str) -> Config {
@@ -43,6 +44,64 @@ pub fn test_state(config: &Config) -> AppState {
         llm_api_base: config.llm_api_base.clone(),
         openai_api_key: config.openai_api_key.clone(),
     }
+}
+
+#[allow(dead_code)]
+struct TestDb {
+    path: PathBuf,
+}
+
+#[allow(dead_code)]
+impl TestDb {
+    fn new() -> Self {
+        Self {
+            path: std::env::temp_dir().join(format!("agentic_http_test_{}.db", uuid::Uuid::now_v7())),
+        }
+    }
+
+    fn url(&self) -> String {
+        format!("sqlite://{}", self.path.display())
+    }
+}
+
+#[allow(dead_code)]
+impl Drop for TestDb {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+        let _ = std::fs::remove_file(self.path.with_extension("db-shm"));
+        let _ = std::fs::remove_file(self.path.with_extension("db-wal"));
+    }
+}
+
+#[allow(dead_code)]
+pub struct StorageBackedState {
+    pub state: AppState,
+    _db: TestDb,
+}
+
+#[allow(dead_code)]
+pub async fn storage_backed_state(llm_url: &str) -> StorageBackedState {
+    let db = TestDb::new();
+    let pool = create_pool_with_schema(Some(&db.url()))
+        .await
+        .expect("create test database");
+    let config = test_config(llm_url);
+    let exec_ctx = Arc::new(ExecutionContext::new(
+        ConversationHandler::new(ConversationStore::new(Arc::clone(&pool))),
+        ResponseHandler::new(ResponseStore::new(Arc::clone(&pool))),
+        Arc::new(reqwest::Client::new()),
+        config.llm_api_base.clone(),
+    ));
+    let proxy_state = ProxyState::new(config.clone()).expect("proxy state");
+    let state = AppState {
+        proxy_state,
+        exec_ctx,
+        shutdown_token: CancellationToken::new(),
+        websocket_tracker: WebSocketTracker::default(),
+        llm_api_base: config.llm_api_base,
+        openai_api_key: config.openai_api_key,
+    };
+    StorageBackedState { state, _db: db }
 }
 
 /// Spawn a minimal mock LLM that responds to `GET /health` with 200.

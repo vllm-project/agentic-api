@@ -8,7 +8,9 @@ use agentic_core::storage::{
 use agentic_core::storage::{ConversationVersion, InOutItem, StorageError};
 use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::{InputItem, InputMessage, InputMessageContent, OutputItem, OutputMessage};
+use serde_json::json;
 use std::sync::Arc;
+use tokio::sync::Barrier;
 
 use support::setup_pool;
 
@@ -36,6 +38,329 @@ async fn test_conversation_store_create_and_get() {
     let retrieved = store.get(&created.conversation_id).await.expect("get failed");
 
     assert_eq!(retrieved.conversation_id, created.conversation_id);
+}
+
+#[tokio::test]
+async fn tenant_scoped_conversations_cannot_be_read_or_mutated_by_another_tenant() {
+    let pool = setup_pool().await;
+    let store = ConversationStore::new(pool);
+    let conversation = store
+        .create_with_items_for_tenant(Some("tenant_a"), None, vec![create_input_item("private")])
+        .await
+        .expect("create tenant conversation");
+
+    assert!(
+        store
+            .get_for_tenant(&conversation.conversation_id, Some("tenant_b"))
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .append_items_for_tenant(
+                &conversation.conversation_id,
+                Some("tenant_b"),
+                vec![create_input_item("not allowed")],
+            )
+            .await
+            .is_err()
+    );
+
+    let page = store
+        .list_items_for_tenant(&conversation.conversation_id, Some("tenant_a"), None, 20, false)
+        .await
+        .expect("list tenant conversation items");
+    assert_eq!(page.data.len(), 1);
+}
+
+#[tokio::test]
+async fn conversation_item_crud_and_pagination_are_ordered_and_scoped() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = setup_pool().await;
+    let store = ConversationStore::new(pool);
+    let conversation = store
+        .create_with_items_for_tenant(
+            Some("tenant_crud"),
+            Some(&json!({"project": "storage"})),
+            vec![create_input_item("first"), create_input_item("second")],
+        )
+        .await?;
+
+    assert_eq!(conversation.metadata.as_deref(), Some(r#"{"project":"storage"}"#));
+    let updated = store
+        .update_metadata_for_tenant(
+            &conversation.conversation_id,
+            Some("tenant_crud"),
+            Some(&json!({"project": "updated"})),
+        )
+        .await?;
+    assert_eq!(updated.metadata.as_deref(), Some(r#"{"project":"updated"}"#));
+
+    let appended = store
+        .append_items_for_tenant(
+            &conversation.conversation_id,
+            Some("tenant_crud"),
+            vec![create_input_item("third")],
+        )
+        .await?;
+    assert_eq!(appended.len(), 1);
+
+    let ascending = store
+        .list_items_for_tenant(&conversation.conversation_id, Some("tenant_crud"), None, 1, false)
+        .await?;
+    assert_eq!(ascending.data.len(), 1);
+    assert_eq!(ascending.data[0].sequence, 0);
+    assert!(ascending.has_more);
+
+    let after_first = store
+        .list_items_for_tenant(
+            &conversation.conversation_id,
+            Some("tenant_crud"),
+            Some(&ascending.data[0].id),
+            1,
+            false,
+        )
+        .await?;
+    assert_eq!(after_first.data[0].sequence, 1);
+    assert!(after_first.has_more);
+
+    let descending = store
+        .list_items_for_tenant(&conversation.conversation_id, Some("tenant_crud"), None, 1, true)
+        .await?;
+    assert_eq!(descending.data[0].sequence, 2);
+    assert!(descending.has_more);
+
+    let retrieved = store
+        .get_item_for_tenant(&conversation.conversation_id, &appended[0].id, Some("tenant_crud"))
+        .await?;
+    assert_eq!(retrieved.id, appended[0].id);
+    assert_eq!(retrieved.item["content"], "third");
+
+    store
+        .delete_item_for_tenant(&conversation.conversation_id, &appended[0].id, Some("tenant_crud"))
+        .await?;
+    assert!(
+        store
+            .get_item_for_tenant(&conversation.conversation_id, &appended[0].id, Some("tenant_crud"))
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .get_item_for_tenant(&conversation.conversation_id, "item_missing", Some("tenant_crud"))
+            .await
+            .is_err()
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn tenant_isolation_covers_conversation_item_and_response_paths() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = setup_pool().await;
+    let store = ConversationStore::new(Arc::clone(&pool));
+    let conversation = store
+        .create_with_items_for_tenant(
+            Some("tenant_a"),
+            Some(&json!({"owner": "a"})),
+            vec![create_input_item("private")],
+        )
+        .await?;
+    let item = store
+        .list_items_for_tenant(&conversation.conversation_id, Some("tenant_a"), None, 20, false)
+        .await?
+        .data
+        .into_iter()
+        .next()
+        .expect("tenant item");
+
+    assert!(
+        store
+            .get_or_create_for_tenant(&conversation.conversation_id, Some("tenant_b"))
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .get_for_tenant(&conversation.conversation_id, Some("tenant_b"))
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .update_metadata_for_tenant(
+                &conversation.conversation_id,
+                Some("tenant_b"),
+                Some(&json!({"owner": "b"}))
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .delete_for_tenant(&conversation.conversation_id, Some("tenant_b"))
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .append_items_for_tenant(
+                &conversation.conversation_id,
+                Some("tenant_b"),
+                vec![create_input_item("denied")]
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .list_items_for_tenant(&conversation.conversation_id, Some("tenant_b"), None, 20, false)
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .get_item_for_tenant(&conversation.conversation_id, &item.id, Some("tenant_b"))
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .delete_item_for_tenant(&conversation.conversation_id, &item.id, Some("tenant_b"))
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .rehydrate_snapshot_for_tenant(&conversation.conversation_id, Some("tenant_b"))
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .persist_if_version_for_tenant(
+                &conversation.conversation_id,
+                Some("tenant_b"),
+                ConversationVersion::LastSequence(0),
+                "resp_tenant_b",
+                None,
+                vec![create_input_item("denied")],
+                &ResponseMetadata::default(),
+            )
+            .await
+            .is_err()
+    );
+
+    store
+        .persist_if_version_for_tenant(
+            &conversation.conversation_id,
+            Some("tenant_a"),
+            ConversationVersion::LastSequence(0),
+            "resp_tenant_a",
+            None,
+            vec![create_input_item("allowed")],
+            &ResponseMetadata::default(),
+        )
+        .await?;
+    let response_store = ResponseStore::new(pool);
+    assert!(
+        response_store
+            .get_for_tenant("resp_tenant_a", Some("tenant_b"))
+            .await
+            .is_err()
+    );
+    assert!(
+        response_store
+            .rehydrate_for_tenant("resp_tenant_a", Some("tenant_b"))
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        store
+            .get_for_tenant(&conversation.conversation_id, Some("tenant_a"))
+            .await?
+            .metadata
+            .as_deref(),
+        Some(r#"{"owner":"a"}"#)
+    );
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn sqlite_concurrent_item_appends_allocate_contiguous_sequences() -> Result<(), Box<dyn std::error::Error>> {
+    let db_path = std::env::temp_dir().join(format!("append_{}.db", uuid::Uuid::now_v7()));
+    let db_url = format!("sqlite://{}", db_path.display());
+    let pool = create_pool_with_schema_and_sqlite_config(
+        Some(&db_url),
+        SqliteConfig {
+            max_connections: 8,
+            ..SqliteConfig::default()
+        },
+    )
+    .await?;
+    let store = ConversationStore::new(Arc::clone(&pool));
+    let conversation = store.create().await?;
+    let writer_count = 16_usize;
+    let barrier = Arc::new(Barrier::new(writer_count));
+    let mut tasks = Vec::with_capacity(writer_count);
+    for index in 0..writer_count {
+        let store = store.clone();
+        let conversation_id = conversation.conversation_id.clone();
+        let barrier = Arc::clone(&barrier);
+        tasks.push(tokio::spawn(async move {
+            barrier.wait().await;
+            store
+                .append_items_for_tenant(
+                    &conversation_id,
+                    None,
+                    vec![create_input_item(&format!("item {index}"))],
+                )
+                .await
+        }));
+    }
+    for task in tasks {
+        task.await??;
+    }
+    let page = store
+        .list_items_for_tenant(&conversation.conversation_id, None, None, 100, false)
+        .await?;
+    assert_eq!(page.data.len(), writer_count);
+    assert_eq!(
+        page.data.iter().map(|item| item.sequence).collect::<Vec<_>>(),
+        (0..i64::try_from(writer_count)?).collect::<Vec<_>>()
+    );
+    pool.close().await;
+    let _ = std::fs::remove_file(db_path);
+    Ok(())
+}
+
+#[tokio::test]
+async fn deleting_a_conversation_preserves_its_items() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = setup_pool().await;
+    let store = ConversationStore::new(Arc::clone(&pool));
+    let conversation = store
+        .create_with_items_for_tenant(Some("tenant_a"), None, vec![create_input_item("preserved")])
+        .await?;
+
+    let item_count_before = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM items WHERE tenant_id = $1")
+        .bind("tenant_a")
+        .fetch_one(pool.as_ref())
+        .await?;
+    assert_eq!(item_count_before, 1);
+
+    store
+        .delete_for_tenant(&conversation.conversation_id, Some("tenant_a"))
+        .await?;
+
+    let item = sqlx::query_as::<_, (Option<String>, Option<i64>)>(
+        "SELECT conversation_id, seq FROM items WHERE tenant_id = $1",
+    )
+    .bind("tenant_a")
+    .fetch_one(pool.as_ref())
+    .await?;
+    assert_eq!(item, (None, None));
+    Ok(())
 }
 
 #[tokio::test]
@@ -446,6 +771,39 @@ async fn test_response_store_with_previous_response() {
 
     let rehydrated = store.rehydrate("resp_2").await.expect("rehydrate failed");
     assert_eq!(rehydrated.len(), 2);
+}
+
+#[tokio::test]
+async fn response_store_allocates_unique_ids_for_repeated_protocol_items() {
+    let pool = setup_pool().await;
+    let store = ResponseStore::new(pool);
+    let metadata = ResponseMetadata::default();
+    let repeated_item = create_output_item("fc_search");
+
+    store
+        .persist(
+            "resp_repeated_protocol_ids",
+            None,
+            vec![repeated_item.clone(), repeated_item.clone(), repeated_item],
+            &metadata,
+        )
+        .await
+        .expect("repeated protocol IDs must not collide in storage");
+
+    let response = store
+        .get("resp_repeated_protocol_ids")
+        .await
+        .expect("response should be stored");
+    let unique_ids: std::collections::HashSet<&String> = response.history_item_ids.iter().collect();
+    assert_eq!(response.history_item_ids.len(), 3);
+    assert_eq!(unique_ids.len(), 3);
+
+    let rehydrated = store
+        .rehydrate("resp_repeated_protocol_ids")
+        .await
+        .expect("response should rehydrate");
+    assert_eq!(rehydrated.len(), 3);
+    assert!(rehydrated.iter().all(|item| item == &create_output_item("fc_search")));
 }
 
 // Edge case tests
