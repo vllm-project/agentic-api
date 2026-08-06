@@ -3,8 +3,6 @@
 //! Builds a [`RequestContext`] by loading prior turns from storage and
 //! injecting them into the enriched request before it is forwarded to the LLM.
 
-#![allow(clippy::missing_errors_doc)]
-
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::storage::InOutItem;
@@ -32,6 +30,13 @@ pub async fn rehydrate_conversation(
     rehydrate_conversation_for_tenant(request, exec_ctx, None).await
 }
 
+/// Builds a request context and scopes stored-state lookup to `tenant_id`.
+///
+/// # Errors
+///
+/// Returns [`ExecutorError::InvalidRequest`] if both `conversation` and
+/// `previous_response_id` are supplied. Propagates storage errors when the selected
+/// state does not exist in the tenant scope or cannot be loaded.
 pub async fn rehydrate_conversation_for_tenant(
     request: RequestPayload,
     exec_ctx: &ExecutionContext,

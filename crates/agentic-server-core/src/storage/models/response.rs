@@ -1,7 +1,5 @@
 //! LLM API response stored in the database.
 
-#![allow(clippy::missing_errors_doc)]
-
 use super::super::pool::{DbPool, DbResult, DbTransaction};
 use crate::utils::common::{deserialize_from_string_opt, deserialize_from_string_opt_or_default, utcnow_str};
 
@@ -56,6 +54,11 @@ pub async fn create_in_tx(
     .await
 }
 
+/// Creates a response in an existing transaction within the optional tenant scope.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] if the insert fails.
 pub async fn create_in_tx_with_tenant(
     tx: &mut DbTransaction<'_>,
     id: &str,
@@ -90,6 +93,11 @@ pub async fn get(pool: &DbPool, id: &str) -> DbResult<Option<Response>> {
     get_for_tenant(pool, id, None).await
 }
 
+/// Gets a response within the optional tenant scope.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] if the query fails.
 pub async fn get_for_tenant(pool: &DbPool, id: &str, tenant_id: Option<&str>) -> DbResult<Option<Response>> {
     match tenant_id {
         Some(tenant_id) => {

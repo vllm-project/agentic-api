@@ -1,5 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
-
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::upstream::fetch_blocking_payload;
@@ -268,6 +266,13 @@ pub async fn compact_response(
     compact_response_for_tenant(request, exec_ctx, auth, None).await
 }
 
+/// Compacts resolved input while applying the supplied tenant scope to state lookup.
+///
+/// # Errors
+///
+/// Returns [`ExecutorError::InvalidRequest`] if neither input nor a previous response
+/// ID is supplied. Propagates rehydration, inference, serialization, and compaction
+/// validation failures from the executor pipeline.
 pub async fn compact_response_for_tenant(
     request: CompactRequest,
     exec_ctx: &ExecutionContext,

@@ -1,7 +1,5 @@
 //! Conversation history item stored in the database.
 
-#![allow(clippy::missing_errors_doc)]
-
 use serde_json::Value;
 use std::fmt::Write;
 use tracing::warn;
@@ -139,6 +137,11 @@ pub async fn create_in_tx(
     create_in_tx_with_tenant(tx, items, conversation_id, None).await
 }
 
+/// Creates items in an existing transaction with optional conversation and tenant scope.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] if sequence allocation or a batched insert fails.
 pub async fn create_in_tx_with_tenant(
     tx: &mut DbTransaction<'_>,
     items: Vec<(String, String)>,
@@ -237,6 +240,11 @@ pub async fn get_items(pool: &DbPool, ids: &[String]) -> DbResult<Vec<Item>> {
     get_items_for_tenant(pool, ids, None).await
 }
 
+/// Gets items by ID within the optional tenant scope.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] if any batched query fails.
 pub async fn get_items_for_tenant(pool: &DbPool, ids: &[String], tenant_id: Option<&str>) -> DbResult<Vec<Item>> {
     if ids.is_empty() {
         return Ok(vec![]);
@@ -271,6 +279,11 @@ pub async fn get_items_for_tenant(pool: &DbPool, ids: &[String], tenant_id: Opti
     Ok(rows)
 }
 
+/// Gets one item from a conversation within the optional tenant scope.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] if the query fails.
 pub async fn get_item(
     pool: &DbPool,
     conversation_id: &str,
@@ -298,10 +311,20 @@ pub async fn get_item(
     }
 }
 
+/// Gets all items for an unscoped conversation in sequence order.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] if the query fails.
 pub async fn get_items_by_conversation(pool: &DbPool, conversation_id: &str) -> DbResult<Vec<Item>> {
     get_items_by_conversation_for_tenant(pool, conversation_id, None).await
 }
 
+/// Gets all items for a conversation and tenant scope in sequence order.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] if the query fails.
 pub async fn get_items_by_conversation_for_tenant(
     pool: &DbPool,
     conversation_id: &str,
@@ -328,6 +351,11 @@ pub async fn get_items_by_conversation_for_tenant(
     }
 }
 
+/// Deletes a conversation item within the optional tenant scope.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] if the deletion fails.
 pub async fn delete(pool: &DbPool, conversation_id: &str, item_id: &str, tenant_id: Option<&str>) -> DbResult<bool> {
     let result = match tenant_id {
         Some(tenant_id) => {
@@ -360,6 +388,11 @@ pub async fn last_conversation_sequence_in_tx(
     last_conversation_sequence_in_tx_for_tenant(tx, conversation_id, None).await
 }
 
+/// Returns the last item sequence for a tenant-scoped conversation in a transaction.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] if the query fails.
 pub async fn last_conversation_sequence_in_tx_for_tenant(
     tx: &mut DbTransaction<'_>,
     conversation_id: &str,

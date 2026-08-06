@@ -1,7 +1,5 @@
 //! Response storage operations and queries.
 
-#![allow(clippy::missing_errors_doc)]
-
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -54,6 +52,13 @@ impl ResponseStore {
         self.get_for_tenant(response_id, None).await
     }
 
+    /// Retrieves a response within the optional tenant scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::NotConfigured`] if storage is disabled, a not-found
+    /// error if the response is outside the tenant scope or absent, or a database
+    /// error if the query fails.
     pub async fn get_for_tenant(&self, response_id: &str, tenant_id: Option<&str>) -> StoreResult<ResponseData> {
         let pool = self.pool()?;
         let row = response::get_for_tenant(pool, response_id, tenant_id)
@@ -73,6 +78,13 @@ impl ResponseStore {
         self.rehydrate_for_tenant(response_id, None).await
     }
 
+    /// Rehydrates a response's ordered item history within the optional tenant scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::NotConfigured`] if storage is disabled, a not-found
+    /// error if the response is outside the tenant scope or absent, or a database
+    /// error if the response or its items cannot be queried.
     pub async fn rehydrate_for_tenant(
         &self,
         response_id: &str,

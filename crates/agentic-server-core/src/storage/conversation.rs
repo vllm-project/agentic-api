@@ -1,7 +1,5 @@
 //! Conversation storage operations.
 
-#![allow(clippy::missing_errors_doc)]
-
 use std::convert::TryFrom;
 use std::sync::Arc;
 
@@ -52,6 +50,13 @@ impl ConversationStore {
         self.create_with_items_for_tenant(None, None, Vec::new()).await
     }
 
+    /// Creates a tenant-scoped conversation with metadata and initial items.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::NotConfigured`] if storage is disabled. Returns a
+    /// serialization error for invalid metadata or items, or a database error if
+    /// the transaction cannot be completed.
     pub async fn create_with_items_for_tenant(
         &self,
         tenant_id: Option<&str>,
@@ -82,6 +87,12 @@ impl ConversationStore {
         self.get_or_create_for_tenant(conversation_id, None).await
     }
 
+    /// Gets or creates a conversation within the optional tenant scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::NotConfigured`] if storage is disabled or a database
+    /// error if the conversation cannot be queried or created.
     pub async fn get_or_create_for_tenant(
         &self,
         conversation_id: &str,
@@ -101,6 +112,13 @@ impl ConversationStore {
         self.get_for_tenant(conversation_id, None).await
     }
 
+    /// Gets a conversation within the optional tenant scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::NotConfigured`] if storage is disabled, a not-found
+    /// error if the conversation is outside the tenant scope or absent, or a database
+    /// error if the query fails.
     pub async fn get_for_tenant(
         &self,
         conversation_id: &str,
@@ -113,6 +131,13 @@ impl ConversationStore {
         Ok(row.into())
     }
 
+    /// Replaces conversation metadata within the optional tenant scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::NotConfigured`] if storage is disabled, a not-found
+    /// error if the conversation is outside the tenant scope or absent, a serialization
+    /// error for invalid metadata, or a database error if the update fails.
     pub async fn update_metadata_for_tenant(
         &self,
         conversation_id: &str,
@@ -127,6 +152,13 @@ impl ConversationStore {
         Ok(row.into())
     }
 
+    /// Deletes a conversation within the optional tenant scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::NotConfigured`] if storage is disabled, a not-found
+    /// error if the conversation is outside the tenant scope or absent, or a database
+    /// error if the transaction fails.
     pub async fn delete_for_tenant(&self, conversation_id: &str, tenant_id: Option<&str>) -> StoreResult<()> {
         let pool = self.pool()?;
         if !conversation::delete(pool, conversation_id, tenant_id).await? {
@@ -135,6 +167,13 @@ impl ConversationStore {
         Ok(())
     }
 
+    /// Appends items atomically within the optional tenant scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::NotConfigured`] if storage is disabled, a not-found
+    /// error if the conversation is outside the tenant scope or absent, a serialization
+    /// error for invalid items, or a database error if locking or insertion fails.
     pub async fn append_items_for_tenant(
         &self,
         conversation_id: &str,
@@ -157,6 +196,13 @@ impl ConversationStore {
         Ok(rows.into_iter().map(ConversationItemData::from).collect())
     }
 
+    /// Lists a page of conversation items within the optional tenant scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::NotConfigured`] if storage is disabled, a not-found
+    /// error if the conversation or `after` item is absent from the tenant scope, or
+    /// a database error if the query fails.
     pub async fn list_items_for_tenant(
         &self,
         conversation_id: &str,
@@ -191,6 +237,13 @@ impl ConversationStore {
         })
     }
 
+    /// Gets one conversation item within the optional tenant scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::NotConfigured`] if storage is disabled, a not-found
+    /// error if the conversation or item is absent from the tenant scope, or a database
+    /// error if the query fails.
     pub async fn get_item_for_tenant(
         &self,
         conversation_id: &str,
@@ -205,6 +258,13 @@ impl ConversationStore {
         Ok(row.into())
     }
 
+    /// Deletes one conversation item within the optional tenant scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::NotConfigured`] if storage is disabled, a not-found
+    /// error if the conversation or item is absent from the tenant scope, or a database
+    /// error if the deletion fails.
     pub async fn delete_item_for_tenant(
         &self,
         conversation_id: &str,
@@ -237,6 +297,14 @@ impl ConversationStore {
         self.rehydrate_snapshot_for_tenant(conversation_id, None).await
     }
 
+    /// Rehydrates a conversation and captures its storage version within a tenant scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::NotConfigured`] if storage is disabled, a not-found
+    /// error if the conversation is absent from the tenant scope,
+    /// [`StorageError::InvalidConversationSequence`] for malformed stored ordering,
+    /// or a database error if the query fails.
     pub async fn rehydrate_snapshot_for_tenant(
         &self,
         conversation_id: &str,
@@ -314,6 +382,14 @@ impl ConversationStore {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// Persists a tenant-scoped turn only when the stored version still matches.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StorageError::NotConfigured`] if storage is disabled,
+    /// [`StorageError::ConversationConflict`] if the version changed, a not-found
+    /// error if the conversation is absent from the tenant scope, a serialization
+    /// error for invalid items or metadata, or a database error if the transaction fails.
     pub async fn persist_if_version_for_tenant(
         &self,
         conversation_id: &str,

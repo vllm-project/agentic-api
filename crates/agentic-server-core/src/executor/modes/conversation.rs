@@ -1,7 +1,5 @@
 //! Conversation storage handler — owns all conversation store operations.
 
-#![allow(clippy::missing_errors_doc)]
-
 use serde_json::Value;
 
 use crate::storage::{
@@ -63,6 +61,12 @@ impl ConversationHandler {
             .map_err(ExecutorError::Storage)
     }
 
+    /// Gets a conversation by ID within the optional tenant scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ExecutorError::Storage`] if storage is disabled, the conversation
+    /// does not exist in the tenant scope, or the database query fails.
     pub async fn get_by_id(&self, conversation_id: &str, tenant_id: Option<&str>) -> ExecutorResult<ConversationData> {
         self.store
             .get_for_tenant(conversation_id, tenant_id)
@@ -78,6 +82,12 @@ impl ConversationHandler {
         self.store.create().await.map_err(ExecutorError::Storage)
     }
 
+    /// Creates a conversation with metadata and an initial ordered item sequence.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ExecutorError::Storage`] if storage is disabled, metadata or an
+    /// item cannot be serialized, or the database transaction fails.
     pub async fn create_with_items(
         &self,
         tenant_id: Option<&str>,
@@ -90,6 +100,13 @@ impl ConversationHandler {
             .map_err(ExecutorError::Storage)
     }
 
+    /// Replaces a conversation's metadata within the optional tenant scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ExecutorError::Storage`] if storage is disabled, the conversation
+    /// does not exist in the tenant scope, metadata cannot be serialized, or the
+    /// database query fails.
     pub async fn update_metadata(
         &self,
         conversation_id: &str,
@@ -102,6 +119,12 @@ impl ConversationHandler {
             .map_err(ExecutorError::Storage)
     }
 
+    /// Deletes a conversation within the optional tenant scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ExecutorError::Storage`] if storage is disabled, the conversation
+    /// does not exist in the tenant scope, or the database transaction fails.
     pub async fn delete(&self, conversation_id: &str, tenant_id: Option<&str>) -> ExecutorResult<()> {
         self.store
             .delete_for_tenant(conversation_id, tenant_id)
@@ -109,6 +132,13 @@ impl ConversationHandler {
             .map_err(ExecutorError::Storage)
     }
 
+    /// Appends items to a conversation in storage order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ExecutorError::Storage`] if storage is disabled, the conversation
+    /// does not exist in the tenant scope, an item cannot be serialized, or the
+    /// database transaction fails.
     pub async fn append_items(
         &self,
         conversation_id: &str,
@@ -121,6 +151,12 @@ impl ConversationHandler {
             .map_err(ExecutorError::Storage)
     }
 
+    /// Lists a page of conversation items in the requested order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ExecutorError::Storage`] if storage is disabled, the conversation
+    /// or `after` item does not exist in the tenant scope, or the database query fails.
     pub async fn list_items(
         &self,
         conversation_id: &str,
@@ -135,6 +171,12 @@ impl ConversationHandler {
             .map_err(ExecutorError::Storage)
     }
 
+    /// Gets one item from a conversation within the optional tenant scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ExecutorError::Storage`] if storage is disabled, the conversation
+    /// or item does not exist in the tenant scope, or the database query fails.
     pub async fn get_item(
         &self,
         conversation_id: &str,
@@ -147,6 +189,12 @@ impl ConversationHandler {
             .map_err(ExecutorError::Storage)
     }
 
+    /// Deletes one item from a conversation within the optional tenant scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ExecutorError::Storage`] if storage is disabled, the conversation
+    /// or item does not exist in the tenant scope, or the database query fails.
     pub async fn delete_item(
         &self,
         conversation_id: &str,

@@ -1,7 +1,5 @@
 //! Conversation context and history.
 
-#![allow(clippy::missing_errors_doc)]
-
 use super::super::pool::{DbPool, DbResult, DbTransaction};
 use crate::storage::backend::DatabaseBackend;
 use crate::utils::common::utcnow_str;
@@ -32,6 +30,11 @@ pub async fn create(pool: &DbPool, id: &str) -> DbResult<Conversation> {
     create_with_metadata(pool, id, None, None).await
 }
 
+/// Creates a conversation with tenant and metadata fields.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] if the transaction cannot be started, inserted, or committed.
 pub async fn create_with_metadata(
     pool: &DbPool,
     id: &str,
@@ -44,6 +47,11 @@ pub async fn create_with_metadata(
     Ok(conversation)
 }
 
+/// Creates a conversation with tenant and metadata fields in an existing transaction.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] if the insert fails.
 pub async fn create_with_metadata_in_tx(
     tx: &mut DbTransaction<'_>,
     id: &str,
@@ -71,6 +79,12 @@ pub async fn get_or_create(pool: &DbPool, id: &str) -> DbResult<Conversation> {
     get_or_create_for_tenant(pool, id, None).await
 }
 
+/// Gets or creates a conversation within the optional tenant scope.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] if the upsert fails or an existing ID belongs to a
+/// different tenant scope.
 pub async fn get_or_create_for_tenant(pool: &DbPool, id: &str, tenant_id: Option<&str>) -> DbResult<Conversation> {
     let now = utcnow_str();
     if let Some(tenant_id) = tenant_id {
@@ -109,6 +123,11 @@ pub async fn get(pool: &DbPool, id: &str) -> DbResult<Option<Conversation>> {
     get_for_tenant(pool, id, None).await
 }
 
+/// Gets a conversation within the optional tenant scope.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] if the query fails.
 pub async fn get_for_tenant(pool: &DbPool, id: &str, tenant_id: Option<&str>) -> DbResult<Option<Conversation>> {
     match tenant_id {
         Some(tenant_id) => {
@@ -127,6 +146,11 @@ pub async fn get_for_tenant(pool: &DbPool, id: &str, tenant_id: Option<&str>) ->
     }
 }
 
+/// Updates conversation metadata within the optional tenant scope.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] if the update query fails.
 pub async fn update_metadata(
     pool: &DbPool,
     id: &str,
@@ -158,6 +182,11 @@ pub async fn update_metadata(
     }
 }
 
+/// Deletes a conversation and detaches its items within the optional tenant scope.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error`] if the transaction cannot be started, queried, or committed.
 pub async fn delete(pool: &DbPool, id: &str, tenant_id: Option<&str>) -> DbResult<bool> {
     let mut tx = pool.begin().await?;
     match tenant_id {
@@ -216,6 +245,12 @@ pub async fn lock_in_tx(tx: &mut DbTransaction<'_>, id: &str) -> DbResult<()> {
     lock_in_tx_for_tenant(tx, id, None).await
 }
 
+/// Locks a tenant-scoped conversation for the lifetime of an existing transaction.
+///
+/// # Errors
+///
+/// Returns [`sqlx::Error::RowNotFound`] if no matching conversation exists, or
+/// another [`sqlx::Error`] if lock acquisition fails.
 pub async fn lock_in_tx_for_tenant(tx: &mut DbTransaction<'_>, id: &str, tenant_id: Option<&str>) -> DbResult<()> {
     if DatabaseBackend::from_connection(tx.as_mut()) == DatabaseBackend::Postgres {
         let locked_id = match tenant_id {

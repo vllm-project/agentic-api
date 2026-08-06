@@ -330,8 +330,6 @@ pub struct ResponsePayload {
     )]
     pub conversation_id: Option<String>,
     pub instructions: Option<String>,
-    #[serde(default)]
-    pub parallel_tool_calls: bool,
     pub temperature: Option<f64>,
     #[serde(default)]
     pub tool_choice: ToolChoice,
@@ -851,7 +849,6 @@ mod tests {
             previous_response_id: None,
             conversation_id: None,
             instructions: None,
-            parallel_tool_calls: true,
             temperature: None,
             tool_choice: ToolChoice::Auto,
             tools: Vec::new(),
@@ -891,7 +888,6 @@ mod tests {
             previous_response_id: None,
             conversation_id: None,
             instructions: None,
-            parallel_tool_calls: true,
             temperature: None,
             tool_choice: ToolChoice::Auto,
             tools: Vec::new(),

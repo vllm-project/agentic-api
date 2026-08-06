@@ -6,14 +6,68 @@
 
 mod support;
 
-use agentic_core::executor::{create_conversation, execute};
+use agentic_core::executor::{BoxStream, create_conversation, execute};
+use agentic_core::types::request_response::ResponsePayload;
+use either::Either;
+use futures::StreamExt;
 use std::sync::Arc;
 use support::{
-    TestFixture, collect_stream, expected_text, load_cassette, make_request, output_text, request_input_texts,
-    responses_turns, unwrap_blocking,
+    TestFixture, Turn, expected_text, load_cassette, make_request, output_text, request_input_texts, responses_turns,
+    unwrap_blocking,
 };
 
 const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/text_only/conversation");
+
+fn recorded_event_types(turn: &Turn) -> Vec<String> {
+    turn.response
+        .sse
+        .as_ref()
+        .expect("streaming cassette should contain SSE")
+        .iter()
+        .flat_map(|entry| entry.lines())
+        .filter_map(|line| line.strip_prefix("data: "))
+        .filter(|data| *data != "[DONE]")
+        .map(|data| serde_json::from_str::<serde_json::Value>(data).expect("cassette SSE data should be valid JSON"))
+        .filter_map(|event| event["type"].as_str().map(str::to_owned))
+        .collect()
+}
+
+async fn collect_stream_lifecycle(result: Either<ResponsePayload, BoxStream>) -> (ResponsePayload, Vec<String>) {
+    let mut stream = match result {
+        Either::Right(stream) => stream,
+        Either::Left(_) => panic!("expected streaming response, got blocking"),
+    };
+    let mut event_types = Vec::new();
+    let mut terminal = None;
+
+    while let Some(chunk) = stream.next().await {
+        for line in chunk.lines() {
+            let Some(data) = line.strip_prefix("data: ") else {
+                continue;
+            };
+            if data == "[DONE]" {
+                continue;
+            }
+            let Ok(mut event) = serde_json::from_str::<serde_json::Value>(data) else {
+                continue;
+            };
+            let Some(event_type) = event["type"].as_str() else {
+                continue;
+            };
+            event_types.push(event_type.to_owned());
+            if event_type == "response.completed"
+                && let Some(response) = event.get_mut("response")
+            {
+                terminal = serde_json::from_value(response.take()).ok();
+            }
+        }
+    }
+
+    (
+        terminal.expect("stream should contain a response.completed payload"),
+        event_types,
+    )
+}
 
 #[tokio::test]
 async fn test_two_turn_nonstreaming_conversation() {
@@ -68,7 +122,7 @@ async fn test_two_turn_streaming_conversation() {
     let conv_id = create_conversation(ctx).await.expect("create conv").conversation_id;
 
     // Act
-    let p1 = collect_stream(
+    let (p1, p1_event_types) = collect_stream_lifecycle(
         execute(
             make_request(&t1.request.body.input, true, true, None, Some(conv_id.clone())),
             Arc::clone(ctx),
@@ -77,7 +131,7 @@ async fn test_two_turn_streaming_conversation() {
         .expect("t1"),
     )
     .await;
-    let p2 = collect_stream(
+    let (p2, p2_event_types) = collect_stream_lifecycle(
         execute(
             make_request(&t2.request.body.input, true, true, None, Some(conv_id)),
             Arc::clone(ctx),
@@ -91,9 +145,11 @@ async fn test_two_turn_streaming_conversation() {
     assert!(p1.id.starts_with("resp_"));
     assert_eq!(p1.status, "completed");
     assert_eq!(output_text(&p1), expected_text(t1));
+    assert_eq!(p1_event_types, recorded_event_types(t1));
     assert_ne!(p2.id, p1.id);
     assert_eq!(p2.status, "completed");
     assert_eq!(output_text(&p2), expected_text(t2));
+    assert_eq!(p2_event_types, recorded_event_types(t2));
 }
 
 /// Case 8 — two independent conversations must not share context.
