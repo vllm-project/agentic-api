@@ -1,6 +1,6 @@
 # Design: Claude Code Integration (Anthropic Messages API)
 
-> **References:** [ROADMAP §4 Messages API](../../ROADMAP.md), [Codex CLI Integration](./codex-integration.md), [Tool Framework](./tool-framework.md), [Anthropic LLM Gateway Protocol](https://code.claude.com/docs/en/llm-gateway-protocol) (the authoritative contract for what Claude Code sends a gateway), [Connect Claude Code to a gateway](https://code.claude.com/docs/en/llm-gateway-connect) (dev-side config and the troubleshooting table), [Claude apps gateway](https://code.claude.com/docs/en/claude-apps-gateway) (Anthropic's reference gateway), [vLLM Claude Code integration](https://docs.vllm.ai/en/latest/serving/integrations/claude_code/) (the zero-gateway baseline).
+> **References:** [ROADMAP §4 Messages API](https://github.com/vllm-project/agentic-api/blob/main/ROADMAP.md#4-messages-api), [Codex CLI Integration](./codex-integration.md), [Tool Framework](./tool-framework.md), [Anthropic LLM Gateway Protocol](https://code.claude.com/docs/en/llm-gateway-protocol) (the authoritative contract for what Claude Code sends a gateway), [Connect Claude Code to a gateway](https://code.claude.com/docs/en/llm-gateway-connect) (dev-side config and the troubleshooting table), [Claude apps gateway](https://code.claude.com/docs/en/claude-apps-gateway) (Anthropic's reference gateway), [vLLM Claude Code integration](https://docs.vllm.ai/en/latest/serving/integrations/claude_code/) (the zero-gateway baseline).
 > **Status:** Proposal
 
 ---
@@ -9,7 +9,11 @@
 
 `agentic-api` today serves one stateful inference surface: the OpenAI-compatible Responses API (`/v1/responses`, with its supporting `/v1/conversations` and `/v1/models` routes), including persistence, `previous_response_id` continuation, gateway tool execution, and the multi-turn tool loop built around it. Codex works because Codex also speaks Responses; the only client-specific work was preserving Codex's `namespace` tool shape (see [Codex CLI Integration](./codex-integration.md)).
 
-Claude Code speaks a different protocol — the Anthropic Messages API (`/v1/messages`). Unlike Responses, Messages is **stateless**: Claude Code sends the entire conversation on every turn, so the gateway needs no storage, no persistence, and no rehydration. Supporting Claude Code is therefore not a stateful-surface build like Responses was; it is a **stateless** surface whose only jobs are protocol-faithful proxying and server-side execution of gateway-owned tools.
+Claude Code speaks a different protocol — the Anthropic Messages API (`/v1/messages`). Unlike Responses, Messages is
+**conversation-stateless**: Claude Code sends the entire conversation on every turn, so the gateway needs no
+authoritative conversation storage or rehydration. Supporting Claude Code is therefore not a stateful client surface
+like Responses; its public contract remains protocol-faithful pass-through plus server-side execution of gateway-owned
+tools.
 
 Concretely, the gateway must implement:
 
@@ -17,7 +21,12 @@ Concretely, the gateway must implement:
 2. **The gateway protocol contract** — forward `anthropic-*` headers and error bodies unchanged, preserve the `system` attribution block, accept either auth header. A naive proxy gets these wrong; see [Gateway protocol contract](#gateway-protocol-contract).
 3. **A server-side tool loop** that executes gateway-owned tools (`web_search`, MCP) without ever exposing them to the client, and maps Anthropic `tool_use`/`tool_result` blocks to the shared tool framework. This is the only real value-add, and the only mechanism that works (see [Verification](#what-a-gateway-can-do)).
 
-No storage layer, no `previous_response_id` analog, no stored-response object. The model-facing half is already solved — vLLM implements Messages natively and accepts everything Claude Code sends (see [Verification](#verification)) — so the remaining work is narrower than Responses, and reuses the existing execution core rather than forking it (ROADMAP §4).
+No conversation store, no `previous_response_id` analog, and no stored-response object. The model-facing half is already
+solved — vLLM implements Messages natively and accepts everything Claude Code sends (see
+[Verification](#verification)) — so the remaining work is narrower than Responses and reuses the existing execution
+core rather than forking it (ROADMAP §4). A separate
+[cache-state RFC](../superpowers/specs/2026-08-20-messages-server-managed-cache-state-design.md) proposes private,
+fail-open optimization metadata without changing this public contract.
 
 ---
 
@@ -86,7 +95,12 @@ Per the [Anthropic Gateway Protocol reference](https://code.claude.com/docs/en/l
 
 Forward `anthropic-version` (currently `2023-06-01`) and `anthropic-beta` to vLLM unchanged. Do not allowlist beta values — the set changes per release, so treat it as open.
 
-The gateway may consume rather than forward `Authorization` / `x-api-key` (accept either; Claude Code sends the credential in one or both depending on `ANTHROPIC_AUTH_TOKEN` vs `ANTHROPIC_API_KEY`). Claude Code also sends `x-claude-code-session-id` / `x-claude-code-agent-id` / `x-claude-code-parent-agent-id` attribution headers; the gateway can log them for observability but does not act on them (no session state). Extra headers (`ANTHROPIC_CUSTOM_HEADERS`) should be tolerated.
+The gateway may consume rather than forward `Authorization` / `x-api-key` (accept either; Claude Code sends the
+credential in one or both depending on `ANTHROPIC_AUTH_TOKEN` vs `ANTHROPIC_API_KEY`). Claude Code also sends
+`x-claude-code-session-id` / `x-claude-code-agent-id` / `x-claude-code-parent-agent-id` attribution headers. The current
+implementation can log them for observability but does not treat them as authentication or conversation state. The
+cache-state RFC proposes using validated, tenant-scoped derivatives only as private routing and lifecycle hints. Extra
+headers (`ANTHROPIC_CUSTOM_HEADERS`) should be tolerated.
 
 ### Feature pass-through
 
@@ -115,13 +129,29 @@ Claude Code issues background calls (spinner tips, summaries, auto-compact, suba
 
 ---
 
-## The gateway stays stateless
+## The public Messages contract stays conversation-stateless
 
-Unlike Responses, where `previous_response_id` triggers server-side rehydration, the Messages API is stateless: the client sends the entire conversation — all prior `messages`, including `tool_use`/`tool_result` blocks — on every turn. Claude Code already carries that history, so **the gateway does not maintain any conversation state.** No storage layer, no rehydration, no persistence, no `previous_response_id` analog. This is a deliberate scope decision, not a deferral — the wire protocol doesn't need it and Claude Code doesn't use it, so building it would be speculative.
+Unlike Responses, where `previous_response_id` triggers server-side rehydration, the Messages API is stateless: the
+client sends the entire conversation — all prior `messages`, including `tool_use`/`tool_result` blocks — on every turn.
+Claude Code already carries that history, so **the gateway does not maintain authoritative conversation state.** There
+is no rehydration, `previous_response_id` analog, or stored-response object. This remains a deliberate scope decision,
+not a deferral.
 
-That leaves exactly one thing for the gateway to do beyond faithful proxying: **server-side execution of gateway-owned tools.** When the model emits a gateway-owned `tool_use` (`web_search`, MCP), the gateway executes it and continues the loop instead of handing the tool back to the client. This is the gateway-owned vs. client-owned split the [tool framework](./tool-framework.md) already models, and — per [Verification](#what-a-gateway-can-do) — the *only* form of it that works with Claude Code is a server-side loop that hides the gateway tool from the client entirely.
+That decision does not prohibit private cache optimization metadata. Such metadata may improve routing or KV-cache
+lifecycle management only when the complete client request remains authoritative and every state failure falls back to
+ordinary inference. It cannot reconstruct history or create a public continuation contract. The
+[server-managed cache-state RFC](../superpowers/specs/2026-08-20-messages-server-managed-cache-state-design.md)
+specifies that separate proposal.
 
-So the whole gateway is stateless orchestration: accept Messages, map tool calls to the shared framework, run the server-side loop for gateway-owned tools, and stream Anthropic events back out.
+For the current integration, the gateway behavior beyond faithful proxying is **server-side execution of gateway-owned
+tools.** When the model emits a gateway-owned `tool_use` (`web_search`, MCP), the gateway executes it and continues the
+loop instead of handing the tool back to the client. This is the gateway-owned vs. client-owned split the
+[tool framework](./tool-framework.md) already models, and — per [Verification](#what-a-gateway-can-do) — the only form
+of it that works with Claude Code is a server-side loop that hides the gateway tool from the client entirely. Private
+cache optimization remains a separately gated proposal rather than current integration behavior.
+
+The public Messages flow remains conversation-stateless orchestration: accept Messages, map tool calls to the shared
+framework, run the server-side loop for gateway-owned tools, and stream Anthropic events back out.
 
 ---
 
@@ -132,11 +162,13 @@ So the whole gateway is stateless orchestration: accept Messages, map tool calls
 - Serve a `/v1/messages` endpoint that Claude Code targets via `ANTHROPIC_BASE_URL` (transparent proxy landed in [#99](https://github.com/vllm-project/agentic-api/pull/99)).
 - Execute gateway-owned tools server-side, reusing the existing tool loop rather than forking a Messages-specific one.
 - Support what Claude Code uses: streaming, `tool_use`/`tool_result`, `system` prompt, `thinking`.
-- Keep the gateway stateless — the raw pass-through path stays transparent, mirroring the Responses `store=false` proxy.
+- Keep the public Messages contract conversation-stateless — the raw pass-through path stays transparent, mirroring
+  the Responses `store=false` proxy.
 
 ### Non-goals
 
-- **Any storage, persistence, or rehydration** — the gateway holds no conversation state; Claude Code carries full history. No `previous_response_id` analog, no stored-response object.
+- **Authoritative conversation storage or rehydration** — Claude Code carries full history. There is no
+  `previous_response_id` analog or stored-response object. Private fail-open cache metadata is specified separately.
 - Re-implementing Messages inference in the gateway — vLLM owns that.
 - Anthropic/Bedrock-hosted routing — this targets vLLM-backed models.
 - A gateway-side Claude runtime.
@@ -173,7 +205,7 @@ graph TD
 
 Both ways of feeding the shared loop still map Messages to and from an internal shape — "vLLM serves Messages natively" removes the model-facing translation, not the gateway's own request/response mapping (the `ADAPT` box). The choice is what they map *to*.
 
-Option A maps to an API-agnostic core: a new `/v1/messages` handler and a thin Messages type set feed the same loop through a representation of items, tool calls, and tool outputs — the shape the storage layer already uses — so both Responses and Messages drive one loop. This aligns with ROADMAP §4, and it is the recommended target. It depends on factoring the loop off its current `RequestPayload`/`ResponsePayload` typing, which is core work the pending Layering ADR owns; the merged #83 unified the dispatch/`LoopDecision` loop but left it typed to Responses, so that step is still ahead, and it is not this doc's to decide (see [Coordination](#coordination--dependencies)).
+Option A maps to an API-agnostic core: a new `/v1/messages` handler and a thin Messages type set feed the same loop through a representation of items, tool calls, and tool outputs — the shape the storage layer already uses — so both Responses and Messages drive one loop. This aligns with ROADMAP §4, and it is the recommended target. It depends on factoring the loop off its current `RequestPayload`/`ResponsePayload` typing, which is core work the pending Layering ADR owns; the merged #83 unified the dispatch/`LoopDecision` loop but left it typed to Responses, so that step is still ahead, and it is not this doc's to decide (see [Coordination](#coordination-dependencies)).
 
 Option B maps inbound Messages to the internal Responses shape, runs the existing loop unchanged, and translates the output back. This is exactly the Responses-specific fork ROADMAP §4 says to avoid, and it double-translates lossily (thinking blocks, `tool_use` IDs, `system`). It is not shippable, and the Stage 0 spike deliberately avoided it — a raw-forward capability probe plus a minimal tool-turn spike de-risked the real unknowns without the translation scaffolding.
 
@@ -202,7 +234,7 @@ Three stages, each a candidate tracker issue. The gateway earns its place in the
 
 - **Stage 0 — de-risk the unknowns (done, see [Verification](#what-a-gateway-can-do)).** A throwaway probe between the real Claude Code CLI and vLLM 0.25.1 settled both open questions without any Responses-translation harness: vLLM accepts every advanced field Claude Code sends, and the gateway-owned tool turn works only via the server-side loop. Haiku small/fast-model setup confirmed.
 - **Stage 1 — transparent proxy + protocol contract (landed in [#99](https://github.com/vllm-project/agentic-api/pull/99)).** The `/v1/messages` and `count_tokens` routes proxying to vLLM, forwarding raw bodies/headers/query/status/SSE/errors and handling dual auth. The remaining contract items this doc flags (the `system` attribution-block strip, open-list `anthropic-beta` forwarding) should get explicit test coverage here.
-- **Stage 2 — server-side gateway tool loop.** Map Anthropic `tool_use`/`tool_result` to the shared tool framework and run the hide-the-call loop so a real gateway-owned tool turn (web_search, the shipped `GatewayExecutor`) completes end to end through `/v1/messages`, streaming correct Anthropic SSE. This is the real value-add and the shippable core. Its acceptance test needs a recorded Messages cassette of the upstream turns (model emits the gateway `tool_use`, then the final text after the `tool_result`) so the loop is covered hermetically, not only live — recording the upstream side reuses the #94 recorder pattern and doesn't depend on the loop existing, so it can start immediately (a small recorder change for the Messages response shape may be needed). Gated on the loop's API-agnostic factoring — see [Coordination](#coordination--dependencies).
+- **Stage 2 — server-side gateway tool loop.** Map Anthropic `tool_use`/`tool_result` to the shared tool framework and run the hide-the-call loop so a real gateway-owned tool turn (web_search, the shipped `GatewayExecutor`) completes end to end through `/v1/messages`, streaming correct Anthropic SSE. This is the real value-add and the shippable core. Its acceptance test needs a recorded Messages cassette of the upstream turns (model emits the gateway `tool_use`, then the final text after the `tool_result`) so the loop is covered hermetically, not only live — recording the upstream side reuses the #94 recorder pattern and doesn't depend on the loop existing, so it can start immediately (a small recorder change for the Messages response shape may be needed). Gated on the loop's API-agnostic factoring — see [Coordination](#coordination-dependencies).
 - **Stage 3 — parity hardening.** Extend the Messages cassette matrix beyond Stage 2's single acceptance recording to the edge cases: interleaved `thinking` and `tool_use`, multi-round gateway tools, streaming `tool_use` (`input_json_delta`), and `system` prompt variants.
 
 ## Coordination & dependencies
@@ -221,7 +253,7 @@ And whatever API-agnostic shape emerges has to be validated against Interactions
 
 Still open, pending code review or an experiment:
 
-1. **Loop coupling to Responses types.** The tool loop takes `RequestPayload` and returns `ResponsePayload` (`engine.rs`); Option A needs these factored to an API-agnostic core. This is the biggest unknown, and per [Coordination](#coordination--dependencies) it's a decision for the Layering ADR and the loop's owners, not this doc.
+1. **Loop coupling to Responses types.** The tool loop takes `RequestPayload` and returns `ResponsePayload` (`engine.rs`); Option A needs these factored to an API-agnostic core. This is the biggest unknown, and per [Coordination](#coordination-dependencies) it's a decision for the Layering ADR and the loop's owners, not this doc.
 2. **`tool_use` ID round-tripping.** Confirm vLLM emits stable `tool_use.id`s that survive the loop, analogous to Codex `call_id` restoration.
 3. **Streaming fidelity when injecting gateway tool results.** Emitting correct Anthropic SSE (`content_block_start` / `input_json_delta` / `content_block_stop`, contiguous `index`) when the gateway resolves a gateway-owned `tool_use` mid-stream — the same hide-the-call concern the Responses path faces, and reusing the same `emit_gateway_*_events` logic already on `main`. The proposed `GatewayAccumulator` (tool-framework.md Future Work) would later unify the blocking and streaming variants, but Messages does not depend on it.
 
@@ -242,5 +274,6 @@ Settled by the [protocol contract](#gateway-protocol-contract):
 ## Out of scope
 
 - Protocol translation of model inference — vLLM serves Messages natively.
-- Continuation state, storage, and persistence for Claude Code — the protocol is stateless and the client carries its own history, so the gateway holds no state at all.
+- Authoritative continuation state, conversation storage, and rehydration for Claude Code — the protocol is stateless
+  and the client carries its own history. Private cache optimization metadata is not conversation state.
 - Executing client-owned tools in the gateway — the client owns those, as with Codex.
