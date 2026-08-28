@@ -34,6 +34,7 @@ enum InFlight {
     Message { item: OutputMessage, text: String },
     Reasoning { item: ReasoningOutput, text: String },
     FunctionCall { item: FunctionToolCall, arguments: String },
+    ToolSearchCall { item: crate::types::io::ToolSearchCall },
     CustomToolCall { item: CustomToolCall, input: String },
     WebSearchCall { item: Option<WebSearchCall> },
     McpCall { item: McpCall },
@@ -47,6 +48,7 @@ impl std::fmt::Debug for InFlight {
             Self::Message { .. } => write!(f, "InFlight::Message {{ .. }}"),
             Self::Reasoning { .. } => write!(f, "InFlight::Reasoning {{ .. }}"),
             Self::FunctionCall { .. } => write!(f, "InFlight::FunctionCall {{ .. }}"),
+            Self::ToolSearchCall { .. } => write!(f, "InFlight::ToolSearchCall {{ .. }}"),
             Self::CustomToolCall { .. } => write!(f, "InFlight::CustomToolCall {{ .. }}"),
             Self::WebSearchCall { .. } => write!(f, "InFlight::WebSearchCall {{ .. }}"),
             Self::McpCall { .. } => write!(f, "InFlight::McpCall {{ .. }}"),
@@ -72,6 +74,7 @@ impl InFlight {
                 item.status = MessageStatus::Completed;
                 Some(OutputItem::FunctionCall(item))
             }
+            Self::ToolSearchCall { item } => Some(OutputItem::ToolSearchCall(item)),
             Self::Message { mut item, text } => {
                 if !text.is_empty() {
                     item.content.push(OutputTextContent::new(text));
@@ -469,6 +472,9 @@ impl ResponseAccumulator {
                     item,
                     arguments: String::with_capacity(128),
                 }),
+            SSEItemType::ToolSearchCall => crate::types::io::ToolSearchCall::try_from(payload)
+                .ok()
+                .map(|item| InFlight::ToolSearchCall { item }),
             SSEItemType::CustomToolCall => {
                 CustomToolCall::try_from(payload)
                     .ok()
@@ -535,6 +541,7 @@ impl ResponseAccumulator {
         if let Some(entry) = in_flight_key.as_deref().and_then(|key| self.in_flight.get_mut(key)) {
             match (&mut entry.item, done_item) {
                 (InFlight::FunctionCall { item, arguments }, _) => item.apply_done(payload, arguments),
+                (InFlight::ToolSearchCall { item }, _) => item.apply_done(payload, &mut String::new()),
                 (InFlight::CustomToolCall { item, input }, _) => item.apply_done(payload, input),
                 (InFlight::McpCall { item }, _) => item.apply_done(payload, &mut String::new()),
                 (InFlight::McpListTools { item }, _) => item.apply_done(payload, &mut String::new()),
@@ -555,6 +562,7 @@ impl ResponseAccumulator {
 
         if let Some(
             mut output_item @ (OutputItem::FunctionCall(_)
+            | OutputItem::ToolSearchCall(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::WebSearchCall(_)
             | OutputItem::McpCall(_)
@@ -618,6 +626,8 @@ impl ResponseAccumulator {
             previous_response_id: previous_response_id.map(str::to_string),
             conversation_id: self.conversation_id,
             instructions: instructions.map(str::to_string),
+            tools: None,
+            tool_choice: None,
         }
     }
 }
@@ -626,6 +636,7 @@ fn in_flight_matches_call_type(item: &InFlight, item_type: SSEItemType) -> bool 
     matches!(
         (item, item_type),
         (InFlight::FunctionCall { .. }, SSEItemType::FunctionCall)
+            | (InFlight::ToolSearchCall { .. }, SSEItemType::ToolSearchCall)
             | (InFlight::CustomToolCall { .. }, SSEItemType::CustomToolCall)
             | (InFlight::WebSearchCall { .. }, SSEItemType::WebSearchCall)
             | (InFlight::McpCall { .. }, SSEItemType::McpCall)
@@ -1842,5 +1853,45 @@ mod tests {
         assert_eq!(call.call_id, "call_1");
         assert_eq!(call.name, "raw_echo");
         assert_eq!(call.input, "hello");
+    }
+
+    #[test]
+    fn native_tool_search_call_accumulates_from_added_and_done() {
+        let acc = ResponseAccumulator::from_sse_lines(
+            [
+                r#"data: {"type":"response.output_item.added","output_index":0,"item":{"type":"tool_search_call","id":"tsc_native","call_id":"call_search","execution":"client","arguments":{},"status":"in_progress"}}"#.to_owned(),
+                r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"tool_search_call","id":"tsc_native","call_id":"call_search","execution":"client","arguments":{"query":"weather"},"status":"completed"}}"#.to_owned(),
+                r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#.to_owned(),
+            ],
+            None,
+        );
+
+        let [OutputItem::ToolSearchCall(call)] = acc.output.as_slice() else {
+            panic!("expected native tool_search_call");
+        };
+        assert_eq!(call.id, "tsc_native");
+        assert_eq!(call.call_id, "call_search");
+        assert_eq!(call.arguments["query"], "weather");
+        assert_eq!(call.status, crate::types::tools::ToolSearchStatus::Completed);
+    }
+
+    #[test]
+    fn blocking_native_tool_search_call_remains_typed() {
+        let body = serde_json::json!({
+            "id": "resp_1",
+            "status": "completed",
+            "output": [{
+                "type": "tool_search_call",
+                "id": "tsc_native",
+                "call_id": "call_search",
+                "execution": "client",
+                "arguments": {"query": "weather"},
+                "status": "completed"
+            }]
+        })
+        .to_string();
+
+        let acc = ResponseAccumulator::from_json(&body, None).expect("valid blocking response");
+        assert!(matches!(acc.output.as_slice(), [OutputItem::ToolSearchCall(_)]));
     }
 }

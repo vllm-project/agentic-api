@@ -89,6 +89,13 @@ pub enum ExecutorError {
 }
 
 impl ExecutorError {
+    pub(crate) fn is_invalid_upstream_tool_search(&self) -> bool {
+        matches!(
+            self,
+            Self::Tool(ToolError::InvalidUpstreamToolSearch | ToolError::UpstreamWithheldFunctionCall)
+        )
+    }
+
     fn client_visible_error(&self) -> &Self {
         match self {
             Self::Persistence(source) if source.contains_conversation_locked() => source.client_visible_error(),
@@ -114,7 +121,12 @@ impl ExecutorError {
             | Self::Tool(ToolError::Config(_))
             | Self::InvalidRequest(_)
             | Self::JsonError(_) => StatusCode::BAD_REQUEST,
-            Self::Tool(ToolError::Execution(_)) | Self::CompactionFailed { .. } => StatusCode::BAD_GATEWAY,
+            Self::Tool(
+                ToolError::Execution(_)
+                | ToolError::InvalidUpstreamToolSearch
+                | ToolError::UpstreamWithheldFunctionCall,
+            )
+            | Self::CompactionFailed { .. } => StatusCode::BAD_GATEWAY,
             Self::ParseError(_) => StatusCode::UNPROCESSABLE_ENTITY,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -131,7 +143,11 @@ impl ExecutorError {
             | Self::JsonError(_) => "invalid_request_error",
             Self::Storage(e) if e.is_not_found() => "not_found",
             Self::LLMRequest { .. } | Self::LLMTransport { .. } | Self::CompactionFailed { .. } => "upstream_error",
-            Self::Tool(ToolError::Execution(_)) => "tool_error",
+            Self::Tool(
+                ToolError::Execution(_)
+                | ToolError::InvalidUpstreamToolSearch
+                | ToolError::UpstreamWithheldFunctionCall,
+            ) => "tool_error",
             _ => "server_error",
         }
     }
@@ -215,6 +231,14 @@ mod tests {
         let storage_err = StorageError::NotConfigured;
         let exec_err = ExecutorError::from(storage_err);
         assert!(exec_err.to_string().contains("storage error"));
+    }
+
+    #[test]
+    fn tool_search_configuration_errors_are_bad_requests() {
+        let error = ExecutorError::from(ToolError::Config("invalid tool_search request".to_owned()));
+
+        assert_eq!(error.http_status(), StatusCode::BAD_REQUEST);
+        assert_eq!(error.error_type(), "invalid_request_error");
     }
 
     #[test]

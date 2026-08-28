@@ -867,6 +867,190 @@ async fn test_response_store_get_after_persist() {
 }
 
 #[tokio::test]
+async fn test_tool_search_conversation_metadata_matches_snapshot_version() {
+    let pool = setup_pool().await;
+    let store = ConversationStore::new(Arc::clone(&pool));
+    let conversation = store.create().await.expect("create conversation");
+    store
+        .persist(
+            &conversation.conversation_id,
+            "resp_tool_search_initial",
+            None,
+            vec![create_input_item("initial")],
+            &ResponseMetadata {
+                model: "initial-model".to_owned(),
+                ..ResponseMetadata::default()
+            },
+        )
+        .await
+        .expect("persist initial turn");
+
+    let loaded_tool: agentic_core::types::tools::ResponsesTool = serde_json::from_value(serde_json::json!({
+        "type": "function",
+        "name": "get_weather",
+        "description": "Get weather",
+        "parameters": {"type": "object"},
+        "defer_loading": true
+    }))
+    .expect("valid loaded function");
+    let latest = ResponseMetadata {
+        model: "latest-model".to_owned(),
+        effective_tools: Some(vec![loaded_tool.clone()]),
+        tool_search_loaded_tools: Some(vec![loaded_tool]),
+        ..ResponseMetadata::default()
+    };
+    store
+        .persist(
+            &conversation.conversation_id,
+            "resp_tool_search_latest",
+            None,
+            vec![create_input_item("latest")],
+            &latest,
+        )
+        .await
+        .expect("persist latest turn");
+
+    // Simulate replicas whose clocks and process-local UUID order disagree with committed conversation-item sequence.
+    sqlx::query("UPDATE responses SET created_at = $1 WHERE id = $2")
+        .bind(9_999_i64)
+        .bind("resp_tool_search_initial")
+        .execute(pool.as_ref())
+        .await
+        .expect("make older turn appear newer by wall clock");
+    sqlx::query("UPDATE responses SET created_at = $1 WHERE id = $2")
+        .bind(1_i64)
+        .bind("resp_tool_search_latest")
+        .execute(pool.as_ref())
+        .await
+        .expect("make latest turn appear older by wall clock");
+
+    let latest_item_id: String =
+        sqlx::query_scalar("SELECT id FROM items WHERE conversation_id = $1 ORDER BY seq DESC LIMIT 1")
+            .bind(&conversation.conversation_id)
+            .fetch_one(pool.as_ref())
+            .await
+            .expect("latest conversation item");
+    let branch = ResponseMetadata {
+        model: "branch-model".to_owned(),
+        ..ResponseMetadata::default()
+    };
+    sqlx::query(
+        "INSERT INTO responses \
+         (id, conversation_id, previous_response_id, history_item_ids, metadata, created_at) \
+         VALUES ($1, $2, $3, $4, $5, $6)",
+    )
+    .bind("resp_tool_search_branch")
+    .bind(&conversation.conversation_id)
+    .bind("resp_tool_search_latest")
+    .bind(serde_json::to_string(&vec![latest_item_id]).expect("branch history JSON"))
+    .bind(String::try_from(&branch).expect("branch metadata JSON"))
+    .bind(20_000_i64)
+    .execute(pool.as_ref())
+    .await
+    .expect("seed conversation-tagged response branch");
+
+    let snapshot = store
+        .rehydrate_snapshot(&conversation.conversation_id)
+        .await
+        .expect("rehydrate typed snapshot");
+    store
+        .persist(
+            &conversation.conversation_id,
+            "resp_after_snapshot",
+            None,
+            vec![create_input_item("after snapshot")],
+            &ResponseMetadata {
+                model: "after-snapshot-model".to_owned(),
+                ..ResponseMetadata::default()
+            },
+        )
+        .await
+        .expect("persist a newer conversation turn");
+    let metadata = store
+        .response_metadata_at_version(&conversation.conversation_id, snapshot.version)
+        .await
+        .expect("load response metadata at snapshot version")
+        .expect("response metadata accompanies conversation items");
+    assert_eq!(metadata.model, "latest-model");
+    assert_eq!(metadata.tool_search_loaded_tools.as_deref().map(<[_]>::len), Some(1));
+}
+
+#[tokio::test]
+async fn test_tool_search_conversation_conflict_does_not_persist_stale_loaded_state() {
+    let pool = setup_pool().await;
+    let store = ConversationStore::new(pool);
+    let conversation = store.create().await.expect("create conversation");
+    let snapshot = store
+        .rehydrate_snapshot(&conversation.conversation_id)
+        .await
+        .expect("capture empty version");
+    let winning_tool: agentic_core::types::tools::ResponsesTool = serde_json::from_value(serde_json::json!({
+        "type": "function",
+        "name": "winning_tool",
+        "parameters": {"type": "object"},
+        "defer_loading": true
+    }))
+    .expect("winning tool");
+    let stale_tool: agentic_core::types::tools::ResponsesTool = serde_json::from_value(serde_json::json!({
+        "type": "function",
+        "name": "stale_tool",
+        "parameters": {"type": "object"},
+        "defer_loading": true
+    }))
+    .expect("stale tool");
+    let winning = ResponseMetadata {
+        model: "winner".to_owned(),
+        effective_tools: Some(vec![winning_tool.clone()]),
+        tool_search_loaded_tools: Some(vec![winning_tool]),
+        ..ResponseMetadata::default()
+    };
+    let stale = ResponseMetadata {
+        model: "stale".to_owned(),
+        effective_tools: Some(vec![stale_tool.clone()]),
+        tool_search_loaded_tools: Some(vec![stale_tool]),
+        ..ResponseMetadata::default()
+    };
+
+    store
+        .persist_if_version(
+            &conversation.conversation_id,
+            snapshot.version,
+            "resp_tool_search_winner",
+            None,
+            vec![create_input_item("winner")],
+            &winning,
+        )
+        .await
+        .expect("winning turn persists");
+    let error = store
+        .persist_if_version(
+            &conversation.conversation_id,
+            snapshot.version,
+            "resp_tool_search_stale",
+            None,
+            vec![create_input_item("stale")],
+            &stale,
+        )
+        .await
+        .expect_err("stale turn conflicts");
+    assert!(matches!(error, StorageError::ConversationConflict { .. }));
+
+    let snapshot = store
+        .rehydrate_snapshot(&conversation.conversation_id)
+        .await
+        .expect("rehydrate winning state");
+    let latest = store
+        .response_metadata_at_version(&conversation.conversation_id, snapshot.version)
+        .await
+        .expect("load winning metadata")
+        .expect("winning metadata");
+    assert_eq!(latest.model, "winner");
+    let serialized = serde_json::to_value(latest.tool_search_loaded_tools).unwrap();
+    assert_eq!(serialized[0]["name"], "winning_tool");
+    assert!(!serialized.to_string().contains("stale_tool"));
+}
+
+#[tokio::test]
 async fn test_conversation_get_or_create_same_id() {
     let pool = setup_pool().await;
     let store = ConversationStore::new(pool);

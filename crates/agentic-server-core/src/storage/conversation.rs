@@ -105,6 +105,27 @@ impl ConversationStore {
         })
     }
 
+    /// Loads metadata from the item-bearing persisted turn at a captured version.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if either targeted database lookup fails.
+    pub async fn response_metadata_at_version(
+        &self,
+        conversation_id: &str,
+        version: ConversationVersion,
+    ) -> StoreResult<Option<ResponseMetadata>> {
+        let ConversationVersion::LastSequence(sequence) = version else {
+            return Ok(None);
+        };
+        let pool = self.pool()?;
+        let Some(item_id) = item::get_id_by_conversation_sequence(pool, conversation_id, sequence).await? else {
+            return Ok(None);
+        };
+        let response = response::get_conversation_turn_for_item(pool, conversation_id, &item_id).await?;
+        Ok(response.and_then(|row| row.metadata_as()))
+    }
+
     /// Persists conversation turn with new items and response metadata.
     ///
     /// Creates items in the conversation and stores the associated response record.

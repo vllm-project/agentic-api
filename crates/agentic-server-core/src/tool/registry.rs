@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -11,19 +11,25 @@ use super::executors::GatewayExecutors;
 use super::function::insert_function_entry;
 use super::mcp::handler::{McpToolMap, McpToolRef};
 use super::mcp::registry::insert_discovered_mcp_entry;
+use super::tool_search::{
+    TOOL_SEARCH_NAME, ensure_request_prepared, insert_tool_search_entry, validate_blocking_response,
+};
 use super::web_search::insert_web_search_entry;
-use super::{CodexNamespaceHandler, GatewayExecutor, McpHandler, NamespaceMap, ToolError, ToolOutput};
+use super::{CodexNamespaceHandler, GatewayExecutor, McpHandler, NamespaceMap, ToolError, ToolOutput, ToolSearchState};
 use crate::events::WireEvent;
 
+use crate::types::event::ResponseStatus;
 use crate::types::io::OutputItem;
 use crate::types::io::output::{FunctionToolCall, McpListTools};
+use crate::types::request_response::RequestPayload;
 use crate::types::tools::{CodeInterpreterToolParam, FileSearchToolParam, ResponsesTool};
-use crate::utils::common::serialize_to_value_or_custom_default;
+use crate::utils::common::{serialize_to_value, serialize_to_value_or_custom_default};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolType {
     Function,
+    ToolSearch,
     Custom,
     CodexNamespace,
     Mcp,
@@ -40,6 +46,7 @@ impl ToolType {
     pub(crate) const fn description(self) -> &'static str {
         match self {
             Self::Function => "function tool",
+            Self::ToolSearch => "tool search",
             Self::Custom => "custom tool",
             Self::CodexNamespace => "Codex namespace tool",
             Self::Mcp => "MCP tool",
@@ -51,7 +58,10 @@ impl ToolType {
 
     #[must_use]
     pub const fn is_gateway_owned(self) -> bool {
-        !matches!(self, Self::Function | Self::Custom | Self::CodexNamespace)
+        !matches!(
+            self,
+            Self::Function | Self::ToolSearch | Self::Custom | Self::CodexNamespace
+        )
     }
 }
 
@@ -162,6 +172,9 @@ fn insert_code_interpreter_entry(
 pub struct ToolRegistry {
     entries: HashMap<String, ToolEntry>,
 
+    /// Prepared public/private tool-search projection for this request.
+    tool_search: Option<Box<ToolSearchState>>,
+
     /// Built once from the declared tools, so final payload and streaming event
     /// restoration don't rebuild it on every call.
     namespace_map: Option<NamespaceMap>,
@@ -179,6 +192,13 @@ pub struct ToolRegistry {
 }
 
 impl ToolRegistry {
+    /// Whether a public request needs tool-search preparation and therefore
+    /// must use the executor rather than transparent upstream pass-through.
+    #[must_use]
+    pub fn request_has_tool_search_state(request: &RequestPayload) -> bool {
+        super::tool_search::request_has_tool_search_state(request)
+    }
+
     /// Build a registry from declared tools and attach gateway handlers for dispatchable tool types.
     ///
     /// # Errors
@@ -203,9 +223,12 @@ impl ToolRegistry {
         let mut entries = HashMap::with_capacity(tools.len());
         let mut mcp_tool_map = McpToolMap::default();
         let mut mcp_list_tools_items = Vec::new();
+        // Validate every declaration before MCP discovery performs external I/O.
+        tools.iter().try_for_each(ResponsesTool::validate)?;
+
         // Namespace members must be keyed by the same flat, model-visible name
-        // the model will call, so resolve them first — the same pure pass used
-        // to build the upstream request.
+        // the model will call. Discovered MCP names retain their separate
+        // post-list collision pass.
         let resolved_tools = CodexNamespaceHandler.resolve_namespace_members(tools)?;
         McpHandler::validate_server_labels(&resolved_tools)?;
 
@@ -213,6 +236,11 @@ impl ToolRegistry {
             match tool {
                 ResponsesTool::Function(p) => {
                     insert_unique_tool_entries(&mut entries, |resolved| insert_function_entry(resolved, p))?;
+                }
+                ResponsesTool::ToolSearch(param) => {
+                    insert_unique_tool_entries(&mut entries, |resolved| {
+                        insert_tool_search_entry(resolved, param);
+                    })?;
                 }
                 ResponsesTool::Mcp(p) => {
                     let tool_set = match executors.mcp_server_tools(p).await {
@@ -268,6 +296,7 @@ impl ToolRegistry {
 
         Ok(Self {
             entries,
+            tool_search: None,
             namespace_map,
             custom_tool_map,
             mcp_tool_map,
@@ -275,16 +304,188 @@ impl ToolRegistry {
         })
     }
 
+    /// Prepare the request's private inference projection, build the normal
+    /// dispatch table, and retain the public tool-search projection in this
+    /// request-scoped registry.
+    pub(crate) fn prepare_request(
+        request: &mut RequestPayload,
+        restored_loaded_tools: &[ResponsesTool],
+        restore_only_declared: bool,
+    ) -> Result<Self, ToolError> {
+        let state = super::ToolSearchHandler::prepare_request(request, restored_loaded_tools, restore_only_declared)?;
+        let mut registry = Self::default();
+        registry.install_tool_search_state(state.map(Box::new), false)?;
+        Ok(registry)
+    }
+
+    /// Build the normal dispatch table after generic request preparation has
+    /// had a chance to short-circuit (for example, explicit compaction).
+    pub(crate) async fn build_prepared_with_handlers(
+        mut self,
+        tools: Option<&mut Vec<ResponsesTool>>,
+        executors: &mut GatewayExecutors,
+    ) -> Result<Self, ToolError> {
+        let mut registry = match tools {
+            Some(tools) => Self::build_with_handlers(tools, executors).await?,
+            None => Self::default(),
+        };
+        registry.install_tool_search_state(self.tool_search.take(), true)?;
+        Ok(registry)
+    }
+
+    fn install_tool_search_state(
+        &mut self,
+        state: Option<Box<ToolSearchState>>,
+        validate_private_routes: bool,
+    ) -> Result<(), ToolError> {
+        if let Some(state) = state {
+            if validate_private_routes {
+                self.validate_tool_search_state(&state)?;
+            }
+            self.tool_search = Some(state);
+        }
+        Ok(())
+    }
+
+    /// Public declarations to expose in response metadata. `Some([])` is
+    /// intentionally distinct from an inactive request.
+    #[must_use]
+    pub(crate) fn tool_search_response_tools(&self) -> Option<Vec<ResponsesTool>> {
+        let state = self.tool_search.as_deref().filter(|state| state.is_active())?;
+        let mut tools = state.public_response_tools();
+        for tool in &mut tools {
+            tool.sanitize_for_persistence();
+        }
+        Some(tools)
+    }
+
+    /// Move the public tool projection into response persistence metadata.
+    pub(crate) fn take_tool_search_metadata(&mut self) -> Option<(Option<Vec<ResponsesTool>>, Vec<ResponsesTool>)> {
+        self.tool_search
+            .as_deref_mut()
+            .filter(|state| state.is_active())
+            .map(ToolSearchState::take_public_metadata)
+    }
+
+    pub(crate) fn validate_blocking_response(&self, body: &str) -> Result<(), ToolError> {
+        let empty = HashSet::new();
+        let state = self.tool_search.as_deref();
+        validate_blocking_response(
+            body,
+            state.is_some_and(ToolSearchState::is_active),
+            state.map_or(&empty, ToolSearchState::withheld_function_names),
+        )
+    }
+
+    /// Ensure tool-search requests went through the request-scoped preparation seam.
+    pub(crate) fn ensure_request_prepared(&self, request: &RequestPayload) -> Result<(), ToolError> {
+        ensure_request_prepared(request, self.tool_search.is_some())
+    }
+
+    pub(crate) fn normalize_response_output(
+        &self,
+        output: &mut Vec<OutputItem>,
+        status: ResponseStatus,
+        unfinished_stream_item_ids: &HashSet<String>,
+    ) -> Result<(), ToolError> {
+        let discard_unfinished = matches!(status, ResponseStatus::Error | ResponseStatus::Incomplete);
+        let mut normalized = Vec::with_capacity(output.len());
+        for item in std::mem::take(output) {
+            match item {
+                OutputItem::FunctionCall(call)
+                    if discard_unfinished && unfinished_stream_item_ids.contains(&call.id) => {}
+                OutputItem::FunctionCall(call) => {
+                    super::tool_search::ensure_function_is_available(self.is_withheld_function(&call.name))?;
+                    if self.tool_type(&call.name) == ToolType::ToolSearch {
+                        if let Some(public) = super::tool_search::project_synthetic_call(
+                            &call,
+                            discard_unfinished,
+                            unfinished_stream_item_ids.contains(&call.id),
+                        )? {
+                            normalized.push(OutputItem::ToolSearchCall(public));
+                        }
+                    } else {
+                        normalized.push(OutputItem::FunctionCall(call));
+                    }
+                }
+                OutputItem::ToolSearchCall(call) => {
+                    if let Some(public) = super::tool_search::project_native_call(&call, discard_unfinished)? {
+                        normalized.push(OutputItem::ToolSearchCall(public));
+                    }
+                }
+                item => normalized.push(item),
+            }
+        }
+        *output = normalized;
+        Ok(())
+    }
+
+    pub(crate) fn restore_tool_search_response_tools(&self, wire: &mut WireEvent) -> Result<(), ToolError> {
+        let Some(response) = wire.rest.get_mut("response").and_then(Value::as_object_mut) else {
+            return Ok(());
+        };
+        if !response.contains_key("tools") {
+            return Ok(());
+        }
+        let Some(tools) = self.tool_search_response_tools() else {
+            return Ok(());
+        };
+        response.insert(
+            "tools".to_owned(),
+            serialize_to_value(&tools).map_err(|_| super::tool_search::invalid_upstream_search_call())?,
+        );
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn tool_search_state(&self) -> Option<&ToolSearchState> {
+        self.tool_search.as_deref()
+    }
+
     #[must_use]
     pub fn lookup(&self, tool_name: &str) -> Option<&ToolEntry> {
         self.entries.get(tool_name)
     }
 
-    pub(crate) fn tool_type_map(&self) -> HashMap<String, ToolType> {
+    pub(crate) fn tool_type(&self, name: &str) -> ToolType {
+        if name == TOOL_SEARCH_NAME && self.tool_search.as_deref().is_some_and(ToolSearchState::is_active) {
+            return ToolType::ToolSearch;
+        }
         self.entries
-            .iter()
-            .map(|(name, entry)| (name.clone(), entry.tool_type))
-            .collect()
+            .get(name)
+            .map_or(ToolType::Function, |entry| entry.tool_type)
+    }
+
+    pub(crate) fn is_withheld_function(&self, name: &str) -> bool {
+        self.tool_search
+            .as_deref()
+            .is_some_and(|state| state.withheld_function_names().contains(name))
+    }
+
+    pub(crate) fn tool_search_is_active(&self) -> bool {
+        self.tool_type(TOOL_SEARCH_NAME) == ToolType::ToolSearch
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_tool_types(tool_types: HashMap<String, ToolType>) -> Self {
+        let entries = tool_types
+            .into_iter()
+            .map(|(name, tool_type)| {
+                (
+                    name,
+                    ToolEntry {
+                        tool_type,
+                        config: Value::Null,
+                        server_label: None,
+                        handler: None,
+                    },
+                )
+            })
+            .collect();
+        Self {
+            entries,
+            ..Self::default()
+        }
     }
 
     #[must_use]
@@ -309,6 +510,34 @@ impl ToolRegistry {
     #[must_use]
     pub(crate) fn mcp_list_tools_items(&self) -> &[McpListTools] {
         &self.mcp_list_tools_items
+    }
+
+    /// Validate the private dispatch table against prepared tool-search state.
+    fn validate_tool_search_state(&self, state: &ToolSearchState) -> Result<(), ToolError> {
+        if !state.is_active() {
+            return Ok(());
+        }
+        if self
+            .entries
+            .keys()
+            .any(|name| state.withheld_function_names().contains(name))
+        {
+            return Err(ToolError::Config(
+                "a loaded tool collides with a withheld function name".to_owned(),
+            ));
+        }
+        let Some(_) = state.synthetic_tool_search() else {
+            return Ok(());
+        };
+        let entry = self.entries.get(TOOL_SEARCH_NAME).ok_or_else(|| {
+            ToolError::Config("prepared tool-search declaration is missing from the private registry".to_owned())
+        })?;
+        if entry.tool_type != ToolType::ToolSearch || entry.tool_type.is_gateway_owned() || entry.handler.is_some() {
+            return Err(ToolError::Config(
+                "prepared tool-search declaration has invalid private registry ownership".to_owned(),
+            ));
+        }
+        Ok(())
     }
 
     pub fn restore_final_payload_output(&self, output: &mut [OutputItem]) {
@@ -373,8 +602,10 @@ mod tests {
     use super::*;
     use crate::tool::executors::GatewayExecutorRegistration;
     use crate::tool::mcp::{McpDiscoveredHandler, McpHandler};
+    use crate::tool::tool_search;
     use crate::types::event::MessageStatus;
     use crate::types::tools::McpDiscoveredToolParam;
+    use crate::utils::common::serialize_to_value;
 
     fn declaration(server_label: &str) -> ResponsesTool {
         serde_json::from_value(serde_json::json!({
@@ -413,6 +644,221 @@ mod tests {
             param,
             handler: Arc::new(McpHandler::discovered_tool_spec_only()),
         }
+    }
+
+    #[tokio::test]
+    async fn tool_search_declaration_has_client_owned_registry_entry() {
+        let mut tools: Vec<ResponsesTool> = serde_json::from_value(serde_json::json!([{
+            "type": "tool_search",
+            "execution": "client",
+            "description": "Find a tool",
+            "parameters": {"type": "object"}
+        }]))
+        .expect("tool-search declaration");
+        let mut executors = GatewayExecutors::default();
+
+        let registry = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
+            .await
+            .expect("client-owned declaration does not require a handler");
+
+        let entry = registry.lookup("tool_search").expect("tool-search entry");
+        assert_eq!(entry.tool_type, ToolType::ToolSearch);
+        assert_eq!(entry.config["description"], "Find a tool");
+        assert!(entry.server_label.is_none());
+        assert!(entry.handler.is_none());
+        assert_eq!(registry.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn synthetic_tool_search_is_client_owned_never_dispatched_and_converts_to_typed_output() {
+        let (request, mut state) = prepared_search_state();
+        let mut tools = private_tools(&mut state, &request);
+        let mut executors = GatewayExecutors::default();
+        let mut registry = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
+            .await
+            .expect("typed tool-search declaration builds normally");
+
+        registry
+            .install_tool_search_state(Some(Box::new(state)), true)
+            .expect("prepared tool-search entry is already classified");
+        let entry = registry.lookup("tool_search").expect("tool-search entry");
+        assert_eq!(entry.tool_type, ToolType::ToolSearch);
+        assert!(!entry.tool_type.is_gateway_owned());
+
+        let call: FunctionToolCall = serde_json::from_value(serde_json::json!({
+            "type": "function_call",
+            "id": "fc_search_1",
+            "call_id": "call_search_1",
+            "name": "tool_search",
+            "arguments": "{\"query\":\"weather\"}",
+            "status": "completed"
+        }))
+        .expect("normalized call");
+        assert!(
+            registry.dispatch(&call).await.is_none(),
+            "tool search has no gateway handler"
+        );
+
+        let output = OutputItem::ToolSearchCall(tool_search::completed_public_call(&call).unwrap());
+        assert_eq!(
+            serialize_to_value(&output).unwrap(),
+            serde_json::json!({
+                "type": "tool_search_call",
+                "id": "tsc_search_1",
+                "call_id": "call_search_1",
+                "execution": "client",
+                "arguments": {"query": "weather"},
+                "status": "completed"
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn declaration_free_replay_enables_state_driven_classification() {
+        let (request, mut state) = replayed_search_state();
+        assert!(state.is_active());
+        assert!(state.synthetic_tool_search().is_none());
+        let mut tools = private_tools(&mut state, &request);
+        let mut registry = ToolRegistry::build_with_handlers(&mut tools, &mut GatewayExecutors::default())
+            .await
+            .expect("loaded function registry");
+        assert!(registry.lookup("tool_search").is_none());
+        registry
+            .install_tool_search_state(Some(Box::new(state)), true)
+            .expect("enable replay translation");
+
+        let valid: FunctionToolCall = serde_json::from_value(serde_json::json!({
+            "type": "function_call", "id": "fc_search", "call_id": "call_search",
+            "name": "tool_search", "namespace": null, "arguments": "{\"query\":\"news\"}",
+            "status": "completed"
+        }))
+        .unwrap();
+        assert_eq!(registry.tool_type("tool_search"), ToolType::ToolSearch);
+        assert!(tool_search::completed_public_call(&valid).is_ok());
+
+        let malformed: FunctionToolCall = serde_json::from_value(serde_json::json!({
+            "type": "function_call", "id": "fc_search", "call_id": "call_search",
+            "name": "tool_search", "namespace": null, "arguments": "{}", "status": "in_progress"
+        }))
+        .unwrap();
+        assert!(tool_search::completed_public_call(&malformed).is_err());
+    }
+
+    #[tokio::test]
+    async fn ordinary_function_named_tool_search_remains_a_function() {
+        let mut tools: Vec<ResponsesTool> = serde_json::from_value(serde_json::json!([{
+            "type": "function",
+            "name": "tool_search",
+            "parameters": {"type": "object"}
+        }]))
+        .unwrap();
+        let registry = ToolRegistry::build_with_handlers(&mut tools, &mut GatewayExecutors::default())
+            .await
+            .unwrap();
+        assert_eq!(registry.tool_type("tool_search"), ToolType::Function);
+    }
+
+    #[tokio::test]
+    async fn withheld_namespace_guard_is_exact_not_prefix_based() {
+        let request = serde_json::from_value(serde_json::json!({
+            "model": "test",
+            "input": "find a tool",
+            "tools": [
+                {
+                    "type": "tool_search", "execution": "client", "description": "Find a tool",
+                    "parameters": {"type": "object"}
+                },
+                {
+                    "type": "namespace", "name": "weather", "tools": [{
+                        "type": "function", "name": "forecast", "defer_loading": true
+                    }]
+                },
+                {
+                    "type": "function", "name": "agentic_ns__weather__ordinary_prefix_like",
+                    "parameters": {"type": "object"}
+                }
+            ],
+            "store": false,
+            "stream": false
+        }))
+        .expect("active namespace request");
+        let mut state = ToolSearchState::build(&request).expect("prepared namespace state");
+        let mut tools = private_tools(&mut state, &request);
+        let mut registry = ToolRegistry::build_with_handlers(&mut tools, &mut GatewayExecutors::default())
+            .await
+            .expect("private registry");
+        registry
+            .install_tool_search_state(Some(Box::new(state)), true)
+            .expect("state application");
+
+        assert!(
+            !registry
+                .tool_search_state()
+                .expect("tool-search state")
+                .withheld_function_names()
+                .contains("agentic_ns__weather__ordinary_prefix_like")
+        );
+        assert!(
+            registry
+                .tool_search_state()
+                .expect("tool-search state")
+                .withheld_function_names()
+                .contains("agentic_ns__weather__forecast")
+        );
+    }
+
+    fn private_tools(
+        state: &mut ToolSearchState,
+        request: &crate::types::request_response::RequestPayload,
+    ) -> Vec<ResponsesTool> {
+        let mut request = request.clone();
+        state
+            .prepare_inference_request(&mut request)
+            .expect("prepared state materializes a private inference request");
+        request.tools.expect("private tools")
+    }
+
+    fn prepared_search_state() -> (crate::types::request_response::RequestPayload, ToolSearchState) {
+        let request: crate::types::request_response::RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test",
+            "input": "find a tool",
+            "tools": [{
+                "type": "tool_search",
+                "execution": "client",
+                "description": "Search the client catalog",
+                "parameters": {"type": "object"}
+            }],
+            "store": false,
+            "stream": false
+        }))
+        .expect("public request");
+        let state = ToolSearchState::build(&request).expect("prepared search state");
+        (request, state)
+    }
+
+    fn replayed_search_state() -> (crate::types::request_response::RequestPayload, ToolSearchState) {
+        let request = serde_json::from_value(serde_json::json!({
+            "model": "test",
+            "input": [
+                {
+                    "type": "tool_search_call", "id": "tsc_1", "call_id": "call_1",
+                    "execution": "client", "arguments": {"query": "weather"}, "status": "completed"
+                },
+                {
+                    "type": "tool_search_output", "call_id": "call_1", "execution": "client",
+                    "status": "completed", "tools": [{
+                        "type": "function", "name": "get_weather", "parameters": {"type": "object"},
+                        "defer_loading": true
+                    }]
+                }
+            ],
+            "tools": [],
+            "store": false,
+            "stream": false
+        }))
+        .expect("declaration-free replay request");
+        let state = ToolSearchState::build(&request).expect("prepared replay state");
+        (request, state)
     }
 
     fn mixed_tool_declarations() -> Vec<ResponsesTool> {

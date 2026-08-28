@@ -8,6 +8,7 @@ use crate::types::io::ResponseUsage;
 pub enum SSEItemType {
     Reasoning,
     FunctionCall,
+    ToolSearchCall,
     CustomToolCall,
     WebSearchCall,
     McpCall,
@@ -22,6 +23,7 @@ impl SSEItemType {
         match self {
             Self::Reasoning => "reasoning",
             Self::FunctionCall => "function_call",
+            Self::ToolSearchCall => "tool_search_call",
             Self::CustomToolCall => "custom_tool_call",
             Self::WebSearchCall => "web_search_call",
             Self::McpCall => "mcp_call",
@@ -37,6 +39,7 @@ impl From<&str> for SSEItemType {
         match s {
             "reasoning" => Self::Reasoning,
             "function_call" => Self::FunctionCall,
+            "tool_search_call" => Self::ToolSearchCall,
             "custom_tool_call" => Self::CustomToolCall,
             "web_search_call" => Self::WebSearchCall,
             "mcp_call" => Self::McpCall,

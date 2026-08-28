@@ -5,11 +5,13 @@ use crate::events::EventPayload;
 use crate::executor::error::ExecutorError;
 use crate::tool::ToolRegistry;
 use crate::types::event::MessageStatus;
+use crate::types::tools::{ToolSearchExecution, ToolSearchStatus};
 use crate::utils::common::deserialize_from_value_opt;
 use crate::utils::uuid7_str;
 
 use super::input::{
-    CompactionItem, InputContent, InputFunctionToolCall, InputItem, InputMessage, InputMessageContent, InputTextContent,
+    CompactionItem, InputContent, InputFunctionToolCall, InputItem, InputMessage, InputMessageContent,
+    InputTextContent, InputToolSearchCall, deserialize_non_blank_string,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,6 +104,21 @@ pub struct FunctionToolCall {
     pub status: MessageStatus,
 }
 
+/// A newly emitted public client tool-search call.
+///
+/// Unlike replay input, execution and status have no serde defaults: response
+/// translation must populate both fields explicitly.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolSearchCall {
+    #[serde(deserialize_with = "deserialize_non_blank_string")]
+    pub id: String,
+    #[serde(deserialize_with = "deserialize_non_blank_string")]
+    pub call_id: String,
+    pub execution: ToolSearchExecution,
+    pub arguments: serde_json::Map<String, Value>,
+    pub status: ToolSearchStatus,
+}
+
 /// A freeform custom tool invocation.
 ///
 /// `input` is opaque text and must not be parsed as function-call JSON.
@@ -170,6 +187,30 @@ impl TryFrom<&EventPayload> for FunctionToolCall {
             namespace: namespace.clone(),
             arguments: String::new(),
             status: MessageStatus::InProgress,
+        })
+    }
+}
+
+impl TryFrom<&EventPayload> for ToolSearchCall {
+    type Error = ExecutorError;
+
+    fn try_from(payload: &EventPayload) -> Result<Self, Self::Error> {
+        let EventPayload::OutputItemAdded { item_id, call_id, .. } = payload else {
+            return Err(ExecutorError::ParseError("expected OutputItemAdded payload".into()));
+        };
+        let call_id = call_id
+            .as_deref()
+            .filter(|call_id| !call_id.trim().is_empty())
+            .ok_or_else(|| ExecutorError::ParseError("tool_search_call is missing call_id".into()))?;
+        if item_id.trim().is_empty() {
+            return Err(ExecutorError::ParseError("tool_search_call is missing id".into()));
+        }
+        Ok(Self {
+            id: item_id.clone(),
+            call_id: call_id.to_owned(),
+            execution: ToolSearchExecution::Client,
+            arguments: serde_json::Map::new(),
+            status: ToolSearchStatus::InProgress,
         })
     }
 }
@@ -656,6 +697,17 @@ impl ApplyDone for FunctionToolCall {
     }
 }
 
+impl ApplyDone for ToolSearchCall {
+    fn apply_done(&mut self, payload: &EventPayload, _buffer: &mut String) {
+        let EventPayload::OutputItemDone { item, .. } = payload else {
+            return;
+        };
+        if let Some(call) = deserialize_from_value_opt(item.clone()) {
+            *self = call;
+        }
+    }
+}
+
 impl ApplyDone for CustomToolCall {
     fn apply_done(&mut self, payload: &EventPayload, buffer: &mut String) {
         match payload {
@@ -731,6 +783,8 @@ pub enum OutputItem {
     Message(OutputMessage),
     #[serde(rename = "function_call")]
     FunctionCall(FunctionToolCall),
+    #[serde(rename = "tool_search_call")]
+    ToolSearchCall(ToolSearchCall),
     #[serde(rename = "custom_tool_call")]
     CustomToolCall(CustomToolCall),
     #[serde(rename = "web_search_call")]
@@ -754,7 +808,7 @@ impl OutputItem {
             Self::FunctionCall(call) => registry
                 .lookup(&call.name)
                 .is_none_or(|entry| !entry.tool_type.is_gateway_owned()),
-            Self::CustomToolCall(_) => true,
+            Self::ToolSearchCall(_) | Self::CustomToolCall(_) => true,
             Self::Message(_)
             | Self::WebSearchCall(_)
             | Self::McpCall(_)
@@ -771,6 +825,7 @@ impl OutputItem {
             Self::Message(message) => Some(InputItem::Message(message.clone().into())),
             Self::Reasoning(reasoning) => Some(InputItem::Reasoning(reasoning.clone())),
             Self::FunctionCall(call) => Some(InputItem::FunctionCall(InputFunctionToolCall::from(call.clone()))),
+            Self::ToolSearchCall(call) => InputToolSearchCall::try_from(call).ok().map(InputItem::ToolSearchCall),
             Self::CustomToolCall(call) => Some(InputItem::FunctionCall(call.clone().into())),
             Self::Compaction(item) => Some(InputItem::Compaction(item.clone())),
             Self::WebSearchCall(_) | Self::McpCall(_) | Self::McpListTools(_) | Self::Unknown => None,
@@ -782,6 +837,82 @@ impl OutputItem {
 mod tests {
     use super::*;
     use crate::types::io::InputItem;
+
+    #[test]
+    fn emitted_tool_search_call_is_explicit_and_requires_client_action() {
+        let wire = serde_json::json!({
+            "type": "tool_search_call",
+            "id": "provider_item_1",
+            "call_id": "call_search_1",
+            "execution": "client",
+            "arguments": {"query": "weather"},
+            "status": "completed"
+        });
+        let item: OutputItem = serde_json::from_value(wire.clone()).expect("valid emitted search call");
+
+        assert_eq!(serde_json::to_value(&item).expect("call serializes"), wire);
+        assert!(item.requires_client_action(&ToolRegistry::default()));
+        let replay = item.to_input_item().expect("search call must remain public on replay");
+        assert_eq!(serde_json::to_value(replay).expect("replay serializes"), wire);
+    }
+
+    #[test]
+    fn emitted_tool_search_call_rejects_missing_or_invalid_required_fields() {
+        for missing in ["execution", "status"] {
+            let mut wire = serde_json::json!({
+                "type": "tool_search_call",
+                "id": "tsc_1",
+                "call_id": "call_search_1",
+                "execution": "client",
+                "arguments": {"query": "weather"},
+                "status": "completed"
+            });
+            wire.as_object_mut().expect("object").remove(missing);
+
+            assert!(
+                serde_json::from_value::<OutputItem>(wire).is_err(),
+                "newly emitted calls require explicit {missing}"
+            );
+        }
+
+        for (field, value) in [
+            ("id", serde_json::json!("   ")),
+            ("call_id", serde_json::json!("   ")),
+            ("arguments", serde_json::json!("not an object")),
+        ] {
+            let mut wire = serde_json::json!({
+                "type": "tool_search_call",
+                "id": "tsc_1",
+                "call_id": "call_search_1",
+                "execution": "client",
+                "arguments": {"query": "weather"},
+                "status": "completed"
+            });
+            wire[field] = value;
+
+            assert!(
+                serde_json::from_value::<OutputItem>(wire).is_err(),
+                "newly emitted calls reject invalid {field}"
+            );
+        }
+    }
+
+    #[test]
+    fn unfinished_tool_search_call_statuses_deserialize_but_are_not_replayable() {
+        for status in ["in_progress", "incomplete"] {
+            let item: OutputItem = serde_json::from_value(serde_json::json!({
+                "type": "tool_search_call",
+                "id": "provider_item_1",
+                "call_id": "call_search_1",
+                "execution": "client",
+                "arguments": {},
+                "status": status
+            }))
+            .unwrap();
+
+            assert!(item.to_input_item().is_none());
+        }
+    }
 
     #[test]
     fn compaction_output_item_round_trips_with_type_tag() {

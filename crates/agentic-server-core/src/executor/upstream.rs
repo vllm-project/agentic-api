@@ -36,20 +36,24 @@ pub(super) async fn fetch_blocking_payload(
     ctx: &RequestContext,
     exec_ctx: &ExecutionContext,
     auth: Option<&str>,
+    registry: &ToolRegistry,
 ) -> ExecutorResult<ResponsePayload> {
     let url = exec_ctx.responses_url();
     // Non-streaming request: stream=false -> full JSON body -> from_json.
+    registry.ensure_request_prepared(&ctx.enriched_request)?;
     let upstream_request = ctx.enriched_request.to_upstream_request(false)?;
     let upstream_json = serialize_to_string(&upstream_request).map_err(ExecutorError::JsonError)?;
 
     let body = fetch_response_json(upstream_json, &url, &exec_ctx.client, auth).await?;
-
+    registry.validate_blocking_response(&body)?;
     let acc = ResponseAccumulator::from_json(&body, ctx.conversation_id.as_deref())?;
     let mut payload = acc.finalize(
         &ctx.enriched_request.model,
         ctx.original_request.previous_response_id.as_deref(),
         ctx.original_request.instructions.as_deref(),
     );
+    let status = payload.status.parse().unwrap_or_default();
+    registry.normalize_response_output(&mut payload.output, status, &std::collections::HashSet::new())?;
     ctx.inject_ids(&mut payload);
 
     Ok(payload)
@@ -59,7 +63,7 @@ pub(super) async fn fetch_stream_payload(
     ctx: &RequestContext,
     exec_ctx: &ExecutionContext,
     auth: Option<&str>,
-    registry: &ToolRegistry,
+    registry: &mut ToolRegistry,
     mut stream: Option<(
         &mut GatewayStreamAccumulator,
         &tokio::sync::mpsc::UnboundedSender<StreamEvent>,
@@ -67,6 +71,7 @@ pub(super) async fn fetch_stream_payload(
     output_offset: usize,
 ) -> ExecutorResult<StreamPayload> {
     let url = exec_ctx.responses_url();
+    registry.ensure_request_prepared(&ctx.enriched_request)?;
     let upstream_request = ctx.enriched_request.to_upstream_request(true)?;
     let upstream_json = serialize_to_string(&upstream_request).map_err(ExecutorError::JsonError)?;
     let mut line_stream = Box::pin(call_inference(
@@ -77,18 +82,12 @@ pub(super) async fn fetch_stream_payload(
         exec_ctx.streaming_timeout,
     ));
     let mut acc = ResponseAccumulator::new(ctx.response_id.clone(), ctx.conversation_id.clone());
-    let mut function_sse = FunctionSseTranslator::new(registry.tool_type_map());
+    let mut function_sse = FunctionSseTranslator::new(registry);
     let mut defer_from_output_index = None;
     let mut deferred_events = Vec::new();
     let mut deferred_bytes = 0;
     while let Some(line_result) = line_stream.next().await {
         let line = line_result?;
-        if stream.is_none() {
-            if let Some(frame) = acc.process_sse_line(&line) {
-                log_upstream_failure(&frame, &ctx.response_id);
-            }
-            continue;
-        }
         if let Some(translation) = acc.process_sse_line_with_translator(&line, &mut function_sse)? {
             let previous_defer_from_output_index = defer_from_output_index;
             defer_from_output_index = translation.defer_from_output_index.map(u64::from);
@@ -129,12 +128,19 @@ pub(super) async fn fetch_stream_payload(
             }
         }
     }
+    let function_sse_outcome = function_sse.finish()?;
     acc.finish_stream();
     let mut payload = acc.finalize(
         &ctx.enriched_request.model,
         ctx.original_request.previous_response_id.as_deref(),
         ctx.original_request.instructions.as_deref(),
     );
+    let status = payload.status.parse().unwrap_or_default();
+    registry.normalize_response_output(
+        &mut payload.output,
+        status,
+        &function_sse_outcome.unfinished_tool_search_item_ids,
+    )?;
     ctx.inject_ids(&mut payload);
     Ok(StreamPayload {
         payload,
@@ -202,6 +208,7 @@ fn should_defer_stream_event(frame: &EventFrame, defer_from_output_index: Option
 
 fn emit_stream_frame(frame: &mut EventFrame, emit_ctx: &mut StreamEmitContext<'_>) -> ExecutorResult<bool> {
     apply_context_response_ids(&mut frame.wire, emit_ctx.request);
+    emit_ctx.registry.restore_tool_search_response_tools(&mut frame.wire)?;
     emit_ctx.registry.restore_stream_event_wire(&mut frame.wire);
     let emitted = emit_ctx.accumulator.process_event(frame, emit_ctx.output_offset);
     if emitted {

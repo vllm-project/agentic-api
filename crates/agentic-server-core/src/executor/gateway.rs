@@ -197,6 +197,10 @@ async fn execute_gateway_call_with_timeout(
         Err(ToolError::Execution(message) | ToolError::Config(message)) => {
             (execution_error_output(&call, &message)?, GatewayCallStatus::Failed)
         }
+        Err(error @ (ToolError::InvalidUpstreamToolSearch | ToolError::UpstreamWithheldFunctionCall)) => (
+            execution_error_output(&call, &error.to_string())?,
+            GatewayCallStatus::Failed,
+        ),
     };
     let public_output = gateway_public_output(dispatch.tool_type, &call, &output, status, registry);
     Ok(GatewayCallResult {
@@ -219,6 +223,7 @@ fn gateway_public_output(
             .mcp_tool_ref(&call.name)
             .map(|tool_ref| crate::tool::mcp::handler::output_item(call, output, status, tool_ref)),
         ToolType::Function
+        | ToolType::ToolSearch
         | ToolType::Custom
         | ToolType::CodexNamespace
         | ToolType::FileSearch
@@ -296,6 +301,7 @@ pub(super) fn gateway_event_plans(
                         .mcp_tool_ref(&call.name)
                         .map(|tool_ref| crate::tool::mcp::handler::started_output_item(call, tool_ref)),
                     ToolType::Function
+                    | ToolType::ToolSearch
                     | ToolType::Custom
                     | ToolType::CodexNamespace
                     | ToolType::FileSearch
@@ -455,6 +461,7 @@ pub(super) fn emit_gateway_start_events(
             }
             OutputItem::Message(_)
             | OutputItem::FunctionCall(_)
+            | OutputItem::ToolSearchCall(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::Reasoning(_)
             | OutputItem::Compaction(_)
@@ -502,6 +509,7 @@ pub(super) fn emit_gateway_completed_events<T: GatewayPublicOutputSource>(
             OutputItem::Compaction(_) => None,
             OutputItem::Message(_)
             | OutputItem::FunctionCall(_)
+            | OutputItem::ToolSearchCall(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::Reasoning(_)
             | OutputItem::Unknown => continue,

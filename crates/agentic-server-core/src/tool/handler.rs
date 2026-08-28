@@ -17,6 +17,10 @@ pub enum ToolError {
     Execution(String),
     #[error("invalid tool config: {0}")]
     Config(String),
+    #[error("upstream returned an invalid tool-search call")]
+    InvalidUpstreamToolSearch,
+    #[error("upstream returned a call for a function that has not been loaded")]
+    UpstreamWithheldFunctionCall,
 }
 
 /// Trait implemented by every tool type — client-owned and gateway-owned alike.
@@ -45,8 +49,9 @@ pub trait ToolHandler: Send + Sync {
 /// Extension of [`ToolHandler`] for tool types that are executed by the gateway.
 ///
 /// Only gateway-owned tools (`Mcp`, `WebSearch`, `FileSearch`, `CodeInterpreter`)
-/// implement this trait. Client-owned tools (`Function`) do not — the type system
-/// makes it impossible to call `execute()` on them.
+/// implement this trait. Client-owned tools (`Function`, `ToolSearch`, `Custom`,
+/// `CodexNamespace`) do not — the type system makes it impossible to call
+/// `execute()` on them.
 ///
 /// ## Note on `async fn` in traits
 ///
