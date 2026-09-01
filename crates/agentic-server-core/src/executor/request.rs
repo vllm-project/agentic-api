@@ -66,7 +66,8 @@ pub struct ExecutionContext {
     /// Base URL for the LLM backend, e.g. `"http://localhost:8000"`.
     pub llm_base_url: String,
     /// Maximum wait time for the next SSE chunk.  `Duration::ZERO` disables the timeout.
-    /// Sourced from [`Config::streaming_chunk_timeout_s`](crate::config::Config::streaming_chunk_timeout_s).
+    /// Sourced from the `STREAMING_CHUNK_TIMEOUT_S` environment variable, defaulting to
+    /// [`DEFAULT_STREAMING_TIMEOUT`] when unset or unparseable.
     pub streaming_timeout: Duration,
     storage_pool: Option<Arc<crate::storage::DbPool>>,
 }
@@ -176,11 +177,23 @@ impl ExecutionContext {
     }
 }
 
+/// Default streaming chunk timeout when `STREAMING_CHUNK_TIMEOUT_S` is unset or
+/// unparseable. Generous to accommodate long-prefill / high-TTFT workloads.
+pub const DEFAULT_STREAMING_TIMEOUT: Duration = Duration::from_secs(600);
+
 fn streaming_timeout_from_env() -> Duration {
-    std::env::var("STREAMING_CHUNK_TIMEOUT_S")
-        .ok()
+    parse_streaming_timeout(std::env::var("STREAMING_CHUNK_TIMEOUT_S").ok().as_deref())
+}
+
+/// Parse a `STREAMING_CHUNK_TIMEOUT_S` value into a chunk timeout.
+///
+/// Falls back to [`DEFAULT_STREAMING_TIMEOUT`] when the value is absent or not a
+/// valid non-negative integer. A value of `0` yields `Duration::ZERO`, which
+/// disables the per-chunk timeout.
+fn parse_streaming_timeout(value: Option<&str>) -> Duration {
+    value
         .and_then(|v| v.parse::<u64>().ok())
-        .map_or(Duration::from_secs(600), Duration::from_secs)
+        .map_or(DEFAULT_STREAMING_TIMEOUT, Duration::from_secs)
 }
 
 fn database_open_error(database_backend: DatabaseBackend, error: &sqlx::Error) -> Error {
@@ -222,9 +235,23 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
-    use super::{ExecutionContext, database_open_error};
+    use super::{DEFAULT_STREAMING_TIMEOUT, ExecutionContext, database_open_error, parse_streaming_timeout};
     use crate::executor::{ConversationHandler, ResponseHandler};
     use crate::storage::{ConversationStore, DatabaseBackend, ResponseStore, create_pool_with_schema};
+
+    #[test]
+    fn streaming_timeout_parsing_covers_unset_invalid_zero_and_valid() {
+        // Unset falls back to the default.
+        assert_eq!(parse_streaming_timeout(None), DEFAULT_STREAMING_TIMEOUT);
+        // Non-numeric and negative values are unparseable → default.
+        assert_eq!(parse_streaming_timeout(Some("")), DEFAULT_STREAMING_TIMEOUT);
+        assert_eq!(parse_streaming_timeout(Some("abc")), DEFAULT_STREAMING_TIMEOUT);
+        assert_eq!(parse_streaming_timeout(Some("-1")), DEFAULT_STREAMING_TIMEOUT);
+        // `0` disables the timeout.
+        assert_eq!(parse_streaming_timeout(Some("0")), Duration::ZERO);
+        // A valid value is honored.
+        assert_eq!(parse_streaming_timeout(Some("30")), Duration::from_secs(30));
+    }
 
     #[test]
     fn database_errors_are_actionable_without_exposing_credentials() {
