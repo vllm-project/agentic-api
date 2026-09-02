@@ -9,6 +9,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VALIDATOR = REPO_ROOT / "scripts" / "validate-python-release-version.sh"
 RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release-python.yml"
+CRATE_RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release-crates.yml"
 PYTHON_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "python.yml"
 BUILD_CONSTRAINTS = REPO_ROOT / "python-build-constraints.txt"
 WORKSPACE_VERSION = re.search(
@@ -46,6 +47,30 @@ def test_release_workflow_keeps_dispatch_version_out_of_shell_source() -> None:
     assert all("${{ inputs.version }}" not in block for block in run_blocks)
 
 
+def test_crate_release_dry_run_does_not_resolve_the_unpublished_core_version() -> None:
+    workflow = CRATE_RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    dry_run_block = next(block for block in _workflow_run_blocks(workflow) if "Would release commit" in block)
+    cargo_commands = [line.strip() for line in dry_run_block.splitlines() if line.strip().startswith("cargo ")]
+
+    assert "cargo package --list -p agentic-server" in cargo_commands
+    assert not any(
+        "agentic-server" in command
+        and "agentic-server-core" not in command
+        and command != "cargo package --list -p agentic-server"
+        for command in cargo_commands
+    )
+
+    package_list = subprocess.run(
+        ["cargo", "package", "--list", "--allow-dirty", "-p", "agentic-server"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert package_list.returncode == 0, package_list.stderr
+    assert "Cargo.toml" in package_list.stdout.splitlines()
+
+
 def test_python_workflows_pin_build_tools_and_manylinux_artifact_contract() -> None:
     release_workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
     python_workflow = PYTHON_WORKFLOW.read_text(encoding="utf-8")
@@ -70,6 +95,14 @@ def test_python_workflows_pin_build_tools_and_manylinux_artifact_contract() -> N
     assert "hashFiles('Cargo.lock', 'python-build-constraints.txt')" in python_workflow
 
 
+def test_python_workflow_validates_crate_release_workflow_changes() -> None:
+    workflow = PYTHON_WORKFLOW.read_text(encoding="utf-8")
+
+    for trigger in ("pull_request", "push"):
+        section = _workflow_trigger_section(workflow, trigger)
+        assert section.count('".github/workflows/release-crates.yml"') == 1
+
+
 def _workflow_run_blocks(workflow: str) -> list[str]:
     lines = workflow.splitlines()
     blocks: list[str] = []
@@ -88,3 +121,14 @@ def _workflow_run_blocks(workflow: str) -> list[str]:
             block.append(candidate)
         blocks.append("\n".join(block))
     return blocks
+
+
+def _workflow_trigger_section(workflow: str, trigger: str) -> str:
+    lines = workflow.splitlines()
+    start = lines.index(f"  {trigger}:")
+    section: list[str] = []
+    for line in lines[start + 1 :]:
+        if line.startswith("  ") and not line.startswith("    ") and line.strip():
+            break
+        section.append(line)
+    return "\n".join(section)
