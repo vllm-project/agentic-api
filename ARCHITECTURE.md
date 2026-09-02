@@ -150,6 +150,11 @@ Handlers make a request-scoped decision between two paths:
 - **Transparent proxy path** — everything else is forwarded to vLLM unchanged via
   `agentic_core::proxy`, with no state, no persistence.
 
+The HTTP Responses handler first parses `RequestPayload<RawValue>` so routing fields
+remain typed while provider-specific `text` formats stay opaque on the transparent
+proxy path. Executor routes convert that raw field to `ResponseTextConfig` before
+building `ExecuteRequest`, preserving strict validation for in-process execution.
+
 ### WebSocket transport (`handler/websocket/`)
 
 `GET /v1/responses` upgrades to a WebSocket. Structurally this is not a one-shot
@@ -165,9 +170,9 @@ not attempt to write a response.
 
 ### `handler/common.rs`
 
-Transport-agnostic helpers shared by both HTTP and WS handlers: body reading with a
-shared size cap, `RequestPayload` parsing, bearer-token extraction, SSE response
-wrapping, and rendering an `ExecutorError` as a JSON error body.
+Transport helpers shared by the HTTP and WS handlers: body reading with a shared size
+cap, generic JSON parsing, bearer-token extraction, SSE response wrapping, and
+rendering an `ExecutorError` as a JSON error body.
 
 ### `auth.rs`
 
