@@ -30,8 +30,8 @@ caller-authored context. Callers treat it as opaque.
 
 Neither step reimplements the storage flow. `hydrate` calls `rehydrate_conversation` and `upstream_request`; `persist` calls
 `decode_upstream` and `commit`. All four are core operations the in-process executor already uses or shares, so a change
-to how a turn is rehydrated or stored reaches both paths at once. This crate contains no parsing, no storage access and
-no request building of its own.
+to how a turn is rehydrated or stored reaches both paths at once. The llm-d crate contains no storage access or
+request-building logic of its own.
 
 What it does contain is the boundary itself: the check for what cannot be split, strict validation for the relayed
 JSON or streaming events, the conversion between the live and wire context forms, and the sealing.
