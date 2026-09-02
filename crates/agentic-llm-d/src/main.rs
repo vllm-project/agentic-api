@@ -31,9 +31,6 @@ struct Cli {
     api_token: String,
 }
 
-/// Long enough that a guessed value is not worth trying.
-const MIN_SECRET_LEN: usize = 32;
-
 #[tokio::main]
 async fn main() -> Result<(), runner::Error> {
     tracing_subscriber::fmt::init();
@@ -51,25 +48,6 @@ async fn main() -> Result<(), runner::Error> {
         sqlite: SqliteConfig::default(),
         tools: ToolRuntimeConfig::default(),
     };
-
-    // Checked before binding: a short secret is worse than none, it looks configured.
-    for (name, value) in [
-        ("AGENTIC_LLM_D_SIGNING_KEY", &cli.signing_key),
-        ("AGENTIC_LLM_D_API_TOKEN", &cli.api_token),
-    ] {
-        if value.trim().len() < MIN_SECRET_LEN {
-            eprintln!("{name} must be at least {MIN_SECRET_LEN} characters of independently generated randomness");
-            std::process::exit(2);
-        }
-    }
-
-    // Independence is the property we can actually check. The token travels in a
-    // header on every request, so reusing it as the signing key would let anyone
-    // who sees one forge the other.
-    if cli.signing_key == cli.api_token {
-        eprintln!("AGENTIC_LLM_D_SIGNING_KEY and AGENTIC_LLM_D_API_TOKEN must be generated independently");
-        std::process::exit(2);
-    }
 
     let shutdown = CancellationToken::new();
     let on_signal = shutdown.clone();

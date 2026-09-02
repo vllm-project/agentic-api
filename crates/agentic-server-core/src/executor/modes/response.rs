@@ -1,6 +1,6 @@
 //! Response storage handler — owns all response store operations.
 
-use crate::storage::{InOutItem, ResponseData, ResponseMetadata, ResponseStore, StorageError};
+use crate::storage::{InOutItem, ResponseData, ResponseMetadata, ResponseStore};
 use crate::types::io::OutputItem;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
@@ -32,20 +32,6 @@ impl ResponseHandler {
             .as_deref()
             .ok_or_else(|| ExecutorError::InvalidRequest("previous_response_id is required for get".into()))?;
         self.store.get(prev_id).await.map_err(ExecutorError::Storage)
-    }
-
-    /// Whether a response is already stored under `response_id`. Split execution
-    /// reserves the id before inference, so a retried persist may carry one that
-    /// is already written.
-    ///
-    /// # Errors
-    /// Returns `ExecutorError` if the store is disabled or the query fails.
-    pub async fn stored(&self, response_id: &str) -> ExecutorResult<bool> {
-        match self.store.get(response_id).await {
-            Ok(_) => Ok(true),
-            Err(StorageError::NotFound { .. }) => Ok(false),
-            Err(error) => Err(ExecutorError::Storage(error)),
-        }
     }
 
     /// Validates that the response for `previous_response_id` exists.
@@ -95,7 +81,8 @@ impl ResponseHandler {
         new_items.extend(ctx.new_input_items.into_iter().map(InOutItem::Input));
         new_items.extend(output_items.into_iter().map(InOutItem::Output));
 
-        self.store
+        let result = self
+            .store
             .persist_with_conversation_id(
                 &ctx.response_id,
                 ctx.conversation_id.as_deref(),
@@ -103,8 +90,15 @@ impl ResponseHandler {
                 new_items,
                 &metadata,
             )
-            .await
-            .map_err(ExecutorError::Storage)
+            .await;
+        match result {
+            Err(error) if error.is_unique_violation() => Err(ExecutorError::Conflict(format!(
+                "a turn is already stored under '{}'",
+                ctx.response_id
+            ))),
+            Err(error) => Err(ExecutorError::Storage(error)),
+            Ok(()) => Ok(()),
+        }
     }
 }
 

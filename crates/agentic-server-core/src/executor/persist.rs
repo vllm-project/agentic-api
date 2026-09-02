@@ -25,12 +25,14 @@ pub(crate) async fn persist_if_needed(
     resp_handler: ResponseHandler,
 ) -> ExecutorResult<()> {
     if should_persist(&ctx) {
-        persist_response(payload, ctx, conv_handler, resp_handler)
-            .await
-            .map_err(|source| {
+        match persist_response(payload, ctx, conv_handler, resp_handler).await {
+            Err(error @ ExecutorError::Conflict(_)) => Err(error),
+            Err(source) => {
                 error!(error = ?source, "failed to persist response");
-                ExecutorError::Persistence(Box::new(source))
-            })
+                Err(ExecutorError::Persistence(Box::new(source)))
+            }
+            Ok(()) => Ok(()),
+        }
     } else {
         Ok(())
     }
@@ -101,15 +103,6 @@ pub async fn commit(
         return Err(ExecutorError::InvalidRequest(format!(
             "upstream response status '{}' is not terminal",
             payload.status
-        )));
-    }
-
-    // A retry carries the same reserved id. Returning the caller's payload would
-    // report content storage does not hold, so refuse instead.
-    if exec_ctx.resp_handler.stored(&payload.id).await? {
-        return Err(ExecutorError::Conflict(format!(
-            "a turn is already stored under '{}'",
-            payload.id
         )));
     }
 

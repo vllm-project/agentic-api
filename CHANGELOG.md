@@ -18,6 +18,8 @@ All notable changes to Agentic API are documented here.
 
 ### Fixed
 
+- Hardened split execution with atomic duplicate persistence, strict relayed-response validation, independent secret
+  validation, bounded hydrate and persist payloads, stable error envelopes, and graceful shutdown error propagation.
 - Forwarded Responses `text` generation settings, including structured output
   formats and verbosity, through typed HTTP, WebSocket, and gateway-tool paths.
 - Replaced `WebSearchActionSearch::new` and `WebSearchCall::new` with fallible

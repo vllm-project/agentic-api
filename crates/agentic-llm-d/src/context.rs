@@ -14,6 +14,8 @@ use agentic_core::types::io::{ResponsesInput, ToolChoice};
 use agentic_core::types::request_response::RequestPayload;
 use agentic_core::types::tools::ResponsesTool;
 
+use crate::SigningKey;
+
 /// What `hydrate` returns. Raw JSON: the caller forwards it uninterpreted.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hydration {
@@ -95,7 +97,7 @@ struct SealedClaims {
 ///
 /// # Errors
 /// [`ExecutorError::InvalidRequest`] if the token cannot be produced.
-pub fn seal(context: SplitContext, key: &[u8]) -> ExecutorResult<String> {
+pub fn seal(context: SplitContext, key: &SigningKey) -> ExecutorResult<String> {
     let expires = SystemTime::now()
         .checked_add(CONTEXT_TTL)
         .and_then(|at| at.duration_since(UNIX_EPOCH).ok())
@@ -105,8 +107,12 @@ pub fn seal(context: SplitContext, key: &[u8]) -> ExecutorResult<String> {
         aud: AUDIENCE.to_owned(),
         ctx: context,
     };
-    encode(&Header::new(Algorithm::HS256), &claims, &EncodingKey::from_secret(key))
-        .map_err(|error| ExecutorError::InvalidRequest(format!("cannot seal context: {error}")))
+    encode(
+        &Header::new(Algorithm::HS256),
+        &claims,
+        &EncodingKey::from_secret(key.as_bytes()),
+    )
+    .map_err(|error| ExecutorError::InvalidRequest(format!("cannot seal context: {error}")))
 }
 
 /// Opens a sealed context, rejecting one that was tampered with or has expired.
@@ -114,11 +120,11 @@ pub fn seal(context: SplitContext, key: &[u8]) -> ExecutorResult<String> {
 /// # Errors
 /// [`ExecutorError::InvalidRequest`] for a bad signature, a wrong audience, or
 /// a context past its expiry.
-pub fn unseal(token: &str, key: &[u8]) -> ExecutorResult<SplitContext> {
+pub fn unseal(token: &str, key: &SigningKey) -> ExecutorResult<SplitContext> {
     let mut validation = Validation::new(Algorithm::HS256);
     validation.set_audience(&[AUDIENCE]);
     validation.set_required_spec_claims(&["exp", "aud"]);
-    decode::<SealedClaims>(token, &DecodingKey::from_secret(key), &validation)
+    decode::<SealedClaims>(token, &DecodingKey::from_secret(key.as_bytes()), &validation)
         .map(|data| data.claims.ctx)
         .map_err(|error| ExecutorError::InvalidRequest(format!("context rejected: {error}")))
 }
