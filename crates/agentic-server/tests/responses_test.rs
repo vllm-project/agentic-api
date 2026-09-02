@@ -387,6 +387,33 @@ async fn spawn_mock_vllm_json_capture() -> (String, Arc<Mutex<Vec<serde_json::Va
     (format!("http://{addr}"), requests, handle)
 }
 
+async fn spawn_mock_vllm_json_capture_body() -> (String, Arc<Mutex<Vec<Bytes>>>, tokio::task::JoinHandle<()>) {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let route_requests = Arc::clone(&requests);
+    let app = Router::new().route(
+        "/v1/responses",
+        post(move |body: Bytes| {
+            let route_requests = Arc::clone(&route_requests);
+            async move {
+                route_requests.lock().await.push(body);
+                axum::response::Response::builder()
+                    .status(200)
+                    .header("Content-Type", "application/json")
+                    .body(axum::body::Body::from(
+                        r#"{"id":"mock_id","object":"response","status":"completed",
+                            "model":"test","output":[],"created_at":0}"#,
+                    ))
+                    .unwrap()
+                    .into_response()
+            }
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (format!("http://{addr}"), requests, handle)
+}
+
 /// Spawn a mock vLLM that returns an SSE stream.
 async fn spawn_mock_vllm_sse() -> (String, tokio::task::JoinHandle<()>) {
     let app = Router::new().route(
@@ -426,6 +453,66 @@ async fn test_store_false_proxies_json_to_vllm() {
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.unwrap();
     assert_eq!(body["id"], "mock_id");
+}
+
+#[tokio::test]
+async fn test_store_false_proxies_unknown_text_format_verbatim() {
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_body().await;
+    let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+    let request_body = r#"{"model":"test","input":"hi","store":false,"stream":false,"text":{"format":{"type":"provider_format","provider_option":true}}}"#;
+
+    let response = reqwest::Client::new()
+        .post(format!("{gateway_url}/v1/responses"))
+        .header("Content-Type", "application/json")
+        .body(request_body)
+        .send()
+        .await
+        .expect("stateless response request");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let requests = requests.lock().await;
+    assert_eq!(requests.as_slice(), [Bytes::from_static(request_body.as_bytes())]);
+}
+
+#[tokio::test]
+async fn test_duplicate_routing_field_is_rejected_before_upstream() {
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_body().await;
+    let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+    let request_body = r#"{"model":"test","input":"hi","store":true,"store":false}"#;
+
+    let response = reqwest::Client::new()
+        .post(format!("{gateway_url}/v1/responses"))
+        .header("Content-Type", "application/json")
+        .body(request_body)
+        .send()
+        .await
+        .expect("response request with a duplicate routing field");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        requests.lock().await.is_empty(),
+        "invalid request must not reach upstream"
+    );
+}
+
+#[tokio::test]
+async fn test_invalid_json_is_rejected_before_upstream() {
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_body().await;
+    let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+
+    let response = reqwest::Client::new()
+        .post(format!("{gateway_url}/v1/responses"))
+        .header("Content-Type", "application/json")
+        .body(r#"{"model":"test","store":false"#)
+        .send()
+        .await
+        .expect("syntactically invalid response request");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        requests.lock().await.is_empty(),
+        "invalid request must not reach upstream"
+    );
 }
 
 #[tokio::test]
@@ -532,6 +619,40 @@ async fn test_stateful_request_forwards_text_configuration() {
 }
 
 #[tokio::test]
+async fn test_stateful_request_preserves_json_schema_property_order() {
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_body().await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let request_body = r#"{"model":"test","input":"hi","store":true,"stream":false,"text":{"format":{"type":"json_schema","name":"ordered","schema":{"type":"object","properties":{"outer_z":{"type":"object","properties":{"inner_z":{"type":"string"},"inner_a":{"type":"string"}}},"outer_a":{"type":"string"}},"required":["outer_z","outer_a"],"additionalProperties":false},"strict":true}}}"#;
+
+    let response = reqwest::Client::new()
+        .post(format!("{gateway_url}/v1/responses"))
+        .header("Content-Type", "application/json")
+        .body(request_body)
+        .send()
+        .await
+        .expect("stateful response request");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let requests = requests.lock().await;
+    let upstream = std::str::from_utf8(&requests[0]).expect("upstream request should be UTF-8 JSON");
+    let outer_z = upstream
+        .find("\"outer_z\"")
+        .expect("outer_z property should be forwarded");
+    let outer_a = upstream
+        .find("\"outer_a\"")
+        .expect("outer_a property should be forwarded");
+    let inner_z = upstream
+        .find("\"inner_z\"")
+        .expect("inner_z property should be forwarded");
+    let inner_a = upstream
+        .find("\"inner_a\"")
+        .expect("inner_a property should be forwarded");
+    assert!(outer_z < outer_a, "outer schema property order changed: {upstream}");
+    assert!(inner_z < inner_a, "nested schema property order changed: {upstream}");
+}
+
+#[tokio::test]
 async fn test_stateful_request_rejects_malformed_text_configuration_before_upstream() {
     let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
     let fixture = storage_backed_state(&llm_url).await;
@@ -543,7 +664,8 @@ async fn test_stateful_request_rejects_malformed_text_configuration_before_upstr
             "model": "test",
             "input": "hi",
             "text": {"format": {"type": "json_schema", "name": "missing_schema"}},
-            "store": true,
+            "tools": [{"type": "web_search_preview"}],
+            "store": false,
             "stream": false
         }))
         .send()

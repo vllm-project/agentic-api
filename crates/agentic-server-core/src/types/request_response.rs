@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
+use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -27,11 +28,11 @@ pub struct ReasoningConfig {
 }
 
 /// Responses text-generation settings forwarded to the upstream service.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct ResponseTextConfig {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub format: Option<ResponseTextFormat>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub verbosity: Option<String>,
     /// Unmodeled extension fields preserved for upstream compatibility.
     #[serde(default)]
@@ -40,7 +41,7 @@ pub struct ResponseTextConfig {
 }
 
 /// Output format requested through [`ResponseTextConfig`].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum ResponseTextFormat {
@@ -59,9 +60,9 @@ pub enum ResponseTextFormat {
     JsonSchema {
         name: String,
         schema: serde_json::Map<String, Value>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(default)]
         description: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(default)]
         strict: Option<bool>,
         /// Unmodeled extension fields preserved for upstream compatibility.
         #[serde(default)]
@@ -70,8 +71,115 @@ pub enum ResponseTextFormat {
     },
 }
 
+const FORMAT_FIELD: &str = "format";
+const VERBOSITY_FIELD: &str = "verbosity";
+const TYPE_FIELD: &str = "type";
+const NAME_FIELD: &str = "name";
+const SCHEMA_FIELD: &str = "schema";
+const DESCRIPTION_FIELD: &str = "description";
+const STRICT_FIELD: &str = "strict";
+
+const TEXT_CONFIG_FIELDS: &[&str] = &[FORMAT_FIELD, VERBOSITY_FIELD];
+const TEXT_FORMAT_FIELDS: &[&str] = &[TYPE_FIELD];
+const JSON_SCHEMA_FORMAT_FIELDS: &[&str] = &[TYPE_FIELD, NAME_FIELD, SCHEMA_FIELD, DESCRIPTION_FIELD, STRICT_FIELD];
+
+fn reserved_extension_key<'a>(extra: &HashMap<String, Value>, reserved: &'a [&'a str]) -> Option<&'a str> {
+    reserved.iter().copied().find(|key| extra.contains_key(*key))
+}
+
+impl Serialize for ResponseTextConfig {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if let Some(key) = reserved_extension_key(&self.extra, TEXT_CONFIG_FIELDS) {
+            return Err(serde::ser::Error::custom(format!(
+                "text configuration extension key `{key}` conflicts with a modeled field"
+            )));
+        }
+
+        let field_count = self.extra.len() + usize::from(self.format.is_some()) + usize::from(self.verbosity.is_some());
+        let mut map = serializer.serialize_map(Some(field_count))?;
+        if let Some(format) = &self.format {
+            map.serialize_entry(FORMAT_FIELD, format)?;
+        }
+        if let Some(verbosity) = &self.verbosity {
+            map.serialize_entry(VERBOSITY_FIELD, verbosity)?;
+        }
+        for (key, value) in &self.extra {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
+}
+
+impl Serialize for ResponseTextFormat {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::Text { extra } => {
+                if let Some(key) = reserved_extension_key(extra, TEXT_FORMAT_FIELDS) {
+                    return Err(serde::ser::Error::custom(format!(
+                        "text format extension key `{key}` conflicts with a modeled field"
+                    )));
+                }
+                let mut map = serializer.serialize_map(Some(extra.len() + 1))?;
+                map.serialize_entry(TYPE_FIELD, "text")?;
+                for (key, value) in extra {
+                    map.serialize_entry(key, value)?;
+                }
+                map.end()
+            }
+            Self::JsonObject { extra } => {
+                if let Some(key) = reserved_extension_key(extra, TEXT_FORMAT_FIELDS) {
+                    return Err(serde::ser::Error::custom(format!(
+                        "text format extension key `{key}` conflicts with a modeled field"
+                    )));
+                }
+                let mut map = serializer.serialize_map(Some(extra.len() + 1))?;
+                map.serialize_entry(TYPE_FIELD, "json_object")?;
+                for (key, value) in extra {
+                    map.serialize_entry(key, value)?;
+                }
+                map.end()
+            }
+            Self::JsonSchema {
+                name,
+                schema,
+                description,
+                strict,
+                extra,
+            } => {
+                if let Some(key) = reserved_extension_key(extra, JSON_SCHEMA_FORMAT_FIELDS) {
+                    return Err(serde::ser::Error::custom(format!(
+                        "text format extension key `{key}` conflicts with a modeled field"
+                    )));
+                }
+                let optional_fields = usize::from(description.is_some()) + usize::from(strict.is_some());
+                let mut map = serializer.serialize_map(Some(extra.len() + optional_fields + 3))?;
+                map.serialize_entry(TYPE_FIELD, "json_schema")?;
+                map.serialize_entry(NAME_FIELD, name)?;
+                map.serialize_entry(SCHEMA_FIELD, schema)?;
+                if let Some(description) = description {
+                    map.serialize_entry(DESCRIPTION_FIELD, description)?;
+                }
+                if let Some(strict) = strict {
+                    map.serialize_entry(STRICT_FIELD, strict)?;
+                }
+                for (key, value) in extra {
+                    map.serialize_entry(key, value)?;
+                }
+                map.end()
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RequestPayload {
+#[serde(bound(serialize = "Box<T>: Serialize", deserialize = "Box<T>: Deserialize<'de>"))]
+pub struct RequestPayload<T: ?Sized = ResponseTextConfig> {
     pub model: String,
     pub input: ResponsesInput,
     pub instructions: Option<String>,
@@ -88,7 +196,7 @@ pub struct RequestPayload {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<Box<ReasoningConfig>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub text: Option<Box<ResponseTextConfig>>,
+    pub text: Option<Box<T>>,
     pub temperature: Option<f64>,
     pub top_p: Option<f64>,
     pub max_output_tokens: Option<u32>,
@@ -173,7 +281,7 @@ where
         .serialize(serializer)
 }
 
-impl RequestPayload {
+impl<T: ?Sized> RequestPayload<T> {
     /// Names the feature in this request that only the in-process executor
     /// implements, if any — neither the passthrough proxy nor split execution
     /// can serve it.
@@ -202,6 +310,44 @@ impl RequestPayload {
         None
     }
 
+    /// Transform the text configuration while moving all other request fields
+    /// without reparsing or reallocating them.
+    ///
+    /// # Errors
+    ///
+    /// Returns the mapping function's error when the text configuration cannot
+    /// be transformed.
+    pub fn try_map_text<U: ?Sized, E>(
+        self,
+        map: impl FnOnce(Box<T>) -> Result<Box<U>, E>,
+    ) -> Result<RequestPayload<U>, E> {
+        let text = self.text.map(map).transpose()?;
+        Ok(RequestPayload {
+            model: self.model,
+            input: self.input,
+            instructions: self.instructions,
+            previous_response_id: self.previous_response_id,
+            conversation_id: self.conversation_id,
+            tools: self.tools,
+            tool_choice: self.tool_choice,
+            stream: self.stream,
+            store: self.store,
+            include: self.include,
+            reasoning: self.reasoning,
+            text,
+            temperature: self.temperature,
+            top_p: self.top_p,
+            max_output_tokens: self.max_output_tokens,
+            truncation: self.truncation,
+            metadata: self.metadata,
+            parallel_tool_calls: self.parallel_tool_calls,
+            cache_salt: self.cache_salt,
+            context_management: self.context_management,
+        })
+    }
+}
+
+impl RequestPayload {
     /// Construct an `UpstreamRequest` suitable for forwarding to vLLM.
     ///
     /// Codex `namespace` tools' members are first renamed to their flat,
@@ -567,6 +713,51 @@ mod tests {
             }));
 
             assert!(parsed.is_err(), "malformed text configuration should fail: {text}");
+        }
+    }
+
+    #[test]
+    fn text_configuration_rejects_reserved_extension_keys() {
+        for reserved in ["format", "verbosity"] {
+            let config = ResponseTextConfig {
+                format: Some(ResponseTextFormat::Text { extra: HashMap::new() }),
+                verbosity: Some("low".to_owned()),
+                extra: HashMap::from([(reserved.to_owned(), serde_json::json!("override"))]),
+            };
+
+            assert!(
+                serde_json::to_value(config).is_err(),
+                "reserved text configuration key should fail: {reserved}"
+            );
+        }
+
+        for reserved in ["type", "name", "schema", "description", "strict"] {
+            let format = ResponseTextFormat::JsonSchema {
+                name: "ordered".to_owned(),
+                schema: serde_json::Map::new(),
+                description: None,
+                strict: Some(true),
+                extra: HashMap::from([(reserved.to_owned(), serde_json::json!("override"))]),
+            };
+
+            assert!(
+                serde_json::to_value(format).is_err(),
+                "reserved text format key should fail: {reserved}"
+            );
+        }
+
+        for format in [
+            ResponseTextFormat::Text {
+                extra: HashMap::from([("type".to_owned(), serde_json::json!("override"))]),
+            },
+            ResponseTextFormat::JsonObject {
+                extra: HashMap::from([("type".to_owned(), serde_json::json!("override"))]),
+            },
+        ] {
+            assert!(
+                serde_json::to_value(format).is_err(),
+                "reserved type key should fail for every text format variant"
+            );
         }
     }
 
