@@ -266,9 +266,13 @@ impl ResponseAccumulator {
 
     pub(crate) fn process_sse_line(&mut self, line: &str) -> Option<EventFrame> {
         let frame = normalize_sse_line(line)?;
-        self.capture_terminal_details_if_needed(&frame);
-        self.process_event(&frame);
+        self.process_normalized_event(&frame);
         Some(frame)
+    }
+
+    pub(crate) fn process_normalized_event(&mut self, frame: &EventFrame) {
+        self.capture_terminal_details_if_needed(frame);
+        self.process_event(frame);
     }
 
     pub(super) fn process_sse_line_with_translator(
@@ -337,6 +341,11 @@ impl ResponseAccumulator {
         ) {
             self.capture_terminal_details(frame);
         }
+    }
+
+    /// Ask before `finish_stream`, which forces an unterminated stream to `completed`.
+    pub(crate) fn saw_terminal_frame(&self) -> bool {
+        self.status != ResponseStatus::InProgress
     }
 
     pub(crate) fn finish_stream(&mut self) {
@@ -538,6 +547,10 @@ impl ResponseAccumulator {
         };
         if let Some(entry) = in_flight_key.as_deref().and_then(|key| self.in_flight.get_mut(key)) {
             match (&mut entry.item, done_item) {
+                (InFlight::Message { item, text }, Some(OutputItem::Message(done_message))) => {
+                    *item = done_message;
+                    text.clear();
+                }
                 (InFlight::Reasoning { item }, _) => item.apply_done(payload, &mut String::new()),
                 (InFlight::FunctionCall { item, arguments }, _) => item.apply_done(payload, arguments),
                 (InFlight::CustomToolCall { item, input }, _) => item.apply_done(payload, input),
@@ -652,7 +665,8 @@ impl ResponseAccumulator {
 fn in_flight_matches_call_type(item: &InFlight, item_type: SSEItemType) -> bool {
     matches!(
         (item, item_type),
-        (InFlight::FunctionCall { .. }, SSEItemType::FunctionCall)
+        (InFlight::Message { .. }, SSEItemType::Message)
+            | (InFlight::FunctionCall { .. }, SSEItemType::FunctionCall)
             | (InFlight::CustomToolCall { .. }, SSEItemType::CustomToolCall)
             | (InFlight::WebSearchCall { .. }, SSEItemType::WebSearchCall)
             | (InFlight::McpCall { .. }, SSEItemType::McpCall)

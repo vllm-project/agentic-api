@@ -81,6 +81,14 @@ pub enum ExecutorError {
     #[error("invalid request: {0}")]
     InvalidRequest(String),
 
+    /// The request exceeds a documented transport or component size budget.
+    #[error("{0}")]
+    PayloadTooLarge(String),
+
+    /// The request conflicts with state already stored.
+    #[error("conflict: {0}")]
+    Conflict(String),
+
     #[error("compaction summarization failed with status '{status}': {details}")]
     CompactionFailed { status: String, details: String },
 
@@ -114,6 +122,8 @@ impl ExecutorError {
             | Self::Tool(ToolError::Config(_) | ToolError::MissingOutput { .. })
             | Self::InvalidRequest(_)
             | Self::JsonError(_) => StatusCode::BAD_REQUEST,
+            Self::Conflict(_) => StatusCode::CONFLICT,
+            Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
             Self::Tool(ToolError::Execution(_)) | Self::CompactionFailed { .. } => StatusCode::BAD_GATEWAY,
             Self::ParseError(_) => StatusCode::UNPROCESSABLE_ENTITY,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
@@ -128,8 +138,10 @@ impl ExecutorError {
             | Self::Tool(ToolError::Config(_) | ToolError::MissingOutput { .. })
             | Self::InvalidRequest(_)
             | Self::ParseError(_)
-            | Self::JsonError(_) => "invalid_request_error",
+            | Self::JsonError(_)
+            | Self::PayloadTooLarge(_) => "invalid_request_error",
             Self::Storage(e) if e.is_not_found() => "not_found",
+            Self::Conflict(_) => "conflict_error",
             Self::LLMRequest { .. } | Self::LLMTransport { .. } | Self::CompactionFailed { .. } => "upstream_error",
             Self::Tool(ToolError::Execution(_)) => "tool_error",
             _ => "server_error",
@@ -141,6 +153,8 @@ impl ExecutorError {
     pub fn error_code(&self) -> &'static str {
         match self.client_visible_error() {
             Self::ConversationLocked { .. } => "conversation_locked",
+            Self::Conflict(_) => "response_already_stored",
+            Self::PayloadTooLarge(_) => "body_too_large",
             other => other.error_type(),
         }
     }
@@ -280,6 +294,24 @@ mod tests {
         let value: serde_json::Value = serde_json::from_slice(&body).expect("valid error response JSON");
 
         assert!(!value["error"].as_object().expect("error object").contains_key("param"));
+    }
+
+    #[test]
+    fn response_id_conflict_has_a_machine_readable_conflict_envelope() {
+        let error = ExecutorError::Conflict("a turn is already stored under 'resp_1'".to_owned());
+
+        assert_eq!(error.http_status(), StatusCode::CONFLICT);
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&error.into_response_body())
+                .expect("valid error response JSON"),
+            serde_json::json!({
+                "error": {
+                    "message": "conflict: a turn is already stored under 'resp_1'",
+                    "type": "conflict_error",
+                    "code": "response_already_stored"
+                }
+            })
+        );
     }
 
     #[test]

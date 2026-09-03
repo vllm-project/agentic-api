@@ -10,7 +10,7 @@ use agentic_core::tool::{GatewayExecutor, WebSearchHandler};
 use agentic_core::types::io::{
     FunctionToolResultMessage, InputItem, OutputItem, ResponsesInput, ToolCallOutput, ToolChoice,
 };
-use agentic_core::types::request_response::RequestPayload;
+use agentic_core::types::request_response::{RequestPayload, ResponseTextConfig};
 use agentic_core::types::tools::{ResponsesTool, WebSearchToolParam};
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, Uri};
@@ -1039,6 +1039,24 @@ async fn build_exec_ctx(llm_url: &str, you_url: String) -> Arc<ExecutionContext>
     )
 }
 
+fn json_object_text_config() -> ResponseTextConfig {
+    serde_json::from_value(serde_json::json!({
+        "format": {"type": "json_object"},
+        "verbosity": "low"
+    }))
+    .unwrap()
+}
+
+fn assert_generation_config_is_preserved(request_bodies: &[serde_json::Value]) {
+    assert_eq!(request_bodies[0]["reasoning"], serde_json::json!({"effort": "high"}));
+    assert_eq!(request_bodies[1]["reasoning"], request_bodies[0]["reasoning"]);
+    assert_eq!(
+        request_bodies[0]["text"],
+        serde_json::to_value(json_object_text_config()).unwrap()
+    );
+    assert_eq!(request_bodies[1]["text"], request_bodies[0]["text"]);
+}
+
 #[tokio::test]
 async fn execute_runs_web_search_and_sends_tool_output_back_to_model() {
     let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
@@ -1063,6 +1081,7 @@ async fn execute_runs_web_search_and_sends_tool_output_back_to_model() {
         reasoning: Some(Box::new(
             serde_json::from_value(serde_json::json!({"effort": "high"})).unwrap(),
         )),
+        text: Some(Box::new(json_object_text_config())),
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
@@ -1085,8 +1104,7 @@ async fn execute_runs_web_search_and_sends_tool_output_back_to_model() {
     assert_eq!(request_bodies.len(), 2);
     assert_eq!(request_bodies[0]["tools"][0]["name"], "web_search");
     assert_eq!(request_bodies[0]["max_output_tokens"], 1024);
-    assert_eq!(request_bodies[0]["reasoning"], serde_json::json!({"effort": "high"}));
-    assert_eq!(request_bodies[1]["reasoning"], serde_json::json!({"effort": "high"}));
+    assert_generation_config_is_preserved(&request_bodies);
     let second_input = request_bodies[1]["input"]
         .as_array()
         .expect("second request input array");
@@ -1168,6 +1186,7 @@ async fn execute_relaxes_forced_tool_choice_after_web_search_result() {
         store: true,
         include: None,
         reasoning: None,
+        text: None,
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
@@ -1201,6 +1220,7 @@ fn base_payload(input: ResponsesInput) -> RequestPayload {
         store: true,
         include: None,
         reasoning: None,
+        text: None,
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
@@ -1334,6 +1354,7 @@ async fn execute_accumulates_usage_across_web_search_model_rounds() {
         store: true,
         include: None,
         reasoning: None,
+        text: None,
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
@@ -1380,6 +1401,7 @@ async fn stream_emits_web_search_lifecycle_events_before_final_payload() {
         store: true,
         include: None,
         reasoning: None,
+        text: None,
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
@@ -1501,6 +1523,7 @@ async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence()
         store: true,
         include: None,
         reasoning: None,
+        text: None,
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
@@ -1577,6 +1600,7 @@ async fn stream_hides_web_search_function_events_when_name_arrives_on_done() {
         store: true,
         include: None,
         reasoning: None,
+        text: None,
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
@@ -1642,6 +1666,7 @@ async fn stream_orders_gateway_lifecycle_before_later_client_function_events() {
         store: true,
         include: None,
         reasoning: None,
+        text: None,
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
@@ -1726,6 +1751,7 @@ async fn execute_runs_multiple_web_search_calls_concurrently() {
         store: true,
         include: None,
         reasoning: None,
+        text: None,
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
@@ -1777,6 +1803,7 @@ async fn execute_feeds_web_search_execution_errors_back_to_model() {
         store: true,
         include: None,
         reasoning: None,
+        text: None,
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
@@ -1830,6 +1857,7 @@ async fn execute_returns_incomplete_after_max_gateway_tool_rounds() {
         store: true,
         include: None,
         reasoning: None,
+        text: None,
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
@@ -1883,6 +1911,7 @@ async fn execute_feeds_invalid_web_search_arguments_back_to_model() {
         store: true,
         include: None,
         reasoning: None,
+        text: None,
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
@@ -1943,6 +1972,7 @@ async fn execute_runs_large_gateway_fanout_without_hard_cap() {
         store: true,
         include: None,
         reasoning: None,
+        text: None,
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
@@ -2011,6 +2041,7 @@ async fn stream_error_events_escape_error_messages() {
         store: true,
         include: None,
         reasoning: None,
+        text: None,
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
@@ -2086,6 +2117,7 @@ async fn incomplete_turn_persists_a_consistent_conversation_for_continuation() {
         store: true,
         include: None,
         reasoning: None,
+        text: None,
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
@@ -2115,6 +2147,7 @@ async fn incomplete_turn_persists_a_consistent_conversation_for_continuation() {
         store: true,
         include: None,
         reasoning: None,
+        text: None,
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
@@ -2188,6 +2221,7 @@ async fn stream_returns_incomplete_after_max_gateway_tool_rounds() {
         store: true,
         include: None,
         reasoning: None,
+        text: None,
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),

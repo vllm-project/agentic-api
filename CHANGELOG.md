@@ -8,13 +8,17 @@ All notable changes to Agentic API are documented here.
 
 - Added the build-only `agentic-api` Python distribution with `serve`, `doctor`, and version commands, packaged Rust
   gateway binaries, local or remote vLLM launch modes, wheel validation, and Linux and macOS release artifacts (#201).
-- Added end-to-end parallel tool calling for typed Responses requests, including bounded concurrent execution for
-  gateway-executed built-in tools, batched web searches, stable output ordering, and per-call failure isolation (#214).
+- Added end-to-end parallel tool calling for typed Responses requests, including forwarding the model-generation
+  preference, bounded concurrent execution for gateway-executed built-in tools, batched web searches, stable output
+  ordering, and per-call failure isolation (#181, #214).
 - Added attached Claude Code and Codex workflows with isolated model and provider configuration and recorded CLI
   coverage (#210).
 - Added configurable streaming chunk timeouts for Responses and Messages streams, with a ten-minute default (#221,
   #227).
-- Added deployment guides and replay coverage for NVIDIA Dynamo and llm-d Kubernetes upstreams (#207, #212).
+- Added an `agentic-llm-d` split-execution backend with authenticated hydrate and persist endpoints for the llm-d
+  coordinator (#216).
+- Added deployment guides and replay coverage for NVIDIA Dynamo and llm-d Kubernetes upstreams, including persistent
+  PostgreSQL storage in the kind guide (#184, #207, #212).
 - Added a benchmark suite comparing WebSocket, HTTP/SSE, and HTTP/JSON Agentic API flows with direct vLLM across tool
   loops, function selection, and stateful conversation workloads (#185).
 - Added a repository-local pull request review skill with explicit wire-format and replay-cassette checks (#228).
@@ -40,6 +44,11 @@ All notable changes to Agentic API are documented here.
 - Required a healthy packaged gateway before `agentic-api doctor --mode local` reports success (#223).
 - Rebuilt workspace crates after `cargo-chef` dependency cooking so container binaries carry current source and package
   metadata (#208, #209).
+- Hardened split execution with atomic duplicate persistence, strict relayed-response validation, independent secret
+  validation, bounded hydrate and persist payloads, stable error envelopes, and graceful shutdown error propagation
+  (#235).
+- Forwarded Responses `text` generation settings, including structured output formats and verbosity, through typed
+  HTTP, WebSocket, and gateway-tool paths (#231).
 - Made web-search action construction fallible so empty query lists return a typed error instead of panicking (#230).
 
 ### Testing

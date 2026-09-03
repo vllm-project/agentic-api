@@ -491,6 +491,73 @@ async fn test_stateful_request_forwards_reasoning_configuration() {
 }
 
 #[tokio::test]
+async fn test_stateful_request_forwards_text_configuration() {
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let text = serde_json::json!({
+        "format": {
+            "type": "json_schema",
+            "name": "weather",
+            "schema": {
+                "type": "object",
+                "properties": {"city": {"type": "string"}},
+                "required": ["city"],
+                "additionalProperties": false
+            },
+            "strict": true,
+            "x-format-extension": "kept"
+        },
+        "verbosity": "low",
+        "x-text-extension": {"enabled": true}
+    });
+
+    let response = reqwest::Client::new()
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "input": "hi",
+            "text": text,
+            "store": true,
+            "stream": false
+        }))
+        .send()
+        .await
+        .expect("stateful response request");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0]["text"], text);
+}
+
+#[tokio::test]
+async fn test_stateful_request_rejects_malformed_text_configuration_before_upstream() {
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+
+    let response = reqwest::Client::new()
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "input": "hi",
+            "text": {"format": {"type": "json_schema", "name": "missing_schema"}},
+            "store": true,
+            "stream": false
+        }))
+        .send()
+        .await
+        .expect("malformed stateful response request");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        requests.lock().await.is_empty(),
+        "invalid request must not reach upstream"
+    );
+}
+
+#[tokio::test]
 async fn test_gateway_normalization_preserves_parallel_tool_calls() {
     // Arrange
     let (llm_url, requests, _h1) = spawn_mock_vllm_json_capture().await;

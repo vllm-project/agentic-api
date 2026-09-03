@@ -10,7 +10,6 @@ use std::sync::Arc;
 use agentic_core::executor::{ExecuteRequest, compact_response as execute_compaction};
 use agentic_core::proxy::{ProxyRequest, proxy_request};
 use agentic_core::types::request_response::{CompactRequest, RequestPayload};
-use agentic_core::types::tools::ResponsesTool;
 
 use super::super::common::{
     convert_response, executor_error_response, extract_bearer, read_and_parse, read_json, sse_response,
@@ -39,13 +38,6 @@ async fn execute_responses(state: &AppState, parts: Parts, payload: RequestPaylo
     }
 }
 
-fn has_gateway_tools(payload: &RequestPayload) -> bool {
-    payload
-        .tools
-        .as_ref()
-        .is_some_and(|tools| tools.iter().any(|tool| !matches!(tool, ResponsesTool::Function(_))))
-}
-
 pub async fn responses(State(state): State<AppState>, req: Request) -> Response {
     let (parts, body) = req.into_parts();
     let (bytes, payload) = match read_and_parse(body).await {
@@ -53,16 +45,8 @@ pub async fn responses(State(state): State<AppState>, req: Request) -> Response 
         Err(e) => return e,
     };
 
-    let should_execute = payload.store
-        || payload.previous_response_id.is_some()
-        || payload.conversation_id.is_some()
-        || payload.input.contains_compaction()
-        || payload.input.has_compaction_trigger()
-        || payload
-            .context_management
-            .as_ref()
-            .is_some_and(|entries| !entries.is_empty())
-        || has_gateway_tools(&payload);
+    let should_execute =
+        payload.store || payload.previous_response_id.is_some() || payload.in_process_feature().is_some();
     debug!(
         route = if should_execute { "executor" } else { "proxy" },
         store = payload.store,

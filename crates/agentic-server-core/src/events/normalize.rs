@@ -16,6 +16,11 @@ pub fn normalize_sse_line(line: &str) -> Option<EventFrame> {
     }
 
     let json: Value = deserialize_from_str_opt(data_str)?;
+    normalize_sse_value(json)
+}
+
+/// Normalizes an already parsed SSE payload.
+pub(crate) fn normalize_sse_value(json: Value) -> Option<EventFrame> {
     let event_type = json
         .get("type")
         .and_then(Value::as_str)
