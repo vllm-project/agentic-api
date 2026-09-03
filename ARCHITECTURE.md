@@ -147,12 +147,12 @@ Handlers make a request-scoped decision between two paths:
   `previous_response_id`, `conversation_id`, compaction, or a gateway-owned tool).
   Builds an `ExecuteRequest` (Responses) or calls `run_messages_loop`/
   `run_messages_stream` (Messages) against `state.exec_ctx`.
-- **Transparent proxy path** — everything else is forwarded to vLLM unchanged via
+- **Pass-through path** — everything else is forwarded to vLLM unchanged via
   `agentic_core::proxy`, with no state, no persistence.
 
 The HTTP Responses handler first parses `RequestPayload<RawValue>` so routing fields
-remain typed while provider-specific `text` formats stay opaque on the transparent
-proxy path. Executor routes convert that raw field to `ResponseTextConfig` before
+remain typed while provider-specific `text` formats stay opaque on the pass-through
+path. Executor routes convert that raw field to `ResponseTextConfig` before
 building `ExecuteRequest`, preserving strict validation for in-process execution.
 
 ### WebSocket transport (`handler/websocket/`)

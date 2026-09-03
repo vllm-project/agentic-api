@@ -653,7 +653,7 @@ async fn test_stateful_request_preserves_json_schema_property_order() {
 }
 
 #[tokio::test]
-async fn test_stateful_request_rejects_malformed_text_configuration_before_upstream() {
+async fn test_executor_route_rejects_malformed_text_configuration_before_upstream() {
     let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
     let fixture = storage_backed_state(&llm_url).await;
     let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
@@ -670,7 +670,7 @@ async fn test_stateful_request_rejects_malformed_text_configuration_before_upstr
         }))
         .send()
         .await
-        .expect("malformed stateful response request");
+        .expect("malformed executor-bound response request");
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     assert!(
