@@ -8,7 +8,7 @@ The Rust-native `agentic` CLI remains supported for `run codex`, `run claude`, `
 
 ## Install the release artifact
 
-This release produces wheel artifacts for 0.5.0 on supported platforms but does not publish them to PyPI yet.
+This release produces wheel artifacts for 0.6.0 on supported platforms but does not publish them to PyPI yet.
 Download the wheel for your platform from the release workflow and use its absolute path below:
 
 ```bash

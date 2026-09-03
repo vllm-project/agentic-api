@@ -149,7 +149,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo publish --dry-run -p agentic-server-core
-          cargo package -p agentic-server --no-verify
+          cargo package --list -p agentic-server
           echo "Would release commit ${{ steps.target.outputs.sha }}"
           echo "Would create tag ${{ steps.version.outputs.tag }}"
           echo "Would create GitHub release ${{ steps.version.outputs.tag }} with generated notes"

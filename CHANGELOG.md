@@ -2,39 +2,59 @@
 
 All notable changes to Agentic API are documented here.
 
-## [Unreleased]
-
-### Changed
-
-- Forwarded `parallel_tool_calls` as the model-generation preference for typed
-  Responses requests, including built-in-only and mixed tool declarations (#181).
-- Added bounded, configurable parallel execution for Responses gateway rounds,
-  preserving model call order and applying per-handler same-tool safety.
-- Preserved MCP list-tools records in continuation history for registry lifecycle
-  decisions while excluding them from model input, preventing repeated public
-  list-tools emission on later turns.
-- Clarified Codex tool execution roles by replacing ambiguous ownership language
-  with the preferred client-executed and gateway-executed terminology.
-
-### Fixed
-
-- Hardened split execution with atomic duplicate persistence, strict relayed-response validation, independent secret
-  validation, bounded hydrate and persist payloads, stable error envelopes, and graceful shutdown error propagation.
-- Forwarded Responses `text` generation settings, including structured output
-  formats and verbosity, through typed HTTP, WebSocket, and gateway-tool paths.
-- Replaced `WebSearchActionSearch::new` and `WebSearchCall::new` with fallible
-  `try_new(...)` constructors; callers now handle `WebSearchActionError` for
-  empty query lists instead of risking a panic.
+## [0.6.0] - 2026-09-01
 
 ### Added
 
-- Documented running Agentic API in front of NVIDIA Dynamo and recorded Dynamo cassettes for stateful and
-  function-call flows.
+- Added the build-only `agentic-api` Python distribution with `serve`, `doctor`, and version commands, packaged Rust
+  gateway binaries, local or remote vLLM launch modes, wheel validation, and Linux and macOS release artifacts (#201).
+- Added end-to-end parallel tool calling for typed Responses requests, including forwarding the model-generation
+  preference, bounded concurrent execution for gateway-executed built-in tools, batched web searches, stable output
+  ordering, and per-call failure isolation (#181, #214).
+- Added attached Claude Code and Codex workflows with isolated model and provider configuration and recorded CLI
+  coverage (#210).
+- Added configurable streaming chunk timeouts for Responses and Messages streams, with a ten-minute default (#221,
+  #227).
+- Added an `agentic-llm-d` split-execution backend with authenticated hydrate and persist endpoints for the llm-d
+  coordinator (#216).
+- Added deployment guides and replay coverage for NVIDIA Dynamo and llm-d Kubernetes upstreams, including persistent
+  PostgreSQL storage in the kind guide (#184, #207, #212).
+- Added a benchmark suite comparing WebSocket, HTTP/SSE, and HTTP/JSON Agentic API flows with direct vLLM across tool
+  loops, function selection, and stateful conversation workloads (#185).
+- Added a repository-local pull request review skill with explicit wire-format and replay-cassette checks (#228).
+
+### Changed
+
+- Forwarded typed Responses reasoning configuration upstream and preserved complete streamed reasoning content,
+  summaries, and opaque state (#219, #225).
+- Replayed persisted plaintext reasoning safely during continuation while rejecting opaque-only state that vLLM cannot
+  consume (#222).
+- Preserved MCP list-tools records in item history for discovery lifecycle decisions while excluding them from model
+  input, preventing repeated public discovery items on later turns (#214).
+- Improved Rust and container CI caching, test setup, and path filtering to shorten release validation (#205).
+- Clarified client-executed and gateway-executed tool roles in Codex integration documentation (#230).
+
+### Fixed
+
+- Rejected continuations that omit required function call outputs instead of proceeding with unresolved call IDs
+  (#214).
+- Preserved MCP and web-search public item types during mixed built-in tool rounds (#214).
+- Removed connection-nominated hop-by-hop headers from proxied requests and responses as required by HTTP semantics
+  (#217).
+- Required a healthy packaged gateway before `agentic-api doctor --mode local` reports success (#223).
+- Rebuilt workspace crates after `cargo-chef` dependency cooking so container binaries carry current source and package
+  metadata (#208, #209).
+- Hardened split execution with atomic duplicate persistence, strict relayed-response validation, independent secret
+  validation, bounded hydrate and persist payloads, stable error envelopes, and graceful shutdown error propagation
+  (#235).
+- Forwarded Responses `text` generation settings, including structured output formats and verbosity, through typed
+  HTTP, WebSocket, and gateway-tool paths (#231).
+- Made web-search action construction fallible so empty query lists return a typed error instead of panicking (#230).
 
 ### Testing
 
-- Added Dynamo upstream replay tests, a generic cassette validator (`scripts/validate-cassettes.py`), and a dedicated
-  CI job for them.
+- Added matched OpenAI and gateway cassettes for reasoning and parallel tool calling, replay tests for Dynamo, a generic
+  cassette validator, Python package and wheel test suites, and dedicated CI jobs for the new release paths.
 
 ## [0.5.0] - 2026-08-25
 
