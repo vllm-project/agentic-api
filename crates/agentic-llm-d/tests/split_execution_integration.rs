@@ -56,10 +56,17 @@ fn upstream_sse(text: &str) -> String {
         json!({"type": "response.in_progress", "response": {"id": "resp_upstream", "status": "in_progress"}}),
         json!({"type": "response.output_item.added", "output_index": 0,
                "item": {"type": "message", "id": "msg_1", "role": "assistant", "status": "in_progress", "content": []}}),
+        json!({"type": "response.content_part.added", "output_index": 0, "content_index": 0,
+               "item_id": "msg_1", "part": {"type": "output_text", "text": "", "annotations": []}}),
         json!({"type": "response.output_text.delta", "output_index": 0, "content_index": 0,
                "item_id": "msg_1", "delta": text}),
+        json!({"type": "response.output_text.done", "output_index": 0, "content_index": 0,
+               "item_id": "msg_1", "text": text}),
+        json!({"type": "response.content_part.done", "output_index": 0, "content_index": 0,
+               "item_id": "msg_1", "part": answer(text)[0]["content"][0]}),
         json!({"type": "response.output_item.done", "output_index": 0, "item": answer(text)[0]}),
-        json!({"type": "response.completed", "response": {"id": "resp_upstream", "status": "completed"}}),
+        json!({"type": "response.completed",
+               "response": {"id": "resp_upstream", "status": "completed", "output": answer(text)}}),
     ]
     .iter()
     .map(|frame| format!("data: {frame}\n\n"))
@@ -135,7 +142,8 @@ async fn output_item_done_is_authoritative_when_delta_is_missing() {
                "item": {"type": "message", "id": "msg_1", "role": "assistant",
                         "status": "in_progress", "content": []}}),
         json!({"type": "response.output_item.done", "output_index": 0, "item": answer("4")[0]}),
-        json!({"type": "response.completed", "response": {"id": "resp_upstream", "status": "completed"}}),
+        json!({"type": "response.completed",
+               "response": {"id": "resp_upstream", "status": "completed", "output": answer("4")}}),
     ]
     .iter()
     .map(|frame| format!("data: {frame}\n\n"))
@@ -160,7 +168,7 @@ async fn a_function_call_stream_passes_strict_validation() {
         r#"data: {"type":"response.function_call_arguments.delta","output_index":0,"item_id":"fc_1","delta":"{\"q\":"}"#,
         r#"data: {"type":"response.function_call_arguments.done","output_index":0,"item_id":"fc_1","name":"lookup","arguments":"{\"q\":\"rust\"}"}"#,
         r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{\"q\":\"rust\"}","status":"completed"}}"#,
-        r#"data: {"type":"response.completed","response":{"id":"resp_upstream","status":"completed"}}"#,
+        r#"data: {"type":"response.completed","response":{"id":"resp_upstream","status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{\"q\":\"rust\"}","status":"completed"}]}}"#,
     ]
     .join("\n\n");
 
@@ -181,8 +189,8 @@ async fn a_turn_that_cannot_be_stored_is_refused() {
     let unknown = hydrate(request("hi", Some("resp_missing")), &ctx).await;
     assert_eq!(status_of(&unknown.expect_err("unknown id")), 404);
 
-    // A caller-supplied body gets none of the in-process parser's defaults. An
-    // unrecognized item *type* is still fine — `OutputItem` keeps a catch-all.
+    // A caller-supplied body gets none of the in-process parser's defaults,
+    // including the catch-all used for compatibility on trusted internal paths.
     let mut in_progress: Value = serde_json::from_str(&upstream_json("partial")).expect("json");
     in_progress["status"] = json!("in_progress");
     for body in [
@@ -192,6 +200,9 @@ async fn a_turn_that_cannot_be_stored_is_refused() {
         r#"{"id":"resp_upstream","status":"completed","output":[123]}"#.to_owned(),
         r#"{"id":"resp_upstream","status":"queued","output":[]}"#.to_owned(),
         r#"{"id":"resp_upstream","status":"potato","output":[]}"#.to_owned(),
+        r#"{"id":"resp_upstream","status":"completed","output":[{"type":"future_item","id":"future_1"}]}"#.to_owned(),
+        r#"{"id":"resp_upstream","status":"completed","output":[{"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{}","status":"completed"}]}"#.to_owned(),
+        r#"{"id":"resp_upstream","status":"completed","output":[{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[]},{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[]}]}"#.to_owned(),
     ] {
         let refused = persist(turn("hi", None, &ctx).await.context, UpstreamBody::Json(&body), &ctx).await;
         assert_eq!(status_of(&refused.expect_err("not storable")), 400, "accepted: {body}");
@@ -223,6 +234,11 @@ async fn a_turn_that_cannot_be_stored_is_refused() {
         // A valid terminal event must not hide an unmatched content delta.
         format!(
             "{created}\n\n{in_progress}\n\ndata: {{\"type\":\"response.output_text.delta\",\"output_index\":0,\"item_id\":\"msg_1\",\"delta\":\"4\"}}\n\n{completed}"
+        ),
+        // Terminal output cannot contain an item that was omitted from the relayed item events.
+        format!(
+            "{created}\n\n{in_progress}\n\ndata: {{\"type\":\"response.completed\",\"response\":{{\"id\":\"resp_upstream\",\"status\":\"completed\",\"output\":{}}}}}",
+            answer("4")
         ),
         // A lifecycle-correct frame must still carry its event-specific data.
         [

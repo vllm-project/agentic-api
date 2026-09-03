@@ -95,6 +95,7 @@ enum ResponseLifecycle {
 #[derive(Default)]
 struct RelayedStreamValidator {
     active_items: HashMap<u32, ActiveItem>,
+    completed_items: HashMap<u32, ActiveItem>,
     seen_item_ids: HashSet<String>,
     seen_output_indexes: HashSet<u32>,
     lifecycle: ResponseLifecycle,
@@ -135,7 +136,7 @@ impl RelayedStreamValidator {
                 let item = event.get("item").ok_or_else(|| missing_field(&event_name, "item"))?;
                 let item_id = required_str(item, "id", "output item")?;
                 let item_type = required_str(item, "type", "output item")?;
-                ensure_supported_stream_item_type(item_type)?;
+                ensure_supported_output_item_type(item_type)?;
                 if self.seen_output_indexes.contains(&output_index) || self.seen_item_ids.contains(item_id) {
                     return Err(ExecutorError::InvalidRequest(format!(
                         "upstream stream repeats output item '{item_id}'"
@@ -157,7 +158,7 @@ impl RelayedStreamValidator {
                 let item = event.get("item").ok_or_else(|| missing_field(&event_name, "item"))?;
                 let item_id = required_str(item, "id", "output item")?;
                 let item_type = required_str(item, "type", "output item")?;
-                ensure_supported_stream_item_type(item_type)?;
+                ensure_supported_output_item_type(item_type)?;
                 OutputItem::deserialize(item).map_err(|error| {
                     ExecutorError::InvalidRequest(format!("upstream stream output item is invalid: {error}"))
                 })?;
@@ -226,6 +227,7 @@ impl RelayedStreamValidator {
                         "upstream stream ended with unfinished output items".to_owned(),
                     ));
                 }
+                self.validate_terminal_output(response)?;
                 self.lifecycle = ResponseLifecycle::Terminal;
             }
             _ => {
@@ -265,12 +267,48 @@ impl RelayedStreamValidator {
         event_name: &str,
     ) -> ExecutorResult<()> {
         self.require_active_item(output_index, item_id, item_type, event_name)?;
-        self.active_items.remove(&output_index);
+        let item = self.active_items.remove(&output_index).ok_or_else(|| {
+            ExecutorError::InvalidRequest(format!(
+                "upstream stream event '{event_name}' has no active output item"
+            ))
+        })?;
+        self.completed_items.insert(output_index, item);
+        Ok(())
+    }
+
+    fn validate_terminal_output(&self, response: &Value) -> ExecutorResult<()> {
+        let output = response
+            .get("output")
+            .and_then(Value::as_array)
+            .ok_or_else(|| missing_field("terminal upstream response", "output"))?;
+        if output.len() != self.completed_items.len() {
+            return Err(ExecutorError::InvalidRequest(
+                "terminal upstream response output does not match completed item events".to_owned(),
+            ));
+        }
+        for (index, item) in output.iter().enumerate() {
+            let output_index = u32::try_from(index).map_err(|_| {
+                ExecutorError::InvalidRequest("terminal upstream response has too many output items".to_owned())
+            })?;
+            let item_id = required_str(item, "id", "terminal output item")?;
+            let item_type = required_str(item, "type", "terminal output item")?;
+            ensure_supported_output_item_type(item_type)?;
+            let Some(completed) = self.completed_items.get(&output_index) else {
+                return Err(ExecutorError::InvalidRequest(
+                    "terminal upstream response output does not match completed item events".to_owned(),
+                ));
+            };
+            if item_id != completed.id || item_type != completed.item_type {
+                return Err(ExecutorError::InvalidRequest(
+                    "terminal upstream response output does not match completed item events".to_owned(),
+                ));
+            }
+        }
         Ok(())
     }
 }
 
-fn ensure_supported_stream_item_type(item_type: &str) -> ExecutorResult<()> {
+fn ensure_supported_output_item_type(item_type: &str) -> ExecutorResult<()> {
     if matches!(
         item_type,
         "message"
@@ -285,7 +323,7 @@ fn ensure_supported_stream_item_type(item_type: &str) -> ExecutorResult<()> {
         return Ok(());
     }
     Err(ExecutorError::InvalidRequest(format!(
-        "upstream stream output item type '{item_type}' is unsupported"
+        "upstream output item type '{item_type}' is unsupported"
     )))
 }
 
@@ -362,7 +400,10 @@ fn validate_event_fields(event: &Value, event_type: SSEEventType, event_name: &s
         SSEEventType::ContentPartAdded
         | SSEEventType::ContentPartDone
         | SSEEventType::ReasoningPartAdded
-        | SSEEventType::ReasoningPartDone => Some("part"),
+        | SSEEventType::ReasoningPartDone => {
+            let _ = required_object(event, "part", event_name)?;
+            None
+        }
         SSEEventType::ResponseCreated
         | SSEEventType::ResponseInProgress
         | SSEEventType::ResponseCompleted
@@ -404,6 +445,17 @@ fn required_string<'a>(value: &'a Value, field: &str, owner: &str) -> ExecutorRe
         .ok_or_else(|| missing_field(owner, field))
 }
 
+fn required_object<'a>(
+    value: &'a Value,
+    field: &str,
+    owner: &str,
+) -> ExecutorResult<&'a serde_json::Map<String, Value>> {
+    value
+        .get(field)
+        .and_then(Value::as_object)
+        .ok_or_else(|| missing_field(owner, field))
+}
+
 fn required_u32(value: &Value, field: &str, owner: &str) -> ExecutorResult<u32> {
     value
         .get(field)
@@ -439,10 +491,20 @@ pub fn ensure_strict_response(body: &str) -> ExecutorResult<()> {
             "upstream response has no 'output' array".to_owned(),
         ));
     };
+    let mut item_ids = HashSet::with_capacity(items.len());
     for (index, item) in items.iter().enumerate() {
-        if let Err(error) = OutputItem::deserialize(item) {
-            return Err(ExecutorError::InvalidRequest(format!(
+        let owner = format!("upstream response output[{index}]");
+        let item_id = required_str(item, "id", &owner)?;
+        let item_type = required_str(item, "type", &owner)?;
+        ensure_supported_output_item_type(item_type)?;
+        OutputItem::deserialize(item).map_err(|error| {
+            ExecutorError::InvalidRequest(format!(
                 "upstream response output[{index}] is not a valid item: {error}"
+            ))
+        })?;
+        if !item_ids.insert(item_id) {
+            return Err(ExecutorError::InvalidRequest(format!(
+                "upstream response repeats output item '{item_id}'"
             )));
         }
     }
