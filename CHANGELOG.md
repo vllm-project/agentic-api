@@ -18,6 +18,8 @@ All notable changes to Agentic API are documented here.
 
 ### Fixed
 
+- Hardened split execution with atomic duplicate persistence, strict relayed-response validation, independent secret
+  validation, bounded hydrate and persist payloads, stable error envelopes, and graceful shutdown error propagation.
 - Forwarded Responses `text` generation settings through typed execution paths while preserving provider-specific
   text formats on stateless proxy requests and JSON Schema property order.
 - Prevented extension fields from overriding modeled Responses text configuration fields during serialization.

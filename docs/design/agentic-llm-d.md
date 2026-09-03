@@ -16,8 +16,8 @@ serve it. Cache-aware scoring can still prefer the engine that handled the previ
 upstream request body with the history inlined and every continuation and storage field removed, and a sealed context
 describing the turn. The caller forwards the body to a model unchanged and echoes the context back.
 
-`persist` takes that context together with the response the model produced — either a complete JSON body, or the SSE
-frames a streaming caller has already relayed to its own client — assembles the turn, stores it, and returns the
+`persist` takes that context together with the response the model produced, either a complete JSON body or the SSE
+frames a streaming caller has already relayed to its own client, assembles the turn, stores it, and returns the
 response envelope carrying the reserved `resp_` identifier. Nothing is re-emitted for a streamed turn, since the caller
 has already sent the frames on.
 
@@ -28,18 +28,18 @@ caller-authored context. Callers treat it as opaque.
 
 ## Composition
 
-Neither step reimplements the flow. `hydrate` calls `rehydrate_conversation` and `upstream_request`; `persist` calls
+Neither step reimplements the storage flow. `hydrate` calls `rehydrate_conversation` and `upstream_request`; `persist` calls
 `decode_upstream` and `commit`. All four are core operations the in-process executor already uses or shares, so a change
-to how a turn is rehydrated or stored reaches both paths at once. This crate contains no parsing, no storage access and
-no request building of its own.
+to how a turn is rehydrated or stored reaches both paths at once. The llm-d crate contains no storage access or
+request-building logic of its own.
 
-What it does contain is the boundary itself: the check for what cannot be split, the conversion between the live and
-wire context forms, and the sealing.
+What it does contain is the boundary itself: the check for what cannot be split, strict validation for the relayed
+JSON or streaming events, the conversion between the live and wire context forms, and the sealing.
 
 Core keeps what is not specific to one consumer. `decode_upstream` is the OpenAI JSON/SSE adapter; it validates a
 caller-supplied body more strictly than the in-process parser, which defaults a missing status and drops items it
 cannot read. `commit` takes a normalized `ResponsePayload` and owns the rest of the shared behaviour:
-reserved-identifier and terminal-status validation, the conflict check on an identifier already stored, and conditional
+reserved-identifier and terminal-status validation, atomic duplicate detection during insertion, and conditional
 persistence. A response still in progress is something an external caller can return but the in-process flow never
 produces; storing it would hand back an identifier that could never be continued, so `commit` rejects it.
 
@@ -49,7 +49,7 @@ limits, so sharing one predicate stops them drifting apart as features are added
 
 ## Boundary
 
-`ensure_splittable` names the feature that prevents a request being split: `conversation_id`, gateway-owned tools,
+`ensure_splittable` names the feature that prevents a request being split: `conversation_id`, gateway-executed built-in tools,
 compaction input, or `context_management`. Each needs state that the in-process executor keeps between steps.
 
 ## The crate
@@ -60,12 +60,29 @@ passthrough proxy, `/v1`, the WebSocket transport, upstream readiness probing an
 absent, so these endpoints cannot be exposed on a listener that also serves `/v1`. Readiness reports whether storage
 answers, since the coordinator owns the model fleet.
 
-## Discussion points
+## Calling and deployment contract
 
-The endpoints authenticate the calling workload with a shared token. That identifies a workload and not a tenant, so
-per-response authorization still needs an owner the schema does not record
-([#107](https://github.com/vllm-project/agentic-api/issues/107)); network policy remains defence in depth. A retried
-`persist` returns `409` rather than the turn it already stored, and the check that detects the reuse is a read before
-the write, so concurrent retries can still race. The sealed context carries the original request and base64 expands it,
-so hydrate's body limit admits turns whose persist body exceeds the same limit. Request fields that `RequestPayload`
-does not model are dropped rather than forwarded, which narrows what reaches vLLM compared with plain passthrough.
+Every hydrate or persist request must send the shared workload credential in
+`x-agentic-workload-token`. Configure the token with `AGENTIC_LLM_D_API_TOKEN` and configure the independent context
+signing key with `AGENTIC_LLM_D_SIGNING_KEY`. Each secret must contain at least 32 non-whitespace bytes. The binary
+rejects missing, short, or reused values before opening storage or binding its listener.
+
+The request budgets are deliberately asymmetric. A hydrate body is limited to 2 MiB. A returned sealed context is
+limited to 6 MiB. Persist accepts a body up to 16 MiB, with at most 6 MiB of context and 4 MiB of decoded upstream
+JSON or SSE. These component budgets leave room for the persist JSON envelope and ensure a context returned by
+hydrate can be echoed back. A larger response is rejected with `413` and code `body_too_large`.
+
+The workload token authenticates only the coordinator, not the end user or tenant. Deploy this listener only on an
+encrypted, policy-restricted service network where every token holder is trusted with all stored response history.
+Network policy is defense in depth, not tenant authorization. Per-response ownership remains tracked in
+[#107](https://github.com/vllm-project/agentic-api/issues/107), and the endpoint must not be exposed across tenant
+trust boundaries until that work lands.
+
+A repeated persist for an already stored response ID returns `409` with code `response_already_stored`. Duplicate
+detection happens atomically at insertion, so concurrent delivery has the same result. The service does not yet prove
+that an identical retry matches the stored payload, so it does not return a prior success response.
+
+## Remaining compatibility point
+
+Request fields that `RequestPayload` does not model are dropped rather than forwarded, which narrows what reaches
+vLLM compared with plain pass-through.
