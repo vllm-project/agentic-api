@@ -7,6 +7,7 @@
 //! runs on a blocking thread while the async task continues reading from the
 //! network — keeping the tokio executor thread free between chunk arrivals.
 
+use std::collections::HashSet;
 use std::pin::Pin;
 use std::sync::mpsc;
 
@@ -457,14 +458,20 @@ impl ResponseAccumulator {
             ));
         }
 
+        let mut terminal_item_ids = HashSet::with_capacity(output.len());
         for (output_index, item) in output.iter().enumerate() {
             let output_index = u32::try_from(output_index)
                 .map_err(|_| invalid_stream("terminal upstream response has too many output items"))?;
             let item = item
                 .as_object()
                 .ok_or_else(|| invalid_stream("terminal upstream response contains an invalid output item"))?;
-            let (_, item_type) = output_item_identity(item, "terminal output item")
+            let (item_id, item_type) = output_item_identity(item, "terminal output item")
                 .map_err(|error| invalid_stream(error.to_string()))?;
+            if !terminal_item_ids.insert(item_id) {
+                return Err(invalid_stream(format!(
+                    "terminal upstream response repeats output item '{item_id}'"
+                )));
+            }
             let Some((_, completed)) = self.completed.iter().find(|(index, _)| *index == output_index) else {
                 return Err(invalid_stream(
                     "terminal upstream response output does not match completed item events",

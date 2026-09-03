@@ -76,6 +76,69 @@ fn is_responses_event_stream(stream: &str) -> bool {
     })
 }
 
+fn message_stream(terminal_ids: [&str; 2]) -> String {
+    [
+        json!({
+            "type": "response.created",
+            "response": {"id": "resp_upstream", "status": "in_progress"}
+        }),
+        json!({
+            "type": "response.in_progress",
+            "response": {"id": "resp_upstream", "status": "in_progress"}
+        }),
+        json!({
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {"id": "msg_streamed_0", "type": "message", "role": "assistant", "status": "in_progress"}
+        }),
+        json!({
+            "type": "response.output_item.done",
+            "output_index": 0,
+            "item": {"id": "msg_streamed_0", "type": "message", "role": "assistant", "status": "completed"}
+        }),
+        json!({
+            "type": "response.output_item.added",
+            "output_index": 1,
+            "item": {"id": "msg_streamed_1", "type": "message", "role": "assistant", "status": "in_progress"}
+        }),
+        json!({
+            "type": "response.output_item.done",
+            "output_index": 1,
+            "item": {"id": "msg_streamed_1", "type": "message", "role": "assistant", "status": "completed"}
+        }),
+        json!({
+            "type": "response.completed",
+            "response": {
+                "id": "resp_upstream",
+                "status": "completed",
+                "output": [
+                    {"id": terminal_ids[0], "type": "message", "role": "assistant", "status": "completed"},
+                    {"id": terminal_ids[1], "type": "message", "role": "assistant", "status": "completed"}
+                ]
+            }
+        }),
+    ]
+    .map(|event| format!("data: {event}"))
+    .join("\n")
+}
+
+#[test]
+fn strict_relay_decoder_accepts_data_lines_without_a_space() {
+    let stream = message_stream(["msg_terminal_0", "msg_terminal_1"]).replace("data: ", "data:");
+
+    decode_upstream(&request_context(), UpstreamBody::Sse(&stream))
+        .expect("SSE data fields may omit the optional space after the colon");
+}
+
+#[test]
+fn strict_relay_decoder_rejects_duplicate_terminal_item_ids() {
+    let stream = message_stream(["msg_terminal", "msg_terminal"]);
+
+    let error = decode_upstream(&request_context(), UpstreamBody::Sse(&stream))
+        .expect_err("duplicate terminal item ids must be rejected");
+    assert!(error.to_string().contains("repeats output item 'msg_terminal'"));
+}
+
 #[test]
 fn strict_relay_decoder_accepts_recorded_responses_streams() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cassettes");

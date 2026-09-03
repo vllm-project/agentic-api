@@ -5,12 +5,14 @@ use crate::utils::common::{deserialize_from_str_opt, deserialize_from_value_opt}
 
 /// Normalize a raw SSE data line into a typed [`EventFrame`].
 ///
-/// Expects input in the form `data: {...}` (the `data: ` prefix is required).
+/// Expects an SSE `data:` field, with or without the optional space after the
+/// colon.
 /// Returns `None` for non-data lines, empty lines, and the `data: [DONE]`
 /// sentinel.
 #[must_use]
 pub fn normalize_sse_line(line: &str) -> Option<EventFrame> {
-    let data_str = line.strip_prefix("data: ")?;
+    let data_str = line.strip_prefix("data:")?;
+    let data_str = data_str.strip_prefix(' ').unwrap_or(data_str);
     if data_str == "[DONE]" {
         return None;
     }
