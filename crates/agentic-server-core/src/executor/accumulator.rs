@@ -14,7 +14,10 @@ use indexmap::IndexMap;
 
 use futures::{Stream, StreamExt};
 
-use crate::events::{EventFrame, EventPayload, SSEEventType, SSEItemType, normalize_sse_line};
+use crate::events::{
+    EventFrame, EventPayload, SSEEventType, SSEItemType, expected_item_type, is_data_frame, normalize_sse_line,
+    output_item_identity, validate_frame,
+};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::function_sse::{FunctionSseTranslation, FunctionSseTranslator};
 use crate::types::event::{MessageStatus, ResponseStatus};
@@ -95,6 +98,15 @@ struct InFlightEntry {
     item: InFlight,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum StreamLifecycle {
+    #[default]
+    AwaitingCreated,
+    Created,
+    InProgress,
+    Terminal,
+}
+
 #[derive(Clone, Copy)]
 pub(super) struct AccumulatedFunctionCall<'a> {
     pub(super) item: &'a FunctionToolCall,
@@ -126,6 +138,7 @@ pub struct ResponseAccumulator {
     in_flight: IndexMap<String, InFlightEntry>,
     /// Completed streaming items waiting to be emitted in `output_index` order.
     completed: Vec<(u32, OutputItem)>,
+    stream_lifecycle: StreamLifecycle,
 }
 
 impl ResponseAccumulator {
@@ -142,6 +155,7 @@ impl ResponseAccumulator {
             error: None,
             in_flight: IndexMap::new(),
             completed: Vec::new(),
+            stream_lifecycle: StreamLifecycle::AwaitingCreated,
         }
     }
 
@@ -183,6 +197,7 @@ impl ResponseAccumulator {
             error,
             in_flight: IndexMap::new(),
             completed: Vec::new(),
+            stream_lifecycle: StreamLifecycle::Terminal,
         })
     }
 
@@ -270,9 +285,198 @@ impl ResponseAccumulator {
         Some(frame)
     }
 
+    pub(crate) fn process_strict_sse_line(&mut self, line: &str) -> ExecutorResult<Option<EventFrame>> {
+        let Some(frame) = normalize_sse_line(line) else {
+            if is_data_frame(line) {
+                return Err(ExecutorError::InvalidRequest(
+                    "upstream stream contains a malformed data frame".to_owned(),
+                ));
+            }
+            return Ok(None);
+        };
+        validate_frame(&frame).map_err(|error| ExecutorError::InvalidRequest(error.to_string()))?;
+        self.validate_strict_transition(&frame)?;
+        self.process_normalized_event(&frame);
+        Ok(Some(frame))
+    }
+
     pub(crate) fn process_normalized_event(&mut self, frame: &EventFrame) {
         self.capture_terminal_details_if_needed(frame);
         self.process_event(frame);
+    }
+
+    fn validate_strict_transition(&self, frame: &EventFrame) -> ExecutorResult<()> {
+        let event_name = frame.wire.event_type.as_deref().unwrap_or("streaming event");
+        if self.stream_lifecycle == StreamLifecycle::Terminal {
+            return Err(invalid_stream(
+                "upstream stream contains an event after its terminal event",
+            ));
+        }
+
+        match (&frame.event_type, &frame.payload) {
+            (SSEEventType::ResponseCreated, EventPayload::Response { .. }) => {
+                if self.stream_lifecycle != StreamLifecycle::AwaitingCreated {
+                    return Err(invalid_lifecycle(event_name));
+                }
+            }
+            (SSEEventType::ResponseInProgress, EventPayload::Response { id, .. }) => {
+                if self.stream_lifecycle != StreamLifecycle::Created || id != &self.response_id {
+                    return Err(invalid_lifecycle_or_id(event_name));
+                }
+            }
+            (
+                SSEEventType::ResponseCompleted | SSEEventType::ResponseFailed | SSEEventType::ResponseIncomplete,
+                EventPayload::Response { id, .. },
+            ) => {
+                if self.stream_lifecycle != StreamLifecycle::InProgress || id != &self.response_id {
+                    return Err(invalid_lifecycle_or_id(event_name));
+                }
+                if !self.in_flight.is_empty() {
+                    return Err(invalid_stream("upstream stream ended with unfinished output items"));
+                }
+                self.validate_terminal_output(frame)?;
+            }
+            (
+                SSEEventType::OutputItemAdded,
+                EventPayload::OutputItemAdded {
+                    item_id,
+                    item_type,
+                    output_index,
+                    ..
+                },
+            ) => {
+                self.require_in_progress(event_name)?;
+                if self.has_output_index(*output_index) || self.has_item_id(item_id) {
+                    return Err(invalid_stream(format!(
+                        "upstream stream repeats output item '{item_id}'"
+                    )));
+                }
+                if item_type.as_str() != raw_output_item_type(frame)? {
+                    return Err(invalid_stream(format!(
+                        "upstream stream event '{event_name}' could not be normalized"
+                    )));
+                }
+            }
+            (
+                SSEEventType::OutputItemDone,
+                EventPayload::OutputItemDone {
+                    item_id,
+                    item_type,
+                    output_index,
+                    ..
+                },
+            ) => {
+                self.require_in_progress(event_name)?;
+                self.require_active_item(*output_index, item_id, item_type.as_str(), event_name)?;
+            }
+            (SSEEventType::Other, _) => self.require_in_progress(event_name)?,
+            (_, _) => {
+                self.require_in_progress(event_name)?;
+                let item_id = frame
+                    .wire
+                    .rest
+                    .get("item_id")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| invalid_stream(format!("upstream stream event '{event_name}' has no item id")))?;
+                let output_index = frame
+                    .wire
+                    .output_index
+                    .and_then(|index| u32::try_from(index).ok())
+                    .ok_or_else(|| {
+                        invalid_stream(format!("upstream stream event '{event_name}' has no output index"))
+                    })?;
+                self.require_active_item(output_index, item_id, expected_item_type(frame.event_type), event_name)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn require_in_progress(&self, event_name: &str) -> ExecutorResult<()> {
+        if self.stream_lifecycle == StreamLifecycle::InProgress {
+            return Ok(());
+        }
+        Err(invalid_lifecycle(event_name))
+    }
+
+    fn require_active_item(
+        &self,
+        output_index: u32,
+        item_id: &str,
+        expected_type: &str,
+        event_name: &str,
+    ) -> ExecutorResult<()> {
+        let Some((active_id, active)) = self
+            .in_flight
+            .iter()
+            .find(|(_, entry)| entry.output_index == output_index)
+        else {
+            return Err(invalid_stream(format!(
+                "upstream stream event '{event_name}' has no active output item"
+            )));
+        };
+        if active_id != item_id || in_flight_item_type(&active.item) != expected_type {
+            return Err(invalid_stream(format!(
+                "upstream stream event '{event_name}' does not match its active output item"
+            )));
+        }
+        Ok(())
+    }
+
+    fn has_output_index(&self, output_index: u32) -> bool {
+        self.in_flight.values().any(|entry| entry.output_index == output_index)
+            || self.completed.iter().any(|(index, _)| *index == output_index)
+    }
+
+    fn has_item_id(&self, item_id: &str) -> bool {
+        self.in_flight.contains_key(item_id)
+            || self
+                .completed
+                .iter()
+                .any(|(_, item)| output_item_id(item).is_some_and(|id| id == item_id))
+    }
+
+    fn validate_terminal_output(&self, frame: &EventFrame) -> ExecutorResult<()> {
+        let response = frame
+            .wire
+            .rest
+            .get("response")
+            .and_then(serde_json::Value::as_object)
+            .ok_or_else(|| invalid_stream("terminal upstream response has no valid 'response'"))?;
+        let Some(output) = response.get("output") else {
+            return Ok(());
+        };
+        if output.is_null() {
+            return Ok(());
+        }
+        let output = output
+            .as_array()
+            .ok_or_else(|| invalid_stream("terminal upstream response has no valid 'output'"))?;
+        if output.len() != self.completed.len() {
+            return Err(invalid_stream(
+                "terminal upstream response output does not match completed item events",
+            ));
+        }
+
+        for (output_index, item) in output.iter().enumerate() {
+            let output_index = u32::try_from(output_index)
+                .map_err(|_| invalid_stream("terminal upstream response has too many output items"))?;
+            let item = item
+                .as_object()
+                .ok_or_else(|| invalid_stream("terminal upstream response contains an invalid output item"))?;
+            let (_, item_type) = output_item_identity(item, "terminal output item")
+                .map_err(|error| invalid_stream(error.to_string()))?;
+            let Some((_, completed)) = self.completed.iter().find(|(index, _)| *index == output_index) else {
+                return Err(invalid_stream(
+                    "terminal upstream response output does not match completed item events",
+                ));
+            };
+            if output_item_type(completed) != Some(item_type) {
+                return Err(invalid_stream(
+                    "terminal upstream response output does not match completed item events",
+                ));
+            }
+        }
+        Ok(())
     }
 
     pub(super) fn process_sse_line_with_translator(
@@ -343,9 +547,14 @@ impl ResponseAccumulator {
         }
     }
 
-    /// Ask before `finish_stream`, which forces an unterminated stream to `completed`.
-    pub(crate) fn saw_terminal_frame(&self) -> bool {
-        self.status != ResponseStatus::InProgress
+    pub(crate) fn finish_strict_stream(&mut self) -> ExecutorResult<()> {
+        if self.stream_lifecycle != StreamLifecycle::Terminal {
+            return Err(ExecutorError::InvalidRequest(
+                "upstream stream ended without a terminal event".to_owned(),
+            ));
+        }
+        self.finish_stream();
+        Ok(())
     }
 
     pub(crate) fn finish_stream(&mut self) {
@@ -353,6 +562,7 @@ impl ResponseAccumulator {
         if self.status == ResponseStatus::InProgress {
             self.status = ResponseStatus::Completed;
         }
+        self.stream_lifecycle = StreamLifecycle::Terminal;
     }
 
     /// Processes a typed [`EventFrame`], updating accumulator state.
@@ -364,6 +574,10 @@ impl ResponseAccumulator {
         match (&frame.event_type, &frame.payload) {
             (SSEEventType::ResponseCreated, EventPayload::Response { id, .. }) if !id.is_empty() => {
                 self.response_id.clone_from(id);
+                self.stream_lifecycle = StreamLifecycle::Created;
+            }
+            (SSEEventType::ResponseInProgress, EventPayload::Response { .. }) => {
+                self.stream_lifecycle = StreamLifecycle::InProgress;
             }
             (SSEEventType::OutputItemAdded, payload @ EventPayload::OutputItemAdded { .. }) => {
                 self.start_output_item(payload);
@@ -522,6 +736,7 @@ impl ResponseAccumulator {
         self.finalize_all();
         self.status = status;
         self.usage = usage;
+        self.stream_lifecycle = StreamLifecycle::Terminal;
     }
 
     fn complete_call_item(&mut self, payload: &EventPayload) {
@@ -545,7 +760,10 @@ impl ResponseAccumulator {
         } else {
             deserialize_from_value_opt::<OutputItem>(raw_item.clone())
         };
-        if let Some(entry) = in_flight_key.as_deref().and_then(|key| self.in_flight.get_mut(key)) {
+        if let Some(mut entry) = in_flight_key
+            .as_deref()
+            .and_then(|key| self.in_flight.shift_remove(key))
+        {
             match (&mut entry.item, done_item) {
                 (InFlight::Message { item, text }, Some(OutputItem::Message(done_message))) => {
                     *item = done_message;
@@ -567,6 +785,9 @@ impl ResponseAccumulator {
                     *item = Some(call);
                 }
                 _ => {}
+            }
+            if let Some(item) = entry.item.finalize() {
+                self.completed.push((entry.output_index, item));
             }
             return;
         }
@@ -673,6 +894,75 @@ fn in_flight_matches_call_type(item: &InFlight, item_type: SSEItemType) -> bool 
             | (InFlight::McpListTools { .. }, SSEItemType::McpListTools)
             | (InFlight::Compaction { .. }, SSEItemType::Compaction)
     )
+}
+
+fn in_flight_item_type(item: &InFlight) -> &'static str {
+    match item {
+        InFlight::Message { .. } => "message",
+        InFlight::Reasoning { .. } => "reasoning",
+        InFlight::FunctionCall { .. } => "function_call",
+        InFlight::CustomToolCall { .. } => "custom_tool_call",
+        InFlight::WebSearchCall { .. } => "web_search_call",
+        InFlight::McpCall { .. } => "mcp_call",
+        InFlight::McpListTools { .. } => "mcp_list_tools",
+        InFlight::Compaction { .. } => "compaction",
+    }
+}
+
+fn output_item_type(item: &OutputItem) -> Option<&'static str> {
+    match item {
+        OutputItem::Message(_) => Some("message"),
+        OutputItem::FunctionCall(_) => Some("function_call"),
+        OutputItem::CustomToolCall(_) => Some("custom_tool_call"),
+        OutputItem::WebSearchCall(_) => Some("web_search_call"),
+        OutputItem::McpCall(_) => Some("mcp_call"),
+        OutputItem::McpListTools(_) => Some("mcp_list_tools"),
+        OutputItem::Reasoning(_) => Some("reasoning"),
+        OutputItem::Compaction(_) => Some("compaction"),
+        OutputItem::Unknown => None,
+    }
+}
+
+fn output_item_id(item: &OutputItem) -> Option<&str> {
+    match item {
+        OutputItem::Message(item) => Some(&item.id),
+        OutputItem::FunctionCall(item) => Some(&item.id),
+        OutputItem::CustomToolCall(item) => Some(&item.id),
+        OutputItem::WebSearchCall(item) => Some(&item.id),
+        OutputItem::McpCall(item) => Some(&item.id),
+        OutputItem::McpListTools(item) => Some(&item.id),
+        OutputItem::Reasoning(item) => Some(&item.id),
+        OutputItem::Compaction(item) => item.id.as_deref(),
+        OutputItem::Unknown => None,
+    }
+}
+
+fn raw_output_item_type(frame: &EventFrame) -> ExecutorResult<&str> {
+    let item = frame
+        .wire
+        .rest
+        .get("item")
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| invalid_stream("output item event has no valid 'item'"))?;
+    output_item_identity(item, "output item")
+        .map(|(_, item_type)| item_type)
+        .map_err(|error| invalid_stream(error.to_string()))
+}
+
+fn invalid_lifecycle(event_name: &str) -> ExecutorError {
+    invalid_stream(format!(
+        "upstream stream event '{event_name}' is out of lifecycle order"
+    ))
+}
+
+fn invalid_lifecycle_or_id(event_name: &str) -> ExecutorError {
+    invalid_stream(format!(
+        "upstream stream event '{event_name}' is out of lifecycle order or changes the response id"
+    ))
+}
+
+fn invalid_stream(message: impl Into<String>) -> ExecutorError {
+    ExecutorError::InvalidRequest(message.into())
 }
 
 fn function_event_key(payload: &EventPayload) -> Option<(&str, u32)> {

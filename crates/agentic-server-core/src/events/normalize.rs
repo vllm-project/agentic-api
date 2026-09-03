@@ -19,6 +19,13 @@ pub fn normalize_sse_line(line: &str) -> Option<EventFrame> {
     normalize_sse_value(json)
 }
 
+/// Whether a line carries an SSE data payload that should normalize to a frame.
+pub(crate) fn is_data_frame(line: &str) -> bool {
+    line.strip_prefix("data:")
+        .map(str::trim)
+        .is_some_and(|payload| !payload.is_empty() && payload != "[DONE]")
+}
+
 /// Normalizes an already parsed SSE payload.
 pub(crate) fn normalize_sse_value(json: Value) -> Option<EventFrame> {
     let event_type = json
@@ -90,6 +97,15 @@ fn json_str_opt(json: &Value, key: &str) -> Option<String> {
     json[key].as_str().map(ToString::to_string)
 }
 
+fn output_item_id(item: &Value) -> String {
+    item["id"]
+        .as_str()
+        .filter(|id| !id.is_empty())
+        .or_else(|| item["item_id"].as_str().filter(|id| !id.is_empty()))
+        .unwrap_or_default()
+        .to_owned()
+}
+
 fn json_u32(json: &Value, key: &str) -> u32 {
     u32::try_from(json[key].as_u64().unwrap_or(0)).unwrap_or(u32::MAX)
 }
@@ -109,7 +125,7 @@ fn extract_response_payload(json: &Value) -> EventPayload {
 fn extract_output_item_added(json: &Value) -> EventPayload {
     let item = &json["item"];
     EventPayload::OutputItemAdded {
-        item_id: json_str(item, "id"),
+        item_id: output_item_id(item),
         item_type: SSEItemType::from(json_str(item, "type")),
         output_index: json_u32(json, "output_index"),
         name: json_str_opt(item, "name"),
@@ -121,7 +137,7 @@ fn extract_output_item_added(json: &Value) -> EventPayload {
 fn extract_output_item_done(json: &Value) -> EventPayload {
     let item = &json["item"];
     EventPayload::OutputItemDone {
-        item_id: json_str(item, "id"),
+        item_id: output_item_id(item),
         item_type: SSEItemType::from(json_str(item, "type")),
         output_index: json_u32(json, "output_index"),
         item: item.clone(),
