@@ -139,11 +139,10 @@ fn extract_output_item_added(json: &Value) -> EventPayload {
 fn extract_output_item_done(json: &Value) -> EventPayload {
     let mut item = json["item"].clone();
     let item_id = output_item_id(&item);
-    if !item_id.is_empty()
-        && item["id"].as_str().is_none_or(str::is_empty)
-        && let Some(item) = item.as_object_mut()
-    {
-        item.insert("id".to_owned(), Value::String(item_id.clone()));
+    if !item_id.is_empty() && item["id"].as_str().is_none_or(str::is_empty) {
+        if let Some(item) = item.as_object_mut() {
+            item.insert("id".to_owned(), Value::String(item_id.clone()));
+        }
     }
     EventPayload::OutputItemDone {
         item_id,
