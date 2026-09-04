@@ -59,6 +59,14 @@ impl TryFrom<String> for StreamId {
     }
 }
 
+impl TryFrom<&str> for StreamId {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::try_from(value.to_owned())
+    }
+}
+
 struct WsRequest {
     payload: RequestPayload,
     stream_id: Option<StreamId>,
@@ -515,10 +523,15 @@ fn parse_ws_request(text: &str) -> Result<WsRequest, WsRequestParseError> {
     })?;
     let stream_id = value
         .get("stream_id")
-        .map(|value| serde_json::from_value::<StreamId>(value.clone()))
+        .map(|value| {
+            value
+                .as_str()
+                .ok_or_else(|| "stream_id must be a string".to_owned())
+                .and_then(StreamId::try_from)
+        })
         .transpose()
         .map_err(|error| WsRequestParseError {
-            error: WsError::from(ExecutorError::from(error)),
+            error: WsError::from(ExecutorError::InvalidRequest(error)),
             stream_id: None,
         })?;
 

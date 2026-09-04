@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::future::Future;
+use std::io::{self, Write};
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -21,6 +22,25 @@ use crate::types::tools::{WebSearchContextSize, WebSearchToolParam};
 const YOU_API_KEY: &str = "YOU_API_KEY";
 const YOU_API_BASE_URL: &str = "YOU_API_BASE_URL";
 const MAX_WEB_SEARCH_QUERIES: usize = 5;
+
+#[derive(Default)]
+struct CountingWriter {
+    bytes: usize,
+}
+
+impl Write for CountingWriter {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        self.bytes = self
+            .bytes
+            .checked_add(buffer.len())
+            .ok_or_else(|| io::Error::other("serialized JSON size overflow"))?;
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
 
 pub(crate) type WebSearchExecutor =
     dyn GatewayExecutor<ToolParams = WebSearchToolParam, ExecutionParams = WebSearchToolParam>;
@@ -228,12 +248,11 @@ impl WebSearchHandler {
         let mut metadata = Vec::new();
         let mut accumulated_bytes = 0usize;
         while let Some(mut response) = responses.try_next().await? {
-            let response_bytes = serde_json::to_vec(&response.results)
-                .and_then(|results| {
-                    serde_json::to_vec(&response.metadata).map(|metadata| results.len() + metadata.len())
-                })
+            let mut counter = CountingWriter::default();
+            serde_json::to_writer(&mut counter, &response.results)
+                .and_then(|()| serde_json::to_writer(&mut counter, &response.metadata))
                 .map_err(|error| ToolError::Execution(format!("failed to size web_search output: {error}")))?;
-            accumulated_bytes = accumulated_bytes.saturating_add(response_bytes);
+            accumulated_bytes = accumulated_bytes.saturating_add(counter.bytes);
             if accumulated_bytes > MAX_GATEWAY_TOOL_OUTPUT_BYTES {
                 return Err(ToolError::Execution(format!(
                     "web_search output exceeded {MAX_GATEWAY_TOOL_OUTPUT_BYTES} bytes"

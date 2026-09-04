@@ -175,7 +175,7 @@ async fn build_tool_registry(
                 tools,
                 &mut executors,
                 |bytes| response_budget.consume(bytes),
-                move || policy.clone().acquire_materialization_permit(),
+                move || policy.acquire_materialization_permit(),
             )
             .await?
         }
@@ -929,13 +929,7 @@ mod tests {
         });
         let mut held_permits = Vec::new();
         for _ in 0..crate::executor::gateway::MAX_CONCURRENT_MATERIALIZATIONS {
-            held_permits.push(
-                exec_ctx
-                    .gateway_scheduler_policy
-                    .clone()
-                    .acquire_materialization_permit()
-                    .await,
-            );
+            held_permits.push(exec_ctx.gateway_scheduler_policy.acquire_materialization_permit().await);
         }
 
         let plain_budget = ExecutorResponseBudget::new();

@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Duration;
@@ -44,11 +45,16 @@ impl GatewaySchedulerPolicy {
     }
 
     /// Acquires one process-wide materialization slot shared by cloned execution contexts.
-    pub(crate) async fn acquire_materialization_permit(self) -> OwnedSemaphorePermit {
-        self.materialization_permits
-            .acquire_owned()
-            .await
-            .expect("materialization semaphore is never closed")
+    pub(crate) fn acquire_materialization_permit(
+        &self,
+    ) -> impl Future<Output = OwnedSemaphorePermit> + Send + 'static + use<> {
+        let materialization_permits = Arc::clone(&self.materialization_permits);
+        async move {
+            materialization_permits
+                .acquire_owned()
+                .await
+                .expect("materialization semaphore is never closed")
+        }
     }
 }
 
@@ -278,6 +284,7 @@ impl GatewayScheduler {
                 &call,
                 &format!("gateway tool '{}' has no registered handler", call.name),
             )?;
+            enforce_gateway_tool_output_size(output.output.len())?;
             response_budget.consume(output.output.len())?;
             return Ok(GatewayCallResult {
                 item_index,
@@ -291,7 +298,7 @@ impl GatewayScheduler {
             None => None,
         };
         let _execution_slot = execution_slots.acquire().await.expect("semaphore is never closed");
-        let _materialization_permit = self.policy.clone().acquire_materialization_permit().await;
+        let _materialization_permit = self.policy.acquire_materialization_permit().await;
 
         let dispatched = if self.timeout.is_zero() {
             binding.execute(&call.call_id, &call.name, &call.arguments).await
@@ -309,13 +316,6 @@ impl GatewayScheduler {
                 ))),
             }
         };
-        match &dispatched {
-            Ok(output) => enforce_gateway_tool_output_size(output.output.len())?,
-            Err(ToolError::Execution(message) | ToolError::Config(message)) => {
-                enforce_gateway_tool_output_size(message.len())?;
-            }
-            Err(ToolError::MissingOutput { .. }) => {}
-        }
         let (output, status) = match dispatched {
             Ok(output) => (output, GatewayCallStatus::Completed),
             Err(ToolError::Execution(message) | ToolError::Config(message)) => {
@@ -323,6 +323,7 @@ impl GatewayScheduler {
             }
             Err(error @ ToolError::MissingOutput { .. }) => return Err(ExecutorError::from(error)),
         };
+        enforce_gateway_tool_output_size(output.output.len())?;
         response_budget.consume(output.output.len())?;
         let public_output = binding.public_output(&call, &output, status);
         Ok(GatewayCallResult {
@@ -822,6 +823,45 @@ mod tests {
         }
     }
 
+    struct SizedErrorExecutor {
+        message: String,
+    }
+
+    impl ToolHandler for SizedErrorExecutor {
+        type ToolParams = WebSearchToolParam;
+
+        fn tool_type(&self) -> ToolType {
+            ToolType::WebSearch
+        }
+
+        fn validate(&self, _params: &WebSearchToolParam) -> Result<(), ToolError> {
+            Ok(())
+        }
+
+        fn normalize(&self, _params: &WebSearchToolParam) -> Vec<FunctionTool> {
+            Vec::new()
+        }
+    }
+
+    impl GatewayExecutor for SizedErrorExecutor {
+        type ExecutionParams = WebSearchToolParam;
+
+        fn execute(
+            &self,
+            _call_id: &str,
+            _tool_name: &str,
+            _arguments: &str,
+            _params: &WebSearchToolParam,
+        ) -> Pin<Box<dyn Future<Output = Result<ToolOutput, ToolError>> + Send + '_>> {
+            let message = self.message.clone();
+            Box::pin(async move { Err(ToolError::Execution(message)) })
+        }
+
+        fn supports_parallel_execution(&self) -> bool {
+            true
+        }
+    }
+
     struct DrainTrackingExecutor {
         slow_call_finished: Arc<AtomicBool>,
     }
@@ -1042,6 +1082,30 @@ mod tests {
             .err()
             .expect("aggregate gateway output must be bounded");
         assert!(error.to_string().contains("executor response budget exceeded"));
+    }
+
+    #[tokio::test]
+    async fn gateway_scheduler_bounds_the_materialized_error_output() {
+        let web_search: ResponsesTool =
+            serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).expect("web_search tool param");
+        let mut executors = GatewayExecutors::default();
+        executors.insert(Arc::new(SizedErrorExecutor {
+            message: "\"".repeat(crate::tool::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES / 2 + 1),
+        }));
+        let mut tools = [web_search];
+        let registry = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
+            .await
+            .expect("registry builds");
+        let output_items = [OutputItem::FunctionCall(web_search_call("call_escaped_error"))];
+        let mut scheduler = GatewayScheduler::plan(&output_items, &registry, 0, GatewaySchedulerPolicy::default());
+
+        let error = scheduler
+            .execute()
+            .await
+            .err()
+            .expect("materialized gateway error output must be bounded");
+
+        assert!(error.to_string().contains("gateway tool output exceeded"));
     }
 
     #[tokio::test]
