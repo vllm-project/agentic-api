@@ -18,6 +18,8 @@ All notable changes to Agentic API are documented here.
 
 ### Fixed
 
+- Bounded WebSocket queues, generated response data, gateway tool results, and MCP discovery and HTTP/SSE payloads so
+  concurrent response streams cannot grow memory without limit.
 - Hardened split execution with atomic duplicate persistence, strict relayed-response validation, independent secret
   validation, bounded hydrate and persist payloads, stable error envelopes, and graceful shutdown error propagation.
 - Forwarded Responses `text` generation settings through typed execution paths while preserving provider-specific
@@ -28,6 +30,8 @@ All notable changes to Agentic API are documented here.
 
 ### Added
 
+- Added concurrent Responses WebSocket multiplexing with per-request `stream_id` routing, preserving FIFO ordering
+  within each stream while allowing independent streams to interleave on one connection.
 - Documented running Agentic API in front of NVIDIA Dynamo and recorded Dynamo cassettes for stateful and
   function-call flows.
 
