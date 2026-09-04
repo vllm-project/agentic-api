@@ -1066,9 +1066,13 @@ async fn authenticated_websocket_rejects_requests_after_identity_expiry() {
     }
     websocket
         .send(TungsteniteMessage::Text(
-            json!({"type": "response.create", "response": {"input": "must not run"}})
-                .to_string()
-                .into(),
+            json!({
+                "type": "response.create",
+                "stream_id": "expired-lane",
+                "response": {"input": "must not run"}
+            })
+            .to_string()
+            .into(),
         ))
         .await
         .expect("send post-expiry request");
@@ -1086,7 +1090,8 @@ async fn authenticated_websocket_rejects_requests_after_identity_expiry() {
             "code": "invalid_token",
             "message": "OIDC bearer token expired",
             "param": null,
-            "sequence_number": 0
+            "sequence_number": 0,
+            "stream_id": "expired-lane"
         })
     );
     assert!(matches!(

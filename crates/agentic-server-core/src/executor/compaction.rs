@@ -205,7 +205,7 @@ pub(crate) async fn compact_items(
         conversation_id: None,
         conversation_version: None,
     };
-    let response = fetch_blocking_payload(&ctx, exec_ctx, auth).await?;
+    let response = fetch_blocking_payload(&ctx, exec_ctx, auth, None).await?;
     let summary = completed_summary_text(&response)?;
 
     Ok((
