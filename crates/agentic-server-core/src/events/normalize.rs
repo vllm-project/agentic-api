@@ -137,12 +137,19 @@ fn extract_output_item_added(json: &Value) -> EventPayload {
 }
 
 fn extract_output_item_done(json: &Value) -> EventPayload {
-    let item = &json["item"];
+    let mut item = json["item"].clone();
+    let item_id = output_item_id(&item);
+    if !item_id.is_empty()
+        && item["id"].as_str().is_none_or(str::is_empty)
+        && let Some(item) = item.as_object_mut()
+    {
+        item.insert("id".to_owned(), Value::String(item_id.clone()));
+    }
     EventPayload::OutputItemDone {
-        item_id: output_item_id(item),
-        item_type: SSEItemType::from(json_str(item, "type")),
+        item_id,
+        item_type: SSEItemType::from(json_str(&item, "type")),
         output_index: json_u32(json, "output_index"),
-        item: item.clone(),
+        item,
     }
 }
 

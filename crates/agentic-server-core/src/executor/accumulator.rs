@@ -1393,6 +1393,25 @@ mod tests {
     }
 
     #[test]
+    fn test_accumulator_uses_authoritative_done_item_with_item_id_fallback() {
+        let lines = vec![
+            r#"data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_1","role":"assistant","status":"in_progress","content":[]}}"#.to_string(),
+            r#"data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"item_id":"msg_1","delta":"partial"}"#.to_string(),
+            r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":null,"item_id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"authoritative","annotations":[]}]}}"#.to_string(),
+            r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed"}}"#.to_string(),
+        ];
+
+        let acc = ResponseAccumulator::from_sse_lines(lines, None);
+        assert_eq!(acc.output.len(), 1);
+        let OutputItem::Message(message) = &acc.output[0] else {
+            panic!("expected message");
+        };
+        assert_eq!(message.id, "msg_1");
+        assert_eq!(message.content.len(), 1);
+        assert_eq!(message.content[0].text, "authoritative");
+    }
+
+    #[test]
     fn test_unknown_mcp_call_error_shape_is_not_dropped() {
         let lines = vec![
             r#"data: {"type":"response.created","response":{"id":"resp_abc"}}"#.to_string(),
