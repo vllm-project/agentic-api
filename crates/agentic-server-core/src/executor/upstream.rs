@@ -5,7 +5,7 @@ use futures::StreamExt;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::events::{EventFrame, SSEEventType, WireEvent, is_data_frame};
+use crate::events::{EventFrame, SSEEventType, WireEvent, ensure_supported_output_item_type, is_data_frame};
 use crate::executor::accumulator::ResponseAccumulator;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::function_sse::FunctionSseTranslator;
@@ -76,25 +76,6 @@ fn absorb_line(acc: &mut ResponseAccumulator, ctx: &RequestContext, line: &str) 
     !is_data_frame(line)
 }
 
-fn ensure_supported_output_item_type(item_type: &str) -> ExecutorResult<()> {
-    if matches!(
-        item_type,
-        "message"
-            | "function_call"
-            | "custom_tool_call"
-            | "web_search_call"
-            | "mcp_call"
-            | "mcp_list_tools"
-            | "reasoning"
-            | "compaction"
-    ) {
-        return Ok(());
-    }
-    Err(ExecutorError::InvalidRequest(format!(
-        "upstream output item type '{item_type}' is unsupported"
-    )))
-}
-
 fn required_str<'a>(value: &'a Value, field: &str, owner: &str) -> ExecutorResult<&'a str> {
     value
         .get(field)
@@ -135,7 +116,8 @@ pub fn ensure_strict_response(body: &str) -> ExecutorResult<()> {
         let owner = format!("upstream response output[{index}]");
         let item_id = required_str(item, "id", &owner)?;
         let item_type = required_str(item, "type", &owner)?;
-        ensure_supported_output_item_type(item_type)?;
+        ensure_supported_output_item_type(item_type)
+            .map_err(|error| ExecutorError::InvalidRequest(error.to_string()))?;
         OutputItem::deserialize(item).map_err(|error| {
             ExecutorError::InvalidRequest(format!(
                 "upstream response output[{index}] is not a valid item: {error}"

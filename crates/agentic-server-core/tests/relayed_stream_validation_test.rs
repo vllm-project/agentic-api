@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use agentic_core::executor::request::RequestContext;
 use agentic_core::executor::{UpstreamBody, decode_upstream};
+use agentic_core::types::io::OutputItem;
 use agentic_core::types::request_response::RequestPayload;
 use serde_json::json;
 
@@ -137,6 +138,77 @@ fn strict_relay_decoder_rejects_duplicate_terminal_item_ids() {
     let error = decode_upstream(&request_context(), UpstreamBody::Sse(&stream))
         .expect_err("duplicate terminal item ids must be rejected");
     assert!(error.to_string().contains("repeats output item 'msg_terminal'"));
+}
+
+#[test]
+fn strict_relay_decoder_rejects_repeated_item_done() {
+    let stream = message_stream(["msg_terminal_0", "msg_terminal_1"]);
+    let mut lines: Vec<_> = stream.lines().collect();
+    lines.insert(4, lines[3]);
+    let stream = lines.join("\n");
+
+    let error = decode_upstream(&request_context(), UpstreamBody::Sse(&stream))
+        .expect_err("strict validation must reject a second completion for the same item");
+
+    assert!(error.to_string().contains("has no active output item"));
+}
+
+#[test]
+fn strict_relay_decoder_rejects_unsupported_item_type() {
+    let stream = message_stream(["msg_terminal_0", "msg_terminal_1"]).replace("\"message\"", "\"unsupported_item\"");
+
+    let error = decode_upstream(&request_context(), UpstreamBody::Sse(&stream))
+        .expect_err("unsupported item types must be rejected before lifecycle validation");
+
+    assert!(
+        error
+            .to_string()
+            .contains("output item type 'unsupported_item' is unsupported")
+    );
+}
+
+#[test]
+fn strict_relay_decoder_preserves_web_search_item_id_fallback() {
+    for id in [Some(json!("ws_1")), None, Some(json!(null)), Some(json!(""))] {
+        for include_terminal_output in [false, true] {
+            let mut item = json!({
+                "type": "web_search_call",
+                "item_id": "ws_1",
+                "status": "completed",
+                "action": {"type": "search", "query": "rust", "sources": []}
+            });
+            if let Some(id) = &id {
+                item["id"] = id.clone();
+            }
+            let mut terminal = json!({"id": "resp_upstream", "status": "completed"});
+            if include_terminal_output {
+                terminal["output"] = json!([item.clone()]);
+            }
+            let stream = [
+                json!({"type": "response.created", "response": {"id": "resp_upstream", "status": "in_progress"}}),
+                json!({"type": "response.in_progress", "response": {"id": "resp_upstream", "status": "in_progress"}}),
+                json!({"type": "response.output_item.added", "output_index": 0, "item": {"type": "web_search_call", "id": "ws_1", "status": "in_progress"}}),
+                json!({"type": "response.output_item.done", "output_index": 0, "item": item}),
+                json!({"type": "response.completed", "response": terminal}),
+            ]
+            .map(|event| format!("data: {event}"))
+            .join("\n");
+
+            let payload = decode_upstream(&request_context(), UpstreamBody::Sse(&stream))
+                .unwrap_or_else(|error| panic!("id={id:?}, terminal output={include_terminal_output}: {error}"));
+
+            assert_eq!(
+                payload.output.len(),
+                1,
+                "id={id:?}, terminal output={include_terminal_output}"
+            );
+            let OutputItem::WebSearchCall(call) = &payload.output[0] else {
+                panic!("expected web-search call");
+            };
+            assert_eq!(call.id, "ws_1");
+            assert_eq!(serde_json::to_value(&call.action).unwrap()["query"], "rust");
+        }
+    }
 }
 
 #[test]

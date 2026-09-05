@@ -298,6 +298,16 @@ impl ResponseAccumulator {
         validate_frame(&frame).map_err(|error| ExecutorError::InvalidRequest(error.to_string()))?;
         self.validate_strict_transition(&frame)?;
         self.process_normalized_event(&frame);
+        if let EventPayload::OutputItemDone { item_id, .. } = &frame.payload {
+            // Strict validation needs completed items removed from the active set.
+            // The lenient path retains them until finalization so repeated done
+            // events update the same item, as they did before strict state reuse.
+            self.completed.extend(
+                self.in_flight
+                    .shift_remove(item_id)
+                    .and_then(|entry| entry.item.finalize().map(|item| (entry.output_index, item))),
+            );
+        }
         Ok(Some(frame))
     }
 
@@ -340,21 +350,13 @@ impl ResponseAccumulator {
             (
                 SSEEventType::OutputItemAdded,
                 EventPayload::OutputItemAdded {
-                    item_id,
-                    item_type,
-                    output_index,
-                    ..
+                    item_id, output_index, ..
                 },
             ) => {
                 self.require_in_progress(event_name)?;
                 if self.has_output_index(*output_index) || self.has_item_id(item_id) {
                     return Err(invalid_stream(format!(
                         "upstream stream repeats output item '{item_id}'"
-                    )));
-                }
-                if item_type.as_str() != raw_output_item_type(frame)? {
-                    return Err(invalid_stream(format!(
-                        "upstream stream event '{event_name}' could not be normalized"
                     )));
                 }
             }
@@ -767,10 +769,7 @@ impl ResponseAccumulator {
         } else {
             deserialize_from_value_opt::<OutputItem>(raw_item.clone())
         };
-        if let Some(mut entry) = in_flight_key
-            .as_deref()
-            .and_then(|key| self.in_flight.shift_remove(key))
-        {
+        if let Some(entry) = in_flight_key.as_deref().and_then(|key| self.in_flight.get_mut(key)) {
             match (&mut entry.item, done_item) {
                 (InFlight::Message { item, text }, Some(OutputItem::Message(done_message))) => {
                     *item = done_message;
@@ -792,9 +791,6 @@ impl ResponseAccumulator {
                     *item = Some(call);
                 }
                 _ => {}
-            }
-            if let Some(item) = entry.item.finalize() {
-                self.completed.push((entry.output_index, item));
             }
             return;
         }
@@ -942,18 +938,6 @@ fn output_item_id(item: &OutputItem) -> Option<&str> {
         OutputItem::Compaction(item) => item.id.as_deref(),
         OutputItem::Unknown => None,
     }
-}
-
-fn raw_output_item_type(frame: &EventFrame) -> ExecutorResult<&str> {
-    let item = frame
-        .wire
-        .rest
-        .get("item")
-        .and_then(serde_json::Value::as_object)
-        .ok_or_else(|| invalid_stream("output item event has no valid 'item'"))?;
-    output_item_identity(item, "output item")
-        .map(|(_, item_type)| item_type)
-        .map_err(|error| invalid_stream(error.to_string()))
 }
 
 fn invalid_lifecycle(event_name: &str) -> ExecutorError {
@@ -1409,6 +1393,40 @@ mod tests {
         assert_eq!(message.id, "msg_1");
         assert_eq!(message.content.len(), 1);
         assert_eq!(message.content[0].text, "authoritative");
+    }
+
+    #[test]
+    fn repeated_function_call_done_does_not_duplicate_lenient_output() {
+        let added = r#"data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":""}}"#;
+        let done = r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{}","status":"completed"}}"#;
+        let terminal = r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#;
+
+        let acc = ResponseAccumulator::from_sse_lines([added, done, done, terminal].map(str::to_owned), None);
+
+        assert_eq!(acc.output.len(), 1);
+        let OutputItem::FunctionCall(call) = &acc.output[0] else {
+            panic!("expected function call");
+        };
+        assert_eq!(call.id, "fc_1");
+        assert_eq!(call.call_id, "call_1");
+        assert_eq!(call.arguments, "{}");
+    }
+
+    #[test]
+    fn repeated_function_call_done_preserves_lenient_authoritative_updates() {
+        let added = r#"data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":""}}"#;
+        let first = r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","arguments":"{}"}}"#;
+        let updated = r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","arguments":"{\"query\":\"rust\"}"}}"#;
+
+        let acc = ResponseAccumulator::from_sse_lines([added, first, updated].map(str::to_owned), None);
+
+        assert_eq!(acc.output.len(), 1);
+        let OutputItem::FunctionCall(call) = &acc.output[0] else {
+            panic!("expected function call");
+        };
+        assert_eq!(call.name, "lookup");
+        assert_eq!(call.call_id, "call_1");
+        assert_eq!(call.arguments, r#"{"query":"rust"}"#);
     }
 
     #[test]
