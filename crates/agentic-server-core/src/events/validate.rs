@@ -2,15 +2,28 @@ use serde::Deserialize;
 use serde_json::{Map, Value};
 use thiserror::Error;
 
-use super::{EventFrame, SSEEventType};
+use super::{EventFrame, SSEEventType, SSEItemType};
 use crate::types::io::OutputItem;
 
 #[derive(Debug, Error)]
 #[error("{0}")]
 pub(crate) struct EventError(String);
 
+#[derive(Debug)]
+pub(crate) struct ValidatedFrame<'a> {
+    pub(crate) item: Option<ValidatedItem<'a>>,
+}
+
+#[derive(Debug)]
+pub(crate) struct ValidatedItem<'a> {
+    pub(crate) item_id: &'a str,
+    pub(crate) output_index: u32,
+    pub(crate) item_type: SSEItemType,
+    pub(crate) done_item: Option<OutputItem>,
+}
+
 /// Validates the stateless wire-format requirements of one normalized frame.
-pub(crate) fn validate_frame(frame: &EventFrame) -> Result<(), EventError> {
+pub(crate) fn validate_frame(frame: &EventFrame) -> Result<ValidatedFrame<'_>, EventError> {
     let event_name = frame
         .wire
         .event_type
@@ -23,44 +36,67 @@ pub(crate) fn validate_frame(frame: &EventFrame) -> Result<(), EventError> {
         | SSEEventType::ResponseInProgress
         | SSEEventType::ResponseCompleted
         | SSEEventType::ResponseFailed
-        | SSEEventType::ResponseIncomplete => validate_response_event(frame, event_name),
-        SSEEventType::OutputItemAdded => validate_output_item(frame, event_name, false),
-        SSEEventType::OutputItemDone => validate_output_item(frame, event_name, true),
-        SSEEventType::Other => Ok(()),
+        | SSEEventType::ResponseIncomplete => {
+            validate_response_event(frame, event_name)?;
+            Ok(ValidatedFrame { item: None })
+        }
+        SSEEventType::OutputItemAdded => {
+            validate_output_item(frame, event_name, false).map(|item| ValidatedFrame { item: Some(item) })
+        }
+        SSEEventType::OutputItemDone => {
+            validate_output_item(frame, event_name, true).map(|item| ValidatedFrame { item: Some(item) })
+        }
+        SSEEventType::Other => Ok(ValidatedFrame { item: None }),
         event_type => {
-            required_output_index(frame, event_name)?;
-            required_str(&frame.wire.rest, "item_id", event_name)?;
-            validate_event_fields(&frame.wire.rest, event_type, event_name)
+            let output_index = required_output_index(frame, event_name)?;
+            let item_id = required_str(&frame.wire.rest, "item_id", event_name)?;
+            validate_event_fields(&frame.wire.rest, event_type, event_name)?;
+            let item_type = expected_item_type(event_type).ok_or_else(|| {
+                invalid(format!(
+                    "upstream output item type for event '{event_name}' is unsupported"
+                ))
+            })?;
+            Ok(ValidatedFrame {
+                item: Some(ValidatedItem {
+                    item_id,
+                    output_index,
+                    item_type,
+                    done_item: None,
+                }),
+            })
         }
     }
 }
 
-pub(crate) fn expected_item_type(event_type: SSEEventType) -> &'static str {
+fn expected_item_type(event_type: SSEEventType) -> Option<SSEItemType> {
     match event_type {
         SSEEventType::OutputTextDelta
         | SSEEventType::OutputTextDone
         | SSEEventType::ContentPartAdded
-        | SSEEventType::ContentPartDone => "message",
-        SSEEventType::FunctionCallArgumentsDelta | SSEEventType::FunctionCallArgumentsDone => "function_call",
-        SSEEventType::CustomToolCallInputDelta | SSEEventType::CustomToolCallInputDone => "custom_tool_call",
+        | SSEEventType::ContentPartDone => Some(SSEItemType::Message),
+        SSEEventType::FunctionCallArgumentsDelta | SSEEventType::FunctionCallArgumentsDone => {
+            Some(SSEItemType::FunctionCall)
+        }
+        SSEEventType::CustomToolCallInputDelta | SSEEventType::CustomToolCallInputDone => {
+            Some(SSEItemType::CustomToolCall)
+        }
         SSEEventType::ReasoningTextDelta
         | SSEEventType::ReasoningTextDone
         | SSEEventType::ReasoningPartAdded
         | SSEEventType::ReasoningPartDone
         | SSEEventType::ReasoningSummaryTextDelta
-        | SSEEventType::ReasoningSummaryTextDone => "reasoning",
-        SSEEventType::FileSearchCallSearching | SSEEventType::FileSearchCallCompleted => "file_search_call",
+        | SSEEventType::ReasoningSummaryTextDone => Some(SSEItemType::Reasoning),
         SSEEventType::WebSearchCallInProgress
         | SSEEventType::WebSearchCallSearching
-        | SSEEventType::WebSearchCallCompleted => "web_search_call",
+        | SSEEventType::WebSearchCallCompleted => Some(SSEItemType::WebSearchCall),
         SSEEventType::McpCallInProgress
         | SSEEventType::McpCallArgumentsDelta
         | SSEEventType::McpCallArgumentsDone
         | SSEEventType::McpCallCompleted
-        | SSEEventType::McpCallFailed => "mcp_call",
+        | SSEEventType::McpCallFailed => Some(SSEItemType::McpCall),
         SSEEventType::McpListToolsInProgress
         | SSEEventType::McpListToolsCompleted
-        | SSEEventType::McpListToolsFailed => "mcp_list_tools",
+        | SSEEventType::McpListToolsFailed => Some(SSEItemType::McpListTools),
         SSEEventType::ResponseCreated
         | SSEEventType::ResponseInProgress
         | SSEEventType::ResponseCompleted
@@ -68,37 +104,31 @@ pub(crate) fn expected_item_type(event_type: SSEEventType) -> &'static str {
         | SSEEventType::ResponseIncomplete
         | SSEEventType::OutputItemAdded
         | SSEEventType::OutputItemDone
-        | SSEEventType::Other => unreachable!("only item events are classified"),
+        | SSEEventType::FileSearchCallSearching
+        | SSEEventType::FileSearchCallCompleted
+        | SSEEventType::Other => None,
     }
 }
 
 pub(crate) fn output_item_identity<'a>(
     item: &'a Map<String, Value>,
     owner: &str,
-) -> Result<(&'a str, &'a str), EventError> {
+) -> Result<(&'a str, SSEItemType), EventError> {
     let item_id = item
         .get("id")
         .and_then(Value::as_str)
         .filter(|id| !id.is_empty())
         .or_else(|| item.get("item_id").and_then(Value::as_str).filter(|id| !id.is_empty()))
         .ok_or_else(|| missing_field(owner, "id"))?;
-    let item_type = required_str(item, "type", owner)?;
-    ensure_supported_output_item_type(item_type)?;
+    let item_type_name = required_str(item, "type", owner)?;
+    let item_type = item_type_name
+        .parse()
+        .map_err(|()| invalid(format!("upstream output item type '{item_type_name}' is unsupported")))?;
     Ok((item_id, item_type))
 }
 
 pub(crate) fn ensure_supported_output_item_type(item_type: &str) -> Result<(), EventError> {
-    if matches!(
-        item_type,
-        "message"
-            | "function_call"
-            | "custom_tool_call"
-            | "web_search_call"
-            | "mcp_call"
-            | "mcp_list_tools"
-            | "reasoning"
-            | "compaction"
-    ) {
+    if item_type.parse::<SSEItemType>().is_ok() {
         return Ok(());
     }
     Err(invalid(format!(
@@ -125,12 +155,21 @@ fn validate_response_event(frame: &EventFrame, event_name: &str) -> Result<(), E
     )))
 }
 
-fn validate_output_item(frame: &EventFrame, event_name: &str, complete: bool) -> Result<(), EventError> {
-    required_output_index(frame, event_name)?;
+fn validate_output_item<'a>(
+    frame: &'a EventFrame,
+    event_name: &str,
+    complete: bool,
+) -> Result<ValidatedItem<'a>, EventError> {
+    let output_index = required_output_index(frame, event_name)?;
     let item = required_object(&frame.wire.rest, "item", event_name)?;
-    let (_, item_type) = output_item_identity(item, "output item")?;
+    let (item_id, item_type) = output_item_identity(item, "output item")?;
     if !complete {
-        return Ok(());
+        return Ok(ValidatedItem {
+            item_id,
+            output_index,
+            item_type,
+            done_item: None,
+        });
     }
 
     let mut canonical = Value::Object(item.clone());
@@ -139,12 +178,18 @@ fn validate_output_item(frame: &EventFrame, event_name: &str, complete: bool) ->
     }
     let output = OutputItem::deserialize(canonical)
         .map_err(|error| invalid(format!("upstream stream output item is invalid: {error}")))?;
-    if matches!(output, OutputItem::Unknown) {
+    if SSEItemType::try_from(&output) != Ok(item_type) {
         return Err(invalid(format!(
-            "upstream output item type '{item_type}' is unsupported"
+            "upstream output item type '{}' is unsupported",
+            item_type.as_str()
         )));
     }
-    Ok(())
+    Ok(ValidatedItem {
+        item_id,
+        output_index,
+        item_type,
+        done_item: Some(output),
+    })
 }
 
 fn validate_event_fields(

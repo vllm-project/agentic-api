@@ -5,7 +5,7 @@ use futures::StreamExt;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::events::{EventFrame, SSEEventType, WireEvent, ensure_supported_output_item_type, is_data_frame};
+use crate::events::{EventFrame, SSEEventType, WireEvent, ensure_supported_output_item_type};
 use crate::executor::accumulator::ResponseAccumulator;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::function_sse::FunctionSseTranslator;
@@ -67,13 +67,11 @@ pub enum UpstreamBody<'a> {
     Sse(&'a str),
 }
 
-fn absorb_line(acc: &mut ResponseAccumulator, ctx: &RequestContext, line: &str) -> bool {
-    if let Some(frame) = acc.process_sse_line(line) {
+fn absorb_line(acc: &mut ResponseAccumulator, ctx: &RequestContext, line: &str) -> ExecutorResult<()> {
+    if let Some(frame) = acc.process_lenient_sse_line(line)? {
         log_upstream_failure(&frame, &ctx.response_id);
-        return true;
     }
-    // Only a `data:` line that produced no frame is malformed.
-    !is_data_frame(line)
+    Ok(())
 }
 
 fn required_str<'a>(value: &'a Value, field: &str, owner: &str) -> ExecutorResult<&'a str> {
@@ -202,7 +200,7 @@ pub(super) async fn fetch_stream_payload(
     while let Some(line_result) = line_stream.next().await {
         let line = line_result?;
         if stream.is_none() {
-            let _ = absorb_line(&mut acc, ctx, &line);
+            absorb_line(&mut acc, ctx, &line)?;
             continue;
         }
         if let Some(translation) = acc.process_sse_line_with_translator(&line, &mut function_sse)? {

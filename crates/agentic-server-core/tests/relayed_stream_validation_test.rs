@@ -154,6 +154,39 @@ fn strict_relay_decoder_rejects_repeated_item_done() {
 }
 
 #[test]
+fn strict_relay_decoder_rejects_item_id_with_the_wrong_output_index() {
+    let stream = message_stream(["msg_terminal_0", "msg_terminal_1"]);
+    let stream = stream.replace(
+        r#"{"type":"response.output_item.done","output_index":0,"item":{"id":"msg_streamed_0""#,
+        r#"{"type":"response.output_item.done","output_index":1,"item":{"id":"msg_streamed_0""#,
+    );
+
+    let error = decode_upstream(&request_context(), UpstreamBody::Sse(&stream))
+        .expect_err("an item id must not resolve through a different explicit output index");
+
+    assert!(error.to_string().contains("does not match its active output item"));
+}
+
+#[test]
+fn strict_relay_decoder_rejects_changed_call_id_without_terminal_output() {
+    let stream = [
+        json!({"type": "response.created", "response": {"id": "resp_upstream", "status": "in_progress"}}),
+        json!({"type": "response.in_progress", "response": {"id": "resp_upstream", "status": "in_progress"}}),
+        json!({"type": "response.output_item.added", "output_index": 0, "item": {"id": "fc_1", "type": "function_call", "status": "in_progress", "call_id": "call_1", "name": "lookup", "arguments": ""}}),
+        json!({"type": "response.function_call_arguments.done", "output_index": 0, "item_id": "fc_1", "call_id": "call_2", "arguments": "{}"}),
+        json!({"type": "response.output_item.done", "output_index": 0, "item": {"id": "fc_1", "type": "function_call", "status": "completed", "call_id": "call_2", "name": "lookup", "arguments": "{}"}}),
+        json!({"type": "response.completed", "response": {"id": "resp_upstream", "status": "completed"}}),
+    ]
+    .map(|event| format!("data: {event}"))
+    .join("\n");
+
+    let error = decode_upstream(&request_context(), UpstreamBody::Sse(&stream))
+        .expect_err("call-id stability must not depend on terminal output being present");
+
+    assert!(error.to_string().contains("changes 'call_id' for output[0]"));
+}
+
+#[test]
 fn strict_relay_decoder_rejects_unsupported_item_type() {
     let stream = message_stream(["msg_terminal_0", "msg_terminal_1"]).replace("\"message\"", "\"unsupported_item\"");
 
@@ -212,9 +245,10 @@ fn strict_relay_decoder_preserves_web_search_item_id_fallback() {
 }
 
 #[test]
-fn strict_relay_decoder_accepts_recorded_responses_streams() {
+fn strict_relay_decoder_accepts_compatible_recorded_responses_streams() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cassettes");
     let mut decoded = 0;
+    let mut rejected = Vec::new();
 
     for path in yaml_files(&root) {
         for (turn_index, chunks) in response_streams(&path).into_iter().enumerate() {
@@ -222,16 +256,35 @@ fn strict_relay_decoder_accepts_recorded_responses_streams() {
             if !is_responses_event_stream(&stream) {
                 continue;
             }
-            decode_upstream(&request_context(), UpstreamBody::Sse(&stream)).unwrap_or_else(|error| {
-                panic!(
-                    "{} turn {} was rejected: {error}",
+            match decode_upstream(&request_context(), UpstreamBody::Sse(&stream)) {
+                Ok(_) => decoded += 1,
+                Err(error) => rejected.push(format!(
+                    "{} turn {}: {error}",
                     path.strip_prefix(&root).expect("cassette below root").display(),
                     turn_index + 1
-                )
-            });
-            decoded += 1;
+                )),
+            }
         }
     }
 
+    let unexpected: Vec<_> = rejected
+        .iter()
+        .filter(|failure| !failure.contains("changes 'call_id'"))
+        .collect();
+    assert!(
+        unexpected.is_empty(),
+        "recorded streams failed for reasons other than the call-ID stability rule:\n{}",
+        unexpected
+            .iter()
+            .map(|failure| failure.as_str())
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+    assert_eq!(
+        rejected.len(),
+        10,
+        "the recorded call-ID incompatibility baseline changed:\n{}",
+        rejected.join("\n")
+    );
     assert!(decoded >= 50, "decoded only {decoded} recorded Responses SSE streams");
 }
