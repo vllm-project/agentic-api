@@ -1309,8 +1309,8 @@ mod tests {
             "role": "user",
             "content": [
                 {
-                    "type": "input_file",
-                    "file_id": "file_1"
+                    "type": "future_content",
+                    "payload": "future_value"
                 }
             ]
         });
