@@ -341,6 +341,12 @@ token-based truncation policy), which intentionally differ from the HTTP catalog
 
 `scripts/agentic-codex.sh` copies the gateway catalog verbatim, so it inherits the resolved modalities with no change.
 
+`scripts/codex-smoke.sh` covers this end to end in CI: the replay server advertises `capabilities: ["image"]`, the real
+Codex CLI attaches a generated 1x1 PNG with `--image`, and the capture assertion requires that exact payload by
+SHA-256. With the capability removed, Codex instead sends `image content omitted because you do not support image
+input` as text and the assertion fails — which is what makes client-side stripping distinguishable from gateway loss.
+[Verifying image support against a live vision model](../guides/vision-model-verification.md) covers the live check.
+
 ### Failure behavior
 
 A launcher never writes a catalog it could not verify. If the gateway cannot be reached, rejects the request, returns

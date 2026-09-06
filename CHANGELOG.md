@@ -6,6 +6,15 @@ All notable changes to Agentic API are documented here.
 
 ### Added
 
+- Verified image preservation through the Responses gateway end to end (#253): integration coverage for mixed
+  text/image ordering, multiple images per turn, client-executed `view_image` tool output, `previous_response_id`
+  continuation, `conversation_id` rehydration, stateless `store: false` proxying, and compaction of retained
+  image-bearing user messages, over both the HTTP and WebSocket transports.
+- Extended `scripts/codex-smoke.sh` so the pinned Codex CLI attaches a generated 1x1 PNG with `--image` and the
+  capture assertion requires that exact payload by SHA-256, proving the image reaches the gateway unmodified. The
+  replay server now serves a `/v1/models` listing advertising image support (#253).
+- Added [Verifying image support against a live vision model](docs/guides/vision-model-verification.md), the opt-in
+  manual guide for checking a real vision model (`Qwen/Qwen3-VL-8B-Instruct`) behind the gateway (#253).
 - Added typed per-model input-modality overrides to `config.toml`
   (`[models."<served-model-id>"] input_modalities = ["text", "image"]`), validated at startup:
   unknown modality names, empty lists, duplicates, and image-only lists are rejected with the
@@ -13,6 +22,8 @@ All notable changes to Agentic API are documented here.
 
 ### Changed
 
+- Modeled `input_file` as a first-class message content part, mirroring the media parts already modeled for
+  client-executed tool output, so a file part keeps its structure instead of being treated as unknown (#253).
 - Forwarded `parallel_tool_calls` as the model-generation preference for typed
   Responses requests, including built-in-only and mixed tool declarations (#181).
 - Added bounded, configurable parallel execution for Responses gateway rounds,
@@ -34,6 +45,12 @@ All notable changes to Agentic API are documented here.
 
 ### Fixed
 
+- Dropped unrepresentable message content parts from model-bound input instead of forwarding a synthetic
+  `{"type": "unknown"}` part that no client sent. The surrounding message and the order of the remaining parts are
+  preserved, so a mixed text-and-image message is no longer mutated in transit (#253).
+- Restored `scripts/codex-smoke.sh`, which could not launch after #252 made the Codex launcher require the gateway
+  model catalog: the replay server served no `/v1/models`, so the launcher failed with
+  `the gateway model catalog ... returned HTTP 404 Not Found` (#253).
 - Resolved Codex image capabilities consistently: the HTTP model catalog and both launcher modes
   now advertise the same resolved `input_modalities`, so a vision-capable model no longer has image
   content stripped client-side because an isolated catalog hardcoded `["text"]`. Existing persistent

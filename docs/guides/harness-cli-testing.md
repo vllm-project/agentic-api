@@ -31,8 +31,12 @@ while verifying [issue #190](https://github.com/vllm-project/agentic-api/issues/
 
 CI pins Claude Code 2.1.245 and Codex 0.149.1 and runs both real CLIs through the attach commands against recorded
 Qwen/vLLM streams. The Claude job verifies a gateway-owned web-search round trip; the Codex job verifies a completed
-Responses answer. Run the same checks locally with `bash scripts/claude-code-smoke.sh` and
-`bash scripts/codex-smoke.sh` after building both binaries with `cargo build -p agentic-server --bins`.
+Responses answer and that a PNG attached with `codex exec --image` reaches the gateway byte for byte. Run the same
+checks locally with `bash scripts/claude-code-smoke.sh` and `bash scripts/codex-smoke.sh` after building both binaries
+with `cargo build -p agentic-server --bins`.
+
+Neither job runs a model. To check that a real vision model renders what the gateway delivered, follow
+[Verifying image support against a live vision model](vision-model-verification.md).
 
 ## CLI behavior worth knowing
 
