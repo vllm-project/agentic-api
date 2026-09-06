@@ -104,6 +104,8 @@ struct RelayedStreamValidator {
 struct ActiveItem {
     id: String,
     item_type: String,
+    call_id: Option<String>,
+    call_id_changed: bool,
 }
 
 impl RelayedStreamValidator {
@@ -149,6 +151,8 @@ impl RelayedStreamValidator {
                     ActiveItem {
                         id: item_id.to_owned(),
                         item_type: item_type.to_owned(),
+                        call_id: item_call_id(item, item_type).map(str::to_owned),
+                        call_id_changed: false,
                     },
                 );
             }
@@ -162,6 +166,13 @@ impl RelayedStreamValidator {
                 OutputItem::deserialize(item).map_err(|error| {
                     ExecutorError::InvalidRequest(format!("upstream stream output item is invalid: {error}"))
                 })?;
+                self.observe_active_call_id(
+                    output_index,
+                    item_id,
+                    item_type,
+                    item_call_id(item, item_type),
+                    &event_name,
+                )?;
                 self.finish_item(output_index, item_id, item_type, &event_name)?;
             }
             SSEEventType::Other => self.require_in_progress(&event_name)?,
@@ -169,8 +180,21 @@ impl RelayedStreamValidator {
                 self.require_in_progress(&event_name)?;
                 let output_index = required_u32(&event, "output_index", &event_name)?;
                 let item_id = required_str(&event, "item_id", &event_name)?;
-                self.require_active_item(output_index, item_id, expected_item_type(event_type), &event_name)?;
+                let item_type = expected_item_type(event_type);
+                self.require_active_item(output_index, item_id, item_type, &event_name)?;
                 validate_event_fields(&event, event_type, &event_name)?;
+                if matches!(
+                    event_type,
+                    SSEEventType::FunctionCallArgumentsDelta | SSEEventType::FunctionCallArgumentsDone
+                ) {
+                    self.observe_active_call_id(
+                        output_index,
+                        item_id,
+                        item_type,
+                        item_call_id(&event, item_type),
+                        &event_name,
+                    )?;
+                }
             }
         }
         normalize_sse_value(event).map(Some).ok_or_else(|| {
@@ -227,7 +251,7 @@ impl RelayedStreamValidator {
                         "upstream stream ended with unfinished output items".to_owned(),
                     ));
                 }
-                self.validate_terminal_output(response)?;
+                self.validate_terminal_output(response, event_type != SSEEventType::ResponseFailed)?;
                 self.lifecycle = ResponseLifecycle::Terminal;
             }
             _ => {
@@ -276,7 +300,31 @@ impl RelayedStreamValidator {
         Ok(())
     }
 
-    fn validate_terminal_output(&self, response: &Value) -> ExecutorResult<()> {
+    fn observe_active_call_id(
+        &mut self,
+        output_index: u32,
+        item_id: &str,
+        item_type: &str,
+        call_id: Option<&str>,
+        event_name: &str,
+    ) -> ExecutorResult<()> {
+        let Some(active) = self.active_items.get_mut(&output_index) else {
+            return Err(ExecutorError::InvalidRequest(format!(
+                "upstream stream event '{event_name}' has no active output item"
+            )));
+        };
+        if item_id != active.id || item_type != active.item_type {
+            return Err(ExecutorError::InvalidRequest(format!(
+                "upstream stream event '{event_name}' does not match its active output item"
+            )));
+        }
+        if let Some(call_id) = call_id {
+            active.observe_call_id(call_id);
+        }
+        Ok(())
+    }
+
+    fn validate_terminal_output(&mut self, response: &Value, enforce_call_id_stability: bool) -> ExecutorResult<()> {
         let output = response
             .get("output")
             .and_then(Value::as_array)
@@ -293,7 +341,7 @@ impl RelayedStreamValidator {
             let item_id = required_str(item, "id", "terminal output item")?;
             let item_type = required_str(item, "type", "terminal output item")?;
             ensure_supported_output_item_type(item_type)?;
-            let Some(completed) = self.completed_items.get(&output_index) else {
+            let Some(completed) = self.completed_items.get_mut(&output_index) else {
                 return Err(ExecutorError::InvalidRequest(
                     "terminal upstream response output does not match completed item events".to_owned(),
                 ));
@@ -303,9 +351,34 @@ impl RelayedStreamValidator {
                     "terminal upstream response output does not match completed item events".to_owned(),
                 ));
             }
+            if let Some(call_id) = item_call_id(item, item_type) {
+                completed.observe_call_id(call_id);
+            }
+            if enforce_call_id_stability && completed.call_id_changed {
+                return Err(ExecutorError::InvalidRequest(format!(
+                    "upstream stream changes 'call_id' for output[{output_index}]"
+                )));
+            }
         }
         Ok(())
     }
+}
+
+impl ActiveItem {
+    fn observe_call_id(&mut self, call_id: &str) {
+        match self.call_id.as_deref() {
+            Some(first) if first != call_id => self.call_id_changed = true,
+            None => self.call_id = Some(call_id.to_owned()),
+            Some(_) => {}
+        }
+    }
+}
+
+fn item_call_id<'a>(item: &'a Value, item_type: &str) -> Option<&'a str> {
+    if !matches!(item_type, "function_call" | "custom_tool_call") {
+        return None;
+    }
+    item.get("call_id")?.as_str().filter(|call_id| !call_id.is_empty())
 }
 
 fn ensure_supported_output_item_type(item_type: &str) -> ExecutorResult<()> {
