@@ -204,6 +204,7 @@ pub(crate) async fn compact_items(
         response_id: uuid7_str("resp_"),
         conversation_id: None,
         conversation_version: None,
+        continuation: None,
     };
     let response = fetch_blocking_payload(&ctx, exec_ctx, auth).await?;
     let summary = completed_summary_text(&response)?;
@@ -254,6 +255,9 @@ pub(crate) async fn maybe_compact_context(
     let (compacted, usage) = compact_items(&model, input, instructions.as_deref(), exec_ctx, auth).await?;
     ctx.enriched_request.input = ResponsesInput::Items(compacted.clone());
     ctx.new_input_items = compacted;
+    if let Some(continuation) = &mut ctx.continuation {
+        continuation.mark_history_replaced();
+    }
     Ok(Some(usage))
 }
 

@@ -24,7 +24,7 @@ use crate::events::EventFrame;
 use crate::executor::error::ExecutorResult;
 use crate::executor::inference::DONE_MARKER;
 use crate::executor::persist::persist_if_needed;
-use crate::executor::rehydrate::{prepare_reasoning_for_vllm, rehydrate_conversation, validate_reasoning_for_vllm};
+use crate::executor::rehydrate::{prepare_reasoning_for_vllm, validate_reasoning_for_vllm};
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::upstream::{emit_deferred_stream_events, fetch_blocking_payload, fetch_stream_payload};
 use crate::tool::{ToolRegistry, mcp};
@@ -176,6 +176,34 @@ fn prepare_initial_reasoning_for_vllm(input: &mut ResponsesInput, round: usize, 
     Ok(())
 }
 
+fn record_round_history(
+    ctx: &mut RequestContext,
+    output_items: &[OutputItem],
+    registry: &ToolRegistry,
+    public_output_count: usize,
+) {
+    // Explicit conversations append public output through their durable handler;
+    // the session lease still serializes execution but must not record it twice.
+    if let Some(continuation) = ctx
+        .continuation
+        .as_mut()
+        .filter(|_| ctx.original_request.conversation_id.is_none())
+    {
+        // The canonical sequence includes reasoning and intermediate messages in
+        // their original positions, followed by this round's tool call outputs.
+        // Discovery records are appended separately from the public response.
+        ctx.new_input_items.extend(
+            output_items
+                .iter()
+                .filter(|item| !matches!(item, OutputItem::McpListTools(_)))
+                .filter_map(OutputItem::to_input_item),
+        );
+        continuation.mark_outputs_recorded(public_output_count);
+    } else {
+        append_gateway_calls_to_new_input(ctx, output_items, registry);
+    }
+}
+
 async fn run_gateway_tool_loop(
     mut ctx: RequestContext,
     exec_ctx: &ExecutionContext,
@@ -243,13 +271,13 @@ async fn run_gateway_tool_loop(
         .await?;
         let public_output = public_output_items(&current_output, &registry, &gateway_results);
         combined_output.extend(public_output);
+        record_round_history(&mut ctx, &current_output, &registry, combined_output.len());
 
         match classify_round(has_client_owned, &gateway_results, round, MAX_GATEWAY_TOOL_ROUNDS) {
             // Client-owned calls (function, custom, or Codex namespace tools)
             // are handed back to the caller. Gateway calls in the same round are
             // still recorded so the returned conversation is complete.
             LoopDecision::RequiresClientAction => {
-                append_gateway_calls_to_new_input(&mut ctx, &current_output, &registry);
                 append_tool_outputs(
                     &mut ctx,
                     gateway_results.into_iter().map(|result| result.input_item).collect(),
@@ -268,7 +296,6 @@ async fn run_gateway_tool_loop(
             // The final round's gateway calls and outputs are recorded so a
             // continuation is not fed a dangling tool call.
             LoopDecision::Incomplete(reason) => {
-                append_gateway_calls_to_new_input(&mut ctx, &current_output, &registry);
                 append_tool_outputs(
                     &mut ctx,
                     gateway_results.into_iter().map(|result| result.input_item).collect(),
@@ -282,7 +309,6 @@ async fn run_gateway_tool_loop(
             LoopDecision::Continue => {
                 ctx.enriched_request.tool_choice = Some(ToolChoice::Auto);
                 append_output_items_to_input(&mut ctx.enriched_request.input, &current_output);
-                append_gateway_calls_to_new_input(&mut ctx, &current_output, &registry);
                 append_tool_outputs(
                     &mut ctx,
                     gateway_results.into_iter().map(|result| result.input_item).collect(),
@@ -312,6 +338,9 @@ async fn run_compaction_trigger(
         unreachable!("compact_items always appends a compaction item");
     };
     ctx.new_input_items = compacted;
+    if let Some(continuation) = &mut ctx.continuation {
+        continuation.mark_history_replaced();
+    }
     let mut payload = ResponsePayload {
         id: ctx.response_id.clone(),
         object: "response".to_owned(),
@@ -572,6 +601,7 @@ pub struct ExecuteRequest {
     payload: RequestPayload,
     exec_ctx: Arc<ExecutionContext>,
     client_auth: Option<String>,
+    continuation: Option<super::session::ResponseContinuation>,
 }
 
 impl ExecuteRequest {
@@ -581,6 +611,7 @@ impl ExecuteRequest {
             payload,
             exec_ctx,
             client_auth: None,
+            continuation: None,
         }
     }
 
@@ -589,6 +620,15 @@ impl ExecuteRequest {
     pub fn with_auth(mut self, token: Option<String>) -> Self {
         self.client_auth = token;
         self
+    }
+
+    /// Retain this turn's continuation state in the supplied serial session.
+    ///
+    /// # Errors
+    /// Returns an error when the session is busy or closed.
+    pub fn with_session(mut self, session: &super::ResponseSession) -> ExecutorResult<Self> {
+        self.continuation = Some(session.begin(self.payload.previous_response_id.as_deref())?);
+        Ok(self)
     }
 
     /// Execute one stateful conversation turn.
@@ -609,7 +649,8 @@ impl ExecuteRequest {
             tools = self.payload.tools.as_ref().map_or(0, Vec::len),
             "executor received responses request"
         );
-        let ctx = rehydrate_conversation(self.payload, &self.exec_ctx).await?;
+        let ctx =
+            super::rehydrate::rehydrate_with_continuation(self.payload, &self.exec_ctx, self.continuation).await?;
         if !ctx.enriched_request.input.has_compaction_trigger() {
             validate_reasoning_for_vllm(&ctx.enriched_request.input)?;
         }

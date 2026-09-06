@@ -78,6 +78,10 @@ pub enum ExecutorError {
     #[error("{entity} not found: {id}")]
     NotFound { entity: String, id: String },
 
+    /// A response session cannot resolve the requested continuation checkpoint.
+    #[error("Previous response with id '{id}' not found.")]
+    PreviousResponseNotFound { id: String },
+
     #[error("invalid request: {0}")]
     InvalidRequest(String),
 
@@ -121,6 +125,7 @@ impl ExecutorError {
             Self::ConversationLocked { .. }
             | Self::Tool(ToolError::Config(_) | ToolError::MissingOutput { .. })
             | Self::InvalidRequest(_)
+            | Self::PreviousResponseNotFound { .. }
             | Self::JsonError(_) => StatusCode::BAD_REQUEST,
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
@@ -137,6 +142,7 @@ impl ExecutorError {
             Self::ConversationLocked { .. }
             | Self::Tool(ToolError::Config(_) | ToolError::MissingOutput { .. })
             | Self::InvalidRequest(_)
+            | Self::PreviousResponseNotFound { .. }
             | Self::ParseError(_)
             | Self::JsonError(_)
             | Self::PayloadTooLarge(_) => "invalid_request_error",
@@ -153,6 +159,7 @@ impl ExecutorError {
     pub fn error_code(&self) -> &'static str {
         match self.client_visible_error() {
             Self::ConversationLocked { .. } => "conversation_locked",
+            Self::PreviousResponseNotFound { .. } => "previous_response_not_found",
             Self::Conflict(_) => "response_already_stored",
             Self::PayloadTooLarge(_) => "body_too_large",
             other => other.error_type(),
@@ -164,6 +171,7 @@ impl ExecutorError {
     pub fn error_param(&self) -> Option<&'static str> {
         match self.client_visible_error() {
             Self::ConversationLocked { .. } => Some("conversation"),
+            Self::PreviousResponseNotFound { .. } => Some("previous_response_id"),
             Self::Tool(ToolError::MissingOutput { .. }) => Some("input"),
             _ => None,
         }
@@ -242,6 +250,22 @@ mod tests {
         let storage_err = StorageError::NotConfigured;
         let exec_err = ExecutorError::from(storage_err);
         assert!(exec_err.to_string().contains("storage error"));
+    }
+
+    #[test]
+    fn previous_response_error_has_the_continuation_envelope() {
+        let error = ExecutorError::PreviousResponseNotFound {
+            id: "resp_missing".to_owned(),
+        };
+        assert_eq!(error.http_status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&error.into_response_body()).unwrap(),
+            serde_json::json!({"error": {
+                "message": "Previous response with id 'resp_missing' not found.",
+                "type": "invalid_request_error", "code": "previous_response_not_found",
+                "param": "previous_response_id"
+            }})
+        );
     }
 
     #[test]

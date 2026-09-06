@@ -687,6 +687,7 @@ async fn test_previous_response_id_persists_inherited_tools_and_choice() {
         response_id: "resp_lookup".into(),
         conversation_id: None,
         conversation_version: None,
+        continuation: None,
     };
 
     let stored = fixture
@@ -1109,6 +1110,7 @@ fn lookup_context(previous_response_id: Option<String>, conversation_id: Option<
         response_id: "resp_lookup".to_owned(),
         conversation_id: None,
         conversation_version: None,
+        continuation: None,
     }
 }
 
