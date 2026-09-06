@@ -13,6 +13,7 @@ use super::input::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct OutputTextContent {
     #[serde(rename = "type")]
     pub type_: String,
@@ -32,6 +33,7 @@ impl OutputTextContent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct OutputMessage {
     pub id: String,
     pub role: String,
@@ -84,6 +86,7 @@ impl From<OutputMessage> for InputMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct FunctionToolCall {
     #[serde(default = "default_function_call_id")]
     #[serde(deserialize_with = "deserialize_function_call_id")]
@@ -106,6 +109,7 @@ pub struct FunctionToolCall {
 ///
 /// `input` is opaque text and must not be parsed as function-call JSON.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CustomToolCall {
     #[serde(default)]
     pub id: String,
@@ -219,6 +223,7 @@ impl TryFrom<&EventPayload> for CompactionItem {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum GatewayCallStatus {
     InProgress,
@@ -240,6 +245,7 @@ impl GatewayCallStatus {
 pub type WebSearchCallStatus = GatewayCallStatus;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum McpCallStatus {
     InProgress,
@@ -260,6 +266,7 @@ impl From<GatewayCallStatus> for McpCallStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct WebSearchSource {
     pub url: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -267,6 +274,7 @@ pub struct WebSearchSource {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct WebSearchActionSearch {
     #[serde(skip, default = "default_web_search_action_search_type")]
     pub type_: String,
@@ -306,12 +314,14 @@ impl WebSearchActionSearch {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct WebSearchActionOpenPage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct WebSearchActionFindInPage {
     pub pattern: String,
     pub url: String,
@@ -324,6 +334,43 @@ pub enum WebSearchAction {
     Search(WebSearchActionSearch),
     OpenPage(WebSearchActionOpenPage),
     FindInPage(WebSearchActionFindInPage),
+}
+
+#[cfg(feature = "openapi")]
+impl utoipa::PartialSchema for WebSearchAction {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::Ref;
+        use utoipa::openapi::schema::{AllOfBuilder, ObjectBuilder, OneOfBuilder, SchemaType, Type};
+
+        fn tagged(type_value: &str, schema: &str) -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+            AllOfBuilder::new()
+                .item(
+                    ObjectBuilder::new()
+                        .property(
+                            "type",
+                            ObjectBuilder::new()
+                                .schema_type(SchemaType::new(Type::String))
+                                .enum_values(Some([type_value])),
+                        )
+                        .required("type"),
+                )
+                .item(Ref::from_schema_name(schema))
+                .into()
+        }
+
+        OneOfBuilder::new()
+            .discriminator(Some(utoipa::openapi::schema::Discriminator::new("type")))
+            .item(tagged("search", "WebSearchActionSearch"))
+            .item(tagged("open_page", "WebSearchActionOpenPage"))
+            .item(tagged("find_in_page", "WebSearchActionFindInPage"))
+            .into()
+    }
+}
+#[cfg(feature = "openapi")]
+impl utoipa::ToSchema for WebSearchAction {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("WebSearchAction")
+    }
 }
 
 impl WebSearchAction {
@@ -346,6 +393,7 @@ impl WebSearchAction {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct WebSearchCall {
     pub id: String,
     pub status: WebSearchCallStatus,
@@ -380,6 +428,31 @@ pub enum McpCallError {
     Unknown(Value),
 }
 
+#[cfg(feature = "openapi")]
+impl utoipa::PartialSchema for McpCallError {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        utoipa::openapi::schema::OneOfBuilder::new()
+            .item(
+                utoipa::openapi::ObjectBuilder::new().schema_type(utoipa::openapi::schema::SchemaType::new(
+                    utoipa::openapi::schema::Type::String,
+                )),
+            )
+            .item(utoipa::openapi::Ref::from_schema_name("McpToolExecutionError"))
+            .item(
+                utoipa::openapi::ObjectBuilder::new().schema_type(utoipa::openapi::schema::SchemaType::new(
+                    utoipa::openapi::schema::Type::Object,
+                )),
+            )
+            .into()
+    }
+}
+#[cfg(feature = "openapi")]
+impl utoipa::ToSchema for McpCallError {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("McpCallError")
+    }
+}
+
 impl McpCallError {
     #[must_use]
     pub fn tool_execution(text: impl Into<String>) -> Self {
@@ -396,6 +469,7 @@ impl McpCallError {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct McpToolExecutionError {
     #[serde(rename = "type")]
     pub type_: String,
@@ -403,6 +477,7 @@ pub struct McpToolExecutionError {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct McpToolExecutionErrorContent {
     #[serde(rename = "type")]
     pub type_: String,
@@ -412,6 +487,7 @@ pub struct McpToolExecutionErrorContent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct McpCall {
     pub id: String,
     pub server_label: String,
@@ -449,6 +525,7 @@ impl McpCall {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct McpListTool {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -476,6 +553,7 @@ impl McpListTool {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct McpListTools {
     pub id: String,
     pub server_label: String,
@@ -537,6 +615,7 @@ impl TryFrom<&EventPayload> for McpCall {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ReasoningTextContent {
     #[serde(rename = "type")]
     pub type_: String,
@@ -553,6 +632,7 @@ impl ReasoningTextContent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ReasoningOutput {
     #[serde(default)]
     pub id: String,
@@ -820,6 +900,48 @@ pub enum OutputItem {
     Compaction(CompactionItem),
     #[serde(other)]
     Unknown,
+}
+
+#[cfg(feature = "openapi")]
+impl utoipa::PartialSchema for OutputItem {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::Ref;
+        use utoipa::openapi::schema::{AllOfBuilder, ObjectBuilder, OneOfBuilder, SchemaType, Type};
+
+        fn tagged(type_value: &str, schema: &str) -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+            AllOfBuilder::new()
+                .item(
+                    ObjectBuilder::new()
+                        .property(
+                            "type",
+                            ObjectBuilder::new()
+                                .schema_type(SchemaType::new(Type::String))
+                                .enum_values(Some([type_value])),
+                        )
+                        .required("type"),
+                )
+                .item(Ref::from_schema_name(schema))
+                .into()
+        }
+
+        OneOfBuilder::new()
+            .discriminator(Some(utoipa::openapi::schema::Discriminator::new("type")))
+            .item(tagged("message", "OutputMessage"))
+            .item(tagged("function_call", "FunctionToolCall"))
+            .item(tagged("custom_tool_call", "CustomToolCall"))
+            .item(tagged("web_search_call", "WebSearchCall"))
+            .item(tagged("mcp_call", "McpCall"))
+            .item(tagged("mcp_list_tools", "McpListTools"))
+            .item(tagged("reasoning", "ReasoningOutput"))
+            .item(tagged("compaction", "CompactionItem"))
+            .into()
+    }
+}
+#[cfg(feature = "openapi")]
+impl utoipa::ToSchema for OutputItem {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("OutputItem")
+    }
 }
 
 impl OutputItem {
