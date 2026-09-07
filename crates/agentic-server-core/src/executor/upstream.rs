@@ -375,7 +375,7 @@ impl ActiveItem {
 }
 
 fn item_call_id<'a>(item: &'a Value, item_type: &str) -> Option<&'a str> {
-    if !matches!(item_type, "function_call" | "custom_tool_call") {
+    if !matches!(item_type, "function_call" | "custom_tool_call" | "shell_call") {
         return None;
     }
     item.get("call_id")?.as_str().filter(|call_id| !call_id.is_empty())
@@ -387,6 +387,7 @@ fn ensure_supported_output_item_type(item_type: &str) -> ExecutorResult<()> {
         "message"
             | "function_call"
             | "custom_tool_call"
+            | "shell_call"
             | "web_search_call"
             | "mcp_call"
             | "mcp_list_tools"

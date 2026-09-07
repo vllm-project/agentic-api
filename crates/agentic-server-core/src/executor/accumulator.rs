@@ -490,7 +490,7 @@ impl ResponseAccumulator {
             SSEItemType::Compaction => CompactionItem::try_from(payload)
                 .ok()
                 .map(|item| InFlight::Compaction { item }),
-            SSEItemType::WebSearchCall => None,
+            SSEItemType::WebSearchCall | SSEItemType::ShellCall => None,
             SSEItemType::McpCall => McpCall::try_from(payload).ok().map(|item| InFlight::McpCall { item }),
             SSEItemType::McpListTools => McpListTools::try_from(payload)
                 .ok()
@@ -575,6 +575,7 @@ impl ResponseAccumulator {
             mut output_item @ (OutputItem::Reasoning(_)
             | OutputItem::FunctionCall(_)
             | OutputItem::CustomToolCall(_)
+            | OutputItem::ShellCall(_)
             | OutputItem::WebSearchCall(_)
             | OutputItem::McpCall(_)
             | OutputItem::McpListTools(_)

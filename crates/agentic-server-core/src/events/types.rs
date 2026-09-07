@@ -12,6 +12,7 @@ pub enum SSEItemType {
     WebSearchCall,
     McpCall,
     McpListTools,
+    ShellCall,
     Compaction,
     Message,
 }
@@ -26,6 +27,7 @@ impl SSEItemType {
             Self::WebSearchCall => "web_search_call",
             Self::McpCall => "mcp_call",
             Self::McpListTools => "mcp_list_tools",
+            Self::ShellCall => "shell_call",
             Self::Compaction => "compaction",
             Self::Message => "message",
         }
@@ -41,6 +43,7 @@ impl From<&str> for SSEItemType {
             "web_search_call" => Self::WebSearchCall,
             "mcp_call" => Self::McpCall,
             "mcp_list_tools" => Self::McpListTools,
+            "shell_call" => Self::ShellCall,
             "compaction" => Self::Compaction,
             _ => Self::Message,
         }
