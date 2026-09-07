@@ -85,6 +85,7 @@ wait_until_ready() {
 
 "$PYTHON_BIN" scripts/claude_code_replay_server.py serve \
   --cassette "$CASSETTE" \
+  --model "$MODEL" \
   --capture "$capture_path" \
   --port "$REPLAY_PORT" \
   >"$replay_log" 2>&1 &
