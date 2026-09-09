@@ -279,7 +279,7 @@ fn bounded_sse_stream(response: http_client::Response) -> BoxStream<'static, Res
             yield Ok::<_, std::io::Error>(chunk);
         }
     };
-    SseStream::from_byte_stream(bytes).boxed()
+    SseStream::from_bytes_stream(bytes).boxed()
 }
 
 #[derive(Default)]

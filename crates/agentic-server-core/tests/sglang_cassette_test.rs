@@ -5,10 +5,10 @@ mod support;
 
 use provider::{Provider, run_function_tool_call, run_stateful_two_turn};
 const PROVIDER: Provider = Provider {
-    directory: "dynamo",
-    prefix: "dynamo",
-    model_slug: "openai-gpt-oss-20b",
-    version: None,
+    directory: "sglang",
+    prefix: "sglang",
+    model_slug: "Qwen-Qwen3-8B",
+    version: Some("0.5.18"),
 };
 
 #[tokio::test]

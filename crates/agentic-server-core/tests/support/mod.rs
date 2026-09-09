@@ -100,14 +100,18 @@ pub fn responses_turns(cassette: &Cassette) -> Vec<&Turn> {
 
 /// Extract the expected output text from a cassette turn.
 ///
-/// - Non-streaming: `body.output[0].content[0].text`
+/// - Non-streaming: concatenate message output text, excluding reasoning items.
 /// - Streaming: concatenate all `response.output_text.delta` values
 pub fn expected_text(turn: &Turn) -> String {
     if let Some(body) = &turn.response.body {
-        return body["output"][0]["content"][0]["text"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
+        return body["output"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|item| item["type"] == "message")
+            .flat_map(|item| item["content"].as_array().into_iter().flatten())
+            .filter_map(|part| part["text"].as_str())
+            .collect();
     }
     if let Some(sse) = &turn.response.sse {
         let mut out = String::new();

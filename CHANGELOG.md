@@ -26,6 +26,8 @@ All notable changes to Agentic API are documented here.
   recorded streaming, non-streaming, and WebSocket coverage (#186).
 - Added concurrent Responses WebSocket multiplexing with per-request `stream_id` routing, FIFO ordering within each
   stream, and bounded concurrency across streams (#240).
+- Added compile-time OpenAPI 3.1 schema generation and checked-in schema validation for the HTTP API (#229).
+- Added pinned SGLang conformance recordings, replay coverage, and launch and recording guidance (#267).
 
 ### Changed
 
@@ -39,6 +41,7 @@ All notable changes to Agentic API are documented here.
 - Clarified client-executed and gateway-executed tool roles in Codex integration documentation (#230).
 - Documented executor streaming ownership and validation boundaries, with a repository review skill for enforcing the
   architecture (#246).
+- Updated the execution architecture documentation to match the current scheduler and llm-d backend (#270).
 - Preserved the typed `ignore_eos` extension when forwarding Responses requests to vLLM (#268).
 
 ### Fixed
@@ -65,6 +68,12 @@ All notable changes to Agentic API are documented here.
 - Enforced CLI readiness deadlines across probes and retry sleeps, including stalled and late-success cases (#265).
 - Cleaned up model subprocesses when startup is interrupted or fails during readiness and database initialization
   (#266).
+- Preserved upstream error headers and content types on non-streaming Responses errors (#250, #262).
+- Accepted upstream SSE `data:` fields with or without an optional separating space (#269).
+- Rejected unsupported message file content on typed Responses paths instead of silently dropping it (#258).
+- Excluded image bytes from compaction token estimates while continuing to count surrounding text (#255, #259).
+- Treated negative upstream `sequence_number` sentinels as unspecified while preserving otherwise valid streaming
+  events (#267).
 - Made web-search action construction fallible so empty query lists return a typed error instead of panicking (#230).
 
 ### Testing
@@ -73,6 +82,7 @@ All notable changes to Agentic API are documented here.
   cassette validator, Python package and wheel test suites, and dedicated CI jobs for the new release paths.
 - Strengthened multi-round cassette assertions for public stream ordering and stabilized Python readiness retry coverage
   across supported interpreter versions (#242, #247).
+- Added regression coverage for structured `input_text` items that omit an explicit message type (#150, #248).
 
 ## [0.5.0] - 2026-08-25
 
