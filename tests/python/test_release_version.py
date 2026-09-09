@@ -95,6 +95,13 @@ def test_crate_release_dry_run_packages_server_against_the_local_core() -> None:
     assert (REPO_ROOT / "target" / "package" / f"agentic-server-{WORKSPACE_VERSION}.crate").is_file()
 
 
+def test_crate_release_published_version_checks_query_crates_io() -> None:
+    workflow = CRATE_RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    published_check = next(block for block in _workflow_run_blocks(workflow) if "is already published" in block)
+
+    assert published_check.count("cargo info --registry crates-io") == 2
+
+
 def test_python_workflows_pin_build_tools_and_manylinux_artifact_contract() -> None:
     release_workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
     python_workflow = PYTHON_WORKFLOW.read_text(encoding="utf-8")
