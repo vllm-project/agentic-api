@@ -2,7 +2,7 @@
 
 All notable changes to Agentic API are documented here.
 
-## [0.6.0] - 2026-09-01
+## [0.6.0] - 2026-09-09
 
 ### Added
 
@@ -22,6 +22,10 @@ All notable changes to Agentic API are documented here.
 - Added a benchmark suite comparing WebSocket, HTTP/SSE, and HTTP/JSON Agentic API flows with direct vLLM across tool
   loops, function selection, and stateful conversation workloads (#185).
 - Added a repository-local pull request review skill with explicit wire-format and replay-cassette checks (#228).
+- Added client tool search support with typed tool discovery, deferred tool materialization, stateful continuation, and
+  recorded streaming, non-streaming, and WebSocket coverage (#186).
+- Added concurrent Responses WebSocket multiplexing with per-request `stream_id` routing, FIFO ordering within each
+  stream, and bounded concurrency across streams (#240).
 
 ### Changed
 
@@ -33,6 +37,9 @@ All notable changes to Agentic API are documented here.
   input, preventing repeated public discovery items on later turns (#214).
 - Improved Rust and container CI caching, test setup, and path filtering to shorten release validation (#205).
 - Clarified client-executed and gateway-executed tool roles in Codex integration documentation (#230).
+- Documented executor streaming ownership and validation boundaries, with a repository review skill for enforcing the
+  architecture (#246).
+- Preserved the typed `ignore_eos` extension when forwarding Responses requests to vLLM (#268).
 
 ### Fixed
 
@@ -47,14 +54,25 @@ All notable changes to Agentic API are documented here.
 - Hardened split execution with atomic duplicate persistence, strict relayed-response validation, independent secret
   validation, bounded hydrate and persist payloads, stable error envelopes, and graceful shutdown error propagation
   (#235).
-- Forwarded Responses `text` generation settings, including structured output formats and verbosity, through typed
-  HTTP, WebSocket, and gateway-tool paths (#231).
+- Rejected relayed responses with missing, reused, or unstable tool call IDs before persistence, while preserving the
+  reserved response ID for corrected retries (#237).
+- Aligned relayed SSE validation with provider-compatible event shapes while continuing to reject inconsistent
+  lifecycles and terminal items (#236).
+- Forwarded Responses `text` generation settings through typed execution paths while preserving provider-specific
+  stateless proxy payloads and JSON Schema property order (#231, #234).
+- Bounded WebSocket queues, response data, gateway tool results, and MCP discovery and transport payloads so concurrent
+  response streams cannot grow memory without limit (#240).
+- Enforced CLI readiness deadlines across probes and retry sleeps, including stalled and late-success cases (#265).
+- Cleaned up model subprocesses when startup is interrupted or fails during readiness and database initialization
+  (#266).
 - Made web-search action construction fallible so empty query lists return a typed error instead of panicking (#230).
 
 ### Testing
 
 - Added matched OpenAI and gateway cassettes for reasoning and parallel tool calling, replay tests for Dynamo, a generic
   cassette validator, Python package and wheel test suites, and dedicated CI jobs for the new release paths.
+- Strengthened multi-round cassette assertions for public stream ordering and stabilized Python readiness retry coverage
+  across supported interpreter versions (#242, #247).
 
 ## [0.5.0] - 2026-08-25
 

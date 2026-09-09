@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use super::io::{
     FunctionTool, InputItem, InputMessage, InputMessageContent, OutputItem, ResponseUsage, ResponsesInput, ToolChoice,
@@ -36,7 +36,7 @@ pub struct ResponseTextConfig {
     /// Unmodeled extension fields preserved for upstream compatibility.
     #[serde(default)]
     #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
+    pub extra: Map<String, Value>,
 }
 
 /// Output format requested through [`ResponseTextConfig`].
@@ -48,13 +48,13 @@ pub enum ResponseTextFormat {
         /// Unmodeled extension fields preserved for upstream compatibility.
         #[serde(default)]
         #[serde(flatten)]
-        extra: HashMap<String, Value>,
+        extra: Map<String, Value>,
     },
     JsonObject {
         /// Unmodeled extension fields preserved for upstream compatibility.
         #[serde(default)]
         #[serde(flatten)]
-        extra: HashMap<String, Value>,
+        extra: Map<String, Value>,
     },
     JsonSchema {
         name: String,
@@ -66,12 +66,13 @@ pub enum ResponseTextFormat {
         /// Unmodeled extension fields preserved for upstream compatibility.
         #[serde(default)]
         #[serde(flatten)]
-        extra: HashMap<String, Value>,
+        extra: Map<String, Value>,
     },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RequestPayload {
+#[serde(bound(serialize = "Box<T>: Serialize", deserialize = "Box<T>: Deserialize<'de>"))]
+pub struct RequestPayload<T: ?Sized = ResponseTextConfig> {
     pub model: String,
     pub input: ResponsesInput,
     pub instructions: Option<String>,
@@ -88,10 +89,13 @@ pub struct RequestPayload {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<Box<ReasoningConfig>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub text: Option<Box<ResponseTextConfig>>,
+    pub text: Option<Box<T>>,
     pub temperature: Option<f64>,
     pub top_p: Option<f64>,
     pub max_output_tokens: Option<u32>,
+    /// vLLM extension: continue generation past the end-of-sequence token.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ignore_eos: Option<bool>,
     pub truncation: Option<String>,
     pub metadata: Option<Value>,
     pub parallel_tool_calls: Option<bool>,
@@ -135,6 +139,8 @@ pub struct UpstreamRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_output_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub ignore_eos: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub truncation: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<&'a Value>,
@@ -173,7 +179,7 @@ where
         .serialize(serializer)
 }
 
-impl RequestPayload {
+impl<T: ?Sized> RequestPayload<T> {
     /// Names the feature in this request that only the in-process executor
     /// implements, if any — neither the passthrough proxy nor split execution
     /// can serve it.
@@ -202,6 +208,45 @@ impl RequestPayload {
         None
     }
 
+    /// Transform the text configuration while moving all other request fields
+    /// without reparsing or reallocating them.
+    ///
+    /// # Errors
+    ///
+    /// Returns the mapping function's error when the text configuration cannot
+    /// be transformed.
+    pub fn try_map_text<U: ?Sized, E>(
+        self,
+        map: impl FnOnce(Box<T>) -> Result<Box<U>, E>,
+    ) -> Result<RequestPayload<U>, E> {
+        let text = self.text.map(map).transpose()?;
+        Ok(RequestPayload {
+            model: self.model,
+            input: self.input,
+            instructions: self.instructions,
+            previous_response_id: self.previous_response_id,
+            conversation_id: self.conversation_id,
+            tools: self.tools,
+            tool_choice: self.tool_choice,
+            stream: self.stream,
+            store: self.store,
+            include: self.include,
+            reasoning: self.reasoning,
+            text,
+            temperature: self.temperature,
+            top_p: self.top_p,
+            max_output_tokens: self.max_output_tokens,
+            ignore_eos: self.ignore_eos,
+            truncation: self.truncation,
+            metadata: self.metadata,
+            parallel_tool_calls: self.parallel_tool_calls,
+            cache_salt: self.cache_salt,
+            context_management: self.context_management,
+        })
+    }
+}
+
+impl RequestPayload {
     /// Construct an `UpstreamRequest` suitable for forwarding to vLLM.
     ///
     /// Codex `namespace` tools' members are first renamed to their flat,
@@ -244,11 +289,12 @@ impl RequestPayload {
         });
         let tools = tools.filter(|tools| !tools.is_empty());
         let namespace_map = CodexNamespaceHandler.build_namespace_map(self.tools.as_deref())?;
+        let input = CodexNamespaceHandler.resolve_input(namespace_map.as_ref(), self.input.model_input());
         let tool_choice = CodexNamespaceHandler.resolve_tool_choice(namespace_map.as_ref(), self.tool_choice.as_ref());
         CustomHandler::validate_tool_choice(self.tools.as_deref(), &tool_choice)?;
         Ok(UpstreamRequest {
             model: &self.model,
-            input: self.input.model_input(),
+            input,
             stream,
             instructions: self.instructions.as_deref(),
             tools,
@@ -259,6 +305,7 @@ impl RequestPayload {
             temperature: self.temperature,
             top_p: self.top_p,
             max_output_tokens: self.max_output_tokens,
+            ignore_eos: self.ignore_eos,
             truncation: self.truncation.as_deref(),
             metadata: self.metadata.as_ref(),
             parallel_tool_calls,
@@ -321,6 +368,10 @@ pub struct ResponsePayload {
     pub previous_response_id: Option<String>,
     pub conversation_id: Option<String>,
     pub instructions: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<ResponsesTool>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<ToolChoice>,
 }
 
 impl ResponsePayload {
@@ -411,6 +462,43 @@ impl From<ResponsesInput> for Vec<InputItem> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn request_payload_preserves_ignore_eos_upstream() {
+        for ignore_eos in [None, Some(false), Some(true)] {
+            let mut request = serde_json::json!({"model": "test-model", "input": "hello"});
+            if let Some(value) = ignore_eos {
+                request["ignore_eos"] = value.into();
+            }
+            let payload: RequestPayload = serde_json::from_value(request).expect("request should deserialize");
+            let payload = payload
+                .try_map_text(Ok::<_, std::convert::Infallible>)
+                .expect("text mapping should preserve request fields");
+            assert_eq!(payload.ignore_eos, ignore_eos);
+
+            for stream in [false, true] {
+                let upstream =
+                    serde_json::to_value(payload.to_upstream_request(stream).expect("request should normalize"))
+                        .expect("upstream request should serialize");
+                assert_eq!(
+                    upstream.get("ignore_eos"),
+                    ignore_eos.map(serde_json::Value::Bool).as_ref()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn request_payload_rejects_non_boolean_ignore_eos() {
+        for value in [serde_json::json!("true"), serde_json::json!(1)] {
+            assert!(
+                serde_json::from_value::<RequestPayload>(serde_json::json!({
+                    "model": "test-model", "input": "hello", "ignore_eos": value
+                }))
+                .is_err()
+            );
+        }
+    }
 
     #[test]
     fn compact_request_accepts_codex_compatibility_fields() {
@@ -568,6 +656,46 @@ mod tests {
 
             assert!(parsed.is_err(), "malformed text configuration should fail: {text}");
         }
+    }
+
+    #[test]
+    fn text_configuration_preserves_extension_field_order() {
+        let config: ResponseTextConfig = serde_json::from_str(
+            r#"{
+                "format": {
+                    "type": "json_schema",
+                    "name": "ordered",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "second": {"type": "string"},
+                            "first": {"type": "number"}
+                        }
+                    },
+                    "x-format-first": 1,
+                    "x-format-second": 2,
+                    "x-format-third": 3,
+                    "x-format-fourth": 4,
+                    "x-format-fifth": 5,
+                    "x-format-sixth": 6
+                },
+                "verbosity": "low",
+                "x-text-first": 1,
+                "x-text-second": 2,
+                "x-text-third": 3,
+                "x-text-fourth": 4,
+                "x-text-fifth": 5,
+                "x-text-sixth": 6
+            }"#,
+        )
+        .expect("text configuration should deserialize");
+
+        let serialized = serde_json::to_string(&config).expect("text configuration should serialize");
+
+        assert_eq!(
+            serialized,
+            r#"{"format":{"type":"json_schema","name":"ordered","schema":{"type":"object","properties":{"second":{"type":"string"},"first":{"type":"number"}}},"x-format-first":1,"x-format-second":2,"x-format-third":3,"x-format-fourth":4,"x-format-fifth":5,"x-format-sixth":6},"verbosity":"low","x-text-first":1,"x-text-second":2,"x-text-third":3,"x-text-fourth":4,"x-text-fifth":5,"x-text-sixth":6}"#
+        );
     }
 
     #[test]
@@ -1003,6 +1131,8 @@ mod tests {
             previous_response_id: None,
             conversation_id: None,
             instructions: None,
+            tools: None,
+            tool_choice: None,
         };
 
         for (status, expected_type) in [
@@ -1036,6 +1166,8 @@ mod tests {
             previous_response_id: None,
             conversation_id: None,
             instructions: None,
+            tools: None,
+            tool_choice: None,
         };
 
         let chunk = payload.as_created_response_chunk();
