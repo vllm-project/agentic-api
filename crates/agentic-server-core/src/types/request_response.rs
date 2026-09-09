@@ -93,6 +93,9 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig> {
     pub temperature: Option<f64>,
     pub top_p: Option<f64>,
     pub max_output_tokens: Option<u32>,
+    /// vLLM extension: continue generation past the end-of-sequence token.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ignore_eos: Option<bool>,
     pub truncation: Option<String>,
     pub metadata: Option<Value>,
     pub parallel_tool_calls: Option<bool>,
@@ -135,6 +138,8 @@ pub struct UpstreamRequest<'a> {
     pub top_p: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_output_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ignore_eos: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub truncation: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -231,6 +236,7 @@ impl<T: ?Sized> RequestPayload<T> {
             temperature: self.temperature,
             top_p: self.top_p,
             max_output_tokens: self.max_output_tokens,
+            ignore_eos: self.ignore_eos,
             truncation: self.truncation,
             metadata: self.metadata,
             parallel_tool_calls: self.parallel_tool_calls,
@@ -299,6 +305,7 @@ impl RequestPayload {
             temperature: self.temperature,
             top_p: self.top_p,
             max_output_tokens: self.max_output_tokens,
+            ignore_eos: self.ignore_eos,
             truncation: self.truncation.as_deref(),
             metadata: self.metadata.as_ref(),
             parallel_tool_calls,
@@ -455,6 +462,43 @@ impl From<ResponsesInput> for Vec<InputItem> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn request_payload_preserves_ignore_eos_upstream() {
+        for ignore_eos in [None, Some(false), Some(true)] {
+            let mut request = serde_json::json!({"model": "test-model", "input": "hello"});
+            if let Some(value) = ignore_eos {
+                request["ignore_eos"] = value.into();
+            }
+            let payload: RequestPayload = serde_json::from_value(request).expect("request should deserialize");
+            let payload = payload
+                .try_map_text(Ok::<_, std::convert::Infallible>)
+                .expect("text mapping should preserve request fields");
+            assert_eq!(payload.ignore_eos, ignore_eos);
+
+            for stream in [false, true] {
+                let upstream =
+                    serde_json::to_value(payload.to_upstream_request(stream).expect("request should normalize"))
+                        .expect("upstream request should serialize");
+                assert_eq!(
+                    upstream.get("ignore_eos"),
+                    ignore_eos.map(serde_json::Value::Bool).as_ref()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn request_payload_rejects_non_boolean_ignore_eos() {
+        for value in [serde_json::json!("true"), serde_json::json!(1)] {
+            assert!(
+                serde_json::from_value::<RequestPayload>(serde_json::json!({
+                    "model": "test-model", "input": "hello", "ignore_eos": value
+                }))
+                .is_err()
+            );
+        }
+    }
 
     #[test]
     fn compact_request_accepts_codex_compatibility_fields() {

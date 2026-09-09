@@ -156,6 +156,7 @@ fn request_payload(model: String, input: ResponsesInput, instructions: Option<St
         temperature: None,
         top_p: None,
         max_output_tokens: None,
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
