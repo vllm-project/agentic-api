@@ -112,6 +112,7 @@ pub struct FunctionToolCall {
 /// Unlike replay input, execution and status have no serde defaults: response
 /// translation must populate both fields explicitly.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ToolSearchCall {
     #[serde(deserialize_with = "deserialize_non_blank_string")]
     pub id: String,
@@ -986,6 +987,7 @@ impl utoipa::PartialSchema for OutputItem {
             .discriminator(Some(utoipa::openapi::schema::Discriminator::new("type")))
             .item(tagged("message", "OutputMessage"))
             .item(tagged("function_call", "FunctionToolCall"))
+            .item(tagged("tool_search_call", "ToolSearchCall"))
             .item(tagged("custom_tool_call", "CustomToolCall"))
             .item(tagged("web_search_call", "WebSearchCall"))
             .item(tagged("mcp_call", "McpCall"))

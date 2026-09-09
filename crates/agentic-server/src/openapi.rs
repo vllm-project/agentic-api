@@ -40,6 +40,8 @@ use utoipa::OpenApi;
         agentic_core::types::io::InputContent,
         agentic_core::types::io::InputFunctionToolCall,
         agentic_core::types::io::FunctionToolResultMessage,
+        agentic_core::types::io::InputToolSearchCall,
+        agentic_core::types::io::ToolSearchOutputMessage,
         agentic_core::types::io::ToolCallOutput,
         agentic_core::types::io::ToolOutputContent,
         agentic_core::types::io::CompactionItem,
@@ -48,6 +50,7 @@ use utoipa::OpenApi;
         agentic_core::types::io::OutputTextContent,
         agentic_core::types::io::OutputMessage,
         agentic_core::types::io::FunctionToolCall,
+        agentic_core::types::io::ToolSearchCall,
         agentic_core::types::io::CustomToolCall,
         agentic_core::types::io::WebSearchCall,
         agentic_core::types::io::WebSearchAction,
@@ -76,6 +79,9 @@ use utoipa::OpenApi;
         agentic_core::types::event::MessageStatus,
         agentic_core::types::tools::ResponsesTool,
         agentic_core::types::tools::FunctionToolParam,
+        agentic_core::types::tools::ToolSearchToolParam,
+        agentic_core::types::tools::ToolSearchExecution,
+        agentic_core::types::tools::ToolSearchStatus,
         agentic_core::types::tools::CustomToolParam,
         agentic_core::types::tools::McpToolParam,
         agentic_core::types::tools::WebSearchToolParam,
@@ -110,6 +116,7 @@ use utoipa::OpenApi;
         ModelObject,
         CodexModelsResponse,
         CodexModelObject,
+        ModelsListResponse,
         CreateConversationRequest,
         ConversationResponse,
     )),
@@ -228,6 +235,14 @@ pub struct CodexModelsResponse {
 pub struct CodexModelObject {
     pub slug: String,
     pub display_name: String,
+}
+
+/// Model list returned by GET /v1/models.
+#[derive(serde::Serialize, utoipa::ToSchema)]
+#[serde(untagged)]
+pub enum ModelsListResponse {
+    OpenAi(ModelsResponse),
+    Codex(CodexModelsResponse),
 }
 
 /// Request body for POST /v1/conversations.
@@ -375,6 +390,47 @@ mod tests {
         assert!(spec.info.license.is_some(), "info.license should be set");
     }
 
+    #[test]
+    fn models_endpoint_declares_both_json_response_shapes() {
+        let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec must serialize");
+        let response_schema =
+            &spec["paths"]["/v1/models"]["get"]["responses"]["200"]["content"]["application/json"]["schema"];
+
+        assert_eq!(response_schema["$ref"], "#/components/schemas/ModelsListResponse");
+        let alternatives = spec["components"]["schemas"]["ModelsListResponse"]["oneOf"]
+            .as_array()
+            .expect("ModelsListResponse must be a oneOf schema");
+        let refs = alternatives
+            .iter()
+            .filter_map(|schema| schema["$ref"].as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            refs,
+            [
+                "#/components/schemas/ModelsResponse",
+                "#/components/schemas/CodexModelsResponse"
+            ]
+        );
+    }
+
+    #[test]
+    fn conversation_request_body_is_optional() {
+        let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec must serialize");
+        let required = spec["paths"]["/v1/conversations"]["post"]["requestBody"]["required"]
+            .as_bool()
+            .unwrap_or(false);
+
+        assert!(!required, "runtime accepts a missing request body");
+    }
+
+    #[test]
+    fn request_payload_schema_includes_ignore_eos() {
+        let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec must serialize");
+        let ignore_eos = &spec["components"]["schemas"]["RequestPayload"]["properties"]["ignore_eos"];
+
+        assert!(ignore_eos.is_object(), "RequestPayload.ignore_eos is undocumented");
+    }
+
     /// Validates that JSON fixtures representing each tagged-enum variant
     /// pass the hand-written `OpenAPI` schema. Catches schema drift that
     /// structural tests (ref resolution, meta-schema) cannot.
@@ -428,6 +484,7 @@ mod tests {
             "parallel_tool_calls": null,
             "cache_salt": null,
             "context_management": null,
+            "ignore_eos": null,
         });
         validate("RequestPayload", &with_nulls);
         let _: agentic_core::types::request_response::RequestPayload =
@@ -470,6 +527,8 @@ mod tests {
             serde_json::json!({"type": "message", "role": "user", "content": "hello"}),
             serde_json::json!({"type": "function_call", "call_id": "c1", "name": "f", "arguments": "{}"}),
             serde_json::json!({"type": "function_call_output", "call_id": "c1", "output": "ok"}),
+            serde_json::json!({"type": "tool_search_call", "id": "tsc1", "call_id": "c1", "execution": "client", "arguments": {}, "status": "completed"}),
+            serde_json::json!({"type": "tool_search_output", "call_id": "c1", "execution": "client", "status": "completed", "tools": []}),
             serde_json::json!({"type": "custom_tool_call", "id": "ct1", "name": "t", "input": "d"}),
             serde_json::json!({"type": "custom_tool_call_output", "call_id": "c1", "output": "r"}),
             serde_json::json!({"type": "reasoning", "id": "r1", "content": [{"type": "reasoning_text", "text": "think"}]}),
@@ -485,6 +544,7 @@ mod tests {
         let output_items = vec![
             serde_json::json!({"type": "message", "id": "m1", "role": "assistant", "status": "completed"}),
             serde_json::json!({"type": "function_call", "id": "fc1", "call_id": "c1", "name": "f", "arguments": "{}", "status": "completed"}),
+            serde_json::json!({"type": "tool_search_call", "id": "tsc1", "call_id": "c1", "execution": "client", "arguments": {}, "status": "completed"}),
             serde_json::json!({"type": "custom_tool_call", "id": "ct1", "name": "t", "input": "d"}),
             serde_json::json!({"type": "web_search_call", "id": "ws1", "status": "completed", "action": {"type": "search", "query": "q"}}),
             serde_json::json!({"type": "mcp_call", "id": "mc1", "server_label": "s", "name": "n", "arguments": "{}"}),
@@ -516,6 +576,7 @@ mod tests {
         // -- ResponsesTool: every variant --
         let tools = vec![
             serde_json::json!({"type": "function", "name": "f"}),
+            serde_json::json!({"type": "tool_search", "execution": "client"}),
             serde_json::json!({"type": "mcp", "server_label": "s"}),
             serde_json::json!({"type": "web_search_preview"}),
             serde_json::json!({"type": "file_search"}),

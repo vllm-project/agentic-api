@@ -10,7 +10,7 @@ use crate::app::AppState;
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/v1/conversations",
-    request_body = crate::openapi::CreateConversationRequest,
+    request_body = Option<crate::openapi::CreateConversationRequest>,
     responses(
         (status = 200, description = "Conversation created", body = crate::openapi::ConversationResponse),
         (status = 400, description = "Invalid request", body = crate::openapi::ApiErrorResponse),

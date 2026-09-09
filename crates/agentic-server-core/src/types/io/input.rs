@@ -248,6 +248,8 @@ mod openapi_schemas {
                 .item(message_branch)
                 .item(tagged_ref("function_call", "InputFunctionToolCall"))
                 .item(tagged_ref("function_call_output", "FunctionToolResultMessage"))
+                .item(tagged_ref("tool_search_call", "InputToolSearchCall"))
+                .item(tagged_ref("tool_search_output", "ToolSearchOutputMessage"))
                 .item(tagged_ref("custom_tool_call", "CustomToolCall"))
                 .item(tagged_ref("custom_tool_call_output", "CustomToolCallOutputMessage"))
                 .item(tagged_ref("reasoning", "ReasoningOutput"))
@@ -353,6 +355,7 @@ where
 
 /// A public model-generated tool-search call replayed as Responses input.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct InputToolSearchCall {
     #[serde(deserialize_with = "deserialize_non_blank_string")]
     pub id: String,
@@ -384,6 +387,7 @@ impl TryFrom<&ToolSearchCall> for InputToolSearchCall {
 
 /// Client-returned declarations resolving a public tool-search call.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ToolSearchOutputMessage {
     #[serde(deserialize_with = "deserialize_non_blank_string")]
     pub call_id: String,

@@ -170,6 +170,7 @@ pub struct CustomToolParam {
 
 /// Only client-executed tool search is part of the public gateway contract.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ToolSearchExecution {
     #[default]
@@ -179,6 +180,7 @@ pub enum ToolSearchExecution {
 
 /// Lifecycle status of a public tool-search call or output item.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ToolSearchStatus {
     InProgress,
@@ -189,6 +191,7 @@ pub enum ToolSearchStatus {
 
 /// Parameters for a client-executed tool-search declaration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ToolSearchToolParam {
     pub execution: ToolSearchExecution,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -342,6 +345,7 @@ impl utoipa::PartialSchema for ResponsesTool {
         utoipa::openapi::schema::OneOfBuilder::new()
             .discriminator(Some(utoipa::openapi::schema::Discriminator::new("type")))
             .item(tagged("function", "FunctionToolParam"))
+            .item(tagged("tool_search", "ToolSearchToolParam"))
             .item(tagged("mcp", "McpToolParam"))
             .item(
                 AllOfBuilder::new()

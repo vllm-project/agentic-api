@@ -248,8 +248,7 @@ pub struct ModelsParams {
     responses(
         (status = 200, description = "OpenAI model list (default) or Codex catalog (when client_version is set)",
             content(
-                (crate::openapi::ModelsResponse = "application/json"),
-                (crate::openapi::CodexModelsResponse = "application/json"),
+                (crate::openapi::ModelsListResponse = "application/json"),
             )),
         (status = 502, description = "Upstream unavailable", body = crate::openapi::ApiErrorResponse),
     ),

@@ -158,6 +158,7 @@ impl utoipa::PartialSchema for RequestPayload {
             .property("temperature", nullable_num())
             .property("top_p", nullable_num())
             .property("max_output_tokens", nullable_int())
+            .property("ignore_eos", nullable_bool())
             .property("truncation", nullable_str())
             .property(
                 "metadata",
