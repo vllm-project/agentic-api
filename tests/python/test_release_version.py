@@ -47,6 +47,14 @@ def test_release_workflow_keeps_dispatch_version_out_of_shell_source() -> None:
     assert all("${{ inputs.version }}" not in block for block in run_blocks)
 
 
+def test_release_workflow_default_matches_workspace_version() -> None:
+    workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    version_input = re.search(r'(?ms)^      version:\n.*?^        default: "([^"]+)"', workflow)
+
+    assert version_input is not None
+    assert version_input.group(1) == WORKSPACE_VERSION
+
+
 def test_crate_release_dry_run_does_not_resolve_the_unpublished_core_version() -> None:
     workflow = CRATE_RELEASE_WORKFLOW.read_text(encoding="utf-8")
     dry_run_block = next(block for block in _workflow_run_blocks(workflow) if "Would release commit" in block)
