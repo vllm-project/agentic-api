@@ -100,14 +100,18 @@ pub fn responses_turns(cassette: &Cassette) -> Vec<&Turn> {
 
 /// Extract the expected output text from a cassette turn.
 ///
-/// - Non-streaming: `body.output[0].content[0].text`
+/// - Non-streaming: concatenate message output text, excluding reasoning items.
 /// - Streaming: concatenate all `response.output_text.delta` values
 pub fn expected_text(turn: &Turn) -> String {
     if let Some(body) = &turn.response.body {
-        return body["output"][0]["content"][0]["text"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
+        return body["output"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|item| item["type"] == "message")
+            .flat_map(|item| item["content"].as_array().into_iter().flatten())
+            .filter_map(|part| part["text"].as_str())
+            .collect();
     }
     if let Some(sse) = &turn.response.sse {
         let mut out = String::new();
@@ -392,6 +396,76 @@ pub fn text_response(text: &str) -> MockResponse {
     )
 }
 
+pub fn function_call_response(id: &str, call_id: &str, name: &str, arguments: &str) -> MockResponse {
+    MockResponse::Json(
+        serde_json::json!({
+            "id": format!("resp_upstream_{id}"),
+            "object": "response",
+            "created_at": 0,
+            "model": "test-model",
+            "status": "completed",
+            "output": [{
+                "id": id,
+                "type": "function_call",
+                "call_id": call_id,
+                "name": name,
+                "arguments": arguments,
+                "status": "completed"
+            }],
+            "usage": null,
+            "incomplete_details": null,
+            "error": null,
+            "previous_response_id": null,
+            "conversation_id": null,
+            "instructions": null
+        })
+        .to_string(),
+    )
+}
+
+pub fn tool_search_function_declarations(name: &str, description: &str) -> Value {
+    serde_json::json!([
+        {
+            "type": "tool_search",
+            "execution": "client",
+            "description": "Find a tool",
+            "parameters": {"type": "object"}
+        },
+        deferred_function_tool(name, description)
+    ])
+}
+
+pub fn deferred_function_tool(name: &str, description: &str) -> Value {
+    serde_json::json!({
+        "type": "function",
+        "name": name,
+        "description": description,
+        "parameters": {"type": "object"},
+        "defer_loading": true
+    })
+}
+
+pub fn tool_search_output(call_id: &str, name: &str, description: &str) -> Value {
+    serde_json::json!({
+        "type": "tool_search_output",
+        "call_id": call_id,
+        "tools": [deferred_function_tool(name, description)]
+    })
+}
+
+pub fn tool_search_request(
+    input: impl Serialize,
+    tools: Option<Value>,
+    store: bool,
+    previous_response_id: Option<String>,
+    conversation_id: Option<String>,
+) -> RequestPayload {
+    let mut request = make_request(input, store, false, previous_response_id, conversation_id);
+    request.tools = tools.map(|tools| serde_json::from_value(tools).expect("valid tool-search declarations"));
+    request.parallel_tool_calls = Some(false);
+    request
+}
+
 pub fn request_input_texts(body: &Value) -> Vec<String> {
     match &body["input"] {
         Value::String(text) => vec![text.clone()],
@@ -436,6 +510,7 @@ pub fn make_request(
         temperature: None,
         top_p: None,
         max_output_tokens: None,
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -480,6 +555,7 @@ pub fn output_text(payload: &ResponsePayload) -> String {
         .filter_map(|item| match item {
             OutputItem::Message(msg) => Some(msg.content.iter().map(|c| c.text.as_str()).collect::<String>()),
             OutputItem::FunctionCall(_)
+            | OutputItem::ToolSearchCall(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::WebSearchCall(_)
             | OutputItem::McpCall(_)

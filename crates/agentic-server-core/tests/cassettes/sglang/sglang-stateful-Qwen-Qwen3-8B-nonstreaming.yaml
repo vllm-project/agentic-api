@@ -1,0 +1,198 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: 'Remember the word APPLE. Just say: OK'
+      max_output_tokens: 2048
+      model: Qwen/Qwen3-8B
+      store: true
+      stream: false
+    headers:
+      content-type: application/json
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      created_at: 0
+      error: null
+      id: recorded_1
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 2048
+      metadata: {}
+      model: Qwen/Qwen3-8B
+      object: response
+      output:
+      - content:
+        - text: '
+
+            Okay, the user mentioned remembering the word "APPLE" and said "OK." I need to respond appropriately. Since they mentioned "APPLE," maybe they want me to recall that word or use it in a response. The "OK" could be a signal to confirm or proceed. I should acknowledge their input and perhaps use "APPLE" in the response. Let me check if there''s any specific context I''m missing. They might be testing if I remember the word, so I should confirm that I remember it and maybe add a friendly message. I''ll make sure the response is natural and not forced.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: recorded_2
+        status: null
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: null
+          text: '
+
+
+            Sure! I remember the word **APPLE**. 😊 Let me know if you''d like to do something with it!'
+          type: output_text
+        id: recorded_3
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      previous_response_id: null
+      reasoning:
+        effort: null
+        summary: null
+      status: completed
+      store: true
+      temperature: null
+      text: null
+      tool_choice: auto
+      tools: []
+      top_p: null
+      truncation: disabled
+      usage:
+        input_tokens: 17
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 151
+        output_tokens_details:
+          reasoning_tokens: 124
+        total_tokens: 168
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - content: 'Remember the word APPLE. Just say: OK'
+        role: user
+        type: message
+      - content:
+        - text: '
+
+            Okay, the user mentioned remembering the word "APPLE" and said "OK." I need to respond appropriately. Since they mentioned "APPLE," maybe they want me to recall that word or use it in a response. The "OK" could be a signal to confirm or proceed. I should acknowledge their input and perhaps use "APPLE" in the response. Let me check if there''s any specific context I''m missing. They might be testing if I remember the word, so I should confirm that I remember it and maybe add a friendly message. I''ll make sure the response is natural and not forced.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: recorded_2
+        status: null
+        summary: []
+        type: reasoning
+      - content:
+        - text: '
+
+
+            Sure! I remember the word **APPLE**. 😊 Let me know if you''d like to do something with it!'
+          type: output_text
+        id: recorded_3
+        role: assistant
+        status: completed
+        type: message
+      - content: What word did I ask you to remember? Reply with just the word.
+        role: user
+        type: message
+      max_output_tokens: 2048
+      model: Qwen/Qwen3-8B
+      store: true
+      stream: false
+    headers:
+      content-type: application/json
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      created_at: 0
+      error: null
+      id: recorded_4
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 2048
+      metadata: {}
+      model: Qwen/Qwen3-8B
+      object: response
+      output:
+      - content:
+        - text: "\nOkay, the user asked me to remember the word \"APPLE\" and then said \"Just say: OK\". I responded by confirming I remembered \"APPLE\" and offered further help. Now, the user is asking, \"What word did I ask you to remember? Reply with just the word.\" \n\nI need to make sure I answer correctly. The user wants just the word, no extra text. Since the initial instruction was to remember \"APPLE\", the answer should be \"APPLE\". I should check if there's any chance of confusion, but the conversation history clearly states that. So the correct response is simply the word \"APPLE\".\n"
+          type: reasoning_text
+        encrypted_content: null
+        id: recorded_5
+        status: null
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: null
+          text: '
+
+
+            APPLE'
+          type: output_text
+        id: recorded_6
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      previous_response_id: null
+      reasoning:
+        effort: null
+        summary: null
+      status: completed
+      store: true
+      temperature: null
+      text: null
+      tool_choice: auto
+      tools: []
+      top_p: null
+      truncation: disabled
+      usage:
+        input_tokens: 67
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 16
+        output_tokens: 133
+        output_tokens_details:
+          reasoning_tokens: 130
+        total_tokens: 200
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+provider:
+  name: sglang
+  version: 0.5.18
+  model: Qwen/Qwen3-8B
+  transport: http-json
+  launch:
+    revision: b968826d9c46dd6066d109eabc6255188de91218
+    reasoning_parser: qwen3
+    tool_call_parser: qwen
+    context_length: 8192
+    mem_fraction_static: 0.3
+    dtype: auto
+    quantization: null
+    tp_size: 1
+    random_seed: 265996454
+  capabilities_exercised:
+  - text
+  - gateway_stateful_continuation
+  unverified:
+  - parallel_function_calls
+  - structured_text
+  - upstream_websocket
+  - reasoning_summary

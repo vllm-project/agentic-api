@@ -14,7 +14,13 @@ exclude = [
 [lib]
 name = "agentic_core"
 
+[features]
+default = []
+openapi = ["dep:utoipa"]
+
 [dependencies]
+utoipa = { workspace = true, optional = true }
+
 async-stream.workspace = true
 bytes.workspace = true
 dirs.workspace = true
@@ -33,6 +39,7 @@ rmcp = { workspace = true, features = [
 ] }
 serde.workspace = true
 serde_json.workspace = true
+sse-stream.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["time"] }
 tracing.workspace = true

@@ -4,16 +4,19 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::types::event::MessageStatus;
+use crate::types::tools::{ResponsesTool, ToolSearchExecution, ToolSearchStatus};
 use crate::utils::common::deserialize_from_value;
 
-use super::output::{CustomToolCall, FunctionToolCall, McpListTools, ReasoningOutput};
+use super::output::{CustomToolCall, FunctionToolCall, McpListTools, ReasoningOutput, ToolSearchCall};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct InputTextContent {
     pub text: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct InputImageContent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file_id: Option<String>,
@@ -24,6 +27,7 @@ pub struct InputImageContent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct InputFileContent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file_data: Option<String>,
@@ -60,6 +64,7 @@ pub enum InputContent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct InputMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
@@ -77,6 +82,7 @@ pub enum InputMessageContent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct FunctionToolResultMessage {
     pub call_id: String,
     pub output: ToolCallOutput,
@@ -96,11 +102,180 @@ pub enum ToolCallOutput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ToolOutputContent {
     InputText(InputTextContent),
     InputImage(InputImageContent),
     InputFile(InputFileContent),
+}
+
+#[cfg(feature = "openapi")]
+mod openapi_schemas {
+    use super::{InputContent, InputItem, InputMessageContent, ResponsesInput, ToolCallOutput};
+    use utoipa::openapi::schema::{ArrayBuilder, OneOfBuilder, Schema, SchemaType, Type};
+    use utoipa::openapi::{ObjectBuilder, Ref, RefOr};
+
+    fn string_schema() -> RefOr<Schema> {
+        ObjectBuilder::new().schema_type(SchemaType::new(Type::String)).into()
+    }
+
+    impl utoipa::PartialSchema for InputMessageContent {
+        fn schema() -> RefOr<Schema> {
+            OneOfBuilder::new()
+                .item(string_schema())
+                .item(ArrayBuilder::new().items(Ref::from_schema_name("InputContent")))
+                .into()
+        }
+    }
+    impl utoipa::ToSchema for InputMessageContent {
+        fn name() -> std::borrow::Cow<'static, str> {
+            std::borrow::Cow::Borrowed("InputMessageContent")
+        }
+    }
+
+    impl utoipa::PartialSchema for ToolCallOutput {
+        fn schema() -> RefOr<Schema> {
+            OneOfBuilder::new()
+                .item(string_schema())
+                .item(ArrayBuilder::new().items(Ref::from_schema_name("ToolOutputContent")))
+                .into()
+        }
+    }
+    impl utoipa::ToSchema for ToolCallOutput {
+        fn name() -> std::borrow::Cow<'static, str> {
+            std::borrow::Cow::Borrowed("ToolCallOutput")
+        }
+    }
+
+    impl utoipa::PartialSchema for ResponsesInput {
+        fn schema() -> RefOr<Schema> {
+            OneOfBuilder::new()
+                .item(string_schema())
+                .item(ArrayBuilder::new().items(Ref::from_schema_name("InputItem")))
+                .into()
+        }
+    }
+    impl utoipa::ToSchema for ResponsesInput {
+        fn name() -> std::borrow::Cow<'static, str> {
+            std::borrow::Cow::Borrowed("ResponsesInput")
+        }
+    }
+
+    fn tagged_text_variant(type_value: &str) -> RefOr<Schema> {
+        ObjectBuilder::new()
+            .property(
+                "type",
+                ObjectBuilder::new()
+                    .schema_type(SchemaType::new(Type::String))
+                    .enum_values(Some([type_value])),
+            )
+            .required("type")
+            .property("text", ObjectBuilder::new().schema_type(SchemaType::new(Type::String)))
+            .required("text")
+            .into()
+    }
+
+    impl utoipa::PartialSchema for InputContent {
+        fn schema() -> RefOr<Schema> {
+            OneOfBuilder::new()
+                .discriminator(Some(utoipa::openapi::schema::Discriminator::new("type")))
+                .item(tagged_text_variant("input_text"))
+                .item(
+                    ObjectBuilder::new()
+                        .property(
+                            "type",
+                            ObjectBuilder::new()
+                                .schema_type(SchemaType::new(Type::String))
+                                .enum_values(Some(["input_image"])),
+                        )
+                        .required("type")
+                        .property(
+                            "file_id",
+                            ObjectBuilder::new().schema_type(SchemaType::new(Type::String)),
+                        )
+                        .property(
+                            "image_url",
+                            ObjectBuilder::new().schema_type(SchemaType::new(Type::String)),
+                        )
+                        .property(
+                            "detail",
+                            ObjectBuilder::new().schema_type(SchemaType::new(Type::String)),
+                        ),
+                )
+                .item(tagged_ref("input_file", "InputFileContent"))
+                .item(tagged_text_variant("output_text"))
+                .item(tagged_text_variant("reasoning_text"))
+                .into()
+        }
+    }
+    impl utoipa::ToSchema for InputContent {
+        fn name() -> std::borrow::Cow<'static, str> {
+            std::borrow::Cow::Borrowed("InputContent")
+        }
+    }
+
+    fn tagged_ref(type_value: &str, schema_name: &str) -> RefOr<Schema> {
+        use utoipa::openapi::schema::AllOfBuilder;
+        AllOfBuilder::new()
+            .item(
+                ObjectBuilder::new()
+                    .property(
+                        "type",
+                        ObjectBuilder::new()
+                            .schema_type(SchemaType::new(Type::String))
+                            .enum_values(Some([type_value])),
+                    )
+                    .required("type"),
+            )
+            .item(Ref::from_schema_name(schema_name))
+            .into()
+    }
+
+    impl utoipa::PartialSchema for InputItem {
+        fn schema() -> RefOr<Schema> {
+            use utoipa::openapi::schema::AllOfBuilder;
+            let message_branch: RefOr<Schema> = AllOfBuilder::new()
+                .item(
+                    ObjectBuilder::new().property(
+                        "type",
+                        ObjectBuilder::new()
+                            .schema_type(SchemaType::new(Type::String))
+                            .enum_values(Some(["message"])),
+                    ),
+                )
+                .item(Ref::from_schema_name("InputMessage"))
+                .into();
+            OneOfBuilder::new()
+                .discriminator(Some(utoipa::openapi::schema::Discriminator::new("type")))
+                .item(message_branch)
+                .item(tagged_ref("function_call", "InputFunctionToolCall"))
+                .item(tagged_ref("function_call_output", "FunctionToolResultMessage"))
+                .item(tagged_ref("tool_search_call", "InputToolSearchCall"))
+                .item(tagged_ref("tool_search_output", "ToolSearchOutputMessage"))
+                .item(tagged_ref("custom_tool_call", "CustomToolCall"))
+                .item(tagged_ref("custom_tool_call_output", "CustomToolCallOutputMessage"))
+                .item(tagged_ref("reasoning", "ReasoningOutput"))
+                .item(tagged_ref("mcp_list_tools", "McpListTools"))
+                .item(tagged_ref("compaction", "CompactionItem"))
+                .item(
+                    ObjectBuilder::new()
+                        .property(
+                            "type",
+                            ObjectBuilder::new()
+                                .schema_type(SchemaType::new(Type::String))
+                                .enum_values(Some(["compaction_trigger"])),
+                        )
+                        .required("type"),
+                )
+                .into()
+        }
+    }
+    impl utoipa::ToSchema for InputItem {
+        fn name() -> std::borrow::Cow<'static, str> {
+            std::borrow::Cow::Borrowed("InputItem")
+        }
+    }
 }
 
 impl ToolCallOutput {
@@ -131,6 +306,7 @@ impl From<&str> for ToolCallOutput {
 /// output: clients may omit `id` and `status` when passing prior items to a
 /// later request or to the compact endpoint.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct InputFunctionToolCall {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
@@ -169,8 +345,65 @@ impl From<CustomToolCall> for InputFunctionToolCall {
     }
 }
 
+pub(super) fn deserialize_non_blank_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer)?;
+    if value.trim().is_empty() {
+        return Err(serde::de::Error::custom("value must not be blank"));
+    }
+    Ok(value)
+}
+
+/// A public model-generated tool-search call replayed as Responses input.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct InputToolSearchCall {
+    #[serde(deserialize_with = "deserialize_non_blank_string")]
+    pub id: String,
+    #[serde(deserialize_with = "deserialize_non_blank_string")]
+    pub call_id: String,
+    #[serde(default)]
+    pub execution: ToolSearchExecution,
+    pub arguments: Value,
+    #[serde(default)]
+    pub status: ToolSearchStatus,
+}
+
+impl TryFrom<&ToolSearchCall> for InputToolSearchCall {
+    type Error = ToolSearchStatus;
+
+    fn try_from(call: &ToolSearchCall) -> Result<Self, Self::Error> {
+        if call.status != ToolSearchStatus::Completed {
+            return Err(call.status);
+        }
+        Ok(Self {
+            id: call.id.clone(),
+            call_id: call.call_id.clone(),
+            execution: call.execution,
+            arguments: call.arguments.clone(),
+            status: ToolSearchStatus::Completed,
+        })
+    }
+}
+
+/// Client-returned declarations resolving a public tool-search call.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ToolSearchOutputMessage {
+    #[serde(deserialize_with = "deserialize_non_blank_string")]
+    pub call_id: String,
+    #[serde(default)]
+    pub execution: ToolSearchExecution,
+    #[serde(default)]
+    pub status: ToolSearchStatus,
+    pub tools: Vec<ResponsesTool>,
+}
+
 /// An opaque compacted context checkpoint accepted as Responses input.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CompactionItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
@@ -179,6 +412,7 @@ pub struct CompactionItem {
 
 /// Client result for a freeform custom tool call.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CustomToolCallOutputMessage {
     pub call_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -206,6 +440,10 @@ pub enum InputItem {
     FunctionCall(InputFunctionToolCall),
     #[serde(rename = "function_call_output")]
     FunctionCallOutput(FunctionToolResultMessage),
+    #[serde(rename = "tool_search_call")]
+    ToolSearchCall(InputToolSearchCall),
+    #[serde(rename = "tool_search_output")]
+    ToolSearchOutput(ToolSearchOutputMessage),
     /// The public freeform invocation accepted from a client request.
     #[serde(rename = "custom_tool_call")]
     CustomToolCall(CustomToolCall),
@@ -238,6 +476,8 @@ impl<'de> Deserialize<'de> for InputItem {
             None | Some("message") => deserialize_from_value(value).map(Self::Message),
             Some("function_call") => deserialize_from_value(value).map(Self::FunctionCall),
             Some("function_call_output") => deserialize_from_value(value).map(Self::FunctionCallOutput),
+            Some("tool_search_call") => deserialize_from_value(value).map(Self::ToolSearchCall),
+            Some("tool_search_output") => deserialize_from_value(value).map(Self::ToolSearchOutput),
             Some("custom_tool_call") => deserialize_from_value(value).map(Self::CustomToolCall),
             Some("custom_tool_call_output") => deserialize_from_value(value).map(Self::CustomToolCallOutput),
             Some("reasoning") => deserialize_from_value(value).map(Self::Reasoning),
@@ -385,6 +625,233 @@ fn function_call_item_id(item_id: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn structured_input_without_message_type() {
+        // The full request body from vllm-project/agentic-api#150. `ResponsesInput`
+        // models the `input` field's value, so pull that field out before
+        // deserializing, mirroring how the request struct's field is populated.
+        let body: Value = serde_json::from_str(
+            r#"{
+                "model": "dummy",
+                "input": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": "hi new"
+                            }
+                        ]
+                    }
+                ]
+            }"#,
+        )
+        .expect("issue payload is valid json");
+
+        let input: ResponsesInput =
+            serde_json::from_value(body["input"].clone()).expect("structured input without message type parses");
+
+        let ResponsesInput::Items(items) = input else {
+            panic!("expected ResponsesInput::Items");
+        };
+        assert_eq!(items.len(), 1);
+
+        let InputItem::Message(message) = &items[0] else {
+            panic!("expected InputItem::Message");
+        };
+        assert_eq!(message.role, "user");
+
+        let InputMessageContent::Parts(parts) = &message.content else {
+            panic!("expected structured content parts");
+        };
+        assert_eq!(parts.len(), 1);
+        let InputContent::InputText(text) = &parts[0] else {
+            panic!("expected InputContent::InputText");
+        };
+        assert_eq!(text.text, "hi new");
+    }
+
+    #[test]
+    fn issue_150_shorthand_message_mixes_with_typed_items() {
+        // A shorthand message (no `"type"` tag) alongside explicitly typed
+        // history items must all deserialize into their own `InputItem` variant.
+        let input: ResponsesInput = serde_json::from_value(serde_json::json!([
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": "hi new"}
+                ]
+            },
+            {
+                "type": "function_call",
+                "call_id": "call_1",
+                "name": "lookup",
+                "arguments": "{}"
+            },
+            {
+                "type": "custom_tool_call_output",
+                "call_id": "call_1",
+                "output": "done"
+            }
+        ]))
+        .expect("shorthand message mixed with typed items parses");
+
+        let ResponsesInput::Items(items) = input else {
+            panic!("expected ResponsesInput::Items");
+        };
+        assert_eq!(items.len(), 3);
+        assert!(matches!(&items[0], InputItem::Message(message) if message.role == "user"));
+        assert!(matches!(&items[1], InputItem::FunctionCall(call) if call.name == "lookup"));
+        assert!(matches!(&items[2], InputItem::CustomToolCallOutput(output) if output.call_id == "call_1"));
+    }
+
+    #[test]
+    fn issue_150_shorthand_message_with_mixed_content_parts() {
+        // Shorthand messages should support the same structured content
+        // vocabulary as explicitly typed ones, including multiple part types.
+        let input: ResponsesInput = serde_json::from_value(serde_json::json!([{
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "look at this"},
+                {"type": "input_image", "image_url": "data:image/png;base64,abc", "detail": "low"}
+            ]
+        }]))
+        .expect("shorthand message with mixed content parts parses");
+
+        let ResponsesInput::Items(items) = input else {
+            panic!("expected ResponsesInput::Items");
+        };
+        assert_eq!(items.len(), 1);
+
+        let InputItem::Message(message) = &items[0] else {
+            panic!("expected InputItem::Message");
+        };
+        let InputMessageContent::Parts(parts) = &message.content else {
+            panic!("expected structured content parts");
+        };
+        assert_eq!(parts.len(), 2);
+        assert!(matches!(&parts[0], InputContent::InputText(text) if text.text == "look at this"));
+        assert!(matches!(&parts[1], InputContent::InputImage(image) if image.detail.as_deref() == Some("low")));
+    }
+
+    #[test]
+    fn tool_search_replay_defaults_are_canonicalized() {
+        let call: InputItem = serde_json::from_value(serde_json::json!({
+            "type": "tool_search_call",
+            "id": "tsc_1",
+            "call_id": "call_search_1",
+            "arguments": ["weather", "timezone"]
+        }))
+        .expect("valid replayed search call");
+        let output: InputItem = serde_json::from_value(serde_json::json!({
+            "type": "tool_search_output",
+            "call_id": "call_search_1",
+            "tools": []
+        }))
+        .expect("valid empty search result");
+
+        assert_eq!(
+            serde_json::to_value(call).expect("call serializes"),
+            serde_json::json!({
+                "type": "tool_search_call",
+                "id": "tsc_1",
+                "call_id": "call_search_1",
+                "execution": "client",
+                "arguments": ["weather", "timezone"],
+                "status": "completed"
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(output).expect("output serializes"),
+            serde_json::json!({
+                "type": "tool_search_output",
+                "call_id": "call_search_1",
+                "execution": "client",
+                "status": "completed",
+                "tools": []
+            })
+        );
+    }
+
+    #[test]
+    fn tool_search_items_accept_documented_statuses() {
+        for status in ["in_progress", "completed", "incomplete"] {
+            let call: InputItem = serde_json::from_value(serde_json::json!({
+                "type": "tool_search_call",
+                "id": "tsc_1",
+                "call_id": "call_search_1",
+                "arguments": {"query": "weather"},
+                "status": status
+            }))
+            .expect("documented tool-search call status");
+            let output: InputItem = serde_json::from_value(serde_json::json!({
+                "type": "tool_search_output",
+                "call_id": "call_search_1",
+                "status": status,
+                "tools": []
+            }))
+            .expect("documented tool-search output status");
+
+            assert_eq!(serde_json::to_value(call).expect("call serializes")["status"], status);
+            assert_eq!(
+                serde_json::to_value(output).expect("output serializes")["status"],
+                status
+            );
+        }
+    }
+
+    #[test]
+    fn tool_search_replay_rejects_invalid_known_shapes() {
+        for item in [
+            serde_json::json!({
+                "type": "tool_search_call",
+                "call_id": "call_search_1",
+                "arguments": {"query": "missing required item id"}
+            }),
+            serde_json::json!({
+                "type": "tool_search_call",
+                "id": "   ",
+                "call_id": "call_search_1",
+                "arguments": {"query": "blank item id"}
+            }),
+            serde_json::json!({
+                "type": "tool_search_call",
+                "id": "tsc_1",
+                "call_id": "   ",
+                "arguments": {"query": "blank call id"}
+            }),
+            serde_json::json!({
+                "type": "tool_search_call",
+                "id": "tsc_1",
+                "call_id": "call_search_1",
+                "execution": "server",
+                "arguments": {"query": "unsupported execution"}
+            }),
+            serde_json::json!({
+                "type": "tool_search_call",
+                "id": "tsc_1",
+                "call_id": "call_search_1",
+                "status": "completed"
+            }),
+            serde_json::json!({
+                "type": "tool_search_output",
+                "call_id": "call_search_1"
+            }),
+        ] {
+            assert!(
+                serde_json::from_value::<InputItem>(item).is_err(),
+                "malformed known tool-search item must not become Unknown"
+            );
+        }
+
+        let future: InputItem = serde_json::from_value(serde_json::json!({
+            "type": "future_search_item",
+            "payload": {"opaque": true}
+        }))
+        .expect("unrelated future item remains forward-compatible");
+        assert!(matches!(future, InputItem::Unknown));
+    }
 
     #[test]
     fn function_call_input_accepts_missing_status() {
