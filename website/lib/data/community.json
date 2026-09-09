@@ -1,0 +1,183 @@
+{
+  "updatedAt": "2026-09-09",
+  "source": "https://api.github.com/repos/vllm-project/agentic-api/contributors?per_page=100",
+  "ownersSource": "https://github.com/vllm-project/agentic-api/blob/main/.github/CODEOWNERS",
+  "maintainers": [
+    {
+      "login": "bbrowning",
+      "name": "Ben Browning",
+      "url": "https://github.com/bbrowning",
+      "avatar": "/people/bbrowning.jpg"
+    },
+    {
+      "login": "franciscojavierarceo",
+      "name": "Francisco Javier Arceo",
+      "url": "https://github.com/franciscojavierarceo",
+      "avatar": "/people/franciscojavierarceo.jpg"
+    },
+    {
+      "login": "jiahuei",
+      "name": "Tan Jia Huei",
+      "url": "https://github.com/jiahuei",
+      "avatar": "/people/jiahuei.jpg"
+    },
+    {
+      "login": "leseb",
+      "name": "Sébastien Han",
+      "url": "https://github.com/leseb",
+      "avatar": "/people/leseb.jpg"
+    },
+    {
+      "login": "maralbahari",
+      "name": "Maral",
+      "url": "https://github.com/maralbahari",
+      "avatar": "/people/maralbahari.jpg"
+    },
+    {
+      "login": "noobHappylife",
+      "name": "noobHappylife",
+      "url": "https://github.com/noobHappylife",
+      "avatar": "/people/noobHappylife.jpg"
+    },
+    {
+      "login": "qandrew",
+      "name": "Andrew Xia",
+      "url": "https://github.com/qandrew",
+      "avatar": "/people/qandrew.jpg"
+    },
+    {
+      "login": "tjtanaa",
+      "name": "TJian",
+      "url": "https://github.com/tjtanaa",
+      "avatar": "/people/tjtanaa.jpg"
+    }
+  ],
+  "contributors": [
+    {
+      "login": "franciscojavierarceo",
+      "name": "Francisco Javier Arceo",
+      "url": "https://github.com/franciscojavierarceo",
+      "avatar": "/people/franciscojavierarceo.jpg",
+      "contributions": 66
+    },
+    {
+      "login": "maralbahari",
+      "name": "Maral",
+      "url": "https://github.com/maralbahari",
+      "avatar": "/people/maralbahari.jpg",
+      "contributions": 28
+    },
+    {
+      "login": "ashwing",
+      "name": "Ashwin Giridharan",
+      "url": "https://github.com/ashwing",
+      "avatar": "/people/ashwing.jpg",
+      "contributions": 16
+    },
+    {
+      "login": "leseb",
+      "name": "Sébastien Han",
+      "url": "https://github.com/leseb",
+      "avatar": "/people/leseb.jpg",
+      "contributions": 12
+    },
+    {
+      "login": "StevenWang-CY",
+      "name": "GroupieSteven",
+      "url": "https://github.com/StevenWang-CY",
+      "avatar": "/people/StevenWang-CY.jpg",
+      "contributions": 11
+    },
+    {
+      "login": "haoshan98",
+      "name": "Hao Shan",
+      "url": "https://github.com/haoshan98",
+      "avatar": "/people/haoshan98.jpg",
+      "contributions": 5
+    },
+    {
+      "login": "harivilasp",
+      "name": "Hari Vilas Panjwani",
+      "url": "https://github.com/harivilasp",
+      "avatar": "/people/harivilasp.jpg",
+      "contributions": 4
+    },
+    {
+      "login": "tjtanaa",
+      "name": "TJian",
+      "url": "https://github.com/tjtanaa",
+      "avatar": "/people/tjtanaa.jpg",
+      "contributions": 3
+    },
+    {
+      "login": "jtechapps",
+      "name": "Jacob M",
+      "url": "https://github.com/jtechapps",
+      "avatar": "/people/jtechapps.jpg",
+      "contributions": 2
+    },
+    {
+      "login": "noobHappylife",
+      "name": "noobHappylife",
+      "url": "https://github.com/noobHappylife",
+      "avatar": "/people/noobHappylife.jpg",
+      "contributions": 2
+    },
+    {
+      "login": "jiahuei",
+      "name": "Tan Jia Huei",
+      "url": "https://github.com/jiahuei",
+      "avatar": "/people/jiahuei.jpg",
+      "contributions": 2
+    },
+    {
+      "login": "avinashsingh77",
+      "name": "Avinash Singh ",
+      "url": "https://github.com/avinashsingh77",
+      "avatar": "/people/avinashsingh77.jpg",
+      "contributions": 1
+    },
+    {
+      "login": "MecicoJay",
+      "name": "MecicoJay",
+      "url": "https://github.com/MecicoJay",
+      "avatar": "/people/MecicoJay.jpg",
+      "contributions": 1
+    },
+    {
+      "login": "mgoin",
+      "name": "Misha Goin",
+      "url": "https://github.com/mgoin",
+      "avatar": "/people/mgoin.jpg",
+      "contributions": 1
+    },
+    {
+      "login": "Mohammad-nassar10",
+      "name": "Mohammad-nassar10",
+      "url": "https://github.com/Mohammad-nassar10",
+      "avatar": "/people/Mohammad-nassar10.jpg",
+      "contributions": 1
+    },
+    {
+      "login": "Zheng-Lu",
+      "name": "Shrek Luzz",
+      "url": "https://github.com/Zheng-Lu",
+      "avatar": "/people/Zheng-Lu.jpg",
+      "contributions": 1
+    },
+    {
+      "login": "ZichenYuan",
+      "name": "Sunny Yuan",
+      "url": "https://github.com/ZichenYuan",
+      "avatar": "/people/ZichenYuan.jpg",
+      "contributions": 1
+    },
+    {
+      "login": "skyloevil",
+      "name": "ZiTian Zhao",
+      "url": "https://github.com/skyloevil",
+      "avatar": "/people/skyloevil.jpg",
+      "contributions": 1
+    }
+  ]
+}
