@@ -28,7 +28,7 @@ use crate::executor::messages_request::web_search_budget_exhausted_result;
 use crate::executor::request::ExecutionContext;
 use crate::proxy::processed_response_headers;
 use crate::tool::ToolRegistry;
-use crate::types::messages::tool_seam;
+use crate::types::messages::{GatewayToolResult, tool_seam};
 use crate::utils::common::{deserialize_from_str, serialize_to_string};
 
 // Shared with the non-streaming loop so the two Messages loops can't drift.
@@ -458,7 +458,7 @@ async fn execute_gateway_calls(
     registry: &ToolRegistry,
     gateway_map: &tool_seam::GatewayToolMap,
     allowed_searches: usize,
-) -> Vec<Value> {
+) -> Vec<GatewayToolResult> {
     let futures = calls.iter().enumerate().map(|(index, c)| async move {
         if index >= allowed_searches {
             return web_search_budget_exhausted_result(&c.id);
@@ -482,7 +482,7 @@ async fn execute_gateway_calls(
             }
             Err(reason) => (format!("{reason}; tool was not run"), true),
         };
-        tool_seam::tool_result_block(&c.id, &output, is_error)
+        tool_seam::tool_result_block(&c.id, output, is_error)
     });
     futures::future::join_all(futures).await
 }
@@ -724,7 +724,7 @@ mod tests {
             calls.len(),
         )
         .await;
-        let content = resolved[0]["content"].as_str().unwrap_or_default();
+        let content = &resolved[0].content;
         assert!(
             content.contains("invalid") || content.contains("malformed") || content.contains("could not"),
             "malformed args must yield an error tool_result, not an empty-arg dispatch: {content:?}"

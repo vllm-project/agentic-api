@@ -7,14 +7,14 @@ use http::HeaderMap;
 use tracing::debug;
 
 use agentic_core::executor::{
-    ExecutorError, MessagesRequestContext, MessagesUpstream, normalize_native_web_search_for_upstream,
-    run_messages_loop, run_messages_stream,
+    ExecutorError, MessagesRequestContext, MessagesUpstream, ParsedMessagesRequest,
+    normalize_native_web_search_for_upstream, run_messages_loop, run_messages_stream,
 };
 use agentic_core::proxy::{
     ProxyAuth, ProxyRequest, error_response_for_auth, proxy_request_with_path, upstream_request_headers,
 };
 use agentic_core::tool::ToolRegistry;
-use agentic_core::types::messages::{MessagesRequest, has_gateway_tool, registry_tools};
+use agentic_core::types::messages::{has_gateway_tool, registry_tools};
 
 use super::super::common::{
     convert_response, read_bytes_with_auth, sse_response_with_headers, upstream_error_response,
@@ -62,29 +62,22 @@ async fn execute_messages(
     state: &AppState,
     headers: &HeaderMap,
     query: Option<&str>,
-    req: MessagesRequest,
-    body: &Bytes,
+    parsed: ParsedMessagesRequest<'_>,
 ) -> Response {
+    let ctx = match MessagesRequestContext::new(parsed) {
+        Ok(ctx) => ctx,
+        Err(e) => return messages_error_response(e),
+    };
+
     // Build the request-scoped registry from the declared tools (M6). Gateway
     // ownership (incl. configured aliases like Claude Code's `WebSearch`) is
     // resolved against the operator-configured map.
     let gateway_map = &state.exec_ctx.messages_gateway_tools;
-    let mut tools = registry_tools(req.tools.as_ref(), gateway_map);
+    let mut tools = registry_tools(ctx.tools(), gateway_map);
     let mut executors = state.exec_ctx.gateway_executors.clone();
     let registry = match ToolRegistry::build_with_handlers(&mut tools, &mut executors).await {
         Ok(r) => r,
         Err(e) => return messages_error_response(ExecutorError::from(e)),
-    };
-
-    // One context per request, carrying both views: the typed request for field
-    // access, and the raw body the loop forwards upstream untouched — preserving
-    // every Anthropic field (tool_choice, stop_sequences, cache_control, and
-    // block types the gateway does not model). Reuses the routing parse, so
-    // neither view is built twice. Native web-search declarations are validated
-    // here, before a streaming response commits its status and headers.
-    let ctx = match MessagesRequestContext::new(req, body) {
-        Ok(ctx) => ctx,
-        Err(e) => return messages_error_response(e),
     };
 
     let upstream = MessagesUpstream::new(
@@ -138,16 +131,16 @@ pub async fn messages(State(state): State<AppState>, request: Request) -> Respon
 
     // Route to the loop only when a gateway-owned tool is declared; everything
     // else keeps the transparent proxy path.
-    if let Ok(req) = serde_json::from_slice::<MessagesRequest>(&bytes) {
-        let route_to_loop = has_gateway_tool(req.tools.as_ref(), &state.exec_ctx.messages_gateway_tools);
+    if let Ok(parsed) = ParsedMessagesRequest::parse(&bytes) {
+        let route_to_loop = has_gateway_tool(parsed.tools(), &state.exec_ctx.messages_gateway_tools);
         debug!(
             route = if route_to_loop { "messages_loop" } else { "proxy" },
-            stream = req.stream,
-            tools = req.tools.as_ref().map_or(0, Vec::len),
+            stream = parsed.stream(),
+            tools = parsed.tools().map_or(0, Vec::len),
             "routing HTTP messages request"
         );
         if route_to_loop {
-            return execute_messages(&state, &parts.headers, parts.uri.query(), req, &bytes).await;
+            return execute_messages(&state, &parts.headers, parts.uri.query(), parsed).await;
         }
     }
 

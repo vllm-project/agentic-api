@@ -14,8 +14,9 @@
 //! * `raw` — the JSON body actually sent upstream. It
 //!   is the single source of truth for `messages` and `system`, and the only
 //!   thing the loops mutate.
-//! * `typed` — the client's request as received, for safe field access to
-//!   `tools`, `stream`, and `model` in routing and the loops.
+//! * `typed` — only the client's `tools`, `stream`, and `model`, retained for
+//!   safe field access in routing and the loops. The parsed message history,
+//!   system prompt, and other fields are dropped before the loop begins.
 //!
 //! The two are **not** kept byte-identical, and must not be confused: `typed` is
 //! what the client sent, `raw` is what the gateway sends upstream. They diverge
@@ -34,16 +35,68 @@ use serde_json::{Map, Value, json};
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::messages_request::{WebSearchBudget, normalize_native_web_search};
-use crate::types::messages::{MessagesRequest, ToolParam};
+use crate::types::messages::{GatewayToolResult, MessagesRequest, ToolParam};
 use crate::utils::common::serialize_to_string;
+
+/// A Messages request parsed together with the exact immutable body bytes it
+/// came from.
+///
+/// Private fields make independently pairing typed data and raw bytes
+/// impossible through the public API. The handler uses the typed view for
+/// routing, then consumes this value to build a [`MessagesRequestContext`] only
+/// when the request needs the gateway tool loop.
+#[derive(Debug)]
+pub struct ParsedMessagesRequest<'a> {
+    typed: MessagesRequest,
+    body: &'a [u8],
+}
+
+impl<'a> ParsedMessagesRequest<'a> {
+    /// Parse a Messages request while retaining the exact bytes it came from.
+    ///
+    /// # Errors
+    /// Returns [`ExecutorError::JsonError`] if `body` is not a well-formed
+    /// Messages request.
+    pub fn parse(body: &'a [u8]) -> ExecutorResult<Self> {
+        let typed = serde_json::from_slice(body).map_err(ExecutorError::JsonError)?;
+        Ok(Self { typed, body })
+    }
+
+    /// The tools declared by the client, before upstream normalization.
+    #[must_use]
+    pub fn tools(&self) -> Option<&Vec<ToolParam>> {
+        self.typed.tools.as_ref()
+    }
+
+    /// Whether the client requested a streaming response.
+    #[must_use]
+    pub fn stream(&self) -> bool {
+        self.typed.stream
+    }
+}
+
+#[derive(Debug)]
+struct MessagesTypedState {
+    model: String,
+    tools: Option<Vec<ToolParam>>,
+    stream: bool,
+}
+
+impl From<MessagesRequest> for MessagesTypedState {
+    fn from(request: MessagesRequest) -> Self {
+        let MessagesRequest {
+            model, tools, stream, ..
+        } = request;
+        Self { model, tools, stream }
+    }
+}
 
 /// One `/v1/messages` request, in both the typed and raw views the gateway tool
 /// loops need. See the module docs for why both exist.
 #[derive(Debug)]
 pub struct MessagesRequestContext {
-    /// The client's request as received. Read-only: routing and registry
-    /// construction only.
-    typed: MessagesRequest,
+    /// The only typed request fields needed after routing.
+    typed: MessagesTypedState,
     /// The upstream body. Mutated by the loops; the source of truth for
     /// `messages` and `system`.
     raw: Value,
@@ -52,13 +105,12 @@ pub struct MessagesRequestContext {
 }
 
 impl MessagesRequestContext {
-    /// Build the context from a request the caller has already parsed for
-    /// routing, plus the original body bytes it was parsed from.
+    /// Build the context from a validated typed/raw request pair.
     ///
-    /// Reusing the caller's `typed` keeps each body parsed exactly once per
-    /// view: the routing parse is carried into the loop instead of being
-    /// discarded, and the raw parse only happens on the loop path, so a proxied
-    /// request never pays for a view it does not use.
+    /// Consuming [`ParsedMessagesRequest`] guarantees both views derive from the
+    /// same immutable input. Only the fields required after routing are retained
+    /// from the typed view; the owned message history and system prompt are
+    /// dropped before this function returns.
     ///
     /// Native web-search declarations are validated and normalized here, before
     /// a streaming handler commits its HTTP status — an invalid declaration must
@@ -68,9 +120,9 @@ impl MessagesRequestContext {
     /// Returns [`ExecutorError::JsonError`] if `body` is not valid JSON, or
     /// [`ExecutorError::InvalidRequest`] if it carries an unsupported or invalid
     /// native web-search declaration.
-    pub fn new(typed: MessagesRequest, body: &[u8]) -> ExecutorResult<Self> {
-        let raw = serde_json::from_slice(body).map_err(ExecutorError::JsonError)?;
-        Self::from_parts(typed, raw)
+    pub fn new(parsed: ParsedMessagesRequest<'_>) -> ExecutorResult<Self> {
+        let raw = serde_json::from_slice(parsed.body).map_err(ExecutorError::JsonError)?;
+        Self::from_parts(parsed.typed, raw)
     }
 
     /// Build the context from a raw JSON body alone, deriving the typed view
@@ -92,7 +144,7 @@ impl MessagesRequestContext {
     fn from_parts(typed: MessagesRequest, mut raw: Value) -> ExecutorResult<Self> {
         let web_search_budget = normalize_native_web_search(&mut raw)?;
         Ok(Self {
-            typed,
+            typed: typed.into(),
             raw,
             web_search_budget,
         })
@@ -153,7 +205,11 @@ impl MessagesRequestContext {
     /// constructor, since `MessagesRequest::messages` is a required array —
     /// erroring keeps it from silently no-opping into a loop that re-POSTs an
     /// unchanged body until the round cap.
-    pub(super) fn append_round(&mut self, assistant_content: &[Value], tool_results: Vec<Value>) -> ExecutorResult<()> {
+    pub(super) fn append_round(
+        &mut self,
+        assistant_content: &[Value],
+        tool_results: Vec<GatewayToolResult>,
+    ) -> ExecutorResult<()> {
         let messages = self
             .raw
             .get_mut("messages")
@@ -164,7 +220,10 @@ impl MessagesRequestContext {
         // instead of being deep-copied — a web-search result runs to kilobytes.
         let mut user = Map::new();
         user.insert("role".to_owned(), Value::String("user".to_owned()));
-        user.insert("content".to_owned(), Value::Array(tool_results));
+        user.insert(
+            "content".to_owned(),
+            serde_json::to_value(tool_results).map_err(ExecutorError::JsonError)?,
+        );
         messages.push(Value::Object(user));
         Ok(())
     }
@@ -212,8 +271,11 @@ mod tests {
     fn append_round_extends_the_raw_history_only() {
         let mut ctx = MessagesRequestContext::from_value(request()).unwrap();
         let assistant = vec![json!({"type": "tool_use", "id": "t1", "name": "web_search", "input": {}})];
-        ctx.append_round(&assistant, vec![json!({"type": "tool_result", "tool_use_id": "t1"})])
-            .unwrap();
+        ctx.append_round(
+            &assistant,
+            vec![GatewayToolResult::new("t1", "answer".to_owned(), false)],
+        )
+        .unwrap();
 
         let messages = ctx.raw["messages"].as_array().expect("messages");
         assert_eq!(messages.len(), 3);
@@ -221,6 +283,8 @@ mod tests {
         assert_eq!(messages[1]["content"], json!(assistant));
         assert_eq!(messages[2]["role"], "user");
         assert_eq!(messages[2]["content"][0]["tool_use_id"], "t1");
+        assert_eq!(messages[2]["content"][0]["content"], "answer");
+        assert_eq!(messages[2]["content"][0]["is_error"], false);
     }
 
     #[test]
@@ -255,12 +319,18 @@ mod tests {
     }
 
     #[test]
-    fn new_reuses_the_routing_parse() {
+    fn parsed_request_builds_both_context_views_from_the_same_input() {
         let body = serde_json::to_vec(&request()).unwrap();
-        let typed: MessagesRequest = serde_json::from_slice(&body).unwrap();
-        let ctx = MessagesRequestContext::new(typed, &body).unwrap();
+        let parsed = ParsedMessagesRequest::parse(&body).unwrap();
+        let ctx = MessagesRequestContext::new(parsed).unwrap();
 
         assert_eq!(ctx.model(), "qwen3");
         assert_eq!(ctx.raw["messages"][0]["content"], "hi");
+    }
+
+    #[test]
+    fn parsed_request_rejects_non_messages_json() {
+        let error = ParsedMessagesRequest::parse(br"[]").unwrap_err();
+        assert!(matches!(error, ExecutorError::JsonError(_)), "{error:?}");
     }
 }

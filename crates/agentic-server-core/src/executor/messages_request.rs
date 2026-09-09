@@ -176,10 +176,10 @@ pub fn normalize_native_web_search_for_upstream(request: &mut Value) -> Executor
     normalize_native_web_search(request).map(|_| had_native)
 }
 
-pub(super) fn web_search_budget_exhausted_result(tool_use_id: &str) -> Value {
+pub(super) fn web_search_budget_exhausted_result(tool_use_id: &str) -> crate::types::messages::GatewayToolResult {
     crate::types::messages::tool_seam::tool_result_block(
         tool_use_id,
-        "web_search max_uses exceeded; search was not run",
+        "web_search max_uses exceeded; search was not run".to_owned(),
         true,
     )
 }

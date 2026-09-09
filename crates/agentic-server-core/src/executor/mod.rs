@@ -26,7 +26,7 @@ pub use compaction::compact_response;
 pub use engine::{BoxStream, ExecuteRequest, create_conversation, execute};
 pub use error::{ExecutorError, ExecutorResult};
 pub use inference::call_inference;
-pub use messages_context::MessagesRequestContext;
+pub use messages_context::{MessagesRequestContext, ParsedMessagesRequest};
 pub use messages_loop::{MessagesResponse, MessagesUpstream, run_messages_loop};
 pub use messages_request::normalize_native_web_search_for_upstream;
 pub use messages_stream::run_messages_stream;

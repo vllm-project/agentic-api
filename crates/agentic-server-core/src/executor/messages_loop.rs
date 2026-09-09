@@ -23,7 +23,7 @@ use crate::executor::messages_context::MessagesRequestContext;
 use crate::executor::messages_request::web_search_budget_exhausted_result;
 use crate::executor::request::ExecutionContext;
 use crate::tool::ToolRegistry;
-use crate::types::messages::tool_seam;
+use crate::types::messages::{GatewayToolResult, tool_seam};
 use crate::utils::common::deserialize_from_str;
 
 /// Max gateway rounds before the loop gives up. Each round is one upstream
@@ -190,7 +190,7 @@ async fn execute_gateway_calls(
     registry: &ToolRegistry,
     gateway_map: &tool_seam::GatewayToolMap,
     allowed_searches: usize,
-) -> Vec<Value> {
+) -> Vec<GatewayToolResult> {
     let futures = gateway_calls.iter().enumerate().map(|(index, block)| async move {
         let id = block.get("id").and_then(Value::as_str).unwrap_or_default();
         let name = block.get("name").and_then(Value::as_str).unwrap_or_default();
@@ -223,7 +223,7 @@ async fn execute_gateway_calls(
             )
         };
 
-        tool_seam::tool_result_block(id, &output, is_error)
+        tool_seam::tool_result_block(id, output, is_error)
     });
     join_all(futures).await
 }
