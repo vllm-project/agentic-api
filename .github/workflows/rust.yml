@@ -154,6 +154,7 @@ jobs:
           cache-bin: false
 
       - name: Validate recorded cassettes
+        if: matrix.provider == 'dynamo'
         run: |
           python3 -m pip install 'PyYAML==6.0.3'
           python3 scripts/validate-cassettes.py

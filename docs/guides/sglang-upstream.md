@@ -6,7 +6,7 @@ The gateway manages stored responses and rehydrates item history for subsequent 
 ## Launch configuration
 
 The conformance recorder targets SGLang **0.5.18** and `Qwen/Qwen3-8B`.
-The model uses the `qwen3` reasoning parser and `qwen25` tool-call parser. See the upstream
+The model uses the `qwen3` reasoning parser and `qwen` tool-call parser. See the upstream
 [installation guide](https://docs.sglang.ai/get_started/install.html) and
 [DGX Spark guide](https://lmsys.org/blog/2025-11-03-gpt-oss-on-nvidia-dgx-spark/).
 
@@ -18,7 +18,7 @@ docker run --name agentic-sglang --gpus all --shm-size 8g \
   python3 -m sglang.launch_server \
   --model-path Qwen/Qwen3-8B --host 0.0.0.0 --port 30000 \
   --revision b968826d9c46dd6066d109eabc6255188de91218 \
-  --reasoning-parser qwen3 --tool-call-parser qwen25 \
+  --reasoning-parser qwen3 --tool-call-parser qwen \
   --mem-fraction-static 0.3 --context-length 8192 --cuda-graph-max-bs 4
 ```
 
