@@ -748,6 +748,45 @@ async fn test_store_false_proxies_json_to_vllm() {
     assert_eq!(body["id"], "mock_id");
 }
 
+/// Regression test for vllm-project/agentic-api#150: a structured message
+/// input item omitting the `"type": "message"` discriminant must still be
+/// accepted by the endpoint, not rejected as an untagged-enum mismatch.
+#[tokio::test]
+async fn test_structured_input_without_message_type_is_accepted() {
+    // Arrange
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
+    let (gw_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+
+    // Act — the exact payload reported in #150: a message item with structured
+    // `content` parts but no top-level `"type"` field.
+    let resp = reqwest::Client::new()
+        .post(format!("{gw_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "dummy",
+            "input": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": "hi new"}
+                    ]
+                }
+            ],
+            "store": false,
+            "stream": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // Assert — the gateway parses the shorthand message and forwards it upstream.
+    assert_eq!(resp.status(), 200);
+    let forwarded = requests.lock().await;
+    assert_eq!(forwarded.len(), 1);
+    assert_eq!(forwarded[0]["input"][0]["role"], "user");
+    assert_eq!(forwarded[0]["input"][0]["content"][0]["type"], "input_text");
+    assert_eq!(forwarded[0]["input"][0]["content"][0]["text"], "hi new");
+}
+
 #[tokio::test]
 async fn test_store_false_manual_tool_search_replay_loads_returned_function() {
     let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_body(serde_json::json!({
@@ -1170,6 +1209,46 @@ async fn test_executor_route_rejects_malformed_text_configuration_before_upstrea
         requests.lock().await.is_empty(),
         "invalid request must not reach upstream"
     );
+}
+
+#[tokio::test]
+async fn test_gateway_normalization_preserves_ignore_eos() {
+    let (llm_url, requests, llm_handle) = spawn_mock_vllm_json_capture().await;
+    let (gw_url, gateway_handle) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+    let client = reqwest::Client::new();
+
+    for ignore_eos in [None, Some(false), Some(true)] {
+        let mut body = serde_json::json!({
+            "model": "test",
+            "input": "hi",
+            "tools": [{"type": "web_search_preview"}],
+            "max_output_tokens": 183,
+            "store": false,
+            "stream": false
+        });
+        if let Some(value) = ignore_eos {
+            body["ignore_eos"] = value.into();
+        }
+        let response = client
+            .post(format!("{gw_url}/v1/responses"))
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let captured = requests.lock().await;
+        let upstream = captured.last().expect("request should reach upstream");
+        assert_eq!(
+            upstream.get("ignore_eos"),
+            ignore_eos.map(serde_json::Value::Bool).as_ref()
+        );
+        assert_eq!(upstream["max_output_tokens"], 183);
+    }
+
+    assert_eq!(requests.lock().await.len(), 3);
+    gateway_handle.abort();
+    llm_handle.abort();
+    let _ = tokio::join!(gateway_handle, llm_handle);
 }
 
 #[tokio::test]

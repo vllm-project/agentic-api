@@ -156,6 +156,7 @@ fn request_payload(model: String, input: ResponsesInput, instructions: Option<St
         temperature: None,
         top_p: None,
         max_output_tokens: None,
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -210,7 +211,7 @@ pub(crate) async fn compact_items(
         conversation_id: None,
         conversation_version: None,
     };
-    let response = fetch_blocking_payload(&ctx, exec_ctx, auth, &crate::tool::ToolRegistry::default()).await?;
+    let response = fetch_blocking_payload(&ctx, exec_ctx, auth, &crate::tool::ToolRegistry::default(), None).await?;
     let summary = completed_summary_text(&response)?;
 
     Ok((
