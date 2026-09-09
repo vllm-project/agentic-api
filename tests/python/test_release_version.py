@@ -55,28 +55,44 @@ def test_release_workflow_default_matches_workspace_version() -> None:
     assert version_input.group(1) == WORKSPACE_VERSION
 
 
-def test_crate_release_dry_run_does_not_resolve_the_unpublished_core_version() -> None:
+def test_crate_release_dry_run_packages_server_against_the_local_core() -> None:
     workflow = CRATE_RELEASE_WORKFLOW.read_text(encoding="utf-8")
     dry_run_block = next(block for block in _workflow_run_blocks(workflow) if "Would release commit" in block)
-    cargo_commands = [line.strip() for line in dry_run_block.splitlines() if line.strip().startswith("cargo ")]
+    normalized_block = " ".join(dry_run_block.split())
 
-    assert "cargo package --list -p agentic-server" in cargo_commands
-    assert not any(
-        "agentic-server" in command
-        and "agentic-server-core" not in command
-        and command != "cargo package --list -p agentic-server"
-        for command in cargo_commands
+    for command in (
+        "cargo check --workspace --locked",
+        "cargo clippy --all-targets --locked -- -D warnings",
+        "cargo test --locked",
+        "cargo publish --locked -p agentic-server-core",
+        "cargo publish --locked -p agentic-server",
+    ):
+        assert command in workflow
+    assert "cargo package --no-verify --locked -p agentic-server" in normalized_block
+    assert (
+        "--config 'patch.crates-io.agentic-server-core.path=\"crates/agentic-server-core\"'" in normalized_block
     )
+    assert "cargo package --list" not in normalized_block
 
-    package_list = subprocess.run(
-        ["cargo", "package", "--list", "--allow-dirty", "-p", "agentic-server"],
+    package = subprocess.run(
+        [
+            "cargo",
+            "package",
+            "--no-verify",
+            "--locked",
+            "--allow-dirty",
+            "-p",
+            "agentic-server",
+            "--config",
+            'patch.crates-io.agentic-server-core.path="crates/agentic-server-core"',
+        ],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         check=False,
     )
-    assert package_list.returncode == 0, package_list.stderr
-    assert "Cargo.toml" in package_list.stdout.splitlines()
+    assert package.returncode == 0, package.stderr
+    assert (REPO_ROOT / "target" / "package" / f"agentic-server-{WORKSPACE_VERSION}.crate").is_file()
 
 
 def test_python_workflows_pin_build_tools_and_manylinux_artifact_contract() -> None:
