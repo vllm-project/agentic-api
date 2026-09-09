@@ -26,6 +26,9 @@ use axum::{Json, Router, routing::post};
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
+#[path = "support/media_session_checks.rs"]
+mod media_session_checks;
+
 struct LocalSearch {
     calls: Arc<AtomicUsize>,
 }

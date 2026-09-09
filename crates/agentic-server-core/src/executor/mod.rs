@@ -19,6 +19,7 @@ pub mod session;
 mod gateway;
 pub mod gateway_accumulator;
 mod pending_calls;
+mod response_budget;
 mod upstream;
 
 pub use compaction::compact_response;

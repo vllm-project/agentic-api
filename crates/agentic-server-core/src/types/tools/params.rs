@@ -28,6 +28,25 @@ impl NonEmptyToolName {
     }
 }
 
+#[cfg(feature = "openapi")]
+impl utoipa::PartialSchema for NonEmptyToolName {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        utoipa::openapi::ObjectBuilder::new()
+            .schema_type(utoipa::openapi::schema::SchemaType::new(
+                utoipa::openapi::schema::Type::String,
+            ))
+            .min_length(Some(1))
+            .into()
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl utoipa::ToSchema for NonEmptyToolName {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("NonEmptyToolName")
+    }
+}
+
 impl TryFrom<String> for NonEmptyToolName {
     type Error = EmptyToolNameError;
 
@@ -113,6 +132,7 @@ pub enum ResponsesTool {
 /// `name` is a [`NonEmptyToolName`]: serde rejects empty strings at
 /// deserialization time, making the invalid state unrepresentable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct FunctionToolParam {
     pub name: NonEmptyToolName,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -134,6 +154,7 @@ pub struct FunctionToolParam {
 /// but the gateway rejects formatted custom tools before normalization because
 /// it cannot preserve their constrained-decoding semantics upstream.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CustomToolParam {
     pub name: NonEmptyToolName,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -149,6 +170,7 @@ pub struct CustomToolParam {
 
 /// Only client-executed tool search is part of the public gateway contract.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ToolSearchExecution {
     #[default]
@@ -158,6 +180,7 @@ pub enum ToolSearchExecution {
 
 /// Lifecycle status of a public tool-search call or output item.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ToolSearchStatus {
     InProgress,
@@ -168,6 +191,7 @@ pub enum ToolSearchStatus {
 
 /// Parameters for a client-executed tool-search declaration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ToolSearchToolParam {
     pub execution: ToolSearchExecution,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -178,6 +202,7 @@ pub struct ToolSearchToolParam {
 
 /// Parameters for a gateway MCP built-in tool declaration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct McpToolParam {
     pub server_label: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -202,6 +227,7 @@ pub struct McpToolParam {
         skip_deserializing,
         skip_serializing_if = "Vec::is_empty"
     )]
+    #[cfg_attr(feature = "openapi", schema(ignore))]
     pub(crate) discovered_tools: Vec<McpDiscoveredToolParam>,
 }
 
@@ -215,6 +241,7 @@ pub struct McpDiscoveredToolParam {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum WebSearchContextSize {
     Low,
@@ -233,12 +260,14 @@ impl WebSearchContextSize {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct WebSearchFilters {
     pub allowed_domains: Option<Vec<String>>,
     pub blocked_domains: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct WebSearchUserLocation {
     #[serde(rename = "type")]
     pub type_: Option<String>,
@@ -250,6 +279,7 @@ pub struct WebSearchUserLocation {
 
 /// Parameters for a web search tool.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct WebSearchToolParam {
     pub search_context_size: Option<WebSearchContextSize>,
     pub filters: Option<WebSearchFilters>,
@@ -258,15 +288,18 @@ pub struct WebSearchToolParam {
 
 /// Parameters for a file search tool.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct FileSearchToolParam {
     pub vector_store_ids: Option<Vec<String>>,
 }
 
 /// Parameters for a code interpreter tool (no required fields).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CodeInterpreterToolParam {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CodexNamespaceToolParam {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -285,6 +318,98 @@ pub enum CodexNamespaceMember {
     Function(FunctionToolParam),
     #[serde(rename = "unknown", other)]
     Unknown,
+}
+
+#[cfg(feature = "openapi")]
+impl utoipa::PartialSchema for ResponsesTool {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::Ref;
+        use utoipa::openapi::schema::{AllOfBuilder, ObjectBuilder, SchemaType, Type};
+
+        fn tagged(type_value: &str, schema: &str) -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+            AllOfBuilder::new()
+                .item(
+                    ObjectBuilder::new()
+                        .property(
+                            "type",
+                            ObjectBuilder::new()
+                                .schema_type(SchemaType::new(Type::String))
+                                .enum_values(Some([type_value])),
+                        )
+                        .required("type"),
+                )
+                .item(Ref::from_schema_name(schema))
+                .into()
+        }
+
+        utoipa::openapi::schema::OneOfBuilder::new()
+            .discriminator(Some(utoipa::openapi::schema::Discriminator::new("type")))
+            .item(tagged("function", "FunctionToolParam"))
+            .item(tagged("tool_search", "ToolSearchToolParam"))
+            .item(tagged("mcp", "McpToolParam"))
+            .item(
+                AllOfBuilder::new()
+                    .item(
+                        ObjectBuilder::new()
+                            .property(
+                                "type",
+                                ObjectBuilder::new()
+                                    .schema_type(SchemaType::new(Type::String))
+                                    .enum_values(Some([
+                                        "web_search_preview",
+                                        "web_search",
+                                        "web_search_preview_2025_03_11",
+                                        "web_search_2025_08_26",
+                                    ])),
+                            )
+                            .required("type"),
+                    )
+                    .item(Ref::from_schema_name("WebSearchToolParam")),
+            )
+            .item(tagged("file_search", "FileSearchToolParam"))
+            .item(tagged("code_interpreter", "CodeInterpreterToolParam"))
+            .item(tagged("namespace", "CodexNamespaceToolParam"))
+            .item(tagged("custom", "CustomToolParam"))
+            .into()
+    }
+}
+#[cfg(feature = "openapi")]
+impl utoipa::ToSchema for ResponsesTool {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("ResponsesTool")
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl utoipa::PartialSchema for CodexNamespaceMember {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::Ref;
+        use utoipa::openapi::schema::{AllOfBuilder, ObjectBuilder, SchemaType, Type};
+
+        utoipa::openapi::schema::OneOfBuilder::new()
+            .discriminator(Some(utoipa::openapi::schema::Discriminator::new("type")))
+            .item(
+                AllOfBuilder::new()
+                    .item(
+                        ObjectBuilder::new()
+                            .property(
+                                "type",
+                                ObjectBuilder::new()
+                                    .schema_type(SchemaType::new(Type::String))
+                                    .enum_values(Some(["function"])),
+                            )
+                            .required("type"),
+                    )
+                    .item(Ref::from_schema_name("FunctionToolParam")),
+            )
+            .into()
+    }
+}
+#[cfg(feature = "openapi")]
+impl utoipa::ToSchema for CodexNamespaceMember {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("CodexNamespaceMember")
+    }
 }
 
 impl ResponsesTool {

@@ -211,6 +211,7 @@ turns:
 | `record_mcp_cassettes.sh` | Native MCP counter tool discovery and calls (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_web_search_cassettes.sh` | Matching web-search calls (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_dynamo_cassettes.sh` | Stateful two-turn and client-executed function tool call cassettes (streaming + non-streaming) | NVIDIA Dynamo frontend |
+| `record_sglang_cassettes.sh` | Same shared executor scenarios as Dynamo, staged validation and sanitized provenance | SGLang |
 | `record_tool_search_cassettes.sh` | Four-turn mixed function/namespace client tool-search characterization; gateway blocking, HTTP/SSE, and WebSocket acceptance | gateway and OpenAI reference |
 
 ### Text-only (OpenAI)
@@ -278,6 +279,11 @@ hydrated item history the gateway sends upstream), records it, and merges both i
 ```bash
 DYNAMO_URL=http://127.0.0.1:8000 MODEL=openai/gpt-oss-20b bash tests/cassettes/record_dynamo_cassettes.sh
 ```
+
+### SGLang
+
+For SGLang launch, recording, sanitation, and replay instructions, see
+[the SGLang upstream guide](../../../../docs/guides/sglang-upstream.md).
 
 ### Client tool search (OpenAI reference and gateway)
 
