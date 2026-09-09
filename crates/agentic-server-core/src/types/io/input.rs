@@ -446,7 +446,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn issue_150_structured_input_without_message_type() {
+    fn structured_input_without_message_type() {
         // The full request body from vllm-project/agentic-api#150. `ResponsesInput`
         // models the `input` field's value, so pull that field out before
         // deserializing, mirroring how the request struct's field is populated.
