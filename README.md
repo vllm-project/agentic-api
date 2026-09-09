@@ -176,6 +176,9 @@ Serving through [NVIDIA Dynamo](https://github.com/ai-dynamo/dynamo) instead of 
 gateway at the Dynamo frontend the same way; see
 [Running Agentic API in front of NVIDIA Dynamo](docs/guides/dynamo-upstream.md).
 
+For SGLang, see [Running Agentic API in front of SGLang](docs/guides/sglang-upstream.md), including the pinned
+launch configuration, cassette recorder, and shared provider replay tests.
+
 **2. Start Agentic API**, pointing it at the vLLM server (set the `YOU_*` variables to enable built-in web search):
 
 ```bash

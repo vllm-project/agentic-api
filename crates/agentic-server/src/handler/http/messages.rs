@@ -11,13 +11,14 @@ use agentic_core::executor::{
     validate_native_web_search_request,
 };
 use agentic_core::proxy::{
-    ProxyAuth, ProxyBody, ProxyRequest, ProxyResponse, error_response_for_auth, proxy_request_with_path,
-    upstream_request_headers,
+    ProxyAuth, ProxyRequest, error_response_for_auth, proxy_request_with_path, upstream_request_headers,
 };
 use agentic_core::tool::ToolRegistry;
 use agentic_core::types::messages::{MessagesRequest, has_gateway_tool, registry_tools};
 
-use super::super::common::{convert_response, read_bytes_with_auth, sse_response_with_headers};
+use super::super::common::{
+    convert_response, read_bytes_with_auth, sse_response_with_headers, upstream_error_response,
+};
 use crate::app::AppState;
 
 async fn proxy_messages(
@@ -44,20 +45,8 @@ async fn proxy_messages(
 /// Preserve upstream Messages errors verbatim; render local executor failures
 /// as an Anthropic error envelope, consistent with the proxy path (E14).
 fn messages_error_response(err: ExecutorError) -> Response {
-    if let ExecutorError::LLMRequest {
-        status,
-        body,
-        mut headers,
-    } = err
-    {
-        headers
-            .entry(http::header::CONTENT_TYPE)
-            .or_insert(http::HeaderValue::from_static("application/json"));
-        return convert_response(ProxyResponse {
-            status,
-            headers,
-            body: ProxyBody::Full(Bytes::from(body)),
-        });
+    if let ExecutorError::LLMRequest { status, body, headers } = err {
+        return upstream_error_response(status, body, headers);
     }
     convert_response(error_response_for_auth(
         err.http_status(),
@@ -123,6 +112,22 @@ async fn execute_messages(
     }
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/v1/messages",
+    request_body = agentic_core::types::messages::MessagesRequest,
+    responses(
+        (status = 200, description = "JSON when stream=false, SSE when stream=true",
+            content(
+                (crate::openapi::MessagesResponse = "application/json"),
+                (() = "text/event-stream"),
+            )),
+        (status = 400, description = "Invalid request", body = crate::openapi::AnthropicErrorResponse),
+        (status = 502, description = "Upstream error", body = crate::openapi::AnthropicErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+    tag = "messages",
+))]
 pub async fn messages(State(state): State<AppState>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
     let bytes: Bytes = match read_bytes_with_auth(body, ProxyAuth::Anthropic).await {
@@ -148,6 +153,18 @@ pub async fn messages(State(state): State<AppState>, request: Request) -> Respon
     proxy_messages(&state, parts, bytes, "/v1/messages").await
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/v1/messages/count_tokens",
+    request_body = crate::openapi::CountTokensRequest,
+    responses(
+        (status = 200, description = "Token count result", body = crate::openapi::CountTokensResponse),
+        (status = 400, description = "Invalid request", body = crate::openapi::AnthropicErrorResponse),
+        (status = 502, description = "Upstream error", body = crate::openapi::AnthropicErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+    tag = "messages",
+))]
 pub async fn count_tokens(State(state): State<AppState>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
     let mut bytes: Bytes = match read_bytes_with_auth(body, ProxyAuth::Anthropic).await {

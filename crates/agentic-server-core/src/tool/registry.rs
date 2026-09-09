@@ -1,8 +1,10 @@
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
+use std::future::{Future, ready};
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use super::codex::insert_namespace_entries;
 use super::custom::{CustomHandler, CustomToolMap, insert_custom_entry};
@@ -10,18 +12,30 @@ use super::executors::GatewayExecutors;
 use super::function::insert_function_entry;
 use super::mcp::registry::insert_discovered_mcp_entry;
 use super::ownership::{GatewayBinding, ToolOwnership};
+use super::tool_search::{
+    TOOL_SEARCH_NAME, ensure_request_prepared, insert_tool_search_entry, validate_blocking_response,
+};
 use super::web_search::insert_web_search_entry;
-use super::{CodexNamespaceHandler, McpHandler, NamespaceMap, ToolError, ToolOutput};
+use super::{
+    CodexNamespaceHandler, McpHandler, NamespaceMap, ToolError, ToolOutput, ToolSearchMetadata, ToolSearchState,
+};
 use crate::events::WireEvent;
 
 use crate::types::io::output::{FunctionToolCall, McpListTools};
 use crate::types::io::{InputItem, OutputItem, ResponsesInput};
+use crate::types::request_response::RequestPayload;
 use crate::types::tools::{CodeInterpreterToolParam, FileSearchToolParam, ResponsesTool};
+use crate::utils::common::serialize_to_value;
+
+const MAX_MCP_SERVERS_PER_REQUEST: usize = 64;
+const MAX_DISCOVERED_MCP_TOOLS_PER_REQUEST: usize = 128;
+const MAX_MCP_DISCOVERY_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolType {
     Function,
+    ToolSearch,
     Custom,
     CodexNamespace,
     Mcp,
@@ -38,6 +52,7 @@ impl ToolType {
     pub(crate) const fn description(self) -> &'static str {
         match self {
             Self::Function => "function tool",
+            Self::ToolSearch => "tool search",
             Self::Custom => "custom tool",
             Self::CodexNamespace => "Codex namespace tool",
             Self::Mcp => "MCP tool",
@@ -53,7 +68,10 @@ impl ToolType {
     /// `ToolOwnership::is_gateway` on it directly.
     #[must_use]
     pub const fn is_gateway_owned(self) -> bool {
-        !matches!(self, Self::Function | Self::Custom | Self::CodexNamespace)
+        !matches!(
+            self,
+            Self::Function | Self::ToolSearch | Self::Custom | Self::CodexNamespace
+        )
     }
 }
 
@@ -154,6 +172,9 @@ fn insert_code_interpreter_entry(entries: &mut HashMap<String, ToolEntry>, _para
 pub struct ToolRegistry {
     entries: HashMap<String, ToolEntry>,
 
+    /// Prepared public/private tool-search projection for this request.
+    tool_search: Option<Box<ToolSearchState>>,
+
     /// Built once from the declared tools, so final payload and streaming event
     /// restoration don't rebuild it on every call.
     namespace_map: Option<NamespaceMap>,
@@ -180,43 +201,99 @@ impl ToolRegistry {
     /// override a gateway-configured server's connection). Transient MCP
     /// discovery failures (the server could not be reached) are not
     /// returned as errors; they are recorded as failed [`McpListTools`]
-    /// metadata so the rest of the request can proceed.
-    ///
-    /// # Panics
-    ///
-    /// Panics if serialization of a tool param struct fails, which cannot happen
-    /// for the types defined in this module (`#[derive(Serialize)]` on plain structs).
+    /// metadata so the rest of the request can proceed. Returns
+    /// [`ToolError::Execution`] when discovered MCP metadata exceeds its byte
+    /// or tool-count limit.
     pub async fn build_with_handlers(
         tools: &mut [ResponsesTool],
         executors: &mut GatewayExecutors,
     ) -> Result<Self, ToolError> {
+        let mut remaining = MAX_MCP_DISCOVERY_BYTES;
+        Self::build_with_handlers_guarded(
+            tools,
+            executors,
+            |bytes| {
+                remaining = remaining.checked_sub(bytes).ok_or_else(|| {
+                    ToolError::Execution(format!(
+                        "MCP discovery metadata exceeded {MAX_MCP_DISCOVERY_BYTES} bytes"
+                    ))
+                })?;
+                Ok(())
+            },
+            || ready(()),
+        )
+        .await
+    }
+
+    /// Builds a registry while charging each guarded MCP discovery to a caller-owned budget.
+    ///
+    /// The callback runs before discovered metadata is copied into the registry or request, so
+    /// a request-wide executor budget can reject aggregate results without retaining the item
+    /// that crossed the limit. Keeping the callback generic preserves the dependency direction:
+    /// tool registration does not depend on executor error or policy types.
+    pub(crate) async fn build_with_handlers_guarded<E, Acquire, AcquireFuture, Guard>(
+        tools: &mut [ResponsesTool],
+        executors: &mut GatewayExecutors,
+        mut consume_materialized: impl FnMut(usize) -> Result<(), E>,
+        mut acquire_materialization: Acquire,
+    ) -> Result<Self, E>
+    where
+        E: From<ToolError>,
+        Acquire: FnMut() -> AcquireFuture,
+        AcquireFuture: Future<Output = Guard>,
+    {
         let mut entries = HashMap::with_capacity(tools.len());
         let mut mcp_list_tools_items = IndexMap::<String, Vec<McpListTools>>::new();
+        let mut discovered_mcp_tools = 0usize;
         // Namespace members must be keyed by the same flat, model-visible name
         // the model will call, so resolve them first — the same pure pass used
         // to build the upstream request.
         let resolved_tools = CodexNamespaceHandler.resolve_namespace_members(tools)?;
         McpHandler::validate_server_labels(&resolved_tools)?;
+        validate_mcp_server_count(&resolved_tools)?;
 
         for (index, tool) in resolved_tools.iter().enumerate() {
             match tool {
                 ResponsesTool::Function(p) => {
                     insert_unique_tool_entries(&mut entries, |resolved| insert_function_entry(resolved, p))?;
                 }
+                ResponsesTool::ToolSearch(param) => {
+                    insert_unique_tool_entries(&mut entries, |resolved| {
+                        insert_tool_search_entry(resolved, param);
+                    })?;
+                }
                 ResponsesTool::Mcp(p) => {
+                    let _materialization_guard = acquire_materialization().await;
                     let tool_set = match executors.mcp_server_tools(p).await {
                         Ok(tool_set) => tool_set,
                         // Config errors mean the declaration is invalid; the client can fix it.
-                        Err(error @ ToolError::Config(_)) => return Err(error),
+                        Err(error @ ToolError::Config(_)) => return Err(error.into()),
                         Err(error) => {
+                            let list_tools_item = McpHandler::failed_list_tools_item(&p.server_label, &error);
+                            consume_serialized(&list_tools_item, &mut consume_materialized)?;
                             mcp_list_tools_items
                                 .entry(p.server_label.clone())
                                 .or_default()
-                                .push(McpHandler::failed_list_tools_item(&p.server_label, &error));
+                                .push(list_tools_item);
                             continue;
                         }
                     };
                     let handlers = tool_set.discovered_handlers;
+                    discovered_mcp_tools = discovered_mcp_tools.checked_add(handlers.len()).ok_or_else(|| {
+                        E::from(ToolError::Execution(
+                            "discovered MCP tool count overflowed the platform limit".to_owned(),
+                        ))
+                    })?;
+                    if discovered_mcp_tools > MAX_DISCOVERED_MCP_TOOLS_PER_REQUEST {
+                        return Err(ToolError::Execution(format!(
+                            "request discovered {discovered_mcp_tools} MCP tools; at most {MAX_DISCOVERED_MCP_TOOLS_PER_REQUEST} discovered MCP tools are allowed"
+                        ))
+                        .into());
+                    }
+                    for handler in &handlers {
+                        consume_serialized(&handler.param, &mut consume_materialized)?;
+                    }
+                    consume_serialized(&tool_set.list_tools_item, &mut consume_materialized)?;
                     mcp_list_tools_items
                         .entry(p.server_label.clone())
                         .or_default()
@@ -260,10 +337,71 @@ impl ToolRegistry {
 
         Ok(Self {
             entries,
+            tool_search: None,
             namespace_map,
             custom_tool_map,
             mcp_list_tools_items,
         })
+    }
+
+    pub(crate) fn install_tool_search_state(&mut self, state: Option<ToolSearchState>) -> Result<(), ToolError> {
+        if let Some(state) = state {
+            self.validate_tool_search_state(&state)?;
+            self.tool_search = Some(Box::new(state));
+        }
+        Ok(())
+    }
+
+    /// Public declarations to expose in response metadata. `Some([])` is
+    /// intentionally distinct from an inactive request.
+    #[must_use]
+    pub(crate) fn tool_search_response_tools(&self) -> Option<Vec<ResponsesTool>> {
+        let state = self.tool_search.as_deref().filter(|state| state.is_active())?;
+        let mut tools = state.public_response_tools();
+        for tool in &mut tools {
+            tool.sanitize_for_persistence();
+        }
+        Some(tools)
+    }
+
+    /// Move the public tool projection into response persistence metadata.
+    pub(crate) fn take_tool_search_metadata(&mut self) -> Option<ToolSearchMetadata> {
+        self.tool_search
+            .take()
+            .filter(|state| state.is_active())
+            .map(|state| (*state).into_public_metadata())
+    }
+
+    pub(crate) fn validate_blocking_response(&self, body: &str) -> Result<(), ToolError> {
+        let empty = HashSet::new();
+        let state = self.tool_search.as_deref();
+        validate_blocking_response(
+            body,
+            state.is_some_and(ToolSearchState::is_active),
+            state.map_or(&empty, ToolSearchState::withheld_function_names),
+        )
+    }
+
+    /// Ensure tool-search requests went through the request-scoped preparation seam.
+    pub(crate) fn ensure_request_prepared(&self, request: &RequestPayload) -> Result<(), ToolError> {
+        ensure_request_prepared(request, self.tool_search.is_some())
+    }
+
+    pub(crate) fn restore_tool_search_response_tools(&self, wire: &mut WireEvent) -> Result<(), ToolError> {
+        let Some(response) = wire.rest.get_mut("response").and_then(Value::as_object_mut) else {
+            return Ok(());
+        };
+        if !response.contains_key("tools") {
+            return Ok(());
+        }
+        let Some(tools) = self.tool_search_response_tools() else {
+            return Ok(());
+        };
+        response.insert(
+            "tools".to_owned(),
+            serialize_to_value(&tools).map_err(|_| super::tool_search::invalid_upstream_search_call())?,
+        );
+        Ok(())
     }
 
     #[must_use]
@@ -271,11 +409,42 @@ impl ToolRegistry {
         self.entries.get(tool_name)
     }
 
-    pub(crate) fn tool_type_map(&self) -> HashMap<String, ToolType> {
+    pub(crate) fn tool_type(&self, name: &str) -> ToolType {
+        if name == TOOL_SEARCH_NAME && self.tool_search.as_deref().is_some_and(ToolSearchState::is_active) {
+            return ToolType::ToolSearch;
+        }
         self.entries
-            .iter()
-            .map(|(name, entry)| (name.clone(), entry.tool_type))
-            .collect()
+            .get(name)
+            .map_or(ToolType::Function, |entry| entry.tool_type)
+    }
+
+    pub(crate) fn is_withheld_function(&self, name: &str) -> bool {
+        self.tool_search
+            .as_deref()
+            .is_some_and(|state| state.withheld_function_names().contains(name))
+    }
+
+    pub(crate) fn tool_search_is_active(&self) -> bool {
+        self.tool_type(TOOL_SEARCH_NAME) == ToolType::ToolSearch
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_tool_types(tool_types: HashMap<String, ToolType>) -> Self {
+        let entries = tool_types
+            .into_iter()
+            .map(|(name, tool_type)| {
+                let entry = if tool_type.is_gateway_owned() {
+                    ToolEntry::gateway(tool_type, None, None)
+                } else {
+                    ToolEntry::client(tool_type, None)
+                };
+                (name, entry)
+            })
+            .collect();
+        Self {
+            entries,
+            ..Self::default()
+        }
     }
 
     #[must_use]
@@ -327,6 +496,34 @@ impl ToolRegistry {
     /// Marks the current request's discovery lifecycle as consumed.
     pub(crate) fn clear_mcp_list_tool_items(&mut self) {
         self.mcp_list_tools_items.clear();
+    }
+
+    /// Validate the private dispatch table against prepared tool-search state.
+    fn validate_tool_search_state(&self, state: &ToolSearchState) -> Result<(), ToolError> {
+        if !state.is_active() {
+            return Ok(());
+        }
+        if self
+            .entries
+            .keys()
+            .any(|name| state.withheld_function_names().contains(name))
+        {
+            return Err(ToolError::Config(
+                "a loaded tool collides with a withheld function name".to_owned(),
+            ));
+        }
+        let Some(_) = state.synthetic_tool_search() else {
+            return Ok(());
+        };
+        let entry = self.entries.get(TOOL_SEARCH_NAME).ok_or_else(|| {
+            ToolError::Config("prepared tool-search declaration is missing from the private registry".to_owned())
+        })?;
+        if entry.tool_type != ToolType::ToolSearch || !matches!(entry.ownership, ToolOwnership::Client) {
+            return Err(ToolError::Config(
+                "prepared tool-search declaration has invalid private registry ownership".to_owned(),
+            ));
+        }
+        Ok(())
     }
 
     pub fn restore_final_payload_output(&self, output: &mut [OutputItem]) {
@@ -382,6 +579,29 @@ impl ToolRegistry {
     }
 }
 
+fn validate_mcp_server_count(tools: &[ResponsesTool]) -> Result<(), ToolError> {
+    let mcp_server_count = tools
+        .iter()
+        .filter(|tool| matches!(tool, ResponsesTool::Mcp(_)))
+        .count();
+    if mcp_server_count > MAX_MCP_SERVERS_PER_REQUEST {
+        return Err(ToolError::Config(format!(
+            "request declared {mcp_server_count} MCP servers; at most {MAX_MCP_SERVERS_PER_REQUEST} MCP server declarations are allowed"
+        )));
+    }
+    Ok(())
+}
+
+fn consume_serialized<T, E>(value: &T, consume_materialized: &mut impl FnMut(usize) -> Result<(), E>) -> Result<(), E>
+where
+    T: Serialize,
+    E: From<ToolError>,
+{
+    let bytes = serde_json::to_vec(value)
+        .map_err(|error| ToolError::Execution(format!("failed to account for MCP discovery metadata: {error}")))?;
+    consume_materialized(bytes.len())
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -415,13 +635,22 @@ mod tests {
     }
 
     fn discovered_handler(server_label: &str, tool_name: &str, internal_name: &str) -> McpDiscoveredHandler {
+        discovered_handler_with_description(server_label, tool_name, internal_name, "Discovered test tool")
+    }
+
+    fn discovered_handler_with_description(
+        server_label: &str,
+        tool_name: &str,
+        internal_name: &str,
+        description: &str,
+    ) -> McpDiscoveredHandler {
         let param = McpDiscoveredToolParam {
             server_label: server_label.to_owned(),
             tool_name: tool_name.to_owned(),
             internal_name: internal_name.to_owned(),
             tool: serde_json::from_value(serde_json::json!({
                 "name": tool_name,
-                "description": "Discovered test tool",
+                "description": description,
                 "inputSchema": {"type": "object"}
             }))
             .expect("discovered MCP tool"),
@@ -430,6 +659,18 @@ mod tests {
             param,
             handler: Arc::new(McpHandler::discovered_tool_spec_only()),
         }
+    }
+
+    fn discovered_handlers(server_label: &str, start: usize, count: usize) -> Vec<McpDiscoveredHandler> {
+        (start..start + count)
+            .map(|index| {
+                discovered_handler(
+                    server_label,
+                    &format!("tool-{index}"),
+                    &format!("mcp__{server_label}__tool_{index}"),
+                )
+            })
+            .collect()
     }
 
     fn mixed_tool_declarations() -> Vec<ResponsesTool> {
@@ -712,6 +953,152 @@ mod tests {
                 .is_some_and(|error| error.contains("failed"))
         );
         assert!(registry.is_empty());
+    }
+
+    #[tokio::test]
+    async fn build_with_handlers_guarded_rejects_aggregate_mcp_discovery_bytes() {
+        let mut executors = GatewayExecutors::default();
+        let description = "x".repeat(600);
+        for server_label in ["first", "second"] {
+            executors.insert(GatewayExecutorRegistration::Mcp {
+                server_label: server_label.to_owned(),
+                handlers: vec![discovered_handler_with_description(
+                    server_label,
+                    "tool",
+                    &format!("mcp__{server_label}__tool"),
+                    &description,
+                )],
+            });
+        }
+        let mut tools = vec![configured_declaration("first"), configured_declaration("second")];
+        let mut consumed = 0usize;
+
+        let error = ToolRegistry::build_with_handlers_guarded(
+            &mut tools,
+            &mut executors,
+            |bytes| {
+                consumed = consumed.saturating_add(bytes);
+                if consumed > 2_048 {
+                    return Err(ToolError::Execution("test MCP discovery budget exceeded".to_owned()));
+                }
+                Ok(())
+            },
+            || std::future::ready(()),
+        )
+        .await
+        .expect_err("aggregate MCP discovery must use the caller's shared budget");
+
+        assert!(matches!(error, ToolError::Execution(message) if message.contains("budget exceeded")));
+    }
+
+    #[tokio::test]
+    async fn build_with_handlers_applies_a_default_mcp_discovery_budget() {
+        let mut executors = GatewayExecutors::default();
+        let description = "x".repeat(MAX_MCP_DISCOVERY_BYTES / 4);
+        for server_label in ["first", "second"] {
+            executors.insert(GatewayExecutorRegistration::Mcp {
+                server_label: server_label.to_owned(),
+                handlers: vec![discovered_handler_with_description(
+                    server_label,
+                    "tool",
+                    &format!("mcp__{server_label}__tool"),
+                    &description,
+                )],
+            });
+        }
+        let mut tools = vec![configured_declaration("first"), configured_declaration("second")];
+
+        let error = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
+            .await
+            .expect_err("the standalone registry builder must enforce its own discovery budget");
+
+        assert!(matches!(
+            error,
+            ToolError::Execution(message)
+                if message.contains("MCP discovery metadata exceeded")
+                    && message.contains(&MAX_MCP_DISCOVERY_BYTES.to_string())
+        ));
+    }
+
+    #[tokio::test]
+    async fn build_with_handlers_rejects_too_many_mcp_declarations_before_discovery() {
+        let mut accepted_executors = GatewayExecutors::default();
+        let mut exact_limit = Vec::new();
+        for index in 0..MAX_MCP_SERVERS_PER_REQUEST {
+            let server_label = format!("accepted-server-{index}");
+            accepted_executors.insert(GatewayExecutorRegistration::Mcp {
+                server_label: server_label.clone(),
+                handlers: vec![discovered_handler(
+                    &server_label,
+                    "tool",
+                    &format!("mcp__accepted_server_{index}__tool"),
+                )],
+            });
+            exact_limit.push(configured_declaration(&server_label));
+        }
+        ToolRegistry::build_with_handlers(&mut exact_limit, &mut accepted_executors)
+            .await
+            .expect("the documented MCP declaration limit must be accepted");
+
+        let mut tools = (0..=MAX_MCP_SERVERS_PER_REQUEST)
+            .map(|index| configured_declaration(&format!("server-{index}")))
+            .collect::<Vec<_>>();
+        let mut executors = GatewayExecutors::default();
+
+        let error = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
+            .await
+            .expect_err("too many MCP declarations must fail before discovery");
+
+        assert!(matches!(
+            error,
+            ToolError::Config(message)
+                if message.contains("MCP server declarations")
+                    && message.contains(&MAX_MCP_SERVERS_PER_REQUEST.to_string())
+        ));
+    }
+
+    #[tokio::test]
+    async fn build_with_handlers_rejects_too_many_discovered_mcp_tools() {
+        let first_count = MAX_DISCOVERED_MCP_TOOLS_PER_REQUEST / 2;
+        let second_count = MAX_DISCOVERED_MCP_TOOLS_PER_REQUEST - first_count;
+        let mut accepted_executors = GatewayExecutors::default();
+        accepted_executors.insert(GatewayExecutorRegistration::Mcp {
+            server_label: "accepted-first".to_owned(),
+            handlers: discovered_handlers("accepted-first", 0, first_count),
+        });
+        accepted_executors.insert(GatewayExecutorRegistration::Mcp {
+            server_label: "accepted-second".to_owned(),
+            handlers: discovered_handlers("accepted-second", first_count, second_count),
+        });
+        let mut accepted_tools = vec![
+            configured_declaration("accepted-first"),
+            configured_declaration("accepted-second"),
+        ];
+        ToolRegistry::build_with_handlers(&mut accepted_tools, &mut accepted_executors)
+            .await
+            .expect("the documented discovered MCP tool limit must be accepted across servers");
+
+        let mut executors = GatewayExecutors::default();
+        executors.insert(GatewayExecutorRegistration::Mcp {
+            server_label: "first".to_owned(),
+            handlers: discovered_handlers("first", 0, first_count),
+        });
+        executors.insert(GatewayExecutorRegistration::Mcp {
+            server_label: "second".to_owned(),
+            handlers: discovered_handlers("second", first_count, second_count + 1),
+        });
+        let mut tools = vec![configured_declaration("first"), configured_declaration("second")];
+
+        let error = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
+            .await
+            .expect_err("too many discovered MCP tools must fail");
+
+        assert!(matches!(
+            error,
+            ToolError::Execution(message)
+                if message.contains("discovered MCP tools")
+                    && message.contains(&MAX_DISCOVERED_MCP_TOOLS_PER_REQUEST.to_string())
+        ));
     }
 
     #[tokio::test]

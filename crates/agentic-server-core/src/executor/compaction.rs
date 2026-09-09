@@ -1,15 +1,19 @@
 use crate::executor::error::{ExecutorError, ExecutorResult};
+use crate::executor::persist::persist_prepared_turn;
+use crate::executor::prepare::prepare_request_tools;
 use crate::executor::rehydrate::rehydrate_conversation;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::upstream::fetch_blocking_payload;
+use crate::tool::ToolSearchState;
 use crate::types::event::MessageStatus;
 use crate::types::io::input::latest_compaction_window;
 use crate::types::io::{
-    CompactionItem, InputContent, InputItem, InputMessage, InputMessageContent, OutputItem, ResponseUsage,
-    ResponsesInput, ToolCallOutput, ToolOutputContent,
+    CompactionItem, InputContent, InputFileContent, InputItem, InputMessage, InputMessageContent, OutputItem,
+    ResponseUsage, ResponsesInput, ToolCallOutput, ToolOutputContent,
 };
 use crate::types::request_response::{CompactRequest, CompactedResponse, RequestPayload, ResponsePayload};
-use crate::utils::common::{serialize_to_string, utcnow_str, uuid7_str};
+use crate::types::tools::ResponsesTool;
+use crate::utils::common::{serialize_to_string, serialize_to_value, utcnow_str, uuid7_str};
 
 const COMPACTION_PROMPT: &str = "You are performing a CONTEXT CHECKPOINT COMPACTION. Create a concise handoff summary that preserves current progress, decisions, constraints, unresolved work, and critical references for the next model. Return only the summary.";
 const ESTIMATED_BYTES_PER_TOKEN: u64 = 4;
@@ -51,6 +55,7 @@ impl InputTokenEstimate {
         self.add_tokens(ESTIMATED_JSON_VALUE_OVERHEAD_TOKENS);
         match value {
             serde_json::Value::String(text) => self.add_text(text),
+            serde_json::Value::Number(number) => self.add_text(&number.to_string()),
             serde_json::Value::Array(values) => {
                 for value in values {
                     self.add_json_value(value);
@@ -62,7 +67,7 @@ impl InputTokenEstimate {
                     self.add_json_value(value);
                 }
             }
-            serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_) => {}
+            serde_json::Value::Null | serde_json::Value::Bool(_) => {}
         }
     }
 
@@ -142,11 +147,14 @@ fn item_has_meaningful_context(item: &InputItem) -> bool {
                     !text.text.trim().is_empty()
                 }
                 InputContent::InputImage(image) => image.image_url.as_deref().is_some_and(|url| !url.trim().is_empty()),
-                InputContent::Unknown => false,
+                // Message files are rejected during typed input validation.
+                InputContent::InputFile(_) | InputContent::Unknown => false,
             }),
         },
         InputItem::FunctionCall(call) => !call.name.trim().is_empty() || !call.arguments.trim().is_empty(),
         InputItem::FunctionCallOutput(output) => output.output.has_content(),
+        InputItem::ToolSearchCall(call) => !call.call_id.trim().is_empty() || value_has_content(&call.arguments),
+        InputItem::ToolSearchOutput(output) => !output.call_id.trim().is_empty() || !output.tools.is_empty(),
         InputItem::CustomToolCall(call) => !call.name.trim().is_empty() || !call.input.trim().is_empty(),
         InputItem::CustomToolCallOutput(output) => output.output.has_content(),
         InputItem::Reasoning(reasoning) => {
@@ -196,10 +204,29 @@ fn add_message_content(estimate: &mut InputTokenEstimate, content: &InputMessage
                         estimate.add_text(&text.text);
                     }
                     InputContent::InputImage(_) => estimate.add_tokens(ESTIMATED_IMAGE_TOKENS),
+                    InputContent::InputFile(file) => add_file_content(estimate, file),
                     InputContent::Unknown => estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS),
                 }
             }
         }
+    }
+}
+
+fn add_file_content(estimate: &mut InputTokenEstimate, file: &InputFileContent) {
+    estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
+    estimate.add_optional_text(file.file_data.as_deref());
+    estimate.add_optional_text(file.file_id.as_deref());
+    estimate.add_optional_text(file.file_url.as_deref());
+    estimate.add_optional_text(file.filename.as_deref());
+    estimate.add_optional_text(file.detail.as_deref());
+}
+
+fn add_tool_definition(estimate: &mut InputTokenEstimate, tool: &ResponsesTool) {
+    // Serialize only declarations, preserving nested schemas and extra fields without
+    // copying image-bearing input. An unrepresentable declaration must not undercount.
+    match serialize_to_value(tool) {
+        Ok(value) => estimate.add_json_value(&value),
+        Err(_) => estimate.add_tokens(u64::MAX),
     }
 }
 
@@ -214,14 +241,7 @@ fn add_tool_call_output(estimate: &mut InputTokenEstimate, output: &ToolCallOutp
                         estimate.add_text(&text.text);
                     }
                     ToolOutputContent::InputImage(_) => estimate.add_tokens(ESTIMATED_IMAGE_TOKENS),
-                    ToolOutputContent::InputFile(file) => {
-                        estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
-                        estimate.add_optional_text(file.file_data.as_deref());
-                        estimate.add_optional_text(file.file_id.as_deref());
-                        estimate.add_optional_text(file.file_url.as_deref());
-                        estimate.add_optional_text(file.filename.as_deref());
-                        estimate.add_optional_text(file.detail.as_deref());
-                    }
+                    ToolOutputContent::InputFile(file) => add_file_content(estimate, file),
                 }
             }
         }
@@ -250,6 +270,17 @@ fn add_input_item(estimate: &mut InputTokenEstimate, item: &InputItem) {
         InputItem::FunctionCallOutput(output) => {
             estimate.add_text(&output.call_id);
             add_tool_call_output(estimate, &output.output);
+        }
+        InputItem::ToolSearchCall(call) => {
+            estimate.add_text(&call.id);
+            estimate.add_text(&call.call_id);
+            estimate.add_json_value(&call.arguments);
+        }
+        InputItem::ToolSearchOutput(output) => {
+            estimate.add_text(&output.call_id);
+            for tool in &output.tools {
+                add_tool_definition(estimate, tool);
+            }
         }
         InputItem::CustomToolCall(call) => {
             estimate.add_text(&call.id);
@@ -323,6 +354,7 @@ fn request_payload(model: String, input: ResponsesInput, instructions: Option<St
         temperature: None,
         top_p: None,
         max_output_tokens: None,
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -377,7 +409,7 @@ pub(crate) async fn compact_items(
         conversation_id: None,
         conversation_version: None,
     };
-    let response = fetch_blocking_payload(&ctx, exec_ctx, auth).await?;
+    let response = fetch_blocking_payload(&ctx, exec_ctx, auth, &crate::tool::ToolRegistry::default(), None).await?;
     let summary = completed_summary_text(&response)?;
 
     Ok((
@@ -452,7 +484,10 @@ pub async fn compact_response(
         request.instructions,
     );
     payload.previous_response_id = request.previous_response_id;
-    let mut ctx = rehydrate_conversation(payload, exec_ctx).await?;
+    let ctx = rehydrate_conversation(payload, exec_ctx).await?;
+    let (mut ctx, tool_search_state) =
+        prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler).await?;
+    let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
     let model = ctx.enriched_request.model.clone();
     let instructions = ctx.enriched_request.instructions.clone();
     let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
@@ -460,7 +495,15 @@ pub async fn compact_response(
 
     let response_id = ctx.response_id.clone();
     ctx.new_input_items.clone_from(&output);
-    match exec_ctx.resp_handler.execute_turn(ctx, Vec::new()).await {
+    match persist_prepared_turn(
+        ctx,
+        tool_search_metadata,
+        Vec::new(),
+        &exec_ctx.conv_handler,
+        &exec_ctx.resp_handler,
+    )
+    .await
+    {
         Ok(()) | Err(ExecutorError::Storage(crate::StorageError::NotConfigured)) => {}
         Err(error) => return Err(error),
     }
@@ -661,6 +704,91 @@ mod tests {
         }) {
             assert_eq!(item.status, Some(MessageStatus::Completed));
             assert!(item.id.as_deref().is_some_and(|id| id.starts_with("msg_")));
+        }
+    }
+
+    #[test]
+    fn token_estimate_counts_large_json_numbers() {
+        assert_text_growth([
+            (
+                "reasoning numbers",
+                serde_json::json!([{"type": "reasoning", "id": "rs_1", "summary": [vec![1_u64; 64]]}]),
+                serde_json::json!([{"type": "reasoning", "id": "rs_1", "summary": [vec![u64::MAX; 64]]}]),
+            ),
+            (
+                "tool-search argument numbers",
+                serde_json::json!([{
+                    "type": "tool_search_call", "id": "ts_1", "call_id": "call_1",
+                    "arguments": {"values": vec![1_u64; 64]}
+                }]),
+                serde_json::json!([{
+                    "type": "tool_search_call", "id": "ts_1", "call_id": "call_1",
+                    "arguments": {"values": vec![u64::MAX; 64]}
+                }]),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn token_estimate_counts_complete_tool_search_declarations() {
+        let base = serde_json::json!([{
+            "type": "tool_search_output", "call_id": "call_1", "tools": [{
+                "type": "namespace", "name": "workspace", "description": "x", "extra_context": "x",
+                "tools": [{
+                    "type": "function", "name": "lookup", "description": "x",
+                    "parameters": {"type": "object", "description": "x", "enum": [1]},
+                    "extra_context": "x"
+                }]
+            }]
+        }]);
+        let long_text = "substantial tool context ".repeat(256);
+        for (label, pointer, value) in [
+            (
+                "namespace description",
+                "/0/tools/0/description",
+                serde_json::json!(long_text),
+            ),
+            (
+                "namespace extra",
+                "/0/tools/0/extra_context",
+                serde_json::json!(long_text),
+            ),
+            (
+                "function description",
+                "/0/tools/0/tools/0/description",
+                serde_json::json!(long_text),
+            ),
+            (
+                "function schema",
+                "/0/tools/0/tools/0/parameters/description",
+                serde_json::json!(long_text),
+            ),
+            (
+                "function extra",
+                "/0/tools/0/tools/0/extra_context",
+                serde_json::json!(long_text),
+            ),
+            (
+                "schema numbers",
+                "/0/tools/0/tools/0/parameters/enum/0",
+                serde_json::json!(u64::MAX),
+            ),
+        ] {
+            let mut long = base.clone();
+            *long.pointer_mut(pointer).expect("existing tool field") = value;
+            assert_text_growth([(label, base.clone(), long)]);
+        }
+    }
+
+    #[test]
+    fn token_estimate_counts_message_file_fields() {
+        let base = serde_json::json!([{
+            "role": "user", "content": [{"type": "input_file"}]
+        }]);
+        for field in ["file_data", "file_id", "file_url", "filename", "detail"] {
+            let mut long = base.clone();
+            long[0]["content"][0][field] = serde_json::json!("file context ".repeat(256));
+            assert_text_growth([(field, base.clone(), long)]);
         }
     }
 
@@ -1042,6 +1170,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn compaction_prepares_tool_search_before_summarization() {
+        let (exec_ctx, server) = mock_execution_context(ResponseStore::disabled()).await;
+        let request = serde_json::from_value(serde_json::json!({
+            "model": "test-model",
+            "input": [{
+                "type": "tool_search_call",
+                "id": "tsc_1",
+                "call_id": "call_search_1",
+                "arguments": {"query": "weather"}
+            }, {
+                "type": "tool_search_output",
+                "call_id": "call_search_1",
+                "tools": []
+            }]
+        }))
+        .expect("valid compact request");
+
+        let compacted = compact_response(request, &exec_ctx, None)
+            .await
+            .expect("compaction prepares and summarizes public search history");
+
+        assert!(matches!(compacted.output.last(), Some(InputItem::Compaction(_))));
+        assert!(
+            compacted
+                .output
+                .iter()
+                .all(|item| !matches!(item, InputItem::ToolSearchCall(_) | InputItem::ToolSearchOutput(_)))
+        );
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn compaction_persists_a_reusable_response_checkpoint() {
         let pool = create_pool_with_schema(Some("sqlite::memory:"))
             .await
@@ -1078,6 +1238,7 @@ mod tests {
                     model: "test-model".to_owned(),
                     previous_response_id: None,
                     effective_tools: None,
+                    tool_search_loaded_tools: None,
                     effective_tool_choice: crate::ToolChoice::Auto,
                     effective_instructions: None,
                 },
