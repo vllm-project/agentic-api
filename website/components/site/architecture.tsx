@@ -14,18 +14,18 @@ export function Architecture() {
   return (
     <figure
       className="architecture"
-      aria-label="Codex, Claude Code, and SDK clients connect to Agentic API over HTTP, SSE, or WebSockets. Agentic API handles state, tool execution, and continuation, then calls open models served by vLLM."
+      aria-label="Codex, Claude Code, and SDK clients connect to Agentic API over HTTP, SSE, or WebSockets. Agentic API handles state, tool execution, and continuation, then calls open models served by vLLM. SGLang and NVIDIA Dynamo are also supported."
     >
       <div className="diagram-heading">
         <span>THE AGENTIC STACK</span>
         <span>01 — 03</span>
       </div>
       <div className="clients">
-        <div>
+        <div className="client-codex">
           <Terminal size={19} />
           <span>Codex</span>
         </div>
-        <div>
+        <div className="client-claude">
           <Code2 size={19} />
           <span>Claude Code</span>
         </div>
@@ -84,6 +84,9 @@ export function Architecture() {
           <span>INFERENCE ENGINE</span>
         </div>
         <p>Open models. Your GPUs.</p>
+        <p className="model-compatibility">
+          (SGLang and Dynamo also supported)
+        </p>
       </div>
       <figcaption>
         <span className="diagram-dot" /> You own every layer.

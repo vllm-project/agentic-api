@@ -321,6 +321,22 @@ a:focus-visible {
 .clients svg {
   color: #b6b8c1;
 }
+.clients > .client-codex {
+  color: var(--brand-blue-soft);
+  background: #12283b;
+  border-color: #3074a8;
+}
+.clients > .client-claude {
+  color: var(--brand-gold-soft);
+  background: #2c2515;
+  border-color: #8c6b24;
+}
+.client-codex svg {
+  color: var(--brand-blue);
+}
+.client-claude svg {
+  color: var(--brand-gold);
+}
 .connector {
   position: relative;
   display: flex;
@@ -464,6 +480,10 @@ a:focus-visible {
   font-size: 12px;
   color: #a3a9b0;
   margin: 8px 0 0 35px;
+}
+.model-layer .model-compatibility {
+  color: var(--brand-blue-soft);
+  line-height: 1.5;
 }
 .architecture figcaption {
   font-size: 12px;
