@@ -9,7 +9,7 @@ export function Footer() {
         <div className="footer-top">
           <div>
             <Brand />
-            <p>Run your agent harness on open models.</p>
+            <p>Your harness, your models.</p>
           </div>
           <div className="footer-links">
             <div>
