@@ -6,8 +6,9 @@ executor and shared persistence layer.
 
 ## Data flow
 
-1. Upload a text file through `POST /v1/files`; optional `file-search-pdf` builds
-   also accept PDFs using bounded parser APIs (Rust 1.88 or newer).
+1. Upload a file through `POST /v1/files` into local filesystem storage. Text
+   ingestion is built in; optional `file-search-pdf` builds also extract PDF text
+   using bounded parser APIs (Rust 1.88 or newer).
 2. Create a vector store and attach the uploaded file through `/v1/vector_stores`.
 3. Extract text, create overlapping token chunks, obtain embeddings from a
    configured OpenAI-compatible embeddings endpoint, and persist chunks.
@@ -21,8 +22,10 @@ executor and shared persistence layer.
 - `types/file_search.rs` owns typed file, vector store, search, filter, ranking,
   chunking, and configuration contracts.
 - `storage/file_search.rs` owns SQL persistence. SQLite and PostgreSQL use the
-  existing pool and a new additive migration. Uploaded bytes are stored in the
-  database so a second replica and a restarted process see the same files.
+  existing pool and a new additive migration; the database retains file metadata.
+- `storage/local_files.rs` owns generated-ID file paths, atomic publication,
+  bounded reads, and file removal. Restarts reuse the configured directory.
+  Replicas require both a shared database and a shared file directory.
 - `tool/file_search/service.rs` owns ingestion and retrieval orchestration;
   focused sibling modules own embeddings, parsing/chunking, and ranking.
 - `tool/file_search/handler.rs` implements the existing typed tool interfaces.
@@ -35,7 +38,10 @@ Provide file upload/list/retrieve/content/delete, vector store
 create/list/retrieve/delete, file attach/list/retrieve/detach, and search.
 Ingestion completes before a successful attachment is returned. Failed ingestion
 must not publish partial chunks. Reattaching an existing file must be idempotent
-or an explicit conflict. Deletion removes associated chunks transactionally.
+or an explicit conflict. Deletion removes metadata and associated chunks
+transactionally, then unlinks
+the uploaded bytes. A crash after metadata deletion can leave an unreferenced file,
+which is no longer accessible through the API.
 
 Text and PDF files use token-based overlapping chunking. The tokenizer operates
 on bounded UTF-8 blocks with cancellation checks to prevent quadratic processing
@@ -64,7 +70,8 @@ must be rejected explicitly rather than silently ignored.
 
 Types live at `crate::types::file_search`:
 
-- `FileSearchConfig`: `embedding_base_url: Option<String>`,
+- `FileSearchConfig`: `files_storage_dir: Option<PathBuf>`,
+  `embedding_base_url: Option<String>`,
   `embedding_model: Option<String>`, `embedding_api_key: Option<String>`;
   implements `Default`, `Clone`, `Debug`, `Serialize`, and `Deserialize`.
 - `SearchRequest`: `query: SearchQuery`, `max_num_results: Option<usize>`,

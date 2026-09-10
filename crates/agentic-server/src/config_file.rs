@@ -1,12 +1,25 @@
 use std::collections::HashMap;
 use std::io::Write;
 use std::num::NonZeroUsize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use agentic_core::McpServerEntry;
 use agentic_core::config::CONFIG_FILE_NAME;
 use agentic_core::error::Error;
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct FilesFileConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub storage_dir: Option<PathBuf>,
+}
+
+impl FilesFileConfig {
+    fn is_empty(&self) -> bool {
+        self.storage_dir.is_none()
+    }
+}
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
@@ -82,6 +95,8 @@ impl MessagesGatewayFileConfig {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct FileConfig {
+    #[serde(skip_serializing_if = "FilesFileConfig::is_empty")]
+    pub files: FilesFileConfig,
     #[serde(skip_serializing_if = "FileSearchFileConfig::is_empty")]
     pub file_search: FileSearchFileConfig,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -200,6 +215,17 @@ impl FileConfig {
 
     fn validate(&self, path: &Path) -> Result<(), Error> {
         if self
+            .files
+            .storage_dir
+            .as_ref()
+            .is_some_and(|directory| directory.as_os_str().is_empty())
+        {
+            return Err(Error::Config(format!(
+                "configuration file {} contains an empty files.storage_dir",
+                path.display()
+            )));
+        }
+        if self
             .file_search
             .api_key_env
             .as_deref()
@@ -267,6 +293,33 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{FileConfig, McpFileConfig, WebSearchFileConfig};
+
+    #[test]
+    fn loads_local_files_storage_directory() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[files]\nstorage_dir = \"/var/lib/agentic/files\"\n",
+        )
+        .unwrap();
+        let config = FileConfig::load(home.path())
+            .expect("valid Files API configuration")
+            .unwrap();
+        let encoded = serde_json::to_value(config).unwrap();
+        assert_eq!(encoded["files"]["storage_dir"], "/var/lib/agentic/files");
+    }
+
+    #[test]
+    fn rejects_empty_local_files_storage_directory() {
+        let home = tempdir().expect("temp home");
+        fs::write(home.path().join("config.toml"), "[files]\nstorage_dir = \"\"\n").unwrap();
+        assert!(
+            FileConfig::load(home.path())
+                .unwrap_err()
+                .to_string()
+                .contains("files.storage_dir")
+        );
+    }
 
     #[test]
     fn loads_embedding_configuration_without_persisting_credentials() {

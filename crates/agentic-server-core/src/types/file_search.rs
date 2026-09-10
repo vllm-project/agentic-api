@@ -1,6 +1,6 @@
 //! Typed contracts for durable files, vector stores, and retrieval.
 
-use std::{collections::BTreeMap, fmt};
+use std::{collections::BTreeMap, fmt, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FileSearchConfig {
+    pub files_storage_dir: Option<PathBuf>,
     pub embedding_base_url: Option<String>,
     pub embedding_model: Option<String>,
     pub embedding_api_key: Option<String>,
@@ -16,6 +17,7 @@ pub struct FileSearchConfig {
 impl fmt::Debug for FileSearchConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("FileSearchConfig")
+            .field("files_storage_dir", &self.files_storage_dir)
             .field("embedding_configured", &self.embedding_base_url.is_some())
             .field("embedding_model", &self.embedding_model)
             .field(
@@ -37,6 +39,14 @@ pub enum FileSearchError {
     Conflict(String),
     #[error("{0}")]
     Unavailable(String),
+    #[error("local file storage {operation} failed")]
+    FileStorage {
+        operation: &'static str,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("local file storage configuration failed: {0}")]
+    Configuration(#[source] Box<crate::error::Error>),
     #[error("file search storage failed")]
     Storage(#[from] sqlx::Error),
     #[error("stored file search data could not be decoded")]
@@ -63,9 +73,9 @@ impl FileSearchError {
             Self::PdfParse(_) => 400,
             Self::NotFound(_) => 404,
             Self::Conflict(_) => 409,
-            Self::Unavailable(_) => 503,
+            Self::Unavailable(_) | Self::FileStorage { .. } => 503,
             Self::Provider(_) | Self::ProviderProtocol | Self::ProviderDecode(_) => 502,
-            Self::Storage(_) | Self::Serialization(_) | Self::Worker(_) => 500,
+            Self::Storage(_) | Self::Serialization(_) | Self::Worker(_) | Self::Configuration(_) => 500,
         }
     }
 
@@ -80,6 +90,11 @@ impl FileSearchError {
                 "Embedding service request failed".into()
             }
             Self::Storage(_) | Self::Serialization(_) | Self::Worker(_) => "File search operation failed".into(),
+            Self::FileStorage { .. } => {
+                "Local file storage is unavailable; check the configured directory, permissions, and file integrity"
+                    .into()
+            }
+            Self::Configuration(_) => "Local file storage configuration is invalid".into(),
             #[cfg(feature = "file-search-pdf")]
             Self::PdfParse(_) => "PDF text extraction failed; upload a valid unencrypted PDF containing text".into(),
         }

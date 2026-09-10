@@ -79,3 +79,25 @@ file-search output types, and required event/executor projection changes.
   tests, all-target/all-feature Clippy with warnings denied, formatting, OpenAPI
   tests, and all pre-commit hooks passed.
 - Prepared a signed-off feature commit and updated PR description for PR #34.
+
+## Local Files API storage follow-up
+
+The Files and vector stores HTTP operations remain part of this branch. New file
+uploads will place bytes in a configurable local directory, while SQLite or
+PostgreSQL retains metadata, attachments, chunks, and embeddings. Existing inline
+file bytes from the earlier draft remain readable. Binary uploads are independent
+of vector-store extraction support.
+
+- [x] Confirm failing config and binary-upload HTTP regressions.
+- [x] Add `[files] storage_dir` and `AGENTIC_FILES_STORAGE_DIR` configuration.
+- [x] Add HTTP lifecycle coverage for metadata, download, detachment, and deletion.
+- [x] Update deployment documentation for persistent and shared file directories.
+- [x] Verify atomic local publication, cancellation cleanup, bounded reads,
+  filesystem errors, and service restart behavior.
+- [x] Complete review, workspace checks, and update both published branches and PR.
+
+Validation completed for the filesystem follow-up: the full workspace suite with
+all features, default/PDF service tests, HTTP and configuration tests, all-target
+all-feature Clippy with warnings denied, formatting, and pre-commit checks pass.
+Independent review identified and verified fixes for cancelled-read capacity and
+new-directory durability. The SQL migration remains unchanged.

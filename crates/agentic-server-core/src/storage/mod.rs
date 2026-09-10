@@ -38,3 +38,4 @@ pub use types::{
     StorageError, StoreResult,
 };
 pub(crate) mod file_search;
+pub(crate) mod local_files;

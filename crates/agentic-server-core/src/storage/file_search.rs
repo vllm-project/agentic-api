@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sqlx::FromRow;
+use tokio_util::sync::CancellationToken;
 
 use super::{DbPool, DbTransaction};
 use crate::types::file_search::{
@@ -23,6 +24,13 @@ pub(crate) struct UploadedFile {
     pub data: String,
     pub content_type: String,
     pub content_base64: String,
+}
+
+pub(crate) enum FilePublicationFailure {
+    SafeToRemove(FileSearchError),
+    // A lost connection during COMMIT can leave the outcome unknown. Keeping
+    // the blob prevents a successfully committed row from losing its content.
+    Indeterminate(sqlx::Error),
 }
 
 #[derive(FromRow)]
@@ -81,12 +89,37 @@ impl FileSearchStorage {
         &self,
         file: &FileObject,
         content_type: &str,
-        content_base64: &str,
-    ) -> Result<(), FileSearchError> {
-        sqlx::query("INSERT INTO file_search_files (id, created_at, data, content_type, content_base64) VALUES ($1, $2, $3, $4, $5)")
-            .bind(&file.id).bind(file.created_at).bind(serde_json::to_string(file)?)
-            .bind(content_type).bind(content_base64).execute(self.pool.as_ref()).await?;
-        Ok(())
+        cancelled: &CancellationToken,
+    ) -> Result<(), FilePublicationFailure> {
+        let data = serde_json::to_string(file).map_err(|error| FilePublicationFailure::SafeToRemove(error.into()))?;
+        let mut tx = tokio::select! {
+            biased;
+            () = cancelled.cancelled() => return Err(FilePublicationFailure::SafeToRemove(super::local_files::cancelled_error())),
+            result = self.pool.begin() => result.map_err(|error| FilePublicationFailure::SafeToRemove(error.into()))?,
+        };
+        let query = sqlx::query("INSERT INTO file_search_files (id, created_at, data, content_type, content_base64) VALUES ($1, $2, $3, $4, '')")
+            .bind(&file.id).bind(file.created_at).bind(data).bind(content_type);
+        let inserted = tokio::select! {
+            biased;
+            () = cancelled.cancelled() => Err(super::local_files::cancelled_error()),
+            result = query.execute(&mut *tx) => result.map(|_| ()).map_err(FileSearchError::from),
+        };
+        let inserted = inserted.and_then(|()| {
+            if cancelled.is_cancelled() {
+                Err(super::local_files::cancelled_error())
+            } else {
+                Ok(())
+            }
+        });
+        if let Err(error) = inserted {
+            if let Err(rollback) = tx.rollback().await {
+                tracing::warn!(%rollback, "file metadata rollback failed; connection will be discarded");
+            }
+            return Err(FilePublicationFailure::SafeToRemove(error));
+        }
+        // Complete COMMIT even if the caller cancels at this point. The owned
+        // operation task preserves the blob whenever the outcome is uncertain.
+        tx.commit().await.map_err(FilePublicationFailure::Indeterminate)
     }
 
     pub(crate) async fn file(&self, id: &str) -> Result<UploadedFile, FileSearchError> {
@@ -421,10 +454,14 @@ mod tests {
     #[tokio::test]
     async fn serialized_embedding_capacity_is_checked_before_publication() {
         let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+        let files = tempfile::tempdir().unwrap();
         let service = FileSearchService::new(
             pool.clone(),
             Arc::new(reqwest::Client::new()),
-            FileSearchConfig::default(),
+            FileSearchConfig {
+                files_storage_dir: Some(files.path().to_owned()),
+                ..FileSearchConfig::default()
+            },
         )
         .unwrap();
         let store = service
@@ -450,10 +487,14 @@ mod tests {
     #[tokio::test]
     async fn store_chunk_capacity_is_checked_across_attachments() {
         let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+        let files = tempfile::tempdir().unwrap();
         let service = FileSearchService::new(
             pool.clone(),
             Arc::new(reqwest::Client::new()),
-            FileSearchConfig::default(),
+            FileSearchConfig {
+                files_storage_dir: Some(files.path().to_owned()),
+                ..FileSearchConfig::default()
+            },
         )
         .unwrap();
         let store = service
@@ -486,10 +527,14 @@ mod tests {
     #[tokio::test]
     async fn store_serialized_capacity_is_checked_across_attachments() {
         let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+        let files = tempfile::tempdir().unwrap();
         let service = FileSearchService::new(
             pool.clone(),
             Arc::new(reqwest::Client::new()),
-            FileSearchConfig::default(),
+            FileSearchConfig {
+                files_storage_dir: Some(files.path().to_owned()),
+                ..FileSearchConfig::default()
+            },
         )
         .unwrap();
         let store = service

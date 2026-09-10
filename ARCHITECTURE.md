@@ -657,8 +657,8 @@ the behavioral layer — routing, handler traits, normalization, and execution.
   projects typed call items and citations. Its shared `FileSearchService` handles
   file ingestion and semantic, keyword, and hybrid retrieval against
   `storage::file_search`. `ExecutionContext::from_config` initializes the service
-  from the existing database pool; the Files and vector store HTTP handlers call
-  this same service. See [file search](docs/api/file-search.md) for configuration,
+  from the existing database pool and local file storage. The Files and vector
+  store HTTP handlers call this same service. See [file search](docs/api/file-search.md) for configuration,
   resource limits, and optional PDF ingestion.
 - **`handler.rs`** — the two traits every tool type reasons about:
   ```rust

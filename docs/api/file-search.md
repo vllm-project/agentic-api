@@ -1,8 +1,29 @@
 # Files, vector stores, and file search
 
-Agentic API stores files, chunks, and vectors in its SQLite or PostgreSQL database.
+Agentic API stores uploaded file bytes on the local filesystem. File metadata,
+vector stores, chunks, and vectors use its SQLite or PostgreSQL database.
 Its built-in `file_search` tool retrieves document passages and supplies them to
 the model within the Responses tool loop. An OGX service is not required.
+
+## Configure local file storage
+
+The Files API saves uploaded bytes under `~/.agentic-api/files` by default, or
+`$AGENTIC_API_HOME/files` when `AGENTIC_API_HOME` is set. Configure another directory
+in `config.toml`:
+
+```toml
+[files]
+storage_dir = "/var/lib/agentic-api/files"
+```
+
+`AGENTIC_FILES_STORAGE_DIR` overrides this setting. Use an absolute path. The
+directory is created when needed for the first upload. Files are stored under
+generated file IDs; uploaded filenames remain metadata and never select a filesystem path.
+
+Use a persistent writable volume for container deployments. Restoring or moving
+an installation requires both the database and the files directory. Multiple
+replicas must share the same database and files directory; independent local
+disks are suitable for a single replica.
 
 ## Configure embeddings
 
@@ -49,10 +70,11 @@ failed or cancelled ingestion publishes no partial chunks. Creating a store with
 `file_ids` ingests those files before publishing the store. Attachments preserve
 the uploaded file ID, filename, attributes, and chunking strategy.
 
-UTF-8 text, Markdown, CSV, JSON, source files, and other supported text formats
-work in the default build. Uploads are limited to 20 MiB and must use purpose
-`assistants` or `user_data`. The default chunk size is 800 tokens with a 400-token
-overlap. Override it with:
+The Files API accepts binary uploads independently of search ingestion. Uploads
+are limited to 20 MiB and must use purpose `assistants` or `user_data`. Attaching a
+file to a vector store validates its format: UTF-8 text, Markdown, CSV, JSON, source
+files, and other supported text formats work in the default build. The default
+chunk size is 800 tokens with a 400-token overlap. Override it with:
 
 ```json
 {
@@ -75,9 +97,10 @@ cargo build -p agentic-server --features file-search-pdf
 ```
 
 This feature requires Rust 1.88 or newer for the parser's decompression limits.
-PDFs must contain extractable text; scanned PDFs require OCR before upload.
+PDFs must contain extractable text; scanned PDFs require OCR before ingestion.
 Encrypted PDFs and documents exceeding parsing, decompression, or extracted-text
-limits are rejected. The default build returns an actionable error for PDFs.
+limits are rejected. The default build can store and download PDFs, but returns
+an actionable error when a PDF is attached for ingestion.
 
 ## Search directly
 
@@ -146,8 +169,16 @@ parts, output items, and the terminal response.
 | Search a store | `POST /v1/vector_stores/{store_id}/search` |
 
 Lists accept `limit`, `after`, `before`, and `order`. Detaching a file preserves the
-original upload. Deleting an upload removes its attachments and chunks from all
-stores. Deleting a vector store preserves uploaded files.
+original upload. Deleting an upload removes its metadata, attachments, and chunks
+from all stores, then removes its local file bytes. Deleting a vector store
+preserves uploaded files.
+
+Uploads publish complete, synced files before committing metadata. Failures and
+cancellation before commit clean up the upload. Filesystem and SQL commits are
+separate: a process crash, failed unlink, or uncertain database commit can leave
+unreferenced files. Automatic orphan-file cleanup is not included. A missing or
+damaged file referenced by metadata returns a storage error instead of a partial
+download. Uploads stored inline by an earlier draft remain readable.
 
 The routes use the gateway's configured authentication policy. This first
 implementation uses bounded exact retrieval over SQL storage. It is intended for

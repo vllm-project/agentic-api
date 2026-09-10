@@ -13,9 +13,14 @@ use serde_json::{Value, json};
 
 mod support;
 
-async fn fixture() -> (FileSearchService, String, String) {
+async fn fixture() -> (FileSearchService, String, String, tempfile::TempDir) {
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
-    let service = FileSearchService::new(pool, Arc::new(reqwest::Client::new()), FileSearchConfig::default()).unwrap();
+    let files = tempfile::tempdir().unwrap();
+    let config = FileSearchConfig {
+        files_storage_dir: Some(files.path().to_owned()),
+        ..FileSearchConfig::default()
+    };
+    let service = FileSearchService::new(pool, Arc::new(reqwest::Client::new()), config).unwrap();
     let file = service
         .upload_file(
             "policy.txt",
@@ -39,7 +44,7 @@ async fn fixture() -> (FileSearchService, String, String) {
         )
         .await
         .unwrap();
-    (service, store.id, file.id)
+    (service, store.id, file.id, files)
 }
 
 async fn context(service: FileSearchService, url: &str) -> Arc<ExecutionContext> {
@@ -163,7 +168,7 @@ fn assert_file_search_stream(events: &[Value], output: &Value) {
 async fn file_search_blocking_and_streaming_preserve_context_include_and_citations() {
     for streaming in [false, true] {
         for include_results in [false, true] {
-            let (service, store_id, file_id) = fixture().await;
+            let (service, store_id, file_id, _files) = fixture().await;
             let llm = support::MockServer::start_deque(vec![
                 upstream(vec![search_call()], streaming),
                 upstream(vec![answer(&file_id)], streaming),
@@ -232,7 +237,7 @@ async fn file_search_blocking_and_streaming_preserve_context_include_and_citatio
 
 #[tokio::test]
 async fn file_search_mixed_client_call_waits_and_preserves_private_search_output() {
-    let (service, store_id, file_id) = fixture().await;
+    let (service, store_id, file_id, _files) = fixture().await;
     let client_call = json!({"type":"function_call","id":"fc_weather","call_id":"call_weather","name":"weather","arguments":"{}","status":"completed"});
     let llm = support::MockServer::start_deque(vec![
         upstream(vec![search_call(), client_call], false),
@@ -270,7 +275,7 @@ async fn file_search_mixed_client_call_waits_and_preserves_private_search_output
 
 #[tokio::test]
 async fn file_search_empty_results_never_create_citations() {
-    let (service, store_id, file_id) = fixture().await;
+    let (service, store_id, file_id, _files) = fixture().await;
     let mut call = search_call();
     call["arguments"] = json!("{\"queries\":[\"unmatchedzzzz\"]}");
     let llm = support::MockServer::start_deque(vec![
@@ -291,7 +296,7 @@ async fn file_search_empty_results_never_create_citations() {
 
 #[tokio::test]
 async fn file_search_failure_is_a_failed_call_with_a_complete_stream_lifecycle() {
-    let (service, _, file_id) = fixture().await;
+    let (service, _, file_id, _files) = fixture().await;
     let llm = support::MockServer::start_deque(vec![
         upstream(vec![search_call()], true),
         upstream(vec![answer(&file_id)], true),
@@ -338,7 +343,7 @@ async fn file_search_selectors_normalize_and_release_after_search() {
         ),
     ] {
         for streaming in [false, true] {
-            let (service, store_id, file_id) = fixture().await;
+            let (service, store_id, file_id, _files) = fixture().await;
             let llm = support::MockServer::start_deque(vec![
                 upstream(vec![search_call()], streaming),
                 upstream(vec![answer(&file_id)], streaming),
@@ -368,7 +373,7 @@ async fn file_search_selector_rejects_missing_declaration_before_inference() {
         json!({"type":"file_search"}),
         json!({"type":"allowed_tools","mode":"auto","tools":[{"type":"file_search"}]}),
     ] {
-        let (service, _, _) = fixture().await;
+        let (service, _, _, _files) = fixture().await;
         let llm = support::MockServer::start_deque(vec![]).await;
         let ctx = context(service, llm.url()).await;
         let mut request = support::make_request("Search", false, false, None, None);

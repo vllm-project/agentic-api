@@ -287,6 +287,9 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
         sqlite,
         tools: ToolRuntimeConfig {
             file_search: agentic_core::types::file_search::FileSearchConfig {
+                files_storage_dir: std::env::var_os("AGENTIC_FILES_STORAGE_DIR")
+                    .map(std::path::PathBuf::from)
+                    .or_else(|| file.files.storage_dir.clone()),
                 embedding_base_url: environment_value("AGENTIC_FILE_SEARCH_EMBEDDING_BASE_URL")
                     .or_else(|| file.file_search.embedding_base_url.clone()),
                 embedding_model: environment_value("AGENTIC_FILE_SEARCH_EMBEDDING_MODEL")

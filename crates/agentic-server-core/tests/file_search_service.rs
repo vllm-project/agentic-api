@@ -5,9 +5,30 @@ use agentic_core::types::file_search::*;
 use std::fmt::Write as _;
 use std::sync::Arc;
 
-async fn service() -> FileSearchService {
+struct TestService {
+    service: FileSearchService,
+    _files: tempfile::TempDir,
+}
+
+impl std::ops::Deref for TestService {
+    type Target = FileSearchService;
+    fn deref(&self) -> &Self::Target {
+        &self.service
+    }
+}
+
+fn file_config(files: &tempfile::TempDir) -> FileSearchConfig {
+    FileSearchConfig {
+        files_storage_dir: Some(files.path().to_owned()),
+        ..FileSearchConfig::default()
+    }
+}
+
+async fn service() -> TestService {
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
-    FileSearchService::new(pool, Arc::new(reqwest::Client::new()), FileSearchConfig::default()).unwrap()
+    let files = tempfile::tempdir().unwrap();
+    let service = FileSearchService::new(pool, Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
+    TestService { service, _files: files }
 }
 
 fn query(text: &str) -> SearchRequest {
@@ -18,14 +39,209 @@ fn query(text: &str) -> SearchRequest {
 }
 
 #[tokio::test]
-async fn uploads_keep_capacity_reserved_while_waiting_for_database() {
+async fn local_files_store_generated_keys_restart_and_delete() {
+    let files = tempfile::tempdir().unwrap();
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
-    let service = FileSearchService::new(
-        pool.clone(),
-        Arc::new(reqwest::Client::new()),
-        FileSearchConfig::default(),
-    )
+    let config = file_config(&files);
+    let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), config.clone()).unwrap();
+    let file = service
+        .upload_file("../../outside.txt", "text/plain", "assistants", b"on disk".to_vec())
+        .await
+        .unwrap();
+    assert_eq!(tokio::fs::read(files.path().join(&file.id)).await.unwrap(), b"on disk");
+    let encoded: String = sqlx::query_scalar("SELECT content_base64 FROM file_search_files WHERE id = $1")
+        .bind(&file.id)
+        .fetch_one(pool.as_ref())
+        .await
+        .unwrap();
+    assert!(encoded.is_empty(), "new uploads must not duplicate bytes in SQL");
+    assert_eq!(std::fs::read_dir(files.path()).unwrap().count(), 1);
+    drop(service);
+    let restarted = FileSearchService::new(pool, Arc::new(reqwest::Client::new()), config).unwrap();
+    assert_eq!(restarted.file_content(&file.id).await.unwrap(), b"on disk");
+    restarted.delete_file(&file.id).await.unwrap();
+    assert!(!files.path().join(&file.id).exists());
+    assert_eq!(restarted.get_file(&file.id).await.unwrap_err().status_code(), 404);
+}
+
+#[tokio::test]
+async fn local_files_accept_binary_uploads_but_validate_ingestion() {
+    let service = service().await;
+    let bytes = vec![0, 255, 128, 1];
+    let file = service
+        .upload_file("payload.bin", "application/octet-stream", "user_data", bytes.clone())
+        .await
+        .unwrap();
+    assert_eq!(service.file_content(&file.id).await.unwrap(), bytes);
+    let store = service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        service
+            .attach_file(
+                &store.id,
+                AttachFileRequest {
+                    file_id: file.id,
+                    ..AttachFileRequest::default()
+                }
+            )
+            .await
+            .unwrap_err()
+            .status_code(),
+        400
+    );
+}
+
+#[tokio::test]
+async fn local_files_reject_malformed_keys_and_missing_blobs_are_storage_failures() {
+    let files = tempfile::tempdir().unwrap();
+    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let service = FileSearchService::new(pool, Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
+    for key in [
+        "../outside",
+        "/tmp/outside",
+        "file-../outside",
+        "file-invalid",
+        "file-00000000-0000-0000-0000-000000000000/child",
+    ] {
+        assert_eq!(service.file_content(key).await.unwrap_err().status_code(), 400);
+        assert_eq!(service.delete_file(key).await.unwrap_err().status_code(), 400);
+    }
+    let file = service
+        .upload_file("lost.txt", "text/plain", "assistants", b"lost".to_vec())
+        .await
+        .unwrap();
+    tokio::fs::remove_file(files.path().join(&file.id)).await.unwrap();
+    assert_eq!(service.file_content(&file.id).await.unwrap_err().status_code(), 503);
+    assert_eq!(service.get_file(&file.id).await.unwrap().id, file.id);
+}
+
+#[tokio::test]
+async fn local_files_publication_failure_and_cancellation_clean_up_bytes() {
+    let files = tempfile::tempdir().unwrap();
+    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
+    sqlx::raw_sql("CREATE TRIGGER reject_upload BEFORE INSERT ON file_search_files BEGIN SELECT RAISE(ABORT, 'injected upload failure'); END;").execute(pool.as_ref()).await.unwrap();
+    assert!(
+        service
+            .upload_file("fail.txt", "text/plain", "assistants", b"failure".to_vec())
+            .await
+            .is_err()
+    );
+    assert_eq!(std::fs::read_dir(files.path()).unwrap().count(), 0);
+    sqlx::raw_sql("DROP TRIGGER reject_upload;")
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    let connection = pool.acquire().await.unwrap();
+    let cloned = service.clone();
+    let upload = tokio::spawn(async move {
+        cloned
+            .upload_file("cancel.txt", "text/plain", "assistants", b"cancelled".to_vec())
+            .await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        while std::fs::read_dir(files.path()).unwrap().count() == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
     .unwrap();
+    upload.abort();
+    assert!(upload.await.unwrap_err().is_cancelled());
+    drop(connection);
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        while std::fs::read_dir(files.path()).unwrap().count() != 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(
+        service
+            .list_files(&ListParams::default())
+            .await
+            .unwrap()
+            .data
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn local_files_preserve_legacy_database_content() {
+    use base64::Engine as _;
+    let files = tempfile::tempdir().unwrap();
+    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
+    let file = FileObject {
+        id: format!("file-{}", uuid::Uuid::now_v7()),
+        object: "file".into(),
+        bytes: 11,
+        created_at: 0,
+        filename: "legacy.txt".into(),
+        purpose: "assistants".into(),
+        status: "processed".into(),
+    };
+    sqlx::query("INSERT INTO file_search_files (id, created_at, data, content_type, content_base64) VALUES ($1, 0, $2, 'text/plain', $3)")
+        .bind(&file.id).bind(serde_json::to_string(&file).unwrap()).bind(base64::engine::general_purpose::STANDARD.encode(b"legacy reef")).execute(pool.as_ref()).await.unwrap();
+    assert_eq!(service.file_content(&file.id).await.unwrap(), b"legacy reef");
+    let store = service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    service
+        .attach_file(
+            &store.id,
+            AttachFileRequest {
+                file_id: file.id.clone(),
+                ..AttachFileRequest::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(service.search(&[store.id], &query("reef")).await.unwrap().data.len(), 1);
+    service.delete_file(&file.id).await.unwrap();
+    assert_eq!(std::fs::read_dir(files.path()).unwrap().count(), 0);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn local_files_do_not_follow_blob_symlinks_or_read_oversized_replacements() {
+    let files = tempfile::tempdir().unwrap();
+    let outside = tempfile::NamedTempFile::new().unwrap();
+    tokio::fs::write(outside.path(), b"private outside content")
+        .await
+        .unwrap();
+    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let service = FileSearchService::new(pool, Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
+    let file = service
+        .upload_file("safe.txt", "text/plain", "assistants", b"safe".to_vec())
+        .await
+        .unwrap();
+    let path = files.path().join(&file.id);
+    tokio::fs::remove_file(&path).await.unwrap();
+    std::os::unix::fs::symlink(outside.path(), &path).unwrap();
+    assert_eq!(service.file_content(&file.id).await.unwrap_err().status_code(), 503);
+    tokio::fs::remove_file(&path).await.unwrap();
+    let oversized = tokio::fs::File::create(&path).await.unwrap();
+    oversized
+        .set_len((agentic_core::tool::file_search::MAX_FILE_BYTES + 1) as u64)
+        .await
+        .unwrap();
+    assert_eq!(service.file_content(&file.id).await.unwrap_err().status_code(), 503);
+    service.delete_file(&file.id).await.unwrap();
+    assert_eq!(
+        tokio::fs::read(outside.path()).await.unwrap(),
+        b"private outside content"
+    );
+}
+
+#[tokio::test]
+async fn uploads_keep_capacity_reserved_while_waiting_for_database() {
+    let files = tempfile::tempdir().unwrap();
+    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
     let connection = pool.acquire().await.unwrap();
     let mut uploads =
         Box::pin(futures::future::join_all((0..4).map(|_| {
@@ -146,9 +362,10 @@ async fn before_pagination_returns_adjacent_files_stores_and_attachments() {
 
 #[tokio::test]
 async fn upload_attach_search_survives_service_recreation_and_deletion() {
+    let files = tempfile::tempdir().unwrap();
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
     let client = Arc::new(reqwest::Client::new());
-    let service = FileSearchService::new(pool.clone(), client.clone(), FileSearchConfig::default()).unwrap();
+    let service = FileSearchService::new(pool.clone(), client.clone(), file_config(&files)).unwrap();
     let bytes = b"The conservation policy protects coral reefs and marine ecosystems.".to_vec();
     let file = service
         .upload_file("ocean.txt", "text/plain", "assistants", bytes.clone())
@@ -169,7 +386,7 @@ async fn upload_attach_search_survives_service_recreation_and_deletion() {
         .await
         .unwrap();
     drop(service);
-    let recreated = FileSearchService::new(pool, client, FileSearchConfig::default()).unwrap();
+    let recreated = FileSearchService::new(pool, client, file_config(&files)).unwrap();
     assert_eq!(recreated.file_content(&file.id).await.unwrap(), bytes);
     let found = recreated
         .search(std::slice::from_ref(&store.id), &query("coral"))
@@ -546,7 +763,7 @@ async fn provider(
 }
 
 async fn embedding_service() -> (
-    FileSearchService,
+    TestService,
     ProviderState,
     tokio::task::JoinHandle<()>,
     Arc<agentic_core::storage::DbPool>,
@@ -564,14 +781,16 @@ async fn embedding_service() -> (
     let task = tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
+    let files = tempfile::tempdir().unwrap();
     let config = FileSearchConfig {
+        files_storage_dir: Some(files.path().to_owned()),
         embedding_base_url: Some(format!("http://{addr}/v1")),
         embedding_model: Some("fixture".into()),
         embedding_api_key: Some("never-log-this-key".into()),
     };
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
     let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), config.clone()).unwrap();
-    (service, state, task, pool, config)
+    (TestService { service, _files: files }, state, task, pool, config)
 }
 
 #[tokio::test]
@@ -804,13 +1023,9 @@ async fn pdf_text_is_extracted_and_original_pdf_remains_durable() {
 
 #[tokio::test]
 async fn database_failure_mid_publication_rolls_back_attachment_and_earlier_chunks() {
+    let files = tempfile::tempdir().unwrap();
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
-    let service = FileSearchService::new(
-        pool.clone(),
-        Arc::new(reqwest::Client::new()),
-        FileSearchConfig::default(),
-    )
-    .unwrap();
+    let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
     let store = service
         .create_vector_store(CreateVectorStoreRequest::default())
         .await
@@ -858,6 +1073,7 @@ fn ogx_vector_mode_alias_and_secret_safe_debug_are_supported() {
         SearchMode::Semantic
     );
     let config = FileSearchConfig {
+        files_storage_dir: None,
         embedding_base_url: Some("https://private.example/v1".into()),
         embedding_model: Some("model".into()),
         embedding_api_key: Some("secret-credential".into()),
@@ -867,15 +1083,11 @@ fn ogx_vector_mode_alias_and_secret_safe_debug_are_supported() {
 
 #[tokio::test]
 async fn uploaded_bytes_and_search_survive_closing_and_reopening_database_pool() {
+    let files = tempfile::tempdir().unwrap();
     let path = std::env::temp_dir().join(format!("file-search-restart-{}.db", uuid::Uuid::now_v7()));
     let url = format!("sqlite://{}", path.display());
     let pool = create_pool_with_schema(Some(&url)).await.unwrap();
-    let service = FileSearchService::new(
-        pool.clone(),
-        Arc::new(reqwest::Client::new()),
-        FileSearchConfig::default(),
-    )
-    .unwrap();
+    let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
     let store = service
         .create_vector_store(CreateVectorStoreRequest::default())
         .await
@@ -892,12 +1104,8 @@ async fn uploaded_bytes_and_search_survive_closing_and_reopening_database_pool()
     pool.close().await;
     drop(pool);
     let reopened = create_pool_with_schema(Some(&url)).await.unwrap();
-    let service = FileSearchService::new(
-        reopened.clone(),
-        Arc::new(reqwest::Client::new()),
-        FileSearchConfig::default(),
-    )
-    .unwrap();
+    let service =
+        FileSearchService::new(reopened.clone(), Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
     assert_eq!(
         service.file_content(&file.id).await.unwrap(),
         b"coral persisted across connections"
@@ -962,14 +1170,10 @@ async fn score_threshold_and_global_result_limit_apply_after_multiquery_merge() 
 #[tokio::test]
 #[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
 async fn postgres_file_search_persists_paginates_and_cascades_deletion() {
+    let files = tempfile::tempdir().unwrap();
     let url = std::env::var("TEST_POSTGRES_URL").expect("TEST_POSTGRES_URL must be set");
     let pool = create_pool_with_schema(Some(&url)).await.unwrap();
-    let service = FileSearchService::new(
-        pool.clone(),
-        Arc::new(reqwest::Client::new()),
-        FileSearchConfig::default(),
-    )
-    .unwrap();
+    let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
     let store = service
         .create_vector_store(CreateVectorStoreRequest {
             name: Some("PostgreSQL file search verification".into()),
@@ -1022,8 +1226,7 @@ async fn postgres_file_search_persists_paginates_and_cascades_deletion() {
     assert!(!next.has_more);
     assert_eq!(service.get_vector_store(&store.id).await.unwrap().file_counts.total, 2);
     drop(service);
-    let restarted =
-        FileSearchService::new(pool, Arc::new(reqwest::Client::new()), FileSearchConfig::default()).unwrap();
+    let restarted = FileSearchService::new(pool, Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
     assert_eq!(
         restarted
             .search(std::slice::from_ref(&store.id), &query("coral"))
@@ -1053,14 +1256,80 @@ async fn postgres_file_search_persists_paginates_and_cascades_deletion() {
 
 #[tokio::test]
 #[cfg(not(feature = "file-search-pdf"))]
-async fn pdf_disabled_build_rejects_upload_with_actionable_error() {
+async fn pdf_disabled_build_preserves_upload_but_rejects_ingestion() {
     let service = service().await;
-    let error = service
+    let file = service
         .upload_file("document.pdf", "application/pdf", "assistants", b"%PDF-1.4\n".to_vec())
+        .await
+        .unwrap();
+    let store = service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    let error = service
+        .attach_file(
+            &store.id,
+            AttachFileRequest {
+                file_id: file.id.clone(),
+                ..AttachFileRequest::default()
+            },
+        )
         .await
         .unwrap_err();
     assert_eq!(error.status_code(), 400);
     assert!(error.public_message().contains("file-search-pdf"));
+    assert_eq!(service.file_content(&file.id).await.unwrap(), b"%PDF-1.4\n");
+}
+
+#[tokio::test]
+async fn local_files_directory_is_lazy_and_configuration_failures_are_actionable() {
+    let parent = tempfile::tempdir().unwrap();
+    let directory = parent.path().join("created-on-upload");
+    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let config = FileSearchConfig {
+        files_storage_dir: Some(directory.clone()),
+        ..FileSearchConfig::default()
+    };
+    let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), config).unwrap();
+    assert!(!directory.exists());
+    assert!(
+        service
+            .list_files(&ListParams::default())
+            .await
+            .unwrap()
+            .data
+            .is_empty()
+    );
+    assert!(!directory.exists());
+    let file = service
+        .upload_file("new.txt", "text/plain", "assistants", b"new".to_vec())
+        .await
+        .unwrap();
+    assert!(directory.join(file.id).is_file());
+    let invalid_config = FileSearchConfig {
+        files_storage_dir: Some("relative".into()),
+        ..FileSearchConfig::default()
+    };
+    assert!(
+        FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), invalid_config)
+            .unwrap_err()
+            .to_string()
+            .contains("absolute")
+    );
+    let blocker = parent.path().join("not-a-directory");
+    tokio::fs::write(&blocker, b"file").await.unwrap();
+    let config = FileSearchConfig {
+        files_storage_dir: Some(blocker.join("files")),
+        ..FileSearchConfig::default()
+    };
+    let service = FileSearchService::new(pool, Arc::new(reqwest::Client::new()), config).unwrap();
+    let error = service
+        .upload_file("blocked.txt", "text/plain", "assistants", b"blocked".to_vec())
+        .await
+        .unwrap_err();
+    assert_eq!(error.status_code(), 503);
+    assert!(error.public_message().contains("permissions"));
+    assert!(std::error::Error::source(&error).is_some());
 }
 
 #[tokio::test]

@@ -10,12 +10,16 @@ use std::{
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio_util::sync::CancellationToken;
 
 use super::{embeddings::Embeddings, ingest, ranking};
 use crate::{
     storage::{
         DbPool,
-        file_search::{Collection, FileSearchStorage, PreparedAttachment, StoredChunk, StoredVectorStore},
+        file_search::{
+            Collection, FilePublicationFailure, FileSearchStorage, PreparedAttachment, StoredChunk, StoredVectorStore,
+        },
+        local_files::LocalFiles,
     },
     types::file_search::{
         AttachFileRequest, ChunkingStrategy, CreateVectorStoreRequest, DeleteObject, FileAttributes, FileCounts,
@@ -39,6 +43,7 @@ impl Drop for CancelIngestionOnDrop {
 #[derive(Clone)]
 pub struct FileSearchService {
     storage: FileSearchStorage,
+    files: LocalFiles,
     embeddings: Option<Embeddings>,
     workers: Arc<Semaphore>,
 }
@@ -66,8 +71,15 @@ impl FileSearchService {
         client: Arc<reqwest::Client>,
         config: FileSearchConfig,
     ) -> Result<Self, FileSearchError> {
+        let directory = match &config.files_storage_dir {
+            Some(directory) => directory.clone(),
+            None => crate::config::agentic_api_home()
+                .map_err(|error| FileSearchError::Configuration(Box::new(error)))?
+                .join("files"),
+        };
         Ok(Self {
             storage: FileSearchStorage::new(pool),
+            files: LocalFiles::new(directory)?,
             embeddings: Embeddings::from_config(client, &config)?,
             workers: Arc::new(Semaphore::new(4)),
         })
@@ -94,7 +106,7 @@ impl FileSearchService {
         Ok(())
     }
 
-    /// Stores uploaded bytes durably in the database.
+    /// Stores uploaded bytes locally and publishes their SQL metadata afterwards.
     ///
     /// # Errors
     /// Returns validation, resource-limit, or storage errors.
@@ -115,7 +127,9 @@ impl FileSearchService {
         if bytes.is_empty() || bytes.len() > MAX_FILE_BYTES {
             return invalid("file must contain 1 byte to 20 MiB");
         }
-        ingest::validate_content_type(filename, content_type)?;
+        if content_type.is_empty() || content_type.len() > 256 || content_type.chars().any(char::is_control) {
+            return invalid("content_type must contain 1 to 256 bytes without control characters");
+        }
         let file = FileObject {
             id: format!("file-{}", uuid::Uuid::now_v7()),
             object: "file".into(),
@@ -125,14 +139,26 @@ impl FileSearchService {
             purpose: purpose.into(),
             status: "processed".into(),
         };
-        let worker_permit = permit.clone();
-        let content = tokio::task::spawn_blocking(move || {
-            let _permit = worker_permit;
-            STANDARD.encode(bytes)
+        let storage = self.storage.clone();
+        let files = self.files.clone();
+        let content_type = content_type.to_owned();
+        let cancelled = CancellationToken::new();
+        let _cancel_on_drop = cancelled.clone().drop_guard();
+        // The caller joins this operation normally. On caller cancellation it
+        // retains its permit and finishes rollback/cleanup without abandoning I/O.
+        tokio::spawn(async move {
+            let _permit = permit;
+            files.publish(&file.id, &bytes, &cancelled).await?;
+            match storage.upload(&file, &content_type, &cancelled).await {
+                Ok(()) => Ok(file),
+                Err(FilePublicationFailure::SafeToRemove(error)) => {
+                    files.remove(&file.id).await?;
+                    Err(error)
+                }
+                Err(FilePublicationFailure::Indeterminate(error)) => Err(error.into()),
+            }
         })
-        .await?;
-        self.storage.upload(&file, content_type, &content).await?;
-        Ok(file)
+        .await?
     }
 
     /// # Errors
@@ -149,6 +175,7 @@ impl FileSearchService {
     /// # Errors
     /// Returns not-found or storage errors.
     pub async fn get_file(&self, id: &str) -> Result<FileObject, FileSearchError> {
+        LocalFiles::validate_id(id)?;
         self.storage.file_object(id).await
     }
 
@@ -156,21 +183,57 @@ impl FileSearchService {
     /// Returns not-found, resource-limit, or storage errors.
     pub async fn file_content(&self, id: &str) -> Result<Vec<u8>, FileSearchError> {
         let permit = self.permit()?;
+        LocalFiles::validate_id(id)?;
         let file = self.storage.file(id).await?;
-        tokio::task::spawn_blocking(move || {
-            let _permit = permit;
-            decode_content(&file.content_base64)
-        })
-        .await?
+        let object: FileObject = serde_json::from_str(&file.data)?;
+        self.read_content(id, object.bytes, file.content_base64, permit).await
     }
 
-    /// Deletes the file and all attachments/chunks atomically.
+    /// Atomically deletes metadata, attachments, and chunks, then removes the local blob.
     ///
     /// # Errors
     /// Returns not-found or storage errors.
     pub async fn delete_file(&self, id: &str) -> Result<DeleteObject, FileSearchError> {
-        self.storage.delete(Collection::Files, id, None).await?;
-        Ok(deleted(id, "file.deleted"))
+        LocalFiles::validate_id(id)?;
+        let permit = self.permit()?;
+        let storage = self.storage.clone();
+        let files = self.files.clone();
+        let id = id.to_owned();
+        // Once deletion starts, finish SQL cascading deletion and blob cleanup
+        // even if the caller disconnects. A failed SQL commit retains the blob.
+        tokio::spawn(async move {
+            let _permit = permit;
+            let file = storage.file(&id).await?;
+            storage.delete(Collection::Files, &id, None).await?;
+            if file.content_base64.is_empty() {
+                files.remove(&id).await?;
+            }
+            Ok(deleted(&id, "file.deleted"))
+        })
+        .await?
+    }
+
+    async fn read_content(
+        &self,
+        id: &str,
+        expected_bytes: i64,
+        legacy: String,
+        permit: Arc<OwnedSemaphorePermit>,
+    ) -> Result<Vec<u8>, FileSearchError> {
+        if legacy.is_empty() {
+            let files = self.files.clone();
+            let id = id.to_owned();
+            return tokio::spawn(async move {
+                let _permit = permit;
+                files.read(&id, expected_bytes, MAX_FILE_BYTES).await
+            })
+            .await?;
+        }
+        tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            decode_content(&legacy)
+        })
+        .await?
     }
 
     /// Creates a vector store, publishing initial file ingestion atomically.
@@ -308,8 +371,12 @@ impl FileSearchService {
         permit: Arc<OwnedSemaphorePermit>,
     ) -> Result<PreparedAttachment, FileSearchError> {
         validate_attributes(&request.attributes)?;
+        LocalFiles::validate_id(&request.file_id)?;
         let uploaded = self.storage.file(&request.file_id).await?;
         let file: FileObject = serde_json::from_str(&uploaded.data)?;
+        let bytes = self
+            .read_content(&request.file_id, file.bytes, uploaded.content_base64, permit.clone())
+            .await?;
         let strategy = request.chunking_strategy.unwrap_or_default();
         let chunking = ingest::chunking_config(&strategy)?;
         let filename = file.filename.clone();
@@ -318,7 +385,6 @@ impl FileSearchService {
         let _cancel_on_drop = CancelIngestionOnDrop(cancelled.clone());
         let texts = tokio::task::spawn_blocking(move || {
             let _permit = worker_permit;
-            let bytes = decode_content(&uploaded.content_base64)?;
             ingest::extract_and_chunk(bytes, &filename, &uploaded.content_type, &chunking, &cancelled)
         })
         .await??;
@@ -555,5 +621,67 @@ fn page<T>(mut data: Vec<T>, params: &ListParams, id: impl Fn(&T) -> &str) -> Li
         last_id: data.last().map(|item| id(item).to_owned()),
         data,
         has_more,
+    }
+}
+
+#[cfg(test)]
+mod local_file_tests {
+    use super::*;
+
+    #[test]
+    fn cancelled_local_read_retains_capacity_until_filesystem_io_finishes() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .max_blocking_threads(1)
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let directory = tempfile::tempdir().unwrap();
+            let pool = crate::storage::create_pool_with_schema(Some("sqlite::memory:"))
+                .await
+                .unwrap();
+            let service = FileSearchService::new(
+                pool,
+                Arc::new(reqwest::Client::new()),
+                FileSearchConfig {
+                    files_storage_dir: Some(directory.path().to_owned()),
+                    ..FileSearchConfig::default()
+                },
+            )
+            .unwrap();
+            let file = service
+                .upload_file("queued.txt", "text/plain", "assistants", b"queued".to_vec())
+                .await
+                .unwrap();
+            let (release, resume_receiver) = std::sync::mpsc::channel();
+            let (started, waiting) = tokio::sync::oneshot::channel();
+            let blocker = tokio::task::spawn_blocking(move || {
+                started.send(()).unwrap();
+                resume_receiver.recv().unwrap();
+            });
+            waiting.await.unwrap();
+            let mut read =
+                Box::pin(service.read_content(&file.id, file.bytes, String::new(), service.permit().unwrap()));
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_millis(20), &mut read)
+                    .await
+                    .is_err()
+            );
+            drop(read);
+            let available_while_io_is_queued = service.workers.available_permits();
+            release.send(()).unwrap();
+            blocker.await.unwrap();
+            tokio::time::timeout(std::time::Duration::from_secs(3), async {
+                while service.workers.available_permits() != 4 {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .unwrap();
+            assert_eq!(
+                available_while_io_is_queued, 3,
+                "cancelled reads must retain their operation slot until queued I/O finishes"
+            );
+        });
     }
 }
