@@ -616,7 +616,7 @@ mod tests {
     async fn mock_execution_context(response_store: ResponseStore) -> (ExecutionContext, tokio::task::JoinHandle<()>) {
         let app = Router::new().route(
             "/v1/responses",
-            post(|| async {
+            post(|_body: axum::body::Bytes| async {
                 axum::Json(serde_json::json!({
                     "id": "resp_upstream",
                     "object": "response",

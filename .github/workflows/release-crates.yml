@@ -56,8 +56,8 @@ jobs:
           toolchain: 1.98.0
           components: clippy, rustfmt
 
-      - name: Refresh lockfile
-        run: cargo check --workspace
+      - name: Verify lockfile
+        run: cargo check --workspace --locked
 
       - name: Cache cargo registry and build
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v4
@@ -75,19 +75,19 @@ jobs:
         run: cargo fmt -- --check
 
       - name: Run clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets --locked -- -D warnings
 
       - name: Run tests
-        run: cargo test
+        run: cargo test --locked
 
       - name: Read and verify package versions
         id: version
         run: |
           set -euo pipefail
           requested_version="${{ inputs.version }}"
-          core_version="$(cargo metadata --format-version 1 --no-deps \
+          core_version="$(cargo metadata --locked --format-version 1 --no-deps \
             | jq -r '.packages[] | select(.name == "agentic-server-core") | .version')"
-          server_version="$(cargo metadata --format-version 1 --no-deps \
+          server_version="$(cargo metadata --locked --format-version 1 --no-deps \
             | jq -r '.packages[] | select(.name == "agentic-server") | .version')"
 
           if [ -z "$core_version" ] || [ "$core_version" = "null" ]; then
@@ -148,8 +148,9 @@ jobs:
         if: inputs.dry_run
         run: |
           set -euo pipefail
-          cargo publish --dry-run -p agentic-server-core
-          cargo package -p agentic-server --no-verify
+          cargo publish --dry-run --locked -p agentic-server-core
+          cargo package --no-verify --locked -p agentic-server \
+            --config 'patch.crates-io.agentic-server-core.path="crates/agentic-server-core"'
           echo "Would release commit ${{ steps.target.outputs.sha }}"
           echo "Would create tag ${{ steps.version.outputs.tag }}"
           echo "Would create GitHub release ${{ steps.version.outputs.tag }} with generated notes"
@@ -158,7 +159,7 @@ jobs:
         if: ${{ !inputs.dry_run }}
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p agentic-server-core
+        run: cargo publish --locked -p agentic-server-core
 
       - name: Wait for agentic-server-core index
         if: ${{ !inputs.dry_run }}
@@ -183,7 +184,7 @@ jobs:
         if: ${{ !inputs.dry_run }}
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p agentic-server
+        run: cargo publish --locked -p agentic-server
 
       - name: Create release refs
         if: ${{ !inputs.dry_run }}
