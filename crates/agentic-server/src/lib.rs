@@ -6,3 +6,5 @@ pub mod app;
 pub mod auth;
 pub mod handler;
 pub mod model_capabilities;
+#[cfg(feature = "openapi")]
+pub mod openapi;

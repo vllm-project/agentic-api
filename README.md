@@ -123,8 +123,8 @@ permission checks and disables Codex approvals and sandboxing.
 ### Python distribution
 
 The `agentic-api` wheel packages the Rust gateway and a small Python launcher. This release produces wheel artifacts
-for 0.5.0 as a build-only release: download the wheel for your platform from the release workflow, then install that local file. It is
-not published on PyPI yet.
+for 0.6.0 as a build-only release: download the wheel for your platform from the release workflow, then install that
+local file. It is not published on PyPI yet.
 
 ```bash
 WHEEL_PATH=/absolute/path/to/agentic_api-PLATFORM.whl
@@ -175,6 +175,9 @@ vllm serve Qwen/Qwen3-30B-A3B-FP8 \
 Serving through [NVIDIA Dynamo](https://github.com/ai-dynamo/dynamo) instead of a standalone `vllm serve`? Point the
 gateway at the Dynamo frontend the same way; see
 [Running Agentic API in front of NVIDIA Dynamo](docs/guides/dynamo-upstream.md).
+
+For SGLang, see [Running Agentic API in front of SGLang](docs/guides/sglang-upstream.md), including the pinned
+launch configuration, cassette recorder, and shared provider replay tests.
 
 **2. Start Agentic API**, pointing it at the vLLM server (set the `YOU_*` variables to enable built-in web search):
 

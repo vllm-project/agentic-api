@@ -4,6 +4,35 @@ use serde::Deserialize;
 // --- Unit tests (per-event-type parsing) ---
 
 #[test]
+fn negative_sequence_numbers_preserve_event_payloads() {
+    for sequence in [-1, -2, i64::MIN] {
+        let line = format!(
+            r#"data: {{"type":"response.output_text.delta","delta":"hello","item_id":"msg_1","output_index":0,"content_index":0,"sequence_number":{sequence}}}"#
+        );
+        let frame = normalize_sse_line(&line).expect("negative sequence must not discard the event");
+        assert_eq!(frame.sequence_number(), None);
+        assert!(matches!(frame.payload, EventPayload::TextDelta { ref delta, .. } if delta == "hello"));
+        assert_eq!(frame.wire.output_index, Some(0));
+    }
+}
+
+#[test]
+fn sequence_number_deserialization_preserves_unsigned_range_and_rejects_nonintegers() {
+    for sequence in [0, 1, u64::MAX] {
+        let line = format!(r#"data: {{"type":"response.in_progress","sequence_number":{sequence}}}"#);
+        assert_eq!(normalize_sse_line(&line).unwrap().sequence_number(), Some(sequence));
+    }
+    for sequence in [r#""-1""#, "-1.5", "true", "{}", "[]"] {
+        let line = format!(r#"data: {{"type":"response.in_progress","sequence_number":{sequence}}}"#);
+        assert!(normalize_sse_line(&line).is_none(), "invalid sequence: {sequence}");
+    }
+    for fields in ["", r#", "sequence_number": null"#] {
+        let line = format!(r#"data: {{"type":"response.in_progress"{fields}}}"#);
+        assert_eq!(normalize_sse_line(&line).unwrap().sequence_number(), None);
+    }
+}
+
+#[test]
 fn test_text_delta() {
     let line = r#"data: {"type":"response.output_text.delta","delta":"hello","item_id":"msg_1","output_index":0,"content_index":0,"sequence_number":4}"#;
     let frame = normalize_sse_line(line).unwrap();
@@ -69,7 +98,7 @@ fn test_function_call_args_done() {
 
 #[test]
 fn test_output_item_done() {
-    let line = r#"data: {"type":"response.output_item.done","item":{"id":"msg_1","type":"message","status":"completed","content":[{"type":"output_text","text":"hi"}]},"output_index":0,"sequence_number":9}"#;
+    let line = r#"data: {"type":"response.output_item.done","item":{"id":"msg_1","item_id":"msg_fallback","type":"message","status":"completed","content":[{"type":"output_text","text":"hi"}]},"output_index":0,"sequence_number":9}"#;
     let frame = normalize_sse_line(line).unwrap();
     assert_eq!(frame.event_type, SSEEventType::OutputItemDone);
     if let EventPayload::OutputItemDone {
@@ -81,6 +110,7 @@ fn test_output_item_done() {
     {
         assert_eq!(item_id, "msg_1");
         assert_eq!(item_type, "message");
+        assert_eq!(item["id"], "msg_1");
         assert_eq!(item["content"][0]["text"].as_str(), Some("hi"));
     } else {
         panic!("expected OutputItemDone payload");
@@ -488,6 +518,28 @@ fn test_text_accumulation() {
         }
     }
     assert_eq!(text, "GLOBE");
+}
+
+#[test]
+fn sentinel_sequence_stream_preserves_terminal_usage_and_text() {
+    use agentic_core::executor::accumulator::ResponseAccumulator;
+    use agentic_core::types::io::OutputItem;
+
+    // Synthetic protocol regression data, not a captured provider recording.
+    let lines = SIMULATED_SSE.iter().map(|line| {
+        let mut event: serde_json::Value = serde_json::from_str(line.strip_prefix("data: ").unwrap()).unwrap();
+        event["sequence_number"] = (-1).into();
+        format!("data: {event}")
+    });
+    let payload = ResponseAccumulator::from_sse_lines(lines, None)
+        .expect("sentinel frames remain valid")
+        .finalize("test-model", None, None);
+    assert_eq!(payload.status, "completed");
+    assert_eq!(payload.output.len(), 1);
+    assert!(matches!(&payload.output[0], OutputItem::Message(message) if message.id == "msg_1"));
+    let serialized = serde_json::to_value(&payload).unwrap();
+    assert_eq!(serialized["output"][0]["content"][0]["text"], "GLOBE");
+    assert_eq!(serialized["usage"]["total_tokens"], 18);
 }
 
 #[test]

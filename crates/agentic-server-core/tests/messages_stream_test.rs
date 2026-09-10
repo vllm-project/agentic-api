@@ -12,14 +12,15 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use agentic_core::executor::{
-    BoxStream, ConversationHandler, ExecutionContext, MessagesUpstream, ResponseHandler, run_messages_stream,
+    BoxStream, ConversationHandler, ExecutionContext, MessagesRequestContext, MessagesUpstream, ResponseHandler,
+    run_messages_stream,
 };
 use agentic_core::storage::{ConversationStore, ResponseStore};
 use agentic_core::tool::{ToolRegistry, WebSearchHandler};
 use agentic_core::types::messages::{GatewayToolMap, ToolParam, registry_tools};
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
-use axum::routing::post;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use futures::StreamExt;
 use http::StatusCode;
@@ -146,7 +147,7 @@ async fn spawn_mock_vllm_stream_then_error(
 async fn spawn_mock_search() -> (String, tokio::task::JoinHandle<()>) {
     let app = Router::new().route(
         "/v1/search",
-        post(|Json(_body): Json<Value>| async move {
+        get(|| async move {
             Json(serde_json::json!({
                 "results": {"web": [{"url": "https://www.rust-lang.org/", "title": "Rust",
                     "description": "d", "snippets": ["Rust 1.89.0 is the latest stable release."]}], "news": []},
@@ -180,7 +181,8 @@ async fn run_test_messages_stream(
     exec_ctx: Arc<ExecutionContext>,
 ) -> BoxStream {
     let upstream = MessagesUpstream::new(&exec_ctx.llm_base_url, None, reqwest::header::HeaderMap::new());
-    run_messages_stream(request, registry, exec_ctx, upstream)
+    let ctx = MessagesRequestContext::from_value(request).expect("request context");
+    run_messages_stream(ctx, registry, exec_ctx, upstream)
         .await
         .map(|response| response.body)
         .unwrap()
@@ -188,8 +190,28 @@ async fn run_test_messages_stream(
 
 #[tokio::test]
 async fn messages_stream_presents_one_message_and_hides_gateway_tool() {
-    let (vllm_url, upstream, _v) = spawn_mock_vllm_stream(cassette_turn_streams()).await;
-    let (search_url, _s) = spawn_mock_search().await;
+    assert_messages_stream_presents_one_message(cassette_turn_streams()).await;
+}
+
+#[tokio::test]
+async fn messages_stream_accepts_unspaced_sse_data_through_gateway_tool_rounds() {
+    let streams = cassette_turn_streams()
+        .into_iter()
+        .map(|body| {
+            body.split_inclusive('\n')
+                .map(|line| {
+                    line.strip_prefix("data: ")
+                        .map_or_else(|| line.to_owned(), |data| format!("data:{data}"))
+                })
+                .collect()
+        })
+        .collect();
+    assert_messages_stream_presents_one_message(streams).await;
+}
+
+async fn assert_messages_stream_presents_one_message(streams: Vec<String>) {
+    let (vllm_url, upstream, vllm) = spawn_mock_vllm_stream(streams).await;
+    let (search_url, search) = spawn_mock_search().await;
     let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
 
     let request = serde_json::json!({
@@ -210,12 +232,27 @@ async fn messages_stream_presents_one_message_and_hides_gateway_tool() {
     let stream = run_test_messages_stream(request, registry, Arc::clone(&exec_ctx)).await;
     let chunks: Vec<String> = stream.collect().await;
     let sse = chunks.join("");
+    vllm.abort();
+    search.abort();
+    let _ = tokio::join!(vllm, search);
 
     // Two upstream rounds ran (tool round + final).
     assert_eq!(
         upstream.calls.load(Ordering::SeqCst),
         2,
         "one tool round + one final round"
+    );
+    let requests = upstream.requests.lock().await;
+    let tool_output = &requests[1]["messages"].as_array().unwrap().last().unwrap()["content"][0];
+    assert_eq!(tool_output["type"], "tool_result");
+    assert_ne!(
+        tool_output["is_error"], true,
+        "gateway search must succeed: {tool_output}"
+    );
+    assert!(
+        tool_output["content"]
+            .to_string()
+            .contains("https://www.rust-lang.org/")
     );
 
     // Exactly one logical message lifecycle.
