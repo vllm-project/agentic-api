@@ -226,32 +226,12 @@ pub async fn run_with_llm(
             }
             state = async {
                 wait_until_llm_ready(&config).await?;
-                build_state(&config, shutdown_token.clone()).await
+                build_state(&config, shutdown_token.clone(), max_request_body_size).await
             } => state?,
         };
 
-    match readiness_result {
-        Ok(true) => info!("LLM ready: {}", config.llm_api_base),
-        Ok(false) => {}
-        Err(err) => {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            return Err(err);
-        }
-    }
-
-    let shutdown_token = CancellationToken::new();
-    let state = match build_state(&config, shutdown_token.clone(), max_request_body_size).await {
-        Ok(s) => s,
-        Err(err) => {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            return Err(err);
-        }
-    };
-
-    let gateway = serve_gateway(state, host, port, authenticator);
-    tokio::pin!(gateway);
+        let gateway = serve_gateway(state, host, port, authenticator);
+        tokio::pin!(gateway);
 
         tokio::select! {
             gateway = &mut gateway => gateway,
