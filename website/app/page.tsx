@@ -22,7 +22,7 @@ export default function Home() {
             Now on <span>vLLM.</span>
           </h1>
           <p className="hero-description">
-            vLLM Agentic API is the agentic application layer to run{' '}
+            vLLM Agentic API is the agentic server that lets you run{' '}
             <strong>Codex</strong> and <strong>Claude Code</strong> on top of
             vLLM.
           </p>

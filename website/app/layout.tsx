@@ -13,11 +13,11 @@ export const metadata: Metadata = {
     template: '%s | vLLM Agentic API',
   },
   description:
-    'vLLM Agentic API is the agentic application layer to run Codex and Claude Code on top of vLLM. Conversation state, gateway-executed built-in tools, multi-turn execution, and WebSockets for open models.',
+    'vLLM Agentic API is the agentic server that lets you run Codex and Claude Code on top of vLLM.',
   openGraph: {
     title: 'vLLM Agentic API — Your agent harness. Now on vLLM.',
     description:
-      'The agentic application layer to run Codex and Claude Code on top of vLLM.',
+      'vLLM Agentic API is the agentic server that lets you run Codex and Claude Code on top of vLLM.',
     type: 'website',
   },
   icons: { icon: '/icon.svg' },
