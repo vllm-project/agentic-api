@@ -123,6 +123,9 @@ impl ExecutorError {
     #[must_use]
     pub fn http_status(&self) -> StatusCode {
         match self.client_visible_error() {
+            Self::Tool(ToolError::FileSearch(error)) => {
+                StatusCode::from_u16(error.status_code()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+            }
             Self::Storage(e) if e.is_not_found() => StatusCode::NOT_FOUND,
             Self::LLMRequest { status, .. } | Self::LLMTransport { status, .. } => *status,
             Self::ConversationLocked { .. }
@@ -146,6 +149,13 @@ impl ExecutorError {
     #[must_use]
     pub fn error_type(&self) -> &'static str {
         match self.client_visible_error() {
+            Self::Tool(ToolError::FileSearch(error)) => match error.status_code() {
+                400 => "invalid_request_error",
+                404 => "not_found",
+                409 => "conflict_error",
+                502 => "upstream_error",
+                _ => "server_error",
+            },
             Self::ConversationLocked { .. }
             | Self::Tool(ToolError::Config(_) | ToolError::MissingOutput { .. })
             | Self::InvalidRequest(_)
@@ -229,6 +239,32 @@ pub type ExecutorResult<T> = Result<T, ExecutorError>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_search_error_envelopes_preserve_request_failure_categories() {
+        use crate::types::file_search::FileSearchError;
+        for (source, status, category) in [
+            (
+                FileSearchError::InvalidRequest("bad query".to_owned()),
+                400,
+                "invalid_request_error",
+            ),
+            (FileSearchError::NotFound("missing file".to_owned()), 404, "not_found"),
+            (
+                FileSearchError::Conflict("already attached".to_owned()),
+                409,
+                "conflict_error",
+            ),
+            (FileSearchError::Unavailable("disabled".to_owned()), 503, "server_error"),
+            (FileSearchError::ProviderProtocol, 502, "upstream_error"),
+        ] {
+            let error = ExecutorError::from(ToolError::FileSearch(source));
+            assert_eq!(error.http_status().as_u16(), status);
+            assert_eq!(error.error_type(), category);
+            assert_eq!(error.response_error()["type"], category);
+            assert!(std::error::Error::source(&error).is_some());
+        }
+    }
 
     #[test]
     fn test_executor_error_display() {

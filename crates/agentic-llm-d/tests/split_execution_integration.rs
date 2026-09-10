@@ -402,12 +402,12 @@ async fn assert_relayed_tool_call_ids_are_validated(stream: bool) {
 
 #[tokio::test]
 async fn relayed_json_call_id_cannot_reuse_continued_history() {
-    assert_relayed_call_id_cannot_reuse_continued_history(false).await;
+    Box::pin(assert_relayed_call_id_cannot_reuse_continued_history(false)).await;
 }
 
 #[tokio::test]
 async fn relayed_sse_call_id_cannot_reuse_continued_history() {
-    assert_relayed_call_id_cannot_reuse_continued_history(true).await;
+    Box::pin(assert_relayed_call_id_cannot_reuse_continued_history(true)).await;
 }
 
 async fn assert_relayed_call_id_cannot_reuse_continued_history(stream: bool) {
@@ -701,8 +701,8 @@ async fn a_turn_that_cannot_be_stored_is_refused() {
         [
             created,
             in_progress,
-            r#"data: {"type":"response.output_item.added","output_index":0,"item":{"type":"file_search_call","id":"fs_1","status":"in_progress","queries":["rust"]}}"#,
-            r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"file_search_call","id":"fs_1","status":"completed","queries":["rust"]}}"#,
+            r#"data: {"type":"response.output_item.added","output_index":0,"item":{"type":"future_tool_call","id":"future_1","status":"in_progress"}}"#,
+            r#"data: {"type":"response.output_item.done","output_index":0,"item":{"type":"future_tool_call","id":"future_1","status":"completed"}}"#,
             completed,
         ]
         .join("\n\n"),

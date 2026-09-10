@@ -533,7 +533,7 @@ As noted above, the round-by-round loop itself is `engine.rs::run_gateway_tool_l
   deadline for the entire round or total call latency. Timeout, execution, and tool-config
   failures become failed tool outputs that can be fed back to the model instead of
   failing the whole response. A tool registered as gateway-owned without an
-  implementation (currently file search/code interpreter) likewise produces an error
+  implementation (currently code interpreter) likewise produces an error
   tool result.
 - Parallel safety is a per-handler contract. `GatewayExecutor::supports_parallel_execution`
   defaults to `false`; registration turns that into a `GatewayBinding::self_exclusion`
@@ -651,8 +651,15 @@ the behavioral layer — routing, handler traits, normalization, and execution.
   each type's `ToolHandler`: e.g. `Function` → `FunctionHandler`, `Mcp` → `McpHandler`,
   `Namespace` → `CodexNamespaceHandler`, `Custom` → `CustomHandler`. `WebSearch` is
   normalized inline from a static builder (single fixed tool, no per-instance state).
-  `FileSearch`/`CodeInterpreter` are declared but currently normalize to nothing — no
+  `CodeInterpreter` is declared but currently normalizes to nothing — no
   handler is registered yet.
+- **`file_search/`** — `FileSearchHandler` normalizes the built-in declaration and
+  projects typed call items and citations. Its shared `FileSearchService` handles
+  file ingestion and semantic, keyword, and hybrid retrieval against
+  `storage::file_search`. `ExecutionContext::from_config` initializes the service
+  from the existing database pool; the Files and vector store HTTP handlers call
+  this same service. See [file search](docs/api/file-search.md) for configuration,
+  resource limits, and optional PDF ingestion.
 - **`handler.rs`** — the two traits every tool type reasons about:
   ```rust
   pub trait ToolHandler: Send + Sync {

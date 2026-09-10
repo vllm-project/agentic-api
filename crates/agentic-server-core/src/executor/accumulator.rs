@@ -29,7 +29,7 @@ use crate::types::io::{
     ApplyDone, CompactionItem, CustomToolCall, FunctionToolCall, OutputItem, OutputMessage, OutputTextContent,
     ReasoningOutput, ResponseUsage, ShellCall, ToolSearchCall,
 };
-use crate::types::io::{McpCall, WebSearchCall};
+use crate::types::io::{FileSearchCall, McpCall, WebSearchCall};
 use crate::types::request_response::{IncompleteDetails, ResponsePayload};
 use crate::utils::common::{deserialize_from_str, deserialize_from_value_opt};
 use crate::utils::uuid7_str;
@@ -73,6 +73,9 @@ enum InFlight {
     Compaction {
         item: CompactionItem,
     },
+    FileSearchCall {
+        item: Option<FileSearchCall>,
+    },
 }
 
 impl std::fmt::Debug for InFlight {
@@ -84,6 +87,7 @@ impl std::fmt::Debug for InFlight {
             Self::ToolSearchCall { .. } => write!(f, "InFlight::ToolSearchCall {{ .. }}"),
             Self::CustomToolCall { .. } => write!(f, "InFlight::CustomToolCall {{ .. }}"),
             Self::ShellCall { .. } => write!(f, "InFlight::ShellCall {{ .. }}"),
+            Self::FileSearchCall { .. } => write!(f, "InFlight::FileSearchCall {{ .. }}"),
             Self::WebSearchCall { .. } => write!(f, "InFlight::WebSearchCall {{ .. }}"),
             Self::McpCall { .. } => write!(f, "InFlight::McpCall {{ .. }}"),
             Self::McpListTools { .. } => write!(f, "InFlight::McpListTools {{ .. }}"),
@@ -118,6 +122,7 @@ impl InFlight {
                 item.status = Some(MessageStatus::Completed);
                 Some(OutputItem::CustomToolCall(item))
             }
+            Self::FileSearchCall { item } => item.map(OutputItem::FileSearchCall),
             Self::WebSearchCall { item } => item.map(OutputItem::WebSearchCall),
             Self::ShellCall { item, .. } => Some(OutputItem::ShellCall(item)),
             Self::McpCall { item } => Some(OutputItem::McpCall(item)),
@@ -1038,11 +1043,12 @@ impl ResponseAccumulator {
                 item,
                 text: String::with_capacity(256),
             }),
+            SSEItemType::FileSearchCall if !item_id.is_empty() => Some(InFlight::FileSearchCall { item: None }),
             SSEItemType::WebSearchCall if !item_id.is_empty() => Some(InFlight::WebSearchCall { item: None }),
             SSEItemType::Compaction => CompactionItem::try_from(payload)
                 .ok()
                 .map(|item| InFlight::Compaction { item }),
-            SSEItemType::WebSearchCall => None,
+            SSEItemType::FileSearchCall | SSEItemType::WebSearchCall => None,
             SSEItemType::ShellCall => ShellCall::try_from(payload).ok().map(|item| InFlight::ShellCall {
                 item,
                 command_stream: None,
@@ -1181,6 +1187,7 @@ impl ResponseAccumulator {
             | OutputItem::ToolSearchCall(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::ShellCall(_)
+            | OutputItem::FileSearchCall(_)
             | OutputItem::WebSearchCall(_)
             | OutputItem::McpCall(_)
             | OutputItem::McpListTools(_)
@@ -1315,6 +1322,7 @@ fn apply_output_item_done(
             }
             *item = done;
         }
+        (InFlight::FileSearchCall { item }, Some(OutputItem::FileSearchCall(done))) => *item = Some(done.clone()),
         (InFlight::WebSearchCall { item }, Some(OutputItem::WebSearchCall(done))) => {
             let mut done = done.clone();
             if done.id.is_empty() {
@@ -1454,6 +1462,48 @@ mod tests {
             payload.incomplete_details.unwrap().reason.as_deref(),
             Some("upstream_error")
         );
+    }
+
+    #[test]
+    fn file_search_lifecycle_preserves_typed_output() {
+        let call = serde_json::json!({"type":"file_search_call","id":"fs_1","status":"completed","queries":["policy"],"results":[]});
+        let mut acc = ResponseAccumulator::new("resp_1".to_owned(), None);
+        let frames = [
+            serde_json::json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}),
+            serde_json::json!({"type":"response.in_progress","response":{"id":"resp_1","status":"in_progress"}}),
+            serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"file_search_call","id":"fs_1","status":"in_progress","queries":["policy"]}}),
+            serde_json::json!({"type":"response.file_search_call.in_progress","output_index":0,"item_id":"fs_1"}),
+            serde_json::json!({"type":"response.file_search_call.searching","output_index":0,"item_id":"fs_1"}),
+            serde_json::json!({"type":"response.file_search_call.completed","output_index":0,"item_id":"fs_1"}),
+            serde_json::json!({"type":"response.output_item.done","output_index":0,"item":call}),
+            serde_json::json!({"type":"response.completed","response":{"id":"resp_1","status":"completed"}}),
+        ];
+        for frame in frames {
+            acc.process_strict_sse_line(&format!("data: {frame}")).unwrap();
+        }
+        let output = serde_json::to_value(acc.finalize("test", None, None).output).unwrap();
+        assert_eq!(output, serde_json::json!([call]));
+    }
+
+    #[test]
+    fn file_search_progress_rejects_wrong_identity_and_completion_order() {
+        for invalid in [
+            serde_json::json!({"type":"response.file_search_call.searching","output_index":1,"item_id":"fs_1"}),
+            serde_json::json!({"type":"response.file_search_call.completed","output_index":0,"item_id":"other"}),
+        ] {
+            let mut acc = ResponseAccumulator::new("resp_1".to_owned(), None);
+            for frame in [
+                serde_json::json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}),
+                serde_json::json!({"type":"response.in_progress","response":{"id":"resp_1","status":"in_progress"}}),
+                serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"file_search_call","id":"fs_1","status":"in_progress","queries":[]}}),
+            ] {
+                acc.process_strict_sse_line(&format!("data: {frame}")).unwrap();
+            }
+            assert!(acc.process_strict_sse_line(&format!("data: {invalid}")).is_err());
+        }
+        let mut acc = ResponseAccumulator::new("resp_1".to_owned(), None);
+        let event = r#"data: {"type":"response.file_search_call.completed","output_index":0,"item_id":"fs_1"}"#;
+        assert!(acc.process_strict_sse_line(event).is_err());
     }
 
     #[test]

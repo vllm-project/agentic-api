@@ -10,6 +10,23 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
+pub(crate) struct FileSearchFileConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub embedding_base_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub embedding_model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key_env: Option<String>,
+}
+
+impl FileSearchFileConfig {
+    fn is_empty(&self) -> bool {
+        self.embedding_base_url.is_none() && self.embedding_model.is_none() && self.api_key_env.is_none()
+    }
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
 pub(crate) struct WebSearchFileConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
@@ -65,6 +82,8 @@ impl MessagesGatewayFileConfig {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct FileConfig {
+    #[serde(skip_serializing_if = "FileSearchFileConfig::is_empty")]
+    pub file_search: FileSearchFileConfig,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub llm_api_base: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -181,6 +200,17 @@ impl FileConfig {
 
     fn validate(&self, path: &Path) -> Result<(), Error> {
         if self
+            .file_search
+            .api_key_env
+            .as_deref()
+            .is_some_and(|name| name.trim().is_empty())
+        {
+            return Err(Error::Config(format!(
+                "configuration file {} contains an empty file_search.api_key_env",
+                path.display()
+            )));
+        }
+        if self
             .web_search
             .api_key_env
             .as_deref()
@@ -237,6 +267,36 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{FileConfig, McpFileConfig, WebSearchFileConfig};
+
+    #[test]
+    fn loads_embedding_configuration_without_persisting_credentials() {
+        let home = tempdir().expect("temp home");
+        fs::write(home.path().join("config.toml"), "[file_search]\nembedding_base_url = \"http://localhost:8001/v1\"\nembedding_model = \"local-embedding\"\napi_key_env = \"LOCAL_EMBEDDING_KEY\"\n").unwrap();
+        let config = FileConfig::load(home.path()).unwrap().unwrap();
+        assert_eq!(config.file_search.embedding_model.as_deref(), Some("local-embedding"));
+        assert_eq!(config.file_search.api_key_env.as_deref(), Some("LOCAL_EMBEDDING_KEY"));
+        fs::write(
+            home.path().join("config.toml"),
+            "[file_search]\nembedding_api_key = \"secret\"\n",
+        )
+        .unwrap();
+        assert!(
+            FileConfig::load(home.path()).is_err(),
+            "raw credentials are not a supported config-file field"
+        );
+    }
+
+    #[test]
+    fn rejects_blank_embedding_api_key_environment_name() {
+        let home = tempdir().expect("temp home");
+        fs::write(home.path().join("config.toml"), "[file_search]\napi_key_env = \" \"\n").unwrap();
+        assert!(
+            FileConfig::load(home.path())
+                .unwrap_err()
+                .to_string()
+                .contains("file_search.api_key_env")
+        );
+    }
 
     #[test]
     fn missing_config_file_uses_defaults() {

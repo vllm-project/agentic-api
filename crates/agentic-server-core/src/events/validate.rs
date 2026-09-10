@@ -89,6 +89,9 @@ fn expected_item_type(event_type: SSEEventType) -> Option<SSEItemType> {
         | SSEEventType::ReasoningPartDone
         | SSEEventType::ReasoningSummaryTextDelta
         | SSEEventType::ReasoningSummaryTextDone => Some(SSEItemType::Reasoning),
+        SSEEventType::FileSearchCallInProgress
+        | SSEEventType::FileSearchCallSearching
+        | SSEEventType::FileSearchCallCompleted => Some(SSEItemType::FileSearchCall),
         SSEEventType::WebSearchCallInProgress
         | SSEEventType::WebSearchCallSearching
         | SSEEventType::WebSearchCallCompleted => Some(SSEItemType::WebSearchCall),
@@ -107,8 +110,6 @@ fn expected_item_type(event_type: SSEEventType) -> Option<SSEItemType> {
         | SSEEventType::ResponseIncomplete
         | SSEEventType::OutputItemAdded
         | SSEEventType::OutputItemDone
-        | SSEEventType::FileSearchCallSearching
-        | SSEEventType::FileSearchCallCompleted
         | SSEEventType::Other => None,
     }
 }
@@ -263,6 +264,7 @@ fn validate_event_fields(
         | SSEEventType::ResponseIncomplete
         | SSEEventType::OutputItemAdded
         | SSEEventType::OutputItemDone
+        | SSEEventType::FileSearchCallInProgress
         | SSEEventType::FileSearchCallSearching
         | SSEEventType::FileSearchCallCompleted
         | SSEEventType::WebSearchCallInProgress

@@ -263,6 +263,7 @@ pub fn build_router_with_auth(
         public_routes
     };
     let protected_routes = Router::new()
+        .merge(crate::handler::http::file_search::router())
         .route("/v1/conversations", post(conversations))
         .route("/v1/models", get(models))
         .route(ANTHROPIC_MESSAGES_PATH, post(messages))

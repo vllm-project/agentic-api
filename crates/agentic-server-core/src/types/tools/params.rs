@@ -291,8 +291,15 @@ pub struct WebSearchToolParam {
 /// Parameters for a file search tool.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(deny_unknown_fields)]
 pub struct FileSearchToolParam {
     pub vector_store_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_num_results: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filters: Option<crate::types::file_search::SearchFilter>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ranking_options: Option<crate::types::file_search::RankingOptions>,
 }
 
 /// Parameters for a code interpreter tool (no required fields).
@@ -421,6 +428,23 @@ impl utoipa::PartialSchema for ResponsesTool {
         use utoipa::openapi::schema::{AllOfBuilder, ObjectBuilder, SchemaType, Type};
 
         fn tagged(type_value: &str, schema: &str) -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+            // Strict parameter objects must include the discriminator in the same
+            // object; an allOf sibling cannot extend additionalProperties:false.
+            if type_value == "file_search" {
+                if let utoipa::openapi::RefOr::T(utoipa::openapi::schema::Schema::Object(mut object)) =
+                    <FileSearchToolParam as utoipa::PartialSchema>::schema()
+                {
+                    object.properties.insert(
+                        "type".into(),
+                        ObjectBuilder::new()
+                            .schema_type(SchemaType::new(Type::String))
+                            .enum_values(Some([type_value]))
+                            .into(),
+                    );
+                    object.required.push("type".into());
+                    return object.into();
+                }
+            }
             AllOfBuilder::new()
                 .item(
                     ObjectBuilder::new()
@@ -825,6 +849,23 @@ mod tests {
         let back = serde_json::to_value(&tool).unwrap();
         assert_eq!(back["type"], "file_search");
         assert_eq!(back["vector_store_ids"][0], "vs_abc");
+    }
+
+    #[test]
+    fn file_search_preserves_typed_options_and_rejects_unsupported_fields() {
+        let wire = serde_json::json!({
+            "type": "file_search", "vector_store_ids": ["vs_1"], "max_num_results": 3,
+            "filters": {"type":"eq","key":"category","value":"policy"},
+            "ranking_options": {"ranker":"auto","score_threshold":0.4,"hybrid_search":null}
+        });
+        let tool: ResponsesTool = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(tool).unwrap(), wire);
+        assert!(
+            serde_json::from_value::<ResponsesTool>(serde_json::json!({
+                "type":"file_search","vector_store_ids":["vs_1"],"rewrite_query":true
+            }))
+            .is_err()
+        );
     }
 
     #[test]

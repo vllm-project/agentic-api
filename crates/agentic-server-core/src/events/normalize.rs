@@ -78,6 +78,7 @@ fn extract_payload(event_type: SSEEventType, json: &Value) -> EventPayload {
         | SSEEventType::ContentPartDone
         | SSEEventType::ReasoningPartAdded
         | SSEEventType::ReasoningPartDone
+        | SSEEventType::FileSearchCallInProgress
         | SSEEventType::FileSearchCallSearching
         | SSEEventType::FileSearchCallCompleted
         | SSEEventType::WebSearchCallInProgress

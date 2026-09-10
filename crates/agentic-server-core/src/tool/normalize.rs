@@ -4,6 +4,7 @@ use crate::types::tools::ResponsesTool;
 
 use super::codex::CodexNamespaceHandler;
 use super::custom::CustomHandler;
+use super::file_search::handler::FileSearchHandler;
 use super::function::FunctionHandler;
 use super::handler::{ToolError, ToolHandler, ToolOutput};
 use super::mcp::McpHandler;
@@ -24,7 +25,8 @@ impl ResponsesTool {
             Self::Function(param) => FunctionHandler.validate(param),
             Self::Mcp(param) => McpHandler::spec_from_param(param).validate(param),
             Self::ToolSearch(param) => ToolSearchHandler.validate(param),
-            Self::WebSearch(_) | Self::FileSearch(_) | Self::CodeInterpreter(_) | Self::Unknown => Ok(()),
+            Self::FileSearch(param) => FileSearchHandler::spec_only().validate(param),
+            Self::WebSearch(_) | Self::CodeInterpreter(_) | Self::Unknown => Ok(()),
             Self::Shell(param) => ShellHandler.validate(param),
             Self::Namespace(param) => CodexNamespaceHandler.validate(param),
             Self::Custom(param) => CustomHandler.validate(param),
@@ -64,7 +66,7 @@ impl ResponsesTool {
     /// - Unformatted `Custom` variants become function tools with one string
     ///   `input` parameter; formatted declarations are rejected by the request
     ///   path because normalization cannot preserve constrained decoding.
-    /// - Unimplemented variants (`FileSearch`, `CodeInterpreter`) return
+    /// - Unimplemented variants (`CodeInterpreter`) return
     ///   an empty list and emit a `tracing::debug!`.
     ///
     /// `RequestPayload::to_upstream_request()` uses this conversion for
@@ -78,10 +80,7 @@ impl ResponsesTool {
             Self::Mcp(param) => McpHandler::spec_from_param(param).normalize(param),
             Self::ToolSearch(param) => ToolSearchHandler.normalize(param).into_iter().take(1).collect(),
             Self::WebSearch(_) => vec![web_search_function_tool()],
-            Self::FileSearch(_) => {
-                tracing::debug!("file_search tool skipped in normalize - handler not yet registered");
-                vec![]
-            }
+            Self::FileSearch(param) => FileSearchHandler::spec_only().normalize(param),
             Self::CodeInterpreter(_) => {
                 tracing::debug!("code_interpreter tool skipped in normalize - handler not yet registered");
                 vec![]
@@ -102,6 +101,39 @@ impl From<ToolOutput> for FunctionToolResultMessage {
         Self {
             call_id: o.call_id,
             output: o.output.into(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod file_search_tests {
+    use crate::types::tools::ResponsesTool;
+
+    #[test]
+    fn file_search_normalizes_to_executable_function() {
+        let tool: ResponsesTool = serde_json::from_value(serde_json::json!({
+            "type": "file_search", "vector_store_ids": ["vs_documents"]
+        }))
+        .unwrap();
+        tool.validate().unwrap();
+        let functions = tool.to_function_tools();
+        assert_eq!(functions.len(), 1);
+        assert_eq!(functions[0].name, "file_search");
+    }
+
+    #[test]
+    fn file_search_rejects_empty_stores_and_invalid_limits() {
+        for declaration in [
+            serde_json::json!({"type": "file_search"}),
+            serde_json::json!({"type": "file_search", "vector_store_ids": []}),
+            serde_json::json!({"type": "file_search", "vector_store_ids": [" "]}),
+            serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_1"], "max_num_results": 0}),
+            serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_1"], "max_num_results": 51}),
+            serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_1"], "ranking_options": {"ranker":"neural"}}),
+            serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_1"], "ranking_options": {"score_threshold":2.0}}),
+        ] {
+            let tool: ResponsesTool = serde_json::from_value(declaration).unwrap();
+            assert!(tool.validate().is_err());
         }
     }
 }

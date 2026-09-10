@@ -9,13 +9,14 @@ repository.workspace = true
 [features]
 default = ["openapi"]
 openapi = ["agentic-core/openapi", "dep:utoipa", "dep:utoipa-axum", "dep:utoipa-swagger-ui"]
+file-search-pdf = ["agentic-core/file-search-pdf"]
 
 [dependencies]
 utoipa = { workspace = true, optional = true }
 utoipa-axum = { workspace = true, optional = true }
 utoipa-swagger-ui = { workspace = true, optional = true }
 agentic-core.workspace = true
-axum.workspace = true
+axum = { workspace = true, features = ["multipart"] }
 bytes.workspace = true
 clap.workspace = true
 either.workspace = true

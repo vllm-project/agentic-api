@@ -318,6 +318,10 @@ impl GatewayScheduler {
         };
         let (output, status) = match dispatched {
             Ok(output) => (output, GatewayCallStatus::Completed),
+            Err(ToolError::FileSearch(error)) => (
+                execution_error_output(&call, &error.public_message())?,
+                GatewayCallStatus::Failed,
+            ),
             Err(ToolError::Execution(message) | ToolError::Config(message)) => {
                 (execution_error_output(&call, &message)?, GatewayCallStatus::Failed)
             }
@@ -473,6 +477,21 @@ pub(super) async fn emit_gateway_start_events<'a>(
         )?;
         emit_gateway_event(&mut added_event, stream_accumulator, stream_sender).await?;
         match output_item {
+            OutputItem::FileSearchCall(call) => {
+                for event_type in [
+                    SSEEventType::FileSearchCallInProgress,
+                    SSEEventType::FileSearchCallSearching,
+                ] {
+                    let mut event = synthetic_event(
+                        event_type,
+                        [
+                            ("item_id".to_owned(), serde_json::json!(call.id)),
+                            ("output_index".to_owned(), serde_json::json!(plan.output_index)),
+                        ],
+                    )?;
+                    emit_gateway_event(&mut event, stream_accumulator, stream_sender).await?;
+                }
+            }
             OutputItem::WebSearchCall(web_search_call) => {
                 let mut in_progress_event = synthetic_event(
                     SSEEventType::WebSearchCallInProgress,
@@ -559,6 +578,7 @@ pub(super) async fn emit_gateway_completed_events<'a, T: GatewayPublicOutputSour
         };
         let output_index = plan.output_index;
         let completed_event = match public_output {
+            OutputItem::FileSearchCall(call) => Some((SSEEventType::FileSearchCallCompleted, call.id.as_str())),
             OutputItem::WebSearchCall(web_search_call) => {
                 Some((SSEEventType::WebSearchCallCompleted, web_search_call.id.as_str()))
             }
@@ -1216,25 +1236,24 @@ mod tests {
 
     #[tokio::test]
     async fn scheduler_retains_event_slot_for_gateway_tool_without_handler() {
-        let file_search: ResponsesTool = serde_json::from_value(serde_json::json!({
-            "type": "file_search",
-            "vector_store_ids": ["vs_test"]
+        let code_interpreter: ResponsesTool = serde_json::from_value(serde_json::json!({
+            "type": "code_interpreter"
         }))
-        .expect("file_search tool param");
+        .expect("code_interpreter tool param");
         let web_search: ResponsesTool =
             serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).expect("web_search tool param");
-        let mut tools = [file_search, web_search];
+        let mut tools = [code_interpreter, web_search];
         let mut executors = GatewayExecutors::default();
         let registry = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
             .await
             .expect("registry builds");
 
-        let mut file_search_call = web_search_call("call_file");
-        file_search_call.name = "file_search".to_owned();
+        let mut code_interpreter_call = web_search_call("call_file");
+        code_interpreter_call.name = "code_interpreter".to_owned();
         let mut search_call = web_search_call("call_web");
         search_call.arguments = r#"{"query":"weather"}"#.to_owned();
         let output_items = [
-            OutputItem::FunctionCall(file_search_call),
+            OutputItem::FunctionCall(code_interpreter_call),
             OutputItem::FunctionCall(search_call),
         ];
         let mut scheduler = GatewayScheduler::plan(&output_items, &registry, 7, GatewaySchedulerPolicy::default());

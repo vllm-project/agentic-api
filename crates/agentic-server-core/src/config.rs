@@ -93,6 +93,7 @@ pub struct WebSearchProviderConfig {
 
 #[derive(Debug, Clone)]
 pub struct ToolRuntimeConfig {
+    pub file_search: crate::types::file_search::FileSearchConfig,
     pub web_search: WebSearchProviderConfig,
     pub mcp_servers: HashMap<String, McpServerEntry>,
     pub mcp_allowed_hosts: Vec<String>,
@@ -109,6 +110,7 @@ pub struct ToolRuntimeConfig {
 impl Default for ToolRuntimeConfig {
     fn default() -> Self {
         Self {
+            file_search: crate::types::file_search::FileSearchConfig::default(),
             web_search: WebSearchProviderConfig::default(),
             mcp_servers: HashMap::default(),
             mcp_allowed_hosts: Vec::default(),

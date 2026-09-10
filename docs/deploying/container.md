@@ -136,6 +136,13 @@ Drain replicas running an older release before enabling writes through this rele
 
 Stored requests now fail if their response or conversation state cannot be persisted. For streaming requests, the gateway sends an error event instead of `response.completed`. Most client responses use the generic message `failed to persist response`; the underlying database error is written only to gateway logs. The exception is an optimistic conversation conflict, which returns status `400`, type `invalid_request_error`, code `conversation_locked`, and param `conversation`. No part of the stale turn is persisted, so the client can retry the request against the conversation's latest state. This prevents clients from receiving a response ID that cannot be continued after a lock timeout or other database failure without exposing database schema or constraint details.
 
+The file search migration (`0005_file_search.sql`) adds four tables for files,
+vector stores, attachments, and chunks. Supervisor-managed deployments must apply
+this migration and grant the runtime role `SELECT`, `INSERT`, `UPDATE`, and `DELETE`
+on the new tables before starting the upgraded gateway. Uploaded bytes and
+embeddings use the same database as conversation state and need no shared local
+filesystem between replicas.
+
 `AGENTIC_API_SCHEMA_READY` keeps schema changes under supervisor control. Startup performs a read-only compatibility
 check and fails if required persistence columns, types, nullability, primary/foreign-key constraints, or the conversation
 sequence index are missing, or if the four integer columns still need widening. Apply this upgrade in one transaction

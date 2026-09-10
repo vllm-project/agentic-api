@@ -172,6 +172,11 @@ async fn build_tool_registry(
     response_budget: &ExecutorResponseBudget,
 ) -> ExecutorResult<ToolRegistry> {
     let mut executors = exec_ctx.gateway_executors.request_scoped();
+    executors.include_file_search_results = ctx
+        .original_request
+        .include
+        .as_ref()
+        .is_some_and(|include| include.iter().any(|field| field == "file_search_call.results"));
     let mut registry: ToolRegistry = match ctx.enriched_request.tools.as_mut() {
         Some(tools) => {
             let policy = exec_ctx.gateway_scheduler_policy.clone();
@@ -217,6 +222,7 @@ async fn run_gateway_tool_loop(
         let compaction_usage = maybe_compact_context(&mut ctx, exec_ctx, auth).await?;
         prepare_initial_reasoning_for_vllm(&mut ctx.enriched_request.input, round, compaction_usage.is_some())?;
         accumulate_usage(&mut combined_usage, compaction_usage);
+        registry.cache_file_search_context(&ctx.enriched_request.input);
         let output_offset = combined_output.len();
         let (mut payload, deferred_stream_events): (ResponsePayload, Vec<_>) = if stream_upstream {
             let stream_payload = fetch_stream_payload(

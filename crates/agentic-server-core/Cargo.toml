@@ -17,11 +17,15 @@ name = "agentic_core"
 [features]
 default = []
 openapi = ["dep:utoipa"]
+file-search-pdf = ["dep:lopdf"]
 
 [dependencies]
 utoipa = { workspace = true, optional = true }
 
 async-stream.workspace = true
+base64 = "0.22"
+lopdf = { version = "0.44", default-features = false, optional = true }
+tiktoken-rs = "0.9.1"
 bytes.workspace = true
 dirs.workspace = true
 either.workspace = true

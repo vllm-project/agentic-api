@@ -9,6 +9,7 @@ use serde_json::Value;
 use super::codex::insert_namespace_entries;
 use super::custom::{CustomHandler, CustomToolMap, insert_custom_entry};
 use super::executors::GatewayExecutors;
+use super::file_search::handler::{FileSearchCitations, insert_file_search_entry};
 use super::function::insert_function_entry;
 use super::mcp::registry::insert_discovered_mcp_entry;
 use super::ownership::{GatewayBinding, ToolOwnership};
@@ -25,7 +26,7 @@ use crate::events::WireEvent;
 use crate::types::io::output::{FunctionToolCall, McpListTools};
 use crate::types::io::{InputItem, OutputItem, ResponsesInput, ToolChoice};
 use crate::types::request_response::RequestPayload;
-use crate::types::tools::{CodeInterpreterToolParam, FileSearchToolParam, ResponsesTool};
+use crate::types::tools::{CodeInterpreterToolParam, ResponsesTool};
 use crate::utils::common::serialize_to_value;
 
 const MAX_MCP_SERVERS_PER_REQUEST: usize = 64;
@@ -149,15 +150,6 @@ pub struct GatewayDispatchResult {
     pub output: Result<ToolOutput, ToolError>,
 }
 
-// TODO: move to a dedicated file_search module alongside its `ToolHandler`
-// once file_search execution is implemented.
-fn insert_file_search_entry(entries: &mut HashMap<String, ToolEntry>, _params: &FileSearchToolParam) {
-    entries.insert(
-        "file_search".to_owned(),
-        ToolEntry::gateway(ToolType::FileSearch, None, None),
-    );
-}
-
 // TODO: move to a dedicated code_interpreter module alongside its `ToolHandler`
 // once code_interpreter execution is implemented.
 fn insert_code_interpreter_entry(entries: &mut HashMap<String, ToolEntry>, _params: &CodeInterpreterToolParam) {
@@ -172,6 +164,7 @@ fn insert_code_interpreter_entry(entries: &mut HashMap<String, ToolEntry>, _para
 #[derive(Debug, Default)]
 pub struct ToolRegistry {
     entries: HashMap<String, ToolEntry>,
+    file_search_citations: FileSearchCitations,
 
     /// Prepared public/private tool-search projection for this request.
     tool_search: Option<Box<ToolSearchState>>,
@@ -259,9 +252,7 @@ impl ToolRegistry {
                     insert_unique_tool_entries(&mut entries, |resolved| insert_function_entry(resolved, p))?;
                 }
                 ResponsesTool::ToolSearch(param) => {
-                    insert_unique_tool_entries(&mut entries, |resolved| {
-                        insert_tool_search_entry(resolved, param);
-                    })?;
+                    insert_unique_tool_entries(&mut entries, |resolved| insert_tool_search_entry(resolved, param))?;
                 }
                 ResponsesTool::Mcp(p) => {
                     let _materialization_guard = acquire_materialization().await;
@@ -314,17 +305,17 @@ impl ToolRegistry {
                     })?;
                 }
                 ResponsesTool::FileSearch(p) => {
-                    insert_unique_tool_entries(&mut entries, |resolved| insert_file_search_entry(resolved, p))?;
+                    let handler = executors.file_search_handler();
+                    let include = executors.include_file_search_results;
+                    insert_unique_tool_entries(&mut entries, |resolved| {
+                        insert_file_search_entry(resolved, p, handler, include);
+                    })?;
                 }
                 ResponsesTool::CodeInterpreter(p) => {
-                    insert_unique_tool_entries(&mut entries, |resolved| {
-                        insert_code_interpreter_entry(resolved, p);
-                    })?;
+                    insert_unique_tool_entries(&mut entries, |resolved| insert_code_interpreter_entry(resolved, p))?;
                 }
                 ResponsesTool::Shell(_) => {
-                    insert_unique_tool_entries(&mut entries, |resolved| {
-                        insert_shell_entry(resolved);
-                    })?;
+                    insert_unique_tool_entries(&mut entries, insert_shell_entry)?;
                 }
                 ResponsesTool::Namespace(p) => {
                     insert_unique_tool_entries(&mut entries, |resolved| insert_namespace_entries(resolved, p))?;
@@ -342,6 +333,7 @@ impl ToolRegistry {
         let custom_tool_map = CustomHandler::build_tool_map(tools);
 
         Ok(Self {
+            file_search_citations: FileSearchCitations::default(),
             entries,
             tool_search: None,
             namespace_map,
@@ -544,11 +536,19 @@ impl ToolRegistry {
         Ok(())
     }
 
+    pub(crate) fn cache_file_search_context(&mut self, input: &ResponsesInput) {
+        self.file_search_citations = FileSearchCitations::from_input(input);
+    }
+
     pub fn restore_final_payload_output(&self, output: &mut [OutputItem]) {
+        for item in output.iter_mut() {
+            self.file_search_citations.restore_output(item);
+        }
         CodexNamespaceHandler.restore_output_items(output, self.namespace_map.as_ref());
     }
 
     pub fn restore_stream_event_wire(&self, wire: &mut WireEvent) -> bool {
+        self.file_search_citations.restore_wire(wire);
         let custom_restored = CustomHandler::restore_response_wire(wire, self.custom_tool_map.as_ref());
         CodexNamespaceHandler.restore_response_wire(wire, self.namespace_map.as_ref()) | custom_restored
     }
@@ -896,7 +896,7 @@ mod tests {
             ("mcp__counter__increment", ToolType::Mcp, Some("counter"), true),
             ("mcp__counter__get_value", ToolType::Mcp, Some("counter"), true),
             ("web_search", ToolType::WebSearch, None, true),
-            ("file_search", ToolType::FileSearch, None, false),
+            ("file_search", ToolType::FileSearch, None, true),
             ("code_interpreter", ToolType::CodeInterpreter, None, false),
             (
                 "agentic_ns__mcp__shell__run",
