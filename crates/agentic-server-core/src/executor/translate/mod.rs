@@ -7,6 +7,7 @@ mod custom;
 mod dispatcher;
 mod function;
 mod namespace;
+mod shell;
 mod tool_search;
 
 pub(super) use context::TranslationContext;

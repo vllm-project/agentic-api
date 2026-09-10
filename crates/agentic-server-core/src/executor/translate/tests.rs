@@ -6,16 +6,16 @@ use crate::tool::ToolType;
 use serde_json::Value;
 use std::collections::HashMap;
 
-fn test_context(tool_types: HashMap<String, ToolType>) -> TranslationContext {
+pub(super) fn test_context(tool_types: HashMap<String, ToolType>) -> TranslationContext {
     let active = tool_types.get("tool_search") == Some(&ToolType::ToolSearch);
     TranslationContext::new(tool_types, HashSet::new(), active)
 }
 
-fn sse(value: &Value) -> String {
+pub(super) fn sse(value: &Value) -> String {
     format!("data: {value}")
 }
 
-fn translate(
+pub(super) fn translate(
     accumulator: &mut ResponseAccumulator,
     translator: &mut TranslationDispatcher,
     value: &Value,

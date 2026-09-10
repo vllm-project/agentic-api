@@ -280,7 +280,7 @@ impl<'a> EngineOrchestration<'a> {
             let gateway_results = self
                 .execute_round_output(&current_output, output_offset, deferred_stream_events)
                 .await?;
-            let public_output = public_output_items(&current_output, &self.registry, &gateway_results);
+            let public_output = public_output_items(&current_output, &self.registry, &gateway_results)?;
             combined_output.extend(public_output);
 
             // A terminal incomplete response may still contain completed gateway

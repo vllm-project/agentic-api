@@ -588,6 +588,7 @@ fn tool_has_deferred_definition(tool: &ResponsesTool) -> bool {
         | ResponsesTool::WebSearch(_)
         | ResponsesTool::FileSearch(_)
         | ResponsesTool::CodeInterpreter(_)
+        | ResponsesTool::Shell(_)
         | ResponsesTool::Unknown => false,
     }
 }
@@ -611,6 +612,7 @@ fn has_reserved_tool_search_name(tool: &ResponsesTool) -> bool {
         | ResponsesTool::WebSearch(_)
         | ResponsesTool::FileSearch(_)
         | ResponsesTool::CodeInterpreter(_)
+        | ResponsesTool::Shell(_)
         | ResponsesTool::Unknown => false,
     }
 }
@@ -933,6 +935,7 @@ fn definition_record(
         | ResponsesTool::WebSearch(_)
         | ResponsesTool::FileSearch(_)
         | ResponsesTool::CodeInterpreter(_)
+        | ResponsesTool::Shell(_)
         | ResponsesTool::Custom(_)
         | ResponsesTool::Unknown => {
             return Err(ToolError::Config(
@@ -1126,6 +1129,8 @@ fn prepare_history(
             | InputItem::FunctionCallOutput(_)
             | InputItem::CustomToolCall(_)
             | InputItem::CustomToolCallOutput(_)
+            | InputItem::ShellCall(_)
+            | InputItem::ShellCallOutput(_)
             | InputItem::Reasoning(_)
             | InputItem::Compaction(_)
             | InputItem::Unknown => private_items.push(item.clone()),
@@ -1287,6 +1292,7 @@ fn model_visible_output_tools(tools: &[ResponsesTool]) -> Result<Vec<ModelVisibl
             | ResponsesTool::WebSearch(_)
             | ResponsesTool::FileSearch(_)
             | ResponsesTool::CodeInterpreter(_)
+            | ResponsesTool::Shell(_)
             | ResponsesTool::Custom(_)
             | ResponsesTool::Unknown => Err(ToolError::Config(
                 "tool_search_output contains an unsupported model-output definition".to_owned(),
@@ -1472,6 +1478,7 @@ fn loaded_tool_identity(tool: &ResponsesTool) -> Result<Option<LoadedToolIdentit
         | ResponsesTool::WebSearch(_)
         | ResponsesTool::FileSearch(_)
         | ResponsesTool::CodeInterpreter(_)
+        | ResponsesTool::Shell(_)
         | ResponsesTool::Custom(_)
         | ResponsesTool::Unknown => return Ok(None),
     };
@@ -1546,6 +1553,7 @@ fn build_catalog(
                 | ResponsesTool::WebSearch(_)
                 | ResponsesTool::FileSearch(_)
                 | ResponsesTool::CodeInterpreter(_)
+                | ResponsesTool::Shell(_)
                 | ResponsesTool::Custom(_)
                 | ResponsesTool::Unknown => None,
             }
@@ -1608,6 +1616,7 @@ fn build_private_tools(
             | ResponsesTool::WebSearch(_)
             | ResponsesTool::FileSearch(_)
             | ResponsesTool::CodeInterpreter(_)
+            | ResponsesTool::Shell(_)
             | ResponsesTool::Custom(_)
             | ResponsesTool::Unknown => Some(tool.clone()),
         })
@@ -1634,6 +1643,7 @@ fn available_public_tools(public_tools: &[ResponsesTool], loaded_tools: &[Respon
             | ResponsesTool::WebSearch(_)
             | ResponsesTool::FileSearch(_)
             | ResponsesTool::CodeInterpreter(_)
+            | ResponsesTool::Shell(_)
             | ResponsesTool::Custom(_)
             | ResponsesTool::Unknown => {}
         }
@@ -1679,6 +1689,7 @@ fn available_public_tools(public_tools: &[ResponsesTool], loaded_tools: &[Respon
             | ResponsesTool::WebSearch(_)
             | ResponsesTool::FileSearch(_)
             | ResponsesTool::CodeInterpreter(_)
+            | ResponsesTool::Shell(_)
             | ResponsesTool::Custom(_)
             | ResponsesTool::Unknown => Some(tool.clone()),
             ResponsesTool::ToolSearch(_) => None,
@@ -1712,6 +1723,7 @@ fn private_definition(
         | ResponsesTool::WebSearch(_)
         | ResponsesTool::FileSearch(_)
         | ResponsesTool::CodeInterpreter(_)
+        | ResponsesTool::Shell(_)
         | ResponsesTool::Custom(_)
         | ResponsesTool::Unknown => None,
     }
@@ -1968,6 +1980,45 @@ mod tests {
             model_items
                 .iter()
                 .all(|item| !matches!(item, InputItem::McpListTools(_)))
+        );
+    }
+
+    #[test]
+    fn preparation_preserves_shell_declarations_and_history() {
+        let mut request: RequestPayload = serde_json::from_value(json!({
+            "model": "test",
+            "tools": [
+                {"type": "tool_search", "execution": "client"},
+                {"type": "shell", "environment": {"type": "local"}}
+            ],
+            "input": [
+                {"type": "shell_call", "call_id": "call_shell", "action": {"commands": ["pwd"]}},
+                {"type": "shell_call_output", "call_id": "call_shell", "output": [
+                    {"stdout": "/workspace", "outcome": {"type": "exit", "exit_code": 0}}
+                ]}
+            ]
+        }))
+        .expect("shell history with tool search");
+        let original_input = serialize_to_value(&request.input).expect("input serializes");
+
+        let state = ToolSearchHandler::prepare_request(&mut request, &[], false)
+            .expect("tool-search preparation")
+            .expect("active tool search");
+
+        assert_eq!(serialize_to_value(&request.input).unwrap(), original_input);
+        assert!(
+            request
+                .tools
+                .as_ref()
+                .unwrap()
+                .iter()
+                .any(|tool| matches!(tool, ResponsesTool::Shell(_)))
+        );
+        assert!(
+            state
+                .public_response_tools()
+                .iter()
+                .any(|tool| matches!(tool, ResponsesTool::Shell(_)))
         );
     }
 

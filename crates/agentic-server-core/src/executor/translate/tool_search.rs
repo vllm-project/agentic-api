@@ -392,18 +392,26 @@ pub(super) fn public_response_tools(
 pub(super) fn restore_response_tools(
     wire: &mut crate::events::WireEvent,
     tools: Option<&[crate::types::tools::ResponsesTool]>,
+    tool_choice: Option<&crate::types::io::ToolChoice>,
 ) -> ExecutorResult<()> {
     let Some(response) = wire.rest.get_mut("response").and_then(Value::as_object_mut) else {
         return Ok(());
     };
-    if !response.contains_key("tools") {
+    let Some(tools) = tools else {
         return Ok(());
-    }
-    if let Some(tools) = tools {
+    };
+    if response.contains_key("tools") {
         response.insert(
             "tools".to_owned(),
             crate::utils::common::serialize_to_value(&tools)
                 .map_err(|_| tool_search::invalid_upstream_search_call())?,
+        );
+    }
+    if response.contains_key("tool_choice") {
+        response.insert(
+            "tool_choice".to_owned(),
+            crate::utils::common::serialize_to_value(tool_choice.unwrap_or(&crate::types::io::ToolChoice::Auto))
+                .map_err(crate::executor::error::ExecutorError::JsonError)?,
         );
     }
     Ok(())

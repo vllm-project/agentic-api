@@ -26,12 +26,32 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
             .unwrap_or_default(),
         state.is_some_and(ToolSearchState::is_active),
     )
+    .with_gateway_tools(
+        registry
+            .tool_classifications()
+            .filter(|(name, _)| registry.is_gateway_owned_name(name))
+            .map(|(name, _)| name.to_owned())
+            .collect(),
+    )
     .with_response_metadata(
         registry.namespace_map().cloned(),
         registry.custom_tool_map().cloned(),
         state
             .filter(|state| state.is_active())
-            .map(crate::tool::ToolSearchState::public_response_tools),
+            .map(crate::tool::ToolSearchState::public_response_tools)
+            .or_else(|| {
+                agent
+                    .request
+                    .enriched_request
+                    .tools
+                    .as_ref()
+                    .filter(|tools| {
+                        tools
+                            .iter()
+                            .any(|tool| matches!(tool, crate::types::tools::ResponsesTool::Shell(_)))
+                    })
+                    .cloned()
+            }),
         agent.request.enriched_request.tool_choice.clone(),
     )
 }
@@ -206,6 +226,9 @@ pub(super) mod tests {
             .unwrap(),
         );
         request.enriched_request.parallel_tool_calls = Some(false);
+        request.enriched_request.tool_choice = Some(crate::types::io::ToolChoice::Custom {
+            name: "raw_echo".try_into().unwrap(),
+        });
         let state = ToolSearchHandler::prepare_request(&mut request.enriched_request, &[], false).unwrap();
         let registry = ToolRegistry::build_with_handlers(
             request.enriched_request.tools.as_mut().unwrap(),

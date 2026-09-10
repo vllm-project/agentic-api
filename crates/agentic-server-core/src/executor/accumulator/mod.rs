@@ -643,6 +643,7 @@ fn output_item_call_id(item: &OutputItem) -> Option<&str> {
         OutputItem::FunctionCall(call) => Some(&call.call_id),
         OutputItem::ToolSearchCall(call) => Some(&call.call_id),
         OutputItem::CustomToolCall(call) => Some(&call.call_id),
+        OutputItem::ShellCall(call) => Some(&call.call_id),
         _ => None,
     }
 }
@@ -667,7 +668,7 @@ fn item_identity<'a>(frame: &'a EventFrame, validated: Option<&ValidatedFrame<'a
     if let Some(item) = validated.and_then(|frame| frame.item.as_ref()) {
         return Some(ItemIdentity {
             index: Some(OutputIndex::new(item.output_index)),
-            item_id: Some(item.item_id),
+            item_id: (!item.item_id.is_empty()).then_some(item.item_id),
             item_type: item.item_type,
         });
     }
@@ -683,6 +684,7 @@ fn item_identity<'a>(frame: &'a EventFrame, validated: Option<&ValidatedFrame<'a
                 | EventPayload::FunctionCallArgsDone { item_id, .. }
                 | EventPayload::CustomToolCallInputDelta { item_id, .. }
                 | EventPayload::CustomToolCallInputDone { item_id, .. }
+                | EventPayload::ShellCallCommand { item_id, .. }
                 | EventPayload::ReasoningTextDelta { item_id, .. }
                 | EventPayload::ReasoningTextDone { item_id, .. }
                 | EventPayload::ReasoningSummaryTextDelta { item_id, .. }

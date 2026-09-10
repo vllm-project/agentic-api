@@ -13,6 +13,7 @@ use std::collections::{HashMap, HashSet};
 #[derive(Default)]
 pub(in crate::executor) struct TranslationContext {
     tool_types: HashMap<String, ToolType>,
+    gateway_tool_names: HashSet<String>,
     withheld_function_names: HashSet<String>,
     tool_search_active: bool,
     namespace_map: Option<NamespaceMap>,
@@ -45,6 +46,15 @@ impl TranslationContext {
         }
     }
 
+    pub(in crate::executor) fn with_gateway_tools(mut self, names: HashSet<String>) -> Self {
+        self.gateway_tool_names = names;
+        self
+    }
+
+    pub(super) fn is_gateway_owned_name(&self, name: &str) -> bool {
+        self.gateway_tool_names.contains(name) || self.tool_type(name).is_gateway_owned()
+    }
+
     /// Owned public mappings; construction performs no registry lookups.
     pub(in crate::executor) fn with_response_metadata(
         mut self,
@@ -61,7 +71,11 @@ impl TranslationContext {
     }
 
     pub(super) fn restore_stream_event_wire(&self, wire: &mut WireEvent) -> ExecutorResult<()> {
-        super::tool_search::restore_response_tools(wire, self.response_tools.as_deref())?;
+        super::tool_search::restore_response_tools(
+            wire,
+            self.response_tools.as_deref(),
+            self.response_tool_choice.as_ref(),
+        )?;
         super::custom::CustomTranslator::restore_response_wire(wire, self.custom_tool_map.as_ref());
         let _ = super::namespace::CodexNamespaceTranslator::restore_response_wire(wire, self.namespace_map.as_ref());
         Ok(())

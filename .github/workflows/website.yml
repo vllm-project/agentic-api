@@ -1,0 +1,84 @@
+name: Website
+
+on:
+  pull_request:
+    paths:
+      - 'website/**'
+      - '.github/workflows/website.yml'
+      - '.github/workflows/release-crates.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/website.yml'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: read
+    env:
+      NEXT_PUBLIC_BASE_PATH: /agentic-api
+      NEXT_PUBLIC_SITE_URL: https://vllm-project.github.io/agentic-api
+      STATIC_OUTPUT_DIR: dist/pages
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # Releases can finish after newer website changes have landed.
+          ref: ${{ github.event_name == 'pull_request' && github.sha || 'main' }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm test
+      - name: Configure GitHub Pages
+        if: github.event_name != 'pull_request' && github.repository == 'vllm-project/agentic-api'
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - name: Refresh contributor profiles and photos
+        if: github.event_name != 'pull_request' && github.repository == 'vllm-project/agentic-api'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npm run refresh:contributors
+      - run: npm run build
+      - run: npm run prepare:pages
+      - run: npm run check
+      - name: Upload GitHub Pages artifact
+        if: github.event_name != 'pull_request' && github.repository == 'vllm-project/agentic-api'
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: website/dist/pages
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.repository == 'vllm-project/agentic-api' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

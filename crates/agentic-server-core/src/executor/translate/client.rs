@@ -38,3 +38,11 @@ impl HasTranslator for CodexNamespaceHandler {
         CodexNamespaceTranslator
     }
 }
+
+impl HasTranslator for crate::tool::ShellHandler {
+    type Translator = super::shell::ShellTranslator;
+
+    fn new_translator() -> Self::Translator {
+        super::shell::ShellTranslator::default()
+    }
+}

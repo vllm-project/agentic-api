@@ -126,7 +126,12 @@ pub async fn rehydrate_conversation(
     // Fail before storage work for new files; check again once history is resolved.
     validate_message_files(&request.input)?;
     let response_id = uuid7_str("resp_");
-    let new_input_items: Vec<InputItem> = Vec::from(&request.input);
+    // Persistence keeps the public items. Tool lowering belongs to the enriched
+    // inference copy, including when a later turn loads these items from storage.
+    let new_input_items = match &request.input {
+        ResponsesInput::Items(items) => items.iter().filter(|item| !item.is_unknown()).cloned().collect(),
+        ResponsesInput::Text(_) => Vec::from(&request.input),
+    };
 
     // One clone for the unmodified original; `request` is moved as enriched_request.
     let original_request = request.clone();
@@ -150,7 +155,7 @@ pub async fn rehydrate_conversation(
     } else if ctx.original_request.previous_response_id.is_some() {
         from_response(&mut ctx, exec_ctx).await?;
     } else {
-        ctx.enriched_request.input = ResponsesInput::Items(ctx.new_input_items.clone());
+        ctx.enriched_request.input = ResponsesInput::Items(Vec::from(&ctx.original_request.input));
     }
 
     validate_message_files(&ctx.enriched_request.input)?;
@@ -168,7 +173,7 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
 
     let mut items = InOutItem::into_input_items(history);
     items.reserve(ctx.new_input_items.len());
-    items.extend(ctx.new_input_items.iter().cloned());
+    items.extend(Vec::from(&ctx.original_request.input));
     if let Some(pending) = pending_calls(&items)?.into_iter().next() {
         return Err(ExecutorError::Tool(ToolError::MissingOutput {
             call_id: pending.call_id,
@@ -200,7 +205,7 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
 
     let mut items = InOutItem::into_input_items(snapshot.items);
     items.reserve(ctx.new_input_items.len());
-    items.extend(ctx.new_input_items.iter().cloned());
+    items.extend(Vec::from(&ctx.original_request.input));
     if let Some(pending) = pending_calls(&items)?.into_iter().next() {
         return Err(ExecutorError::Tool(ToolError::MissingOutput {
             call_id: pending.call_id,

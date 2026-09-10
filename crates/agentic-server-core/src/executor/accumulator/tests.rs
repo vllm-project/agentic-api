@@ -410,6 +410,7 @@ fn test_process_event_text_delta_accumulates() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
+            shell_call: None,
             item_id: "msg_1".into(),
             item_type: "message".into(),
             output_index: Some(0),
@@ -1256,6 +1257,7 @@ fn test_function_call_accumulation_basic() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
+            shell_call: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(0),
@@ -1331,6 +1333,7 @@ fn test_function_call_done_uses_deltas_when_arguments_empty() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
+            shell_call: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(0),
@@ -1380,6 +1383,7 @@ fn test_function_call_multiple_parallel() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
+            shell_call: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(0),
@@ -1404,6 +1408,7 @@ fn test_function_call_multiple_parallel() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
+            shell_call: None,
             item_id: "fc_2".into(),
             item_type: "function_call".into(),
             output_index: Some(1),
@@ -1447,6 +1452,7 @@ fn test_function_call_interleaved_with_message() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
+            shell_call: None,
             item_id: "msg_1".into(),
             item_type: "message".into(),
             output_index: Some(0),
@@ -1470,6 +1476,7 @@ fn test_function_call_interleaved_with_message() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
+            shell_call: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(1),
@@ -1513,6 +1520,7 @@ fn test_function_call_done_updates_metadata() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
+            shell_call: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(0),
@@ -1608,6 +1616,7 @@ fn test_function_call_empty_item_id_generates_uuid() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
+            shell_call: None,
             item_id: String::new(),
             item_type: "function_call".into(),
             output_index: Some(0),
@@ -1665,6 +1674,7 @@ fn test_function_call_finalized_on_response_completed() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
+            shell_call: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(0),

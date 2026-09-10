@@ -5,13 +5,14 @@ use std::collections::HashMap;
 
 use indexmap::IndexMap;
 
+use crate::events::types::ShellCommandUpdate;
 use crate::events::{EventPayload, SSEItemType};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::types::event::MessageStatus;
 use crate::types::io::output::McpListTools;
 use crate::types::io::{
     ApplyDone, CompactionItem, CustomToolCall, FunctionToolCall, McpCall, OutputItem, OutputMessage, OutputTextContent,
-    ReasoningOutput, ToolSearchCall, WebSearchCall,
+    ReasoningOutput, ShellCall, ToolSearchCall, WebSearchCall,
 };
 use crate::utils::common::deserialize_from_value_opt;
 use crate::utils::uuid7_str;
@@ -78,7 +79,12 @@ impl SlotMap {
         action: SlotAction,
         validation: Validation,
     ) -> ExecutorResult<Option<OutputIndex>> {
-        if validation == Validation::Strict && (identity.index.is_none() || identity.item_id.is_none()) {
+        // Native shell command events identify the active call by output_index.
+        // Added/done items and other semantic events still require an item ID.
+        let allows_index_only = action == SlotAction::Mutate && identity.item_type == SSEItemType::ShellCall;
+        if validation == Validation::Strict
+            && (identity.index.is_none() || (identity.item_id.is_none() && !allows_index_only))
+        {
             return Err(invalid("upstream item requires 'output_index' and a non-empty item ID"));
         }
         let by_id = identity.item_id.and_then(|id| self.indexes_by_id.get(id)).copied();
@@ -203,7 +209,7 @@ impl SlotMap {
             ..
         }) = self.slots.get_mut(&index)
         {
-            item.apply_event(payload);
+            item.apply_event(payload)?;
         }
         Ok(Some(index))
     }
@@ -237,6 +243,19 @@ impl SlotMap {
                 self.bind_id(index, identity.item_id);
                 return Ok(None);
             }
+            if let SlotState::Active(ActiveItem::ShellCall {
+                item,
+                command_stream: Some(done),
+                ..
+            }) = &slot.state
+            {
+                if done.iter().any(|complete| !complete)
+                    || !matches!(&parsed, Some(OutputItem::ShellCall(final_item))
+                        if final_item.action.commands == item.action.commands)
+                {
+                    return Err(invalid("shell item done has unfinished or contradictory commands"));
+                }
+            }
             let candidate = slot.state.completion_candidate(
                 payload,
                 parsed.as_ref(),
@@ -269,6 +288,7 @@ impl SlotMap {
             | OutputItem::FunctionCall(_)
             | OutputItem::ToolSearchCall(_)
             | OutputItem::CustomToolCall(_)
+            | OutputItem::ShellCall(_)
             | OutputItem::WebSearchCall(_)
             | OutputItem::McpCall(_)
             | OutputItem::McpListTools(_)
@@ -310,15 +330,41 @@ fn semantically_equal(left: &OutputItem, right: &OutputItem) -> bool {
 /// accumulated text/arguments buffer.
 #[derive(Clone)]
 pub(super) enum ActiveItem {
-    Message { item: OutputMessage, text: String },
-    Reasoning { item: ReasoningOutput },
-    FunctionCall { item: FunctionToolCall, arguments: String },
-    ToolSearchCall { item: ToolSearchCall },
-    CustomToolCall { item: CustomToolCall, input: String },
-    WebSearchCall { item: Option<WebSearchCall> },
-    McpCall { item: McpCall },
-    McpListTools { item: McpListTools },
-    Compaction { item: CompactionItem },
+    Message {
+        item: OutputMessage,
+        text: String,
+    },
+    Reasoning {
+        item: ReasoningOutput,
+    },
+    FunctionCall {
+        item: FunctionToolCall,
+        arguments: String,
+    },
+    ToolSearchCall {
+        item: ToolSearchCall,
+    },
+    CustomToolCall {
+        item: CustomToolCall,
+        input: String,
+    },
+    ShellCall {
+        item: ShellCall,
+        command_stream: Option<Vec<bool>>,
+        command: String,
+    },
+    WebSearchCall {
+        item: Option<WebSearchCall>,
+    },
+    McpCall {
+        item: McpCall,
+    },
+    McpListTools {
+        item: McpListTools,
+    },
+    Compaction {
+        item: CompactionItem,
+    },
 }
 
 impl std::fmt::Debug for ActiveItem {
@@ -329,6 +375,7 @@ impl std::fmt::Debug for ActiveItem {
             Self::FunctionCall { .. } => write!(f, "ActiveItem::FunctionCall {{ .. }}"),
             Self::ToolSearchCall { .. } => write!(f, "ActiveItem::ToolSearchCall {{ .. }}"),
             Self::CustomToolCall { .. } => write!(f, "ActiveItem::CustomToolCall {{ .. }}"),
+            Self::ShellCall { .. } => write!(f, "ActiveItem::ShellCall {{ .. }}"),
             Self::WebSearchCall { .. } => write!(f, "ActiveItem::WebSearchCall {{ .. }}"),
             Self::McpCall { .. } => write!(f, "ActiveItem::McpCall {{ .. }}"),
             Self::McpListTools { .. } => write!(f, "ActiveItem::McpListTools {{ .. }}"),
@@ -369,6 +416,11 @@ impl ActiveItem {
                 item,
                 text: String::with_capacity(256),
             }),
+            SSEItemType::ShellCall => ShellCall::try_from(payload).ok().map(|item| ActiveItem::ShellCall {
+                item,
+                command_stream: None,
+                command: String::new(),
+            }),
             SSEItemType::WebSearchCall => Some(ActiveItem::WebSearchCall { item: None }),
             SSEItemType::Compaction => CompactionItem::try_from(payload)
                 .ok()
@@ -387,6 +439,7 @@ impl ActiveItem {
             Self::FunctionCall { .. } => SSEItemType::FunctionCall,
             Self::ToolSearchCall { .. } => SSEItemType::ToolSearchCall,
             Self::CustomToolCall { .. } => SSEItemType::CustomToolCall,
+            Self::ShellCall { .. } => SSEItemType::ShellCall,
             Self::WebSearchCall { .. } => SSEItemType::WebSearchCall,
             Self::McpCall { .. } => SSEItemType::McpCall,
             Self::McpListTools { .. } => SSEItemType::McpListTools,
@@ -412,6 +465,11 @@ impl ActiveItem {
                 item,
                 input: String::new(),
             },
+            OutputItem::ShellCall(item) => Self::ShellCall {
+                item,
+                command_stream: None,
+                command: String::new(),
+            },
             OutputItem::WebSearchCall(item) => Self::WebSearchCall { item: Some(item) },
             OutputItem::McpCall(item) => Self::McpCall { item },
             OutputItem::McpListTools(item) => Self::McpListTools { item },
@@ -421,7 +479,7 @@ impl ActiveItem {
     }
 
     /// Folds a resolved event; the accumulator checks identity and lifecycle first.
-    pub(super) fn apply_event(&mut self, payload: &EventPayload) {
+    pub(super) fn apply_event(&mut self, payload: &EventPayload) -> ExecutorResult<()> {
         match self {
             Self::Message { text, .. } => {
                 if let EventPayload::TextDelta { delta, .. } = payload {
@@ -446,12 +504,55 @@ impl ActiveItem {
                 EventPayload::CustomToolCallInputDone { .. } => item.apply_done(payload, input),
                 _ => {}
             },
+            Self::ShellCall {
+                item,
+                command_stream,
+                command: buffer,
+            } => {
+                if let EventPayload::ShellCallCommand {
+                    command_index, update, ..
+                } = payload
+                {
+                    let done = command_stream.get_or_insert_with(Vec::new);
+                    let index = usize::try_from(*command_index)
+                        .map_err(|_| invalid("shell command index exceeds platform bounds"))?;
+                    match update {
+                        ShellCommandUpdate::Added(command) => {
+                            if index != done.len()
+                                || item.action.commands.len() != done.len()
+                                || done.last() == Some(&false)
+                            {
+                                return Err(invalid("shell command added out of order"));
+                            }
+                            item.action.commands.push(String::new());
+                            buffer.clone_from(command);
+                            done.push(false);
+                        }
+                        ShellCommandUpdate::Delta(delta) => {
+                            if done.get(index) != Some(&false) {
+                                return Err(invalid("shell command delta has no active command"));
+                            }
+                            buffer.push_str(delta);
+                        }
+                        ShellCommandUpdate::Done(command) => {
+                            if done.get(index) != Some(&false) || *buffer != *command {
+                                return Err(invalid(
+                                    "shell command done is repeated or contradicts streamed command",
+                                ));
+                            }
+                            item.apply_done(payload, buffer);
+                            done[index] = true;
+                        }
+                    }
+                }
+            }
             Self::ToolSearchCall { .. }
             | Self::WebSearchCall { .. }
             | Self::McpCall { .. }
             | Self::McpListTools { .. }
             | Self::Compaction { .. } => {}
         }
+        Ok(())
     }
 
     pub(super) fn finalize(self) -> Option<OutputItem> {
@@ -479,6 +580,7 @@ impl ActiveItem {
                 item.status = Some(MessageStatus::Completed);
                 Some(OutputItem::CustomToolCall(item))
             }
+            Self::ShellCall { item, .. } => Some(OutputItem::ShellCall(item)),
             Self::WebSearchCall { item } => item.map(OutputItem::WebSearchCall),
             Self::McpCall { item } => Some(OutputItem::McpCall(item)),
             Self::McpListTools { item } => Some(OutputItem::McpListTools(item)),
@@ -547,6 +649,8 @@ impl SlotState {
     }
 }
 
+// Keep each output-item completion in the same transition dispatcher.
+#[allow(clippy::too_many_lines)]
 fn apply_output_item_done(
     active: &mut ActiveItem,
     payload: &EventPayload,
@@ -634,6 +738,7 @@ fn apply_output_item_done(
             }
             *item = Some(done);
         }
+        (ActiveItem::ShellCall { item, .. }, Some(OutputItem::ShellCall(done))) => item.clone_from(done),
         (ActiveItem::McpCall { item }, Some(OutputItem::McpCall(done))) => item.clone_from(done),
         (ActiveItem::McpListTools { item }, Some(OutputItem::McpListTools(done))) => item.clone_from(done),
         (ActiveItem::Compaction { item }, Some(OutputItem::Compaction(done))) => {
@@ -643,6 +748,7 @@ fn apply_output_item_done(
             }
             *item = done;
         }
+        (ActiveItem::ShellCall { item, command, .. }, None) => item.apply_done(payload, command),
         (ActiveItem::Reasoning { item }, None) => item.apply_done(payload, &mut String::new()),
         (ActiveItem::FunctionCall { item, arguments }, None) => item.apply_done(payload, arguments),
         (ActiveItem::ToolSearchCall { item }, None) => item.apply_done(payload, &mut String::new()),

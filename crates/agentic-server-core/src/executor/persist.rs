@@ -186,6 +186,7 @@ async fn validate_output_call_ids(
             OutputItem::FunctionCall(call) => ("function_call", call.call_id.as_str()),
             OutputItem::ToolSearchCall(call) => ("tool_search_call", call.call_id.as_str()),
             OutputItem::CustomToolCall(call) => ("custom_tool_call", call.call_id.as_str()),
+            OutputItem::ShellCall(call) => ("shell_call", call.call_id.as_str()),
             _ => continue,
         };
         if call_id.is_empty() {
@@ -226,6 +227,7 @@ fn stored_call_id(item: &InOutItem) -> Option<&str> {
         InOutItem::Output(OutputItem::FunctionCall(call)) => Some(&call.call_id),
         InOutItem::Output(OutputItem::ToolSearchCall(call)) => Some(&call.call_id),
         InOutItem::Output(OutputItem::CustomToolCall(call)) => Some(&call.call_id),
+        InOutItem::Output(OutputItem::ShellCall(call)) => Some(&call.call_id),
         InOutItem::Output(_) => None,
     }
 }
@@ -235,6 +237,7 @@ fn input_call_id(item: &InputItem) -> Option<&str> {
         InputItem::FunctionCall(call) => Some(&call.call_id),
         InputItem::ToolSearchCall(call) => Some(&call.call_id),
         InputItem::CustomToolCall(call) => Some(&call.call_id),
+        InputItem::ShellCall(call) => Some(&call.call_id),
         _ => None,
     }
 }

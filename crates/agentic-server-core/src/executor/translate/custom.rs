@@ -200,7 +200,7 @@ fn partial_custom_input(state: &mut CustomCallState, arguments: &str) -> Executo
     Ok((!delta.is_empty()).then_some(delta))
 }
 
-fn complete_json_string_prefix(value: &str) -> usize {
+pub(super) fn complete_json_string_prefix(value: &str) -> usize {
     let bytes = value.as_bytes();
     let mut index = 0;
     while index < bytes.len() {

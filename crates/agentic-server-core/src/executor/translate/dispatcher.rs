@@ -6,7 +6,9 @@ use super::{
 use crate::events::{EventFrame, EventPayload, SSEEventType, SSEItemType};
 use crate::executor::accumulator::AccumulatedFunctionCall;
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::tool::{CodexNamespaceHandler, CustomHandler, FunctionHandler, ToolSearchHandler, ToolType, tool_search};
+use crate::tool::{
+    CodexNamespaceHandler, CustomHandler, FunctionHandler, ShellHandler, ToolSearchHandler, ToolType, tool_search,
+};
 use crate::utils::common::serialize_to_string;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -167,8 +169,13 @@ impl TranslationDispatcher {
             ToolType::Function => Box::new(FunctionHandler::new_translator()),
             ToolType::CodexNamespace => Box::new(CodexNamespaceHandler::new_translator()),
             ToolType::Custom => Box::new(CustomHandler::new_translator()),
+            ToolType::Shell if !self.context.is_gateway_owned_name(name) => Box::new(ShellHandler::new_translator()),
             ToolType::ToolSearch => Box::new(ToolSearchHandler::new_translator()),
-            ToolType::Mcp | ToolType::WebSearch | ToolType::FileSearch | ToolType::CodeInterpreter => {
+            ToolType::Shell
+            | ToolType::Mcp
+            | ToolType::WebSearch
+            | ToolType::FileSearch
+            | ToolType::CodeInterpreter => {
                 self.active.insert(output_index, ActiveCall::Gateway);
                 if self.first_gateway_output_index.is_none_or(|first| output_index < first) {
                     self.first_gateway_output_index = Some(output_index);
