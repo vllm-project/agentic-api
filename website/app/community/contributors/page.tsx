@@ -4,7 +4,7 @@ import { ArrowUpRight } from 'lucide-react';
 import community from '@/lib/data/community.json';
 import { CommunityNav } from '@/components/site/community-nav';
 import { CommunityCTA } from '@/components/site/community-cta';
-import { REPO } from '@/lib/site';
+import { REPO, assetPath } from '@/lib/site';
 
 export const metadata: Metadata = {
   title: 'Contributors',
@@ -12,6 +12,13 @@ export const metadata: Metadata = {
     'Meet the people contributing to vLLM Agentic API and find ways to help through thoughtful reviews, clear documentation, useful bug reports, and well-tested code.',
   alternates: { canonical: '/community/contributors' },
 };
+
+const refreshedDate = new Intl.DateTimeFormat('en-US', {
+  month: 'long',
+  day: 'numeric',
+  year: 'numeric',
+  timeZone: 'UTC',
+}).format(new Date(`${community.updatedAt}T00:00:00Z`));
 
 const waysToHelp = [
   {
@@ -101,7 +108,7 @@ export default function Contributors() {
               >
                 <Image
                   unoptimized
-                  src={person.avatar}
+                  src={assetPath(person.avatar)}
                   alt=""
                   width={48}
                   height={48}
@@ -117,9 +124,9 @@ export default function Contributors() {
           ))}
         </ul>
         <p className="source-note">
-          Names from the project’s GitHub contributor list, checked September 9,
-          2026. This list is one part of a wider community that also helps
-          through reviews, issue reports, documentation, and support.
+          Names from the project’s GitHub contributor list, checked{' '}
+          {refreshedDate}. This list is one part of a wider community that also
+          helps through reviews, issue reports, documentation, and support.
         </p>
       </section>
       <CommunityCTA />

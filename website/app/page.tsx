@@ -6,7 +6,7 @@ import { Features } from '@/components/site/features';
 import { Quickstart } from '@/components/site/quickstart';
 import { Ecosystem } from '@/components/site/ecosystem';
 import community from '@/lib/data/community.json';
-import { REPO } from '@/lib/site';
+import { REPO, assetPath } from '@/lib/site';
 export default function Home() {
   return (
     <main id="main">
@@ -103,7 +103,7 @@ export default function Home() {
               <a href={p.url} key={p.login} aria-label={`${p.name} on GitHub`}>
                 <Image
                   unoptimized
-                  src={p.avatar}
+                  src={assetPath(p.avatar)}
                   width={64}
                   height={64}
                   loading="lazy"

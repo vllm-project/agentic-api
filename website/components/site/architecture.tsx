@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import { assetPath } from '@/lib/site';
 import {
   Terminal,
   Code2,
@@ -44,7 +45,7 @@ export function Architecture() {
           <Image
             unoptimized
             className="gateway-mark"
-            src="/brand/agentic-api-mark.svg"
+            src={assetPath('/brand/agentic-api-mark.svg')}
             alt=""
             width={902}
             height={943}

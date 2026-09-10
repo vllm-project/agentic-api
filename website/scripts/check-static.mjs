@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-const output = resolve('dist/client');
+const output = resolve(process.env.STATIC_OUTPUT_DIR || 'dist/client');
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+
 const docs = JSON.parse(readFileSync('lib/data/docs-versions.json', 'utf8'));
 assert.ok(docs.versions.some((version) => version.id === docs.defaultVersion));
 assert.equal(
@@ -34,7 +37,9 @@ const pages = [
 ];
 const errors = [];
 function resolvePage(path) {
-  const base = resolve(output, '.' + path);
+  if (basePath && !path.startsWith(`${basePath}/`) && path !== basePath)
+    return false;
+  const base = resolve(output, '.' + (path.slice(basePath.length) || '/'));
   return [base, base + '.html', base + '/index.html'].some(existsSync);
 }
 for (const [file, heading] of pages) {
@@ -54,6 +59,13 @@ for (const [file, heading] of pages) {
   assert.ok(/<title>[^<]+<\/title>/.test(document), `${file}: document title`);
   assert.ok(/name="description"/.test(document), `${file}: page description`);
   assert.ok(/id="main"/.test(document), `${file}: skip-link target`);
+  if (siteUrl && file !== '404.html' && file !== 'index.html') {
+    const route = file === 'index.html' ? '/' : `/${file.slice(0, -5)}`;
+    assert.ok(
+      document.includes(`href="${siteUrl.replace(/\/$/, '')}${route}"`),
+      `${file}: canonical URL includes deployment path`,
+    );
+  }
   if (file.startsWith('docs')) {
     const versionId =
       file === 'docs.html' ? docs.defaultVersion : file.slice(5, -5);

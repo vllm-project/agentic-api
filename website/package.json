@@ -11,7 +11,10 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "check": "tsc --noEmit && oxlint && node scripts/check-static.mjs",
-    "format:check": "oxfmt --check"
+    "format:check": "oxfmt --check",
+    "refresh:contributors": "node scripts/refresh-contributors.mjs",
+    "test": "node --test scripts/*.test.mjs",
+    "prepare:pages": "node scripts/prepare-pages.mjs"
   },
   "dependencies": {
     "react": "19.2.8",

@@ -10,7 +10,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet';
-import { REPO, DOCS } from '@/lib/site';
+import { REPO, DOCS, assetPath } from '@/lib/site';
 import { useState } from 'react';
 export function Brand() {
   return (
@@ -18,7 +18,7 @@ export function Brand() {
       <Image
         unoptimized
         className="brand-logo"
-        src="/brand/agentic-api-logo.svg"
+        src={assetPath('/brand/agentic-api-logo.svg')}
         alt="Agentic API"
         width={1739}
         height={796}

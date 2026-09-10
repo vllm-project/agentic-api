@@ -5,7 +5,7 @@ import Link from 'next/link';
 import community from '@/lib/data/community.json';
 import { CommunityNav } from '@/components/site/community-nav';
 import { CommunityCTA } from '@/components/site/community-cta';
-import { REPO } from '@/lib/site';
+import { REPO, assetPath } from '@/lib/site';
 export const metadata: Metadata = {
   title: 'Project team',
   description:
@@ -53,7 +53,7 @@ export default function Team() {
               <div className="person-top">
                 <Image
                   unoptimized
-                  src={p.avatar}
+                  src={assetPath(p.avatar)}
                   alt=""
                   width={72}
                   height={72}

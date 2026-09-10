@@ -211,3 +211,14 @@ jobs:
             --target "$target_sha" \
             --title "$tag" \
             --generate-notes
+
+  website:
+    name: Refresh and deploy website
+    needs: release
+    if: ${{ !inputs.dry_run && github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    # GITHUB_TOKEN-created releases do not trigger another release event workflow.
+    uses: ./.github/workflows/website.yml

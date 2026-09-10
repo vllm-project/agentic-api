@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-09-09",
+  "updatedAt": "2026-09-10",
   "source": "https://api.github.com/repos/vllm-project/agentic-api/contributors?per_page=100",
   "ownersSource": "https://github.com/vllm-project/agentic-api/blob/main/.github/CODEOWNERS",
   "maintainers": [
@@ -75,7 +75,7 @@
       "login": "leseb",
       "name": "Sébastien Han",
       "url": "https://github.com/leseb",
-      "avatar": "/people/leseb.jpg"
+      "avatar": "/people/leseb.png"
     },
     {
       "login": "StevenWang-CY",
@@ -93,7 +93,13 @@
       "login": "harivilasp",
       "name": "Hari Vilas Panjwani",
       "url": "https://github.com/harivilasp",
-      "avatar": "/people/harivilasp.jpg"
+      "avatar": "/people/harivilasp.png"
+    },
+    {
+      "login": "Zheng-Lu",
+      "name": "Shrek Luzz",
+      "url": "https://github.com/Zheng-Lu",
+      "avatar": "/people/Zheng-Lu.jpg"
     },
     {
       "login": "tjtanaa",
@@ -105,31 +111,37 @@
       "login": "jtechapps",
       "name": "Jacob M",
       "url": "https://github.com/jtechapps",
-      "avatar": "/people/jtechapps.jpg"
+      "avatar": "/people/jtechapps.png"
     },
     {
       "login": "noobHappylife",
       "name": "noobHappylife",
       "url": "https://github.com/noobHappylife",
-      "avatar": "/people/noobHappylife.jpg"
+      "avatar": "/people/noobHappylife.png"
     },
     {
       "login": "jiahuei",
       "name": "Tan Jia Huei",
       "url": "https://github.com/jiahuei",
-      "avatar": "/people/jiahuei.jpg"
+      "avatar": "/people/jiahuei.png"
     },
     {
       "login": "avinashsingh77",
       "name": "Avinash Singh",
       "url": "https://github.com/avinashsingh77",
-      "avatar": "/people/avinashsingh77.jpg"
+      "avatar": "/people/avinashsingh77.png"
+    },
+    {
+      "login": "LOGO127",
+      "name": "LOGO127",
+      "url": "https://github.com/LOGO127",
+      "avatar": "/people/LOGO127.jpg"
     },
     {
       "login": "MecicoJay",
       "name": "MecicoJay",
       "url": "https://github.com/MecicoJay",
-      "avatar": "/people/MecicoJay.jpg"
+      "avatar": "/people/MecicoJay.png"
     },
     {
       "login": "mgoin",
@@ -141,19 +153,13 @@
       "login": "Mohammad-nassar10",
       "name": "Mohammad-nassar10",
       "url": "https://github.com/Mohammad-nassar10",
-      "avatar": "/people/Mohammad-nassar10.jpg"
-    },
-    {
-      "login": "Zheng-Lu",
-      "name": "Shrek Luzz",
-      "url": "https://github.com/Zheng-Lu",
-      "avatar": "/people/Zheng-Lu.jpg"
+      "avatar": "/people/Mohammad-nassar10.png"
     },
     {
       "login": "ZichenYuan",
       "name": "Sunny Yuan",
       "url": "https://github.com/ZichenYuan",
-      "avatar": "/people/ZichenYuan.jpg"
+      "avatar": "/people/ZichenYuan.png"
     },
     {
       "login": "skyloevil",
