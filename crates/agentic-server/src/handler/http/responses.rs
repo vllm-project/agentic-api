@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use agentic_core::executor::{ExecuteRequest, compact_response as execute_compaction};
 use agentic_core::proxy::{ProxyRequest, proxy_request};
+use agentic_core::tool::ToolSearchHandler;
 use agentic_core::types::request_response::{CompactRequest, RequestPayload, ResponseTextConfig};
 
 use super::super::common::{
@@ -41,6 +42,22 @@ async fn execute_responses(state: &AppState, parts: Parts, payload: RequestPaylo
     }
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/v1/responses",
+    request_body = agentic_core::types::request_response::RequestPayload,
+    responses(
+        (status = 200, description = "JSON when stream=false, SSE when stream=true",
+            content(
+                (agentic_core::types::request_response::ResponsePayload = "application/json"),
+                (() = "text/event-stream"),
+            )),
+        (status = 400, description = "Invalid request", body = crate::openapi::ApiErrorResponse),
+        (status = 502, description = "Upstream error", body = crate::openapi::ApiErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+    tag = "responses",
+))]
 pub async fn responses(State(state): State<AppState>, req: Request) -> Response {
     let (parts, body) = req.into_parts();
     let bytes = match read_bytes(body, state.max_request_body_size).await {
@@ -52,8 +69,10 @@ pub async fn responses(State(state): State<AppState>, req: Request) -> Response 
         Err(error) => return executor_error_response(error.into()),
     };
 
+    let has_tool_search_state = ToolSearchHandler::request_has_state(&routing_payload);
     let should_execute = routing_payload.store
         || routing_payload.previous_response_id.is_some()
+        || has_tool_search_state
         || routing_payload.in_process_feature().is_some();
     debug!(
         route = if should_execute { "executor" } else { "proxy" },
@@ -63,6 +82,7 @@ pub async fn responses(State(state): State<AppState>, req: Request) -> Response 
         has_conversation_id = routing_payload.conversation_id.is_some(),
         has_compaction = routing_payload.input.contains_compaction(),
         has_compaction_trigger = routing_payload.input.has_compaction_trigger(),
+        has_tool_search_state,
         context_management = routing_payload.context_management.as_ref().map_or(0, Vec::len),
         tools = routing_payload.tools.as_ref().map_or(0, Vec::len),
         "routing HTTP responses request"
@@ -81,6 +101,18 @@ pub async fn responses(State(state): State<AppState>, req: Request) -> Response 
     }
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/v1/responses/compact",
+    request_body = agentic_core::types::request_response::CompactRequest,
+    responses(
+        (status = 200, description = "Compacted response", body = agentic_core::types::request_response::CompactedResponse),
+        (status = 400, description = "Invalid request", body = crate::openapi::ApiErrorResponse),
+        (status = 502, description = "Upstream error", body = crate::openapi::ApiErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+    tag = "responses",
+))]
 pub async fn compact_response(State(state): State<AppState>, req: Request) -> Response {
     let (parts, body) = req.into_parts();
     let request: CompactRequest = match read_json(body, state.max_request_body_size).await {

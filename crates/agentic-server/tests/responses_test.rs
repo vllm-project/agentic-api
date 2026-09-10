@@ -6,7 +6,9 @@ use axum::http::header;
 use axum::response::IntoResponse;
 use axum::routing::post;
 use http::StatusCode;
+use std::collections::VecDeque;
 use std::convert::Infallible;
+use std::fmt::Write as _;
 use std::future::Future;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
@@ -365,22 +367,35 @@ async fn spawn_mock_vllm_json() -> (String, tokio::task::JoinHandle<()>) {
 }
 
 async fn spawn_mock_vllm_json_capture() -> (String, Arc<Mutex<Vec<serde_json::Value>>>, tokio::task::JoinHandle<()>) {
+    spawn_mock_vllm_json_capture_body(serde_json::json!({
+        "id": "mock_id",
+        "object": "response",
+        "status": "completed",
+        "model": "test",
+        "output": [],
+        "created_at": 0
+    }))
+    .await
+}
+
+async fn spawn_mock_vllm_json_capture_body(
+    response_body: serde_json::Value,
+) -> (String, Arc<Mutex<Vec<serde_json::Value>>>, tokio::task::JoinHandle<()>) {
     let requests = Arc::new(Mutex::new(Vec::new()));
     let route_requests = Arc::clone(&requests);
+    let response_body = Arc::new(response_body.to_string());
     let app = Router::new().route(
         "/v1/responses",
         post(move |body: Bytes| {
             let route_requests = Arc::clone(&route_requests);
+            let response_body = Arc::clone(&response_body);
             async move {
                 let body = serde_json::from_slice::<serde_json::Value>(&body).unwrap();
                 route_requests.lock().await.push(body);
                 axum::response::Response::builder()
                     .status(200)
                     .header("Content-Type", "application/json")
-                    .body(axum::body::Body::from(
-                        r#"{"id":"mock_id","object":"response","status":"completed",
-                            "model":"test","output":[],"created_at":0}"#,
-                    ))
+                    .body(axum::body::Body::from(response_body.as_str().to_owned()))
                     .unwrap()
                     .into_response()
             }
@@ -392,7 +407,7 @@ async fn spawn_mock_vllm_json_capture() -> (String, Arc<Mutex<Vec<serde_json::Va
     (format!("http://{addr}"), requests, handle)
 }
 
-async fn spawn_mock_vllm_json_capture_body() -> (String, Arc<Mutex<Vec<Bytes>>>, tokio::task::JoinHandle<()>) {
+async fn spawn_mock_vllm_json_capture_bytes() -> (String, Arc<Mutex<Vec<Bytes>>>, tokio::task::JoinHandle<()>) {
     let requests = Arc::new(Mutex::new(Vec::new()));
     let route_requests = Arc::clone(&requests);
     let app = Router::new().route(
@@ -440,6 +455,284 @@ async fn spawn_mock_vllm_sse() -> (String, tokio::task::JoinHandle<()>) {
     (format!("http://{addr}"), handle)
 }
 
+async fn spawn_tool_search_sse_sequence(
+    responses: Vec<String>,
+) -> (String, Arc<Mutex<Vec<serde_json::Value>>>, tokio::task::JoinHandle<()>) {
+    let responses = Arc::new(Mutex::new(VecDeque::from(responses)));
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let route_responses = Arc::clone(&responses);
+    let route_requests = Arc::clone(&requests);
+    let app = Router::new().route(
+        "/v1/responses",
+        post(move |body: Bytes| {
+            let route_responses = Arc::clone(&route_responses);
+            let route_requests = Arc::clone(&route_requests);
+            async move {
+                route_requests
+                    .lock()
+                    .await
+                    .push(serde_json::from_slice(&body).expect("request JSON"));
+                let response = route_responses.lock().await.pop_front().expect("prepared SSE response");
+                axum::response::Response::builder()
+                    .status(StatusCode::OK)
+                    .header(header::CONTENT_TYPE, "text/event-stream; charset=utf-8")
+                    .body(axum::body::Body::from(response))
+                    .unwrap()
+                    .into_response()
+            }
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let handle = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (format!("http://{addr}"), requests, handle)
+}
+
+fn tool_search_sse() -> String {
+    let events = [
+        serde_json::json!({
+            "type":"response.created",
+            "response":{
+                "id":"up_search","status":"in_progress",
+                "tools":[{"type":"function","name":"tool_search","parameters":{"type":"object"}}]
+            }
+        }),
+        serde_json::json!({
+            "type":"response.output_item.added","output_index":0,
+            "item":{"id":"fc_search","type":"function_call","status":"in_progress",
+                "name":"tool_search","call_id":"call_search","arguments":""}
+        }),
+        serde_json::json!({
+            "type":"response.function_call_arguments.delta","output_index":0,
+            "item_id":"fc_search","delta":"{\"query\":\"weather\"}"
+        }),
+        serde_json::json!({
+            "type":"response.function_call_arguments.done","output_index":0,
+            "item_id":"fc_search","name":"tool_search","arguments":"{\"query\":\"weather\"}"
+        }),
+        serde_json::json!({
+            "type":"response.output_item.done","output_index":0,
+            "item":{"id":"fc_search","type":"function_call","status":"completed",
+                "name":"tool_search","call_id":"call_search","arguments":"{\"query\":\"weather\"}"}
+        }),
+        serde_json::json!({"type":"response.completed","response":{"id":"up_search","status":"completed","usage":null}}),
+    ];
+    encode_sse_events(events)
+}
+
+fn encode_sse_events(events: impl IntoIterator<Item = serde_json::Value>) -> String {
+    let mut response = String::new();
+    for event in events {
+        writeln!(&mut response, "data: {event}\n").expect("writing to String cannot fail");
+    }
+    response.push_str("data: [DONE]\n\n");
+    response
+}
+
+fn function_call_sse(name: &str, item_id: &str, call_id: &str, arguments: &str) -> String {
+    let events = [
+        serde_json::json!({
+            "type":"response.created",
+            "response":{
+                "id":"up_call","status":"in_progress",
+                "tools":[{"type":"function","name":name,"parameters":{"type":"object"}}]
+            }
+        }),
+        serde_json::json!({
+            "type":"response.output_item.added","output_index":0,
+            "item":{"id":item_id,"type":"function_call","status":"in_progress",
+                "name":name,"call_id":call_id,"arguments":""}
+        }),
+        serde_json::json!({
+            "type":"response.output_item.done","output_index":0,
+            "item":{"id":item_id,"type":"function_call","status":"completed",
+                "name":name,"call_id":call_id,"arguments":arguments}
+        }),
+        serde_json::json!({"type":"response.completed","response":{"id":"up_call","status":"completed","usage":null}}),
+    ];
+    encode_sse_events(events)
+}
+
+fn final_message_sse() -> String {
+    let events = [
+        serde_json::json!({"type":"response.created","response":{"id":"up_final","status":"in_progress"}}),
+        serde_json::json!({
+            "type":"response.output_item.added","output_index":0,
+            "item":{"id":"msg_final","type":"message","role":"assistant","status":"in_progress","content":[]}
+        }),
+        serde_json::json!({
+            "type":"response.output_text.delta","output_index":0,"content_index":0,
+            "item_id":"msg_final","delta":"PARIS_WEATHER_OK"
+        }),
+        serde_json::json!({"type":"response.completed","response":{"id":"up_final","status":"completed","usage":null}}),
+    ];
+    encode_sse_events(events)
+}
+
+fn assert_public_search_sse(
+    first_events: &[serde_json::Value],
+    deferred_weather: &serde_json::Value,
+) -> serde_json::Value {
+    let public_tools = serde_json::json!([
+        {
+            "type":"tool_search","execution":"client","description":"Search tools",
+            "parameters":{"type":"object","properties":{"query":{"type":"string"}}}
+        },
+        deferred_weather
+    ]);
+    let response_tool_envelopes = first_events
+        .iter()
+        .filter_map(|event| event.get("response"))
+        .filter_map(|response| response.get("tools"))
+        .collect::<Vec<_>>();
+    assert!(!response_tool_envelopes.is_empty());
+    assert!(response_tool_envelopes.iter().all(|tools| *tools == &public_tools));
+    assert!(first_events.iter().all(|event| {
+        event["response"]["tools"].as_array().is_none_or(|tools| {
+            tools
+                .iter()
+                .all(|tool| !(tool["type"] == "function" && tool["name"] == "tool_search"))
+        })
+    }));
+    assert_eq!(
+        first_events
+            .iter()
+            .map(|event| event["sequence_number"].as_u64())
+            .collect::<Vec<_>>(),
+        (0..u64::try_from(first_events.len()).unwrap())
+            .map(Some)
+            .collect::<Vec<_>>()
+    );
+    assert!(first_events.iter().all(|event| {
+        !matches!(
+            event["type"].as_str(),
+            Some("response.function_call_arguments.delta" | "response.function_call_arguments.done" | "error")
+        )
+    }));
+    let search_lifecycle = first_events
+        .iter()
+        .filter(|event| {
+            matches!(
+                event["type"].as_str(),
+                Some("response.output_item.added" | "response.output_item.done")
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(search_lifecycle.len(), 2);
+    assert_eq!(search_lifecycle[0]["item"]["type"], "tool_search_call");
+    assert_eq!(search_lifecycle[0]["item"]["status"], "in_progress");
+    assert_eq!(search_lifecycle[0]["item"]["arguments"], serde_json::json!({}));
+    assert_eq!(search_lifecycle[1]["item"]["type"], "tool_search_call");
+    assert_eq!(search_lifecycle[1]["item"]["status"], "completed");
+    assert_eq!(
+        search_lifecycle[1]["item"]["arguments"],
+        serde_json::json!({"query":"weather"})
+    );
+    assert_eq!(search_lifecycle[0]["item"]["id"], search_lifecycle[1]["item"]["id"]);
+    assert_eq!(
+        search_lifecycle[0]["item"]["call_id"],
+        search_lifecycle[1]["item"]["call_id"]
+    );
+    assert_eq!(search_lifecycle[0]["output_index"], search_lifecycle[1]["output_index"]);
+    let search_call = first_events.last().expect("first terminal")["response"]["output"][0].clone();
+    assert_eq!(search_call["type"], "tool_search_call");
+    assert_eq!(search_call["id"], "tsc_search");
+    assert_eq!(search_call, search_lifecycle[1]["item"]);
+    search_call
+}
+
+#[tokio::test]
+async fn test_http_sse_tool_search_three_request_continuation_stays_public() {
+    let (llm_url, requests, _llm) = spawn_tool_search_sse_sequence(vec![
+        tool_search_sse(),
+        function_call_sse("get_weather", "fc_weather", "call_weather", "{\"city\":\"Paris\"}"),
+        final_message_sse(),
+    ])
+    .await;
+    let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+    let client = reqwest::Client::new();
+    let deferred_weather = serde_json::json!({
+        "type":"function","name":"get_weather","description":"Get weather",
+        "parameters":{"type":"object","properties":{"city":{"type":"string"}}},
+        "defer_loading":true
+    });
+    let first_response = client
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model":"test","input":"find weather","store":false,"stream":true,"parallel_tool_calls":false,
+            "tools":[
+                {"type":"tool_search","execution":"client","description":"Search tools",
+                    "parameters":{"type":"object","properties":{"query":{"type":"string"}}}},
+                deferred_weather.clone()
+            ]
+        }))
+        .send()
+        .await
+        .expect("first response");
+    assert_eq!(first_response.status(), StatusCode::OK);
+    let first_body = first_response.text().await.expect("first SSE body");
+    let first_events = sse_events(&first_body);
+    let search_call = assert_public_search_sse(&first_events, &deferred_weather);
+
+    let search_output = serde_json::json!({
+        "type":"tool_search_output","call_id":"call_search","tools":[deferred_weather]
+    });
+    let second_response = client
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model":"test","input":[search_call.clone(),search_output.clone()],"store":false,"stream":true
+        }))
+        .send()
+        .await
+        .expect("second response");
+    let second_body = second_response.text().await.expect("second SSE body");
+    let second_events = sse_events(&second_body);
+    let weather_call = second_events.last().unwrap()["response"]["output"][0].clone();
+    assert_eq!(weather_call["type"], "function_call");
+    assert_eq!(weather_call["name"], "get_weather");
+
+    let third_response = client
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model":"test",
+            "input":[
+                search_call,search_output,weather_call,
+                {"type":"function_call_output","call_id":"call_weather","output":"sunny"}
+            ],
+            "store":false,"stream":true
+        }))
+        .send()
+        .await
+        .expect("third response");
+    let third_events = sse_events(&third_response.text().await.expect("third SSE body"));
+    assert_eq!(
+        third_events.last().unwrap()["response"]["output"][0]["content"][0]["text"],
+        "PARIS_WEATHER_OK"
+    );
+
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 3);
+    assert_eq!(requests[0]["tools"].as_array().map(Vec::len), Some(1));
+    assert_eq!(requests[0]["tools"][0]["name"], "tool_search");
+    assert!(
+        requests[1]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "get_weather")
+    );
+    assert!(requests[1]["input"].as_array().unwrap().iter().any(|item| {
+        item["type"] == "function_call" && item["name"] == "tool_search" && item["call_id"] == "call_search"
+    }));
+    assert!(
+        requests[2]["input"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| { item["type"] == "function_call_output" && item["call_id"] == "call_weather" })
+    );
+}
+
 #[tokio::test]
 async fn test_store_false_proxies_json_to_vllm() {
     // Arrange
@@ -460,9 +753,248 @@ async fn test_store_false_proxies_json_to_vllm() {
     assert_eq!(body["id"], "mock_id");
 }
 
+/// Regression test for vllm-project/agentic-api#150: a structured message
+/// input item omitting the `"type": "message"` discriminant must still be
+/// accepted by the endpoint, not rejected as an untagged-enum mismatch.
+#[tokio::test]
+async fn test_structured_input_without_message_type_is_accepted() {
+    // Arrange
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
+    let (gw_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+
+    // Act — the exact payload reported in #150: a message item with structured
+    // `content` parts but no top-level `"type"` field.
+    let resp = reqwest::Client::new()
+        .post(format!("{gw_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "dummy",
+            "input": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": "hi new"}
+                    ]
+                }
+            ],
+            "store": false,
+            "stream": false
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // Assert — the gateway parses the shorthand message and forwards it upstream.
+    assert_eq!(resp.status(), 200);
+    let forwarded = requests.lock().await;
+    assert_eq!(forwarded.len(), 1);
+    assert_eq!(forwarded[0]["input"][0]["role"], "user");
+    assert_eq!(forwarded[0]["input"][0]["content"][0]["type"], "input_text");
+    assert_eq!(forwarded[0]["input"][0]["content"][0]["text"], "hi new");
+}
+
+#[tokio::test]
+async fn test_store_false_manual_tool_search_replay_loads_returned_function() {
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_body(serde_json::json!({
+        "id": "upstream_loaded_call",
+        "object": "response",
+        "status": "completed",
+        "model": "test",
+        "created_at": 0,
+        "output": [{
+            "type": "function_call",
+            "id": "fc_weather_1",
+            "call_id": "call_weather_1",
+            "name": "get_weather",
+            "arguments": "{\"city\":\"Paris\"}",
+            "status": "completed"
+        }]
+    }))
+    .await;
+    let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+
+    let response = reqwest::Client::new()
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "input": [
+                {
+                    "type": "tool_search_call",
+                    "id": "tsc_1",
+                    "call_id": "call_search_1",
+                    "arguments": {"query": "weather"}
+                },
+                {
+                    "type": "tool_search_output",
+                    "call_id": "call_search_1",
+                    "tools": [{
+                        "type": "function",
+                        "name": "get_weather",
+                        "description": "Get weather",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"city": {"type": "string"}},
+                            "required": ["city"]
+                        },
+                        "defer_loading": true
+                    }]
+                }
+            ],
+            "tools": [],
+            "store": false,
+            "stream": false
+        }))
+        .send()
+        .await
+        .expect("gateway response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value = response.json().await.expect("response JSON");
+    assert_eq!(body["output"][0]["type"], "function_call");
+    assert_eq!(body["output"][0]["name"], "get_weather");
+
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0].get("previous_response_id").is_none());
+    assert_eq!(requests[0]["input"][0]["type"], "function_call");
+    assert_eq!(requests[0]["input"][0]["name"], "tool_search");
+    assert_eq!(requests[0]["input"][0]["call_id"], "call_search_1");
+    assert_eq!(requests[0]["input"][1]["type"], "function_call_output");
+    assert_eq!(requests[0]["input"][1]["call_id"], "call_search_1");
+    assert_eq!(requests[0]["tools"].as_array().map(Vec::len), Some(1));
+    assert_eq!(requests[0]["tools"][0]["name"], "get_weather");
+    assert!(requests[0]["tools"][0].get("defer_loading").is_none());
+}
+
+#[tokio::test]
+async fn test_store_false_fresh_tool_search_lowers_and_translates_blocking_call() {
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_body(serde_json::json!({
+        "id": "upstream_search_call",
+        "object": "response",
+        "status": "completed",
+        "model": "test",
+        "created_at": 0,
+        "output": [{
+            "type": "function_call",
+            "id": "fc_search_1",
+            "call_id": "call_search_1",
+            "name": "tool_search",
+            "arguments": "{\"query\":\"weather\"}",
+            "status": "completed"
+        }]
+    }))
+    .await;
+    let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+
+    let response = reqwest::Client::new()
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "input": "find a weather tool",
+            "tools": [
+                {
+                    "type": "tool_search",
+                    "execution": "client",
+                    "description": "Search the client catalog",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}},
+                        "required": ["query"]
+                    }
+                },
+                {
+                    "type": "function",
+                    "name": "get_weather",
+                    "description": "Get weather",
+                    "parameters": {"type": "object"},
+                    "defer_loading": true
+                }
+            ],
+            "store": false,
+            "stream": false
+        }))
+        .send()
+        .await
+        .expect("gateway response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value = response.json().await.expect("response JSON");
+    assert_eq!(
+        body["output"][0],
+        serde_json::json!({
+            "type": "tool_search_call",
+            "id": "tsc_search_1",
+            "call_id": "call_search_1",
+            "execution": "client",
+            "arguments": {"query": "weather"},
+            "status": "completed"
+        })
+    );
+
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0]["tools"].as_array().map(Vec::len), Some(1));
+    assert_eq!(requests[0]["tools"][0]["type"], "function");
+    assert_eq!(requests[0]["tools"][0]["name"], "tool_search");
+    assert!(
+        requests[0]["tools"]
+            .as_array()
+            .is_some_and(|tools| tools.iter().all(|tool| tool["name"] != "get_weather")),
+        "deferred function schema must not be a top-level private tool"
+    );
+    assert!(
+        requests[0]["tools"][0]["description"]
+            .as_str()
+            .is_some_and(|description| description.contains("get_weather")),
+        "safe synthetic catalog keeps function identity"
+    );
+}
+
+#[tokio::test]
+async fn test_blocking_tool_search_rejects_invalid_upstream_arguments_as_bad_gateway() {
+    let (llm_url, _requests, _llm) = spawn_mock_vllm_json_capture_body(serde_json::json!({
+        "id": "upstream_bad_search_call",
+        "object": "response",
+        "status": "completed",
+        "model": "test",
+        "created_at": 0,
+        "output": [{
+            "type": "function_call",
+            "id": "fc_search_bad",
+            "call_id": "call_search_bad",
+            "name": "tool_search",
+            "arguments": "not valid JSON",
+            "status": "completed"
+        }]
+    }))
+    .await;
+    let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+
+    let response = reqwest::Client::new()
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "input": "find a tool",
+            "tools": [{
+                "type": "tool_search",
+                "execution": "client",
+                "description": "Search",
+                "parameters": {"type": "object"}
+            }],
+            "store": false,
+            "stream": false
+        }))
+        .send()
+        .await
+        .expect("gateway response");
+
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    let body: serde_json::Value = response.json().await.expect("error JSON");
+    assert_eq!(body["error"]["type"], "tool_error");
+}
+
 #[tokio::test]
 async fn test_store_false_proxies_unknown_text_format_verbatim() {
-    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_body().await;
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_bytes().await;
     let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
     let request_body = r#"{"model":"test","input":"hi","store":false,"stream":false,"text":{"format":{"type":"provider_format","provider_option":true}}}"#;
 
@@ -481,7 +1013,7 @@ async fn test_store_false_proxies_unknown_text_format_verbatim() {
 
 #[tokio::test]
 async fn test_duplicate_routing_field_is_rejected_before_upstream() {
-    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_body().await;
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_bytes().await;
     let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
     let request_body = r#"{"model":"test","input":"hi","store":true,"store":false}"#;
 
@@ -502,7 +1034,7 @@ async fn test_duplicate_routing_field_is_rejected_before_upstream() {
 
 #[tokio::test]
 async fn test_invalid_json_is_rejected_before_upstream() {
-    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_body().await;
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_bytes().await;
     let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
 
     let response = reqwest::Client::new()
@@ -625,7 +1157,7 @@ async fn test_stateful_request_forwards_text_configuration() {
 
 #[tokio::test]
 async fn test_stateful_request_preserves_json_schema_property_order() {
-    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_body().await;
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_bytes().await;
     let fixture = storage_backed_state(&llm_url).await;
     let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
     let request_body = r#"{"model":"test","input":"hi","store":true,"stream":false,"text":{"format":{"type":"json_schema","name":"ordered","schema":{"type":"object","properties":{"outer_z":{"type":"object","properties":{"inner_z":{"type":"string"},"inner_a":{"type":"string"}}},"outer_a":{"type":"string"}},"required":["outer_z","outer_a"],"additionalProperties":false},"strict":true}}}"#;
@@ -682,6 +1214,46 @@ async fn test_executor_route_rejects_malformed_text_configuration_before_upstrea
         requests.lock().await.is_empty(),
         "invalid request must not reach upstream"
     );
+}
+
+#[tokio::test]
+async fn test_gateway_normalization_preserves_ignore_eos() {
+    let (llm_url, requests, llm_handle) = spawn_mock_vllm_json_capture().await;
+    let (gw_url, gateway_handle) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+    let client = reqwest::Client::new();
+
+    for ignore_eos in [None, Some(false), Some(true)] {
+        let mut body = serde_json::json!({
+            "model": "test",
+            "input": "hi",
+            "tools": [{"type": "web_search_preview"}],
+            "max_output_tokens": 183,
+            "store": false,
+            "stream": false
+        });
+        if let Some(value) = ignore_eos {
+            body["ignore_eos"] = value.into();
+        }
+        let response = client
+            .post(format!("{gw_url}/v1/responses"))
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let captured = requests.lock().await;
+        let upstream = captured.last().expect("request should reach upstream");
+        assert_eq!(
+            upstream.get("ignore_eos"),
+            ignore_eos.map(serde_json::Value::Bool).as_ref()
+        );
+        assert_eq!(upstream["max_output_tokens"], 183);
+    }
+
+    assert_eq!(requests.lock().await.len(), 3);
+    gateway_handle.abort();
+    llm_handle.abort();
+    let _ = tokio::join!(gateway_handle, llm_handle);
 }
 
 #[tokio::test]

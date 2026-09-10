@@ -20,6 +20,7 @@ agentic-api/
   crates/
     agentic-server-core/   # "agentic_core" — pure Rust orchestration library
     agentic-server/        # axum HTTP/WS gateway + the `agentic` CLI launcher
+    agentic-llm-d/         # split-execution state backend for the llm-d coordinator
     agentic-praxis/        # placeholder: future Praxis gateway adapter
 ```
 
@@ -30,13 +31,19 @@ agentic-api/
   calls into `agentic_core`, and streams the result back. It also happens to host a
   second, unrelated binary — a CLI launcher (`agentic`) that spawns the gateway and a
   coding harness (Codex/Claude Code) as subprocesses for local use.
+- **`agentic-llm-d`** is a separate axum backend for the llm-d coordinator, which runs
+  inference itself. Its [router](crates/agentic-llm-d/src/lib.rs) exposes
+  `/v1alpha/responses/hydrate` and `/v1alpha/responses/persist`, plus health/readiness
+  probes. It uses `agentic_core` for state services and does not proxy or call a model.
 - **`agentic-praxis`** is currently a placeholder. Per ADR-03, the intent is for it to
   wrap each `agentic-server-core` public function as an `HttpFilter` so Praxis can
   compose the agentic loop declaratively instead of going through `agentic-server`'s
   axum router. Nothing is implemented there yet.
 
-The dependency direction is one-way: `agentic-server` depends on `agentic-server-core`,
-never the reverse. `agentic-server-core` has no knowledge of axum, HTTP, or WebSockets.
+The dependency direction is one-way: `agentic-server` and `agentic-llm-d` depend on
+`agentic-server-core`, never the reverse. `agentic-server-core` has no axum dependency;
+client-facing HTTP/WS transport belongs to the adapter crates, while upstream HTTP/SSE
+I/O lives in core inference transport.
 
 ## Request flow at a glance
 
@@ -159,11 +166,26 @@ building `ExecuteRequest`, preserving strict validation for in-process execution
 
 `GET /v1/responses` upgrades to a WebSocket. Structurally this is not a one-shot
 handler like the HTTP routes — `responses_ws_loop` is a long-lived session loop that
-reads `response.create` messages off the socket, queues any that arrive while a
-response is streaming, and drives the *same* `ExecuteRequest::run()` executor call the
-HTTP handler uses. WebSocket sessions always force `stream: true, store: true`. Because
-axum's built-in graceful shutdown doesn't wait for upgraded connections, `AppState`
-carries a separate `WebSocketTracker` so shutdown can drain in-flight sessions.
+reads `response.create` messages off the socket and drives the *same*
+`ExecuteRequest::run()` executor call the HTTP handler uses. Requests with distinct
+`stream_id` values run concurrently, while requests in the same lane remain FIFO;
+requests without a `stream_id` share a default FIFO lane. The session admits at most
+64 active or queued requests and 12 MiB of aggregate request data. WebSocket sessions
+always force `stream: true, store: true`. Because axum's built-in graceful shutdown
+doesn't wait for upgraded connections, `AppState` carries a separate
+`WebSocketTracker` so shutdown can drain in-flight sessions.
+
+Executor streams propagate downstream backpressure through a bounded event channel.
+Upstream SSE lines are capped at 256 KiB, while normalized events are capped at 1 MiB.
+Each request also shares a 1 MiB response budget across MCP discovery, upstream rounds,
+and normalized gateway tool output, so a slow consumer cannot turn a fixed event-count
+buffer into unbounded retained memory. MCP discovery participates in the same 16-permit
+materialization window as gateway calls and is capped at 64 server declarations and
+128 discovered tools per request.
+The WebSocket transport queues only serialized, size-checked events, capped at
+1 MiB each including routing metadata, in its 64-entry outbound queue. Local
+completion validates both lifecycle events before persistence. Authentication is
+rechecked at request dispatch so queued work cannot start after identity expiry.
 Errors are modeled by a dedicated `WsError` enum (`handler/websocket/error.rs`) rather
 than reusing the HTTP JSON-error path, since some failure modes (a dead socket) must
 not attempt to write a response.
@@ -248,7 +270,7 @@ access happen — those live in `tool/`, `executor/`, and `storage/` respectivel
   continuation state available to orchestration without sending unsupported public
   item types to vLLM.
 - **`types/tools/params.rs`** — the tool **declaration** shapes a client sends:
-  `ResponsesTool` (tagged enum: `Function`, `Mcp`, `WebSearch`, `FileSearch`,
+  `ResponsesTool` (tagged enum: `Function`, `ToolSearch`, `Mcp`, `WebSearch`, `FileSearch`,
   `CodeInterpreter`, `Namespace`, `Custom`, `Unknown`) and each variant's param struct.
   This is a good concrete example of the module boundary: `ResponsesTool` is *defined*
   here as a pure shape, but its behavior — `validate()` and `to_function_tools()` — is
@@ -457,9 +479,9 @@ in the response accumulator or inference transport.
 
 #### `function_sse.rs` — `FunctionSseTranslator`
 
-vLLM only ever emits `function_call` SSE events, regardless of which tool type the
-call is routed to. This translator looks up each call's name in the tool registry and
-reshapes the raw stream accordingly:
+Upstreams without native support for a declared tool type emit `function_call` SSE
+events instead. This translator borrows the request-scoped tool registry for
+classification and reshapes those raw calls accordingly:
 - **Custom tools** — rewritten into the public `custom_tool_call` event shape
   (`output_item.added` / `custom_tool_call_input.delta` / `.done` / `output_item.done`),
   reconstructing the `input` JSON incrementally from the streamed `arguments`.
@@ -467,6 +489,9 @@ reshapes the raw stream accordingly:
   frames are suppressed entirely. Their real client-visible events are synthesized
   later, once the call has actually executed, by `gateway.rs`.
 - **Client-owned tools** (`Function`, `CodexNamespace`) — pass through unchanged.
+- **Tool search** — native `tool_search_call` events pass through as typed items;
+  synthetic `function_call` events named `tool_search` are projected into that same
+  public lifecycle after validation.
 
 It also buffers function-call events that arrive before the call's name is known
 (bounded at 256 KiB) and replays them once the name resolves.
@@ -478,21 +503,29 @@ As noted above, the round-by-round loop itself is `engine.rs::run_gateway_tool_l
 - `GatewayScheduler::plan` creates one slot per gateway-owned function call. Each slot
   owns the original item index, public output index, typed `GatewayBinding`, and
   lifecycle projection; a missing executor is represented by an explicit slot rather
-  than omitted from a parallel vector. `GatewayScheduler::execute` then returns one
-  ordered `GatewayCallResult` per slot. A `futures::stream::buffered` sliding window
-  bounds fan-out using `tools.max_concurrent_gateway_calls` (default `5`, configurable
-  through `AGENTIC_MAX_CONCURRENT_GATEWAY_CALLS`). The setting is a nonzero value
-  carried by the owning `ExecutionContext` into each scheduler, so independent
-  contexts do not share process-global policy and `.buffered(0)` is unrepresentable.
-  Completion may occur out of order, but the collected result order always matches
-  model call order.
+  than omitted from a parallel vector. `GatewayScheduler::execute_with_budget` then returns one
+  ordered `GatewayCallResult` per slot. `futures::future::join_all` polls all planned
+  calls, while a `tokio::sync::Semaphore` created by each `execute_with_budget` invocation limits
+  active tool executions in that round using `tools.max_concurrent_gateway_calls`
+  (default `5`, configurable through `AGENTIC_MAX_CONCURRENT_GATEWAY_CALLS`). This
+  nonzero setting is carried by the owning `ExecutionContext` into each scheduler;
+  the permits are local to the round, not a process-wide or cross-request limit.
+  Completion may occur out of order, but `join_all` preserves model call order in
+  the collected results. The permit limit bounds execution, not the number of
+  planned call futures waiting for permits.
 - A normalized `web_search` function call may batch at most five queries. The JSON
   Schema advertises the ceiling and the handler enforces it again because normalized
   web search currently uses non-strict arguments. Provider searches acquire a shared
   handler semaphore initialized from `tools.max_concurrent_gateway_calls`, preventing
   batched calls from multiplying the configured outbound concurrency. Results remain
   collected in query order for the public `web_search_call.action.queries` projection.
-- Every call has an independent 60-second timeout. Timeout, execution, and tool-config
+- Each bound call first acquires its optional same-tool exclusion permit, then a
+  round execution permit, then a materialization permit shared by cloned scheduler
+  policies (also used by MCP discovery, with a limit of 16). Waiting for same-tool
+  exclusion does not consume a round permit; waiting for materialization does. The
+  independent 60-second timeout wraps `GatewayBinding::execute` only after all
+  permits are acquired. These permit waits do not count toward it, so it is not a
+  deadline for the entire round or total call latency. Timeout, execution, and tool-config
   failures become failed tool outputs that can be fed back to the model instead of
   failing the whole response. A tool registered as gateway-owned without an
   implementation (currently file search/code interpreter) likewise produces an error
@@ -530,9 +563,9 @@ The round decision remains in `engine.rs`, after gateway execution:
 `parallel_tool_calls` is an upstream model-generation preference, not a gateway
 scheduler switch. It is forwarded to vLLM for all supported declaration mixtures and
 defaults to `false` when omitted. Whatever calls the model emits are executed under
-the global sliding window and each handler's same-tool safety policy.
+the per-round execution permit limit and each handler's same-tool safety policy.
 
-#### `messages_loop.rs` / `messages_request.rs` / `messages_stream.rs`
+#### `messages_context.rs` / `messages_loop.rs` / `messages_request.rs` / `messages_stream.rs`
 
 A **parallel, independent implementation** of the same shape of loop for the Anthropic
 Messages API. `messages_stream.rs`'s own header comment describes it as "structurally
@@ -544,6 +577,18 @@ pieces: `ToolRegistry::dispatch` and `types::messages::tool_seam`. The round/tim
 constants (`MAX_GATEWAY_TOOL_ROUNDS`, `GATEWAY_TOOL_TIMEOUT`) are duplicated and
 manually kept in sync with the Responses-side ones rather than shared — a known seam,
 not an oversight, per the future-consolidation note.
+
+Both loops take a `MessagesRequestContext` (`messages_context.rs`), the per-request
+type that replaced a bare `serde_json::Value` at that boundary. It holds two views of
+one request: a typed `MessagesRequest` for reading `tools`/`stream`/`model`, and the
+raw JSON body that is actually forwarded upstream. The raw body is deliberately *not*
+re-serialized from the typed view — `ContentBlock` catches unmodeled block types in
+`#[serde(other)] Unknown` and models only the fields the gateway reads, so a typed
+round-trip would drop `cache_control` and `is_error` and collapse `image`/
+`redacted_thinking` into `{"type":"unknown"}`. The context owns every mutation the
+loops make to that body (`force_stream`, `append_round`) and the native web-search
+budget, so the two views cannot drift apart uncontrolled; `messages` and `system` are
+reachable only through the raw body, never the typed view.
 
 ### `storage/` — persistence
 
