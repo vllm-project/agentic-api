@@ -69,7 +69,7 @@ The community information architecture is inspired by the supplied vLLM Semantic
 
 ## Branding
 
-The site uses the project's official blue (`#30A2FF`) and gold (`#FDB515`). The logo, diagram brandmark, and favicon are sourced from `assets/White-Main-Logo.svg` and `assets/Main-Brandmark.svg` in the upstream repository and are bundled without artwork changes. Blue identifies links and interactive accents; gold highlights primary actions and key project labels.
+The site uses the project's official blue (`#30A2FF`) and gold (`#FDB515`). The logo, diagram brandmark, and favicon are sourced from `assets/White-Main-Logo.svg` and `assets/Main-Brandmark.svg` in the upstream repository and are bundled without artwork changes. Blue identifies links and interactive accents; gold highlights primary actions and key project labels. Light and dark themes follow system preferences through CSS `color-scheme` and `light-dark()`, including changes while the page is open. Light mode uses the unchanged `assets/Black-Main-Logo.svg` and darker blue/gold text tones for contrast; the original brand colors remain on logos and filled accents. Tailwind’s dark variants follow the same system preference.
 
 ## Inference ecosystem
 

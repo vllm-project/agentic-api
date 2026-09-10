@@ -15,15 +15,21 @@ import { useState } from 'react';
 export function Brand() {
   return (
     <Link href="/" className="brand" aria-label="vLLM Agentic API home">
-      <Image
-        unoptimized
-        className="brand-logo"
-        src={assetPath('/brand/agentic-api-logo.svg')}
-        alt="Agentic API"
-        width={1739}
-        height={796}
-        priority
-      />
+      <picture>
+        <source
+          media="(prefers-color-scheme: dark)"
+          srcSet={assetPath('/brand/agentic-api-logo.svg')}
+        />
+        <Image
+          unoptimized
+          className="brand-logo"
+          src={assetPath('/brand/agentic-api-logo-light.svg')}
+          alt="Agentic API"
+          width={1739}
+          height={796}
+          loading="eager"
+        />
+      </picture>
     </Link>
   );
 }
