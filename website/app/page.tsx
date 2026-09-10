@@ -6,7 +6,7 @@ import { Features } from '@/components/site/features';
 import { Quickstart } from '@/components/site/quickstart';
 import { Ecosystem } from '@/components/site/ecosystem';
 import community from '@/lib/data/community.json';
-import { REPO, assetPath } from '@/lib/site';
+import { REPO, SLACK, SLACK_CHANNEL, assetPath } from '@/lib/site';
 export default function Home() {
   return (
     <main id="main">
@@ -87,6 +87,9 @@ export default function Home() {
             Meet the people building the application layer for open-model
             agents. There’s room for your ideas, your fixes, and your next
             contribution.
+          </p>
+          <p className="slack-note">
+            Join us in <a href={SLACK}>{SLACK_CHANNEL} on the vLLM Slack</a>.
           </p>
           <div className="hero-actions">
             <Link className="button secondary" href="/community/team">

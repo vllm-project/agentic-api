@@ -1,6 +1,19 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
+@custom-variant dark {
+  &:where([data-theme='dark'], [data-theme='dark'] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(
+      :root:not([data-theme='light']):not([data-theme='dark']),
+      :root:not([data-theme='light']):not([data-theme='dark']) *
+    ) {
+      @slot;
+    }
+  }
+}
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -83,6 +96,12 @@ a:focus-visible {
   background: light-dark(#c6e7ff, #12538a);
   color: light-dark(#123b59, white);
 }
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
 .container {
   width: min(1200px, calc(100% - 96px));
   margin-inline: auto;
@@ -111,6 +130,23 @@ a:focus-visible {
   display: block;
   width: 175px;
   height: auto;
+}
+.brand-logo-dark {
+  display: none;
+}
+:root[data-theme='dark'] .brand-logo-light {
+  display: none;
+}
+:root[data-theme='dark'] .brand-logo-dark {
+  display: block;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .brand-logo-light {
+    display: none;
+  }
+  :root:not([data-theme='light']) .brand-logo-dark {
+    display: block;
+  }
 }
 .site-footer .brand-logo {
   width: 190px;
@@ -148,6 +184,17 @@ a:focus-visible {
   font-size: 14px;
 }
 .github-nav:hover {
+  background: light-dark(#eaf0f6, #222428);
+}
+.theme-trigger[data-slot='select-trigger'] {
+  height: 40px;
+  min-width: 108px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+.theme-trigger[data-slot='select-trigger']:hover {
   background: light-dark(#eaf0f6, #222428);
 }
 .mobile-toggle {
@@ -680,7 +727,7 @@ h2 {
     gap: 20px;
   }
   .header-inner {
-    gap: 24px;
+    gap: 16px;
   }
   .section-heading {
     gap: 30px;
@@ -769,6 +816,17 @@ h2 {
   }
   .github-nav {
     padding: 9px;
+  }
+  .theme-trigger[data-slot='select-trigger'] {
+    min-width: 40px;
+    width: 40px;
+    padding: 10px;
+    justify-content: center;
+  }
+  .theme-label,
+  .theme-trigger > [data-slot='select-icon'],
+  .theme-trigger > svg:last-child {
+    display: none;
   }
   .github-nav span,
   .github-nav > svg:last-child {
@@ -1503,6 +1561,14 @@ h2 {
 .community-cta .button {
   flex-shrink: 0;
 }
+.slack-note a {
+  color: var(--blue-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.community-cta .slack-note {
+  margin-top: 10px;
+}
 .not-found {
   padding-block: 130px;
 }
@@ -1877,6 +1943,11 @@ h2 {
   }
   .gateway-mark {
     width: 32px;
+  }
+}
+@media (max-width: 360px) {
+  .site-header .brand-logo {
+    width: 132px;
   }
 }
 .ecosystem-section {

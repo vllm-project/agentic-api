@@ -12,24 +12,30 @@ import {
 } from '@/components/ui/sheet';
 import { REPO, DOCS, assetPath } from '@/lib/site';
 import { useState } from 'react';
+import { ThemeSwitcher } from './theme-switcher';
 export function Brand() {
   return (
     <Link href="/" className="brand" aria-label="vLLM Agentic API home">
-      <picture>
-        <source
-          media="(prefers-color-scheme: dark)"
-          srcSet={assetPath('/brand/agentic-api-logo.svg')}
-        />
+      <span className="brand-images" aria-hidden="true">
         <Image
           unoptimized
-          className="brand-logo"
+          className="brand-logo brand-logo-light"
           src={assetPath('/brand/agentic-api-logo-light.svg')}
-          alt="Agentic API"
+          alt=""
           width={1739}
           height={796}
           loading="eager"
         />
-      </picture>
+        <Image
+          unoptimized
+          className="brand-logo brand-logo-dark"
+          src={assetPath('/brand/agentic-api-logo.svg')}
+          alt=""
+          width={1739}
+          height={796}
+          loading="eager"
+        />
+      </span>
     </Link>
   );
 }
@@ -69,6 +75,7 @@ export function Header() {
           <span>GitHub</span>
           <ArrowUpRight size={14} />
         </a>
+        <ThemeSwitcher />
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger className="mobile-toggle" aria-label="Open navigation">
             <Menu size={23} />
