@@ -4,7 +4,7 @@ export function CommunityCTA() {
   return (
     <section className="community-cta">
       <div>
-        <span className="eyebrow">YOUR NEXT PULL REQUEST STARTS HERE</span>
+        <span className="eyebrow">THERE ARE MANY WAYS TO HELP</span>
         <h2>Help shape what comes next.</h2>
         <p>
           Improve the docs, report a bug, review a change, or build the next

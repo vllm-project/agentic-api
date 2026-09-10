@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ArrowUpRight, Users, GitCommitHorizontal } from 'lucide-react';
+import { ArrowUpRight, Users, HeartHandshake } from 'lucide-react';
 import { REPO } from '@/lib/site';
 export function CommunityNav() {
   const path = usePathname();
@@ -24,7 +24,7 @@ export function CommunityNav() {
               : undefined
           }
         >
-          <GitCommitHorizontal size={17} /> Contributors
+          <HeartHandshake size={17} /> Contributors
         </Link>
       </div>
       <a href={`${REPO}/blob/main/CONTRIBUTING.md`}>

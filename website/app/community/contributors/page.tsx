@@ -1,29 +1,45 @@
 import Image from 'next/image';
 import type { Metadata } from 'next';
-import { ArrowUpRight, GitCommitHorizontal } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import community from '@/lib/data/community.json';
 import { CommunityNav } from '@/components/site/community-nav';
 import { CommunityCTA } from '@/components/site/community-cta';
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableHead,
-  TableCell,
-  TableRow,
-  TableCaption,
-} from '@/components/ui/table';
 import { REPO } from '@/lib/site';
+
 export const metadata: Metadata = {
   title: 'Contributors',
   description:
-    'Meet the contributors building vLLM Agentic API. Explore the GitHub contribution snapshot and find your way to contribute.',
+    'Meet the people contributing to vLLM Agentic API and find ways to help through thoughtful reviews, clear documentation, useful bug reports, and well-tested code.',
   alternates: { canonical: '/community/contributors' },
 };
-const total = community.contributors.reduce(
-  (sum, p) => sum + p.contributions,
-  0,
-);
+
+const waysToHelp = [
+  {
+    title: 'Share a useful bug report',
+    description:
+      'Explain what happened, what you expected, and how to reproduce it. Clear context helps someone find a fix.',
+    href: `${REPO}/issues`,
+  },
+  {
+    title: 'Make the docs clearer',
+    description:
+      'Improve an explanation, test an example, or document something you learned while getting started.',
+    href: `${REPO}/tree/main/docs`,
+  },
+  {
+    title: 'Review a change',
+    description:
+      'Ask thoughtful questions, try a proposed fix, and help catch edge cases before a change ships.',
+    href: `${REPO}/pulls`,
+  },
+  {
+    title: 'Improve the code and tests',
+    description:
+      'Work with maintainers on a focused change. Explain the problem it solves and test the behavior that matters.',
+    href: `${REPO}/blob/main/CONTRIBUTING.md`,
+  },
+];
+
 export default function Contributors() {
   return (
     <main id="main" className="container community-page">
@@ -35,136 +51,76 @@ export default function Contributors() {
           <span>A step forward.</span>
         </h1>
         <p>
-          The people turning open-model agents into everyday tools. Thank you
-          for building with us.
+          Clear bug reports, thoughtful reviews, better documentation, and
+          well-tested code all help make Agentic API better.
         </p>
       </header>
       <CommunityNav />
-      <section
-        className="contributor-stats"
-        aria-label="Contributor snapshot statistics"
-      >
-        <div>
-          <span>{community.contributors.length}</span>
-          <p>GitHub contributors</p>
-        </div>
-        <div>
-          <span>{total}</span>
-          <p>Attributed commits</p>
-        </div>
-        <div className="snapshot-date">
-          <span>Sep 09, 2026</span>
-          <p>Snapshot date · All-time GitHub data</p>
-        </div>
-      </section>
-      <section className="contributors-section">
-        <div className="contributors-heading">
+      <section className="contribution-ways" aria-labelledby="ways-to-help">
+        <div className="contribution-section-heading">
           <div>
-            <span className="eyebrow">THE PEOPLE BEHIND THE COMMITS</span>
-            <h2>Contributor spotlight</h2>
+            <span className="eyebrow">START WITH A PROBLEM YOU CARE ABOUT</span>
+            <h2 id="ways-to-help">Find a way to help.</h2>
           </div>
-          <a className="text-link" href={`${REPO}/graphs/contributors`}>
-            Explore on GitHub <ArrowUpRight size={15} />
-          </a>
+          <p>
+            Bring your experience, share context, and work with the community
+            toward a useful solution.
+          </p>
         </div>
-        <div className="spotlight-grid">
-          {community.contributors.slice(0, 3).map((p, i) => (
-            <a className="spotlight-card" href={p.url} key={p.login}>
-              <div className="spotlight-top">
-                <span className="rank">/{String(i + 1).padStart(2, '0')}</span>
-                <ArrowUpRight size={18} />
-              </div>
-              <Image unoptimized src={p.avatar} alt="" width={64} height={64} />
-              <h3>{p.name}</h3>
-              <span className="person-handle">@{p.login}</span>
-              <div className="spotlight-bottom">
-                <strong>{p.contributions}</strong>
-                <span>attributed commits</span>
-                <GitCommitHorizontal size={20} />
-              </div>
-            </a>
+        <div className="contribution-ways-grid">
+          {waysToHelp.map((way) => (
+            <article key={way.title}>
+              <h3>
+                <a href={way.href}>
+                  {way.title}
+                  <ArrowUpRight size={17} />
+                </a>
+              </h3>
+              <p>{way.description}</p>
+            </article>
           ))}
         </div>
-        <div className="all-contributors-heading">
-          <h3>
-            All contributors <span>{community.contributors.length}</span>
-          </h3>
-          <span>BY ATTRIBUTED COMMITS</span>
+      </section>
+      <section
+        className="contributor-community"
+        aria-labelledby="contributor-directory-heading"
+      >
+        <div className="contribution-section-heading">
+          <div>
+            <span className="eyebrow">THE PEOPLE WORKING ON AGENTIC API</span>
+            <h2 id="contributor-directory-heading">Meet the contributors.</h2>
+          </div>
         </div>
-        <div className="contributors-table-wrap">
-          <Table className="contributors-table">
-            <TableCaption>
-              All-time, non-bot accounts returned by the GitHub contributors API
-              on September 9, 2026. Counts reflect GitHub’s cached commit
-              attribution, not reviews, issues, or total project impact.{' '}
-              <a href={community.source}>Data source ↗</a>
-            </TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead scope="col">#</TableHead>
-                <TableHead scope="col">Contributor</TableHead>
-                <TableHead scope="col" className="commit-cell">
-                  Commits
-                </TableHead>
-                <TableHead scope="col" className="share-cell">
-                  Share of snapshot
-                </TableHead>
-                <TableHead scope="col">
-                  <span className="sr-only">GitHub profile</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {community.contributors.map((p, i) => (
-                <TableRow key={p.login}>
-                  <TableCell className="rank-cell">
-                    {String(i + 1).padStart(2, '0')}
-                  </TableCell>
-                  <TableCell>
-                    <a
-                      className="table-person"
-                      href={p.url}
-                      aria-label={`${p.name} on GitHub`}
-                    >
-                      <Image
-                        unoptimized
-                        src={p.avatar}
-                        alt=""
-                        loading="lazy"
-                        width={38}
-                        height={38}
-                      />
-                      <div>
-                        <strong>{p.name}</strong>
-                        <span>@{p.login}</span>
-                      </div>
-                    </a>
-                  </TableCell>
-                  <TableCell className="commit-cell">
-                    {p.contributions}
-                  </TableCell>
-                  <TableCell className="share-cell">
-                    <div className="share-track">
-                      <span
-                        style={{ width: `${(100 * p.contributions) / total}%` }}
-                      />
-                    </div>
-                    <span>{((100 * p.contributions) / total).toFixed(1)}%</span>
-                  </TableCell>
-                  <TableCell>
-                    <a
-                      className="profile-arrow"
-                      href={p.url}
-                      aria-label={`View ${p.name} on GitHub`}
-                    >
-                      <ArrowUpRight size={17} />
-                    </a>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <ul className="contributor-directory">
+          {community.contributors.map((person) => (
+            <li key={person.login}>
+              <a
+                className="contributor-profile"
+                href={person.url}
+                aria-label={`${person.name} on GitHub`}
+              >
+                <Image
+                  unoptimized
+                  src={person.avatar}
+                  alt=""
+                  width={48}
+                  height={48}
+                  loading="lazy"
+                />
+                <div>
+                  <h3>{person.name}</h3>
+                  <span>@{person.login}</span>
+                </div>
+                <ArrowUpRight size={16} />
+              </a>
+            </li>
+          ))}
+        </ul>
+        <p className="source-note">
+          Names from the project’s GitHub contributor list, checked September 9,
+          2026. This list is one part of a wider community that also helps
+          through reviews, issue reports, documentation, and support.
+        </p>
       </section>
       <CommunityCTA />
     </main>

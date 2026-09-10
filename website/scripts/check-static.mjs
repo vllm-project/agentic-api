@@ -20,7 +20,11 @@ for (const version of docs.versions) {
 const pages = [
   ['index.html', 'Your agent harness.', 'get-started'],
   ['community/team.html', 'behind the', 'Project Stewards'],
-  ['community/contributors.html', 'Every contribution.', 'All contributors'],
+  [
+    'community/contributors.html',
+    'Every contribution.',
+    'Meet the contributors.',
+  ],
   ['404.html', 'A small detour.', 'Back to home'],
   ['docs.html', 'Your version.'],
   ...docs.versions.map((version) => [

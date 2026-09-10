@@ -23,7 +23,7 @@ Routes:
 
 - `/` — project positioning, architecture, capabilities, Codex/Claude Code examples, and community links.
 - `/community/team` — maintainers from the project's CODEOWNERS.
-- `/community/contributors` — a dated snapshot of GitHub contributors and attributed commits.
+- `/community/contributors` — a contributor directory and guidance for thoughtful contributions.
 - `/docs` — documentation directory for the default tagged version.
 - `/docs/latest` and `/docs/v0.1.0` through `/docs/v0.5.0` — shareable documentation directories for development and tagged snapshots.
 
@@ -33,12 +33,12 @@ Routes:
 - `lib/data/docs-versions.json`: available documentation versions, the default version, pinned source revisions, and optional hosted documentation destinations.
 - `lib/docs.ts`: documentation sections and version-specific link resolution.
 - `lib/quickstart.ts`: visible CLI examples and the optional read-only WebMCP tool contract.
-- `lib/data/community.json`: public names, handles, roster sources, and contribution snapshot dated September 9, 2026.
+- `lib/data/community.json`: public names, handles, and roster sources checked September 9, 2026; contributor profiles retain GitHub’s contribution order.
 - `public/people/`: public GitHub avatars, bundled to avoid runtime requests.
 
 Documentation navigation opens the site's version directory. The project's configured Read the Docs site returned HTTP 404 on September 9, 2026, so guides currently open on GitHub. Tagged documentation links are pinned to the tag's resolved commit, while `latest` intentionally tracks `main`. The newer SGLang, Dynamo, and agentic-llm-d pages are shown only for development because those files are absent from the checked release snapshots. See [documentation versioning](docs/versioning.md) for adding versions and connecting the existing MkDocs/Read the Docs setup when it is available.
 
-The team roster follows [CODEOWNERS](https://github.com/vllm-project/agentic-api/blob/main/.github/CODEOWNERS). Contributor counts come from [GitHub's contributors endpoint](https://api.github.com/repos/vllm-project/agentic-api/contributors?per_page=100). These are GitHub's cached all-time attributed commit counts, not review counts or a measure of total project impact. Refresh the snapshot deliberately when publishing an update; the site makes no live analytics claims.
+The team roster follows [CODEOWNERS](https://github.com/vllm-project/agentic-api/blob/main/.github/CODEOWNERS). Contributor names come from [GitHub's contributors endpoint](https://api.github.com/repos/vllm-project/agentic-api/contributors?per_page=100). When refreshing the list, order profiles by descending GitHub contribution count, preserving source order for ties, then retain only profile information. Individual commit totals, rank fields, and shares are not part of the website data, and the page does not label the ordering. Every profile uses the same presentation, including in the homepage avatar mosaic. The directory acknowledges that this source is not a complete record of documentation, reviews, issue reports, or community support.
 
 Integration copy and commands were checked against the project's [README](https://github.com/vllm-project/agentic-api/blob/main/README.md). Shell/editor function tools execute in the client. Built-in web search and MCP tools execute on the gateway. Model compatibility depends on the served model and its tool-calling configuration.
 

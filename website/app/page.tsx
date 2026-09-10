@@ -99,7 +99,7 @@ export default function Home() {
         </div>
         <div className="community-visual">
           <div className="avatar-mosaic">
-            {community.contributors.slice(0, 12).map((p) => (
+            {community.contributors.map((p) => (
               <a href={p.url} key={p.login} aria-label={`${p.name} on GitHub`}>
                 <Image
                   unoptimized
@@ -112,10 +112,7 @@ export default function Home() {
               </a>
             ))}
           </div>
-          <p>
-            <span>{community.contributors.length} contributors.</span> One
-            open-source project.
-          </p>
+          <p>People helping make Agentic API better.</p>
           <a className="text-link" href={`${REPO}/blob/main/CONTRIBUTING.md`}>
             Make your first contribution <ArrowUpRight size={15} />
           </a>
