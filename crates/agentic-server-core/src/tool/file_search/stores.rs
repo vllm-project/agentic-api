@@ -3,7 +3,6 @@ use super::{
     Arc, AtomicBool, CancelIngestionOnDrop, FileObject, FileSearchError, FileSearchService, VectorStoreFileObject,
     VectorStoreObject, ingest, invalid, validate_attributes,
 };
-use crate::types::file_search::StaticChunking;
 
 pub(super) fn validate_store_fields(
     name: Option<&str>,
@@ -84,14 +83,7 @@ impl FileSearchService {
             let _cancel_on_drop = CancelIngestionOnDrop(cancelled.clone());
             tokio::task::spawn_blocking(move || {
                 let _permit = permit;
-                ingest::extract_and_chunk(
-                    bytes,
-                    &file.filename,
-                    &uploaded.content_type,
-                    &StaticChunking::default(),
-                    &cancelled,
-                )
-                .map(|document| document.text)
+                ingest::extract_text(bytes, &file.filename, &uploaded.content_type, &cancelled)
             })
             .await??
         };

@@ -612,3 +612,143 @@ async fn sqlite_cleanup_waiting_for_policy_extension_rechecks_the_deadline() {
     );
     pool.close().await;
 }
+
+#[tokio::test]
+async fn legacy_large_chunk_content_recovery_does_not_rechunk() {
+    let (service, pool, _files) = fixture("sqlite::memory:").await;
+    // Each repeated word requires a cl100k token, exceeding the default 819,600-token
+    // budget while remaining well inside the 4096/0 ingestion and extracted-byte limits.
+    let text = "a ".repeat(900_000);
+    let file = service
+        .upload_file("large-legacy.txt", "text/plain", "assistants", text.as_bytes().to_vec())
+        .await
+        .unwrap();
+    let store = service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    service
+        .attach_file(
+            &store.id,
+            AttachFileRequest {
+                file_id: file.id.clone(),
+                chunking_strategy: Some(ChunkingStrategy::Static {
+                    config: StaticChunking {
+                        max_chunk_size_tokens: 4096,
+                        chunk_overlap_tokens: 0,
+                    },
+                }),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    // Migration 0007 leaves this column null for existing attachments.
+    sqlx::query("UPDATE file_search_attachments SET parsed_content = NULL WHERE store_id = $1 AND file_id = $2")
+        .bind(&store.id)
+        .bind(&file.id)
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    let content = service.vector_store_file_content(&store.id, &file.id).await.unwrap();
+    assert!(!content.has_more);
+    assert!(content.next_page.is_none());
+    assert_eq!(content.data.len(), 1);
+    let ParsedFileContent::Text { text: recovered } = &content.data[0];
+    assert_eq!(recovered, &text);
+}
+
+#[tokio::test]
+#[ignore = "requires isolated TEST_POSTGRES_URL"]
+async fn postgres_store_updates_round_trip_omitted_null_and_value() {
+    let (service, _pool, _files) = fixture(&std::env::var("TEST_POSTGRES_URL").unwrap()).await;
+    let store = service
+        .create_vector_store(
+            serde_json::from_value(json!({
+                "name":"original", "metadata":{"purpose":"docs"},
+                "expires_after":{"anchor":"last_active_at","days":2}
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    service
+        .update_vector_store(&store.id, request(json!({})))
+        .await
+        .unwrap();
+    let omitted = service.get_vector_store(&store.id).await.unwrap();
+    service
+        .update_vector_store(
+            &store.id,
+            request(json!({
+                "name":"changed", "metadata":{"team":"search"},
+                "expires_after":{"anchor":"last_active_at","days":3}
+            })),
+        )
+        .await
+        .unwrap();
+    let replaced = service.get_vector_store(&store.id).await.unwrap();
+    service
+        .update_vector_store(&store.id, request(json!({"metadata":null})))
+        .await
+        .unwrap();
+    let cleared_metadata = service.get_vector_store(&store.id).await.unwrap();
+    service
+        .update_vector_store(&store.id, request(json!({"name":null,"expires_after":null})))
+        .await
+        .unwrap();
+    let cleared = service.get_vector_store(&store.id).await.unwrap();
+    service
+        .update_vector_store(&store.id, request(json!({})))
+        .await
+        .unwrap();
+    let omitted_after_null = service.get_vector_store(&store.id).await.unwrap();
+    service
+        .update_vector_store(
+            &store.id,
+            request(json!({
+                "name":"restored", "metadata":{"revision":"2"},
+                "expires_after":{"anchor":"last_active_at","days":1}
+            })),
+        )
+        .await
+        .unwrap();
+    let restored = service.get_vector_store(&store.id).await.unwrap();
+    service.delete_vector_store(&store.id).await.unwrap();
+
+    let activity = store.last_active_at.unwrap();
+    assert_eq!(omitted.name, "original");
+    assert_eq!(
+        serde_json::to_value(&omitted.metadata).unwrap(),
+        json!({"purpose":"docs"})
+    );
+    assert_eq!(omitted.expires_after.unwrap().days, 2);
+    assert_eq!(omitted.expires_at, Some(activity + 172_800));
+    assert_eq!(replaced.name, "changed");
+    assert_eq!(
+        serde_json::to_value(&replaced.metadata).unwrap(),
+        json!({"team":"search"})
+    );
+    assert_eq!(replaced.expires_after.unwrap().days, 3);
+    assert_eq!(replaced.expires_at, Some(activity + 259_200));
+    assert_eq!(cleared_metadata.name, "changed");
+    assert!(cleared_metadata.metadata.is_none());
+    assert_eq!(cleared_metadata.expires_after.unwrap().days, 3);
+    assert_eq!(cleared_metadata.expires_at, Some(activity + 259_200));
+    for object in [cleared, omitted_after_null] {
+        assert_eq!(object.name, "");
+        assert!(object.metadata.is_none());
+        assert!(object.expires_after.is_none());
+        assert!(object.expires_at.is_none());
+        assert_eq!(object.last_active_at, Some(activity));
+        assert_eq!(object.status, VectorStoreStatus::Completed);
+    }
+    assert_eq!(restored.name, "restored");
+    assert_eq!(
+        serde_json::to_value(&restored.metadata).unwrap(),
+        json!({"revision":"2"})
+    );
+    assert_eq!(restored.expires_after.unwrap().days, 1);
+    assert_eq!(restored.expires_at, Some(activity + 86400));
+    assert_eq!(restored.last_active_at, Some(activity));
+}
