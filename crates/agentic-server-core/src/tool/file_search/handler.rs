@@ -80,7 +80,7 @@ impl FileSearchHandler {
         let arguments = parse_arguments(arguments)?;
         let request = search_request(params, arguments.queries);
         let result = service
-            .search(params.vector_store_ids.as_deref().unwrap_or_default(), &request)
+            .search_for_tool(params.vector_store_ids.as_deref().unwrap_or_default(), &request)
             .await
             .map_err(ToolError::FileSearch)?;
         let output = FileSearchToolOutput {
@@ -224,7 +224,8 @@ fn search_request(params: &FileSearchToolParam, queries: Vec<String>) -> SearchR
         max_num_results: params.max_num_results,
         filters: params.filters.clone(),
         ranking_options: params.ranking_options.clone(),
-        ..SearchRequest::default()
+        search_mode: params.search_mode,
+        rewrite_query: params.rewrite_query,
     }
 }
 

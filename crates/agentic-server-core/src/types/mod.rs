@@ -26,3 +26,6 @@ pub use tools::{
     ShellEnvironment, ShellToolParam, ToolSearchExecution, ToolSearchStatus, ToolSearchToolParam, WebSearchContextSize,
     WebSearchFilters, WebSearchToolParam, WebSearchUserLocation,
 };
+
+pub mod retrieval_models;
+pub mod vector_stores;

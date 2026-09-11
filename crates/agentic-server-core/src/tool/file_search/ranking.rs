@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     storage::file_search::StoredChunk,
-    types::file_search::{SearchContent, SearchMode, SearchRequest, SearchResult},
+    types::file_search::{ChunkRetrievalParams, Ranker, SearchContent, SearchMode, SearchRequest, SearchResult},
 };
 
 pub(super) fn rank(
@@ -13,6 +13,8 @@ pub(super) fn rank(
     query_embeddings: &[Vec<f64>],
     mode: SearchMode,
     request: &SearchRequest,
+    ranker: Ranker,
+    defaults: &ChunkRetrievalParams,
 ) -> Vec<SearchResult> {
     let chunks: Vec<_> = chunks
         .into_iter()
@@ -51,21 +53,10 @@ pub(super) fn rank(
         let scores = match mode {
             SearchMode::Keyword => keyword,
             SearchMode::Semantic => semantic,
-            SearchMode::Hybrid => {
-                let weights = request
-                    .ranking_options
-                    .as_ref()
-                    .and_then(|options| options.hybrid_search.as_ref());
-                fuse(
-                    &semantic,
-                    &keyword,
-                    weights.and_then(|weights| weights.embedding_weight).unwrap_or(1.0),
-                    weights.and_then(|weights| weights.text_weight).unwrap_or(1.0),
-                )
-            }
+            SearchMode::Hybrid => hybrid_scores(&semantic, &keyword, request, ranker, defaults),
         };
         for (index, score) in scores.into_iter().enumerate() {
-            if score <= 0.0 || score < threshold {
+            if !ranker.uses_model() && (score <= 0.0 || score < threshold) {
                 continue;
             }
             let key = (chunks[index].file_id.as_str(), chunks[index].text.as_str());
@@ -99,6 +90,43 @@ pub(super) fn rank(
             }
         })
         .collect()
+}
+
+fn hybrid_scores(
+    semantic: &[f64],
+    keyword: &[f64],
+    request: &SearchRequest,
+    ranker: Ranker,
+    defaults: &ChunkRetrievalParams,
+) -> Vec<f64> {
+    let options = request.ranking_options.as_ref();
+    let weights = options.and_then(|options| options.hybrid_search.as_ref());
+    let alpha = options
+        .and_then(|options| options.alpha)
+        .unwrap_or(defaults.weighted_search_alpha);
+    let embedding = options
+        .and_then(|options| options.weights.as_ref())
+        .map(|weights| weights.vector)
+        .or_else(|| weights.and_then(|weights| weights.embedding_weight))
+        .unwrap_or(if weights.is_some() { 1.0 } else { alpha });
+    let text = options
+        .and_then(|options| options.weights.as_ref())
+        .map(|weights| weights.keyword)
+        .or_else(|| weights.and_then(|weights| weights.text_weight))
+        .unwrap_or(if weights.is_some() { 1.0 } else { 1.0 - alpha });
+    if ranker == Ranker::Weighted {
+        weighted(semantic, keyword, embedding, text)
+    } else {
+        fuse(
+            semantic,
+            keyword,
+            embedding,
+            text,
+            options
+                .and_then(|options| options.impact_factor)
+                .unwrap_or(defaults.rrf_impact_factor),
+        )
+    }
 }
 
 fn cosine(left: &[f64], right: &[f64]) -> f64 {
@@ -181,7 +209,7 @@ fn bm25(chunks: &[StoredChunk], query: &str) -> Vec<f64> {
 }
 
 #[allow(clippy::cast_precision_loss, reason = "at most 10000 chunks are ranked")]
-fn fuse(semantic: &[f64], keyword: &[f64], embedding_weight: f64, text_weight: f64) -> Vec<f64> {
+fn fuse(semantic: &[f64], keyword: &[f64], embedding_weight: f64, text_weight: f64, impact_factor: f64) -> Vec<f64> {
     let mut scores = vec![0.0; semantic.len()];
     for (input, weight) in [(semantic, embedding_weight), (keyword, text_weight)] {
         let mut ranked: Vec<_> = input
@@ -194,10 +222,42 @@ fn fuse(semantic: &[f64], keyword: &[f64], embedding_weight: f64, text_weight: f
             right_score.total_cmp(left_score).then_with(|| left.cmp(right))
         });
         for (rank, (index, _)) in ranked.into_iter().enumerate() {
-            scores[index] += (weight / (embedding_weight + text_weight)) * 61.0 / (61.0 + rank as f64);
+            scores[index] += (weight / (embedding_weight + text_weight)) * (impact_factor + 1.0)
+                / (impact_factor + 1.0 + rank as f64);
         }
     }
     scores
+}
+
+#[allow(clippy::float_cmp, reason = "equal extrema mean the score list is exactly constant")]
+fn weighted(semantic: &[f64], keyword: &[f64], embedding_weight: f64, text_weight: f64) -> Vec<f64> {
+    fn normalize(input: &[f64]) -> Vec<f64> {
+        let min = input
+            .iter()
+            .copied()
+            .filter(|score| *score > 0.0)
+            .fold(f64::INFINITY, f64::min);
+        let max = input.iter().copied().fold(0.0, f64::max);
+        input
+            .iter()
+            .map(|score| {
+                if *score <= 0.0 {
+                    0.0
+                } else if max == min {
+                    1.0
+                } else {
+                    (*score - min) / (max - min)
+                }
+            })
+            .collect()
+    }
+    normalize(semantic)
+        .into_iter()
+        .zip(normalize(keyword))
+        .map(|(semantic, keyword)| {
+            (semantic * embedding_weight + keyword * text_weight) / (embedding_weight + text_weight)
+        })
+        .collect()
 }
 
 #[cfg(test)]

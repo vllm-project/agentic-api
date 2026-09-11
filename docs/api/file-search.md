@@ -49,6 +49,158 @@ A vector store records its embedding endpoint, model, and vector dimensions.
 Changing that configuration requires a new store and reingestion for semantic
 search. Existing stores remain available for keyword search.
 
+## Model-assisted retrieval configuration
+
+Use `file_search.vector_stores` to group independently configured model providers.
+Requests select allowlisted models; they cannot supply endpoints or credentials.
+Qualified selectors split once into provider ID and provider-local model name, so
+`local/org/rerank` sends model `org/rerank` to provider `local`. Unqualified selectors
+use `default_provider_id`. Unknown providers and models fail before model calls.
+
+```toml
+[file_search.vector_stores]
+default_provider_id = "local"
+
+[file_search.vector_stores.providers.local]
+base_url = "http://localhost:8001/v1"
+models = ["embedding-model", "context-model", "org/rerank"]
+api_key_env = "LOCAL_RETRIEVAL_KEY"
+protocol = "vllm"
+score_interpretation = "probability"
+
+[file_search.vector_stores.default_embedding_model]
+provider_id = "local"
+model_id = "embedding-model"
+embedding_dimensions = 768
+
+[file_search.vector_stores.default_reranker_model]
+provider_id = "local"
+model_id = "org/rerank"
+
+[file_search.vector_stores.contextual_retrieval_params]
+model = { provider_id = "local", model_id = "context-model" }
+default_timeout_seconds = 120
+default_max_concurrency = 3
+max_document_tokens = 100000
+
+[file_search.vector_stores.rewrite_query_params]
+model = { provider_id = "local", model_id = "context-model" }
+max_tokens = 100
+temperature = 0.0
+
+[file_search.vector_stores.chunk_retrieval_params]
+chunk_multiplier = 5
+max_tokens_in_context = 4000
+default_reranker_strategy = "rrf"
+rrf_impact_factor = 60.0
+weighted_search_alpha = 0.5
+# Optional: default_search_mode = "vector"
+```
+
+Grouped embeddings and the legacy embedding connection are alternative forms;
+configuring both is an error. Existing legacy environment overrides still apply.
+Each provider's secret is resolved from its `api_key_env`, redacted in diagnostics,
+and omitted from serialized configuration. Credentials are never inherited from
+the Responses model. Different providers can serve each operation. The supported
+`vllm` text protocol uses embeddings and Chat Completions below the base URL and
+`/rerank` after removing a trailing `/v1`.
+
+Absent explicit defaults preserve keyword-only local setup and hybrid search when
+embeddings exist. `file_ingestion_params.default_chunk_size_tokens` and
+`default_chunk_overlap_tokens` configure auto ingestion; defaults preserve native
+800/400 behavior. Static overlap remains limited to half the chunk size.
+`file_batch_params` validates `max_concurrent_files_per_batch` (default 3, range
+1–32), `file_batch_chunk_size` (10, 1–1000), and `cleanup_interval_seconds` (86400,
+1–604800); asynchronous workers are a later layer.
+
+### Contextual ingestion
+
+```json
+{
+  "file_id": "file-...",
+  "chunking_strategy": {
+    "type": "contextual",
+    "contextual": {
+      "model_id": "local/context-model",
+      "max_chunk_size_tokens": 700,
+      "chunk_overlap_tokens": 400
+    }
+  }
+}
+```
+
+The nested `contextual` object is required; all its fields have defaults. Chunk
+size is 100–4096; contextual overlap must be strictly less than chunk size.
+`model_id` overrides the configured contextual model. `timeout_seconds` (1–600)
+overrides the deployment timeout (10–600, default 120). `max_concurrency` (1–32)
+can reduce per-ingestion concurrency, still capped by the deployment's shared
+contextual semaphore (1–32, default 3). Document size uses a character-count/4 token
+estimate, bounded by `max_document_tokens` (1000–1000000) and existing extraction
+byte limits. Optional `context_prompt` must contain `{{WHOLE_DOCUMENT}}` exactly
+once before `{{CHUNK_CONTENT}}`, also exactly once, and fit 16 KiB.
+
+The model receives the document as a shared system prefix and the chunk in a user
+message, with temperature zero and at most 256 output tokens. Nonempty context is
+prepended to the embedding input and stored separately as `embedding_text`.
+Returned/cited source text stays original. Every context call must succeed before
+embedding or publishing the attachment; partial failure, timeout, cancellation,
+or malformed/empty output publishes nothing. Contextual ingestion requires
+embeddings. Calls have no retries or silent fallback. Prompt expansion is
+size-checked before allocation. JSON request bodies are bounded to 32 MiB while
+being serialized, chat/rerank responses to 1 MiB, contextual output to 8 KiB, and
+rewritten queries to 4096 bytes. Rewrite and rerank calls time out after 45 seconds.
+
+### Rewrite and ranking semantics
+
+Direct search and the Responses tool declaration accept `rewrite_query` and
+`search_mode`. Rewriting joins input queries with spaces and makes one model call
+before retrieval. `search_query` (tool `queries`) contains the single rewritten
+query; without rewriting, established multi-query retrieval and deduplication
+apply. Rewrite `temperature` includes explicit zero (range 0–2), `max_tokens` is
+1–4096, and optional `prompt` must include `{query}` and fit 16 KiB. Missing
+configuration, failed calls, and empty output fail the search.
+
+`ranking_options.ranker` accepts `auto`, `none`, `rrf`, `normalized`, `weighted`,
+`neural`, and `classifier`. `auto` uses the configured strategy; `none` bypasses
+model reranking while retaining the selected retrieval mode's base ranking.
+`normalized` aliases normalized RRF. `weighted` min-max normalizes each present
+score list and combines vector proportion `alpha` with keyword proportion
+`1-alpha`. Equal nonempty scores normalize to one; absent scores normalize to zero.
+RRF uses one-based ranks with configurable `impact_factor` (0–10000) and scales
+scores to [0,1]. Explicit `weights` contains nonnegative `vector` and `keyword`
+values summing to one. Existing `hybrid_search.embedding_weight`/`text_weight`
+remain supported; do not combine these two weight forms. Explicit parameters
+override deployment defaults. Fusion weights require hybrid mode. Neural score
+blending is not supported.
+
+OpenAI selectors `default-2024-11-15` and `default-2024-08-21` select the configured
+model ranker; `default_2024_08_21` remains accepted as a compatibility alias. These
+selectors do not reproduce OpenAI's hosted models or scores. `ranking_options.model`
+overrides `default_reranker_model` for both neural and classifier ranking. Missing
+model configuration is an error. Both use vLLM/Cohere-style text reranking
+(`documents`, `top_n`, `results`) before final truncation. The deployment
+`chunk_multiplier` (1–20) expands the initial result count within existing
+pgvector aggregate candidate limits. No additional corpus data is loaded to
+refill results. Filters and store isolation apply before provider calls.
+
+Reranker indexes must form a complete unique permutation of bounded candidates.
+Scores must be finite. `score_interpretation = "probability"` requires [0,1];
+`"logit"` applies a numerically stable sigmoid. Arbitrary scores are never clipped.
+Model scores are implementation-specific: select the interpretation for the model
+being deployed. `score_threshold` (0–1) applies to final model scores for both
+neural and classifier ranking, before the final result limit. Zero initial
+similarity does not exclude an otherwise selected model-reranking candidate.
+Without model reranking, the threshold applies to base retrieval scores.
+Provider errors return no partial search response.
+
+The Responses tool keeps whole source chunks within `max_tokens_in_context`
+(1–32768, default 4000), using bounded `cl100k_base` token counting. Chunks that do
+not fit are omitted. Direct search is independent of that context budget.
+Search and context preparation share the service admission slot; queued or running
+tokenization retains that slot until it exits, including after caller cancellation.
+Cancellation is checked between bounded tokenization blocks. Citation item types
+and file IDs remain unchanged.
+
 ## Select PostgreSQL indexed retrieval
 
 The default `exact` backend works with SQLite and plain PostgreSQL. To use
@@ -249,11 +401,9 @@ unreferenced files. Automatic orphan-file cleanup is not included. A missing or
 damaged file referenced by metadata returns a storage error instead of a partial
 download. Uploads stored inline by an earlier draft remain readable.
 
-The routes use the gateway's configured authentication policy. This first
-implementation uses bounded exact retrieval over SQL storage. It is intended for
-small corpora and returns explicit capacity errors when limits are exceeded.
+The routes use the gateway's configured authentication policy. Retrieval uses bounded exact SQL or the configured pgvector backend and returns
+explicit capacity errors when limits are exceeded.
 Each store is limited to 10,000 chunks and 64 MiB of serialized chunk data,
 including embeddings; ingestion enforces these limits before publication.
 Searching multiple stores shares the same aggregate retrieval budget.
-It does not implement OGX's provider catalog, contextual chunking, query rewriting,
-neural reranking, or asynchronous file batches.
+It does not expose OGX's provider catalog or asynchronous file batches.

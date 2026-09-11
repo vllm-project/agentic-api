@@ -293,6 +293,10 @@ pub struct WebSearchToolParam {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(deny_unknown_fields)]
 pub struct FileSearchToolParam {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search_mode: Option<crate::types::file_search::SearchMode>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub rewrite_query: bool,
     pub vector_store_ids: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_num_results: Option<usize>,
@@ -862,7 +866,7 @@ mod tests {
         assert_eq!(serde_json::to_value(tool).unwrap(), wire);
         assert!(
             serde_json::from_value::<ResponsesTool>(serde_json::json!({
-                "type":"file_search","vector_store_ids":["vs_1"],"rewrite_query":true
+                "type":"file_search","vector_store_ids":["vs_1"],"model_url":"https://unconfigured.invalid"
             }))
             .is_err()
         );

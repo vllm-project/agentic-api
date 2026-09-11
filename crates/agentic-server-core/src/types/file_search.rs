@@ -4,10 +4,14 @@ use std::{collections::BTreeMap, fmt, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+pub use super::vector_stores::*;
+
 /// Deployment-controlled embedding connection. An absent connection selects keyword retrieval.
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FileSearchConfig {
+    #[serde(default)]
+    pub vector_stores: VectorStoresConfig,
     #[serde(default)]
     pub backend: FileSearchBackend,
     pub files_storage_dir: Option<PathBuf>,
@@ -20,6 +24,7 @@ impl fmt::Debug for FileSearchConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("FileSearchConfig")
             .field("backend", &self.backend)
+            .field("vector_stores", &self.vector_stores)
             .field("files_storage_dir", &self.files_storage_dir)
             .field("embedding_configured", &self.embedding_base_url.is_some())
             .field("embedding_model", &self.embedding_model)
@@ -120,11 +125,11 @@ pub enum FileSearchError {
     Storage(#[from] sqlx::Error),
     #[error("stored file search data could not be decoded")]
     Serialization(#[from] serde_json::Error),
-    #[error("embedding provider request failed")]
+    #[error("file search model provider request failed")]
     Provider(#[source] reqwest::Error),
-    #[error("embedding provider returned an invalid response")]
+    #[error("file search model provider returned an invalid response")]
     ProviderProtocol,
-    #[error("embedding provider returned malformed JSON")]
+    #[error("file search model provider returned malformed JSON")]
     ProviderDecode(#[source] serde_json::Error),
     #[error("file search worker failed")]
     Worker(#[from] tokio::task::JoinError),
@@ -156,7 +161,7 @@ impl FileSearchError {
             | Self::Conflict(message)
             | Self::Unavailable(message) => message.clone(),
             Self::Provider(_) | Self::ProviderProtocol | Self::ProviderDecode(_) => {
-                "Embedding service request failed".into()
+                "File search model service request failed".into()
             }
             Self::Storage(_) | Self::Serialization(_) | Self::Worker(_) => "File search operation failed".into(),
             Self::FileStorage { .. } => {
@@ -244,8 +249,25 @@ pub struct CompoundFilter {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct RankingOptions {
     pub ranker: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alpha: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub impact_factor: Option<f64>,
     pub score_threshold: Option<f64>,
     pub hybrid_search: Option<HybridSearchOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weights: Option<FusionWeights>,
+}
+
+/// Explicit vector/keyword fusion proportions. Neural scores replace fused scores.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct FusionWeights {
+    pub vector: f64,
+    pub keyword: f64,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -339,10 +361,64 @@ pub struct FileObject {
 pub enum ChunkingStrategy {
     #[default]
     Auto,
+    Contextual {
+        contextual: ContextualChunking,
+    },
     Static {
         #[serde(rename = "static")]
         config: StaticChunking,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ContextualChunking {
+    pub model_id: Option<String>,
+    pub max_chunk_size_tokens: usize,
+    pub chunk_overlap_tokens: usize,
+    pub timeout_seconds: Option<u64>,
+    pub max_concurrency: Option<usize>,
+    pub context_prompt: String,
+}
+impl Default for ContextualChunking {
+    fn default() -> Self {
+        Self {
+        model_id: None, max_chunk_size_tokens: 700, chunk_overlap_tokens: 400,
+        timeout_seconds: None, max_concurrency: None,
+        context_prompt: "<document>\n{{WHOLE_DOCUMENT}}\n</document>\nHere is the chunk we want to situate within the whole document\n<chunk>\n{{CHUNK_CONTENT}}\n</chunk>\nPlease give a short succinct description to situate this chunk of text within the overall document for the purposes of improving search retrieval of the chunk. Answer only with the succinct description and nothing else.".into(),
+    }
+    }
+}
+impl ContextualChunking {
+    /// # Errors
+    /// Rejects unsupported bounds and malformed context templates.
+    pub fn validate(&self) -> Result<(), FileSearchError> {
+        if !(100..=4096).contains(&self.max_chunk_size_tokens)
+            || self.chunk_overlap_tokens >= self.max_chunk_size_tokens
+            || self.timeout_seconds.is_some_and(|n| !(1..=600).contains(&n))
+            || self.max_concurrency.is_some_and(|n| !(1..=32).contains(&n))
+            || self
+                .model_id
+                .as_ref()
+                .is_some_and(|model| model.trim().is_empty() || model.len() > 385)
+            || self.context_prompt.len() > 16384
+        {
+            return invalid("invalid contextual chunk size, overlap, model, timeout, or concurrency");
+        }
+        if self.context_prompt.matches("{{WHOLE_DOCUMENT}}").count() != 1
+            || self.context_prompt.matches("{{CHUNK_CONTENT}}").count() != 1
+        {
+            return invalid("context_prompt requires each document and chunk placeholder exactly once");
+        }
+        match (
+            self.context_prompt.find("{{WHOLE_DOCUMENT}}"),
+            self.context_prompt.find("{{CHUNK_CONTENT}}"),
+        ) {
+            (Some(document), Some(chunk)) if document < chunk => Ok(()),
+            _ => invalid("context_prompt requires {{WHOLE_DOCUMENT}} before {{CHUNK_CONTENT}}"),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -486,9 +562,6 @@ impl SearchRequest {
         if !(1..=50).contains(&self.max_num_results.unwrap_or(10)) {
             return invalid("max_num_results must be between 1 and 50");
         }
-        if self.rewrite_query {
-            return invalid("rewrite_query is not supported by in-tree file search");
-        }
         if let Some(options) = &self.ranking_options {
             options.validate()?;
         }
@@ -503,18 +576,46 @@ impl RankingOptions {
     /// # Errors
     /// Returns an invalid-request error for unsupported ranking or invalid weights.
     pub fn validate(&self) -> Result<(), FileSearchError> {
+        if let Some(ranker) = &self.ranker {
+            ranker.parse::<Ranker>()?;
+        }
         if self
-            .ranker
-            .as_deref()
-            .is_some_and(|ranker| !matches!(ranker, "auto" | "none"))
+            .model
+            .as_ref()
+            .is_some_and(|model| model.trim().is_empty() || model.len() > 385)
         {
-            return invalid("ranker must be auto or none; neural and classifier reranking are not supported");
+            return invalid("model must contain 1 to 385 bytes");
+        }
+        if self
+            .alpha
+            .is_some_and(|value| !value.is_finite() || !(0.0..=1.0).contains(&value))
+        {
+            return invalid("alpha must be between 0 and 1");
+        }
+        if self
+            .impact_factor
+            .is_some_and(|value| !value.is_finite() || !(0.0..=10000.0).contains(&value))
+        {
+            return invalid("impact_factor must be between 0 and 10000");
         }
         if self
             .score_threshold
             .is_some_and(|value| !value.is_finite() || !(0.0..=1.0).contains(&value))
         {
             return invalid("score_threshold must be between 0 and 1");
+        }
+        if let Some(weights) = &self.weights {
+            if self.hybrid_search.is_some()
+                || !weights.vector.is_finite()
+                || !weights.keyword.is_finite()
+                || weights.vector < 0.0
+                || weights.keyword < 0.0
+                || (weights.vector + weights.keyword - 1.0).abs() > 1e-6
+            {
+                return invalid(
+                    "weights must be nonnegative vector/keyword proportions summing to 1; do not combine with hybrid_search",
+                );
+            }
         }
         if let Some(weights) = &self.hybrid_search {
             let embedding = weights.embedding_weight.unwrap_or(1.0);
