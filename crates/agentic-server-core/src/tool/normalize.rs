@@ -129,7 +129,7 @@ mod file_search_tests {
             serde_json::json!({"type": "file_search", "vector_store_ids": [" "]}),
             serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_1"], "max_num_results": 0}),
             serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_1"], "max_num_results": 51}),
-            serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_1"], "ranking_options": {"ranker":"neural"}}),
+            serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_1"], "ranking_options": {"ranker":"unknown"}}),
             serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_1"], "ranking_options": {"score_threshold":2.0}}),
         ] {
             let tool: ResponsesTool = serde_json::from_value(declaration).unwrap();

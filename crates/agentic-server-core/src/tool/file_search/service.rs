@@ -12,7 +12,7 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::CancellationToken;
 
-use super::{embeddings::Embeddings, ingest, ranking};
+use super::{embeddings::Embeddings, ingest, models::Models, ranking};
 use crate::{
     storage::{
         DbPool,
@@ -23,8 +23,9 @@ use crate::{
     },
     types::file_search::{
         AttachFileRequest, ChunkingStrategy, CreateVectorStoreRequest, DeleteObject, FileAttributes, FileCounts,
-        FileObject, FileSearchConfig, FileSearchError, ListParams, ListResponse, SearchMode, SearchQuery,
-        SearchRequest, SearchResponse, VectorStoreFileObject, VectorStoreObject, invalid, validate_attributes,
+        FileObject, FileSearchConfig, FileSearchError, ListParams, ListResponse, Ranker, RankingOptions, SearchMode,
+        SearchQuery, SearchRequest, SearchResponse, VectorStoreFileObject, VectorStoreObject, invalid,
+        validate_attributes,
     },
 };
 
@@ -46,6 +47,8 @@ pub struct FileSearchService {
     files: LocalFiles,
     embeddings: Option<Embeddings>,
     workers: Arc<Semaphore>,
+    models: Models,
+    config: Arc<crate::types::file_search::VectorStoresConfig>,
 }
 
 impl std::fmt::Debug for FileSearchService {
@@ -71,6 +74,7 @@ impl FileSearchService {
         client: Arc<reqwest::Client>,
         config: FileSearchConfig,
     ) -> Result<Self, FileSearchError> {
+        config.vector_stores.validate()?;
         let directory = match &config.files_storage_dir {
             Some(directory) => directory.clone(),
             None => crate::config::agentic_api_home()
@@ -79,19 +83,28 @@ impl FileSearchService {
         };
         if !matches!(config.backend, crate::types::file_search::FileSearchBackend::Exact)
             && config.embedding_base_url.is_none()
+            && config.vector_stores.default_embedding_model.is_none()
         {
             return invalid("pgvector requires configured embeddings");
         }
+        let embeddings = Embeddings::from_config(client.clone(), &config)?;
+        let vector_config = Arc::new(config.vector_stores);
         Ok(Self {
             storage: FileSearchStorage::with_backend(pool, &config.backend)?,
             files: LocalFiles::new(directory)?,
-            embeddings: Embeddings::from_config(client, &config)?,
+            embeddings,
+            models: Models::new(client, vector_config.clone()),
+            config: vector_config,
             workers: Arc::new(Semaphore::new(4)),
         })
     }
 
     pub(crate) async fn initialize(&self) -> Result<(), FileSearchError> {
         self.storage.initialize().await
+    }
+
+    pub(super) fn context_token_limit(&self) -> usize {
+        self.config.chunk_retrieval_params.max_tokens_in_context
     }
 
     fn permit(&self) -> Result<Arc<OwnedSemaphorePermit>, FileSearchError> {
@@ -301,7 +314,9 @@ impl FileSearchService {
             dimensions = usize::try_from(prepared.dimensions).ok().filter(|value| *value != 0);
             for chunk in &prepared.chunks {
                 total_bytes = total_bytes.saturating_add(
-                    chunk.text.len() + chunk.embedding.as_ref().map_or(0, |embedding| embedding.len() * 8),
+                    chunk.text.len()
+                        + chunk.embedding_text.as_ref().map_or(0, String::len)
+                        + chunk.embedding.as_ref().map_or(0, |embedding| embedding.len() * 8),
                 );
             }
             if total_bytes > 64 * 1024 * 1024 {
@@ -387,18 +402,46 @@ impl FileSearchService {
             .read_content(&request.file_id, file.bytes, uploaded.content_base64, permit.clone())
             .await?;
         let strategy = request.chunking_strategy.unwrap_or_default();
-        let chunking = ingest::chunking_config(&strategy)?;
+        let chunking = if matches!(strategy, ChunkingStrategy::Auto) {
+            crate::types::file_search::StaticChunking {
+                max_chunk_size_tokens: self.config.file_ingestion_params.default_chunk_size_tokens,
+                chunk_overlap_tokens: self.config.file_ingestion_params.default_chunk_overlap_tokens,
+            }
+        } else {
+            ingest::chunking_config(&strategy)?
+        };
+        if let ChunkingStrategy::Contextual { contextual } = &strategy {
+            if self.embeddings.is_none() {
+                return invalid("contextual ingestion requires configured embeddings");
+            }
+            self.config.resolve(
+                contextual.model_id.as_deref(),
+                self.config.contextual_retrieval_params.model.as_ref(),
+            )?;
+        }
         let filename = file.filename.clone();
         let worker_permit = permit.clone();
         let cancelled = Arc::new(AtomicBool::new(false));
         let _cancel_on_drop = CancelIngestionOnDrop(cancelled.clone());
-        let texts = tokio::task::spawn_blocking(move || {
+        let document = tokio::task::spawn_blocking(move || {
             let _permit = worker_permit;
             ingest::extract_and_chunk(bytes, &filename, &uploaded.content_type, &chunking, &cancelled)
         })
         .await??;
+        let contextual = if let ChunkingStrategy::Contextual { contextual } = &strategy {
+            Some(
+                self.models
+                    .contextualize(&document.text, &document.chunks, contextual)
+                    .await?,
+            )
+        } else {
+            None
+        };
+        let texts = document.chunks;
         let vectors = if let Some(embeddings) = &self.embeddings {
-            embeddings.embed(&texts, dimensions).await?
+            embeddings
+                .embed(contextual.as_deref().unwrap_or(&texts), dimensions)
+                .await?
         } else {
             Vec::new()
         };
@@ -410,18 +453,24 @@ impl FileSearchService {
         let embedding_dimensions = vectors.first().map_or(0, Vec::len);
         let mut usage_bytes = 0usize;
         let mut embeddings = vectors.into_iter();
+        let mut contextual = contextual.unwrap_or_default().into_iter();
         let chunks = texts
             .into_iter()
             .enumerate()
             .map(|(chunk_index, text)| {
                 let embedding = embeddings.next();
-                usage_bytes = usage_bytes
-                    .saturating_add(text.len() + embedding.as_ref().map_or(0, |embedding| embedding.len() * 8));
+                let embedding_text = contextual.next();
+                usage_bytes = usage_bytes.saturating_add(
+                    text.len()
+                        + embedding_text.as_ref().map_or(0, String::len)
+                        + embedding.as_ref().map_or(0, |embedding| embedding.len() * 8),
+                );
                 StoredChunk {
                     file_id: file.id.clone(),
                     filename: file.filename.clone(),
                     chunk_index,
                     text,
+                    embedding_text,
                     embedding,
                     attributes: request.attributes.clone(),
                 }
@@ -488,38 +537,35 @@ impl FileSearchService {
         Ok(deleted(file_id, "vector_store.file.deleted"))
     }
 
-    /// Retrieves and globally ranks deduplicated chunks across selected vector stores.
-    ///
-    /// # Errors
-    /// Returns validation, configuration, provider, resource-limit, or storage errors.
-    pub async fn search(
-        &self,
-        store_ids: &[String],
-        request: &SearchRequest,
-    ) -> Result<SearchResponse, FileSearchError> {
-        request.validate()?;
-        if store_ids.is_empty() || store_ids.len() > 16 || store_ids.iter().any(|id| id.is_empty() || id.len() > 128) {
-            return invalid("search requires 1 to 16 vector store IDs of at most 128 bytes each");
-        }
-        let permit = self.permit()?;
-        let mode = request.search_mode.unwrap_or(if self.embeddings.is_some() {
-            SearchMode::Hybrid
-        } else {
-            SearchMode::Keyword
-        });
+    fn search_mode(&self, request: &SearchRequest) -> Result<SearchMode, FileSearchError> {
+        let mode = request
+            .search_mode
+            .or(self.config.chunk_retrieval_params.default_search_mode)
+            .unwrap_or(if self.embeddings.is_some() {
+                SearchMode::Hybrid
+            } else {
+                SearchMode::Keyword
+            });
         if mode != SearchMode::Keyword && self.embeddings.is_none() {
             return Err(FileSearchError::Unavailable(
                 "Semantic and hybrid search require configured embeddings; use keyword search".into(),
             ));
         }
         if mode != SearchMode::Hybrid
-            && request
-                .ranking_options
-                .as_ref()
-                .is_some_and(|options| options.hybrid_search.is_some())
+            && request.ranking_options.as_ref().is_some_and(|options| {
+                options.hybrid_search.is_some() || options.weights.is_some() || options.alpha.is_some()
+            })
         {
             return invalid("hybrid_search weights require hybrid search mode");
         }
+        Ok(mode)
+    }
+
+    async fn search_dimensions(
+        &self,
+        store_ids: &[String],
+        mode: SearchMode,
+    ) -> Result<(Option<usize>, bool), FileSearchError> {
         let mut dimensions = None;
         for id in store_ids {
             let store = self.storage.store(id).await?;
@@ -544,10 +590,56 @@ impl FileSearchService {
             }
             dimensions = Some(expected);
         }
-        let queries = match &request.query {
+        Ok((dimensions, has_embeddings))
+    }
+
+    fn ranking_strategy(&self, options: &RankingOptions) -> Result<Ranker, FileSearchError> {
+        let mut ranker = options
+            .ranker
+            .as_deref()
+            .map(str::parse::<Ranker>)
+            .transpose()?
+            .unwrap_or(self.config.chunk_retrieval_params.default_reranker_strategy);
+        if ranker == Ranker::Auto {
+            ranker = self.config.chunk_retrieval_params.default_reranker_strategy;
+            if ranker == Ranker::Auto {
+                ranker = Ranker::Rrf;
+            }
+        }
+        if ranker.uses_model() {
+            self.config
+                .resolve(options.model.as_deref(), self.config.default_reranker_model.as_ref())?;
+        } else if options.model.is_some() {
+            return invalid("model selector requires a model ranker");
+        }
+        Ok(ranker)
+    }
+
+    /// Retrieves and globally ranks deduplicated chunks across selected vector stores.
+    ///
+    /// # Errors
+    /// Returns validation, configuration, provider, resource-limit, or storage errors.
+    pub async fn search(
+        &self,
+        store_ids: &[String],
+        request: &SearchRequest,
+    ) -> Result<SearchResponse, FileSearchError> {
+        request.validate()?;
+        if store_ids.is_empty() || store_ids.len() > 16 || store_ids.iter().any(|id| id.is_empty() || id.len() > 128) {
+            return invalid("search requires 1 to 16 vector store IDs of at most 128 bytes each");
+        }
+        let permit = self.permit()?;
+        let mode = self.search_mode(request)?;
+        let (dimensions, has_embeddings) = self.search_dimensions(store_ids, mode).await?;
+        let mut queries = match &request.query {
             SearchQuery::Text(query) => vec![query.clone()],
             SearchQuery::Texts(queries) => queries.clone(),
         };
+        let options = request.ranking_options.clone().unwrap_or_default();
+        let ranker = self.ranking_strategy(&options)?;
+        if request.rewrite_query {
+            queries = vec![self.models.rewrite(&queries).await?];
+        }
         let vectors = if mode == SearchMode::Keyword || !has_embeddings {
             Vec::new()
         } else {
@@ -580,12 +672,42 @@ impl FileSearchService {
             }
         }
         let worker_queries = queries.clone();
-        let request = request.clone();
-        let data = tokio::task::spawn_blocking(move || {
-            let _permit = permit;
-            ranking::rank(chunks, &worker_queries, &vectors, mode, &request)
+        let mut candidate_request = request.clone();
+        let limit = request.max_num_results.unwrap_or(10);
+        candidate_request.max_num_results = Some(if ranker.uses_model() {
+            limit * self.config.chunk_retrieval_params.chunk_multiplier
+        } else {
+            limit
+        });
+        if ranker.uses_model() {
+            candidate_request
+                .ranking_options
+                .get_or_insert_with(Default::default)
+                .score_threshold = None;
+        }
+        let config = self.config.clone();
+        let worker_permit = permit.clone();
+        let mut data = tokio::task::spawn_blocking(move || {
+            let _permit = worker_permit;
+            ranking::rank(
+                chunks,
+                &worker_queries,
+                &vectors,
+                mode,
+                &candidate_request,
+                ranker,
+                &config.chunk_retrieval_params,
+            )
         })
         .await?;
+        if ranker.uses_model() {
+            data = self
+                .models
+                .rerank(&queries.join(" "), data, options.model.as_deref())
+                .await?;
+            data.retain(|result| result.score >= options.score_threshold.unwrap_or(0.0));
+        }
+        data.truncate(limit);
         Ok(SearchResponse {
             object: "vector_store.search_results.page".into(),
             search_query: queries,

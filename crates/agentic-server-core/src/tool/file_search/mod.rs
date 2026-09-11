@@ -3,6 +3,7 @@
 mod embeddings;
 pub(crate) mod handler;
 mod ingest;
+mod models;
 mod ranking;
 mod service;
 

@@ -287,6 +287,13 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
         sqlite,
         tools: ToolRuntimeConfig {
             file_search: agentic_core::types::file_search::FileSearchConfig {
+                vector_stores: {
+                    let mut config = file.file_search.vector_stores.clone().unwrap_or_default();
+                    for provider in config.providers.values_mut() {
+                        provider.api_key = provider.api_key_env.as_deref().and_then(environment_value);
+                    }
+                    config
+                },
                 backend: file.file_search.backend.clone(),
                 files_storage_dir: std::env::var_os("AGENTIC_FILES_STORAGE_DIR")
                     .map(std::path::PathBuf::from)

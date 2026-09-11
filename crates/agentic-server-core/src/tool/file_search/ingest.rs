@@ -12,6 +12,13 @@ const TOKENIZATION_BLOCK_BYTES: usize = 256;
 
 pub(super) fn chunking_config(strategy: &ChunkingStrategy) -> Result<StaticChunking, FileSearchError> {
     let config = match strategy {
+        ChunkingStrategy::Contextual { contextual } => {
+            contextual.validate()?;
+            return Ok(StaticChunking {
+                max_chunk_size_tokens: contextual.max_chunk_size_tokens,
+                chunk_overlap_tokens: contextual.chunk_overlap_tokens,
+            });
+        }
         ChunkingStrategy::Auto => StaticChunking::default(),
         ChunkingStrategy::Static { config } => config.clone(),
     };
@@ -77,13 +84,18 @@ pub(super) fn validate_content_type(filename: &str, content_type: &str) -> Resul
     invalid("Unsupported file type; upload UTF-8 text or a PDF containing extractable text")
 }
 
+pub(super) struct ExtractedDocument {
+    pub text: String,
+    pub chunks: Vec<String>,
+}
+
 pub(super) fn extract_and_chunk(
     bytes: Vec<u8>,
     filename: &str,
     content_type: &str,
     chunking: &StaticChunking,
     cancelled: &AtomicBool,
-) -> Result<Vec<String>, FileSearchError> {
+) -> Result<ExtractedDocument, FileSearchError> {
     validate_content_type(filename, content_type)?;
     let content_type = content_type.split(';').next().unwrap_or_default().trim();
     let text = if is_pdf(filename, content_type) {
@@ -101,7 +113,8 @@ pub(super) fn extract_and_chunk(
     if text.contains('\0') {
         return invalid("The file contains binary content instead of text");
     }
-    chunks(&text, chunking, cancelled)
+    let chunks = chunks(&text, chunking, cancelled)?;
+    Ok(ExtractedDocument { text, chunks })
 }
 
 #[cfg(not(feature = "file-search-pdf"))]
@@ -219,6 +232,36 @@ fn chunks(text: &str, config: &StaticChunking, cancelled: &AtomicBool) -> Result
     Ok(chunks)
 }
 
+/// Keep complete source chunks that fit the remaining model-context budget.
+pub(super) fn limit_context(
+    results: Vec<crate::types::file_search::SearchResult>,
+    mut budget: usize,
+) -> Vec<crate::types::file_search::SearchResult> {
+    let tokenizer = tiktoken_rs::cl100k_base_singleton();
+    results
+        .into_iter()
+        .filter(|result| {
+            let mut tokens = 0usize;
+            for content in &result.content {
+                let mut text = content.text.as_str();
+                while !text.is_empty() {
+                    let mut end = text.len().min(TOKENIZATION_BLOCK_BYTES);
+                    while !text.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    tokens = tokens.saturating_add(tokenizer.encode_ordinary(&text[..end]).len());
+                    if tokens > budget {
+                        return false;
+                    }
+                    text = &text[end..];
+                }
+            }
+            budget -= tokens;
+            true
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -237,7 +280,8 @@ mod tests {
             &config,
             &AtomicBool::new(false),
         )
-        .unwrap();
+        .unwrap()
+        .chunks;
         assert!(chunks.len() > 1);
         assert_eq!(chunks.concat(), text);
         assert!(chunks.iter().all(|chunk| !chunk.contains('\u{fffd}')));

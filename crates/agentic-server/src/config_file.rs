@@ -24,6 +24,8 @@ impl FilesFileConfig {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct FileSearchFileConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vector_stores: Option<agentic_core::types::file_search::VectorStoresConfig>,
     #[serde(default)]
     pub backend: agentic_core::types::file_search::FileSearchBackend,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -36,7 +38,8 @@ pub(crate) struct FileSearchFileConfig {
 
 impl FileSearchFileConfig {
     fn is_empty(&self) -> bool {
-        self.backend == agentic_core::types::file_search::FileSearchBackend::Exact
+        self.vector_stores.is_none()
+            && self.backend == agentic_core::types::file_search::FileSearchBackend::Exact
             && self.embedding_base_url.is_none()
             && self.embedding_model.is_none()
             && self.api_key_env.is_none()
@@ -219,6 +222,11 @@ impl FileConfig {
     }
 
     fn validate(&self, path: &Path) -> Result<(), Error> {
+        if let Some(config) = &self.file_search.vector_stores {
+            config
+                .validate()
+                .map_err(|error| Error::Config(format!("invalid file_search.vector_stores: {error}")))?;
+        }
         if self
             .files
             .storage_dir
@@ -373,6 +381,43 @@ ef_search = 100
             FileConfig::load(home.path()).is_err(),
             "raw credentials are not a supported config-file field"
         );
+    }
+
+    #[test]
+    fn grouped_models_load_with_secret_names_and_reject_raw_secrets() {
+        let home = tempdir().unwrap();
+        let configuration = r#"
+[file_search.vector_stores]
+default_provider_id="local"
+[file_search.vector_stores.providers.local]
+base_url="http://localhost:8001/v1"
+models=["embed", "chat", "org/rerank"]
+api_key_env="LOCAL_RETRIEVAL_KEY"
+[file_search.vector_stores.default_reranker_model]
+provider_id="local"
+model_id="org/rerank"
+[file_search.vector_stores.rewrite_query_params]
+temperature=0.0
+"#;
+        fs::write(home.path().join("config.toml"), configuration).unwrap();
+        let config = FileConfig::load(home.path()).unwrap().unwrap();
+        let mut grouped = config.file_search.vector_stores.unwrap();
+        grouped.providers.get_mut("local").unwrap().api_key = Some("never-persist-secret".into());
+        assert!(!format!("{grouped:?}").contains("never-persist-secret"));
+        assert!(!toml::to_string(&grouped).unwrap().contains("never-persist-secret"));
+        assert!(grouped.rewrite_query_params.unwrap().temperature.abs() < f64::EPSILON);
+        fs::write(
+            home.path().join("config.toml"),
+            configuration.replace("api_key_env=", "api_key="),
+        )
+        .unwrap();
+        assert!(FileConfig::load(home.path()).is_err());
+        fs::write(
+            home.path().join("config.toml"),
+            configuration.replace("org/rerank\"\n", "unknown\"\n"),
+        )
+        .unwrap();
+        assert!(FileConfig::load(home.path()).is_err());
     }
 
     #[test]

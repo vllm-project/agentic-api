@@ -2,8 +2,10 @@
 
 use std::{sync::Arc, time::Duration};
 
+#[cfg(test)]
+use crate::types::retrieval_models::EmbeddingData;
+use crate::types::retrieval_models::{EmbeddingRequest, EmbeddingResponse};
 use futures::StreamExt;
-use serde::{Deserialize, Serialize};
 
 use crate::types::file_search::{FileSearchConfig, FileSearchError};
 
@@ -17,24 +19,7 @@ pub(super) struct Embeddings {
     endpoint: reqwest::Url,
     model: String,
     api_key: Option<String>,
-}
-
-#[derive(Serialize)]
-struct EmbeddingRequest<'a> {
-    model: &'a str,
-    input: &'a [String],
-    encoding_format: &'static str,
-}
-
-#[derive(Deserialize)]
-struct EmbeddingResponse {
-    model: String,
-    data: Vec<EmbeddingData>,
-}
-#[derive(Deserialize)]
-struct EmbeddingData {
-    index: usize,
-    embedding: Vec<f64>,
+    dimensions: Option<usize>,
 }
 
 impl Embeddings {
@@ -42,6 +27,24 @@ impl Embeddings {
         client: Arc<reqwest::Client>,
         config: &FileSearchConfig,
     ) -> Result<Option<Self>, FileSearchError> {
+        if let Some(model) = &config.vector_stores.default_embedding_model {
+            let (provider, name) = config.vector_stores.resolve(None, Some(model))?;
+            if config.embedding_base_url.is_some()
+                || config.embedding_model.is_some()
+                || config.embedding_api_key.is_some()
+            {
+                return Err(FileSearchError::InvalidRequest(
+                    "configure either grouped or legacy embeddings, not both".into(),
+                ));
+            }
+            return Ok(Some(Self {
+                client,
+                endpoint: provider.endpoint("embeddings")?,
+                model: name.into(),
+                api_key: provider.api_key.clone(),
+                dimensions: model.embedding_dimensions,
+            }));
+        }
         let (Some(base_url), Some(model)) = (&config.embedding_base_url, &config.embedding_model) else {
             if config.embedding_base_url.is_some()
                 || config.embedding_model.is_some()
@@ -77,6 +80,7 @@ impl Embeddings {
             endpoint,
             model: model.clone(),
             api_key: config.embedding_api_key.clone(),
+            dimensions: None,
         }))
     }
 
@@ -90,7 +94,12 @@ impl Embeddings {
         expected_dimensions: Option<usize>,
     ) -> Result<Vec<Vec<f64>>, FileSearchError> {
         let mut embeddings = Vec::with_capacity(texts.len());
-        let mut dimensions = expected_dimensions;
+        let mut dimensions = expected_dimensions.or(self.dimensions);
+        if self.dimensions.is_some_and(|configured| dimensions != Some(configured)) {
+            return Err(FileSearchError::InvalidRequest(
+                "stored and configured embedding dimensions differ".into(),
+            ));
+        }
         for input in texts.chunks(BATCH_SIZE) {
             let mut request = self
                 .client
@@ -101,6 +110,7 @@ impl Embeddings {
                     model: &self.model,
                     input,
                     encoding_format: "float",
+                    dimensions: self.dimensions,
                 })?);
             if let Some(key) = &self.api_key {
                 request = request.bearer_auth(key);

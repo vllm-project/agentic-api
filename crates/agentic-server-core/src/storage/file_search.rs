@@ -47,6 +47,8 @@ pub(crate) struct StoredChunk {
     pub filename: String,
     pub chunk_index: usize,
     pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding_text: Option<String>,
     pub embedding: Option<Vec<f64>>,
     pub attributes: crate::types::file_search::FileAttributes,
 }
@@ -494,6 +496,7 @@ mod tests {
             dimensions: i64::try_from(dimensions).unwrap(),
             chunks: (0..count)
                 .map(|chunk_index| StoredChunk {
+                    embedding_text: None,
                     file_id: file.id.clone(),
                     filename: file.filename.clone(),
                     chunk_index,
