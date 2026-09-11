@@ -323,7 +323,7 @@ pub enum EventPayload {
     OutputItemAdded {
         item_id: String,
         item_type: SSEItemType,
-        output_index: u32,
+        output_index: Option<u32>,
         name: Option<String>,
         namespace: Option<String>,
         call_id: Option<String>,
@@ -335,7 +335,7 @@ pub enum EventPayload {
     OutputItemDone {
         item_id: String,
         item_type: SSEItemType,
-        output_index: u32,
+        output_index: Option<u32>,
         item: Value,
     },
 
@@ -343,7 +343,7 @@ pub enum EventPayload {
     TextDelta {
         delta: String,
         item_id: String,
-        output_index: u32,
+        output_index: Option<u32>,
         content_index: u32,
     },
 
@@ -351,7 +351,7 @@ pub enum EventPayload {
     TextDone {
         text: String,
         item_id: String,
-        output_index: u32,
+        output_index: Option<u32>,
     },
 
     /// `response.function_call_arguments.delta`
@@ -359,7 +359,7 @@ pub enum EventPayload {
         delta: String,
         call_id: Option<String>,
         item_id: String,
-        output_index: u32,
+        output_index: Option<u32>,
     },
 
     /// `response.function_call_arguments.done`
@@ -368,7 +368,7 @@ pub enum EventPayload {
         call_id: Option<String>,
         item_id: String,
         name: String,
-        output_index: u32,
+        output_index: Option<u32>,
     },
 
     /// `response.custom_tool_call_input.delta`
@@ -381,21 +381,21 @@ pub enum EventPayload {
     CustomToolCallInputDelta {
         delta: String,
         item_id: String,
-        output_index: u32,
+        output_index: Option<u32>,
     },
 
     /// `response.custom_tool_call_input.done`
     CustomToolCallInputDone {
         input: String,
         item_id: String,
-        output_index: u32,
+        output_index: Option<u32>,
     },
 
     /// `response.reasoning_text.delta`
     ReasoningTextDelta {
         delta: String,
         item_id: String,
-        output_index: u32,
+        output_index: Option<u32>,
         content_index: u32,
     },
 
@@ -403,7 +403,7 @@ pub enum EventPayload {
     ReasoningTextDone {
         text: String,
         item_id: String,
-        output_index: u32,
+        output_index: Option<u32>,
         content_index: u32,
     },
 
@@ -411,7 +411,7 @@ pub enum EventPayload {
     ReasoningSummaryTextDelta {
         delta: String,
         item_id: String,
-        output_index: u32,
+        output_index: Option<u32>,
         summary_index: u32,
     },
 
@@ -419,7 +419,7 @@ pub enum EventPayload {
     ReasoningSummaryTextDone {
         text: String,
         item_id: String,
-        output_index: u32,
+        output_index: Option<u32>,
         summary_index: u32,
     },
 
@@ -441,6 +441,50 @@ pub struct EventFrame {
 }
 
 impl EventFrame {
+    /// The supplied item index, retaining absence until ingestion resolves it.
+    pub(crate) fn output_index(&self) -> Option<u32> {
+        match &self.payload {
+            EventPayload::OutputItemAdded { output_index, .. }
+            | EventPayload::OutputItemDone { output_index, .. }
+            | EventPayload::TextDelta { output_index, .. }
+            | EventPayload::TextDone { output_index, .. }
+            | EventPayload::FunctionCallArgsDelta { output_index, .. }
+            | EventPayload::FunctionCallArgsDone { output_index, .. }
+            | EventPayload::CustomToolCallInputDelta { output_index, .. }
+            | EventPayload::CustomToolCallInputDone { output_index, .. }
+            | EventPayload::ReasoningTextDelta { output_index, .. }
+            | EventPayload::ReasoningTextDone { output_index, .. }
+            | EventPayload::ReasoningSummaryTextDelta { output_index, .. }
+            | EventPayload::ReasoningSummaryTextDone { output_index, .. } => *output_index,
+            _ => self.wire.output_index.and_then(|index| u32::try_from(index).ok()),
+        }
+    }
+
+    /// Carries the ingestion-resolved index into folding and emitted wire data.
+    pub(crate) fn set_output_index(&mut self, index: u32) {
+        self.wire.output_index = Some(u64::from(index));
+        match &mut self.payload {
+            EventPayload::OutputItemAdded { output_index, .. }
+            | EventPayload::OutputItemDone { output_index, .. }
+            | EventPayload::TextDelta { output_index, .. }
+            | EventPayload::TextDone { output_index, .. }
+            | EventPayload::FunctionCallArgsDelta { output_index, .. }
+            | EventPayload::FunctionCallArgsDone { output_index, .. }
+            | EventPayload::CustomToolCallInputDelta { output_index, .. }
+            | EventPayload::CustomToolCallInputDone { output_index, .. }
+            | EventPayload::ReasoningTextDelta { output_index, .. }
+            | EventPayload::ReasoningTextDone { output_index, .. }
+            | EventPayload::ReasoningSummaryTextDelta { output_index, .. }
+            | EventPayload::ReasoningSummaryTextDone { output_index, .. } => *output_index = Some(index),
+            EventPayload::Raw(value) => {
+                if let Some(object) = value.as_object_mut() {
+                    object.insert("output_index".to_owned(), Value::from(index));
+                }
+            }
+            _ => {}
+        }
+    }
+
     #[must_use]
     pub fn synthetic(event_type: SSEEventType, rest: Map<String, Value>) -> Option<Self> {
         let event_type_name = <&str>::try_from(event_type).ok()?;

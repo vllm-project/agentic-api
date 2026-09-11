@@ -68,7 +68,7 @@ pub(crate) fn validate_frame(frame: &EventFrame) -> Result<ValidatedFrame<'_>, E
     }
 }
 
-fn expected_item_type(event_type: SSEEventType) -> Option<SSEItemType> {
+pub(crate) fn expected_item_type(event_type: SSEEventType) -> Option<SSEItemType> {
     match event_type {
         SSEEventType::OutputTextDelta
         | SSEEventType::OutputTextDone
