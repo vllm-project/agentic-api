@@ -10,15 +10,15 @@ use std::{
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
-use tokio_util::sync::CancellationToken;
+#[path = "files.rs"]
+mod files;
+pub use files::{FileDownload, FileUpload};
 
 use super::{embeddings::Embeddings, ingest, models::Models, ranking};
 use crate::{
     storage::{
         DbPool,
-        file_search::{
-            Collection, FilePublicationFailure, FileSearchStorage, PreparedAttachment, StoredChunk, StoredVectorStore,
-        },
+        file_search::{Collection, FileSearchStorage, PreparedAttachment, StoredChunk, StoredVectorStore},
         local_files::LocalFiles,
     },
     types::file_search::{
@@ -30,7 +30,8 @@ use crate::{
 };
 
 /// Maximum accepted size for one uploaded file.
-pub const MAX_FILE_BYTES: usize = 20 * 1024 * 1024;
+pub const MAX_FILE_BYTES: usize = 512 * 1024 * 1024;
+const MAX_INGESTION_BYTES: usize = 20 * 1024 * 1024;
 
 struct CancelIngestionOnDrop(Arc<AtomicBool>);
 
@@ -150,57 +151,23 @@ impl FileSearchService {
         purpose: &str,
         bytes: Vec<u8>,
     ) -> Result<FileObject, FileSearchError> {
-        let permit = self.permit()?;
-        if filename.is_empty() || filename.len() > 255 || filename.chars().any(char::is_control) {
-            return invalid("filename must contain 1 to 255 bytes without control characters");
-        }
-        if !matches!(purpose, "assistants" | "user_data") {
-            return invalid("file search accepts purpose assistants or user_data");
-        }
-        if bytes.is_empty() || bytes.len() > MAX_FILE_BYTES {
-            return invalid("file must contain 1 byte to 20 MiB");
-        }
-        if content_type.is_empty() || content_type.len() > 256 || content_type.chars().any(char::is_control) {
-            return invalid("content_type must contain 1 to 256 bytes without control characters");
-        }
-        let file = FileObject {
-            id: format!("file-{}", uuid::Uuid::now_v7()),
-            object: "file".into(),
-            bytes: size_i64(bytes.len())?,
-            created_at: chrono::Utc::now().timestamp(),
-            filename: filename.into(),
-            purpose: purpose.into(),
-            status: "processed".into(),
-        };
-        let storage = self.storage.clone();
-        let files = self.files.clone();
-        let content_type = content_type.to_owned();
-        let cancelled = CancellationToken::new();
-        let _cancel_on_drop = cancelled.clone().drop_guard();
-        // The caller joins this operation normally. On caller cancellation it
-        // retains its permit and finishes rollback/cleanup without abandoning I/O.
-        tokio::spawn(async move {
-            let _permit = permit;
-            files.publish(&file.id, &bytes, &cancelled).await?;
-            match storage.upload(&file, &content_type, &cancelled).await {
-                Ok(()) => Ok(file),
-                Err(FilePublicationFailure::SafeToRemove(error)) => {
-                    files.remove(&file.id).await?;
-                    Err(error)
-                }
-                Err(FilePublicationFailure::Indeterminate(error)) => Err(error.into()),
-            }
-        })
-        .await?
+        let mut upload = self.begin_file_upload(filename, content_type)?;
+        upload.write(&bytes).await?;
+        upload.finish(purpose, None).await
     }
 
     /// # Errors
     /// Returns pagination validation or storage errors.
     pub async fn list_files(&self, params: &ListParams) -> Result<ListResponse<FileObject>, FileSearchError> {
-        validate_list(params)?;
+        let mut params = params.clone();
+        params.limit = Some(params.limit.unwrap_or(10000));
+        validate_pagination(&params, 10000)?;
+        if let Some(purpose) = &params.purpose {
+            files::validate_purpose(purpose)?;
+        }
         Ok(page(
-            self.storage.list(Collection::Files, None, params).await?,
-            params,
+            self.storage.list(Collection::Files, None, &params).await?,
+            &params,
             |file: &FileObject| &file.id,
         ))
     }
@@ -236,12 +203,10 @@ impl FileSearchService {
         // even if the caller disconnects. A failed SQL commit retains the blob.
         tokio::spawn(async move {
             let _permit = permit;
-            let file = storage.file(&id).await?;
-            storage.delete(Collection::Files, &id, None).await?;
-            if file.content_base64.is_empty() {
-                files.remove(&id).await?;
-            }
-            Ok(deleted(&id, "file.deleted"))
+            storage.delete_file(&id).await?;
+            files.remove(&id).await?;
+            storage.acknowledge_blob_cleanup(&id).await?;
+            Ok(deleted(&id, "file"))
         })
         .await?
     }
@@ -258,7 +223,7 @@ impl FileSearchService {
             let id = id.to_owned();
             return tokio::spawn(async move {
                 let _permit = permit;
-                files.read(&id, expected_bytes, MAX_FILE_BYTES).await
+                files.read(&id, expected_bytes, MAX_INGESTION_BYTES).await
             })
             .await?;
         }
@@ -739,6 +704,8 @@ impl FileSearchService {
         if prepare_context {
             data = self.prepare_context(data, permit).await?;
         }
+        let visible = self.storage.visible_result_files(store_ids, &data).await?;
+        data.retain(|result| visible.contains(&result.file_id));
         Ok(SearchResponse {
             object: "vector_store.search_results.page".into(),
             search_query: queries,
@@ -761,7 +728,7 @@ fn deleted(id: &str, object: &str) -> DeleteObject {
     }
 }
 fn decode_content(encoded: &str) -> Result<Vec<u8>, FileSearchError> {
-    if encoded.len() > MAX_FILE_BYTES.div_ceil(3) * 4 {
+    if encoded.len() > MAX_INGESTION_BYTES.div_ceil(3) * 4 {
         return Err(FileSearchError::Unavailable(
             "Stored file exceeds the file size limit".into(),
         ));
@@ -771,8 +738,14 @@ fn decode_content(encoded: &str) -> Result<Vec<u8>, FileSearchError> {
         .map_err(|_| FileSearchError::Unavailable("Stored file content could not be decoded".into()))
 }
 fn validate_list(params: &ListParams) -> Result<(), FileSearchError> {
-    if !(1..=100).contains(&params.limit.unwrap_or(20)) {
-        return invalid("limit must be between 1 and 100");
+    if params.purpose.is_some() {
+        return invalid("purpose applies only to Files lists");
+    }
+    validate_pagination(params, 100)
+}
+fn validate_pagination(params: &ListParams, maximum: usize) -> Result<(), FileSearchError> {
+    if !(1..=maximum).contains(&params.limit.unwrap_or(20)) {
+        return invalid(&format!("limit must be between 1 and {maximum}"));
     }
     if params.after.is_some() && params.before.is_some() {
         return invalid("provide only one of after and before");
@@ -876,6 +849,15 @@ mod local_file_tests {
 
     #[test]
     fn cancelled_local_read_retains_capacity_until_filesystem_io_finishes() {
+        cancelled_read_retains_capacity(false);
+    }
+
+    #[test]
+    fn cancelled_streaming_download_retains_capacity_until_filesystem_io_finishes() {
+        cancelled_read_retains_capacity(true);
+    }
+
+    fn cancelled_read_retains_capacity(streaming: bool) {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .max_blocking_threads(1)
@@ -906,8 +888,17 @@ mod local_file_tests {
                 resume_receiver.recv().unwrap();
             });
             waiting.await.unwrap();
-            let mut read =
-                Box::pin(service.read_content(&file.id, file.bytes, String::new(), service.permit().unwrap()));
+            let mut read: std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), FileSearchError>>>> =
+                if streaming {
+                    Box::pin(async { service.download_file(&file.id).await.map(|_| ()) })
+                } else {
+                    Box::pin(async {
+                        service
+                            .read_content(&file.id, file.bytes, String::new(), service.permit().unwrap())
+                            .await
+                            .map(|_| ())
+                    })
+                };
             assert!(
                 tokio::time::timeout(std::time::Duration::from_millis(20), &mut read)
                     .await

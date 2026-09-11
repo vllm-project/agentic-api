@@ -108,12 +108,117 @@ impl FileSearchStorage {
         Ok(())
     }
 
+    async fn file_visibility(&self) -> Result<String, FileSearchError> {
+        let mut connection = self.pool.acquire().await?;
+        let now = database_now(&mut connection).await?;
+        Ok(format!("(expires_at IS NULL OR expires_at > {now})"))
+    }
+
+    pub(crate) async fn delete_file(&self, id: &str) -> Result<(), FileSearchError> {
+        let mut tx = self.pool.begin().await?;
+        let changed = sqlx::query("UPDATE file_search_files SET id = id WHERE id = $1")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected();
+        if changed == 0 {
+            return Err(FileSearchError::NotFound("File not found".into()));
+        }
+        delete_file_in_transaction(&mut tx, id).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub(crate) async fn expire_files(&self, limit: usize) -> Result<(), FileSearchError> {
+        let mut tx = self.pool.begin().await?;
+        let now = database_now(&mut tx).await?;
+        let ids: Vec<String> = sqlx::query_scalar(
+            "SELECT id FROM file_search_files WHERE expires_at <= $1 ORDER BY expires_at, id LIMIT $2",
+        )
+        .bind(now)
+        .bind(i64::try_from(limit).unwrap_or(1000))
+        .fetch_all(&mut *tx)
+        .await?;
+        for id in ids {
+            let locked = sqlx::query("UPDATE file_search_files SET id = id WHERE id = $1")
+                .bind(&id)
+                .execute(&mut *tx)
+                .await?
+                .rows_affected();
+            if locked == 0 {
+                continue;
+            }
+            let now = database_now(&mut tx).await?;
+            let due: Option<String> =
+                sqlx::query_scalar("SELECT id FROM file_search_files WHERE id = $1 AND expires_at <= $2")
+                    .bind(&id)
+                    .bind(now)
+                    .fetch_optional(&mut *tx)
+                    .await?;
+            if due.is_some() {
+                delete_file_in_transaction(&mut tx, &id).await?;
+            }
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub(crate) async fn pending_blob_cleanup(&self, limit: usize) -> Result<Vec<String>, FileSearchError> {
+        Ok(
+            sqlx::query_scalar("SELECT file_id FROM file_search_blob_cleanup ORDER BY file_id LIMIT $1")
+                .bind(i64::try_from(limit).unwrap_or(1000))
+                .fetch_all(self.pool.as_ref())
+                .await?,
+        )
+    }
+
+    pub(crate) async fn acknowledge_blob_cleanup(&self, id: &str) -> Result<(), FileSearchError> {
+        sqlx::query("DELETE FROM file_search_blob_cleanup WHERE file_id = $1")
+            .bind(id)
+            .execute(self.pool.as_ref())
+            .await?;
+        Ok(())
+    }
+
+    pub(crate) async fn visible_result_files(
+        &self,
+        stores: &[String],
+        results: &[crate::types::file_search::SearchResult],
+    ) -> Result<std::collections::HashSet<String>, FileSearchError> {
+        if results.is_empty() {
+            return Ok(std::collections::HashSet::new());
+        }
+        let store_placeholders = (1..=stores.len())
+            .map(|index| format!("${index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let file_placeholders = (stores.len() + 1..=stores.len() + results.len())
+            .map(|index| format!("${index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT DISTINCT file_id FROM file_search_attachments WHERE store_id IN ({store_placeholders}) AND file_id IN ({file_placeholders}) AND file_id IN (SELECT id FROM file_search_files WHERE {})",
+            self.file_visibility().await?
+        );
+        let mut query = sqlx::query_scalar::<_, String>(&sql);
+        for store in stores {
+            query = query.bind(store);
+        }
+        for result in results {
+            query = query.bind(&result.file_id);
+        }
+        Ok(query.fetch_all(self.pool.as_ref()).await?.into_iter().collect())
+    }
+
     pub(crate) async fn has_chunks(&self, stores: &[String]) -> Result<bool, FileSearchError> {
         let placeholders = (1..=stores.len())
             .map(|index| format!("${index}"))
             .collect::<Vec<_>>()
             .join(", ");
-        let sql = format!("SELECT chunk_index FROM file_search_chunks WHERE store_id IN ({placeholders}) LIMIT 1");
+        let visibility = self.file_visibility().await?;
+        let sql = format!(
+            "SELECT chunk_index FROM file_search_chunks WHERE store_id IN ({placeholders}) AND file_id IN (SELECT id FROM file_search_files WHERE {visibility}) LIMIT 1"
+        );
         let mut query = sqlx::query_scalar::<_, i64>(&sql);
         for store in stores {
             query = query.bind(store);
@@ -151,8 +256,8 @@ impl FileSearchStorage {
             () = cancelled.cancelled() => return Err(FilePublicationFailure::SafeToRemove(super::local_files::cancelled_error())),
             result = self.pool.begin() => result.map_err(|error| FilePublicationFailure::SafeToRemove(error.into()))?,
         };
-        let query = sqlx::query("INSERT INTO file_search_files (id, created_at, data, content_type, content_base64) VALUES ($1, $2, $3, $4, '')")
-            .bind(&file.id).bind(file.created_at).bind(data).bind(content_type);
+        let query = sqlx::query("INSERT INTO file_search_files (id, created_at, data, content_type, content_base64, expires_at, purpose) VALUES ($1, $2, $3, $4, '', $5, $6)")
+            .bind(&file.id).bind(file.created_at).bind(data).bind(content_type).bind(file.expires_at).bind(&file.purpose);
         let inserted = tokio::select! {
             biased;
             () = cancelled.cancelled() => Err(super::local_files::cancelled_error()),
@@ -177,19 +282,25 @@ impl FileSearchStorage {
     }
 
     pub(crate) async fn file(&self, id: &str) -> Result<UploadedFile, FileSearchError> {
-        sqlx::query_as("SELECT data, content_type, content_base64 FROM file_search_files WHERE id = $1")
-            .bind(id)
-            .fetch_optional(self.pool.as_ref())
-            .await?
-            .ok_or_else(|| FileSearchError::NotFound("File not found".into()))
+        sqlx::query_as(&format!(
+            "SELECT data, content_type, content_base64 FROM file_search_files WHERE id = $1 AND {}",
+            self.file_visibility().await?
+        ))
+        .bind(id)
+        .fetch_optional(self.pool.as_ref())
+        .await?
+        .ok_or_else(|| FileSearchError::NotFound("File not found".into()))
     }
 
     pub(crate) async fn file_object(&self, id: &str) -> Result<FileObject, FileSearchError> {
-        let data: String = sqlx::query_scalar("SELECT data FROM file_search_files WHERE id = $1")
-            .bind(id)
-            .fetch_optional(self.pool.as_ref())
-            .await?
-            .ok_or_else(|| FileSearchError::NotFound("File not found".into()))?;
+        let data: String = sqlx::query_scalar(&format!(
+            "SELECT data FROM file_search_files WHERE id = $1 AND {}",
+            self.file_visibility().await?
+        ))
+        .bind(id)
+        .fetch_optional(self.pool.as_ref())
+        .await?
+        .ok_or_else(|| FileSearchError::NotFound("File not found".into()))?;
         Ok(serde_json::from_str(&data)?)
     }
 
@@ -204,7 +315,7 @@ impl FileSearchStorage {
     pub(crate) async fn store_object(&self, id: &str) -> Result<VectorStoreObject, FileSearchError> {
         let row = self.store(id).await?;
         let mut store: VectorStoreObject = serde_json::from_str(&row.data)?;
-        let (count, bytes): (i64, i64) = sqlx::query_as("SELECT COUNT(*), CAST(COALESCE(SUM(usage_bytes), 0) AS BIGINT) FROM file_search_attachments WHERE store_id = $1")
+        let (count, bytes): (i64, i64) = sqlx::query_as(&format!("SELECT COUNT(*), CAST(COALESCE(SUM(usage_bytes), 0) AS BIGINT) FROM file_search_attachments WHERE store_id = $1 AND file_id IN (SELECT id FROM file_search_files WHERE {})", self.file_visibility().await?))
             .bind(id).fetch_one(self.pool.as_ref()).await?;
         store.file_counts.completed = count;
         store.file_counts.total = count;
@@ -258,7 +369,7 @@ impl FileSearchStorage {
         file_id: &str,
     ) -> Result<Option<VectorStoreFileObject>, FileSearchError> {
         let data: Option<String> =
-            sqlx::query_scalar("SELECT data FROM file_search_attachments WHERE store_id = $1 AND file_id = $2")
+            sqlx::query_scalar(&format!("SELECT data FROM file_search_attachments WHERE store_id = $1 AND file_id = $2 AND file_id IN (SELECT id FROM file_search_files WHERE {})", self.file_visibility().await?))
                 .bind(store_id)
                 .bind(file_id)
                 .fetch_optional(self.pool.as_ref())
@@ -326,6 +437,21 @@ impl FileSearchStorage {
             "DESC"
         };
         let filter = if store_id.is_some() { " AND store_id = $4" } else { "" };
+        let visibility = self.file_visibility().await?;
+        let filter = match collection {
+            Collection::Files => format!(
+                "{filter} AND {visibility} AND ($4 = '' OR purpose = $4 OR (purpose IS NULL AND {purpose_json} = $4))",
+                purpose_json = if self.pool.acquire().await?.backend_name() == "PostgreSQL" {
+                    "data::jsonb ->> 'purpose'"
+                } else {
+                    "json_extract(data, '$.purpose')"
+                }
+            ),
+            Collection::Attachments => {
+                format!("{filter} AND file_id IN (SELECT id FROM file_search_files WHERE {visibility})")
+            }
+            Collection::Stores => filter.to_owned(),
+        };
         let sql = format!(
             "SELECT data FROM {table} WHERE ($1 = '' OR created_at {operator} $2 OR (created_at = $2 AND {id} {operator} $1)){filter} ORDER BY created_at {order}, {id} {order} LIMIT $3",
             table = collection.table(),
@@ -336,6 +462,9 @@ impl FileSearchStorage {
         let mut query = sqlx::query_scalar(&sql).bind(cursor).bind(created).bind(limit);
         if let Some(store_id) = store_id {
             query = query.bind(store_id);
+        }
+        if matches!(collection, Collection::Files) {
+            query = query.bind(params.purpose.as_deref().unwrap_or(""));
         }
         let rows: Vec<String> = query.fetch_all(self.pool.as_ref()).await?;
         rows.iter()
@@ -350,8 +479,9 @@ impl FileSearchStorage {
             .map(|index| format!("${index}"))
             .collect::<Vec<_>>()
             .join(", ");
+        let visibility = self.file_visibility().await?;
         let sql = format!(
-            "SELECT data FROM file_search_chunks WHERE store_id IN ({placeholders}) ORDER BY store_id, file_id, chunk_index"
+            "SELECT data FROM file_search_chunks WHERE store_id IN ({placeholders}) AND file_id IN (SELECT id FROM file_search_files WHERE {visibility}) ORDER BY store_id, file_id, chunk_index"
         );
         let mut query = sqlx::query_scalar::<_, String>(&sql);
         for id in store_ids {
@@ -373,6 +503,26 @@ impl FileSearchStorage {
         }
         Ok(chunks)
     }
+}
+
+/// Database wall clock, refreshed after contended writes rather than transaction start.
+pub(crate) async fn database_now(connection: &mut sqlx::AnyConnection) -> Result<i64, FileSearchError> {
+    let sql = if connection.backend_name() == "PostgreSQL" {
+        "SELECT CAST(FLOOR(EXTRACT(EPOCH FROM clock_timestamp())) AS BIGINT)"
+    } else {
+        "SELECT CAST(strftime('%s', 'now') AS BIGINT)"
+    };
+    Ok(sqlx::query_scalar(sql).fetch_one(connection).await?)
+}
+
+async fn delete_file_in_transaction(tx: &mut DbTransaction<'_>, id: &str) -> Result<(), FileSearchError> {
+    sqlx::query("INSERT INTO file_search_blob_cleanup (file_id) SELECT id FROM file_search_files WHERE id = $1 AND content_base64 = '' ON CONFLICT (file_id) DO NOTHING")
+        .bind(id).execute(&mut **tx).await?;
+    sqlx::query("DELETE FROM file_search_files WHERE id = $1")
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
 }
 
 fn validate_capacity(bytes: i64, chunks: i64) -> Result<(), FileSearchError> {
@@ -409,6 +559,15 @@ async fn publish_attachment(
     chunks: &[String],
     storage_bytes: i64,
 ) -> Result<(), FileSearchError> {
+    let file_id = &attachment.object.id;
+    let locked = sqlx::query("UPDATE file_search_files SET id = id WHERE id = $1")
+        .bind(file_id)
+        .execute(&mut **tx)
+        .await?
+        .rows_affected();
+    if locked != 1 {
+        return Err(FileSearchError::NotFound("File was deleted during ingestion".into()));
+    }
     // The conditional write serializes concurrent ingestions and establishes the
     // model dimension exactly once; no network work takes place in this transaction.
     let changed = sqlx::query("UPDATE file_search_stores SET embedding_dimensions = $1 WHERE id = $2 AND embedding_identity = $3 AND (embedding_dimensions = 0 OR embedding_dimensions = $1)")
@@ -417,6 +576,19 @@ async fn publish_attachment(
         return Err(FileSearchError::Conflict(
             "Vector store embedding configuration changed or the vector store was deleted".into(),
         ));
+    }
+    // The store guard can wait past the source deadline even while we own the
+    // file row lock. Refresh wall time after both contended parent writes.
+    let now = database_now(&mut *tx).await?;
+    let live: Option<String> = sqlx::query_scalar(
+        "SELECT id FROM file_search_files WHERE id = $1 AND (expires_at IS NULL OR expires_at > $2)",
+    )
+    .bind(file_id)
+    .bind(now)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if live.is_none() {
+        return Err(FileSearchError::NotFound("File expired during ingestion".into()));
     }
     let bytes: i64 = sqlx::query_scalar(
         "SELECT CAST(COALESCE(SUM(storage_bytes), 0) AS BIGINT) FROM file_search_attachments WHERE store_id = $1",

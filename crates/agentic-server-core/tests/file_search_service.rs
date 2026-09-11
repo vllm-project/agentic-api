@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 struct TestService {
     service: FileSearchService,
-    _files: tempfile::TempDir,
+    files: tempfile::TempDir,
 }
 
 impl std::ops::Deref for TestService {
@@ -28,7 +28,7 @@ async fn service() -> TestService {
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
     let files = tempfile::tempdir().unwrap();
     let service = FileSearchService::new(pool, Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
-    TestService { service, _files: files }
+    TestService { service, files }
 }
 
 fn query(text: &str) -> SearchRequest {
@@ -175,6 +175,7 @@ async fn local_files_preserve_legacy_database_content() {
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
     let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
     let file = FileObject {
+        expires_at: None,
         id: format!("file-{}", uuid::Uuid::now_v7()),
         object: "file".into(),
         bytes: 11,
@@ -186,6 +187,9 @@ async fn local_files_preserve_legacy_database_content() {
     sqlx::query("INSERT INTO file_search_files (id, created_at, data, content_type, content_base64) VALUES ($1, 0, $2, 'text/plain', $3)")
         .bind(&file.id).bind(serde_json::to_string(&file).unwrap()).bind(base64::engine::general_purpose::STANDARD.encode(b"legacy reef")).execute(pool.as_ref()).await.unwrap();
     assert_eq!(service.file_content(&file.id).await.unwrap(), b"legacy reef");
+    let download = service.download_file(&file.id).await.unwrap();
+    let chunks: Vec<_> = futures::TryStreamExt::try_collect(download).await.unwrap();
+    assert_eq!(chunks.concat(), b"legacy reef");
     let store = service
         .create_vector_store(CreateVectorStoreRequest::default())
         .await
@@ -335,6 +339,7 @@ async fn before_pagination_returns_adjacent_files_stores_and_attachments() {
             before: Some(id.clone()),
             order: Some(order),
             after: None,
+            purpose: None,
         };
         let page = service.list_files(&before(&file_ids[5])).await.unwrap();
         assert!(page.has_more);
@@ -725,11 +730,13 @@ enum ProviderMode {
     WrongDimensions,
     Fail,
     Wait,
+    Pause,
 }
 #[derive(Clone)]
 struct ProviderState {
     mode: Arc<std::sync::Mutex<ProviderMode>>,
     started: Arc<tokio::sync::Notify>,
+    resume: Arc<tokio::sync::Notify>,
 }
 #[derive(serde::Deserialize)]
 struct EmbeddingInput {
@@ -745,6 +752,10 @@ async fn provider(
     if matches!(mode, ProviderMode::Wait) {
         state.started.notify_one();
         std::future::pending::<()>().await;
+    }
+    if matches!(mode, ProviderMode::Pause) {
+        state.started.notify_one();
+        state.resume.notified().await;
     }
     if matches!(mode, ProviderMode::Fail) {
         return (
@@ -772,6 +783,7 @@ async fn embedding_service() -> (
     let state = ProviderState {
         mode: Arc::new(std::sync::Mutex::new(ProviderMode::Good)),
         started: Arc::new(tokio::sync::Notify::new()),
+        resume: Arc::new(tokio::sync::Notify::new()),
     };
     let app = axum::Router::new()
         .route("/v1/embeddings", axum::routing::post(provider))
@@ -791,7 +803,7 @@ async fn embedding_service() -> (
     };
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
     let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), config.clone()).unwrap();
-    (TestService { service, _files: files }, state, task, pool, config)
+    (TestService { service, files }, state, task, pool, config)
 }
 
 #[tokio::test]
@@ -1532,6 +1544,32 @@ async fn postgres_pgvector_indexed_semantics_restart_filters_and_deletion() {
             .file_id,
         coral.id
     );
+    sqlx::query("UPDATE file_search_files SET expires_at = 1 WHERE id = $1")
+        .bind(&coral.id)
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    for mode in [SearchMode::Keyword, SearchMode::Semantic, SearchMode::Hybrid] {
+        let expired_query = SearchRequest {
+            query: SearchQuery::Text("coral".into()),
+            search_mode: Some(mode),
+            ..query.clone()
+        };
+        assert!(
+            restarted
+                .search(std::slice::from_ref(&store.id), &expired_query)
+                .await
+                .unwrap()
+                .data
+                .iter()
+                .all(|result| result.file_id != coral.id)
+        );
+    }
+    sqlx::query("UPDATE file_search_files SET expires_at = NULL WHERE id = $1")
+        .bind(&coral.id)
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
     restarted.detach_file(&store.id, &coral.id).await.unwrap();
     assert!(
         restarted
@@ -1933,4 +1971,356 @@ async fn assert_established_ivfflat_search_ignores_initialization_lock(
         assert!(!result.unwrap().unwrap().data.is_empty());
     }
     blocker.rollback().await.unwrap();
+}
+
+#[tokio::test]
+async fn expired_uploads_are_hidden_and_cleanup_replays_durable_intents() {
+    expiration_cleanup_contract("sqlite::memory:").await;
+}
+
+#[tokio::test]
+#[ignore = "requires isolated TEST_POSTGRES_URL"]
+async fn postgres_expired_uploads_cleanup_replays_durable_intents() {
+    expiration_cleanup_contract(&std::env::var("TEST_POSTGRES_URL").unwrap()).await;
+}
+
+async fn expiration_cleanup_contract(url: &str) {
+    let files = tempfile::tempdir().unwrap();
+    let pool = create_pool_with_schema(Some(url)).await.unwrap();
+    let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
+    let file = service
+        .upload_file(
+            "expire.txt",
+            "text/plain",
+            "assistants",
+            b"expiration visibility".to_vec(),
+        )
+        .await
+        .unwrap();
+    let retained = service
+        .upload_file("retained.txt", "text/plain", "assistants", b"retained".to_vec())
+        .await
+        .unwrap();
+    let store = service
+        .create_vector_store(CreateVectorStoreRequest {
+            file_ids: vec![file.id.clone()],
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    sqlx::query("UPDATE file_search_files SET expires_at = 1 WHERE id = $1")
+        .bind(&file.id)
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    assert_eq!(service.get_file(&file.id).await.unwrap_err().status_code(), 404);
+    assert_eq!(service.file_content(&file.id).await.unwrap_err().status_code(), 404);
+    assert!(
+        !service
+            .list_files(&ListParams::default())
+            .await
+            .unwrap()
+            .data
+            .iter()
+            .any(|item| item.id == file.id)
+    );
+    assert!(
+        service
+            .list_vector_store_files(&store.id, &ListParams::default())
+            .await
+            .unwrap()
+            .data
+            .is_empty()
+    );
+    assert!(
+        service
+            .search(std::slice::from_ref(&store.id), &query("expiration"))
+            .await
+            .unwrap()
+            .data
+            .is_empty()
+    );
+    assert_eq!(
+        service
+            .get_vector_store_file(&store.id, &file.id)
+            .await
+            .unwrap_err()
+            .status_code(),
+        404
+    );
+    // A cleanup failure after SQL commit must preserve durable intent for restart.
+    let blob = files.path().join(&file.id);
+    std::fs::remove_file(&blob).unwrap();
+    std::fs::create_dir(&blob).unwrap();
+    assert!(service.cleanup_expired_files(100).await.is_err());
+    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_blob_cleanup")
+        .fetch_one(pool.as_ref())
+        .await
+        .unwrap();
+    assert_eq!(pending, 1);
+    std::fs::remove_dir(&blob).unwrap();
+    assert_eq!(service.cleanup_expired_files(100).await.unwrap(), 1);
+    assert_eq!(service.cleanup_expired_files(100).await.unwrap(), 0);
+    assert_eq!(service.file_content(&retained.id).await.unwrap(), b"retained");
+    service.delete_file(&retained.id).await.unwrap();
+    service.delete_vector_store(&store.id).await.unwrap();
+}
+
+#[tokio::test]
+async fn dropped_streaming_upload_never_publishes_metadata_or_leaks_staging() {
+    let files = tempfile::tempdir().unwrap();
+    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let service = FileSearchService::new(pool, Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
+    let mut upload = service
+        .begin_file_upload("cancelled.bin", "application/octet-stream")
+        .unwrap();
+    upload.write(&vec![42; 1024 * 1024]).await.unwrap();
+    drop(upload);
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            if std::fs::read_dir(files.path()).unwrap().count() == 0 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(
+        service
+            .list_files(&ListParams::default())
+            .await
+            .unwrap()
+            .data
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn streaming_upload_accepts_exact_512_mib_and_rejects_one_more_byte() {
+    use futures::TryStreamExt as _;
+    let service = service().await;
+    let mut upload = service
+        .begin_file_upload("boundary.bin", "application/octet-stream")
+        .unwrap();
+    let chunk = vec![0x6b; 64 * 1024];
+    for _ in 0..8192 {
+        upload.write(&chunk).await.unwrap();
+    }
+    let file = upload.finish("user_data", None).await.unwrap();
+    assert_eq!(file.bytes, 536_870_912);
+    assert!(
+        service.file_content(&file.id).await.is_err(),
+        "ingestion convenience read remains bounded"
+    );
+    let mut download = service.download_file(&file.id).await.unwrap();
+    let mut total = 0usize;
+    while let Some(bytes) = download.try_next().await.unwrap() {
+        assert!(bytes.len() <= 64 * 1024);
+        assert!(bytes.iter().all(|byte| *byte == 0x6b));
+        total += bytes.len();
+    }
+    assert_eq!(total, 536_870_912);
+    service.delete_file(&file.id).await.unwrap();
+    let mut upload = service
+        .begin_file_upload("oversized.bin", "application/octet-stream")
+        .unwrap();
+    for _ in 0..8192 {
+        upload.write(&chunk).await.unwrap();
+    }
+    assert!(upload.write(&[0]).await.is_err());
+    drop(upload);
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            if std::fs::read_dir(service.files.path()).unwrap().count() == 0 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn changed_download_fails_before_emitting_the_final_declared_bytes() {
+    use futures::StreamExt as _;
+    use std::io::Write as _;
+    let service = service().await;
+    let file = service
+        .upload_file(
+            "changed.bin",
+            "application/octet-stream",
+            "assistants",
+            vec![1; 1024 * 1024],
+        )
+        .await
+        .unwrap();
+    let mut download = service.download_file(&file.id).await.unwrap();
+    let mut total = download.next().await.unwrap().unwrap().len();
+    std::fs::OpenOptions::new()
+        .append(true)
+        .open(service.files.path().join(&file.id))
+        .unwrap()
+        .write_all(&[2])
+        .unwrap();
+    let mut failed = false;
+    while let Some(chunk) = download.next().await {
+        if let Ok(bytes) = chunk {
+            total += bytes.len();
+        } else {
+            failed = true;
+            break;
+        }
+    }
+    assert!(failed);
+    assert!(
+        total < 1024 * 1024,
+        "Content-Length must not be satisfied before integrity verification"
+    );
+}
+
+#[tokio::test]
+async fn file_expiration_during_embedding_prevents_publication_and_search() {
+    let (service, state, task, pool, _) = embedding_service().await;
+    let store = service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    let file = service
+        .upload_file("expire.txt", "text/plain", "assistants", b"coral reefs".to_vec())
+        .await
+        .unwrap();
+    *state.mode.lock().unwrap() = ProviderMode::Pause;
+    let worker = service.service.clone();
+    let store_id = store.id.clone();
+    let file_id = file.id.clone();
+    let ingestion = tokio::spawn(async move {
+        worker
+            .attach_file(
+                &store_id,
+                AttachFileRequest {
+                    file_id,
+                    ..Default::default()
+                },
+            )
+            .await
+    });
+    state.started.notified().await;
+    sqlx::query("UPDATE file_search_files SET expires_at = 1 WHERE id = $1")
+        .bind(&file.id)
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    state.resume.notify_one();
+    assert_eq!(ingestion.await.unwrap().unwrap_err().status_code(), 404);
+    *state.mode.lock().unwrap() = ProviderMode::Good;
+    assert!(
+        service
+            .search(&[store.id], &query("coral"))
+            .await
+            .unwrap()
+            .data
+            .is_empty()
+    );
+    task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated TEST_POSTGRES_URL"]
+async fn postgres_file_expiring_while_publication_waits_for_store_lock_is_not_attached() {
+    let pool = create_pool_with_schema(Some(&std::env::var("TEST_POSTGRES_URL").unwrap()))
+        .await
+        .unwrap();
+    let files = tempfile::tempdir().unwrap();
+    let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
+    let file = service
+        .upload_file(
+            "lock-expiry.txt",
+            "text/plain",
+            "assistants",
+            b"coral lock expiration".to_vec(),
+        )
+        .await
+        .unwrap();
+    let store = service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    let mut blocker = pool.begin().await.unwrap();
+    let blocker_pid: i64 = sqlx::query_scalar("SELECT CAST(pg_backend_pid() AS BIGINT)")
+        .fetch_one(&mut *blocker)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE file_search_stores SET embedding_dimensions = embedding_dimensions WHERE id = $1")
+        .bind(&store.id)
+        .execute(&mut *blocker)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE file_search_files SET expires_at = CAST(FLOOR(EXTRACT(EPOCH FROM clock_timestamp())) AS BIGINT) + 2 WHERE id = $1").bind(&file.id).execute(pool.as_ref()).await.unwrap();
+    let worker = service.clone();
+    let file_id = file.id.clone();
+    let store_id = store.id.clone();
+    let publication = tokio::spawn(async move {
+        worker
+            .attach_file(
+                &store_id,
+                AttachFileRequest {
+                    file_id,
+                    ..Default::default()
+                },
+            )
+            .await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            let waiting_on_store: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND CAST($1 AS INTEGER) = ANY(pg_blocking_pids(pid)))")
+                .bind(blocker_pid).fetch_one(pool.as_ref()).await.unwrap();
+            if waiting_on_store { break; }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }).await.expect("publication must reach the contended store row before expiry");
+    let still_live: bool = sqlx::query_scalar(
+        "SELECT expires_at > EXTRACT(EPOCH FROM clock_timestamp()) FROM file_search_files WHERE id = $1",
+    )
+    .bind(&file.id)
+    .fetch_one(pool.as_ref())
+    .await
+    .unwrap();
+    assert!(
+        still_live,
+        "publication must be observed blocked while its source file is still live"
+    );
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            let expired: bool = sqlx::query_scalar(
+                "SELECT expires_at <= EXTRACT(EPOCH FROM clock_timestamp()) FROM file_search_files WHERE id = $1",
+            )
+            .bind(&file.id)
+            .fetch_one(pool.as_ref())
+            .await
+            .unwrap();
+            if expired {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    blocker.commit().await.unwrap();
+    let result = publication.await.unwrap();
+    let chunks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_chunks WHERE store_id = $1")
+        .bind(&store.id)
+        .fetch_one(pool.as_ref())
+        .await
+        .unwrap();
+    // Clean up before asserting, including on the red run.
+    service.delete_vector_store(&store.id).await.unwrap();
+    service.delete_file(&file.id).await.unwrap();
+    assert!(
+        matches!(result, Err(FileSearchError::NotFound(_))),
+        "publication after file expiration must fail: {result:?}"
+    );
+    assert_eq!(chunks, 0);
 }

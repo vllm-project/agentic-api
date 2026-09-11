@@ -343,6 +343,22 @@ pub struct SearchContent {
     pub text: String,
 }
 
+/// Files expiration policy measured from creation.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct FileExpiresAfter {
+    pub anchor: FileExpirationAnchor,
+    pub seconds: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum FileExpirationAnchor {
+    CreatedAt,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct FileObject {
@@ -352,6 +368,8 @@ pub struct FileObject {
     pub created_at: i64,
     pub filename: String,
     pub purpose: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<i64>,
     pub status: String,
 }
 
@@ -535,6 +553,7 @@ pub enum ListOrder {
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ListParams {
+    pub purpose: Option<String>,
     pub limit: Option<usize>,
     pub after: Option<String>,
     pub before: Option<String>,

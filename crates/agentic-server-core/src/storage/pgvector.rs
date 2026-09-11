@@ -194,7 +194,7 @@ impl PgvectorStorage {
                     }
                     sql.push_bind(store);
                 }
-                sql.push(")");
+                sql.push(") AND file_id IN (SELECT id FROM file_search_files WHERE expires_at IS NULL OR expires_at > EXTRACT(EPOCH FROM clock_timestamp()))");
                 if let Some(filter) = filter {
                     sql.push(" AND ");
                     push_filter(&mut sql, filter)?;

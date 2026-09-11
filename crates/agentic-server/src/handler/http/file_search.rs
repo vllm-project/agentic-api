@@ -4,15 +4,18 @@ use agentic_core::executor::ExecutorError;
 use agentic_core::tool::ToolError;
 use agentic_core::tool::file_search::{FileSearchService, MAX_FILE_BYTES};
 use agentic_core::types::file_search::{
-    AttachFileRequest, CreateVectorStoreRequest, FileSearchError, ListParams, SearchRequest,
+    AttachFileRequest, CreateVectorStoreRequest, FileExpirationAnchor, FileExpiresAfter, FileSearchError, ListParams,
+    SearchRequest,
 };
-use axum::extract::multipart::MultipartRejection;
+#[path = "multipart_limits.rs"]
+mod multipart_limits;
 use axum::extract::rejection::{JsonRejection, QueryRejection};
-use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
+use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use http::{StatusCode, header};
+use multipart_limits::BoundedMultipart;
 use serde::Serialize;
 
 use crate::app::AppState;
@@ -93,69 +96,112 @@ fn query(params: Result<Query<ListParams>, QueryRejection>) -> Result<ListParams
 ))]
 pub(crate) async fn upload_file(
     State(state): State<AppState>,
-    multipart: Result<Multipart, MultipartRejection>,
+    multipart: Result<BoundedMultipart, Response>,
 ) -> Response {
     let search = match service(&state) {
         Ok(service) => service,
         Err(error) => return *error,
     };
-    let Ok(mut multipart) = multipart else {
-        return invalid("Expected multipart/form-data with file and purpose fields");
+    let mut multipart = match multipart {
+        Ok(BoundedMultipart(multipart)) => multipart,
+        Err(rejection) => return rejection,
     };
     let mut purpose = None;
+    let mut anchor = None;
+    let mut seconds = None;
     let mut uploaded = None;
     loop {
-        let field = match multipart.next_field().await {
+        let mut field = match multipart.next_field().await {
             Ok(Some(field)) => field,
             Ok(None) => break,
             Err(failure) => return multipart_error(&failure),
         };
         match field.name() {
-            Some("purpose") if purpose.is_none() => {
-                let value = match field.text().await {
-                    Ok(value) => value,
-                    Err(failure) => return multipart_error(&failure),
+            Some("purpose" | "expires_after[anchor]" | "expires_after[seconds]") => {
+                let name = field.name().unwrap_or_default().to_owned();
+                let slot = match name.as_str() {
+                    "purpose" => &mut purpose,
+                    "expires_after[anchor]" => &mut anchor,
+                    _ => &mut seconds,
                 };
-                if value.len() > 32 {
-                    return invalid("Invalid file purpose");
+                if slot.is_some() {
+                    return invalid("Duplicate multipart field");
                 }
-                purpose = Some(value);
-            }
-            Some("file") if uploaded.is_none() => {
-                let Some(filename) = field.file_name().map(str::to_owned) else {
-                    return invalid("File field requires a filename");
-                };
-                let content_type = field.content_type().unwrap_or("application/octet-stream").to_owned();
-                let mut field = field;
-                let mut bytes = Vec::new();
+                let mut value = Vec::new();
                 loop {
                     match field.chunk().await {
                         Ok(Some(chunk)) => {
-                            if bytes.len().saturating_add(chunk.len()) > MAX_FILE_BYTES {
-                                return executor_error_response(ExecutorError::PayloadTooLarge(
-                                    "File exceeds 20 MiB".into(),
-                                ));
+                            if value.len().saturating_add(chunk.len()) > 32 {
+                                return invalid("Multipart scalar exceeds 32 bytes");
                             }
-                            bytes.extend_from_slice(&chunk);
+                            value.extend_from_slice(&chunk);
                         }
                         Ok(None) => break,
                         Err(failure) => return multipart_error(&failure),
                     }
                 }
-                uploaded = Some((filename, content_type, bytes));
+                let Ok(value) = String::from_utf8(value) else {
+                    return invalid("Multipart scalar must be UTF-8");
+                };
+                *slot = Some(value);
             }
-            _ => return invalid("Expected exactly one file and one purpose field"),
+            Some("file") if uploaded.is_none() => {
+                let Some(filename) = field.file_name() else {
+                    return invalid("File field requires a filename");
+                };
+                let mut upload = match search
+                    .begin_file_upload(filename, field.content_type().unwrap_or("application/octet-stream"))
+                {
+                    Ok(upload) => upload,
+                    Err(failure) => return error(failure),
+                };
+                let mut size = 0usize;
+                loop {
+                    match field.chunk().await {
+                        Ok(Some(chunk)) => {
+                            size = size.saturating_add(chunk.len());
+                            if size > MAX_FILE_BYTES {
+                                return executor_error_response(ExecutorError::PayloadTooLarge(
+                                    "File exceeds 512 MiB".into(),
+                                ));
+                            }
+                            if let Err(failure) = upload.write(&chunk).await {
+                                return error(failure);
+                            }
+                        }
+                        Ok(None) => break,
+                        Err(failure) => return multipart_error(&failure),
+                    }
+                }
+                uploaded = Some(upload);
+            }
+            _ => return invalid("Expected one file, one purpose, and optional expires_after fields"),
         }
     }
-    let (Some(purpose), Some((filename, content_type, bytes))) = (purpose, uploaded) else {
+    let (Some(purpose), Some(upload)) = (purpose, uploaded) else {
         return invalid("Both file and purpose are required");
     };
-    result(search.upload_file(&filename, &content_type, &purpose, bytes).await)
+    let expires = match (anchor, seconds) {
+        (None, None) => None,
+        (Some(anchor), Some(seconds)) if anchor == "created_at" => {
+            let Ok(seconds) = seconds.parse::<u32>() else {
+                return invalid("expires_after.seconds must be an integer");
+            };
+            Some(FileExpiresAfter {
+                anchor: FileExpirationAnchor::CreatedAt,
+                seconds,
+            })
+        }
+        _ => return invalid("expires_after requires anchor=created_at and seconds"),
+    };
+    result(upload.finish(&purpose, expires).await)
 }
 
 fn multipart_error(failure: &axum::extract::multipart::MultipartError) -> Response {
-    if failure.status() == StatusCode::PAYLOAD_TOO_LARGE {
-        executor_error_response(ExecutorError::PayloadTooLarge("Upload exceeds 20 MiB".into()))
+    if multipart_limits::is_framing_limit(failure) {
+        executor_error_response(ExecutorError::PayloadTooLarge("Multipart framing exceeds 8 KiB".into()))
+    } else if failure.status() == StatusCode::PAYLOAD_TOO_LARGE {
+        executor_error_response(ExecutorError::PayloadTooLarge("Upload exceeds 512 MiB".into()))
     } else {
         invalid("Malformed multipart upload")
     }
@@ -163,7 +209,7 @@ fn multipart_error(failure: &axum::extract::multipart::MultipartError) -> Respon
 
 #[cfg_attr(feature = "openapi", utoipa::path(
     get, path = "/v1/files",
-    params(("limit" = Option<usize>, Query, description = "Page size, 1 to 100"), ("after" = Option<String>, Query), ("before" = Option<String>, Query), ("order" = Option<String>, Query)),
+    params(("limit" = Option<usize>, Query, description = "Page size, 1 to 10000; defaults to 10000"), ("purpose" = Option<String>, Query), ("after" = Option<String>, Query), ("before" = Option<String>, Query), ("order" = Option<String>, Query)),
     responses((status = 200, description = "Success", body = agentic_core::types::file_search::ListResponse<agentic_core::types::file_search::FileObject>), (status = 400, description = "Invalid request", body = crate::openapi::ApiErrorResponse), (status = 404, description = "Object not found", body = crate::openapi::ApiErrorResponse)),
     security(("bearer_auth" = [])), tag = "file_search",
 ))]
@@ -207,13 +253,14 @@ pub(crate) async fn file_content(State(state): State<AppState>, Path(id): Path<S
         Ok(service) => service,
         Err(error) => return *error,
     };
-    match search.file_content(&id).await {
-        Ok(bytes) => (
+    match search.download_file(&id).await {
+        Ok(download) => (
             [
-                (header::CONTENT_TYPE, "application/octet-stream"),
-                (header::CONTENT_DISPOSITION, "attachment"),
+                (header::CONTENT_TYPE, "application/octet-stream".to_owned()),
+                (header::CONTENT_DISPOSITION, "attachment".to_owned()),
+                (header::CONTENT_LENGTH, download.bytes.to_string()),
             ],
-            bytes,
+            axum::body::Body::from_stream(download),
         )
             .into_response(),
         Err(failure) => error(failure),
