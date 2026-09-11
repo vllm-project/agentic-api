@@ -148,7 +148,27 @@ fn should_defer_stream_event(frame: &EventFrame, defer_from_output_index: Option
 }
 
 async fn emit_stream_frame(frame: &mut EventFrame, emit_ctx: &mut StreamEmitContext<'_>) -> ExecutorResult<bool> {
+    // Completed grounded text supplies authoritative offsets and annotation order.
+    if frame.event_type == SSEEventType::OutputTextAnnotationAdded
+        && frame
+            .wire
+            .rest
+            .get("annotation")
+            .and_then(|annotation| annotation.get("type"))
+            .and_then(Value::as_str)
+            == Some("file_citation")
+    {
+        return Ok(false);
+    }
     apply_context_response_ids(&mut frame.wire, emit_ctx.request);
+    for mut annotation in emit_ctx.accumulator.citation_frames(frame, emit_ctx.output_offset)? {
+        if emit_ctx
+            .accumulator
+            .process_event(&mut annotation, emit_ctx.output_offset)
+        {
+            emit_sse_frame(emit_ctx.sender, &annotation).await?;
+        }
+    }
     let emitted = emit_ctx.accumulator.process_event(frame, emit_ctx.output_offset);
     if emitted {
         emit_sse_frame(emit_ctx.sender, frame).await?;

@@ -16,9 +16,11 @@ pub(super) fn validate_store_fields(
         metadata.len() > 16
             || metadata
                 .iter()
-                .any(|(key, value)| key.is_empty() || key.len() > 64 || value.len() > 512)
+                .any(|(key, value)| key.is_empty() || key.chars().count() > 64 || value.chars().count() > 512)
     }) {
-        return invalid("metadata accepts at most 16 entries, with 1 to 64 byte keys and values up to 512 bytes");
+        return invalid(
+            "metadata accepts at most 16 entries, with 1 to 64 character keys and values up to 512 characters",
+        );
     }
     if let Some(expiration) = expiration {
         expiration.validate()?;

@@ -25,6 +25,7 @@ pub(super) struct StreamPayload {
 /// Lives for the response, preserving gateway event numbering across inference rounds.
 pub(super) struct AgentPipeline {
     pub(super) request: RequestContext,
+    response_tool_choice: crate::types::io::ToolChoice,
     tool_search_state: Option<ToolSearchState>,
     delivery: StreamDelivery,
     round: Option<RoundIngestion>,
@@ -37,11 +38,27 @@ impl AgentPipeline {
         sender: Option<Sender<StreamEvent>>,
     ) -> Self {
         Self {
+            response_tool_choice: request.enriched_request.tool_choice.clone().unwrap_or_default(),
             request,
             tool_search_state,
             delivery: StreamDelivery::new(sender),
             round: None,
         }
+    }
+
+    pub(super) fn response_tool_choice(&self) -> &crate::types::io::ToolChoice {
+        &self.response_tool_choice
+    }
+
+    pub(super) fn response_tools(&self) -> Vec<crate::types::tools::ResponsesTool> {
+        let mut tools = self.tool_search_state().filter(|state| state.is_active()).map_or_else(
+            || self.request.enriched_request.tools.clone().unwrap_or_default(),
+            ToolSearchState::public_response_tools,
+        );
+        for tool in &mut tools {
+            tool.sanitize_for_persistence();
+        }
+        tools
     }
 
     pub(super) fn tool_search_state(&self) -> Option<&ToolSearchState> {
@@ -114,6 +131,9 @@ impl AgentPipeline {
             self.request.original_request.previous_response_id.as_deref(),
             self.request.original_request.instructions.as_deref(),
         )?;
+        payload.tools = self.response_tools();
+        payload.tool_choice = self.response_tool_choice.clone();
+        payload.parallel_tool_calls = self.request.enriched_request.parallel_tool_calls.unwrap_or(false);
         self.request.inject_ids(&mut payload);
         Ok(payload)
     }

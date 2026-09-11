@@ -1381,12 +1381,13 @@ fn public_catalog_distinguishes_inactive_search_from_an_empty_active_catalog() {
             assert_eq!(tools[0]["name"], "ordinary");
         }
         let mut payload = accumulator.finalize("test", None, None);
+        payload.tools = serde_json::from_value(serde_json::json!([{"type":"function","name":"ordinary"}])).unwrap();
         dispatcher
             .finish()
             .unwrap()
             .normalize_response_payload(&mut payload)
             .unwrap();
-        assert_eq!(payload.tools.is_some(), active);
+        assert_eq!(payload.tools.is_empty(), active);
     }
 }
 

@@ -679,8 +679,8 @@ pub(crate) fn validate_attributes(attributes: &FileAttributes) -> Result<(), Fil
         return invalid("attributes accepts at most 16 keys");
     }
     for (key, value) in attributes {
-        if key.is_empty() || key.len() > 64 {
-            return invalid("attribute keys must contain 1 to 64 bytes");
+        if key.is_empty() || key.chars().count() > 64 {
+            return invalid("attribute keys must contain 1 to 64 characters");
         }
         validate_attribute_value(value)?;
     }
@@ -689,7 +689,9 @@ pub(crate) fn validate_attributes(attributes: &FileAttributes) -> Result<(), Fil
 
 fn validate_attribute_value(value: &AttributeValue) -> Result<(), FileSearchError> {
     match value {
-        AttributeValue::String(value) if value.len() > 512 => invalid("attribute values must not exceed 512 bytes"),
+        AttributeValue::String(value) if value.chars().count() > 512 => {
+            invalid("attribute values must not exceed 512 characters")
+        }
         AttributeValue::Number(value) if !value.is_finite() => invalid("attribute numbers must be finite"),
         _ => Ok(()),
     }
@@ -711,8 +713,8 @@ impl SearchFilter {
                 }
             }
             Self::Comparison(filter) => {
-                if filter.key.is_empty() || filter.key.len() > 64 {
-                    return invalid("filter keys must contain 1 to 64 bytes");
+                if filter.key.is_empty() || filter.key.chars().count() > 64 {
+                    return invalid("filter keys must contain 1 to 64 characters");
                 }
                 match (&filter.operator, &filter.value) {
                     (ComparisonOperator::In | ComparisonOperator::Nin, FilterValue::List(values))
@@ -980,4 +982,27 @@ pub struct FileBatchObject {
     pub vector_store_id: String,
     pub status: BatchStatus,
     pub file_counts: FileCounts,
+}
+
+#[cfg(test)]
+mod unicode_contract_tests {
+    use super::*;
+
+    #[test]
+    fn attribute_and_filter_limits_count_characters_without_loosening_boundaries() {
+        for (key_length, value_length, valid) in [(64, 512, true), (65, 512, false), (64, 513, false)] {
+            let key = "界".repeat(key_length);
+            let value = "文".repeat(value_length);
+            let attributes = [(key.clone(), AttributeValue::String(value.clone()))].into();
+            assert_eq!(validate_attributes(&attributes).is_ok(), valid);
+            for filter_value in [serde_json::json!(value), serde_json::json!([value])] {
+                let operator = if filter_value.is_array() { "in" } else { "eq" };
+                let request: SearchRequest = serde_json::from_value(serde_json::json!({
+                    "query":"policy", "filters":{"type":operator,"key":key,"value":filter_value}
+                }))
+                .unwrap();
+                assert_eq!(request.validate().is_ok(), valid);
+            }
+        }
+    }
 }

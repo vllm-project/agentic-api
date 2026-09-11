@@ -406,9 +406,6 @@ pub(super) fn restore_response_tools(
     let Some(response) = wire.rest.get_mut("response").and_then(Value::as_object_mut) else {
         return Ok(());
     };
-    if !response.contains_key("tools") {
-        return Ok(());
-    }
     if let Some(tools) = tools {
         response.insert(
             "tools".to_owned(),

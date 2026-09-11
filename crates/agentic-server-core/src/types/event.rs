@@ -113,3 +113,16 @@ mod tests {
         assert_eq!("unknown".parse::<MessageStatus>().unwrap(), MessageStatus::InProgress);
     }
 }
+
+/// Grounded file citation emitted before its completed output text content.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename = "response.output_text.annotation.added")]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct OutputTextFileCitationAdded {
+    pub item_id: String,
+    pub output_index: u64,
+    pub content_index: usize,
+    pub annotation_index: usize,
+    pub sequence_number: u64,
+    pub annotation: crate::types::io::FileCitation,
+}

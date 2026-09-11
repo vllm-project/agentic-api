@@ -9,6 +9,7 @@ pub struct GatewayStreamAccumulator {
     next_sequence_number: u64,
     emitted_created: bool,
     emitted_in_progress: bool,
+    citations: super::stream_citations::StreamCitations,
 }
 
 pub(super) struct StreamEvent {
@@ -28,6 +29,7 @@ impl GatewayStreamAccumulator {
             next_sequence_number: 0,
             emitted_created: false,
             emitted_in_progress: false,
+            citations: super::stream_citations::StreamCitations::default(),
         }
     }
 
@@ -50,10 +52,20 @@ impl GatewayStreamAccumulator {
         rebase_output_index(&mut frame.wire, output_offset);
     }
 
+    pub(super) fn citation_frames(&mut self, frame: &EventFrame, offset: usize) -> ExecutorResult<Vec<EventFrame>> {
+        self.citations.before_done(frame, offset)
+    }
+
     pub(crate) fn terminal_response_chunk(&mut self, payload: &ResponsePayload) -> ExecutorResult<String> {
         let mut frame = terminal_response_frame(payload)?;
+        let mut chunk = String::new();
+        for mut annotation in self.citation_frames(&frame, 0)? {
+            self.stamp_event(&mut annotation, 0);
+            chunk.push_str(&checked_stream_event(&annotation)?);
+        }
         self.stamp_event(&mut frame, 0);
-        checked_stream_event(&frame)
+        chunk.push_str(&checked_stream_event(&frame)?);
+        Ok(chunk)
     }
 
     #[cfg(test)]

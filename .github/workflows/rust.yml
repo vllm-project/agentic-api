@@ -74,16 +74,28 @@ jobs:
         run: cargo fmt --check
 
       - name: Run clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
       - name: Run tests
-        run: cargo test
+        run: cargo test --workspace --all-features --locked
 
       - name: Test Codex and Claude launcher contracts
         run: bash scripts/tests/agentic-launchers-test.sh
 
       - name: Test agentic CLI end to end
         run: python3 scripts/tests/agentic-cli-e2e-test.py
+
+      - name: Install Python for strict SDK contracts
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.13'
+
+      - name: Verify Files, Vector Stores, and file-search SDK contracts
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/file-search-sdk"
+          "${RUNNER_TEMP}/file-search-sdk/bin/pip" install 'openai==3.13.0'
+          cargo build -p agentic-server --all-features --locked
+          "${RUNNER_TEMP}/file-search-sdk/bin/python" scripts/tests/file-search-sdk-test.py target/debug/agentic-server -v
 
   postgres:
     runs-on: ubuntu-latest
@@ -129,20 +141,13 @@ jobs:
       - name: Provision pgvector extension
         run: psql "$TEST_POSTGRES_URL" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS vector"
 
-      - name: Verify PostgreSQL schema upgrades and validation
-        run: cargo test -p agentic-server-core --lib -- --ignored --test-threads=1
-
-      - name: Verify PostgreSQL migrations and restart persistence
-        run: cargo test -p agentic-server-core --test postgres_storage_integration -- --ignored --test-threads=1
-
-      - name: Verify PostgreSQL file search persistence
-        run: cargo test -p agentic-server-core --test file_search_service postgres_file_search -- --ignored --test-threads=1
-
-      - name: Verify real pgvector indexed retrieval and transactional publication
-        run: cargo test -p agentic-server-core --test file_search_service postgres_pgvector -- --ignored --test-threads=1
+      # Every ignored core test currently requires this isolated PostgreSQL service.
+      # Keep new lifecycle/runtime targets in this gate; never add paid/network tests here.
+      - name: Verify all PostgreSQL storage, retrieval, lifecycle, and worker contracts
+        run: cargo test -p agentic-server-core --all-features --locked --lib --tests -- --ignored --test-threads=1
 
       - name: Verify bounded PDF ingestion
-        run: cargo test -p agentic-server-core --features file-search-pdf --test file_search_service pdf
+        run: cargo test -p agentic-server-core --features file-search-pdf --locked --test file_search_service pdf
 
   provider-upstream:
     runs-on: ubuntu-latest

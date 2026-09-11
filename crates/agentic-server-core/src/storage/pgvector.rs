@@ -5,7 +5,10 @@ use futures::TryStreamExt;
 use std::{collections::HashSet, sync::Arc};
 use tokio::sync::OnceCell;
 
-use super::{DbPool, file_search::StoredChunk};
+use super::{
+    DbPool,
+    file_search::{ChunkRow, RetrievedChunk},
+};
 use crate::types::file_search::{
     AttributeValue, ComparisonOperator, CompoundOperator, FileSearchBackend, FileSearchError, FilterValue,
     PgvectorIndex, SearchFilter, SearchMode, invalid,
@@ -155,7 +158,7 @@ impl PgvectorStorage {
         vectors: &[Vec<f64>],
         mode: SearchMode,
         filter: Option<&SearchFilter>,
-    ) -> Result<Vec<StoredChunk>, FileSearchError> {
+    ) -> Result<Vec<RetrievedChunk>, FileSearchError> {
         self.initialize(pool).await?;
         if mode != SearchMode::Keyword && matches!(self.index, PgvectorIndex::Ivfflat { .. }) {
             self.maintain_index(pool).await?;
@@ -188,7 +191,7 @@ impl PgvectorStorage {
                     continue;
                 }
                 let mut sql = CandidateSql::new(
-                    "SELECT data FROM file_search_chunks WHERE (store_id, file_id) IN (SELECT store_id, file_id FROM file_search_attachments WHERE status = 'completed') AND store_id IN (",
+                    "SELECT store_id, file_id, chunk_index, (SELECT generation FROM file_search_attachments a WHERE a.store_id=file_search_chunks.store_id AND a.file_id=file_search_chunks.file_id) AS generation, data FROM file_search_chunks WHERE (store_id, file_id) IN (SELECT store_id, file_id FROM file_search_attachments WHERE status = 'completed') AND store_id IN (",
                 );
                 for (i, store) in stores.iter().enumerate() {
                     if i > 0 {
@@ -225,19 +228,19 @@ impl PgvectorStorage {
                         .push(")) DESC");
                 }
                 sql.push(format!(" LIMIT {}", self.limit));
-                let mut query = sqlx::query_scalar::<_, String>(&sql.text);
+                let mut query = sqlx::query_as::<_, ChunkRow>(&sql.text);
                 for value in &sql.parameters {
                     query = query.bind(value);
                 }
                 let mut rows = query.fetch(&mut *tx);
-                while let Some(data) = rows.try_next().await? {
-                    candidate_bytes = candidate_bytes.saturating_add(data.len());
+                while let Some(row) = rows.try_next().await? {
+                    candidate_bytes = candidate_bytes.saturating_add(row.data.len());
                     candidate_count += 1;
                     if candidate_bytes > 64 * 1024 * 1024 || candidate_count > 10_000 {
                         return Err(FileSearchError::Unavailable("Indexed candidate union exceeds 64 MiB or 10000 rows; reduce candidate_limit or the number of queries".into()));
                     }
-                    let chunk: StoredChunk = serde_json::from_str(&data)?;
-                    if seen.insert((chunk.file_id.clone(), chunk.text.clone())) {
+                    let chunk = row.decode()?;
+                    if seen.insert(chunk.origin.clone()) {
                         chunks.push(chunk);
                     }
                 }

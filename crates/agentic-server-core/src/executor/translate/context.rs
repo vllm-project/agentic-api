@@ -22,6 +22,7 @@ pub(in crate::executor) struct TranslationContext {
     custom_tool_map: Option<CustomToolMap>,
     response_tools: Option<Vec<ResponsesTool>>,
     response_tool_choice: Option<ToolChoice>,
+    parallel_tool_calls: Option<bool>,
 }
 
 impl std::fmt::Debug for TranslationContext {
@@ -73,6 +74,11 @@ impl TranslationContext {
         self
     }
 
+    pub(in crate::executor) fn with_parallel_tool_calls(mut self, parallel_tool_calls: bool) -> Self {
+        self.parallel_tool_calls = Some(parallel_tool_calls);
+        self
+    }
+
     pub(in crate::executor) fn with_file_search_context(mut self, input: &crate::types::io::ResponsesInput) -> Self {
         self.file_search_citations = Some(FileSearchCitations::from_input(input));
         self
@@ -86,9 +92,16 @@ impl TranslationContext {
         if self.response_tools.is_some()
             && let Some(choice) = self.response_tool_choice.as_ref()
             && let Some(response) = wire.rest.get_mut("response").and_then(serde_json::Value::as_object_mut)
-            && response.contains_key("tool_choice")
         {
             response.insert("tool_choice".to_owned(), serde_json::to_value(choice)?);
+        }
+        if let Some(parallel_tool_calls) = self.parallel_tool_calls
+            && let Some(response) = wire.rest.get_mut("response").and_then(serde_json::Value::as_object_mut)
+        {
+            response.insert(
+                "parallel_tool_calls".to_owned(),
+                serde_json::Value::Bool(parallel_tool_calls),
+            );
         }
         super::custom::CustomTranslator::restore_response_wire(wire, self.custom_tool_map.as_ref());
         let _ = super::namespace::CodexNamespaceTranslator::restore_response_wire(wire, self.namespace_map.as_ref());
@@ -96,9 +109,12 @@ impl TranslationContext {
     }
 
     pub(super) fn restore_response_metadata(&self, payload: &mut ResponsePayload) {
+        if let Some(parallel_tool_calls) = self.parallel_tool_calls {
+            payload.parallel_tool_calls = parallel_tool_calls;
+        }
         if let Some(tools) = &self.response_tools {
-            payload.tools = Some(tools.clone());
-            payload.tool_choice = Some(self.response_tool_choice.clone().unwrap_or_default());
+            payload.tools.clone_from(tools);
+            payload.tool_choice = self.response_tool_choice.clone().unwrap_or_default();
         }
     }
 

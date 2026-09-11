@@ -21,6 +21,7 @@ pub mod gateway_accumulator;
 mod pending_calls;
 mod pipeline;
 mod response_budget;
+mod stream_citations;
 mod upstream;
 
 pub use compaction::compact_response;

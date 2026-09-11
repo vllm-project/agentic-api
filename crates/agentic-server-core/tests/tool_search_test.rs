@@ -1311,12 +1311,11 @@ async fn namespace_nonstreaming_manual_flow_reuses_flattening_and_restoration() 
         .expect("loaded namespace member")
         .remove("defer_loading");
     assert_eq!(
-        serde_json::to_value(second.tools.as_ref().expect("response tools")).expect("response tools serialize"),
+        serde_json::to_value(&second.tools).expect("response tools serialize"),
         json!([available_namespace])
     );
     assert_eq!(
-        serde_json::to_value(second.tool_choice.as_ref().expect("response tool choice"))
-            .expect("response tool choice serializes"),
+        serde_json::to_value(&second.tool_choice).expect("response tool choice serializes"),
         public_choice
     );
 

@@ -111,7 +111,8 @@ embeddings exist. `file_ingestion_params.default_chunk_size_tokens` and
 800/400 behavior. Static overlap remains limited to half the chunk size.
 `file_batch_params` validates `max_concurrent_files_per_batch` (default 3, range
 1–32), `file_batch_chunk_size` (10, 1–1000), and `cleanup_interval_seconds` (86400,
-1–604800); asynchronous workers are a later layer.
+1–604800). These settings control the current
+[durable batch workers](#durable-file-batches-and-workers).
 
 ### Contextual ingestion
 
@@ -329,7 +330,12 @@ PDF ingestion is an optional build feature:
 cargo build -p agentic-server --features file-search-pdf
 ```
 
-This feature requires Rust 1.88 or newer for the parser's decompression limits.
+The locked dependency graph supports this feature on Rust 1.88; the newly added
+optional `aes` dependency is locked to 0.9.2. Use `--locked` for reproducible builds.
+The repository still declares Rust 1.85, but existing main-branch dependencies
+(`home` and ICU require 1.88; `process-wrap` requires 1.87) prevent that toolchain
+from building the current workspace. This stack does not change that policy or
+downgrade those unrelated dependencies. CI uses Rust 1.98.
 PDFs must contain extractable text; scanned PDFs require OCR before ingestion.
 Encrypted PDFs and documents exceeding parsing, decompression, or extracted-text
 limits are rejected. The default build can store and download PDFs, but returns
@@ -505,7 +511,7 @@ explicit capacity errors when limits are exceeded.
 Each store is limited to 10,000 chunks and 64 MiB of serialized chunk data,
 including embeddings; ingestion enforces these limits before publication.
 Searching multiple stores shares the same aggregate retrieval budget.
-It does not expose OGX's provider catalog or asynchronous file batches.
+Provider endpoints and credentials are deployment controlled; the HTTP API does not expose OGX's provider catalog.
 
 ### Durable file batches and workers
 
@@ -561,3 +567,93 @@ for pool acquisition/statement execution and five seconds for lock waits; SQLite
 uses a five-second busy timeout. Embedding HTTP calls have a 45-second timeout;
 contextual calls use the bounded configured timeout, and both respond to runtime
 cancellation. Library callers must explicitly consume the runtime with `shutdown`.
+
+
+## Compatibility and verification
+
+Compatibility covers the exercised Files, Vector Stores, and Responses file-search
+contracts below. It does not imply conformance with every OpenAI API or equivalent
+retrieval quality to OpenAI's hosted models. The method schemas and OpenAI Python
+SDK **3.13.0** provide independent wire contracts; generated OpenAPI alone is not
+conformance evidence. Contract references are the
+[Files schema](https://developers.openai.com/api/reference/resources/files/methods/create),
+[Vector Stores search schema](https://developers.openai.com/api/reference/resources/vector_stores/methods/search),
+[batch schema](https://developers.openai.com/api/reference/resources/vector_stores/subresources/file_batches/methods/create),
+[Responses annotation event](https://developers.openai.com/api/reference/resources/responses/websocket-events#response.output_text.annotation.added),
+and [retrieval guide](https://developers.openai.com/api/docs/guides/retrieval).
+
+| Surface | Implemented contract | Verification and boundaries |
+| --- | --- | --- |
+| Files | Create, retrieve, content, list, delete; six upload purposes; explicit expiry and batch default; purpose and keyset pagination; `object: "file"` deletion | Strict SDK plus HTTP/service tests cover file-first multipart and streamed binary hashes above the former 20 MiB upload cap. `evals` uses exact raw-wire assertions because this SDK's request enum accepts it but its response enum omits it. Only that contradictory enum case bypasses typed SDK parsing. |
+| Vector Stores | Create, retrieve, update, list, delete; nullable metadata/name/policy updates; activity/deadline/status and counts | SDK and SQLite/PostgreSQL lifecycle tests verify updates, terminal expiry, publication races, and cleanup. The activity refresh policy is explicitly defined above; expired metadata persists while search data is removed. |
+| Vector Store files | Attach, retrieve, attribute update, filtered/paginated list, detach, parsed content | SDK and HTTP/service tests exercise null attributes and required update fields, original extracted text in a `data` content page, overlap/context exclusion, and preservation of the independent upload. |
+| File batches | Create, retrieve, cancel, filtered/paginated member lists; per-file options; `vector_store.files_batch` and five counts | Strict SDK covers completed/failed members, blocked-model cancellation, graceful shutdown/restart, and hard-crash recovery after the real lease expires. SQLite and PostgreSQL runtime tests additionally cover competing claims, expired leases, stale publication, and durable recovery. SQL and the Files mount must be shared across replicas. Model calls may repeat after recovery; fenced publication prevents stale attempts from committing. |
+| Search | String or query list; attribute-key filters; 1–50 results; actual rewritten `search_query`; finite 0–1 scores; `none`, `auto`, and documented dated ranker selectors | SDK and local model fixtures exercise rewrite/embedding/rerank flow; exact SQL and real pgvector tests cover isolation, Unicode filters, and deletion. Selector compatibility does not reproduce the hosted ranking models. Bounded candidate retrieval and capacity errors apply. |
+| Responses `file_search` | Public tool declarations/choice, result includes, call lifecycle, grounded file citations, `response.output_text.annotation.added`, continuation | Rust stream tests and strict SDK decoding verify contiguous sequences, rebased output indexes, content/annotation indexes, split markers, duplicate/forged citations, and agreement with done/final output. Required `tools`, `tool_choice`, and `parallel_tool_calls` are serialized on generated response objects. Each response reports its initial effective tool choice despite later internal `auto` selection; existing continuation persistence keeps the effective post-loop choice. Omitted parallel calls retain this server's effective `false` default. |
+
+Native `GET /v1/responses/{id}` is not implemented. Response storage supports item
+history and effective settings for continuation; it does not retain a complete
+Response object for the SDK's `responses.retrieve`. That general Responses CRUD
+surface is outside this file-search conformance scope.
+
+File citation events are emitted when completed content establishes valid offsets
+and final annotation order, before its content/item done event. Repeated done
+representations produce one event per final file annotation. Upstream file-citation
+events are reconciled through that grounded completed content; non-file and null
+annotation events pass through. A citation must refer to a retrieved file in this
+request or its continuation history. `annotation_index` identifies the final
+annotation-array entry. The existing file citation `index` convention remains a
+Unicode character offset in the output text; the method schema's prose calls it
+an index in a file list without an executable example resolving that difference.
+This layer verifies event/final consistency and does not claim that ambiguous
+semantic detail is independently established as hosted-service parity.
+
+Metadata and attachment attributes allow at most 16 entries, keys of 1–64 Unicode
+characters, and string values of at most 512 Unicode characters. Filter keys and
+string operands use the same character limits, including array operands. Character
+counts are Unicode scalar values, not UTF-8 bytes; serialized-byte resource budgets
+remain independent. The retrieval guide's filename-filter `property` selector is
+not implemented: the current method schema and pinned SDK require attribute `key`.
+The SDK Search ranking schema includes `ranker` and `score_threshold`; guide-only
+hybrid weighting examples are not treated as SDK contract evidence.
+
+| OGX extension | Deployment or request behavior |
+| --- | --- |
+| Grouped vector-store configuration | Registered provider/model identities, contextual ingestion defaults, reranker selection, rewriting, and batch settings; endpoint URLs and credentials stay deployment controlled. |
+| Contextual chunking | A configured model produces document-aware embedding context while stored original source remains suitable for parsed content and citations. |
+| Retrieval and fusion controls | Keyword, semantic/vector, hybrid, weighted/RRF/normalized modes and explicit registered model selectors supplement OpenAI-compatible selectors. |
+| Neural/classifier reranking | Configured vLLM/Cohere transports and probability/logit score interpretation; model-specific behavior, not an OpenAI ranking-model replica. |
+
+| Operational resource | Bound or behavior |
+| --- | --- |
+| Upload and download | 512 MiB upload ceiling with bounded streaming. A download linearizes at open; later deletion/expiry cannot retract bytes already sent. |
+| Ingestion | 20 MiB source input; 16 MiB extracted text; 2,048 chunks per file. Supported text formats and optional extractable-text PDF only; no OCR. |
+| Chunking | Default 800 tokens with 400 overlap; bounded-block `cl100k_base` tokenization can differ from whole-document tokenization. Static and contextual limits are validated before publication. |
+| Store and candidate transfer | 10,000 chunks and 64 MiB serialized chunk data per store; aggregate search/candidate budgets and explicit capacity errors apply. |
+| Workers and model requests | Four owned worker/admission slots, per-batch concurrency, 30-second renewable claims, bounded model calls and parser work; graceful shutdown joins owned work and preserves resumability. |
+| Response streaming | Existing 1 MiB executor-response/event budgets and bounded backpressure apply to citation events as well. No unbounded duplicate text buffer is introduced. |
+
+The maintained loopback suite is `scripts/tests/file-search-sdk-test.py`, with
+owned fixtures in `scripts/tests/sdk_file_search_fixtures.py`. Run it against an
+actual built server in an isolated environment:
+
+```bash
+cargo build -p agentic-server --all-features --locked
+uv run --no-project --python 3.13 --with openai==3.13.0 python \
+  scripts/tests/file-search-sdk-test.py target/debug/agentic-server -v
+```
+
+Local verification of this stack passed 1,339 workspace tests, all 31 PostgreSQL
+integration tests, and 17 strict SDK cases with deterministic loopback models.
+Rust 1.88 passed the locked all-feature workspace check; Rust 1.98 passed the
+all-feature tests (including PDF extraction) and clippy.
+
+The SDK uses strict response validation and disabled environment proxies. Provider
+fixtures bind only to loopback, server environments exclude inherited provider
+credentials, polling/streams have total deadlines, and forced cleanup never counts
+as a successful shutdown test. CI installs the exact SDK pin in a separate virtual
+environment, runs all-feature Rust tests/clippy, and runs every currently ignored
+core PostgreSQL integration test serially against PostgreSQL 17 and pgvector 0.8.6.
+Those ignored tests are explicitly database tests; future paid/network scenarios
+must use a separate opt-in gate. These checks establish the listed API behavior,
+not model quality or platform certification.

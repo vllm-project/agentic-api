@@ -112,9 +112,9 @@ impl FileSearchService {
 
     async fn prepare_context(
         &self,
-        data: Vec<crate::types::file_search::SearchResult>,
+        data: Vec<ranking::RankedCandidate>,
         permit: Arc<OwnedSemaphorePermit>,
-    ) -> Result<Vec<crate::types::file_search::SearchResult>, FileSearchError> {
+    ) -> Result<Vec<ranking::RankedCandidate>, FileSearchError> {
         let budget = self.config.chunk_retrieval_params.max_tokens_in_context;
         let cancelled = Arc::new(AtomicBool::new(false));
         let _cancel_on_drop = CancelIngestionOnDrop(cancelled.clone());
@@ -662,6 +662,33 @@ impl FileSearchService {
         self.search_impl(store_ids, request, true).await
     }
 
+    async fn visible_results(
+        &self,
+        data: Vec<ranking::RankedCandidate>,
+        filter: Option<&crate::types::file_search::SearchFilter>,
+    ) -> Result<Vec<crate::types::file_search::SearchResult>, FileSearchError> {
+        let origins: Vec<_> = data
+            .iter()
+            .flat_map(|candidate| candidate.origins.iter().map(|scored| &scored.origin))
+            .collect();
+        let visible = self.storage.visible_result_origins(&origins, filter).await?;
+        let mut data: Vec<_> = data
+            .into_iter()
+            .filter_map(|mut candidate| {
+                let (origin, attributes) = candidate
+                    .origins
+                    .iter()
+                    .filter_map(|scored| visible.get(&scored.origin).map(|attributes| (scored, attributes)))
+                    .max_by(|(left, _), (right, _)| left.score.total_cmp(&right.score))?;
+                candidate.result.attributes.clone_from(attributes);
+                candidate.result.score = origin.score;
+                Some(candidate.result)
+            })
+            .collect();
+        data.sort_by(|left, right| right.score.total_cmp(&left.score));
+        Ok(data)
+    }
+
     async fn search_impl(
         &self,
         store_ids: &[String],
@@ -702,7 +729,7 @@ impl FileSearchService {
         };
         if mode != SearchMode::Keyword {
             for chunk in &chunks {
-                let vector = chunk.embedding.as_ref().ok_or_else(|| {
+                let vector = chunk.chunk.embedding.as_ref().ok_or_else(|| {
                     FileSearchError::Unavailable("Stored embeddings are missing; recreate this vector store".into())
                 })?;
                 if dimensions.is_some_and(|expected| expected != vector.len())
@@ -749,15 +776,14 @@ impl FileSearchService {
                 .models
                 .rerank(&queries.join(" "), data, options.model.as_deref())
                 .await?;
-            data.retain(|result| result.score >= options.score_threshold.unwrap_or(0.0));
+            data.retain(|candidate| candidate.result.score >= options.score_threshold.unwrap_or(0.0));
         }
         data.truncate(limit);
         if prepare_context {
             data = self.prepare_context(data, permit).await?;
         }
         self.storage.refresh_activity(store_ids).await?;
-        let visible = self.storage.visible_result_files(store_ids, &data).await?;
-        data.retain(|result| visible.contains(&result.file_id));
+        let data = self.visible_results(data, request.filters.as_ref()).await?;
         Ok(SearchResponse {
             object: "vector_store.search_results.page".into(),
             search_query: queries,

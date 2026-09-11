@@ -37,24 +37,10 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
     .with_response_metadata(
         registry.namespace_map().cloned(),
         registry.custom_tool_map().cloned(),
-        state
-            .filter(|state| state.is_active())
-            .map(crate::tool::ToolSearchState::public_response_tools)
-            .or_else(|| {
-                agent
-                    .request
-                    .enriched_request
-                    .tools
-                    .as_ref()
-                    .filter(|tools| {
-                        tools
-                            .iter()
-                            .any(|tool| matches!(tool, crate::types::tools::ResponsesTool::Shell(_)))
-                    })
-                    .cloned()
-            }),
-        agent.request.enriched_request.tool_choice.clone(),
+        Some(agent.response_tools()),
+        Some(agent.response_tool_choice().clone()),
     )
+    .with_parallel_tool_calls(agent.request.enriched_request.parallel_tool_calls.unwrap_or(false))
 }
 
 /// Builds the JSON body sent upstream: history inlined, continuation and storage
@@ -227,6 +213,8 @@ pub(super) mod tests {
             .unwrap(),
         );
         request.enriched_request.parallel_tool_calls = Some(false);
+        request.enriched_request.tool_choice =
+            Some(serde_json::from_value(serde_json::json!({"type":"custom","name":"raw_echo"})).unwrap());
         let state = ToolSearchHandler::prepare_request(&mut request.enriched_request, &[], false).unwrap();
         let registry = ToolRegistry::build_with_handlers(
             request.enriched_request.tools.as_mut().unwrap(),

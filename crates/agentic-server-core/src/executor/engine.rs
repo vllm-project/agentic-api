@@ -469,9 +469,13 @@ async fn run_compaction_trigger(
         previous_response_id: ctx.original_request.previous_response_id.clone(),
         conversation_id: ctx.conversation_id.clone(),
         instructions,
-        tools: None,
-        tool_choice: None,
+        tools: ctx.enriched_request.tools.clone().unwrap_or_default(),
+        tool_choice: ctx.enriched_request.tool_choice.clone().unwrap_or_default(),
+        parallel_tool_calls: ctx.enriched_request.parallel_tool_calls.unwrap_or(false),
     };
+    for tool in &mut payload.tools {
+        tool.sanitize_for_persistence();
+    }
     ctx.inject_ids(&mut payload);
     Ok(payload)
 }
@@ -606,6 +610,9 @@ struct StreamFailureContext {
     model: String,
     previous_response_id: Option<String>,
     instructions: Option<String>,
+    tools: Vec<crate::types::tools::ResponsesTool>,
+    tool_choice: ToolChoice,
+    parallel_tool_calls: bool,
 }
 
 impl From<&RequestContext> for StreamFailureContext {
@@ -616,6 +623,19 @@ impl From<&RequestContext> for StreamFailureContext {
             model: ctx.enriched_request.model.clone(),
             previous_response_id: ctx.original_request.previous_response_id.clone(),
             instructions: ctx.original_request.instructions.clone(),
+            tools: ctx
+                .enriched_request
+                .tools
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|mut tool| {
+                    tool.sanitize_for_persistence();
+                    tool
+                })
+                .collect(),
+            tool_choice: ctx.enriched_request.tool_choice.clone().unwrap_or_default(),
+            parallel_tool_calls: ctx.enriched_request.parallel_tool_calls.unwrap_or(false),
         }
     }
 }
@@ -639,8 +659,9 @@ impl StreamFailureContext {
             previous_response_id: self.previous_response_id.clone(),
             conversation_id: self.conversation_id.clone(),
             instructions: self.instructions.clone(),
-            tools: None,
-            tool_choice: None,
+            tools: self.tools.clone(),
+            tool_choice: self.tool_choice.clone(),
+            parallel_tool_calls: self.parallel_tool_calls,
         }
     }
 }

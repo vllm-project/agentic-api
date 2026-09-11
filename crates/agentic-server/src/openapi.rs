@@ -47,6 +47,7 @@ use utoipa::OpenApi;
         agentic_core::types::io::FileSearchCall,
         agentic_core::types::io::FileSearchCallResult,
         agentic_core::types::io::FileCitation,
+        agentic_core::types::event::OutputTextFileCitationAdded,
         agentic_core::types::request_response::RequestPayload,
         agentic_core::types::request_response::ResponsePayload,
         agentic_core::types::request_response::CompactRequest,

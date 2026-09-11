@@ -486,10 +486,16 @@ pub struct ResponsePayload {
     pub previous_response_id: Option<String>,
     pub conversation_id: Option<String>,
     pub instructions: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Vec<ResponsesTool>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tool_choice: Option<ToolChoice>,
+    /// Always serialized; defaults permit reading older response payloads.
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = true))]
+    pub tools: Vec<ResponsesTool>,
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = true))]
+    pub tool_choice: ToolChoice,
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = true))]
+    pub parallel_tool_calls: bool,
 }
 
 impl ResponsePayload {
@@ -1253,8 +1259,9 @@ mod tests {
             previous_response_id: None,
             conversation_id: None,
             instructions: None,
-            tools: None,
-            tool_choice: None,
+            tools: Vec::new(),
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
         };
 
         for (status, expected_type) in [
@@ -1288,8 +1295,9 @@ mod tests {
             previous_response_id: None,
             conversation_id: None,
             instructions: None,
-            tools: None,
-            tool_choice: None,
+            tools: Vec::new(),
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: false,
         };
 
         let chunk = payload.as_created_response_chunk();

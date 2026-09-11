@@ -3,28 +3,44 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    storage::file_search::StoredChunk,
+    storage::file_search::{ChunkOrigin, RetrievedChunk, StoredChunk},
     types::file_search::{ChunkRetrievalParams, Ranker, SearchContent, SearchMode, SearchRequest, SearchResult},
 };
 
+/// Keeps all matching origins of a deduplicated passage until final visibility.
+pub(super) struct RankedCandidate {
+    pub result: SearchResult,
+    pub origins: Vec<ScoredOrigin>,
+}
+
+pub(super) struct ScoredOrigin {
+    pub origin: ChunkOrigin,
+    pub score: f64,
+}
+
 pub(super) fn rank(
-    chunks: Vec<StoredChunk>,
+    chunks: Vec<RetrievedChunk>,
     queries: &[String],
     query_embeddings: &[Vec<f64>],
     mode: SearchMode,
     request: &SearchRequest,
     ranker: Ranker,
     defaults: &ChunkRetrievalParams,
-) -> Vec<SearchResult> {
+) -> Vec<RankedCandidate> {
     let chunks: Vec<_> = chunks
         .into_iter()
         .filter(|chunk| {
             request
                 .filters
                 .as_ref()
-                .is_none_or(|filter| filter.matches(&chunk.attributes))
+                .is_none_or(|filter| filter.matches(&chunk.chunk.attributes))
         })
         .collect();
+    let (chunks, origins): (Vec<_>, Vec<_>) = chunks
+        .into_iter()
+        .map(|retrieved| (retrieved.chunk, retrieved.origin))
+        .unzip();
+    let mut origin_scores = vec![None::<f64>; chunks.len()];
     let mut best: HashMap<(&str, &str), (usize, f64)> = HashMap::new();
     let threshold = request
         .ranking_options
@@ -59,11 +75,21 @@ pub(super) fn rank(
             if !ranker.uses_model() && (score <= 0.0 || score < threshold) {
                 continue;
             }
+            origin_scores[index] = Some(origin_scores[index].map_or(score, |previous| previous.max(score)));
             let key = (chunks[index].file_id.as_str(), chunks[index].text.as_str());
             let entry = best.entry(key).or_insert((index, score));
             if score > entry.1 {
                 *entry = (index, score);
             }
+        }
+    }
+    let mut origin_groups: HashMap<(&str, &str), Vec<ScoredOrigin>> = HashMap::new();
+    for ((chunk, origin), score) in chunks.iter().zip(origins).zip(origin_scores) {
+        if let Some(score) = score {
+            origin_groups
+                .entry((&chunk.file_id, &chunk.text))
+                .or_default()
+                .push(ScoredOrigin { origin, score });
         }
     }
     let mut matches: Vec<_> = best.into_values().collect();
@@ -78,15 +104,20 @@ pub(super) fn rank(
         .into_iter()
         .map(|(index, score)| {
             let chunk = &chunks[index];
-            SearchResult {
-                file_id: chunk.file_id.clone(),
-                filename: chunk.filename.clone(),
-                score,
-                attributes: chunk.attributes.clone(),
-                content: vec![SearchContent {
-                    type_: "text".into(),
-                    text: chunk.text.clone(),
-                }],
+            RankedCandidate {
+                origins: origin_groups
+                    .remove(&(chunk.file_id.as_str(), chunk.text.as_str()))
+                    .unwrap_or_default(),
+                result: SearchResult {
+                    file_id: chunk.file_id.clone(),
+                    filename: chunk.filename.clone(),
+                    score,
+                    attributes: chunk.attributes.clone(),
+                    content: vec![SearchContent {
+                        type_: "text".into(),
+                        text: chunk.text.clone(),
+                    }],
+                },
             }
         })
         .collect()
@@ -263,6 +294,49 @@ fn weighted(semantic: &[f64], keyword: &[f64], embedding_weight: f64, text_weigh
 #[cfg(test)]
 mod tests {
     use super::cosine;
+
+    #[test]
+    fn deduplicated_origins_must_independently_meet_the_score_threshold() {
+        use super::*;
+        let chunks = [vec![1.0, 0.0], vec![0.5, 0.75_f64.sqrt()]]
+            .into_iter()
+            .enumerate()
+            .map(|(index, embedding)| RetrievedChunk {
+                origin: ChunkOrigin {
+                    store_id: format!("store-{index}"),
+                    file_id: "file".into(),
+                    chunk_index: 0,
+                    generation: "generation".into(),
+                },
+                chunk: StoredChunk {
+                    file_id: "file".into(),
+                    filename: "source.txt".into(),
+                    chunk_index: 0,
+                    text: "same source".into(),
+                    embedding_text: None,
+                    embedding: Some(embedding),
+                    attributes: std::collections::BTreeMap::default(),
+                },
+            })
+            .collect();
+        let request: SearchRequest =
+            serde_json::from_str(r#"{"query":"source","ranking_options":{"score_threshold":0.8}}"#).unwrap();
+        let results = rank(
+            chunks,
+            &["source".into()],
+            &[vec![1.0, 0.0]],
+            SearchMode::Semantic,
+            &request,
+            Ranker::None,
+            &ChunkRetrievalParams::default(),
+        );
+        assert_eq!(results.len(), 1);
+        assert_eq!(
+            results[0].origins.len(),
+            1,
+            "a below-threshold attachment cannot validate another origin's result"
+        );
+    }
 
     #[test]
     fn cosine_is_stable_for_finite_vectors_of_extreme_magnitude() {

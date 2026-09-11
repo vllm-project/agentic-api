@@ -125,6 +125,7 @@ pub enum SSEEventType {
     // Text content
     OutputTextDelta,
     OutputTextDone,
+    OutputTextAnnotationAdded,
     ContentPartAdded,
     ContentPartDone,
 
@@ -177,6 +178,7 @@ impl From<&str> for SSEEventType {
             "response.output_item.done" => Self::OutputItemDone,
             "response.output_text.delta" => Self::OutputTextDelta,
             "response.output_text.done" => Self::OutputTextDone,
+            "response.output_text.annotation.added" => Self::OutputTextAnnotationAdded,
             "response.content_part.added" => Self::ContentPartAdded,
             "response.content_part.done" => Self::ContentPartDone,
             "response.function_call_arguments.delta" => Self::FunctionCallArgumentsDelta,
@@ -225,6 +227,7 @@ impl TryFrom<SSEEventType> for &'static str {
             SSEEventType::OutputItemDone => Ok("response.output_item.done"),
             SSEEventType::OutputTextDelta => Ok("response.output_text.delta"),
             SSEEventType::OutputTextDone => Ok("response.output_text.done"),
+            SSEEventType::OutputTextAnnotationAdded => Ok("response.output_text.annotation.added"),
             SSEEventType::ContentPartAdded => Ok("response.content_part.added"),
             SSEEventType::ContentPartDone => Ok("response.content_part.done"),
             SSEEventType::FunctionCallArgumentsDelta => Ok("response.function_call_arguments.delta"),

@@ -102,6 +102,7 @@ fn extract_payload(event_type: SSEEventType, json: &Value) -> EventPayload {
         | SSEEventType::McpListToolsInProgress
         | SSEEventType::McpListToolsCompleted
         | SSEEventType::McpListToolsFailed
+        | SSEEventType::OutputTextAnnotationAdded
         | SSEEventType::Other => EventPayload::Raw(json.clone()),
     }
 }
