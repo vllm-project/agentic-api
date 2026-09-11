@@ -5,6 +5,7 @@ import { Footer } from '@/components/site/footer';
 import { SITE_URL, assetPath } from '@/lib/site';
 import { themeInitScript } from '@/lib/theme.mjs';
 import './globals.css';
+import './effects.css';
 const sans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const mono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
 export const metadata: Metadata = {

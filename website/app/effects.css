@@ -1,0 +1,277 @@
+/* Brand lighting stays behind content and never captures pointer input. */
+.hero,
+.community-hero {
+  position: relative;
+  isolation: isolate;
+}
+.hero::before,
+.community-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse at 85% 35%,
+      light-dark(#30a2ff25, #30a2ff20),
+      transparent 58%
+    ),
+    radial-gradient(
+      ellipse at 45% 85%,
+      light-dark(#fdb51518, #fdb51512),
+      transparent 52%
+    );
+  mask-image: linear-gradient(transparent, #000 18%, #000 72%, transparent);
+}
+.community-hero::before {
+  background:
+    radial-gradient(
+      ellipse at 75% 35%,
+      light-dark(#30a2ff28, #30a2ff26),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse at 95% 70%,
+      light-dark(#fdb51520, #fdb51516),
+      transparent 45%
+    );
+}
+
+/* A fine illuminated edge gives every card the same treatment. */
+:is(.feature-card, .person-card, .contributor-profile, .upstream-card) {
+  position: relative;
+  transition:
+    border-color 220ms ease,
+    box-shadow 220ms ease,
+    transform 220ms ease;
+}
+:is(.feature-card, .person-card, .contributor-profile, .upstream-card)::after {
+  content: '';
+  position: absolute;
+  inset: 0 18px auto;
+  height: 1px;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--brand-blue) 35%,
+    var(--brand-gold) 70%,
+    transparent
+  );
+  transition: opacity 220ms ease;
+}
+:is(
+  .feature-card,
+  .person-card,
+  .contributor-profile,
+  .upstream-card
+):focus-within {
+  border-color: var(--brand-blue);
+  box-shadow:
+    0 12px 28px light-dark(#193d5810, #00000026),
+    0 0 24px light-dark(#30a2ff0b, #30a2ff12);
+}
+:is(
+    .feature-card,
+    .person-card,
+    .contributor-profile,
+    .upstream-card
+  ):focus-within::after {
+  opacity: 1;
+}
+.person-top img,
+.avatar-mosaic img {
+  transition: filter 220ms ease;
+}
+.person-card:focus-visible .person-top img,
+.avatar-mosaic a:focus-visible img {
+  filter: saturate(1);
+}
+.button > svg,
+.person-top > svg,
+.contributor-profile > svg {
+  transition: transform 220ms ease;
+}
+
+/* Signals follow the existing connector, beneath its readable transport label. */
+.architecture .connector::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: calc(50% - 1px);
+  width: 2px;
+  height: 14px;
+  border-radius: 2px;
+  opacity: 0;
+  pointer-events: none;
+  background: linear-gradient(transparent, var(--brand-blue));
+  box-shadow: 0 0 9px #30a2ff80;
+}
+.architecture .connector.second::after {
+  background: linear-gradient(transparent, var(--brand-gold));
+  box-shadow: 0 0 9px #fdb51570;
+}
+.architecture .gateway::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 26px light-dark(#30a2ff26, #30a2ff38);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :is(.feature-card, .person-card, .contributor-profile, .upstream-card):hover {
+    border-color: var(--brand-blue);
+    box-shadow:
+      0 12px 28px light-dark(#193d5810, #00000026),
+      0 0 24px light-dark(#30a2ff0b, #30a2ff12);
+  }
+  :is(
+      .feature-card,
+      .person-card,
+      .contributor-profile,
+      .upstream-card
+    ):hover::after {
+    opacity: 1;
+  }
+  .person-card:hover .person-top img,
+  .avatar-mosaic a:hover img {
+    filter: saturate(1);
+  }
+}
+
+/* Entrance and signal sequences finish; there is no perpetual animation. */
+@media (prefers-reduced-motion: no-preference) {
+  .hero-copy > *,
+  .community-hero > * {
+    animation: site-arrive 650ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  }
+  .hero-copy > :nth-child(2),
+  .community-hero > :nth-child(2) {
+    animation-delay: 70ms;
+  }
+  .hero-copy > :nth-child(n + 3),
+  .community-hero > :nth-child(n + 3) {
+    animation-delay: 140ms;
+  }
+  .hero .architecture {
+    animation: site-arrive 800ms 180ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  }
+  .hero::before,
+  .community-hero::before {
+    animation: site-light-in 1400ms ease-out backwards;
+  }
+  .architecture .connector::after {
+    animation: site-signal 1200ms 650ms ease-in-out 2;
+  }
+  .architecture .connector.second::after {
+    animation-delay: 1250ms;
+  }
+  .architecture .gateway::after {
+    animation: site-gateway-light 1200ms 1000ms ease-in-out 2;
+  }
+  .button:focus-visible > svg:last-child,
+  .person-card:focus-visible .person-top > svg,
+  .contributor-profile:focus-visible > svg {
+    transform: translate(2px, -1px);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .contributor-profile:hover {
+      transform: translateY(-3px);
+    }
+    .button:hover > svg:last-child,
+    .person-card:hover .person-top > svg,
+    .contributor-profile:hover > svg {
+      transform: translate(2px, -1px);
+    }
+    .architecture:hover .connector::after {
+      animation-name: site-signal-hover;
+      animation-delay: 0ms;
+      animation-iteration-count: 1;
+    }
+    .architecture:hover .connector.second::after {
+      animation-delay: 600ms;
+    }
+    .architecture:hover .gateway::after {
+      animation-name: site-gateway-hover;
+      animation-delay: 350ms;
+      animation-iteration-count: 1;
+    }
+  }
+}
+
+@keyframes site-arrive {
+  from {
+    opacity: 0.65;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes site-light-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes site-signal {
+  0% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  20%,
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+}
+@keyframes site-signal-hover {
+  0% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  20%,
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+}
+@keyframes site-gateway-light {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  45% {
+    opacity: 1;
+  }
+}
+@keyframes site-gateway-hover {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  45% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .person-card:hover,
+  .avatar-mosaic a:hover,
+  .primary:hover {
+    transform: none;
+  }
+}
