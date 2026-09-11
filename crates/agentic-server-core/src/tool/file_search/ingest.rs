@@ -253,10 +253,10 @@ fn chunks(text: &str, config: &StaticChunking, cancelled: &AtomicBool) -> Result
 
 /// Keep complete source chunks that fit the remaining model-context budget.
 pub(super) fn limit_context(
-    results: Vec<crate::types::file_search::SearchResult>,
+    results: Vec<super::ranking::RankedCandidate>,
     mut budget: usize,
     cancelled: &AtomicBool,
-) -> Result<Vec<crate::types::file_search::SearchResult>, FileSearchError> {
+) -> Result<Vec<super::ranking::RankedCandidate>, FileSearchError> {
     if cancelled.load(Ordering::Relaxed) {
         return Err(FileSearchError::Unavailable(
             "File search context preparation was cancelled".into(),
@@ -266,7 +266,7 @@ pub(super) fn limit_context(
     let mut selected = Vec::with_capacity(results.len());
     'passages: for result in results {
         let mut tokens = 0usize;
-        for content in &result.content {
+        for content in &result.result.content {
             let mut text = content.text.as_str();
             while !text.is_empty() {
                 if cancelled.load(Ordering::Relaxed) {

@@ -450,13 +450,16 @@ impl FileSearchStorage {
                     .await?;
                 let (chunks, bytes) =
                     encoded.ok_or_else(|| FileSearchError::Unavailable("Missing prepared chunks".into()))?;
-                publish_attachment(&mut tx, &job.store_id, &job.identity, &prepared, &chunks, bytes).await?;
-                sqlx::query("UPDATE file_search_attachments SET generation=$3 WHERE store_id=$1 AND file_id=$2")
-                    .bind(&job.store_id)
-                    .bind(&job.options.file_id)
-                    .bind(&job.generation.0)
-                    .execute(&mut *tx)
-                    .await?;
+                publish_attachment(
+                    &mut tx,
+                    &job.store_id,
+                    &job.identity,
+                    &prepared,
+                    &chunks,
+                    bytes,
+                    &job.generation.0,
+                )
+                .await?;
                 object = prepared.object;
             }
             Err(error) => {

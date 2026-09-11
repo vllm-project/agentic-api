@@ -940,3 +940,219 @@ async fn store_expiration_during_reranking_rejects_cached_candidates() {
         Some(1)
     );
 }
+
+#[derive(Clone, Copy, Debug)]
+enum AttachmentMutation {
+    DifferentStoreExcluded,
+    DifferentStoreMatching,
+    SameStoreReplacement,
+    AttributesExcluded,
+    AttributesMatching,
+}
+
+async fn attachment_mutation_during_rerank(backend: Option<FileSearchBackend>, mutation: AttachmentMutation) {
+    let mode = if backend.is_some() { "semantic" } else { "keyword" };
+    let mut setup = setup(backend.is_some()).await;
+    if let Some(backend) = backend {
+        let url = std::env::var("TEST_POSTGRES_URL").unwrap();
+        setup.pool = create_pool_with_schema(Some(&url)).await.unwrap();
+        setup.config.backend = backend;
+        setup.service = FileSearchService::new(
+            setup.pool.clone(),
+            Arc::new(reqwest::Client::new()),
+            setup.config.clone(),
+        )
+        .unwrap();
+    }
+    let service = &setup.service;
+    let mut stores = Vec::new();
+    for _ in 0..2 {
+        stores.push(
+            service
+                .create_vector_store(CreateVectorStoreRequest::default())
+                .await
+                .unwrap()
+                .id,
+        );
+    }
+    stores.sort();
+    let file_id = attach(service, &stores[0], "coral preferred", None).await;
+    let original: FileAttributes = serde_json::from_value(json!({"scope":"included", "label":"original"})).unwrap();
+    service
+        .update_vector_store_file(
+            &stores[0],
+            &file_id,
+            UpdateVectorStoreFileRequest {
+                attributes: original.clone(),
+            },
+        )
+        .await
+        .unwrap();
+    if matches!(
+        mutation,
+        AttachmentMutation::DifferentStoreExcluded | AttachmentMutation::DifferentStoreMatching
+    ) {
+        let scope = if matches!(mutation, AttachmentMutation::DifferentStoreMatching) {
+            "included"
+        } else {
+            "excluded"
+        };
+        service
+            .attach_file(
+                &stores[1],
+                AttachFileRequest {
+                    file_id: file_id.clone(),
+                    attributes: serde_json::from_value(json!({"scope":scope, "label":"survivor"})).unwrap(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+    }
+    *setup.state.rerank_pause.lock().unwrap() = true;
+    let search_service = service.clone();
+    let search_stores = stores.clone();
+    let request: SearchRequest = serde_json::from_value(json!({
+        "query":"coral", "search_mode":mode, "ranking_options":{"ranker":"neural"},
+        "filters":{"type":"eq","key":"scope","value":"included"}
+    }))
+    .unwrap();
+    let search = tokio::spawn(async move { search_service.search(&search_stores, &request).await });
+    tokio::time::timeout(std::time::Duration::from_secs(5), setup.state.rerank_started.notified())
+        .await
+        .unwrap();
+    mutate_attachment(service, &stores[0], &file_id, original, mutation).await;
+    setup.state.rerank_resume.notify_one();
+    let response = tokio::time::timeout(std::time::Duration::from_secs(5), search)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    for store in stores {
+        service.delete_vector_store(&store).await.unwrap();
+    }
+    service.delete_file(&file_id).await.unwrap();
+    assert_attachment_search(&response, &file_id, mutation);
+}
+
+fn assert_attachment_search(response: &SearchResponse, file_id: &str, mutation: AttachmentMutation) {
+    match mutation {
+        AttachmentMutation::DifferentStoreMatching | AttachmentMutation::AttributesMatching => {
+            assert_eq!(
+                response.data.len(),
+                1,
+                "{mutation:?}: preserve one valid deduplicated result"
+            );
+            assert_eq!(response.data[0].file_id, file_id);
+            assert_eq!(response.data[0].content[0].text, "coral preferred");
+            let label = if matches!(mutation, AttachmentMutation::DifferentStoreMatching) {
+                "survivor"
+            } else {
+                "updated"
+            };
+            assert_eq!(
+                serde_json::to_value(&response.data[0].attributes).unwrap(),
+                json!({"scope":"included", "label":label})
+            );
+        }
+        _ => assert!(
+            response.data.is_empty(),
+            "{mutation:?}: stale attachment must not validate cached evidence"
+        ),
+    }
+}
+
+async fn mutate_attachment(
+    service: &FileSearchService,
+    store: &str,
+    file_id: &str,
+    original: FileAttributes,
+    mutation: AttachmentMutation,
+) {
+    match mutation {
+        AttachmentMutation::DifferentStoreExcluded
+        | AttachmentMutation::DifferentStoreMatching
+        | AttachmentMutation::SameStoreReplacement => {
+            service.detach_file(store, file_id).await.unwrap();
+            if matches!(mutation, AttachmentMutation::SameStoreReplacement) {
+                // Identical source, attributes and chunk boundaries still belong to a new attachment.
+                service
+                    .attach_file(
+                        store,
+                        AttachFileRequest {
+                            file_id: file_id.to_owned(),
+                            attributes: original,
+                            ..Default::default()
+                        },
+                    )
+                    .await
+                    .unwrap();
+            }
+        }
+        AttachmentMutation::AttributesExcluded | AttachmentMutation::AttributesMatching => {
+            let scope = if matches!(mutation, AttachmentMutation::AttributesMatching) {
+                "included"
+            } else {
+                "excluded"
+            };
+            service
+                .update_vector_store_file(
+                    store,
+                    file_id,
+                    UpdateVectorStoreFileRequest {
+                        attributes: serde_json::from_value(json!({"scope":scope, "label":"updated"})).unwrap(),
+                    },
+                )
+                .await
+                .unwrap();
+        }
+    }
+}
+
+#[tokio::test]
+async fn rerank_provenance_excludes_other_store_attributes() {
+    attachment_mutation_during_rerank(None, AttachmentMutation::DifferentStoreExcluded).await;
+}
+#[tokio::test]
+async fn rerank_provenance_preserves_matching_deduplicated_origin() {
+    attachment_mutation_during_rerank(None, AttachmentMutation::DifferentStoreMatching).await;
+}
+#[tokio::test]
+async fn rerank_provenance_rejects_same_store_replacement() {
+    attachment_mutation_during_rerank(None, AttachmentMutation::SameStoreReplacement).await;
+}
+#[tokio::test]
+async fn rerank_provenance_rechecks_updated_filter() {
+    attachment_mutation_during_rerank(None, AttachmentMutation::AttributesExcluded).await;
+}
+#[tokio::test]
+async fn rerank_provenance_returns_current_matching_attributes() {
+    attachment_mutation_during_rerank(None, AttachmentMutation::AttributesMatching).await;
+}
+
+#[tokio::test]
+#[ignore = "requires isolated TEST_POSTGRES_URL with pgvector"]
+async fn postgres_rerank_provenance_exact_and_pgvector() {
+    for backend in [
+        FileSearchBackend::Exact,
+        FileSearchBackend::Pgvector {
+            dimensions: 2,
+            index: PgvectorIndex::Hnsw {
+                m: 16,
+                ef_construction: 64,
+                ef_search: 100,
+            },
+            candidate_limit: 50,
+        },
+    ] {
+        for mutation in [
+            AttachmentMutation::DifferentStoreExcluded,
+            AttachmentMutation::DifferentStoreMatching,
+            AttachmentMutation::SameStoreReplacement,
+            AttachmentMutation::AttributesExcluded,
+            AttachmentMutation::AttributesMatching,
+        ] {
+            attachment_mutation_during_rerank(Some(backend.clone()), mutation).await;
+        }
+    }
+}

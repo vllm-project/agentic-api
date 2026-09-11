@@ -1,8 +1,7 @@
 //! Cancellation-safe bounded text generation and vLLM reranking.
 use crate::types::{
     file_search::{
-        ContextualChunking, FileSearchError, ModelProvider, ScoreInterpretation, SearchResult, VectorStoresConfig,
-        invalid,
+        ContextualChunking, FileSearchError, ModelProvider, ScoreInterpretation, VectorStoresConfig, invalid,
     },
     retrieval_models::{
         RetrievalChatRequest, RetrievalChatResponse, RetrievalMessage, RetrievalRole, RetrievalText, RetrievalTextPart,
@@ -150,9 +149,9 @@ impl Models {
     pub(super) async fn rerank(
         &self,
         query: &str,
-        mut candidates: Vec<SearchResult>,
+        mut candidates: Vec<super::ranking::RankedCandidate>,
         selection: Option<&str>,
-    ) -> Result<Vec<SearchResult>, FileSearchError> {
+    ) -> Result<Vec<super::ranking::RankedCandidate>, FileSearchError> {
         let (provider, model) = self
             .config
             .resolve(selection, self.config.default_reranker_model.as_ref())?;
@@ -161,7 +160,7 @@ impl Models {
         }
         let documents = candidates
             .iter()
-            .map(|result| result.content[0].text.as_str())
+            .map(|result| result.result.content[0].text.as_str())
             .collect();
         // Score every bounded candidate, then validate the complete permutation before publishing any result.
         let request = TextRerankRequest {
@@ -193,9 +192,13 @@ impl Models {
                     exp / (1.0 + exp)
                 }
             };
-            candidates[result.index].score = score;
+            let candidate = &mut candidates[result.index];
+            candidate.result.score = score;
+            for origin in &mut candidate.origins {
+                origin.score = score;
+            }
         }
-        candidates.sort_by(|left, right| right.score.total_cmp(&left.score));
+        candidates.sort_by(|left, right| right.result.score.total_cmp(&left.result.score));
         Ok(candidates)
     }
     async fn post<T: Serialize, R: DeserializeOwned>(

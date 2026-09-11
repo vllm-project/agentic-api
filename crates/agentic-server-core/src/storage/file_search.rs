@@ -58,6 +58,48 @@ pub(crate) struct StoredChunk {
     pub attributes: crate::types::file_search::FileAttributes,
 }
 
+/// Private retrieval identity; never serialized into a public search result.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
+pub(crate) struct ChunkOrigin {
+    pub store_id: String,
+    pub file_id: String,
+    pub chunk_index: i64,
+    pub generation: String,
+}
+
+pub(crate) struct RetrievedChunk {
+    pub chunk: StoredChunk,
+    pub origin: ChunkOrigin,
+}
+
+#[derive(FromRow)]
+pub(crate) struct ChunkRow {
+    pub store_id: String,
+    pub file_id: String,
+    pub chunk_index: i64,
+    pub generation: String,
+    pub data: String,
+}
+
+impl ChunkRow {
+    fn origin(self) -> ChunkOrigin {
+        ChunkOrigin {
+            store_id: self.store_id,
+            file_id: self.file_id,
+            chunk_index: self.chunk_index,
+            generation: self.generation,
+        }
+    }
+
+    pub(crate) fn decode(self) -> Result<RetrievedChunk, FileSearchError> {
+        let chunk = serde_json::from_str(&self.data)?;
+        Ok(RetrievedChunk {
+            chunk,
+            origin: self.origin(),
+        })
+    }
+}
+
 pub(crate) struct PreparedAttachment {
     pub object: VectorStoreFileObject,
     pub chunks: Vec<StoredChunk>,
@@ -199,35 +241,46 @@ impl FileSearchStorage {
         Ok(())
     }
 
-    pub(crate) async fn visible_result_files(
+    /// Revalidate exact attachment generations and chunks in one database snapshot.
+    /// Attributes are refreshed here because they may change during model work.
+    pub(crate) async fn visible_result_origins(
         &self,
-        stores: &[String],
-        results: &[crate::types::file_search::SearchResult],
-    ) -> Result<std::collections::HashSet<String>, FileSearchError> {
-        if results.is_empty() {
-            return Ok(std::collections::HashSet::new());
+        origins: &[&ChunkOrigin],
+        filter: Option<&crate::types::file_search::SearchFilter>,
+    ) -> Result<std::collections::HashMap<ChunkOrigin, crate::types::file_search::FileAttributes>, FileSearchError>
+    {
+        use futures::TryStreamExt;
+        let mut visible = std::collections::HashMap::new();
+        if origins.is_empty() {
+            return Ok(visible);
         }
-        let store_placeholders = (1..=stores.len())
-            .map(|index| format!("${index}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let file_placeholders = (stores.len() + 1..=stores.len() + results.len())
-            .map(|index| format!("${index}"))
-            .collect::<Vec<_>>()
-            .join(", ");
+        // One JSON parameter avoids backend bind-parameter limits for the bounded
+        // 10000-origin union. SQL and backend-specific JSON decoding stay in storage.
+        let requested = if self.pool.acquire().await?.backend_name() == "PostgreSQL" {
+            "jsonb_to_recordset($1::jsonb) AS requested(store_id text, file_id text, chunk_index bigint, generation text)"
+        } else {
+            "(SELECT json_extract(value, '$.store_id') AS store_id, json_extract(value, '$.file_id') AS file_id, json_extract(value, '$.chunk_index') AS chunk_index, json_extract(value, '$.generation') AS generation FROM json_each($1)) AS requested"
+        };
+        let visibility = self.file_visibility().await?;
         let sql = format!(
-            "SELECT DISTINCT file_id FROM file_search_attachments WHERE status = 'completed' AND store_id IN ({store_placeholders}) AND file_id IN ({file_placeholders}) AND store_id IN (SELECT id FROM file_search_stores WHERE lifecycle_status != 'expired' AND {}) AND file_id IN (SELECT id FROM file_search_files WHERE {})",
-            self.file_visibility().await?,
-            self.file_visibility().await?
+            "SELECT c.store_id, c.file_id, c.chunk_index, a.generation, a.data FROM {requested} JOIN file_search_chunks c ON c.store_id=requested.store_id AND c.file_id=requested.file_id AND c.chunk_index=requested.chunk_index JOIN file_search_attachments a ON a.store_id=c.store_id AND a.file_id=c.file_id AND a.generation=requested.generation WHERE a.status='completed' AND c.store_id IN (SELECT id FROM file_search_stores WHERE lifecycle_status!='expired' AND {visibility}) AND c.file_id IN (SELECT id FROM file_search_files WHERE {visibility})"
         );
-        let mut query = sqlx::query_scalar::<_, String>(&sql);
-        for store in stores {
-            query = query.bind(store);
+        let query = sqlx::query_as::<_, ChunkRow>(&sql).bind(serde_json::to_string(origins)?);
+        let mut rows = query.fetch(self.pool.as_ref());
+        let mut bytes = 0usize;
+        while let Some(row) = rows.try_next().await? {
+            bytes = bytes.saturating_add(row.data.len());
+            if bytes > 64 * 1024 * 1024 {
+                return Err(FileSearchError::Unavailable(
+                    "Final search visibility exceeds 64 MiB".into(),
+                ));
+            }
+            let object: VectorStoreFileObject = serde_json::from_str(&row.data)?;
+            if filter.is_none_or(|filter| filter.matches(&object.attributes)) {
+                visible.insert(row.origin(), object.attributes);
+            }
         }
-        for result in results {
-            query = query.bind(&result.file_id);
-        }
-        Ok(query.fetch_all(self.pool.as_ref()).await?.into_iter().collect())
+        Ok(visible)
     }
 
     pub(crate) async fn has_chunks(&self, stores: &[String]) -> Result<bool, FileSearchError> {
@@ -253,7 +306,7 @@ impl FileSearchStorage {
         vectors: &[Vec<f64>],
         mode: crate::types::file_search::SearchMode,
         filter: Option<&crate::types::file_search::SearchFilter>,
-    ) -> Result<Vec<StoredChunk>, FileSearchError> {
+    ) -> Result<Vec<RetrievedChunk>, FileSearchError> {
         match &self.pgvector {
             Some(pgvector) => {
                 pgvector
@@ -352,7 +405,16 @@ impl FileSearchStorage {
             .bind(&object.id).bind(object.created_at).bind(serde_json::to_string(object)?).bind(identity).bind(now).bind(days).bind(days.map(|days| now + days * 86400))
             .execute(&mut *tx).await?;
         for (attachment, (chunks, storage_bytes)) in attachments.iter().zip(encoded) {
-            publish_attachment(&mut tx, &object.id, identity, attachment, &chunks, storage_bytes).await?;
+            publish_attachment(
+                &mut tx,
+                &object.id,
+                identity,
+                attachment,
+                &chunks,
+                storage_bytes,
+                &uuid::Uuid::now_v7().to_string(),
+            )
+            .await?;
         }
         tx.commit().await?;
         Ok(())
@@ -367,7 +429,16 @@ impl FileSearchStorage {
         self.initialize().await?;
         let (chunks, storage_bytes) = serialize_chunks(&attachment.chunks).await?;
         let mut tx = self.pool.begin().await?;
-        publish_attachment(&mut tx, store_id, identity, attachment, &chunks, storage_bytes).await?;
+        publish_attachment(
+            &mut tx,
+            store_id,
+            identity,
+            attachment,
+            &chunks,
+            storage_bytes,
+            &uuid::Uuid::now_v7().to_string(),
+        )
+        .await?;
         tx.commit().await?;
         Ok(())
     }
@@ -516,7 +587,7 @@ impl FileSearchStorage {
     }
 
     /// Streaming row decoding bounds corpus memory before deserializing vectors.
-    pub(crate) async fn chunks(&self, store_ids: &[String]) -> Result<Vec<StoredChunk>, FileSearchError> {
+    pub(crate) async fn chunks(&self, store_ids: &[String]) -> Result<Vec<RetrievedChunk>, FileSearchError> {
         use futures::TryStreamExt;
         let placeholders = (1..=store_ids.len())
             .map(|index| format!("${index}"))
@@ -524,17 +595,17 @@ impl FileSearchStorage {
             .join(", ");
         let visibility = self.file_visibility().await?;
         let sql = format!(
-            "SELECT data FROM file_search_chunks WHERE (store_id, file_id) IN (SELECT store_id, file_id FROM file_search_attachments WHERE status = 'completed') AND store_id IN ({placeholders}) AND store_id IN (SELECT id FROM file_search_stores WHERE lifecycle_status != 'expired' AND {visibility}) AND file_id IN (SELECT id FROM file_search_files WHERE {visibility}) ORDER BY store_id, file_id, chunk_index"
+            "SELECT store_id, file_id, chunk_index, (SELECT generation FROM file_search_attachments a WHERE a.store_id=file_search_chunks.store_id AND a.file_id=file_search_chunks.file_id) AS generation, data FROM file_search_chunks WHERE (store_id, file_id) IN (SELECT store_id, file_id FROM file_search_attachments WHERE status = 'completed') AND store_id IN ({placeholders}) AND store_id IN (SELECT id FROM file_search_stores WHERE lifecycle_status != 'expired' AND {visibility}) AND file_id IN (SELECT id FROM file_search_files WHERE {visibility}) ORDER BY store_id, file_id, chunk_index"
         );
-        let mut query = sqlx::query_scalar::<_, String>(&sql);
+        let mut query = sqlx::query_as::<_, ChunkRow>(&sql);
         for id in store_ids {
             query = query.bind(id);
         }
         let mut rows = query.fetch(self.pool.as_ref());
         let mut chunks = Vec::new();
         let mut total_bytes = 0usize;
-        while let Some(data) = rows.try_next().await? {
-            total_bytes = total_bytes.saturating_add(data.len());
+        while let Some(row) = rows.try_next().await? {
+            total_bytes = total_bytes.saturating_add(row.data.len());
             if i64::try_from(total_bytes).unwrap_or(i64::MAX) > MAX_CORPUS_BYTES
                 || i64::try_from(chunks.len()).unwrap_or(i64::MAX) >= MAX_CORPUS_CHUNKS
             {
@@ -542,7 +613,7 @@ impl FileSearchStorage {
                     "Selected corpus exceeds the exact retrieval capacity; search fewer vector stores or files".into(),
                 ));
             }
-            chunks.push(serde_json::from_str(&data)?);
+            chunks.push(row.decode()?);
         }
         Ok(chunks)
     }
@@ -602,6 +673,7 @@ async fn publish_attachment(
     attachment: &PreparedAttachment,
     chunks: &[String],
     storage_bytes: i64,
+    generation: &str,
 ) -> Result<(), FileSearchError> {
     let file_id = &attachment.object.id;
     let locked = sqlx::query("UPDATE file_search_files SET id = id WHERE id = $1")
@@ -650,9 +722,9 @@ async fn publish_attachment(
         count.saturating_add(i64::try_from(chunks.len()).unwrap_or(i64::MAX)),
     )?;
     let object = &attachment.object;
-    let inserted = sqlx::query("INSERT INTO file_search_attachments (store_id, file_id, created_at, usage_bytes, data, storage_bytes, status, parsed_content) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)")
+    let inserted = sqlx::query("INSERT INTO file_search_attachments (store_id, file_id, created_at, usage_bytes, data, storage_bytes, status, parsed_content, generation) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)")
         .bind(store_id).bind(&object.id).bind(object.created_at).bind(object.usage_bytes).bind(serde_json::to_string(object)?)
-        .bind(storage_bytes).bind(object.status.as_str()).bind(&attachment.parsed_content)
+        .bind(storage_bytes).bind(object.status.as_str()).bind(&attachment.parsed_content).bind(generation)
         .execute(&mut **tx).await;
     if let Err(sqlx::Error::Database(error)) = &inserted {
         if error.is_unique_violation() {

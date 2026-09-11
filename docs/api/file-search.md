@@ -111,7 +111,8 @@ embeddings exist. `file_ingestion_params.default_chunk_size_tokens` and
 800/400 behavior. Static overlap remains limited to half the chunk size.
 `file_batch_params` validates `max_concurrent_files_per_batch` (default 3, range
 1–32), `file_batch_chunk_size` (10, 1–1000), and `cleanup_interval_seconds` (86400,
-1–604800); asynchronous workers are a later layer.
+1–604800). These settings control the current
+[durable batch workers](#durable-file-batches-and-workers).
 
 ### Contextual ingestion
 
@@ -642,7 +643,7 @@ uv run --no-project --python 3.13 --with openai==3.13.0 python \
   scripts/tests/file-search-sdk-test.py target/debug/agentic-server -v
 ```
 
-Local verification of this layer passed 1,333 workspace tests, all 30 PostgreSQL
+Local verification of this stack passed 1,339 workspace tests, all 31 PostgreSQL
 integration tests, and 17 strict SDK cases with deterministic loopback models.
 Rust 1.88 passed the locked all-feature workspace check; Rust 1.98 passed the
 all-feature tests (including PDF extraction) and clippy.

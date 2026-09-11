@@ -26,8 +26,11 @@ class RetrievalModels:
             def log_message(self, *_args):
                 pass
 
-            def do_POST(self):
+            def setup(self):
+                super().setup()
                 self.connection.settimeout(5)
+
+            def do_POST(self):
                 length = int(self.headers.get("Content-Length", "0"))
                 if length < 0 or length > 4 * 1024 * 1024:
                     self.send_error(413)
@@ -170,8 +173,11 @@ class ResponsesModel:
             def log_message(self, *_args):
                 pass
 
-            def do_POST(self):
+            def setup(self):
+                super().setup()
                 self.connection.settimeout(5)
+
+            def do_POST(self):
                 length = int(self.headers.get("Content-Length", "0"))
                 if self.path != "/v1/responses" or not 0 < length <= 4 * 1024 * 1024:
                     self.send_error(400)

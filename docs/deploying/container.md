@@ -137,10 +137,15 @@ Drain replicas running an older release before enabling writes through this rele
 
 Stored requests now fail if their response or conversation state cannot be persisted. For streaming requests, the gateway sends an error event instead of `response.completed`. Most client responses use the generic message `failed to persist response`; the underlying database error is written only to gateway logs. The exception is an optimistic conversation conflict, which returns status `400`, type `invalid_request_error`, code `conversation_locked`, and param `conversation`. No part of the stale turn is persisted, so the client can retry the request against the conversation's latest state. This prevents clients from receiving a response ID that cannot be continued after a lock timeout or other database failure without exposing database schema or constraint details.
 
-The file search migration (`0005_file_search.sql`) adds four tables for files,
-vector stores, attachments, and chunks. Supervisor-managed deployments must apply
-this migration and grant the runtime role `SELECT`, `INSERT`, `UPDATE`, and `DELETE`
-on the new tables before starting the upgraded gateway. File metadata and
+Supervisor-managed deployments must apply every applicable migration in order
+through `0008_vector_store_batches.sql`: `0005_file_search.sql`,
+`0006_file_expiration.sql`, `0007_vector_store_lifecycle.sql`, and
+`0008_vector_store_batches.sql` add file search, expiration/blob cleanup, store
+lifecycle, and durable file batches. Grant the runtime role `SELECT`,
+`INSERT`, `UPDATE`, and `DELETE` on all file search tables before starting the
+upgraded gateway: `file_search_files`, `file_search_stores`,
+`file_search_attachments`, `file_search_chunks`, `file_search_blob_cleanup`,
+`file_search_batches`, and `file_search_jobs`. File metadata and
 embeddings use the same database as conversation state. Uploaded bytes use the
 local filesystem configured by `AGENTIC_FILES_STORAGE_DIR`. Mount persistent
 writable storage for the Files API, including PostgreSQL deployments. Replicas
@@ -182,7 +187,15 @@ curl --fail http://127.0.0.1:9000/ready
 
 The container CI workflow builds the image, verifies that build tools are absent, launches the gateway against a mock upstream, checks both probes, and exercises a stored Responses API request through SQLite persistence. HTTP streaming and WebSockets use the same gateway binary and exposed port; the image does not add a transport proxy.
 
-On `SIGTERM`, the gateway stops accepting connections and gives in-flight requests up to eight seconds to drain before closing the remaining connections. Set an orchestrator termination grace period longer than eight seconds; the default 30-second Kubernetes grace period and the documented 10-second Docker stop timeout both satisfy this requirement.
+On `SIGTERM`, the gateway stops accepting connections and gives in-flight HTTP
+requests up to eight seconds to drain before closing the remaining connections.
+Full process shutdown also joins the file-search workers; cooperative parser,
+filesystem, and SQL/COMMIT work can outlast that HTTP drain. Size the orchestrator
+termination grace period for both drains using the configured
+[database timeouts](#postgresql-production-settings) and the
+[file-search worker shutdown guidance](../api/file-search.md#durable-file-batches-and-workers).
+The ten-second Docker example and Kubernetes's default 30 seconds are not
+unconditional full-process shutdown guarantees.
 
 ## Kubernetes and OpenShift security context
 
