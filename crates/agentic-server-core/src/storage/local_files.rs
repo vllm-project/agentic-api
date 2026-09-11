@@ -61,12 +61,24 @@ impl LocalFiles {
         Ok(self.directory.join(id))
     }
 
+    #[cfg(test)]
     pub(crate) async fn publish(
         &self,
         id: &str,
         bytes: &[u8],
         cancelled: &CancellationToken,
     ) -> Result<(), FileSearchError> {
+        self.publish_stream(id, &mut std::io::Cursor::new(bytes), cancelled)
+            .await
+            .map(|_| ())
+    }
+
+    pub(crate) async fn publish_stream(
+        &self,
+        id: &str,
+        reader: &mut (impl tokio::io::AsyncRead + Unpin),
+        cancelled: &CancellationToken,
+    ) -> Result<usize, FileSearchError> {
         let destination = self.path(id)?;
         let temporary = self.directory.join(format!(".upload-{id}-{}", uuid::Uuid::now_v7()));
         self.ensure_directory().await?;
@@ -79,27 +91,41 @@ impl LocalFiles {
             .await
             .map_err(|source| io_error("staging creation", source))?;
         let written = async {
-            for chunk in bytes.chunks(64 * 1024) {
-                if cancelled.is_cancelled() {
-                    return Err(cancelled_error());
+            let mut total = 0usize;
+            let mut buffer = vec![0; 64 * 1024];
+            loop {
+                let len = tokio::select! {
+                    biased;
+                    () = cancelled.cancelled() => return Err(cancelled_error()),
+                    result = reader.read(&mut buffer) => result.map_err(|source| io_error("upload read", source))?,
+                };
+                if len == 0 {
+                    break;
                 }
-                file.write_all(chunk)
+                total = total.saturating_add(len);
+                if total > crate::tool::file_search::MAX_FILE_BYTES {
+                    return Err(FileSearchError::InvalidRequest("File exceeds 512 MiB".into()));
+                }
+                file.write_all(&buffer[..len])
                     .await
                     .map_err(|source| io_error("write", source))?;
             }
             file.flush().await.map_err(|source| io_error("flush", source))?;
             file.sync_all().await.map_err(|source| io_error("sync", source))?;
-            Ok(())
+            Ok(total)
         }
         .await;
         // Tokio may have a buffered write in flight when cancellation was observed.
         // Finish it before unlinking so cleanup also works on Windows.
         let flushed = file.flush().await.map_err(|source| io_error("flush", source));
         drop(file);
-        if let Err(error) = written.and(flushed) {
-            remove_if_present(&temporary).await?;
-            return Err(error);
-        }
+        let total = match written.and_then(|total| flushed.map(|()| total)) {
+            Ok(total) => total,
+            Err(error) => {
+                remove_if_present(&temporary).await?;
+                return Err(error);
+            }
+        };
         if cancelled.is_cancelled() {
             remove_if_present(&temporary).await?;
             return Err(cancelled_error());
@@ -118,7 +144,7 @@ impl LocalFiles {
             remove_if_present(&destination).await?;
             return Err(error);
         }
-        Ok(())
+        Ok(total)
     }
 
     pub(crate) async fn read(
@@ -127,6 +153,24 @@ impl LocalFiles {
         expected_bytes: i64,
         max_bytes: usize,
     ) -> Result<Vec<u8>, FileSearchError> {
+        let file = self.open_read(id, expected_bytes, max_bytes).await?;
+        let expected = u64::try_from(expected_bytes)
+            .map_err(|_| io_error("read", io::Error::new(io::ErrorKind::InvalidData, "invalid blob size")))?;
+        let mut bytes = Vec::new();
+        file.take(max_bytes as u64 + 1)
+            .read_to_end(&mut bytes)
+            .await
+            .map_err(|source| io_error("read", source))?;
+        if bytes.len() > max_bytes || bytes.len() as u64 != expected {
+            return Err(io_error(
+                "read",
+                io::Error::new(io::ErrorKind::InvalidData, "blob size changed while reading"),
+            ));
+        }
+        Ok(bytes)
+    }
+
+    async fn open_read(&self, id: &str, expected_bytes: i64, max_bytes: usize) -> Result<fs::File, FileSearchError> {
         let path = self.path(id)?;
         let metadata = fs::symlink_metadata(&path)
             .await
@@ -151,22 +195,80 @@ impl LocalFiles {
                 io::Error::new(io::ErrorKind::InvalidData, "blob size mismatch or limit exceeded"),
             ));
         }
-        let mut bytes = Vec::new();
-        file.take(max_bytes as u64 + 1)
-            .read_to_end(&mut bytes)
+        Ok(file)
+    }
+
+    pub(crate) async fn stream(
+        &self,
+        id: &str,
+        expected_bytes: i64,
+        sender: tokio::sync::mpsc::Sender<Result<bytes::Bytes, FileSearchError>>,
+        ready: tokio::sync::oneshot::Sender<Result<(), FileSearchError>>,
+    ) {
+        let mut file = match self
+            .open_read(id, expected_bytes, crate::tool::file_search::MAX_FILE_BYTES)
             .await
-            .map_err(|source| io_error("read", source))?;
-        if bytes.len() > max_bytes || bytes.len() as u64 != expected {
-            return Err(io_error(
-                "read",
-                io::Error::new(io::ErrorKind::InvalidData, "blob size changed while reading"),
-            ));
+        {
+            Ok(file) => file,
+            Err(error) => {
+                let _ = ready.send(Err(error));
+                return;
+            }
+        };
+        if ready.send(Ok(())).is_err() {
+            return;
         }
-        Ok(bytes)
+        let result = async {
+            let mut remaining = u64::try_from(expected_bytes)
+                .map_err(|_| io_error("read", io::Error::new(io::ErrorKind::InvalidData, "invalid blob size")))?;
+            loop {
+                if sender.is_closed() {
+                    return Ok(());
+                }
+                let mut buffer = vec![0; 64 * 1024];
+                let len = file
+                    .read(&mut buffer)
+                    .await
+                    .map_err(|source| io_error("read", source))?;
+                if len as u64 > remaining || (len == 0 && remaining != 0) {
+                    return Err(io_error(
+                        "read",
+                        io::Error::new(io::ErrorKind::InvalidData, "blob size changed while reading"),
+                    ));
+                }
+                if len == 0 {
+                    break;
+                }
+                remaining -= len as u64;
+                // Verify EOF before emitting the final declared bytes: an HTTP
+                // client may consider Content-Length satisfied immediately.
+                if remaining == 0 {
+                    let mut extra = [0];
+                    let read = file.read(&mut extra).await.map_err(|source| io_error("read", source))?;
+                    let metadata = file.metadata().await.map_err(|source| io_error("read", source))?;
+                    if read != 0 || metadata.len() != u64::try_from(expected_bytes).unwrap_or(u64::MAX) {
+                        return Err(io_error(
+                            "read",
+                            io::Error::new(io::ErrorKind::InvalidData, "blob size changed while reading"),
+                        ));
+                    }
+                }
+                buffer.truncate(len);
+                if sender.send(Ok(bytes::Bytes::from(buffer))).await.is_err() {
+                    return Ok(());
+                }
+            }
+            Ok(())
+        }
+        .await;
+        if let Err(error) = result {
+            let _ = sender.send(Err(error)).await;
+        }
     }
 
     pub(crate) async fn remove(&self, id: &str) -> Result<(), FileSearchError> {
         remove_if_present(&self.path(id)?).await?;
+        self.ensure_directory().await?;
         self.sync_directory().await
     }
 

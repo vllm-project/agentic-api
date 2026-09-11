@@ -291,8 +291,18 @@ failed or cancelled ingestion publishes no partial chunks. Creating a store with
 the uploaded file ID, filename, attributes, and chunking strategy.
 
 The Files API accepts binary uploads independently of search ingestion. Uploads
-are limited to 20 MiB and must use purpose `assistants` or `user_data`. Attaching a
-file to a vector store validates its format: UTF-8 text, Markdown, CSV, JSON, source
+stream to disk with a 512 MiB limit (including zero-byte files). Accepted purposes are
+`assistants`, `batch`, `fine-tune`, `vision`, `user_data`, and `evals`. The multipart
+fields may occur in any order. Optional `expires_after[anchor]=created_at` and
+`expires_after[seconds]` (3600 through 2592000) set expiration. Batch-purpose files
+expire after 30 days by default; other purposes persist by default. Responses
+include `expires_at` when set. OpenAI Python SDK 3.13.0 accepts `evals` in upload
+parameters but omits it from its response-purpose literal; strict response validation
+in that SDK version rejects this purpose even though the HTTP contract accepts it.
+
+Attaching a
+file to a vector store retains a separate 20 MiB input limit and validates its format:
+UTF-8 text, Markdown, CSV, JSON, source
 files, and other supported text formats work in the default build. The default
 chunk size is 800 tokens with a 400-token overlap. Override it with:
 
@@ -389,17 +399,32 @@ parts, output items, and the terminal response.
 | Retrieve/detach a store file | `GET` / `DELETE /v1/vector_stores/{store_id}/files/{file_id}` |
 | Search a store | `POST /v1/vector_stores/{store_id}/search` |
 
-Lists accept `limit`, `after`, `before`, and `order`. Detaching a file preserves the
+Lists accept `limit`, `after`, `before`, and `order`. Files lists additionally accept
+`purpose`, with a limit of 1–10000 and default 10000; vector store lists retain their
+1–100 limit and default 20. Files deletion returns `object: "file"`. Detaching a file preserves the
 original upload. Deleting an upload removes its metadata, attachments, and chunks
 from all stores, then removes its local file bytes. Deleting a vector store
 preserves uploaded files.
 
 Uploads publish complete, synced files before committing metadata. Failures and
 cancellation before commit clean up the upload. Filesystem and SQL commits are
-separate: a process crash, failed unlink, or uncertain database commit can leave
-unreferenced files. Automatic orphan-file cleanup is not included. A missing or
-damaged file referenced by metadata returns a storage error instead of a partial
-download. Uploads stored inline by an earlier draft remain readable.
+separate: a process crash or uncertain upload commit can leave unreferenced files.
+Deletion and expiration atomically persist a blob-cleanup intent with SQL deletion;
+`FileSearchService::cleanup_expired_files(limit)` retries pending filesystem deletion
+and acknowledges it only after directory synchronization. It never sweeps arbitrary
+unreferenced files that another upload might be publishing. A lifecycle worker must
+invoke this method to reclaim expired bytes; visibility does not depend on that worker.
+Expired files disappear from reads, lists, attachment reads, and search immediately,
+and publication rechecks expiry after model work. Cleanup removes attachments and
+chunks from every store while preserving independent uploads. Servers sharing SQL
+must share the same files storage directory/mount.
+
+Downloads stream through a bounded buffer with verified `Content-Length`. Missing or
+already damaged files return a storage error before headers; integrity or I/O errors
+during streaming terminate the response. Download visibility is checked when opening;
+an already-open download can finish if its metadata is subsequently deleted or expires.
+Search revalidates visible attachments after rewriting, embedding, and reranking.
+Uploads stored inline by an earlier draft remain readable.
 
 The routes use the gateway's configured authentication policy. Retrieval uses bounded exact SQL or the configured pgvector backend and returns
 explicit capacity errors when limits are exceeded.

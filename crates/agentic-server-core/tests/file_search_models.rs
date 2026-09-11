@@ -8,6 +8,9 @@ use std::sync::{Arc, Mutex};
 struct Fixture {
     requests: Arc<Mutex<Vec<(String, Value)>>>,
     rerank_response: Arc<Mutex<Option<Value>>>,
+    rerank_pause: Arc<Mutex<bool>>,
+    rerank_started: Arc<tokio::sync::Notify>,
+    rerank_resume: Arc<tokio::sync::Notify>,
     chat_fail: Arc<Mutex<bool>>,
     chat_fail_after: Arc<Mutex<Option<usize>>>,
     chat_response: Arc<Mutex<Option<Value>>>,
@@ -79,6 +82,11 @@ async fn rerank(State(state): State<Fixture>, headers: axum::http::HeaderMap, Js
             .to_owned(),
     );
     state.requests.lock().unwrap().push(("rerank".into(), input.clone()));
+    let pause = *state.rerank_pause.lock().unwrap();
+    if pause {
+        state.rerank_started.notify_one();
+        state.rerank_resume.notified().await;
+    }
     if let Some(output) = state.rerank_response.lock().unwrap().clone() {
         return Json(output);
     }
@@ -868,4 +876,28 @@ fn hyphenated_openai_ranker_is_accepted_in_deployment_configuration() {
     let ranker: Ranker = serde_json::from_str("\"default-2024-08-21\"").unwrap();
     assert_eq!(ranker, Ranker::Default20240821);
     assert_eq!(serde_json::to_string(&ranker).unwrap(), "\"default-2024-08-21\"");
+}
+
+#[tokio::test]
+async fn expiration_during_reranking_discards_cached_candidates() {
+    let setup = setup(false).await;
+    let store = setup
+        .service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    let file_id = attach(&setup.service, &store.id, "coral preferred", None).await;
+    *setup.state.rerank_pause.lock().unwrap() = true;
+    let service = setup.service.clone();
+    let request: SearchRequest =
+        serde_json::from_value(json!({"query":"coral","ranking_options":{"ranker":"neural"}})).unwrap();
+    let search = tokio::spawn(async move { service.search(&[store.id], &request).await });
+    setup.state.rerank_started.notified().await;
+    sqlx::query("UPDATE file_search_files SET expires_at = 1 WHERE id = $1")
+        .bind(file_id)
+        .execute(setup.pool.as_ref())
+        .await
+        .unwrap();
+    setup.state.rerank_resume.notify_one();
+    assert!(search.await.unwrap().unwrap().data.is_empty());
 }

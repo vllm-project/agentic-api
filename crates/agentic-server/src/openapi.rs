@@ -1036,4 +1036,5 @@ pub struct FileUploadRequest {
     #[schema(format = Binary)]
     pub file: String,
     pub purpose: String,
+    pub expires_after: Option<agentic_core::types::file_search::FileExpiresAfter>,
 }

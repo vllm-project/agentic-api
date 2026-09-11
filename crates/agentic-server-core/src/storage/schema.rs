@@ -15,8 +15,8 @@ use crate::config::DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS;
 type DbResult<T> = Result<T, sqlx::Error>;
 
 const POSTGRES_SCHEMA_ADVISORY_LOCK: i64 = 7_194_963_546_799_751;
-const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 40;
-const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 14;
+const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 43;
+const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 15;
 const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 4;
 const POSTGRES_INTEGER_WIDENING_SQL: &str = "
     ALTER TABLE conversations
@@ -91,6 +91,9 @@ where
                  ('file_search_files', 'data', 'text', 'NO'), \
                  ('file_search_files', 'content_type', 'text', 'NO'), \
                  ('file_search_files', 'content_base64', 'text', 'NO'), \
+                 ('file_search_files', 'expires_at', 'bigint', 'YES'), \
+                 ('file_search_files', 'purpose', 'text', 'YES'), \
+                 ('file_search_blob_cleanup', 'file_id', 'text', 'NO'), \
                  ('file_search_stores', 'id', 'text', 'NO'), \
                  ('file_search_stores', 'created_at', 'bigint', 'NO'), \
                  ('file_search_stores', 'data', 'text', 'NO'), \
@@ -146,6 +149,7 @@ where
                  ('conversations', 'f', \
                   'FOREIGN KEY (latest_response_id) REFERENCES responses(id) ON DELETE SET NULL'), \
                  ('file_search_files', 'p', 'PRIMARY KEY (id)'), \
+                 ('file_search_blob_cleanup', 'p', 'PRIMARY KEY (file_id)'), \
                  ('file_search_stores', 'p', 'PRIMARY KEY (id)'), \
                  ('file_search_attachments', 'p', 'PRIMARY KEY (store_id, file_id)'), \
                  ('file_search_chunks', 'p', 'PRIMARY KEY (store_id, file_id, chunk_index)'), \
@@ -308,7 +312,7 @@ pub(crate) async fn pin_postgres_persistence_schema(connection: &mut sqlx::AnyCo
          WHERE table_namespace.nspname = ANY(current_schemas(false)) \
          AND table_relation.relkind IN ('r', 'p', 'v', 'm', 'f') \
          AND table_relation.relname IN ('_sqlx_migrations', 'conversations', 'items', 'responses', \
-              'file_search_files', 'file_search_stores', 'file_search_attachments', 'file_search_chunks') \
+              'file_search_files', 'file_search_stores', 'file_search_attachments', 'file_search_chunks', 'file_search_blob_cleanup') \
          ORDER BY table_namespace.nspname::text",
     )
     .fetch_all(&mut *connection)
@@ -399,6 +403,10 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                          ('responses', 'INSERT'), \
                          ('file_search_files', 'SELECT'), \
                          ('file_search_files', 'INSERT'), \
+                         ('file_search_files', 'UPDATE'), \
+                         ('file_search_blob_cleanup', 'SELECT'), \
+                         ('file_search_blob_cleanup', 'INSERT'), \
+                         ('file_search_blob_cleanup', 'DELETE'), \
                          ('file_search_files', 'DELETE'), \
                          ('file_search_stores', 'SELECT'), \
                          ('file_search_stores', 'INSERT'), \
@@ -411,7 +419,7 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                          ('file_search_chunks', 'INSERT') \
                  ) \
                  SELECT current_setting('transaction_read_only') = 'off' \
-                    AND COUNT(table_relation.oid) = 19 \
+                    AND COUNT(table_relation.oid) = 23 \
                     AND COALESCE(BOOL_AND( \
                         has_table_privilege(current_user, table_relation.oid, required.privilege) \
                     ), false) \
@@ -440,7 +448,8 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                 "SELECT id FROM conversations LIMIT 0",
                 "SELECT id FROM items LIMIT 0",
                 "SELECT id FROM responses LIMIT 0",
-                "SELECT id, created_at, data, content_type, content_base64 FROM file_search_files LIMIT 0",
+                "SELECT id, created_at, data, content_type, content_base64, expires_at, purpose FROM file_search_files LIMIT 0",
+                "SELECT file_id FROM file_search_blob_cleanup LIMIT 0",
                 "SELECT id, created_at, data, embedding_identity, embedding_dimensions FROM file_search_stores LIMIT 0",
                 "SELECT store_id, file_id, created_at, usage_bytes, storage_bytes, data FROM file_search_attachments LIMIT 0",
                 "SELECT store_id, file_id, chunk_index, data FROM file_search_chunks LIMIT 0",
@@ -696,6 +705,15 @@ mod tests {
             .execute(pool.as_ref())
             .await
             .unwrap();
+        assert!(
+            verify_persistence_ready(pool.as_ref()).await.is_err(),
+            "expiry migration is required"
+        );
+        assert!(wrapper.ensure_schema_ready_with_marker(true).await.is_err());
+        sqlx::raw_sql(include_str!("../../migrations/0006_file_expiration.sql"))
+            .execute(pool.as_ref())
+            .await
+            .unwrap();
         verify_persistence_ready(pool.as_ref()).await.unwrap();
         wrapper.ensure_schema_ready_with_marker(true).await.unwrap();
     }
@@ -798,6 +816,14 @@ mod tests {
             .execute(&mut *connection)
             .await
             .unwrap();
+        assert!(
+            supervisor.ensure_schema_ready_with_marker(true).await.is_err(),
+            "expiry migration is required"
+        );
+        sqlx::raw_sql(include_str!("../../migrations/0006_file_expiration.sql"))
+            .execute(&mut *connection)
+            .await
+            .unwrap();
         supervisor.ensure_schema_ready_with_marker(true).await.unwrap();
         supervisor.pool.close().await;
         sqlx::query("SET search_path TO public")
@@ -839,6 +865,7 @@ mod tests {
             include_str!("../../migrations/0003_index_conversation_sequence.sql"),
             include_str!("../../migrations/0004_link_conversation_latest_response.sql"),
             include_str!("../../migrations/0005_file_search.sql"),
+            include_str!("../../migrations/0006_file_expiration.sql"),
         ] {
             sqlx::raw_sql(migration)
                 .execute(&mut *connection)
