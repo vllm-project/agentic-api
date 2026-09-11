@@ -145,6 +145,7 @@ class ReplayState:
     turns: list[ReplayTurn]
     capture_path: Path
     next_turn: int = 0
+    model: str | None = None
 
     def __post_init__(self) -> None:
         self.lock = threading.Lock()
@@ -191,6 +192,17 @@ def make_handler(state: ReplayState) -> type[BaseHTTPRequestHandler]:
             parsed = urlsplit(self.path)
             if parsed.path == "/health":
                 self._send_bytes(200, "text/plain", b"")
+                return
+            if parsed.path == "/v1/models" and state.model is not None:
+                # Synthetic discovery metadata, not a captured inference turn.
+                # The text-only replay must not advertise image support.
+                self._send_json(
+                    200,
+                    {
+                        "object": "list",
+                        "data": [{"id": state.model, "object": "model", "capabilities": []}],
+                    },
+                )
                 return
             if parsed.path == "/v1/search":
                 query = {key: values[-1] for key, values in parse_qs(parsed.query).items()}
@@ -279,6 +291,7 @@ def parse_args() -> argparse.Namespace:
     serve.add_argument("--cassette", required=True, type=Path)
     serve.add_argument("--port", required=True, type=int)
     serve.add_argument("--capture", required=True, type=Path)
+    serve.add_argument("--model", help="Model ID to advertise in a synthetic text-only catalog")
 
     assert_capture = subparsers.add_parser("assert-capture")
     assert_capture.add_argument("--capture", required=True, type=Path)
@@ -306,7 +319,7 @@ def main() -> None:
 
     args.capture.parent.mkdir(parents=True, exist_ok=True)
     args.capture.write_text("")
-    state = ReplayState(load_turns(args.cassette), args.capture)
+    state = ReplayState(load_turns(args.cassette), args.capture, model=args.model)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(state))
     server.serve_forever()
 

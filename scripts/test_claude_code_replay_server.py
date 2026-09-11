@@ -3,9 +3,12 @@ import sys
 import tempfile
 import threading
 import unittest
+import urllib.error
 import urllib.request
+from contextlib import contextmanager
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -91,6 +94,54 @@ def capture_records(first_request: dict, second_request: dict) -> list[dict]:
 
 
 class ReplayServerTests(unittest.TestCase):
+    @contextmanager
+    def catalog_server(self, model):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            capture_path = Path(temp_dir) / "capture.jsonl"
+            capture_path.write_text("")
+            state = replay.ReplayState(replay.load_turns(RESPONSES_CASSETTE), capture_path, model=model)
+            server = ThreadingHTTPServer(("127.0.0.1", 0), replay.make_handler(state))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                yield f"http://127.0.0.1:{server.server_port}", state
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=5)
+                self.assertFalse(thread.is_alive())
+
+    def test_models_route_is_text_only_and_does_not_consume_recorded_turn(self) -> None:
+        model = "custom/model-with-override"
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with self.catalog_server(model) as (url, state):
+            for _ in range(2):
+                with opener.open(url + "/v1/models", timeout=5) as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(response.headers.get_content_type(), "application/json")
+                    self.assertEqual(
+                        json.load(response),
+                        {"object": "list", "data": [{"id": model, "object": "model", "capabilities": []}]},
+                    )
+            self.assertEqual(state.next_turn, 0)
+            self.assertEqual(replay.load_capture(state.capture_path), [])
+            self.assertEqual(state.take_turn(), replay.load_turns(RESPONSES_CASSETTE)[0])
+
+    def test_unconfigured_model_catalog_keeps_not_found_response(self) -> None:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with self.catalog_server(None) as (url, state):
+            with self.assertRaises(urllib.error.HTTPError) as failure:
+                opener.open(url + "/v1/models", timeout=5)
+            self.assertEqual(failure.exception.code, 404)
+            failure.exception.close()
+            self.assertEqual(state.next_turn, 0)
+
+    def test_serve_accepts_optional_model_catalog(self) -> None:
+        arguments = ["replay", "serve", "--cassette", "fixture.yaml", "--capture", "capture.jsonl", "--port", "0"]
+        for extra, expected in (([], None), (["--model", QWEN_MODEL], QWEN_MODEL)):
+            with self.subTest(model=expected), patch.object(sys, "argv", arguments + extra):
+                self.assertEqual(replay.parse_args().model, expected)
+
     def test_load_turns_reads_recorded_streams(self) -> None:
         turns = replay.load_turns(CASSETTE)
 
