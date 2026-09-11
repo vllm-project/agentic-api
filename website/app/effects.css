@@ -38,28 +38,67 @@
     );
 }
 
-/* A fine illuminated edge gives every card the same treatment. */
+/* Larger pools of light track the pointer; their defaults are static. */
+.hero::after,
+.community-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--spotlight-opacity, 0.65);
+  background: radial-gradient(
+    460px circle at var(--spotlight-x, 38%) var(--spotlight-y, 35%),
+    light-dark(#30a2ff45, #30a2ff50),
+    light-dark(#30a2ff14, #30a2ff18) 42%,
+    transparent 72%
+  );
+  mask-image: linear-gradient(transparent, #000 12%, #000 82%, transparent);
+  transition: opacity 240ms ease;
+}
+
+/* Nearby cards catch a gold edge and a soft blue reflection. */
 :is(.feature-card, .person-card, .contributor-profile, .upstream-card) {
   position: relative;
+  isolation: isolate;
   transition:
     border-color 220ms ease,
     box-shadow 220ms ease,
     transform 220ms ease;
 }
+:is(.feature-card, .person-card, .contributor-profile, .upstream-card)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--spotlight-opacity, 0.45);
+  background: radial-gradient(
+    280px circle at var(--spotlight-x, 85%) var(--spotlight-y, 0%),
+    light-dark(#30a2ff22, #30a2ff2c),
+    transparent 72%
+  );
+  transition: opacity 220ms ease;
+}
 :is(.feature-card, .person-card, .contributor-profile, .upstream-card)::after {
   content: '';
   position: absolute;
-  inset: 0 18px auto;
-  height: 1px;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
   pointer-events: none;
-  opacity: 0;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--brand-blue) 35%,
-    var(--brand-gold) 70%,
-    transparent
+  opacity: var(--spotlight-opacity, 0.4);
+  background: radial-gradient(
+    180px circle at var(--spotlight-x, 85%) var(--spotlight-y, 0%),
+    var(--brand-gold),
+    light-dark(#30a2ff80, #30a2ff99) 55%,
+    transparent 85%
   );
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
   transition: opacity 220ms ease;
 }
 :is(
@@ -79,6 +118,22 @@
     .contributor-profile,
     .upstream-card
   ):focus-within::after {
+  opacity: 1;
+}
+:is(
+    .feature-card,
+    .person-card,
+    .contributor-profile,
+    .upstream-card
+  ):focus-within::before,
+:is(
+    .feature-card,
+    .person-card,
+    .contributor-profile,
+    .upstream-card
+  ):focus-within::after {
+  --spotlight-x: 50%;
+  --spotlight-y: 0%;
   opacity: 1;
 }
 .person-top img,
