@@ -15,6 +15,7 @@ use tokio::sync::Notify;
 
 use super::{ExecutorError, ExecutorResult};
 use crate::storage::{InOutItem, ResponseMetadata};
+use crate::types::io::input::latest_compaction_window;
 use crate::types::io::{InputItem, OutputItem};
 use crate::utils::common::serialized_size_up_to;
 
@@ -350,6 +351,26 @@ fn aggregate_budget_error() -> ExecutorError {
     )
 }
 
+/// Restore only the current canonical window, while preserving orchestration
+/// records that the model-facing projection would strip. Durable response chains
+/// can still reference superseded parent rows; those must not consume the session
+/// checkpoint budget or introduce obsolete pending calls after reconnecting.
+pub(super) fn canonical_session_history(history: Vec<InputItem>) -> Vec<InputItem> {
+    let Some(window) = latest_compaction_window(&history) else {
+        return history;
+    };
+    history
+        .into_iter()
+        .enumerate()
+        .filter(|(index, item)| {
+            *index >= window.latest_index()
+                || window.retains_user_item(*index, item)
+                || matches!(item, InputItem::McpListTools(_))
+        })
+        .map(|(_, item)| item)
+        .collect()
+}
+
 impl ResponseContinuation {
     /// The executor has replaced this turn's input with a canonical compacted window.
     pub(crate) fn mark_history_replaced(&mut self) {
@@ -394,7 +415,7 @@ impl ResponseContinuation {
         let checkpoint = ResponseCheckpoint {
             response_id,
             conversation_id,
-            history,
+            history: canonical_session_history(history),
             metadata,
             durable,
         };

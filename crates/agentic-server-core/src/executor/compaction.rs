@@ -3,7 +3,7 @@ use crate::executor::persist::persist_prepared_turn;
 use crate::executor::prepare::prepare_request_tools;
 use crate::executor::rehydrate::rehydrate_conversation;
 use crate::executor::request::{ExecutionContext, RequestContext};
-use crate::executor::upstream::fetch_blocking_payload;
+use crate::executor::upstream::{agent_pipeline, fetch_blocking_payload};
 use crate::tool::ToolSearchState;
 use crate::types::event::MessageStatus;
 use crate::types::io::input::latest_compaction_window;
@@ -157,6 +157,8 @@ fn item_has_meaningful_context(item: &InputItem) -> bool {
         InputItem::ToolSearchOutput(output) => !output.call_id.trim().is_empty() || !output.tools.is_empty(),
         InputItem::CustomToolCall(call) => !call.name.trim().is_empty() || !call.input.trim().is_empty(),
         InputItem::CustomToolCallOutput(output) => output.output.has_content(),
+        InputItem::ShellCall(call) => !call.action.commands.is_empty(),
+        InputItem::ShellCallOutput(output) => !output.output.is_empty(),
         InputItem::Reasoning(reasoning) => {
             reasoning.content.iter().any(|content| !content.text.trim().is_empty())
                 || reasoning.summary.iter().any(value_has_content)
@@ -293,6 +295,13 @@ fn add_input_item(estimate: &mut InputTokenEstimate, item: &InputItem) {
             estimate.add_optional_text(output.name.as_deref());
             add_tool_call_output(estimate, &output.output);
         }
+        InputItem::ShellCall(_) | InputItem::ShellCallOutput(_) => {
+            // Shell items carry textual commands and outputs, without image payloads.
+            match serialize_to_value(item) {
+                Ok(value) => estimate.add_json_value(&value),
+                Err(_) => estimate.add_tokens(u64::MAX),
+            }
+        }
         InputItem::Reasoning(reasoning) => {
             estimate.add_text(&reasoning.id);
             estimate.add_optional_text(reasoning.status.as_deref());
@@ -410,7 +419,9 @@ pub(crate) async fn compact_items(
         conversation_version: None,
         continuation: None,
     };
-    let response = fetch_blocking_payload(&ctx, exec_ctx, auth, &crate::tool::ToolRegistry::default(), None).await?;
+    let mut agent = agent_pipeline(ctx, None, None);
+    let response =
+        fetch_blocking_payload(&mut agent, exec_ctx, auth, &crate::tool::ToolRegistry::default(), None).await?;
     let summary = completed_summary_text(&response)?;
 
     Ok((
@@ -926,6 +937,27 @@ mod tests {
                     "call_id": "call_1",
                     "output": [{"type": "input_text", "text": long_text}]
                 }]),
+            ),
+        ]);
+    }
+
+    #[test]
+    fn shell_commands_and_outputs_increase_token_estimates() {
+        let long_text = "shell context ".repeat(256);
+        assert_text_growth([
+            (
+                "shell commands",
+                serde_json::json!([{"type": "shell_call", "call_id": "c1", "action": {"commands": ["x"]}}]),
+                serde_json::json!([{"type": "shell_call", "call_id": "c1", "action": {"commands": [long_text]}}]),
+            ),
+            (
+                "shell output",
+                serde_json::json!([{"type": "shell_call_output", "call_id": "c1", "output": [
+                    {"stdout": "x", "stderr": "", "outcome": {"type": "exit", "exit_code": 0}}
+                ]}]),
+                serde_json::json!([{"type": "shell_call_output", "call_id": "c1", "output": [
+                    {"stdout": long_text, "stderr": long_text, "outcome": {"type": "exit", "exit_code": 0}}
+                ]}]),
             ),
         ]);
     }

@@ -187,6 +187,7 @@ async fn validate_output_call_ids(
             OutputItem::FunctionCall(call) => ("function_call", call.call_id.as_str()),
             OutputItem::ToolSearchCall(call) => ("tool_search_call", call.call_id.as_str()),
             OutputItem::CustomToolCall(call) => ("custom_tool_call", call.call_id.as_str()),
+            OutputItem::ShellCall(call) => ("shell_call", call.call_id.as_str()),
             _ => continue,
         };
         if call_id.is_empty() {
@@ -204,18 +205,13 @@ async fn validate_output_call_ids(
         return Ok(());
     }
 
-    if let Some(continuation) = &ctx.continuation {
-        // Rehydration already pinned a coherent canonical parent. Re-reading the
-        // database here is both unnecessary and wrong for an unstored response.
-        let history = continuation
-            .parent
-            .as_ref()
-            .map_or(&[][..], |parent| parent.history.as_slice());
-        validate_history_call_ids(history.iter().map(input_call_id), &call_ids)?;
-    } else {
-        let history = resp_handler.rehydrate(ctx).await?;
-        validate_history_call_ids(history.iter().map(stored_call_id), &call_ids)?;
+    if ctx.continuation.is_some() {
+        // Rehydration already combined the pinned parent with normalized input.
+        // Validate that effective window, excluding calls superseded by compaction.
+        return validate_history_call_ids(ctx.enriched_request.input.model_items().map(input_call_id), &call_ids);
     }
+    let history = resp_handler.rehydrate(ctx).await?;
+    validate_history_call_ids(history.iter().map(stored_call_id), &call_ids)?;
     for (input_index, item) in ctx.new_input_items.iter().enumerate() {
         if let Some((output_index, item_type)) = input_call_id(item).and_then(|call_id| call_ids.get(call_id)) {
             return Err(ExecutorError::InvalidRequest(format!(
@@ -246,6 +242,7 @@ fn stored_call_id(item: &InOutItem) -> Option<&str> {
         InOutItem::Output(OutputItem::FunctionCall(call)) => Some(&call.call_id),
         InOutItem::Output(OutputItem::ToolSearchCall(call)) => Some(&call.call_id),
         InOutItem::Output(OutputItem::CustomToolCall(call)) => Some(&call.call_id),
+        InOutItem::Output(OutputItem::ShellCall(call)) => Some(&call.call_id),
         InOutItem::Output(_) => None,
     }
 }
@@ -255,6 +252,7 @@ fn input_call_id(item: &InputItem) -> Option<&str> {
         InputItem::FunctionCall(call) => Some(&call.call_id),
         InputItem::ToolSearchCall(call) => Some(&call.call_id),
         InputItem::CustomToolCall(call) => Some(&call.call_id),
+        InputItem::ShellCall(call) => Some(&call.call_id),
         _ => None,
     }
 }

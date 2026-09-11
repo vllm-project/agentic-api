@@ -1,0 +1,228 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: 'The local shell environment is Linux bash. Use the shell tool exactly
+        once with this exact action, preserving the commands array and its order:
+        {"commands": ["printf ''SHELL_OK\\n''", "printf ''SHELL_ERROR\\n'' >&2; exit
+        7", "sleep 2"], "timeout_ms": 1000, "max_output_length": 4096}. Keep semicolon-separated
+        statements in the same command string. Wait for the client to return shell_call_output
+        before interpreting the results.'
+      max_output_tokens: 4096
+      model: Qwen/Qwen3.5-35B-A3B-FP8
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - environment:
+          type: local
+        type: shell
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1789101053
+      error: null
+      id: resp_01a08ebb-8fab-7e02-a261-8c1c69e1e214
+      incomplete_details: null
+      instructions: null
+      model: Qwen/Qwen3.5-35B-A3B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to run a shell command with specific parameters.
+            They''ve provided the exact JSON structure they want me to use. This is
+            a test of the shell tool functionality.
+
+
+            Looking at the commands:
+
+            1. `printf ''SHELL_OK\n''` - This should print SHELL_OK and succeed
+
+            2. `printf ''SHELL_ERROR\n'' >&2; exit 7` - This should print an error
+            message to stderr and exit with code 7
+
+            3. `sleep 2` - This would sleep for 2 seconds
+
+
+            However, the timeout is set to 1000ms (1 second), and there''s a sleep
+            2 command. The second command exits with code 7, which means the third
+            command won''t execute because the shell exits after the second command.
+
+
+            Let me use the shell tool with these exact parameters.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_9ebadd69187bd586
+        status: null
+        summary: []
+        type: reasoning
+      - action:
+          commands:
+          - printf 'SHELL_OK\n'
+          - printf 'SHELL_ERROR\n' >&2; exit 7
+          - sleep 2
+          max_output_length: 4096
+          timeout_ms: 1000
+        call_id: chatcmpl-tool-9b27faefa68d0a57
+        id: sh_beb64805fc65a6ee
+        status: completed
+        type: shell_call
+      previous_response_id: null
+      status: completed
+      tool_choice: auto
+      tools:
+      - environment:
+          type: local
+        type: shell
+      usage:
+        input_tokens: 505
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 267
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 772
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: chatcmpl-tool-9b27faefa68d0a57
+        max_output_length: 4096
+        output:
+        - outcome:
+            exit_code: 0
+            type: exit
+          stderr: ''
+          stdout: 'SHELL_OK
+
+            '
+        - outcome:
+            exit_code: 7
+            type: exit
+          stderr: 'SHELL_ERROR
+
+            '
+          stdout: ''
+        - outcome:
+            type: timeout
+          stderr: ''
+          stdout: ''
+        type: shell_call_output
+      - content: Use the shell output above without calling any more tools. For each
+          command, report its stdout, stderr, and exit code or timeout outcome in
+          order.
+        role: user
+        type: message
+      max_output_tokens: 4096
+      model: Qwen/Qwen3.5-35B-A3B-FP8
+      previous_response_id: resp_01a08ebb-8fab-7e02-a261-8c1c69e1e214
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - environment:
+          type: local
+        type: shell
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1789101055
+      error: null
+      id: resp_01a08ebb-968f-7ad0-97b3-d8d225ba906f
+      incomplete_details: null
+      instructions: null
+      model: Qwen/Qwen3.5-35B-A3B-FP8
+      object: response
+      output:
+      - content:
+        - text: "The user is asking me to analyze the shell output from the previous\
+            \ command and report the results for each command in order. Let me parse\
+            \ the output:\n\n1. First command: `printf 'SHELL_OK\\\\n'`\n   - stdout:\
+            \ \"SHELL_OK\\n\"\n   - stderr: \"\"\n   - outcome: exit_code: 0\n\n2.\
+            \ Second command: `printf 'SHELL_ERROR\\\\n' >&2; exit 7`\n   - stdout:\
+            \ \"\"\n   - stderr: \"SHELL_ERROR\\n\"\n   - outcome: exit_code: 7\n\n\
+            3. Third command: `sleep 2`\n   - stdout: \"\"\n   - stderr: \"\"\n  \
+            \ - outcome: timeout (this didn't complete before the 1000ms timeout)\n\
+            \nLet me report this in order.\n"
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_9b37cd20c909de0f
+        status: null
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            Here are the results for each command in order:
+
+
+            **Command 1:** `printf ''SHELL_OK\n''`
+
+            - stdout: `SHELL_OK`
+
+            - stderr: (empty)
+
+            - Exit code: 0
+
+
+            **Command 2:** `printf ''SHELL_ERROR\n'' >&2; exit 7`
+
+            - stdout: (empty)
+
+            - stderr: `SHELL_ERROR`
+
+            - Exit code: 7
+
+
+            **Command 3:** `sleep 2`
+
+            - stdout: (empty)
+
+            - stderr: (empty)
+
+            - Outcome: Timeout (the command was killed before completing due to the
+            1000ms timeout limit)'
+          type: output_text
+        id: msg_af01c85599fdf30a
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: resp_01a08ebb-8fab-7e02-a261-8c1c69e1e214
+      status: completed
+      tool_choice: auto
+      tools:
+      - environment:
+          type: local
+        type: shell
+      usage:
+        input_tokens: 695
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 319
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 1014
+    headers:
+      content-type: application/json
+    status_code: 200

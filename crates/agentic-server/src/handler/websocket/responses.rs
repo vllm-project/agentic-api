@@ -1,4 +1,5 @@
 use std::collections::{HashMap, VecDeque};
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -17,7 +18,8 @@ use tracing::{debug, warn};
 
 use agentic_core::ResponseUsage;
 use agentic_core::executor::{
-    BoxStream, ExecuteRequest, ExecutorError, RequestContext, persist_turn, rehydrate_conversation,
+    BoxStream, ExecuteRequest, ExecutorError, RequestContext, ResponseSession, ResponseSessionGroup, persist_turn,
+    rehydrate_in_session,
 };
 use agentic_core::types::request_response::RequestPayload;
 use agentic_core::utils::common::utcnow_str;
@@ -34,6 +36,12 @@ const WS_MAX_EVENT_BYTES: usize = 1024 * 1024;
 const WS_MAX_OUTSTANDING_REQUESTS: usize = 64;
 const WS_MAX_OUTSTANDING_BYTES: usize = 12 * 1024 * 1024;
 const WS_MAX_STREAM_ID_CHARS: usize = 256;
+// Retained state is bounded separately from queued requests and outbound events.
+// Limits cover serialized checkpoints, including pinned parents and replacements.
+const WS_MAX_SESSION_LANES: usize = 128;
+const WS_MAX_CHECKPOINT_ITEMS: usize = 32_768;
+const WS_MAX_CHECKPOINT_BYTES: usize = 16 * 1024 * 1024;
+const WS_MAX_RETAINED_BYTES: usize = 32 * 1024 * 1024;
 
 /// Serialized and size-checked before entering the bounded outbound queue.
 struct WsOutboundEvent(String);
@@ -92,6 +100,7 @@ struct WsRequest {
 
 #[derive(Debug)]
 struct WsRequestParseError {
+    previous_response_id: Option<String>,
     error: WsError,
     stream_id: Option<StreamId>,
 }
@@ -127,6 +136,7 @@ impl WsWorkItem {
 }
 
 struct WsAdmissionError {
+    error: WsError,
     stream_id: Option<StreamId>,
 }
 
@@ -162,6 +172,9 @@ struct WsMultiplexer {
     principal: Option<Arc<AuthenticatedPrincipal>>,
     outbound_tx: mpsc::Sender<WsOutboundEvent>,
     lanes: HashMap<Option<StreamId>, VecDeque<WsWorkItem>>,
+    // Idle lanes retain their latest checkpoint until the connection closes.
+    sessions: HashMap<Option<StreamId>, Arc<ResponseSession>>,
+    session_group: ResponseSessionGroup,
     request_tasks: JoinSet<RequestCompletion>,
     queued_requests: usize,
     byte_budget: WsByteBudget,
@@ -182,6 +195,13 @@ impl WsMultiplexer {
             principal: principal.map(Arc::new),
             outbound_tx,
             lanes: HashMap::new(),
+            sessions: HashMap::new(),
+            session_group: ResponseSessionGroup::new(
+                NonZeroUsize::new(WS_MAX_SESSION_LANES).expect("positive session limit"),
+                NonZeroUsize::new(WS_MAX_CHECKPOINT_ITEMS).expect("positive item limit"),
+                NonZeroUsize::new(WS_MAX_CHECKPOINT_BYTES).expect("positive checkpoint limit"),
+                NonZeroUsize::new(WS_MAX_RETAINED_BYTES).expect("positive retention limit"),
+            ),
             request_tasks: JoinSet::new(),
             queued_requests: 0,
             byte_budget: WsByteBudget::default(),
@@ -197,12 +217,26 @@ impl WsMultiplexer {
     fn schedule(&mut self, work: WsWorkItem) -> Result<(), WsAdmissionError> {
         if !self.has_capacity_for(work.input_bytes()) {
             return Err(WsAdmissionError {
+                error: WsError::TooManyRequests,
                 stream_id: work.stream_id().cloned(),
             });
         }
 
-        self.byte_budget.reserve(work.input_bytes());
         let lane = work.lane();
+        if !self.sessions.contains_key(&lane) {
+            if self.sessions.len() >= WS_MAX_SESSION_LANES {
+                return Err(WsAdmissionError {
+                    error: WsError::TooManyRequests,
+                    stream_id: lane,
+                });
+            }
+            let session = self.session_group.new_session().map_err(|error| WsAdmissionError {
+                error: WsError::from(error),
+                stream_id: lane.clone(),
+            })?;
+            self.sessions.insert(lane.clone(), Arc::new(session));
+        }
+        self.byte_budget.reserve(work.input_bytes());
         if let Some(queue) = self.lanes.get_mut(&lane) {
             queue.push_back(work);
             self.queued_requests += 1;
@@ -273,6 +307,8 @@ impl WsMultiplexer {
         let shutdown_token = self.shutdown_token.clone();
         let stream_id = work.stream_id().cloned();
         let input_bytes = work.input_bytes();
+        // schedule creates a session before admitting work; idle sessions survive schedule_next.
+        let session = Arc::clone(self.sessions.get(&lane).expect("admitted lane has a session"));
         self.request_tasks.spawn(async move {
             // Admission may precede dispatch by an entire inference/tool round.
             // Recheck here for both new lanes and work dequeued by schedule_next.
@@ -285,9 +321,24 @@ impl WsMultiplexer {
             }
             let result = match work {
                 WsWorkItem::Execute { request, .. } => {
-                    handle_ws_request(*request, &state, auth, &outbound_tx, &shutdown_token).await
+                    handle_ws_request(*request, &state, auth, &outbound_tx, &shutdown_token, &session).await
                 }
-                WsWorkItem::Reject { error, .. } => Err(error.error),
+                WsWorkItem::Reject { error, .. } => {
+                    if let Some(parent) = error.previous_response_id.as_deref() {
+                        session
+                            .discard_cached_response(parent)
+                            .map_err(WsError::from)
+                            .and(Err(error.error))
+                    } else {
+                        Err(error.error)
+                    }
+                }
+            };
+            // Dropping a failed executor stream aborts its worker asynchronously.
+            // Do not dispatch the next turn until its lease has been released.
+            let result = match session.wait_until_idle().await {
+                Ok(()) => result,
+                Err(error) => Err(WsError::from(error)),
             };
             let result = match result {
                 Ok(()) => Ok(()),
@@ -425,8 +476,15 @@ async fn responses_ws_loop(
     if client_disconnected {
         multiplexer.request_tasks.abort_all();
         while multiplexer.request_tasks.join_next().await.is_some() {}
+        // Executor stream disposal aborts its nested inference worker. Wait for
+        // every lease to release its pinned state before ending this connection.
+        for session in multiplexer.sessions.values() {
+            if let Err(error) = session.wait_until_idle().await {
+                warn!(%error, "failed to await websocket continuation disposal");
+            }
+        }
     }
-    drop(multiplexer.outbound_tx);
+    drop(multiplexer);
     close_ws(&mut sender, &mut receiver).await;
     debug!("responses websocket session closed");
 }
@@ -484,7 +542,7 @@ async fn handle_ws_client_message(
             }
             match multiplexer.schedule(work) {
                 Ok(()) => true,
-                Err(rejected) => handle_ws_error(sender, WsError::TooManyRequests, rejected.stream_id.as_ref()).await,
+                Err(rejected) => handle_ws_error(sender, rejected.error, rejected.stream_id.as_ref()).await,
             }
         }
         Message::Binary(_) if *draining => true,
@@ -547,6 +605,7 @@ where
 fn parse_ws_request(text: &str) -> Result<WsRequest, WsRequestParseError> {
     let value = serde_json::from_str::<Value>(text).map_err(|error| WsRequestParseError {
         error: WsError::InvalidJson(error),
+        previous_response_id: None,
         stream_id: None,
     })?;
     let stream_id = value
@@ -560,30 +619,36 @@ fn parse_ws_request(text: &str) -> Result<WsRequest, WsRequestParseError> {
         .transpose()
         .map_err(|error| WsRequestParseError {
             error: WsError::from(ExecutorError::InvalidRequest(error)),
+            previous_response_id: None,
             stream_id: None,
         })?;
 
     if value.get("type").and_then(Value::as_str) != Some("response.create") {
         return Err(WsRequestParseError {
             error: WsError::UnexpectedType,
+            previous_response_id: None,
             stream_id,
         });
     }
 
+    // Only valid routing plus response.create may identify a checkpoint for eviction.
+    // In particular, an explicit null/invalid stream_id must not target the default lane.
+    let previous_response_id = value
+        .get("previous_response_id")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
     let generate = value.get("generate").and_then(Value::as_bool);
     let mut payload = serde_json::from_value::<RequestPayload>(value).map_err(|error| WsRequestParseError {
         error: WsError::from(ExecutorError::from(error)),
+        previous_response_id,
         stream_id: stream_id.clone(),
     })?;
     let requested_stream = payload.stream;
-    let requested_store = payload.store;
     payload.stream = true;
-    payload.store = true;
     debug!(
         requested_stream,
-        requested_store,
         forced_stream = payload.stream,
-        forced_store = payload.store,
+        store = payload.store,
         has_previous_response_id = payload.previous_response_id.is_some(),
         has_conversation_id = payload.conversation_id.is_some(),
         stream_id = stream_id.as_ref().map(StreamId::as_str),
@@ -605,6 +670,7 @@ async fn handle_ws_request(
     auth: Option<String>,
     outbound_tx: &mpsc::Sender<WsOutboundEvent>,
     shutdown_token: &CancellationToken,
+    session: &ResponseSession,
 ) -> Result<(), WsError> {
     let WsRequest {
         payload,
@@ -614,11 +680,12 @@ async fn handle_ws_request(
 
     if generate == Some(false) {
         debug!("handling non-generating websocket request locally");
-        return complete_without_inference(outbound_tx, state, payload, stream_id.as_ref()).await;
+        return complete_without_inference(outbound_tx, state, payload, stream_id.as_ref(), session).await;
     }
 
     let result = ExecuteRequest::new(payload, Arc::clone(&state.exec_ctx))
         .with_auth(auth)
+        .with_session(session)?
         .run()
         .await?;
     let Some(result) = keep_if_running(shutdown_token, result) else {
@@ -639,8 +706,9 @@ async fn complete_without_inference(
     state: &AppState,
     payload: RequestPayload,
     stream_id: Option<&StreamId>,
+    session: &ResponseSession,
 ) -> Result<(), WsError> {
-    let ctx = rehydrate_conversation(payload, &state.exec_ctx).await?;
+    let ctx = rehydrate_in_session(payload, &state.exec_ctx, session).await?;
     let created_at = utcnow_str();
     let created_event = empty_response_event(&ctx, created_at, "response.created", "in_progress", 0, None);
     let completed_event = empty_response_event(

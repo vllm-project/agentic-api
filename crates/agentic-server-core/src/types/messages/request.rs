@@ -215,6 +215,39 @@ pub enum ContentBlock {
     Unknown,
 }
 
+/// A gateway-generated Anthropic `tool_result` block.
+///
+/// Unlike [`ContentBlock::ToolResult`], this models the narrower schema emitted
+/// by the gateway: textual content and an explicit success/error marker. Keeping
+/// this typed until the upstream request is assembled prevents locally generated
+/// blocks from silently omitting or misspelling required fields.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct GatewayToolResult {
+    #[serde(rename = "type")]
+    kind: GatewayToolResultKind,
+    pub tool_use_id: String,
+    pub content: String,
+    pub is_error: bool,
+}
+
+impl GatewayToolResult {
+    #[must_use]
+    pub fn new(tool_use_id: &str, content: String, is_error: bool) -> Self {
+        Self {
+            kind: GatewayToolResultKind::ToolResult,
+            tool_use_id: tool_use_id.to_owned(),
+            content,
+            is_error,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum GatewayToolResultKind {
+    ToolResult,
+}
+
 /// `tool_result.content` may be a plain string or an array of blocks (Anthropic
 /// allows both). Normalised to a single string by [`ToolResultContent::to_text`].
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -21,13 +21,15 @@ use async_stream::stream;
 use futures::StreamExt;
 use serde_json::{Value, json};
 
+use crate::events::{ClassifiedSseLine, SseLine};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::inference::{BoxStream, response_lines, send_request};
-use crate::executor::messages_request::{normalize_native_web_search, web_search_budget_exhausted_result};
+use crate::executor::messages_context::MessagesRequestContext;
+use crate::executor::messages_request::web_search_budget_exhausted_result;
 use crate::executor::request::ExecutionContext;
 use crate::proxy::processed_response_headers;
 use crate::tool::ToolRegistry;
-use crate::types::messages::tool_seam;
+use crate::types::messages::{GatewayToolResult, tool_seam};
 use crate::utils::common::{deserialize_from_str, serialize_to_string};
 
 // Shared with the non-streaming loop so the two Messages loops can't drift.
@@ -43,17 +45,16 @@ use crate::executor::messages_loop::{
 /// Returns an executor error when the initial request cannot be serialized or
 /// when the upstream rejects it before streaming begins.
 pub async fn run_messages_stream(
-    mut request: Value,
+    mut ctx: MessagesRequestContext,
     registry: Arc<ToolRegistry>,
     exec_ctx: Arc<ExecutionContext>,
     upstream: MessagesUpstream,
 ) -> ExecutorResult<MessagesResponse<BoxStream>> {
-    let mut web_search_budget = normalize_native_web_search(&mut request)?;
-    request["stream"] = Value::Bool(true);
+    ctx.force_stream(true);
 
     // Prime the first upstream request before the handler commits an HTTP 200.
     // This lets initial vLLM errors retain their original status and body.
-    let first_body = serialize_to_string(&request)?;
+    let first_body = ctx.upstream_body()?;
     let first_response = send_request(
         &exec_ctx.client,
         upstream.url(),
@@ -72,9 +73,9 @@ pub async fn run_messages_stream(
             let response = if let Some(response) = prepared_response.take() {
                 response
             } else {
-                let body = match serialize_to_string(&request) {
+                let body = match ctx.upstream_body() {
                     Ok(b) => b,
-                    Err(e) => { yield error_sse(&e.to_string()); return; }
+                    Err(e) => { yield executor_error_sse(&e); return; }
                 };
                 match send_request(
                     &exec_ctx.client,
@@ -118,14 +119,17 @@ pub async fn run_messages_stream(
             // the gateway tool_use (F3, streaming half). The gateway calls are
             // derived from the same buffered blocks for dispatch.
             let (assistant_content, calls) = acc.take_round();
-            let allowed_searches = web_search_budget.reserve(calls.len());
-            let resolved = execute_gateway_calls(
+            let allowed_searches = ctx.reserve_searches(calls.len());
+            let tool_results = execute_gateway_calls(
                 &calls,
                 &registry,
                 &exec_ctx.messages_gateway_tools,
                 allowed_searches,
             ).await;
-            append_round_to_history(&mut request, &assistant_content, &resolved);
+            if let Err(e) = ctx.append_round(&assistant_content, tool_results) {
+                yield executor_error_sse(&e);
+                return;
+            }
         }
 
         // Round budget exhausted.
@@ -301,14 +305,10 @@ impl MessagesStreamAccumulator {
 
     /// Translate one upstream SSE line into zero or more client SSE lines.
     fn push(&mut self, line: &str) -> Vec<String> {
-        let Some(data) = line.strip_prefix("data: ") else {
+        let ClassifiedSseLine::Data(data) = SseLine::parse(line) else {
             return Vec::new();
         };
-        let data = data.trim();
-        if data == "[DONE]" {
-            return Vec::new();
-        }
-        let Ok(mut event) = serde_json::from_str::<Value>(data) else {
+        let Ok(mut event) = deserialize_from_str::<Value>(data.as_str()) else {
             return Vec::new();
         };
         match event.get("type").and_then(Value::as_str) {
@@ -446,17 +446,19 @@ fn executor_error_sse(error: &ExecutorError) -> String {
 
 /// Execute reconstructed gateway calls (concurrent, per-call timeout). Errors
 /// become error `tool_result`s (E5).
+///
+/// Returns one `tool_result` block per call, fed back next round. (The assistant
+/// turn — including each call's `tool_use` block — is reconstructed from the
+/// accumulator's buffered blocks in [`MessagesStreamAccumulator::take_round`].)
 async fn execute_gateway_calls(
     calls: &[StreamedCall],
     registry: &ToolRegistry,
     gateway_map: &tool_seam::GatewayToolMap,
     allowed_searches: usize,
-) -> Vec<ResolvedStreamCall> {
+) -> Vec<GatewayToolResult> {
     let futures = calls.iter().enumerate().map(|(index, c)| async move {
         if index >= allowed_searches {
-            return ResolvedStreamCall {
-                tool_result_block: web_search_budget_exhausted_result(&c.id),
-            };
+            return web_search_budget_exhausted_result(&c.id);
         }
         // F4: reject a malformed/incomplete reconstructed input rather than
         // coercing to {} and dispatching the tool with args the model never sent.
@@ -477,38 +479,15 @@ async fn execute_gateway_calls(
             }
             Err(reason) => (format!("{reason}; tool was not run"), true),
         };
-        ResolvedStreamCall {
-            tool_result_block: tool_seam::tool_result_block(&c.id, &output, is_error),
-        }
+        tool_seam::tool_result_block(&c.id, output, is_error)
     });
     futures::future::join_all(futures).await
 }
 
-/// The `tool_result` block for one executed gateway call, fed back next round.
-/// (The assistant turn — including this call's `tool_use` block — is reconstructed
-/// from the accumulator's buffered blocks in [`MessagesStreamAccumulator::take_round`].)
-struct ResolvedStreamCall {
-    tool_result_block: Value,
-}
-
-/// Append the model's full assistant turn (`thinking`/`text`/`signature` +
-/// gateway `tool_use`, order preserved — F3) and a following user turn of `tool_result`s,
-/// so the next upstream round sees the complete conversation state. These stay
-/// internal — the client never sees the gateway call (hide-the-call).
-fn append_round_to_history(request: &mut Value, assistant_content: &[Value], resolved: &[ResolvedStreamCall]) {
-    let assistant = json!({ "role": "assistant", "content": assistant_content });
-    let user = json!({
-        "role": "user",
-        "content": resolved.iter().map(|r| r.tool_result_block.clone()).collect::<Vec<_>>()
-    });
-    if let Some(messages) = request.get_mut("messages").and_then(Value::as_array_mut) {
-        messages.push(assistant);
-        messages.push(user);
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use std::fmt::Write as _;
+
     use super::*;
 
     fn line(v: &Value) -> String {
@@ -518,6 +497,41 @@ mod tests {
     /// Accumulator with the default gateway map (built-in `web_search` only).
     fn acc() -> MessagesStreamAccumulator {
         MessagesStreamAccumulator::new(tool_seam::GatewayToolMap::default())
+    }
+
+    #[tokio::test]
+    async fn messages_bridge_accepts_optional_data_space() {
+        for prefix in ["data:", "data: "] {
+            let mut acc = acc();
+            acc.begin_round();
+            let events = [
+                json!({"type": "message_start", "message": {"id": "m"}}),
+                json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
+                json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "hello"}}),
+                json!({"type": "content_block_stop", "index": 0}),
+                json!({"type": "message_delta", "delta": {"stop_reason": "end_turn"}}),
+                json!({"type": "message_stop"}),
+            ];
+            let mut body = String::new();
+            for event in &events {
+                write!(body, "{prefix}{event}\n\n").expect("write SSE event");
+            }
+            write!(body, "{prefix}[DONE]\n\n").expect("write SSE termination marker");
+            let response = reqwest::Response::from(http::Response::new(body));
+            let mut lines = Box::pin(response_lines(response, std::time::Duration::ZERO));
+            let mut output = Vec::new();
+            while let Some(line) = lines.next().await {
+                output.extend(acc.push(&line.expect("valid SSE transport")));
+            }
+            output.extend(acc.finish());
+
+            let output = output.join("");
+            assert_eq!(output.matches("event: message_start").count(), 1, "{prefix:?}");
+            assert_eq!(output.matches("event: content_block_delta").count(), 1, "{prefix:?}");
+            assert_eq!(output.matches("event: message_stop").count(), 1, "{prefix:?}");
+            assert!(output.contains(r#""text":"hello""#), "{prefix:?}");
+            assert!(output.contains("end_turn"), "{prefix:?}");
+        }
     }
 
     // A single non-tool round: message_start forwarded once, blocks pass through
@@ -744,7 +758,7 @@ mod tests {
             calls.len(),
         )
         .await;
-        let content = resolved[0].tool_result_block["content"].as_str().unwrap_or_default();
+        let content = &resolved[0].content;
         assert!(
             content.contains("invalid") || content.contains("malformed") || content.contains("could not"),
             "malformed args must yield an error tool_result, not an empty-arg dispatch: {content:?}"

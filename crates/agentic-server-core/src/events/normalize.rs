@@ -1,6 +1,8 @@
 use serde_json::Value;
 
-use super::types::{EventFrame, EventPayload, SSEEventType, SSEItemType, WireEvent};
+use super::types::{EventFrame, EventPayload, SSEEventType, SSEItemType, ShellCommandUpdate, WireEvent};
+use super::{ClassifiedSseLine, SseLine};
+use crate::types::io::OutputItem;
 use crate::utils::common::{deserialize_from_str_opt, deserialize_from_value_opt};
 
 /// Normalize a raw SSE data line into a typed [`EventFrame`].
@@ -11,38 +13,47 @@ use crate::utils::common::{deserialize_from_str_opt, deserialize_from_value_opt}
 /// sentinel.
 #[must_use]
 pub fn normalize_sse_line(line: &str) -> Option<EventFrame> {
-    let data_str = line.strip_prefix("data:")?;
-    let data_str = data_str.strip_prefix(' ').unwrap_or(data_str);
-    if data_str == "[DONE]" {
+    let ClassifiedSseLine::Data(data) = SseLine::parse(line) else {
         return None;
-    }
+    };
+    normalize_sse_data_checked(&data).ok().flatten()
+}
 
-    let json: Value = deserialize_from_str_opt(data_str)?;
+#[derive(Debug, thiserror::Error)]
+#[error("upstream stream has an invalid 'output_index': expected an unsigned 32-bit integer")]
+pub(crate) struct InvalidOutputIndex;
+
+/// Shares normalization with the public adapter while preserving invalid-index
+/// errors for ingestion. Malformed JSON remains a policy decision downstream.
+pub(crate) fn normalize_sse_data_checked(data: &SseLine) -> Result<Option<EventFrame>, InvalidOutputIndex> {
+    let Some(json) = deserialize_from_str_opt::<Value>(data.as_str()) else {
+        return Ok(None);
+    };
     normalize_sse_value(json)
 }
 
-/// Whether a line carries an SSE data payload that should normalize to a frame.
-pub(crate) fn is_data_frame(line: &str) -> bool {
-    line.strip_prefix("data:")
-        .map(str::trim)
-        .is_some_and(|payload| !payload.is_empty() && payload != "[DONE]")
-}
-
 /// Normalizes an already parsed SSE payload.
-pub(crate) fn normalize_sse_value(json: Value) -> Option<EventFrame> {
+fn normalize_sse_value(json: Value) -> Result<Option<EventFrame>, InvalidOutputIndex> {
+    if let Some(index) = json.get("output_index") {
+        index
+            .as_u64()
+            .and_then(|index| u32::try_from(index).ok())
+            .ok_or(InvalidOutputIndex)?;
+    }
     let event_type = json
         .get("type")
         .and_then(Value::as_str)
         .map_or(SSEEventType::Other, SSEEventType::from);
 
     let payload = extract_payload(event_type, &json);
-    let wire: WireEvent = deserialize_from_value_opt(json)?;
-
-    Some(EventFrame {
+    let Some(wire) = deserialize_from_value_opt::<WireEvent>(json) else {
+        return Ok(None);
+    };
+    Ok(Some(EventFrame {
         event_type,
         payload,
         wire,
-    })
+    }))
 }
 
 /// Extract a typed payload from the JSON body based on the classified event type.
@@ -64,6 +75,9 @@ fn extract_payload(event_type: SSEEventType, json: &Value) -> EventPayload {
         SSEEventType::FunctionCallArgumentsDone => extract_fn_call_args_done(json),
         SSEEventType::CustomToolCallInputDelta => extract_custom_tool_call_input_delta(json),
         SSEEventType::CustomToolCallInputDone => extract_custom_tool_call_input_done(json),
+        SSEEventType::ShellCallCommandAdded => extract_shell_call_command_added(json),
+        SSEEventType::ShellCallCommandDelta => extract_shell_call_command_delta(json),
+        SSEEventType::ShellCallCommandDone => extract_shell_call_command_done(json),
 
         SSEEventType::ReasoningTextDelta => extract_reasoning_text_delta(json),
         SSEEventType::ReasoningTextDone => extract_reasoning_text_done(json),
@@ -108,6 +122,12 @@ fn output_item_id(item: &Value) -> String {
         .to_owned()
 }
 
+fn json_output_index(json: &Value) -> Option<u32> {
+    json.get("output_index")
+        .and_then(Value::as_u64)
+        .and_then(|index| u32::try_from(index).ok())
+}
+
 fn json_u32(json: &Value, key: &str) -> u32 {
     u32::try_from(json[key].as_u64().unwrap_or(0)).unwrap_or(u32::MAX)
 }
@@ -129,10 +149,18 @@ fn extract_output_item_added(json: &Value) -> EventPayload {
     EventPayload::OutputItemAdded {
         item_id: output_item_id(item),
         item_type: SSEItemType::from(json_str(item, "type")),
-        output_index: json_u32(json, "output_index"),
+        output_index: json_output_index(json),
         name: json_str_opt(item, "name"),
         namespace: json_str_opt(item, "namespace"),
         call_id: json_str_opt(item, "call_id"),
+        shell_call: if item["type"] == "shell_call" {
+            match deserialize_from_value_opt::<OutputItem>(item.clone()) {
+                Some(OutputItem::ShellCall(call)) => Some(Box::new(call)),
+                _ => None,
+            }
+        } else {
+            None
+        },
     }
 }
 
@@ -147,7 +175,7 @@ fn extract_output_item_done(json: &Value) -> EventPayload {
     EventPayload::OutputItemDone {
         item_id,
         item_type: SSEItemType::from(json_str(&item, "type")),
-        output_index: json_u32(json, "output_index"),
+        output_index: json_output_index(json),
         item,
     }
 }
@@ -156,7 +184,7 @@ fn extract_text_delta(json: &Value) -> EventPayload {
     EventPayload::TextDelta {
         delta: json_str(json, "delta"),
         item_id: json_str(json, "item_id"),
-        output_index: json_u32(json, "output_index"),
+        output_index: json_output_index(json),
         content_index: json_u32(json, "content_index"),
     }
 }
@@ -165,7 +193,28 @@ fn extract_text_done(json: &Value) -> EventPayload {
     EventPayload::TextDone {
         text: json_str(json, "text"),
         item_id: json_str(json, "item_id"),
+        output_index: json_output_index(json),
+    }
+}
+
+fn extract_shell_call_command_added(json: &Value) -> EventPayload {
+    extract_shell_command(json, ShellCommandUpdate::Added(json_str(json, "command")))
+}
+
+fn extract_shell_call_command_delta(json: &Value) -> EventPayload {
+    extract_shell_command(json, ShellCommandUpdate::Delta(json_str(json, "delta")))
+}
+
+fn extract_shell_call_command_done(json: &Value) -> EventPayload {
+    extract_shell_command(json, ShellCommandUpdate::Done(json_str(json, "command")))
+}
+
+fn extract_shell_command(json: &Value, update: ShellCommandUpdate) -> EventPayload {
+    EventPayload::ShellCallCommand {
+        item_id: json_str(json, "item_id"),
         output_index: json_u32(json, "output_index"),
+        command_index: json_u32(json, "command_index"),
+        update,
     }
 }
 
@@ -174,7 +223,7 @@ fn extract_fn_call_args_delta(json: &Value) -> EventPayload {
         delta: json_str(json, "delta"),
         call_id: json_str_opt(json, "call_id"),
         item_id: json_str(json, "item_id"),
-        output_index: json_u32(json, "output_index"),
+        output_index: json_output_index(json),
     }
 }
 
@@ -184,7 +233,7 @@ fn extract_fn_call_args_done(json: &Value) -> EventPayload {
         call_id: json_str_opt(json, "call_id"),
         item_id: json_str(json, "item_id"),
         name: json_str(json, "name"),
-        output_index: json_u32(json, "output_index"),
+        output_index: json_output_index(json),
     }
 }
 
@@ -192,7 +241,7 @@ fn extract_custom_tool_call_input_delta(json: &Value) -> EventPayload {
     EventPayload::CustomToolCallInputDelta {
         delta: json_str(json, "delta"),
         item_id: json_str(json, "item_id"),
-        output_index: json_u32(json, "output_index"),
+        output_index: json_output_index(json),
     }
 }
 
@@ -200,7 +249,7 @@ fn extract_custom_tool_call_input_done(json: &Value) -> EventPayload {
     EventPayload::CustomToolCallInputDone {
         input: json_str(json, "input"),
         item_id: json_str(json, "item_id"),
-        output_index: json_u32(json, "output_index"),
+        output_index: json_output_index(json),
     }
 }
 
@@ -208,7 +257,7 @@ fn extract_reasoning_text_delta(json: &Value) -> EventPayload {
     EventPayload::ReasoningTextDelta {
         delta: json_str(json, "delta"),
         item_id: json_str(json, "item_id"),
-        output_index: json_u32(json, "output_index"),
+        output_index: json_output_index(json),
         content_index: json_u32(json, "content_index"),
     }
 }
@@ -217,7 +266,7 @@ fn extract_reasoning_text_done(json: &Value) -> EventPayload {
     EventPayload::ReasoningTextDone {
         text: json_str(json, "text"),
         item_id: json_str(json, "item_id"),
-        output_index: json_u32(json, "output_index"),
+        output_index: json_output_index(json),
         content_index: json_u32(json, "content_index"),
     }
 }
@@ -226,7 +275,7 @@ fn extract_reasoning_summary_text_delta(json: &Value) -> EventPayload {
     EventPayload::ReasoningSummaryTextDelta {
         delta: json_str(json, "delta"),
         item_id: json_str(json, "item_id"),
-        output_index: json_u32(json, "output_index"),
+        output_index: json_output_index(json),
         summary_index: json_u32(json, "summary_index"),
     }
 }
@@ -235,7 +284,7 @@ fn extract_reasoning_summary_text_done(json: &Value) -> EventPayload {
     EventPayload::ReasoningSummaryTextDone {
         text: json_str(json, "text"),
         item_id: json_str(json, "item_id"),
-        output_index: json_u32(json, "output_index"),
+        output_index: json_output_index(json),
         summary_index: json_u32(json, "summary_index"),
     }
 }

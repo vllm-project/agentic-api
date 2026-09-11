@@ -1,0 +1,68 @@
+{
+  "checkedAt": "2026-09-09",
+  "defaultVersion": "v0.5.0",
+  "versions": [
+    {
+      "id": "latest",
+      "label": "Latest (development)",
+      "channel": "development",
+      "ref": "main",
+      "sourceRef": "main",
+      "hostedBaseUrl": null,
+      "sections": [
+        "overview",
+        "api",
+        "developing",
+        "community",
+        "sglang",
+        "dynamo",
+        "llmd"
+      ]
+    },
+    {
+      "id": "v0.5.0",
+      "label": "v0.5.0",
+      "channel": "release",
+      "ref": "v0.5.0",
+      "sourceRef": "032935de73d92f116ac108f24cd63d6a158aad94",
+      "hostedBaseUrl": null,
+      "sections": ["overview", "api", "developing", "community"]
+    },
+    {
+      "id": "v0.4.0",
+      "label": "v0.4.0",
+      "channel": "release",
+      "ref": "v0.4.0",
+      "sourceRef": "10cfbedb2dc371ad14b83a5a1f6729d6e1a3e5b8",
+      "hostedBaseUrl": null,
+      "sections": ["overview", "api", "developing", "community"]
+    },
+    {
+      "id": "v0.3.0",
+      "label": "v0.3.0",
+      "channel": "release",
+      "ref": "v0.3.0",
+      "sourceRef": "8fe80b21e655dbc17b4439b94cc9dbc58f27b8c4",
+      "hostedBaseUrl": null,
+      "sections": ["overview", "api", "developing", "community"]
+    },
+    {
+      "id": "v0.2.0",
+      "label": "v0.2.0",
+      "channel": "release",
+      "ref": "v0.2.0",
+      "sourceRef": "8fe80b21e655dbc17b4439b94cc9dbc58f27b8c4",
+      "hostedBaseUrl": null,
+      "sections": ["overview", "api", "developing", "community"]
+    },
+    {
+      "id": "v0.1.0",
+      "label": "v0.1.0",
+      "channel": "release",
+      "ref": "v0.1.0",
+      "sourceRef": "a2e33e12620d7bea615073c59c685c9fde2bcaae",
+      "hostedBaseUrl": null,
+      "sections": ["overview", "api", "developing", "community"]
+    }
+  ]
+}

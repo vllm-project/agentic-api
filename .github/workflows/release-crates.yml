@@ -134,12 +134,12 @@ jobs:
           set -euo pipefail
           version="${{ steps.version.outputs.version }}"
 
-          if cargo info "agentic-server-core@$version" >/dev/null 2>&1; then
+          if cargo info --registry crates-io "agentic-server-core@$version" >/dev/null 2>&1; then
             echo "::error::agentic-server-core $version is already published"
             exit 1
           fi
 
-          if cargo info "agentic-server@$version" >/dev/null 2>&1; then
+          if cargo info --registry crates-io "agentic-server@$version" >/dev/null 2>&1; then
             echo "::error::agentic-server $version is already published"
             exit 1
           fi
@@ -211,3 +211,14 @@ jobs:
             --target "$target_sha" \
             --title "$tag" \
             --generate-notes
+
+  website:
+    name: Refresh and deploy website
+    needs: release
+    if: ${{ !inputs.dry_run && github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    # GITHUB_TOKEN-created releases do not trigger another release event workflow.
+    uses: ./.github/workflows/website.yml

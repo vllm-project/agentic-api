@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use agentic_core::executor::accumulator::ResponseAccumulator;
 use agentic_core::executor::request::RequestContext;
 use agentic_core::executor::{UpstreamBody, decode_upstream};
 use agentic_core::types::io::OutputItem;
@@ -124,52 +125,101 @@ fn message_stream(terminal_ids: [&str; 2]) -> String {
     .join("\n")
 }
 
-#[test]
-fn strict_relay_decoder_accepts_data_lines_without_a_space() {
+#[tokio::test]
+async fn strict_relay_decoder_accepts_data_lines_without_a_space() {
     let stream = message_stream(["msg_terminal_0", "msg_terminal_1"]).replace("data: ", "data:");
 
-    decode_upstream(&request_context(), UpstreamBody::Sse(&stream))
+    decode_upstream(request_context(), UpstreamBody::Sse(&stream))
+        .await
+        .map(|(payload, _)| payload)
         .expect("SSE data fields may omit the optional space after the colon");
 }
 
-#[test]
-fn strict_relay_decoder_rejects_duplicate_terminal_item_ids() {
+#[tokio::test]
+async fn completed_terminal_details_are_preserved_by_both_ingestion_paths() {
+    let error = json!({"code": "upstream_error", "message": "Provider supplied terminal details"});
+    let lines = [
+        json!({"type": "response.created", "response": {"id": "resp_upstream", "status": "in_progress"}}),
+        json!({"type": "response.in_progress", "response": {"id": "resp_upstream", "status": "in_progress"}}),
+        json!({
+            "type": "response.completed",
+            "response": {
+                "id": "resp_upstream",
+                "status": "completed",
+                "output": [],
+                "error": error.clone(),
+                "incomplete_details": {"reason": "upstream_error"}
+            }
+        }),
+    ]
+    .map(|event| format!("data: {event}"));
+
+    let strict = decode_upstream(request_context(), UpstreamBody::Sse(&lines.join("\n")))
+        .await
+        .map(|(payload, _)| payload)
+        .expect("valid completed stream");
+    let lenient = ResponseAccumulator::from_sse_lines(lines, None)
+        .expect("valid completed stream")
+        .finalize("test-model", None, None);
+
+    for (policy, payload) in [("strict", strict), ("lenient", lenient)] {
+        assert_eq!(payload.status, "completed", "{policy}");
+        assert_eq!(payload.error.as_ref(), Some(&error), "{policy}");
+        assert_eq!(
+            payload
+                .incomplete_details
+                .as_ref()
+                .and_then(|details| details.reason.as_deref()),
+            Some("upstream_error"),
+            "{policy}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn strict_relay_decoder_rejects_duplicate_terminal_item_ids() {
     let stream = message_stream(["msg_terminal", "msg_terminal"]);
 
-    let error = decode_upstream(&request_context(), UpstreamBody::Sse(&stream))
+    let error = decode_upstream(request_context(), UpstreamBody::Sse(&stream))
+        .await
+        .map(|(payload, _)| payload)
         .expect_err("duplicate terminal item ids must be rejected");
     assert!(error.to_string().contains("repeats output item 'msg_terminal'"));
 }
 
-#[test]
-fn strict_relay_decoder_rejects_repeated_item_done() {
+#[tokio::test]
+async fn strict_relay_decoder_rejects_repeated_item_done() {
     let stream = message_stream(["msg_terminal_0", "msg_terminal_1"]);
     let mut lines: Vec<_> = stream.lines().collect();
     lines.insert(4, lines[3]);
     let stream = lines.join("\n");
 
-    let error = decode_upstream(&request_context(), UpstreamBody::Sse(&stream))
+    let error = decode_upstream(request_context(), UpstreamBody::Sse(&stream))
+        .await
+        .map(|(payload, _)| payload)
         .expect_err("strict validation must reject a second completion for the same item");
 
     assert!(error.to_string().contains("has no active output item"));
 }
 
-#[test]
-fn strict_relay_decoder_rejects_item_id_with_the_wrong_output_index() {
+#[tokio::test]
+async fn strict_relay_decoder_rejects_item_id_with_the_wrong_output_index() {
     let stream = message_stream(["msg_terminal_0", "msg_terminal_1"]);
     let stream = stream.replace(
         r#"{"type":"response.output_item.done","output_index":0,"item":{"id":"msg_streamed_0""#,
         r#"{"type":"response.output_item.done","output_index":1,"item":{"id":"msg_streamed_0""#,
     );
 
-    let error = decode_upstream(&request_context(), UpstreamBody::Sse(&stream))
+    let error = decode_upstream(request_context(), UpstreamBody::Sse(&stream))
+        .await
+        .map(|(payload, _)| payload)
         .expect_err("an item id must not resolve through a different explicit output index");
 
     assert!(error.to_string().contains("does not match its active output item"));
 }
 
-#[test]
-fn strict_relay_decoder_rejects_changed_call_id_without_terminal_output() {
+#[tokio::test]
+async fn strict_relay_decoder_rejects_changed_call_id_without_terminal_output() {
     let stream = [
         json!({"type": "response.created", "response": {"id": "resp_upstream", "status": "in_progress"}}),
         json!({"type": "response.in_progress", "response": {"id": "resp_upstream", "status": "in_progress"}}),
@@ -181,17 +231,21 @@ fn strict_relay_decoder_rejects_changed_call_id_without_terminal_output() {
     .map(|event| format!("data: {event}"))
     .join("\n");
 
-    let error = decode_upstream(&request_context(), UpstreamBody::Sse(&stream))
+    let error = decode_upstream(request_context(), UpstreamBody::Sse(&stream))
+        .await
+        .map(|(payload, _)| payload)
         .expect_err("call-id stability must not depend on terminal output being present");
 
     assert!(error.to_string().contains("changes 'call_id' for output[0]"));
 }
 
-#[test]
-fn strict_relay_decoder_rejects_unsupported_item_type() {
+#[tokio::test]
+async fn strict_relay_decoder_rejects_unsupported_item_type() {
     let stream = message_stream(["msg_terminal_0", "msg_terminal_1"]).replace("\"message\"", "\"unsupported_item\"");
 
-    let error = decode_upstream(&request_context(), UpstreamBody::Sse(&stream))
+    let error = decode_upstream(request_context(), UpstreamBody::Sse(&stream))
+        .await
+        .map(|(payload, _)| payload)
         .expect_err("unsupported item types must be rejected before lifecycle validation");
 
     assert!(
@@ -201,8 +255,8 @@ fn strict_relay_decoder_rejects_unsupported_item_type() {
     );
 }
 
-#[test]
-fn strict_relay_decoder_preserves_web_search_item_id_fallback() {
+#[tokio::test]
+async fn strict_relay_decoder_preserves_web_search_item_id_fallback() {
     for id in [Some(json!("ws_1")), None, Some(json!(null)), Some(json!(""))] {
         for include_terminal_output in [false, true] {
             let mut item = json!({
@@ -228,7 +282,8 @@ fn strict_relay_decoder_preserves_web_search_item_id_fallback() {
             .map(|event| format!("data: {event}"))
             .join("\n");
 
-            let payload = decode_upstream(&request_context(), UpstreamBody::Sse(&stream))
+            let (payload, _) = decode_upstream(request_context(), UpstreamBody::Sse(&stream))
+                .await
                 .unwrap_or_else(|error| panic!("id={id:?}, terminal output={include_terminal_output}: {error}"));
 
             assert_eq!(
@@ -245,8 +300,8 @@ fn strict_relay_decoder_preserves_web_search_item_id_fallback() {
     }
 }
 
-#[test]
-fn strict_relay_decoder_accepts_compatible_recorded_responses_streams() {
+#[tokio::test]
+async fn strict_relay_decoder_accepts_compatible_recorded_responses_streams() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cassettes");
     let mut decoded = 0;
     let mut rejected = Vec::new();
@@ -257,7 +312,10 @@ fn strict_relay_decoder_accepts_compatible_recorded_responses_streams() {
             if !is_responses_event_stream(&stream) {
                 continue;
             }
-            match decode_upstream(&request_context(), UpstreamBody::Sse(&stream)) {
+            match decode_upstream(request_context(), UpstreamBody::Sse(&stream))
+                .await
+                .map(|(payload, _)| payload)
+            {
                 Ok(_) => decoded += 1,
                 Err(error) => rejected.push(format!(
                     "{} turn {}: {error}",

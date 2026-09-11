@@ -114,6 +114,8 @@ pub enum ResponsesTool {
     FileSearch(FileSearchToolParam),
     #[serde(rename = "code_interpreter")]
     CodeInterpreter(CodeInterpreterToolParam),
+    #[serde(rename = "shell")]
+    Shell(ShellToolParam),
     #[serde(rename = "namespace")]
     Namespace(CodexNamespaceToolParam),
     /// A freeform tool declaration. Unlike a function tool, calls carry raw
@@ -298,6 +300,98 @@ pub struct FileSearchToolParam {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CodeInterpreterToolParam {}
 
+/// Parameters for the shell built-in tool.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ShellToolParam {
+    pub environment: ShellEnvironment,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allowed_callers: Option<Vec<String>>,
+    #[serde(default, flatten)]
+    pub extra: HashMap<String, Value>,
+}
+
+/// Environment in which shell calls are executed.
+#[non_exhaustive]
+#[derive(Debug, Clone)]
+pub enum ShellEnvironment {
+    Local(LocalShellEnvironment),
+    Unknown(Value),
+}
+
+#[cfg(feature = "openapi")]
+impl utoipa::PartialSchema for ShellEnvironment {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::Ref;
+        use utoipa::openapi::schema::{AllOfBuilder, ObjectBuilder, SchemaType, Type};
+
+        AllOfBuilder::new()
+            .item(
+                ObjectBuilder::new()
+                    .property(
+                        "type",
+                        ObjectBuilder::new()
+                            .schema_type(SchemaType::new(Type::String))
+                            .enum_values(Some(["local"])),
+                    )
+                    .required("type"),
+            )
+            .item(Ref::from_schema_name("LocalShellEnvironment"))
+            .into()
+    }
+}
+
+#[cfg(feature = "openapi")]
+impl utoipa::ToSchema for ShellEnvironment {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("ShellEnvironment")
+    }
+}
+
+impl Serialize for ShellEnvironment {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut value = match self {
+            Self::Local(environment) => serde_json::to_value(environment).map_err(serde::ser::Error::custom)?,
+            Self::Unknown(value) => return value.serialize(serializer),
+        };
+        let object = value
+            .as_object_mut()
+            .ok_or_else(|| serde::ser::Error::custom("shell environment must serialize as an object"))?;
+        object.insert("type".to_owned(), Value::String("local".to_owned()));
+        value.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ShellEnvironment {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let mut value = Value::deserialize(deserializer)?;
+        if value.get("type").and_then(Value::as_str) != Some("local") {
+            return Ok(Self::Unknown(value));
+        }
+        value
+            .as_object_mut()
+            .expect("a value with a string type field must be an object")
+            .remove("type");
+        serde_json::from_value(value)
+            .map(Self::Local)
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+/// Caller-provided local environment configuration.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct LocalShellEnvironment {
+    #[serde(default, flatten)]
+    pub extra: HashMap<String, Value>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CodexNamespaceToolParam {
@@ -368,6 +462,7 @@ impl utoipa::PartialSchema for ResponsesTool {
             )
             .item(tagged("file_search", "FileSearchToolParam"))
             .item(tagged("code_interpreter", "CodeInterpreterToolParam"))
+            .item(tagged("shell", "ShellToolParam"))
             .item(tagged("namespace", "CodexNamespaceToolParam"))
             .item(tagged("custom", "CustomToolParam"))
             .into()
@@ -422,6 +517,7 @@ impl ResponsesTool {
             Self::WebSearch(_) => Some("web_search_preview"),
             Self::FileSearch(_) => Some("file_search"),
             Self::CodeInterpreter(_) => Some("code_interpreter"),
+            Self::Shell(_) => Some("shell"),
             Self::Namespace(_) => Some("namespace"),
             Self::Custom(_) => Some("custom"),
             Self::Unknown => None,
@@ -737,6 +833,50 @@ mod tests {
         let tool: ResponsesTool = serde_json::from_value(json).unwrap();
         assert!(matches!(tool, ResponsesTool::CodeInterpreter(_)));
         assert_eq!(serde_json::to_value(&tool).unwrap()["type"], "code_interpreter");
+    }
+
+    #[test]
+    fn responses_tool_shell_local_environment_round_trips() {
+        let json = serde_json::json!({
+            "type": "shell",
+            "environment": {
+                "type": "local",
+                "skills": [{"name": "repo", "path": "/workspace/repo"}]
+            },
+            "allowed_callers": ["assistant"],
+            "future_tool_field": true
+        });
+        let tool: ResponsesTool = serde_json::from_value(json).unwrap();
+        assert!(matches!(tool, ResponsesTool::Shell(_)));
+
+        let serialized = serde_json::to_value(tool).unwrap();
+        assert_eq!(serialized["type"], "shell");
+        assert_eq!(serialized["environment"]["type"], "local");
+        assert_eq!(serialized["environment"]["skills"][0]["name"], "repo");
+        assert_eq!(serialized["allowed_callers"][0], "assistant");
+        assert_eq!(serialized["future_tool_field"], true);
+    }
+
+    #[test]
+    fn responses_tool_shell_preserves_unknown_environment() {
+        let json = serde_json::json!({
+            "type": "shell",
+            "environment": {
+                "type": "container_reference",
+                "container": "cntr_123",
+                "future_environment_field": true
+            }
+        });
+        let tool: ResponsesTool = serde_json::from_value(json.clone()).unwrap();
+        assert!(matches!(
+            tool,
+            ResponsesTool::Shell(ShellToolParam {
+                environment: ShellEnvironment::Unknown(_),
+                ..
+            })
+        ));
+
+        assert_eq!(serde_json::to_value(tool).unwrap(), json);
     }
 
     #[test]

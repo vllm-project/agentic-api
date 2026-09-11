@@ -3,13 +3,12 @@
 //! Builds a [`RequestContext`] by loading prior turns from storage and
 //! injecting them into the enriched request before it is forwarded to the LLM.
 
-use super::session::{ResponseCheckpoint, ResponseContinuation, ResponseSession};
+use super::session::{ResponseCheckpoint, ResponseContinuation, ResponseSession, canonical_session_history};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::pending_calls::pending_calls;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::storage::InOutItem;
 use crate::tool::ToolError;
-use crate::types::io::input::latest_compaction_window;
 use crate::types::io::{
     InputContent, InputItem, InputMessageContent, ReasoningOutput, ReasoningTextContent, ResponsesInput,
     resolve_tool_choice, resolve_tools,
@@ -149,7 +148,12 @@ pub(crate) async fn rehydrate_with_continuation(
     // Fail before storage work for new files; check again once history is resolved.
     validate_message_files(&request.input)?;
     let response_id = uuid7_str("resp_");
-    let new_input_items: Vec<InputItem> = Vec::from(&request.input);
+    // Persistence keeps the public items. Tool lowering belongs to the enriched
+    // inference copy, including when a later turn loads these items from storage.
+    let new_input_items = match &request.input {
+        ResponsesInput::Items(items) => items.iter().filter(|item| !item.is_unknown()).cloned().collect(),
+        ResponsesInput::Text(_) => Vec::from(&request.input),
+    };
 
     // One clone for the unmodified original; `request` is moved as enriched_request.
     let original_request = request.clone();
@@ -174,7 +178,7 @@ pub(crate) async fn rehydrate_with_continuation(
     } else if ctx.original_request.previous_response_id.is_some() {
         from_response(&mut ctx, exec_ctx).await?;
     } else {
-        ctx.enriched_request.input = ResponsesInput::Items(ctx.new_input_items.clone());
+        ctx.enriched_request.input = ResponsesInput::Items(Vec::from(&ctx.original_request.input));
     }
 
     validate_message_files(&ctx.enriched_request.input)?;
@@ -195,7 +199,7 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
 
     let mut items = InOutItem::into_input_items(history);
     items.reserve(ctx.new_input_items.len());
-    items.extend(ctx.new_input_items.iter().cloned());
+    items.extend(Vec::from(&ctx.original_request.input));
     if let Some(pending) = pending_calls(&items)?.into_iter().next() {
         return Err(ExecutorError::Tool(ToolError::MissingOutput {
             call_id: pending.call_id,
@@ -244,7 +248,10 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
         std::sync::Arc::new(continuation.retain_parent(checkpoint)?)
     };
     let mut items = parent.history.clone();
-    items.extend(ctx.new_input_items.iter().cloned());
+    // Match durable rehydration: lower custom/shell call outputs only in the
+    // inference copy. new_input_items retains their public wire types.
+    items.extend(Vec::from(&ctx.original_request.input));
+    let items = canonical_session_history(items);
     if let Some(pending) = pending_calls(&items)?.into_iter().next() {
         return Err(ExecutorError::Tool(ToolError::MissingOutput {
             call_id: pending.call_id,
@@ -269,26 +276,6 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
     Ok(())
 }
 
-/// Restore only the current canonical window, while preserving orchestration
-/// records that the model-facing projection would strip. Durable response chains
-/// can still reference superseded parent rows; those must not consume the session
-/// checkpoint budget or introduce obsolete pending calls after reconnecting.
-fn canonical_session_history(history: Vec<InputItem>) -> Vec<InputItem> {
-    let Some(window) = latest_compaction_window(&history) else {
-        return history;
-    };
-    history
-        .into_iter()
-        .enumerate()
-        .filter(|(index, item)| {
-            *index >= window.latest_index()
-                || window.retains_user_item(*index, item)
-                || matches!(item, InputItem::McpListTools(_))
-        })
-        .map(|(_, item)| item)
-        .collect()
-}
-
 /// Hydrates `ctx` from the conversation store.
 ///
 /// Gets or creates the conversation (depending on `store`) and rehydrates its
@@ -307,7 +294,7 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
 
     let mut items = InOutItem::into_input_items(snapshot.items);
     items.reserve(ctx.new_input_items.len());
-    items.extend(ctx.new_input_items.iter().cloned());
+    items.extend(Vec::from(&ctx.original_request.input));
     if let Some(pending) = pending_calls(&items)?.into_iter().next() {
         return Err(ExecutorError::Tool(ToolError::MissingOutput {
             call_id: pending.call_id,

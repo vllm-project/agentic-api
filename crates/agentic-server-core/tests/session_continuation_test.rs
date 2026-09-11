@@ -1443,3 +1443,74 @@ async fn session_compacted_durable_parent_restores_within_the_canonical_budget()
         model.close().await;
     }
 }
+
+#[tokio::test]
+async fn replayed_compaction_releases_superseded_session_history() {
+    let exec = execution();
+    for pending_call in [false, true] {
+        let session = ResponseSession::new(NonZeroUsize::new(2).unwrap(), NonZeroUsize::new(100_000).unwrap());
+        let ctx = rehydrate_in_session(request(None, json!("obsolete question")), &exec, &session)
+            .await
+            .unwrap();
+        let parent = ctx.response_id.clone();
+        let items = if pending_call {
+            json!([function_call("obsolete")])
+        } else {
+            model_message("resp_old", "obsolete answer")["output"].clone()
+        };
+        let output = response(&ctx, items);
+        commit(ctx, output, &exec).await.unwrap();
+        let ctx = rehydrate_in_session(
+            request(
+                Some(&parent),
+                json!([
+                    {"type":"compaction", "id":"cmp_replayed", "encrypted_content":"current summary"}
+                ]),
+            ),
+            &exec,
+            &session,
+        )
+        .await
+        .expect("a replayed window supersedes old pending calls");
+        let child = ctx.response_id.clone();
+        let output = response(&ctx, json!([]));
+        commit(ctx, output, &exec)
+            .await
+            .expect("superseded history must not consume the checkpoint budget");
+        let ctx = rehydrate_in_session(request(Some(&child), json!([])), &exec, &session)
+            .await
+            .unwrap();
+        let items = serde_json::to_value(&ctx.enriched_request.input).unwrap();
+        assert_eq!(items.as_array().unwrap().len(), 1);
+        assert_eq!(items[0]["type"], "compaction");
+    }
+}
+
+#[tokio::test]
+async fn session_commit_validates_call_ids_against_replayed_compaction_window() {
+    let exec = execution();
+    let session = session();
+    let parent = parent_with_call(&exec, &session).await;
+    let ctx = rehydrate_in_session(
+        request(
+            Some(&parent),
+            json!([
+                {"type":"compaction", "encrypted_content":"superseded old tool call"}
+            ]),
+        ),
+        &exec,
+        &session,
+    )
+    .await
+    .unwrap();
+    let payload = response(&ctx, json!([function_call("call_first")]));
+    let child = commit(ctx, payload, &exec)
+        .await
+        .expect("the old call is outside the effective history");
+    let ctx = resolved_continuation(&exec, &session, &child.id).await;
+    let items = serde_json::to_value(&ctx.enriched_request.input).unwrap();
+    assert_eq!(items.as_array().unwrap().len(), 3);
+    assert_eq!(items[0]["type"], "compaction");
+    assert_eq!(items[1]["type"], "function_call");
+    assert_eq!(items[2]["type"], "function_call_output");
+}
