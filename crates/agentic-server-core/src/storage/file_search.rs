@@ -17,6 +17,7 @@ const MAX_CORPUS_CHUNKS: i64 = 10_000;
 #[derive(Clone)]
 pub(crate) struct FileSearchStorage {
     pool: Arc<DbPool>,
+    pgvector: Option<super::pgvector::PgvectorStorage>,
 }
 
 #[derive(FromRow)]
@@ -81,8 +82,59 @@ impl Collection {
 }
 
 impl FileSearchStorage {
+    #[cfg(test)]
     pub(crate) fn new(pool: Arc<DbPool>) -> Self {
-        Self { pool }
+        Self { pool, pgvector: None }
+    }
+
+    pub(crate) fn with_backend(
+        pool: Arc<DbPool>,
+        backend: &crate::types::file_search::FileSearchBackend,
+    ) -> Result<Self, FileSearchError> {
+        let pgvector = super::pgvector::PgvectorStorage::from_config(&pool, backend)?;
+        Ok(Self { pool, pgvector })
+    }
+
+    pub(crate) fn vector_dimensions(&self) -> Option<usize> {
+        self.pgvector.as_ref().map(super::pgvector::PgvectorStorage::dimensions)
+    }
+
+    pub(crate) async fn initialize(&self) -> Result<(), FileSearchError> {
+        if let Some(pgvector) = &self.pgvector {
+            pgvector.initialize(&self.pool).await?;
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn has_chunks(&self, stores: &[String]) -> Result<bool, FileSearchError> {
+        let placeholders = (1..=stores.len())
+            .map(|index| format!("${index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!("SELECT chunk_index FROM file_search_chunks WHERE store_id IN ({placeholders}) LIMIT 1");
+        let mut query = sqlx::query_scalar::<_, i64>(&sql);
+        for store in stores {
+            query = query.bind(store);
+        }
+        Ok(query.fetch_optional(self.pool.as_ref()).await?.is_some())
+    }
+
+    pub(crate) async fn candidates(
+        &self,
+        stores: &[String],
+        queries: &[String],
+        vectors: &[Vec<f64>],
+        mode: crate::types::file_search::SearchMode,
+        filter: Option<&crate::types::file_search::SearchFilter>,
+    ) -> Result<Vec<StoredChunk>, FileSearchError> {
+        match &self.pgvector {
+            Some(pgvector) => {
+                pgvector
+                    .candidates(&self.pool, stores, queries, vectors, mode, filter)
+                    .await
+            }
+            None => self.chunks(stores).await,
+        }
     }
 
     pub(crate) async fn upload(
@@ -164,6 +216,7 @@ impl FileSearchStorage {
         identity: &str,
         attachments: &[PreparedAttachment],
     ) -> Result<(), FileSearchError> {
+        self.initialize().await?;
         let mut encoded = Vec::with_capacity(attachments.len());
         let mut total_bytes = 0;
         for attachment in attachments {
@@ -189,6 +242,7 @@ impl FileSearchStorage {
         identity: &str,
         attachment: &PreparedAttachment,
     ) -> Result<(), FileSearchError> {
+        self.initialize().await?;
         let (chunks, storage_bytes) = serialize_chunks(&attachment.chunks).await?;
         let mut tx = self.pool.begin().await?;
         publish_attachment(&mut tx, store_id, identity, attachment, &chunks, storage_bytes).await?;

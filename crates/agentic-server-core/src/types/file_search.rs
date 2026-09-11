@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FileSearchConfig {
+    #[serde(default)]
+    pub backend: FileSearchBackend,
     pub files_storage_dir: Option<PathBuf>,
     pub embedding_base_url: Option<String>,
     pub embedding_model: Option<String>,
@@ -17,6 +19,7 @@ pub struct FileSearchConfig {
 impl fmt::Debug for FileSearchConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("FileSearchConfig")
+            .field("backend", &self.backend)
             .field("files_storage_dir", &self.files_storage_dir)
             .field("embedding_configured", &self.embedding_base_url.is_some())
             .field("embedding_model", &self.embedding_model)
@@ -25,6 +28,72 @@ impl fmt::Debug for FileSearchConfig {
                 &self.embedding_api_key.as_ref().map(|_| "[REDACTED]"),
             )
             .finish()
+    }
+}
+
+/// Deployment-selected retrieval storage. Exact SQL remains portable.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum FileSearchBackend {
+    #[default]
+    Exact,
+    Pgvector {
+        dimensions: u16,
+        index: PgvectorIndex,
+        candidate_limit: u16,
+    },
+}
+
+/// Cosine ANN index construction and transaction-local search settings.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum PgvectorIndex {
+    Hnsw {
+        m: u16,
+        ef_construction: u16,
+        ef_search: u16,
+    },
+    Ivfflat {
+        lists: u16,
+        probes: u16,
+    },
+}
+
+impl FileSearchBackend {
+    /// Validates bounded pgvector dimensions and index/search parameters.
+    ///
+    /// # Errors
+    /// Returns an actionable configuration error for invalid settings.
+    pub fn validate(&self) -> Result<(), FileSearchError> {
+        if let Self::Pgvector {
+            dimensions,
+            index,
+            candidate_limit,
+        } = self
+        {
+            if !(1..=2000).contains(dimensions) || !(50..=1000).contains(candidate_limit) {
+                return invalid("pgvector dimensions must be 1 to 2000 and candidate_limit 50 to 1000");
+            }
+            let valid = match index {
+                PgvectorIndex::Hnsw {
+                    m,
+                    ef_construction,
+                    ef_search,
+                } => {
+                    (2..=100).contains(m)
+                        && (4..=1000).contains(ef_construction)
+                        && *ef_construction >= 2 * m
+                        && (1..=1000).contains(ef_search)
+                }
+                PgvectorIndex::Ivfflat { lists, probes } => {
+                    (2..=32768).contains(lists) && *probes > 0 && probes < lists
+                }
+            };
+            if !valid {
+                return invalid("invalid pgvector index construction or search parameters");
+            }
+        }
+        Ok(())
     }
 }
 

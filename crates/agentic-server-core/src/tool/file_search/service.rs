@@ -39,7 +39,7 @@ impl Drop for CancelIngestionOnDrop {
     }
 }
 
-/// In-tree exact retrieval over persistent SQL storage.
+/// In-tree exact or indexed retrieval over persistent SQL storage.
 #[derive(Clone)]
 pub struct FileSearchService {
     storage: FileSearchStorage,
@@ -77,12 +77,21 @@ impl FileSearchService {
                 .map_err(|error| FileSearchError::Configuration(Box::new(error)))?
                 .join("files"),
         };
+        if !matches!(config.backend, crate::types::file_search::FileSearchBackend::Exact)
+            && config.embedding_base_url.is_none()
+        {
+            return invalid("pgvector requires configured embeddings");
+        }
         Ok(Self {
-            storage: FileSearchStorage::new(pool),
+            storage: FileSearchStorage::with_backend(pool, &config.backend)?,
             files: LocalFiles::new(directory)?,
             embeddings: Embeddings::from_config(client, &config)?,
             workers: Arc::new(Semaphore::new(4)),
         })
+    }
+
+    pub(crate) async fn initialize(&self) -> Result<(), FileSearchError> {
+        self.storage.initialize().await
     }
 
     fn permit(&self) -> Result<Arc<OwnedSemaphorePermit>, FileSearchError> {
@@ -393,6 +402,11 @@ impl FileSearchService {
         } else {
             Vec::new()
         };
+        if let Some(expected) = self.storage.vector_dimensions() {
+            for vector in &vectors {
+                crate::storage::pgvector::validate_vector(vector, expected)?;
+            }
+        }
         let embedding_dimensions = vectors.first().map_or(0, Vec::len);
         let mut usage_bytes = 0usize;
         let mut embeddings = vectors.into_iter();
@@ -523,7 +537,33 @@ impl FileSearchService {
                 }
             }
         }
-        let chunks = self.storage.chunks(store_ids).await?;
+        let has_embeddings = dimensions.is_some() && self.storage.has_chunks(store_ids).await?;
+        if let Some(expected) = self.storage.vector_dimensions() {
+            if dimensions.is_some_and(|actual| actual != expected) {
+                return invalid("stored embeddings do not match configured pgvector dimensions");
+            }
+            dimensions = Some(expected);
+        }
+        let queries = match &request.query {
+            SearchQuery::Text(query) => vec![query.clone()],
+            SearchQuery::Texts(queries) => queries.clone(),
+        };
+        let vectors = if mode == SearchMode::Keyword || !has_embeddings {
+            Vec::new()
+        } else {
+            let embeddings = self
+                .embeddings
+                .as_ref()
+                .ok_or_else(|| FileSearchError::Unavailable("Embeddings are not configured".into()))?;
+            embeddings.embed(&queries, dimensions).await?
+        };
+        let chunks = if mode != SearchMode::Keyword && vectors.is_empty() {
+            Vec::new()
+        } else {
+            self.storage
+                .candidates(store_ids, &queries, &vectors, mode, request.filters.as_ref())
+                .await?
+        };
         if mode != SearchMode::Keyword {
             for chunk in &chunks {
                 let vector = chunk.embedding.as_ref().ok_or_else(|| {
@@ -537,22 +577,8 @@ impl FileSearchService {
                         "Stored embeddings are incompatible; recreate this vector store".into(),
                     ));
                 }
-                dimensions = Some(vector.len());
             }
         }
-        let queries = match &request.query {
-            SearchQuery::Text(query) => vec![query.clone()],
-            SearchQuery::Texts(queries) => queries.clone(),
-        };
-        let vectors = if mode == SearchMode::Keyword || chunks.is_empty() {
-            Vec::new()
-        } else {
-            let embeddings = self
-                .embeddings
-                .as_ref()
-                .ok_or_else(|| FileSearchError::Unavailable("Embeddings are not configured".into()))?;
-            embeddings.embed(&queries, dimensions).await?
-        };
         let worker_queries = queries.clone();
         let request = request.clone();
         let data = tokio::task::spawn_blocking(move || {
