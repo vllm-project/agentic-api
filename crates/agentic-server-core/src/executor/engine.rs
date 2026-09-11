@@ -171,6 +171,12 @@ async fn build_tool_registry(
     response_budget: &ExecutorResponseBudget,
 ) -> ExecutorResult<ToolRegistry> {
     let mut executors = exec_ctx.gateway_executors.request_scoped();
+    executors.include_file_search_results = agent
+        .request
+        .original_request
+        .include
+        .as_ref()
+        .is_some_and(|include| include.iter().any(|field| field == "file_search_call.results"));
     let mut registry: ToolRegistry = match agent.request.enriched_request.tools.as_mut() {
         Some(tools) => {
             let policy = exec_ctx.gateway_scheduler_policy.clone();

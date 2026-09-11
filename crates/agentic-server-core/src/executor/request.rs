@@ -57,6 +57,8 @@ impl RequestContext {
 /// rather than stored here, keeping this context purely shared and immutable.
 #[derive(Clone, Debug)]
 pub struct ExecutionContext {
+    /// Shared in-tree file ingestion and retrieval, available when persistence is configured.
+    pub file_search: Option<crate::tool::file_search::FileSearchService>,
     pub conv_handler: ConversationHandler,
     pub resp_handler: ResponseHandler,
     pub client: Arc<reqwest::Client>,
@@ -97,6 +99,7 @@ impl ExecutionContext {
     ) -> Self {
         let gateway_executors = GatewayExecutors::from_env(Arc::clone(&client));
         Self {
+            file_search: None,
             conv_handler,
             resp_handler,
             client,
@@ -160,9 +163,19 @@ impl ExecutionContext {
         let conv_handler = ConversationHandler::new(ConversationStore::new(pool.clone()));
         let resp_handler = ResponseHandler::new(ResponseStore::new(pool.clone()));
         let client = Arc::new(reqwest::Client::new());
-        let gateway_executors = GatewayExecutors::from_config(Arc::clone(&client), &cfg.tools)
+        let mut gateway_executors = GatewayExecutors::from_config(Arc::clone(&client), &cfg.tools)
             .map_err(|error| Error::Config(format!("failed to validate configured MCP server policies: {error}")))?;
+        let file_search = crate::tool::file_search::FileSearchService::new(
+            Arc::clone(&pool),
+            Arc::clone(&client),
+            cfg.tools.file_search.clone(),
+        )
+        .map_err(|error| Error::Config(error.public_message()))?;
+        gateway_executors.insert(GatewayExecutorRegistration::FileSearch(Arc::new(
+            crate::tool::file_search::FileSearchHandler::new(file_search.clone()),
+        )));
         Ok(Self {
+            file_search: Some(file_search),
             conv_handler,
             resp_handler,
             client,

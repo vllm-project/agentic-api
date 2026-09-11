@@ -15,8 +15,8 @@ use crate::config::DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS;
 type DbResult<T> = Result<T, sqlx::Error>;
 
 const POSTGRES_SCHEMA_ADVISORY_LOCK: i64 = 7_194_963_546_799_751;
-const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 20;
-const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 7;
+const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 40;
+const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 14;
 const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 4;
 const POSTGRES_INTEGER_WIDENING_SQL: &str = "
     ALTER TABLE conversations
@@ -85,7 +85,27 @@ where
                  ('responses', 'metadata', 'text', 'YES'), \
                  ('responses', 'created_at', 'integer', 'NO'), \
                  ('responses', 'tenant_id', 'text', 'YES'), \
-                 ('responses', 'raw_tokens', 'text', 'YES') \
+                 ('responses', 'raw_tokens', 'text', 'YES'), \
+                 ('file_search_files', 'id', 'text', 'NO'), \
+                 ('file_search_files', 'created_at', 'bigint', 'NO'), \
+                 ('file_search_files', 'data', 'text', 'NO'), \
+                 ('file_search_files', 'content_type', 'text', 'NO'), \
+                 ('file_search_files', 'content_base64', 'text', 'NO'), \
+                 ('file_search_stores', 'id', 'text', 'NO'), \
+                 ('file_search_stores', 'created_at', 'bigint', 'NO'), \
+                 ('file_search_stores', 'data', 'text', 'NO'), \
+                 ('file_search_stores', 'embedding_identity', 'text', 'NO'), \
+                 ('file_search_stores', 'embedding_dimensions', 'bigint', 'NO'), \
+                 ('file_search_attachments', 'store_id', 'text', 'NO'), \
+                 ('file_search_attachments', 'file_id', 'text', 'NO'), \
+                 ('file_search_attachments', 'created_at', 'bigint', 'NO'), \
+                 ('file_search_attachments', 'usage_bytes', 'bigint', 'NO'), \
+                 ('file_search_attachments', 'storage_bytes', 'bigint', 'NO'), \
+                 ('file_search_attachments', 'data', 'text', 'NO'), \
+                 ('file_search_chunks', 'store_id', 'text', 'NO'), \
+                 ('file_search_chunks', 'file_id', 'text', 'NO'), \
+                 ('file_search_chunks', 'chunk_index', 'bigint', 'NO'), \
+                 ('file_search_chunks', 'data', 'text', 'NO') \
          ) \
          SELECT COUNT(*) \
          FROM required \
@@ -124,7 +144,14 @@ where
                  ('responses', 'f', \
                   'FOREIGN KEY (previous_response_id) REFERENCES responses(id) ON DELETE SET NULL'), \
                  ('conversations', 'f', \
-                  'FOREIGN KEY (latest_response_id) REFERENCES responses(id) ON DELETE SET NULL') \
+                  'FOREIGN KEY (latest_response_id) REFERENCES responses(id) ON DELETE SET NULL'), \
+                 ('file_search_files', 'p', 'PRIMARY KEY (id)'), \
+                 ('file_search_stores', 'p', 'PRIMARY KEY (id)'), \
+                 ('file_search_attachments', 'p', 'PRIMARY KEY (store_id, file_id)'), \
+                 ('file_search_chunks', 'p', 'PRIMARY KEY (store_id, file_id, chunk_index)'), \
+                 ('file_search_attachments', 'f', 'FOREIGN KEY (store_id) REFERENCES file_search_stores(id) ON DELETE CASCADE'), \
+                 ('file_search_attachments', 'f', 'FOREIGN KEY (file_id) REFERENCES file_search_files(id) ON DELETE CASCADE'), \
+                 ('file_search_chunks', 'f', 'FOREIGN KEY (store_id, file_id) REFERENCES file_search_attachments(store_id, file_id) ON DELETE CASCADE') \
          ) \
          SELECT COUNT(*) \
          FROM required \
@@ -280,7 +307,8 @@ pub(crate) async fn pin_postgres_persistence_schema(connection: &mut sqlx::AnyCo
          JOIN pg_namespace table_namespace ON table_namespace.oid = table_relation.relnamespace \
          WHERE table_namespace.nspname = ANY(current_schemas(false)) \
          AND table_relation.relkind IN ('r', 'p', 'v', 'm', 'f') \
-         AND table_relation.relname IN ('_sqlx_migrations', 'conversations', 'items', 'responses') \
+         AND table_relation.relname IN ('_sqlx_migrations', 'conversations', 'items', 'responses', \
+              'file_search_files', 'file_search_stores', 'file_search_attachments', 'file_search_chunks') \
          ORDER BY table_namespace.nspname::text",
     )
     .fetch_all(&mut *connection)
@@ -368,10 +396,22 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                          ('items', 'SELECT'), \
                          ('items', 'INSERT'), \
                          ('responses', 'SELECT'), \
-                         ('responses', 'INSERT') \
+                         ('responses', 'INSERT'), \
+                         ('file_search_files', 'SELECT'), \
+                         ('file_search_files', 'INSERT'), \
+                         ('file_search_files', 'DELETE'), \
+                         ('file_search_stores', 'SELECT'), \
+                         ('file_search_stores', 'INSERT'), \
+                         ('file_search_stores', 'UPDATE'), \
+                         ('file_search_stores', 'DELETE'), \
+                         ('file_search_attachments', 'SELECT'), \
+                         ('file_search_attachments', 'INSERT'), \
+                         ('file_search_attachments', 'DELETE'), \
+                         ('file_search_chunks', 'SELECT'), \
+                         ('file_search_chunks', 'INSERT') \
                  ) \
                  SELECT current_setting('transaction_read_only') = 'off' \
-                    AND COUNT(table_relation.oid) = 7 \
+                    AND COUNT(table_relation.oid) = 19 \
                     AND COALESCE(BOOL_AND( \
                         has_table_privilege(current_user, table_relation.oid, required.privilege) \
                     ), false) \
@@ -400,6 +440,10 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                 "SELECT id FROM conversations LIMIT 0",
                 "SELECT id FROM items LIMIT 0",
                 "SELECT id FROM responses LIMIT 0",
+                "SELECT id, created_at, data, content_type, content_base64 FROM file_search_files LIMIT 0",
+                "SELECT id, created_at, data, embedding_identity, embedding_dimensions FROM file_search_stores LIMIT 0",
+                "SELECT store_id, file_id, created_at, usage_bytes, storage_bytes, data FROM file_search_attachments LIMIT 0",
+                "SELECT store_id, file_id, chunk_index, data FROM file_search_chunks LIMIT 0",
             ] {
                 sqlx::query(statement).execute(&mut *connection).await?;
             }
@@ -506,6 +550,7 @@ impl PoolWithSchema {
         if supervisor_managed {
             debug!("[schema] Migrations skipped — marked ready by supervisor.");
             verify_supervisor_managed_postgres_schema(self.pool.as_ref(), self.postgres_migration_timeout).await?;
+            verify_persistence_ready(self.pool.as_ref()).await?;
             self.schema_ready.store(true, Ordering::SeqCst);
             return Ok(());
         }
@@ -625,6 +670,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn file_search_readiness_and_supervisor_marker_require_new_tables() {
+        let pool = crate::storage::pool::create_pool(Some("sqlite::memory:"))
+            .await
+            .unwrap();
+        for migration in [
+            include_str!("../../migrations/0001_initial.sql"),
+            include_str!("../../migrations/0002_add_placeholders.sql"),
+            include_str!("../../migrations/0003_index_conversation_sequence.sql"),
+            include_str!("../../migrations/0004_link_conversation_latest_response.sql"),
+        ] {
+            sqlx::raw_sql(migration).execute(pool.as_ref()).await.unwrap();
+        }
+        assert!(
+            verify_persistence_ready(pool.as_ref()).await.is_err(),
+            "file search tables must be ready before accepting requests"
+        );
+        let wrapper = PoolWithSchema::new(pool.clone());
+        assert!(
+            wrapper.ensure_schema_ready_with_marker(true).await.is_err(),
+            "a supervisor marker cannot conceal missing file search migrations"
+        );
+        assert!(!wrapper.schema_ready.load(Ordering::SeqCst));
+        sqlx::raw_sql(include_str!("../../migrations/0005_file_search.sql"))
+            .execute(pool.as_ref())
+            .await
+            .unwrap();
+        verify_persistence_ready(pool.as_ref()).await.unwrap();
+        wrapper.ensure_schema_ready_with_marker(true).await.unwrap();
+    }
+
+    #[tokio::test]
     async fn test_pool_with_schema_ready() {
         let pool = crate::storage::pool::create_pool(Some("sqlite://?mode=memory"))
             .await
@@ -673,6 +749,71 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
+    async fn postgres_supervisor_requires_file_search_migration() {
+        let database_url = std::env::var("TEST_POSTGRES_URL").expect("TEST_POSTGRES_URL must be set");
+        let pool = crate::storage::pool::create_pool(Some(&database_url)).await.unwrap();
+        let schema = format!("file_search_upgrade_{}", uuid::Uuid::now_v7().simple());
+        let mut connection = pool.acquire().await.unwrap();
+        sqlx::query(&format!("CREATE SCHEMA {schema}"))
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+        sqlx::query("SELECT set_config('search_path', $1, false)")
+            .bind(&schema)
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+        for migration in [
+            include_str!("../../migrations/0001_initial.sql"),
+            include_str!("../../migrations/0002_add_placeholders.sql"),
+            include_str!("../../migrations/0003_index_conversation_sequence.sql"),
+            include_str!("../../migrations/0004_link_conversation_latest_response.sql"),
+        ] {
+            sqlx::raw_sql(migration).execute(&mut *connection).await.unwrap();
+        }
+        sqlx::raw_sql(POSTGRES_INTEGER_WIDENING_SQL)
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+        let selected_schema = schema.clone();
+        let supervisor_pool = sqlx::any::AnyPoolOptions::new()
+            .max_connections(1)
+            .after_connect(move |connection, _| {
+                let schema = selected_schema.clone();
+                Box::pin(async move {
+                    sqlx::query("SELECT set_config('search_path', $1, false)")
+                        .bind(schema)
+                        .execute(connection)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .connect(&database_url)
+            .await
+            .unwrap();
+        let supervisor = PoolWithSchema::new(Arc::new(supervisor_pool));
+        assert!(supervisor.ensure_schema_ready_with_marker(true).await.is_err());
+        assert!(!supervisor.schema_ready.load(Ordering::SeqCst));
+        sqlx::raw_sql(include_str!("../../migrations/0005_file_search.sql"))
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+        supervisor.ensure_schema_ready_with_marker(true).await.unwrap();
+        supervisor.pool.close().await;
+        sqlx::query("SET search_path TO public")
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+        sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
+            .execute(&mut *connection)
+            .await
+            .unwrap();
+        drop(connection);
+        pool.close().await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
     #[allow(
         clippy::too_many_lines,
         reason = "keeps the complete migration lifecycle in one integration test"
@@ -697,6 +838,7 @@ mod tests {
             include_str!("../../migrations/0002_add_placeholders.sql"),
             include_str!("../../migrations/0003_index_conversation_sequence.sql"),
             include_str!("../../migrations/0004_link_conversation_latest_response.sql"),
+            include_str!("../../migrations/0005_file_search.sql"),
         ] {
             sqlx::raw_sql(migration)
                 .execute(&mut *connection)

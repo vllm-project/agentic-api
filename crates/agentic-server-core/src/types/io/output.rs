@@ -479,6 +479,37 @@ impl WebSearchAction {
     }
 }
 
+/// A retrieved passage exposed when `file_search_call.results` is requested.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct FileSearchCallResult {
+    pub file_id: String,
+    pub filename: String,
+    pub score: f64,
+    pub attributes: crate::types::file_search::FileAttributes,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct FileSearchCall {
+    pub id: String,
+    pub status: GatewayCallStatus,
+    pub queries: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub results: Option<Vec<FileSearchCallResult>>,
+}
+
+/// Annotation for a file explicitly cited by the model from retrieved context.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename = "file_citation")]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct FileCitation {
+    pub file_id: String,
+    pub filename: String,
+    pub index: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct WebSearchCall {
@@ -994,6 +1025,8 @@ pub enum OutputItem {
     CustomToolCall(CustomToolCall),
     #[serde(rename = "shell_call")]
     ShellCall(ShellCall),
+    #[serde(rename = "file_search_call")]
+    FileSearchCall(FileSearchCall),
     #[serde(rename = "web_search_call")]
     WebSearchCall(WebSearchCall),
     #[serde(rename = "mcp_call")]
@@ -1037,6 +1070,7 @@ impl utoipa::PartialSchema for OutputItem {
             .item(tagged("tool_search_call", "ToolSearchCall"))
             .item(tagged("custom_tool_call", "CustomToolCall"))
             .item(tagged("shell_call", "ShellCall"))
+            .item(tagged("file_search_call", "FileSearchCall"))
             .item(tagged("web_search_call", "WebSearchCall"))
             .item(tagged("mcp_call", "McpCall"))
             .item(tagged("mcp_list_tools", "McpListTools"))
@@ -1062,6 +1096,7 @@ impl OutputItem {
             Self::ToolSearchCall(item) => Some(&item.id),
             Self::CustomToolCall(item) => Some(&item.id),
             Self::ShellCall(item) => item.id.as_deref(),
+            Self::FileSearchCall(item) => Some(&item.id),
             Self::WebSearchCall(item) => Some(&item.id),
             Self::McpCall(item) => Some(&item.id),
             Self::McpListTools(item) => Some(&item.id),
@@ -1079,6 +1114,7 @@ impl OutputItem {
                 .is_none_or(|entry| !entry.ownership.is_gateway()),
             Self::ToolSearchCall(_) | Self::CustomToolCall(_) | Self::ShellCall(_) => true,
             Self::Message(_)
+            | Self::FileSearchCall(_)
             | Self::WebSearchCall(_)
             | Self::McpCall(_)
             | Self::McpListTools(_)
@@ -1103,7 +1139,7 @@ impl OutputItem {
             Self::ShellCall(call) => Some(InputItem::FunctionCall(call.clone().into())),
             Self::McpListTools(list_tools) => Some(InputItem::McpListTools(list_tools.clone())),
             Self::Compaction(item) => Some(InputItem::Compaction(item.clone())),
-            Self::WebSearchCall(_) | Self::McpCall(_) | Self::Unknown => None,
+            Self::FileSearchCall(_) | Self::WebSearchCall(_) | Self::McpCall(_) | Self::Unknown => None,
         }
     }
 }
@@ -1112,6 +1148,20 @@ impl OutputItem {
 mod tests {
     use super::*;
     use crate::types::io::InputItem;
+
+    #[test]
+    fn file_search_call_preserves_retrieved_identifiers() {
+        let wire = serde_json::json!({
+            "type": "file_search_call", "id": "fs_1", "status": "completed",
+            "queries": ["policy"], "results": [{"file_id": "file_1", "filename": "policy.txt",
+                "score": 0.9, "attributes": {}, "text": "Policy text"}]
+        });
+        let item: OutputItem = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(item.id(), Some("fs_1"));
+        assert_eq!(serde_json::to_value(&item).unwrap(), wire);
+        assert!(!item.requires_client_action(&ToolRegistry::default()));
+        assert!(item.to_input_item().is_none());
+    }
 
     #[test]
     fn emitted_tool_search_call_is_explicit_and_requires_client_action() {

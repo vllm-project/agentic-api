@@ -1,6 +1,7 @@
 use crate::events::WireEvent;
 use crate::executor::error::ExecutorResult;
 use crate::tool::custom::CustomToolMap;
+use crate::tool::file_search::handler::FileSearchCitations;
 use crate::tool::{NamespaceMap, ToolType};
 use crate::types::event::ResponseStatus;
 use crate::types::io::OutputItem;
@@ -12,6 +13,7 @@ use std::collections::{HashMap, HashSet};
 /// An owned snapshot of the effective tool classification and availability for one round.
 #[derive(Default)]
 pub(in crate::executor) struct TranslationContext {
+    file_search_citations: Option<FileSearchCitations>,
     tool_types: HashMap<String, ToolType>,
     gateway_owned_names: HashSet<String>,
     withheld_function_names: HashSet<String>,
@@ -71,7 +73,15 @@ impl TranslationContext {
         self
     }
 
+    pub(in crate::executor) fn with_file_search_context(mut self, input: &crate::types::io::ResponsesInput) -> Self {
+        self.file_search_citations = Some(FileSearchCitations::from_input(input));
+        self
+    }
+
     pub(super) fn restore_stream_event_wire(&self, wire: &mut WireEvent) -> ExecutorResult<()> {
+        if let Some(citations) = &self.file_search_citations {
+            citations.restore_wire(wire);
+        }
         super::tool_search::restore_response_tools(wire, self.response_tools.as_deref())?;
         if self.response_tools.is_some()
             && let Some(choice) = self.response_tool_choice.as_ref()
@@ -124,6 +134,11 @@ impl TranslationContext {
         unfinished_stream_item_ids: &HashSet<String>,
     ) -> ExecutorResult<()> {
         super::tool_search::normalize_response_output(self, output, status, unfinished_stream_item_ids)?;
+        if let Some(citations) = &self.file_search_citations {
+            for item in output.iter_mut() {
+                citations.restore_output(item);
+            }
+        }
         super::namespace::CodexNamespaceTranslator::restore_output_items(output, self.namespace_map.as_ref());
         Ok(())
     }

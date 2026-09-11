@@ -12,8 +12,8 @@ use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::types::event::MessageStatus;
 use crate::types::io::output::McpListTools;
 use crate::types::io::{
-    ApplyDone, CompactionItem, CustomToolCall, FunctionToolCall, McpCall, OutputItem, OutputMessage, OutputTextContent,
-    ReasoningOutput, ShellCall, ToolSearchCall, WebSearchCall,
+    ApplyDone, CompactionItem, CustomToolCall, FileSearchCall, FunctionToolCall, McpCall, OutputItem, OutputMessage,
+    OutputTextContent, ReasoningOutput, ShellCall, ToolSearchCall, WebSearchCall,
 };
 use crate::utils::common::deserialize_from_value_opt;
 use crate::utils::uuid7_str;
@@ -286,6 +286,7 @@ impl SlotMap {
             | OutputItem::ToolSearchCall(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::ShellCall(_)
+            | OutputItem::FileSearchCall(_)
             | OutputItem::WebSearchCall(_)
             | OutputItem::McpCall(_)
             | OutputItem::McpListTools(_)
@@ -350,6 +351,9 @@ pub(super) enum ActiveItem {
         command_stream: Option<Vec<bool>>,
         command: String,
     },
+    FileSearchCall {
+        item: Option<FileSearchCall>,
+    },
     WebSearchCall {
         item: Option<WebSearchCall>,
     },
@@ -373,6 +377,7 @@ impl std::fmt::Debug for ActiveItem {
             Self::ToolSearchCall { .. } => write!(f, "ActiveItem::ToolSearchCall {{ .. }}"),
             Self::CustomToolCall { .. } => write!(f, "ActiveItem::CustomToolCall {{ .. }}"),
             Self::ShellCall { .. } => write!(f, "ActiveItem::ShellCall {{ .. }}"),
+            Self::FileSearchCall { .. } => write!(f, "ActiveItem::FileSearchCall {{ .. }}"),
             Self::WebSearchCall { .. } => write!(f, "ActiveItem::WebSearchCall {{ .. }}"),
             Self::McpCall { .. } => write!(f, "ActiveItem::McpCall {{ .. }}"),
             Self::McpListTools { .. } => write!(f, "ActiveItem::McpListTools {{ .. }}"),
@@ -418,6 +423,7 @@ impl ActiveItem {
                 item,
                 text: String::with_capacity(256),
             }),
+            SSEItemType::FileSearchCall => Some(ActiveItem::FileSearchCall { item: None }),
             SSEItemType::WebSearchCall => Some(ActiveItem::WebSearchCall { item: None }),
             SSEItemType::Compaction => CompactionItem::try_from(payload)
                 .ok()
@@ -437,6 +443,7 @@ impl ActiveItem {
             Self::ToolSearchCall { .. } => SSEItemType::ToolSearchCall,
             Self::CustomToolCall { .. } => SSEItemType::CustomToolCall,
             Self::ShellCall { .. } => SSEItemType::ShellCall,
+            Self::FileSearchCall { .. } => SSEItemType::FileSearchCall,
             Self::WebSearchCall { .. } => SSEItemType::WebSearchCall,
             Self::McpCall { .. } => SSEItemType::McpCall,
             Self::McpListTools { .. } => SSEItemType::McpListTools,
@@ -467,6 +474,7 @@ impl ActiveItem {
                 item,
                 input: String::new(),
             },
+            OutputItem::FileSearchCall(item) => Self::FileSearchCall { item: Some(item) },
             OutputItem::WebSearchCall(item) => Self::WebSearchCall { item: Some(item) },
             OutputItem::McpCall(item) => Self::McpCall { item },
             OutputItem::McpListTools(item) => Self::McpListTools { item },
@@ -543,6 +551,7 @@ impl ActiveItem {
                 _ => {}
             },
             Self::ToolSearchCall { .. }
+            | Self::FileSearchCall { .. }
             | Self::WebSearchCall { .. }
             | Self::McpCall { .. }
             | Self::McpListTools { .. }
@@ -577,6 +586,7 @@ impl ActiveItem {
                 item.status = Some(MessageStatus::Completed);
                 Some(OutputItem::CustomToolCall(item))
             }
+            Self::FileSearchCall { item } => item.map(OutputItem::FileSearchCall),
             Self::WebSearchCall { item } => item.map(OutputItem::WebSearchCall),
             Self::McpCall { item } => Some(OutputItem::McpCall(item)),
             Self::McpListTools { item } => Some(OutputItem::McpListTools(item)),
@@ -662,6 +672,7 @@ fn apply_output_item_done(
         (ActiveItem::CustomToolCall { item, input }, Some(OutputItem::CustomToolCall(done))) => {
             item.merge_done(done, input);
         }
+        (ActiveItem::FileSearchCall { item }, Some(OutputItem::FileSearchCall(done))) => *item = Some(done.clone()),
         (ActiveItem::WebSearchCall { item }, Some(OutputItem::WebSearchCall(done))) => item.merge_done(done, item_id),
         (ActiveItem::McpCall { item }, Some(OutputItem::McpCall(done))) => item.merge_done(done, ()),
         (ActiveItem::McpListTools { item }, Some(OutputItem::McpListTools(done))) => item.merge_done(done, ()),

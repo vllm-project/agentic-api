@@ -1783,3 +1783,65 @@ fn test_reasoning_before_done_only_custom_tool_call_preserves_order() {
     assert_eq!(call.name, "raw_echo");
     assert_eq!(call.input, "hello");
 }
+
+#[test]
+fn file_search_lifecycle_preserves_typed_output() {
+    let call = serde_json::json!({"type":"file_search_call","id":"fs_1","status":"completed","queries":["policy"],"results":[]});
+    let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+    let frames = [
+        serde_json::json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.in_progress","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"file_search_call","id":"fs_1","status":"in_progress","queries":["policy"]}}),
+        serde_json::json!({"type":"response.file_search_call.in_progress","output_index":0,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.file_search_call.searching","output_index":0,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.file_search_call.completed","output_index":0,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.output_item.done","output_index":0,"item":call}),
+        serde_json::json!({"type":"response.completed","response":{"id":"resp_1","status":"completed"}}),
+    ];
+    for frame in frames {
+        acc.process_line(SseLine::parse(&format!("data: {frame}"))).unwrap();
+    }
+    let output = serde_json::to_value(acc.finalize("test", None, None).output).unwrap();
+    assert_eq!(output, serde_json::json!([call]));
+}
+
+#[test]
+fn file_search_done_only_is_preserved_leniently_and_rejected_strictly() {
+    let call = serde_json::json!({"type":"file_search_call","id":"fs_1","status":"completed","queries":["policy"],"results":[]});
+    let lines = [
+        serde_json::json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.in_progress","response":{"id":"resp_1","status":"in_progress"}}),
+        serde_json::json!({"type":"response.output_item.done","output_index":0,"item":call}),
+        serde_json::json!({"type":"response.completed","response":{"id":"resp_1","status":"completed"}}),
+    ]
+    .map(|event| format!("data: {event}"));
+    let payload = from_sse_lines(lines.clone(), None).finalize("test", None, None);
+    assert_eq!(serde_json::to_value(payload.output).unwrap(), serde_json::json!([call]));
+
+    let mut strict = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+    for line in &lines[..2] {
+        strict.process_line(SseLine::parse(line)).unwrap();
+    }
+    assert!(strict.process_line(SseLine::parse(&lines[2])).is_err());
+}
+
+#[test]
+fn file_search_progress_rejects_wrong_identity_and_completion_order() {
+    for invalid in [
+        serde_json::json!({"type":"response.file_search_call.searching","output_index":1,"item_id":"fs_1"}),
+        serde_json::json!({"type":"response.file_search_call.completed","output_index":0,"item_id":"other"}),
+    ] {
+        let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+        for frame in [
+            serde_json::json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}),
+            serde_json::json!({"type":"response.in_progress","response":{"id":"resp_1","status":"in_progress"}}),
+            serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"type":"file_search_call","id":"fs_1","status":"in_progress","queries":[]}}),
+        ] {
+            acc.process_line(SseLine::parse(&format!("data: {frame}"))).unwrap();
+        }
+        assert!(acc.process_line(SseLine::parse(&format!("data: {invalid}"))).is_err());
+    }
+    let mut acc = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+    let event = r#"data: {"type":"response.file_search_call.completed","output_index":0,"item_id":"fs_1"}"#;
+    assert!(acc.process_line(SseLine::parse(event)).is_err());
+}

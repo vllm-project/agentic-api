@@ -37,6 +37,8 @@ impl GatewayToolEventPlan {
 pub enum ToolError {
     #[error("execution failed: {0}")]
     Execution(String),
+    #[error("file_search failed: {}", .0.public_message())]
+    FileSearch(#[from] crate::types::file_search::FileSearchError),
     #[error("invalid tool config: {0}")]
     Config(String),
     #[error("upstream returned an invalid tool-search call")]
@@ -74,9 +76,9 @@ pub trait ToolHandler: Send + Sync {
 
 /// Extension of [`ToolHandler`] for tool types that are executed by the gateway.
 ///
-/// Only executable gateway handlers implement this trait. MCP and web search
-/// implement it today. File search and code interpreter are gateway-owned in
-/// the registry but do not yet have executors. Client-owned tools (`Function`,
+/// Only executable gateway handlers implement this trait. MCP, web search, and
+/// file search implement it today. Code interpreter is gateway-owned in the
+/// registry but does not yet have an executor. Client-owned tools (`Function`,
 /// `ToolSearch`, `Custom`, `CodexNamespace`) do not implement it, so they cannot
 /// be dispatched through this interface.
 ///

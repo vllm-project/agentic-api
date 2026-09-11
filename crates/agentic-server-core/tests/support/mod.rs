@@ -558,6 +558,7 @@ pub fn output_text(payload: &ResponsePayload) -> String {
             | OutputItem::ToolSearchCall(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::ShellCall(_)
+            | OutputItem::FileSearchCall(_)
             | OutputItem::WebSearchCall(_)
             | OutputItem::McpCall(_)
             | OutputItem::McpListTools(_)

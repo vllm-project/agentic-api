@@ -642,7 +642,7 @@ round:
   deadline for the entire round or total call latency. Timeout, execution, and tool-config
   failures become failed tool outputs that can be fed back to the model instead of
   failing the whole response. A tool registered as gateway-owned without an
-  implementation (currently file search/code interpreter) likewise produces an error
+  implementation (currently code interpreter) likewise produces an error
   tool result.
 - Parallel safety is a per-handler contract. `GatewayExecutor::supports_parallel_execution`
   defaults to `false`; registration turns that into a `GatewayBinding::self_exclusion`
@@ -775,7 +775,7 @@ RequestPayload::to_upstream_request
 `RequestPayload::to_upstream_request` is the only request-level seam that prepares
 tools for vLLM. New callers must use it rather than rebuilding function schemas or
 normalizing declarations in the executor. Declared placeholders that are not yet
-supported, currently file search and code interpreter, produce no upstream function
+supported, currently code interpreter, produce no upstream function
 declaration until they have a complete handler and execution path.
 
 | Component | Responsibility |
@@ -790,13 +790,19 @@ declaration until they have a complete handler and execution path.
   `to_function_tools()`. These are the declaration-level validation and normalization
   entry points used by `RequestPayload::to_upstream_request`. Each supported variant's
   policy belongs to its corresponding `ToolHandler`: `FunctionHandler`,
-  `ToolSearchHandler`, `McpHandler`, `WebSearchHandler`, `CodexNamespaceHandler`, or
+  `ToolSearchHandler`, `McpHandler`, `WebSearchHandler`, `FileSearchHandler`, `CodexNamespaceHandler`, or
   `CustomHandler`. Web search's fixed canonical builder is shared with
   `WebSearchHandler::normalize`; it remains one schema even though it has no
   per-declaration normalization state. The method name is plural because namespace and
   MCP declarations may expand to several model-visible function tools.
-  `FileSearch`/`CodeInterpreter` remain unsupported placeholders and normalize to
-  nothing.
+  `CodeInterpreter` remains an unsupported placeholder and normalizes to nothing.
+- **`file_search/`** — `FileSearchHandler` normalizes the built-in declaration and
+  projects typed call items and citations. Its shared `FileSearchService` handles
+  file ingestion and semantic, keyword, and hybrid retrieval against
+  `storage::file_search`. `ExecutionContext::from_config` initializes the service
+  from the existing database pool and local file storage. The Files and vector
+  store HTTP handlers call this same service. See [file search](docs/api/file-search.md) for configuration,
+  resource limits, and optional PDF ingestion.
 - **`handler.rs`** — the two traits every tool type reasons about:
   ```rust
   pub trait ToolHandler: Send + Sync {

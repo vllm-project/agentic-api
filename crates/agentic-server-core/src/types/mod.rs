@@ -1,4 +1,5 @@
 pub mod event;
+pub mod file_search;
 pub mod io;
 pub mod messages;
 pub mod request_response;

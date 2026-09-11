@@ -37,3 +37,5 @@ pub use types::{
     ConversationData, ConversationSnapshot, ConversationVersion, InOutItem, ItemKind, ResponseData, ResponseMetadata,
     StorageError, StoreResult,
 };
+pub(crate) mod file_search;
+pub(crate) mod local_files;

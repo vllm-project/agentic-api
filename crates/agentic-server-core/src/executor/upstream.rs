@@ -26,6 +26,7 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
             .unwrap_or_default(),
         state.is_some_and(ToolSearchState::is_active),
     )
+    .with_file_search_context(&agent.request.enriched_request.input)
     .with_gateway_owned_names(
         registry
             .tool_classifications()

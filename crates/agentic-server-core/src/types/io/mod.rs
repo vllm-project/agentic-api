@@ -16,6 +16,7 @@ pub use output::{
     WebSearchActionFindInPage, WebSearchActionOpenPage, WebSearchActionSearch, WebSearchCall, WebSearchCallStatus,
     WebSearchSource,
 };
+pub use output::{FileCitation, FileSearchCall, FileSearchCallResult};
 pub use shell::{
     ShellCall, ShellCallAction, ShellCallOutcome, ShellCallOutputContent, ShellCallOutputMessage, ShellCallStatus,
 };

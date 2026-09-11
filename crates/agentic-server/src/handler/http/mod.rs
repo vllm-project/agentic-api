@@ -1,4 +1,5 @@
 pub(crate) mod conversations;
+pub(crate) mod file_search;
 pub(crate) mod messages;
 pub(crate) mod models;
 pub(crate) mod responses;
