@@ -21,6 +21,7 @@ use async_stream::stream;
 use futures::StreamExt;
 use serde_json::{Value, json};
 
+use crate::events::{ClassifiedSseLine, SseLine};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::inference::{BoxStream, response_lines, send_request};
 use crate::executor::messages_context::MessagesRequestContext;
@@ -304,14 +305,10 @@ impl MessagesStreamAccumulator {
 
     /// Translate one upstream SSE line into zero or more client SSE lines.
     fn push(&mut self, line: &str) -> Vec<String> {
-        let Some(data) = line.strip_prefix("data: ") else {
+        let ClassifiedSseLine::Data(data) = SseLine::parse(line) else {
             return Vec::new();
         };
-        let data = data.trim();
-        if data == "[DONE]" {
-            return Vec::new();
-        }
-        let Ok(mut event) = serde_json::from_str::<Value>(data) else {
+        let Ok(mut event) = deserialize_from_str::<Value>(data.as_str()) else {
             return Vec::new();
         };
         match event.get("type").and_then(Value::as_str) {
@@ -489,6 +486,8 @@ async fn execute_gateway_calls(
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Write as _;
+
     use super::*;
 
     fn line(v: &Value) -> String {
@@ -498,6 +497,41 @@ mod tests {
     /// Accumulator with the default gateway map (built-in `web_search` only).
     fn acc() -> MessagesStreamAccumulator {
         MessagesStreamAccumulator::new(tool_seam::GatewayToolMap::default())
+    }
+
+    #[tokio::test]
+    async fn messages_bridge_accepts_optional_data_space() {
+        for prefix in ["data:", "data: "] {
+            let mut acc = acc();
+            acc.begin_round();
+            let events = [
+                json!({"type": "message_start", "message": {"id": "m"}}),
+                json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
+                json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "hello"}}),
+                json!({"type": "content_block_stop", "index": 0}),
+                json!({"type": "message_delta", "delta": {"stop_reason": "end_turn"}}),
+                json!({"type": "message_stop"}),
+            ];
+            let mut body = String::new();
+            for event in &events {
+                write!(body, "{prefix}{event}\n\n").expect("write SSE event");
+            }
+            write!(body, "{prefix}[DONE]\n\n").expect("write SSE termination marker");
+            let response = reqwest::Response::from(http::Response::new(body));
+            let mut lines = Box::pin(response_lines(response, std::time::Duration::ZERO));
+            let mut output = Vec::new();
+            while let Some(line) = lines.next().await {
+                output.extend(acc.push(&line.expect("valid SSE transport")));
+            }
+            output.extend(acc.finish());
+
+            let output = output.join("");
+            assert_eq!(output.matches("event: message_start").count(), 1, "{prefix:?}");
+            assert_eq!(output.matches("event: content_block_delta").count(), 1, "{prefix:?}");
+            assert_eq!(output.matches("event: message_stop").count(), 1, "{prefix:?}");
+            assert!(output.contains(r#""text":"hello""#), "{prefix:?}");
+            assert!(output.contains("end_turn"), "{prefix:?}");
+        }
     }
 
     // A single non-tool round: message_start forwarded once, blocks pass through

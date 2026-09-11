@@ -4,7 +4,6 @@ pub mod accumulator;
 pub mod compaction;
 pub mod engine;
 pub mod error;
-pub mod function_sse;
 pub mod inference;
 pub mod messages_context;
 pub mod messages_loop;
@@ -15,10 +14,12 @@ pub mod persist;
 mod prepare;
 pub mod rehydrate;
 pub mod request;
+pub mod translate;
 
 mod gateway;
 pub mod gateway_accumulator;
 mod pending_calls;
+mod pipeline;
 mod response_budget;
 mod upstream;
 
