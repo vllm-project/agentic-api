@@ -90,7 +90,9 @@ probes = 10
 `ef_construction` 4–1000 and at least twice `m`, and `ef_search` 1–1000.
 `candidate_limit` is 50–1000 per query and retrieval method. Queries use cosine
 distance operators, SQL store/attribute filters, and transaction-local search
-settings with iterative scans. ANN recall depends on index/search settings;
+settings with iterative scans. Established-index retrieval does not acquire the
+schema initialization lock; index maintenance commits before candidate queries.
+ANN recall depends on index/search settings;
 PostgreSQL can choose an exact scan for small or selective corpora. Keyword
 candidates use a `simple` text-search GIN index; the shared ranker applies BM25
 and hybrid fusion to the bounded candidate union before the final result limit.
@@ -190,7 +192,8 @@ Results include file ID, filename, attributes, score, and text content.
 
 Filters support `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`, and `nin`, combined with
 nested `and` and `or` filters. Comparisons use the attribute's actual string,
-number, or boolean type. Result limits range from 1 to 50 and apply globally
+number, or boolean type. String ranges use UTF-8 byte ordering on both backends,
+independently of the PostgreSQL database collation. Result limits range from 1 to 50 and apply globally
 across queries and, for the built-in tool, selected stores.
 
 ## Use the Responses built-in tool

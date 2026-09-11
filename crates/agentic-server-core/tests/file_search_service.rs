@@ -1682,6 +1682,7 @@ async fn postgres_pgvector_migrates_exact_data_and_rolls_back_failed_publication
         .await
         .unwrap();
     vector.search(std::slice::from_ref(&store.id), &query).await.unwrap();
+    assert_established_ivfflat_search_ignores_initialization_lock(&vector, &pool, &store.id).await;
     let mut tx = pool.begin().await.unwrap();
     sqlx::query("SET LOCAL enable_seqscan = off")
         .execute(&mut *tx)
@@ -1836,4 +1837,100 @@ async fn empty_semantic_search_does_not_require_the_embedding_provider() {
     *state.mode.lock().unwrap() = ProviderMode::Fail;
     assert!(service.search(&[store.id], &request).await.unwrap().data.is_empty());
     task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated TEST_POSTGRES_URL with CREATE DATABASE and ICU support"]
+async fn postgres_pgvector_string_ranges_use_binary_order_on_english_database() {
+    let (_fixture, _, task, _, mut config) = embedding_service().await;
+    let files = tempfile::tempdir().unwrap();
+    config.files_storage_dir = Some(files.path().to_owned());
+    config.backend = FileSearchBackend::Pgvector {
+        dimensions: 2,
+        index: PgvectorIndex::Hnsw {
+            m: 16,
+            ef_construction: 64,
+            ef_search: 100,
+        },
+        candidate_limit: 50,
+    };
+    let url = std::env::var("TEST_POSTGRES_URL").unwrap();
+    let admin = agentic_core::storage::create_pool(Some(&url)).await.unwrap();
+    let database = format!("task1_collation_{}", uuid::Uuid::now_v7().simple());
+    sqlx::query(&format!(
+        "CREATE DATABASE {database} TEMPLATE template0 ENCODING 'UTF8' LOCALE_PROVIDER icu ICU_LOCALE 'en-US'"
+    ))
+    .execute(admin.as_ref())
+    .await
+    .unwrap();
+    let mut english_url = reqwest::Url::parse(&url).unwrap();
+    english_url.set_path(&format!("/{database}"));
+    let pool = create_pool_with_schema(Some(english_url.as_str())).await.unwrap();
+    let english_order: i64 =
+        sqlx::query_scalar("SELECT CASE WHEN '\"a\"'::jsonb > '\"Z\"'::jsonb THEN 1::bigint ELSE 0::bigint END")
+            .fetch_one(pool.as_ref())
+            .await
+            .unwrap();
+    assert_eq!(
+        english_order, 0,
+        "fixture must use locale order that differs from Rust ordering"
+    );
+    let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), config).unwrap();
+    let store = service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    let file = attach_text(
+        &service,
+        &store.id,
+        "a.txt",
+        "coral",
+        [("label".into(), AttributeValue::String("a".into()))].into(),
+    )
+    .await;
+    let request = SearchRequest {
+        search_mode: Some(SearchMode::Keyword),
+        filters: Some(serde_json::from_value(serde_json::json!({"type":"gt", "key":"label", "value":"Z"})).unwrap()),
+        ..query("coral")
+    };
+    let response = service.search(&[store.id], &request).await;
+    drop(service);
+    pool.close().await;
+    sqlx::query(&format!("DROP DATABASE {database} WITH (FORCE)"))
+        .execute(admin.as_ref())
+        .await
+        .unwrap();
+    task.abort();
+    let response = response.unwrap();
+    assert_eq!(response.data.len(), 1, "a > Z under the API's binary string ordering");
+    assert_eq!(response.data[0].file_id, file.id);
+}
+
+async fn assert_established_ivfflat_search_ignores_initialization_lock(
+    service: &FileSearchService,
+    pool: &agentic_core::storage::DbPool,
+    store: &str,
+) {
+    let mut blocker = pool.begin().await.unwrap();
+    sqlx::query("SELECT pg_advisory_xact_lock(752041291)")
+        .execute(&mut *blocker)
+        .await
+        .unwrap();
+    for mode in [SearchMode::Semantic, SearchMode::Keyword] {
+        let request = SearchRequest {
+            search_mode: Some(mode),
+            ..query("coral")
+        };
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            service.search(&[store.to_owned()], &request),
+        )
+        .await;
+        assert!(
+            result.is_ok(),
+            "established {mode:?} retrieval must not wait for the schema initialization lock"
+        );
+        assert!(!result.unwrap().unwrap().data.is_empty());
+    }
+    blocker.rollback().await.unwrap();
 }

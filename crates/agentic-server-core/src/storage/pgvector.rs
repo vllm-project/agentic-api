@@ -77,26 +77,47 @@ impl PgvectorStorage {
         Ok(())
     }
 
+    fn index_configuration(&self) -> (&'static str, String) {
+        match self.index {
+            PgvectorIndex::Hnsw { m, ef_construction, .. } => {
+                ("hnsw", format!("m = {m}, ef_construction = {ef_construction}"))
+            }
+            PgvectorIndex::Ivfflat { lists, .. } => ("ivfflat", format!("lists = {lists}")),
+        }
+    }
+
+    async fn index_is_current(&self, tx: &mut super::DbTransaction<'_>) -> Result<bool, FileSearchError> {
+        let (method, options) = self.index_configuration();
+        let existing: Option<String> =
+            sqlx::query_scalar("SELECT obj_description(oid, 'pg_class') FROM pg_class WHERE oid = to_regclass($1)")
+                .bind(format!("file_search_vector_{}", self.dimensions))
+                .fetch_optional(&mut **tx)
+                .await?
+                .flatten();
+        Ok(existing.as_deref() == Some(format!("{method} {options}").as_str()))
+    }
+
+    async fn maintain_index(&self, pool: &DbPool) -> Result<(), FileSearchError> {
+        // Established indexes need only an unlocked catalog read. Missing or
+        // changed indexes are rechecked under the maintenance lock. Commit
+        // before retrieval so the lock never covers streamed candidate queries.
+        let mut tx = pool.begin().await?;
+        if !self.index_is_current(&mut tx).await? {
+            self.configure_index(&mut tx).await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
     async fn configure_index(&self, tx: &mut super::DbTransaction<'_>) -> Result<(), FileSearchError> {
         sqlx::query("SELECT pg_advisory_xact_lock(752041291)")
             .execute(&mut **tx)
             .await?;
         let dims = self.dimensions;
-        let (method, options) = match self.index {
-            PgvectorIndex::Hnsw { m, ef_construction, .. } => {
-                ("hnsw", format!("m = {m}, ef_construction = {ef_construction}"))
-            }
-            PgvectorIndex::Ivfflat { lists, .. } => ("ivfflat", format!("lists = {lists}")),
-        };
+        let (method, options) = self.index_configuration();
         let name = format!("file_search_vector_{dims}");
         let signature = format!("{method} {options}");
-        let existing: Option<String> =
-            sqlx::query_scalar("SELECT obj_description(oid, 'pg_class') FROM pg_class WHERE oid = to_regclass($1)")
-                .bind(&name)
-                .fetch_optional(&mut **tx)
-                .await?
-                .flatten();
-        if existing.as_deref() != Some(signature.as_str()) {
+        if !self.index_is_current(tx).await? {
             sqlx::query(&format!("DROP INDEX IF EXISTS {name}"))
                 .execute(&mut **tx)
                 .await?;
@@ -136,10 +157,10 @@ impl PgvectorStorage {
         filter: Option<&SearchFilter>,
     ) -> Result<Vec<StoredChunk>, FileSearchError> {
         self.initialize(pool).await?;
-        let mut tx = pool.begin().await?;
-        if matches!(self.index, PgvectorIndex::Ivfflat { .. }) {
-            self.configure_index(&mut tx).await?;
+        if mode != SearchMode::Keyword && matches!(self.index, PgvectorIndex::Ivfflat { .. }) {
+            self.maintain_index(pool).await?;
         }
+        let mut tx = pool.begin().await?;
         let settings = match self.index {
             PgvectorIndex::Hnsw { ef_search, .. } => [
                 ("hnsw.ef_search", ef_search.to_string()),
@@ -286,7 +307,13 @@ fn push_filter(sql: &mut CandidateSql, filter: &SearchFilter) -> Result<(), File
                         AttributeValue::Boolean(_) => "boolean",
                     });
                     sql.push(" AND ");
-                    attr(sql);
+                    if matches!(value, AttributeValue::String(_)) {
+                        sql.push("(data::jsonb -> 'attributes' ->> ")
+                            .push_bind(comparison.key.clone())
+                            .push(") COLLATE \"C\"");
+                    } else {
+                        attr(sql);
+                    }
                     sql.push(match comparison.operator {
                         ComparisonOperator::Eq => " = ",
                         ComparisonOperator::Ne => " <> ",
@@ -296,7 +323,11 @@ fn push_filter(sql: &mut CandidateSql, filter: &SearchFilter) -> Result<(), File
                         ComparisonOperator::Lte => " <= ",
                         ComparisonOperator::In | ComparisonOperator::Nin => return invalid("invalid scalar filter"),
                     });
-                    sql.push_bind(serde_json::to_string(value)?).push("::jsonb");
+                    if let AttributeValue::String(value) = value {
+                        sql.push_bind(value.clone());
+                    } else {
+                        sql.push_bind(serde_json::to_string(value)?).push("::jsonb");
+                    }
                 }
             }
         }
