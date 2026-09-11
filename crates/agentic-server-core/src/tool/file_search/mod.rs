@@ -9,4 +9,4 @@ mod service;
 
 pub use crate::types::file_search::FileSearchError;
 pub use handler::{FileSearchExecutionParams, FileSearchExecutor, FileSearchHandler};
-pub use service::{FileDownload, FileSearchService, FileUpload, MAX_FILE_BYTES};
+pub use service::{FileDownload, FileSearchRuntime, FileSearchService, FileUpload, MAX_FILE_BYTES};

@@ -13,8 +13,11 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 #[path = "files.rs"]
 mod files;
 pub use files::{FileDownload, FileUpload};
+#[path = "batches.rs"]
+mod batches;
 #[path = "stores.rs"]
 mod stores;
+pub use batches::FileSearchRuntime;
 use stores::validate_store_fields;
 
 use super::{embeddings::Embeddings, ingest, models::Models, ranking};
@@ -384,6 +387,28 @@ impl FileSearchService {
         dimensions: Option<usize>,
         permit: Arc<OwnedSemaphorePermit>,
     ) -> Result<PreparedAttachment, FileSearchError> {
+        self.prepare_cancellable(
+            store_id,
+            request,
+            dimensions,
+            permit,
+            &tokio_util::sync::CancellationToken::new(),
+        )
+        .await
+    }
+
+    #[allow(
+        clippy::too_many_lines,
+        reason = "keeps bounded extraction and model preparation in the single shared ingestion pipeline"
+    )]
+    async fn prepare_cancellable(
+        &self,
+        store_id: &str,
+        request: AttachFileRequest,
+        dimensions: Option<usize>,
+        permit: Arc<OwnedSemaphorePermit>,
+        cancellation: &tokio_util::sync::CancellationToken,
+    ) -> Result<PreparedAttachment, FileSearchError> {
         validate_attributes(&request.attributes)?;
         LocalFiles::validate_id(&request.file_id)?;
         let uploaded = self.storage.file(&request.file_id).await?;
@@ -416,25 +441,33 @@ impl FileSearchService {
         let worker_permit = permit.clone();
         let cancelled = Arc::new(AtomicBool::new(false));
         let _cancel_on_drop = CancelIngestionOnDrop(cancelled.clone());
-        let document = tokio::task::spawn_blocking(move || {
+        let parser_cancelled = cancelled.clone();
+        let mut parser = tokio::task::spawn_blocking(move || {
             let _permit = worker_permit;
             ingest::extract_and_chunk(bytes, &filename, &uploaded.content_type, &chunking, &cancelled)
-        })
-        .await??;
+        });
+        let document = tokio::select! {
+            result = &mut parser => result??,
+            () = cancellation.cancelled() => {
+                parser_cancelled.store(true, Ordering::Relaxed);
+                let _ = parser.await?;
+                return Err(FileSearchError::Unavailable("Ingestion stopped".into()));
+            }
+        };
         let contextual = if let ChunkingStrategy::Contextual { contextual } = &strategy {
-            Some(
-                self.models
-                    .contextualize(&document.text, &document.chunks, contextual)
-                    .await?,
-            )
+            Some(tokio::select! {
+                result = self.models.contextualize(&document.text, &document.chunks, contextual) => result?,
+                () = cancellation.cancelled() => return Err(FileSearchError::Unavailable("Ingestion stopped".into())),
+            })
         } else {
             None
         };
         let texts = document.chunks;
         let vectors = if let Some(embeddings) = &self.embeddings {
-            embeddings
-                .embed(contextual.as_deref().unwrap_or(&texts), dimensions)
-                .await?
+            tokio::select! {
+                result = embeddings.embed(contextual.as_deref().unwrap_or(&texts), dimensions) => result?,
+                () = cancellation.cancelled() => return Err(FileSearchError::Unavailable("Ingestion stopped".into())),
+            }
         } else {
             Vec::new()
         };

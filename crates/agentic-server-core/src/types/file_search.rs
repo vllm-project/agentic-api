@@ -108,6 +108,8 @@ pub enum FileSearchError {
     #[error("{0}")]
     InvalidRequest(String),
     #[error("{0}")]
+    UnsupportedFile(String),
+    #[error("{0}")]
     NotFound(String),
     #[error("{0}")]
     Conflict(String),
@@ -142,7 +144,7 @@ impl FileSearchError {
     #[must_use]
     pub const fn status_code(&self) -> u16 {
         match self {
-            Self::InvalidRequest(_) => 400,
+            Self::InvalidRequest(_) | Self::UnsupportedFile(_) => 400,
             #[cfg(feature = "file-search-pdf")]
             Self::PdfParse(_) => 400,
             Self::NotFound(_) => 404,
@@ -157,6 +159,7 @@ impl FileSearchError {
     pub fn public_message(&self) -> String {
         match self {
             Self::InvalidRequest(message)
+            | Self::UnsupportedFile(message)
             | Self::NotFound(message)
             | Self::Conflict(message)
             | Self::Unavailable(message) => message.clone(),
@@ -943,4 +946,38 @@ pub enum VectorStoreFileChunkingStrategy {
     // Legacy rows retained request settings rather than resolved chunk boundaries.
     #[serde(alias = "auto", alias = "contextual")]
     Other,
+}
+
+/// A batch supplies either shared options with IDs or independent per-file options.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct CreateFileBatchRequest {
+    pub file_ids: Option<Vec<String>>,
+    pub files: Option<Vec<AttachFileRequest>>,
+    #[serde(default, deserialize_with = "null_default")]
+    #[cfg_attr(feature = "openapi", schema(nullable = true))]
+    pub attributes: FileAttributes,
+    pub chunking_strategy: Option<ChunkingStrategy>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum BatchStatus {
+    InProgress,
+    Completed,
+    Cancelled,
+    Failed,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct FileBatchObject {
+    pub id: String,
+    pub object: String,
+    pub created_at: i64,
+    pub vector_store_id: String,
+    pub status: BatchStatus,
+    pub file_counts: FileCounts,
 }

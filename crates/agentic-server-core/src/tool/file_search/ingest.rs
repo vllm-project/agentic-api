@@ -81,7 +81,9 @@ pub(super) fn validate_content_type(filename: &str, content_type: &str) -> Resul
     {
         return Ok(());
     }
-    invalid("Unsupported file type; upload UTF-8 text or a PDF containing extractable text")
+    Err(FileSearchError::UnsupportedFile(
+        "Unsupported file type; upload UTF-8 text or a PDF containing extractable text".into(),
+    ))
 }
 
 pub(super) struct ExtractedDocument {

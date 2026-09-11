@@ -7,6 +7,8 @@ use sqlx::FromRow;
 use tokio_util::sync::CancellationToken;
 
 use super::{DbPool, DbTransaction};
+#[path = "vector_store_batches.rs"]
+pub(crate) mod batches;
 #[path = "vector_store_lifecycle.rs"]
 mod lifecycle;
 use crate::types::file_search::{
@@ -20,6 +22,8 @@ const MAX_CORPUS_CHUNKS: i64 = 10_000;
 pub(crate) struct FileSearchStorage {
     pool: Arc<DbPool>,
     pgvector: Option<super::pgvector::PgvectorStorage>,
+    #[cfg(test)]
+    pub(crate) batch_test_hooks: Option<Arc<batches::BatchTestHooks>>,
 }
 
 #[derive(FromRow)]
@@ -88,7 +92,11 @@ impl Collection {
 impl FileSearchStorage {
     #[cfg(test)]
     pub(crate) fn new(pool: Arc<DbPool>) -> Self {
-        Self { pool, pgvector: None }
+        Self {
+            pool,
+            pgvector: None,
+            batch_test_hooks: None,
+        }
     }
 
     pub(crate) fn with_backend(
@@ -96,7 +104,12 @@ impl FileSearchStorage {
         backend: &crate::types::file_search::FileSearchBackend,
     ) -> Result<Self, FileSearchError> {
         let pgvector = super::pgvector::PgvectorStorage::from_config(&pool, backend)?;
-        Ok(Self { pool, pgvector })
+        Ok(Self {
+            pool,
+            pgvector,
+            #[cfg(test)]
+            batch_test_hooks: None,
+        })
     }
 
     pub(crate) fn vector_dimensions(&self) -> Option<usize> {
@@ -402,6 +415,12 @@ impl FileSearchStorage {
                 return Err(FileSearchError::NotFound("File not found or expired".into()));
             }
         }
+        if let Some(store_id) = store_id {
+            batches::invalidate(&mut tx, Some(store_id), Some(id)).await?;
+        } else if matches!(collection, Collection::Stores) {
+            lifecycle::lock_store(&mut tx, id).await?;
+            batches::invalidate(&mut tx, Some(id), None).await?;
+        }
         let filter = if store_id.is_some() { " AND store_id = $2" } else { "" };
         let sql = format!(
             "DELETE FROM {} WHERE {} = $1{filter}",
@@ -540,6 +559,7 @@ pub(crate) async fn database_now(connection: &mut sqlx::AnyConnection) -> Result
 }
 
 async fn delete_file_in_transaction(tx: &mut DbTransaction<'_>, id: &str) -> Result<(), FileSearchError> {
+    batches::invalidate(tx, None, Some(id)).await?;
     sqlx::query("INSERT INTO file_search_blob_cleanup (file_id) SELECT id FROM file_search_files WHERE id = $1 AND content_base64 = '' ON CONFLICT (file_id) DO NOTHING")
         .bind(id).execute(&mut **tx).await?;
     sqlx::query("DELETE FROM file_search_files WHERE id = $1")

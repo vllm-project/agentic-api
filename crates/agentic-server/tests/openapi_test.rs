@@ -237,3 +237,28 @@ async fn vector_store_schema_preserves_required_nullable_contracts() {
         .collect();
     assert_eq!(kinds, ["static", "other"]);
 }
+
+#[tokio::test]
+async fn file_batch_schema_and_filtered_routes_are_published() {
+    let spec = fetch_spec().await;
+    for (path, method) in [
+        ("/v1/vector_stores/{store_id}/file_batches", "post"),
+        ("/v1/vector_stores/{store_id}/file_batches/{batch_id}", "get"),
+        ("/v1/vector_stores/{store_id}/file_batches/{batch_id}/cancel", "post"),
+        ("/v1/vector_stores/{store_id}/file_batches/{batch_id}/files", "get"),
+    ] {
+        assert!(spec["paths"][path][method].is_object(), "{method} {path}");
+    }
+    let required = spec["components"]["schemas"]["FileBatchObject"]["required"]
+        .as_array()
+        .unwrap();
+    for field in ["id", "object", "created_at", "vector_store_id", "status", "file_counts"] {
+        assert!(required.iter().any(|entry| entry == field));
+    }
+    let params = spec["paths"]["/v1/vector_stores/{store_id}/file_batches/{batch_id}/files"]["get"]["parameters"]
+        .as_array()
+        .unwrap();
+    for field in ["filter", "limit", "order", "after", "before"] {
+        assert!(params.iter().any(|entry| entry["name"] == field));
+    }
+}

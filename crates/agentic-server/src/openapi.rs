@@ -28,6 +28,11 @@ use utoipa::OpenApi;
         crate::handler::http::file_search::get_vector_store_file,
         crate::handler::http::file_search::detach_file,
         crate::handler::http::file_search::search,
+        crate::handler::http::file_search::create_file_batch,
+        crate::handler::http::file_search::get_file_batch,
+        crate::handler::http::file_search::cancel_file_batch,
+        crate::handler::http::file_search::list_file_batch_files,
+
         crate::handler::http::models::health,
         crate::handler::http::models::ready,
         crate::handler::http::models::models,

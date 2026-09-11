@@ -8,6 +8,7 @@ use agentic_core::error::Error as CoreError;
 use agentic_core::executor::ExecutionContext;
 use agentic_core::proxy::ProxyState;
 use agentic_core::readiness::{llm_readiness_client, wait_llm_ready};
+use agentic_core::tool::file_search::{FileSearchError, FileSearchRuntime};
 use agentic_server::app::{AppState, ReadinessTracker, ServerConfig, WebSocketTracker, build_router_with_auth};
 use agentic_server::auth::{OidcAuthError, OidcAuthenticator, OidcConfig};
 use tokio::net::TcpListener;
@@ -20,6 +21,8 @@ const GATEWAY_DRAIN_TIMEOUT: Duration = Duration::from_secs(8);
 pub enum ServerError {
     #[error(transparent)]
     Core(#[from] CoreError),
+    #[error(transparent)]
+    FileSearch(#[from] FileSearchError),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("failed to initialize OIDC authentication: {0}")]
@@ -151,7 +154,26 @@ pub async fn run(config: Config, host: &str, port: u16, oidc_config: Option<Oidc
     };
     wait_until_llm_ready(&config).await?;
     let state = build_state(&config, CancellationToken::new()).await?;
-    serve_gateway_until_signal(state, host, port, authenticator).await
+    let runtime = state
+        .exec_ctx
+        .file_search
+        .clone()
+        .map(|service| FileSearchRuntime::start_with_shutdown(service, state.shutdown_token.child_token()));
+    let result = serve_gateway_until_signal(state, host, port, authenticator).await;
+    shutdown_runtime(runtime, result).await
+}
+
+async fn shutdown_runtime(
+    runtime: Option<FileSearchRuntime>,
+    result: Result<(), ServerError>,
+) -> Result<(), ServerError> {
+    let shutdown = match runtime {
+        Some(runtime) => runtime.shutdown().await,
+        None => Ok(()),
+    };
+    result?;
+    shutdown?;
+    Ok(())
 }
 
 /// Spawn vLLM as a subprocess and run the gateway in the foreground.
@@ -201,22 +223,31 @@ pub async fn run_with_llm(
             } => state?,
         };
 
+        let runtime = state
+            .exec_ctx
+            .file_search
+            .clone()
+            .map(|service| FileSearchRuntime::start_with_shutdown(service, state.shutdown_token.child_token()));
         let gateway = serve_gateway(state, host, port, authenticator);
         tokio::pin!(gateway);
 
-        tokio::select! {
-            gateway = &mut gateway => gateway,
-            status = child.wait() => {
-                shutdown_token.cancel();
-                let status = status?;
-                Err(ServerError::from(CoreError::LlmProcessExited { status: status.to_string() }))
-            },
-            () = &mut shutdown => {
-                info!("shutdown signal received");
-                shutdown_token.cancel();
-                drain_gateway(gateway.as_mut()).await
+        let serving = async {
+            tokio::select! {
+                gateway = &mut gateway => gateway,
+                status = child.wait() => {
+                    shutdown_token.cancel();
+                    let status = status?;
+                    Err(ServerError::from(CoreError::LlmProcessExited { status: status.to_string() }))
+                },
+                () = &mut shutdown => {
+                    info!("shutdown signal received");
+                    shutdown_token.cancel();
+                    drain_gateway(gateway.as_mut()).await
+                }
             }
         }
+        .await;
+        shutdown_runtime(runtime, serving).await
     }
     .await;
 
