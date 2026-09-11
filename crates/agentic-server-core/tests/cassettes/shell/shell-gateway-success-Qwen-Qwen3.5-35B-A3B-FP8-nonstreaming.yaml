@@ -26,9 +26,9 @@ turns:
   response:
     body:
       conversation_id: null
-      created_at: 1788851382
+      created_at: 1789101025
       error: null
-      id: resp_01a07fd9-e3e1-7652-accb-809e0744cf95
+      id: resp_01a08ebb-2448-7780-a495-ebd75ee2d72a
       incomplete_details: null
       instructions: null
       model: Qwen/Qwen3.5-35B-A3B-FP8
@@ -36,18 +36,26 @@ turns:
       output:
       - content:
         - text: 'The user is asking me to use the shell tool exactly once with specific
-            commands. They''ve provided a specific action with a commands array containing
-            one command: ["printf ''SHELL_OK\\n''"] with timeout_ms of 1000 and max_output_length
-            of 4096.
+            commands. They want me to execute `printf ''SHELL_OK\n''` with timeout_ms
+            of 1000 and max_output_length of 4096.
 
 
-            They want me to call the shell function with these exact parameters. Let
-            me format this correctly.
+            I need to call the shell tool with:
+
+            - commands: ["printf ''SHELL_OK\\n''"]
+
+            - timeout_ms: 1000
+
+            - max_output_length: 4096
+
+
+            This is a straightforward shell execution call. I should preserve the
+            exact format they specified.
 
             '
           type: reasoning_text
         encrypted_content: null
-        id: rs_9ce0829b57171675
+        id: rs_97917ffa835f3c9e
         status: null
         summary: []
         type: reasoning
@@ -56,20 +64,25 @@ turns:
           - printf 'SHELL_OK\n'
           max_output_length: 4096
           timeout_ms: 1000
-        call_id: chatcmpl-tool-a95aec1211d91651
-        id: sh_9989093f4e383727
+        call_id: chatcmpl-tool-b0a92526df2e611e
+        id: sh_854800ad00293ae0
         status: completed
         type: shell_call
       previous_response_id: null
       status: completed
+      tool_choice: auto
+      tools:
+      - environment:
+          type: local
+        type: shell
       usage:
         input_tokens: 485
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 150
+        output_tokens: 183
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 635
+        total_tokens: 668
     headers:
       content-type: application/json
     status_code: 200
@@ -77,7 +90,7 @@ turns:
   request:
     body:
       input:
-      - call_id: chatcmpl-tool-a95aec1211d91651
+      - call_id: chatcmpl-tool-b0a92526df2e611e
         max_output_length: 4096
         output:
         - outcome:
@@ -95,7 +108,7 @@ turns:
         type: message
       max_output_tokens: 4096
       model: Qwen/Qwen3.5-35B-A3B-FP8
-      previous_response_id: resp_01a07fd9-e3e1-7652-accb-809e0744cf95
+      previous_response_id: resp_01a08ebb-2448-7780-a495-ebd75ee2d72a
       store: true
       stream: false
       tool_choice: auto
@@ -113,36 +126,36 @@ turns:
   response:
     body:
       conversation_id: null
-      created_at: 1788851383
+      created_at: 1789101026
       error: null
-      id: resp_01a07fd9-e7e1-7d12-8380-eaabf10caad6
+      id: resp_01a08ebb-291b-7221-bf79-576ca895dbaa
       incomplete_details: null
       instructions: null
       model: Qwen/Qwen3.5-35B-A3B-FP8
       object: response
       output:
       - content:
-        - text: 'The user wants me to report the shell output without calling any
-            more tools. I need to report the stdout, stderr, and exit code/outcome
-            for the command that was executed.
+        - text: 'The user wants me to report the shell output I received from the
+            previous command execution. I should format this information clearly for
+            each command that was run.
 
 
-            From the shell output I received:
+            From the shell output, I have:
 
             - stdout: "SHELL_OK\n"
 
-            - stderr: ""
+            - stderr: "" (empty)
 
             - outcome: {"type":"exit","exit_code":0}
 
 
-            This is straightforward - I just need to report this information in a
-            clear format.
+            This was a single command ("printf ''SHELL_OK\\n''"), so I should report
+            it in order as requested.
 
             '
           type: reasoning_text
         encrypted_content: null
-        id: rs_9eedd40ce9fb5964
+        id: rs_b370a97f101c7139
         status: null
         summary: []
         type: reasoning
@@ -151,28 +164,41 @@ turns:
           text: '
 
 
-            **Command 1:** `printf ''SHELL_OK\n''`
+            ## Shell Command Output
+
+
+            **Command:** `printf ''SHELL_OK\n''`
+
 
             - **stdout:** `SHELL_OK`
 
             - **stderr:** (empty)
 
-            - **outcome:** exit with code 0'
+            - **exit code:** 0 (exit)
+
+
+            The command executed successfully and printed "SHELL_OK" to standard output
+            with no errors and a successful exit code.'
           type: output_text
-        id: msg_a199910ae461cf10
+        id: msg_b2da0e324ac26a4d
         role: assistant
         status: completed
         type: message
-      previous_response_id: resp_01a07fd9-e3e1-7652-accb-809e0744cf95
+      previous_response_id: resp_01a08ebb-2448-7780-a495-ebd75ee2d72a
       status: completed
+      tool_choice: auto
+      tools:
+      - environment:
+          type: local
+        type: shell
       usage:
         input_tokens: 623
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 136
+        output_tokens: 171
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 759
+        total_tokens: 794
     headers:
       content-type: application/json
     status_code: 200

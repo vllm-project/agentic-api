@@ -108,11 +108,13 @@ fn prepared_shell_history_and_choice_match_upstream_function_tools() {
     );
 }
 
-#[test]
-fn native_shell_stream_obeys_strict_lifecycle() {
+#[tokio::test]
+async fn native_shell_stream_obeys_strict_lifecycle() {
     for status in ["completed", "incomplete"] {
         let events = lifecycle(&shell_item(status));
-        let response = decode_upstream(&context(), UpstreamBody::Sse(&sse(&events))).expect("native shell lifecycle");
+        let (response, _) = decode_upstream(context(), UpstreamBody::Sse(&sse(&events)))
+            .await
+            .expect("native shell lifecycle");
         assert_eq!(serde_json::to_value(&response.output[0]).unwrap(), shell_item(status));
         let frame = agentic_core::events::normalize_sse_line(&format!("data: {}", events[2])).unwrap();
         let added = ShellCall::try_from(&frame.payload).unwrap();
@@ -120,16 +122,32 @@ fn native_shell_stream_obeys_strict_lifecycle() {
         assert!(!added.extra.contains_key("type"));
         let mut changed_id = events.clone();
         changed_id[3]["item"]["id"] = json!("sh_wrong");
-        assert!(decode_upstream(&context(), UpstreamBody::Sse(&sse(&changed_id))).is_err());
+        assert!(
+            decode_upstream(context(), UpstreamBody::Sse(&sse(&changed_id)))
+                .await
+                .is_err()
+        );
         let mut changed_call = events.clone();
         changed_call[3]["item"]["call_id"] = json!("call_wrong");
-        assert!(decode_upstream(&context(), UpstreamBody::Sse(&sse(&changed_call))).is_err());
+        assert!(
+            decode_upstream(context(), UpstreamBody::Sse(&sse(&changed_call)))
+                .await
+                .is_err()
+        );
         let mut changed_index = events.clone();
         changed_index[3]["output_index"] = json!(1);
-        assert!(decode_upstream(&context(), UpstreamBody::Sse(&sse(&changed_index))).is_err());
+        assert!(
+            decode_upstream(context(), UpstreamBody::Sse(&sse(&changed_index)))
+                .await
+                .is_err()
+        );
         let mut repeated = events.clone();
         repeated.insert(4, events[3].clone());
-        assert!(decode_upstream(&context(), UpstreamBody::Sse(&sse(&repeated))).is_err());
+        assert!(
+            decode_upstream(context(), UpstreamBody::Sse(&sse(&repeated)))
+                .await
+                .is_err()
+        );
     }
 }
 
@@ -169,7 +187,9 @@ async fn run(request: RequestPayload, ctx: Arc<agentic_core::executor::Execution
                 assert_eq!(event["item"]["status"], "completed");
             }
             // A consumer outside the gateway must be able to strictly replay its stream.
-            decode_upstream(&context(), UpstreamBody::Sse(&chunks.join(""))).expect("public strict replay");
+            decode_upstream(context(), UpstreamBody::Sse(&chunks.join("")))
+                .await
+                .expect("public strict replay");
             serde_json::from_value(response["response"].clone()).unwrap()
         }
     }
@@ -322,8 +342,8 @@ async fn shell_response_metadata_uses_public_declarations_and_selector() {
     }
 }
 
-#[test]
-fn recorded_shell_streams_replay_strictly() {
+#[tokio::test]
+async fn recorded_shell_streams_replay_strictly() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cassettes/shell");
     for (provider, model) in [("openai-reference", "gpt-5.6"), ("gateway", "Qwen-Qwen3.5-35B-A3B-FP8")] {
         for scenario in ["success", "nonzero-exit", "timeout", "multiple-commands"] {
@@ -332,7 +352,8 @@ fn recorded_shell_streams_replay_strictly() {
             assert_eq!(cassette.turns.len(), 2);
             for (index, turn) in cassette.turns.iter().enumerate() {
                 let wire = turn.response.sse.as_ref().unwrap().join("");
-                let response = decode_upstream(&context(), UpstreamBody::Sse(&wire))
+                let (response, _) = decode_upstream(context(), UpstreamBody::Sse(&wire))
+                    .await
                     .unwrap_or_else(|error| panic!("{} turn {index}: {error}", path.display()));
                 if index == 0 {
                     let call = response
@@ -371,10 +392,12 @@ fn command_lifecycle() -> Vec<Value> {
     events
 }
 
-#[test]
-fn shell_command_stream_validates_indices_order_and_final_commands() {
+#[tokio::test]
+async fn shell_command_stream_validates_indices_order_and_final_commands() {
     let events = command_lifecycle();
-    decode_upstream(&context(), UpstreamBody::Sse(&sse(&events))).unwrap();
+    decode_upstream(context(), UpstreamBody::Sse(&sse(&events)))
+        .await
+        .unwrap();
     for failure in [
         "index",
         "item-id",
@@ -420,7 +443,7 @@ fn shell_command_stream_validates_indices_order_and_final_commands() {
             _ => unreachable!(),
         }
         assert!(
-            decode_upstream(&context(), UpstreamBody::Sse(&sse(&bad))).is_err(),
+            decode_upstream(context(), UpstreamBody::Sse(&sse(&bad))).await.is_err(),
             "accepted {failure}"
         );
     }
@@ -474,7 +497,7 @@ fn recorded_shell_lifecycle(events: &[Value], call: &Value) -> Vec<Value> {
     trace
 }
 
-fn recorded_shell_contract(provider: &str, model: &str, scenario: &str, streaming: bool) -> Value {
+async fn recorded_shell_contract(provider: &str, model: &str, scenario: &str, streaming: bool) -> Value {
     let mode = if streaming { "streaming" } else { "nonstreaming" };
     let path = format!(
         "{}/tests/cassettes/shell/shell-{provider}-{scenario}-{model}-{mode}.yaml",
@@ -495,7 +518,9 @@ fn recorded_shell_contract(provider: &str, model: &str, scenario: &str, streamin
         let body = if streaming {
             let chunks = turn.response.sse.as_ref().unwrap();
             let wire = chunks.join("");
-            decode_upstream(&context(), UpstreamBody::Sse(&wire)).expect("strict shell stream replay");
+            decode_upstream(context(), UpstreamBody::Sse(&wire))
+                .await
+                .expect("strict shell stream replay");
             let events = support::streamed_sse_events(chunks);
             let completed = events
                 .iter()
@@ -554,12 +579,12 @@ fn recorded_shell_contract(provider: &str, model: &str, scenario: &str, streamin
     })
 }
 
-#[test]
-fn recorded_gateway_shell_contract_matches_openai() {
+#[tokio::test]
+async fn recorded_gateway_shell_contract_matches_openai() {
     for scenario in ["success", "nonzero-exit", "timeout", "multiple-commands"] {
         for streaming in [false, true] {
-            let reference = recorded_shell_contract("openai-reference", "gpt-5.6", scenario, streaming);
-            let gateway = recorded_shell_contract("gateway", "Qwen-Qwen3.5-35B-A3B-FP8", scenario, streaming);
+            let reference = recorded_shell_contract("openai-reference", "gpt-5.6", scenario, streaming).await;
+            let gateway = recorded_shell_contract("gateway", "Qwen-Qwen3.5-35B-A3B-FP8", scenario, streaming).await;
             assert_eq!(gateway, reference, "{scenario}, streaming={streaming}");
         }
     }

@@ -1426,7 +1426,7 @@ mod tests {
             shell_call: None,
             item_id: "rs_1".to_owned(),
             item_type: crate::events::SSEItemType::Reasoning,
-            output_index: 2,
+            output_index: Some(2),
             name: None,
             namespace: None,
             call_id: None,
@@ -1438,7 +1438,7 @@ mod tests {
                 &EventPayload::ReasoningTextDone {
                     text: text.to_owned(),
                     item_id: "rs_1".to_owned(),
-                    output_index: 2,
+                    output_index: Some(2),
                     content_index,
                 },
                 &mut String::new(),
@@ -1449,7 +1449,7 @@ mod tests {
                 &EventPayload::ReasoningSummaryTextDone {
                     text: text.to_owned(),
                     item_id: "rs_1".to_owned(),
-                    output_index: 2,
+                    output_index: Some(2),
                     summary_index,
                 },
                 &mut String::new(),
@@ -1474,7 +1474,7 @@ mod tests {
         let done = EventPayload::OutputItemDone {
             item_id: "rs_1".to_owned(),
             item_type: crate::events::SSEItemType::Reasoning,
-            output_index: 0,
+            output_index: Some(0),
             item: serde_json::json!({
                 "id": "rs_1",
                 "type": "reasoning",
@@ -1498,7 +1498,7 @@ mod tests {
         let malformed = EventPayload::OutputItemDone {
             item_id: "rs_1".to_owned(),
             item_type: crate::events::SSEItemType::Reasoning,
-            output_index: 0,
+            output_index: Some(0),
             item: serde_json::json!({
                 "id": "rs_1",
                 "type": "reasoning",
@@ -1518,7 +1518,7 @@ mod tests {
             &EventPayload::ReasoningTextDone {
                 text: String::new(),
                 item_id: "rs_1".to_owned(),
-                output_index: 0,
+                output_index: Some(0),
                 content_index: 0,
             },
             &mut stale_delta,
@@ -1532,7 +1532,7 @@ mod tests {
             &EventPayload::ReasoningSummaryTextDone {
                 text: String::new(),
                 item_id: "rs_1".to_owned(),
-                output_index: 0,
+                output_index: Some(0),
                 summary_index: 0,
             },
             &mut stale_summary_delta,
@@ -1628,7 +1628,7 @@ mod tests {
             shell_call: None,
             item_id: "mcpl_1".to_owned(),
             item_type: crate::events::SSEItemType::McpListTools,
-            output_index: 0,
+            output_index: Some(0),
             name: None,
             namespace: None,
             call_id: None,
@@ -1641,7 +1641,7 @@ mod tests {
         let done = EventPayload::OutputItemDone {
             item_id: "mcpl_1".to_owned(),
             item_type: crate::events::SSEItemType::McpListTools,
-            output_index: 0,
+            output_index: Some(0),
             item: serde_json::json!({
                 "type": "mcp_list_tools",
                 "id": "mcpl_1",
