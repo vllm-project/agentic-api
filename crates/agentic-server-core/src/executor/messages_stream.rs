@@ -61,6 +61,7 @@ pub async fn run_messages_stream(
         first_body,
         None,
         Some(upstream.headers()),
+        exec_ctx.streaming_timeout,
     )
     .await?;
     let response_headers = processed_response_headers(first_response.headers());
@@ -83,6 +84,7 @@ pub async fn run_messages_stream(
                     body,
                     None,
                     Some(upstream.headers()),
+                    exec_ctx.streaming_timeout,
                 )
                 .await
                 {

@@ -64,11 +64,10 @@ fn drain_complete_utf8_lines(buffer: &mut Vec<u8>) -> ExecutorResult<Vec<String>
     Ok(lines)
 }
 
-async fn response_text_limited(resp: reqwest::Response) -> ExecutorResult<String> {
+async fn response_text_limited(resp: reqwest::Response, chunk_timeout: Duration) -> ExecutorResult<String> {
     let mut stream = resp.bytes_stream();
     let mut body = Vec::new();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(ExecutorError::NetworkError)?;
+    while let Some(chunk) = next_chunk(&mut stream, chunk_timeout).await? {
         if chunk.len() > MAX_EXECUTOR_RESPONSE_BYTES.saturating_sub(body.len()) {
             return Err(ExecutorError::StreamError(format!(
                 "upstream response exceeded {MAX_EXECUTOR_RESPONSE_BYTES} bytes"
@@ -85,13 +84,15 @@ async fn response_text_limited(resp: reqwest::Response) -> ExecutorResult<String
 /// Shared by both the blocking path (caller consumes a bounded byte stream) and
 /// the streaming path (caller reads `.bytes_stream()`). Maps connect/timeout failures and
 /// non-2xx status codes to [`ExecutorError::LLMRequest`] and connection
-/// failures to [`ExecutorError::LLMTransport`].
+/// failures to [`ExecutorError::LLMTransport`]. The chunk timeout also bounds error-body
+/// reads after headers arrive; unreadable bodies are discarded while retaining status and headers.
 pub(super) async fn send_request(
     client: &reqwest::Client,
     url: &str,
     body: String,
     auth: Option<&str>,
     forwarded_headers: Option<&reqwest::header::HeaderMap>,
+    chunk_timeout: Duration,
 ) -> ExecutorResult<reqwest::Response> {
     let mut headers = forwarded_headers.cloned().unwrap_or_default();
     headers
@@ -120,7 +121,7 @@ pub(super) async fn send_request(
         let headers = processed_response_headers(resp.headers());
         // Log and discard any error reading the error body — the status code
         // is the primary signal; an empty body is acceptable here.
-        let body = response_text_limited(resp)
+        let body = response_text_limited(resp, chunk_timeout)
             .await
             .inspect_err(|error| tracing::debug!(%error, "failed to read bounded error response body"))
             .unwrap_or_default();
@@ -143,9 +144,9 @@ pub(super) async fn fetch_response_json(
     client: &reqwest::Client,
     auth: Option<&str>,
 ) -> ExecutorResult<String> {
-    let resp = send_request(client, url, upstream_json, auth, None).await?;
+    let resp = send_request(client, url, upstream_json, auth, None, Duration::ZERO).await?;
     // Preserve the reqwest::Error as the typed source (NetworkError).
-    response_text_limited(resp).await
+    response_text_limited(resp, Duration::ZERO).await
 }
 
 /// Makes a non-streaming HTTP POST with caller-supplied upstream headers.
@@ -155,9 +156,9 @@ pub(super) async fn fetch_response_json_with_headers(
     client: &reqwest::Client,
     headers: &reqwest::header::HeaderMap,
 ) -> ExecutorResult<(String, http::HeaderMap)> {
-    let resp = send_request(client, url, upstream_json, None, Some(headers)).await?;
+    let resp = send_request(client, url, upstream_json, None, Some(headers), Duration::ZERO).await?;
     let response_headers = processed_response_headers(resp.headers());
-    let body = response_text_limited(resp).await?;
+    let body = response_text_limited(resp, Duration::ZERO).await?;
     Ok((body, response_headers))
 }
 
@@ -178,7 +179,7 @@ pub fn call_inference(
     chunk_timeout: Duration,
 ) -> impl Stream<Item = Result<String, ExecutorError>> + Send + 'static {
     stream! {
-        let resp = match send_request(&client, &url, upstream_json, auth.as_deref(), None).await {
+        let resp = match send_request(&client, &url, upstream_json, auth.as_deref(), None, chunk_timeout).await {
             Ok(r) => r,
             Err(e) => { yield Err(e); return; }
         };
@@ -436,9 +437,16 @@ mod tests {
     #[tokio::test]
     async fn non_success_response_discards_a_cumulative_oversized_body() {
         let (url, server) = oversized_body_server(StatusCode::BAD_GATEWAY).await;
-        let error = send_request(&reqwest::Client::new(), &url, "{}".to_owned(), None, None)
-            .await
-            .expect_err("non-success response must fail");
+        let error = send_request(
+            &reqwest::Client::new(),
+            &url,
+            "{}".to_owned(),
+            None,
+            None,
+            Duration::ZERO,
+        )
+        .await
+        .expect_err("non-success response must fail");
 
         let ExecutorError::LLMRequest { status, body, .. } = error else {
             panic!("expected upstream request error");

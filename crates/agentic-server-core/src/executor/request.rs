@@ -70,7 +70,8 @@ pub struct ExecutionContext {
     pub messages_gateway_tools: GatewayToolMap,
     /// Base URL for the LLM backend, e.g. `"http://localhost:8000"`.
     pub llm_base_url: String,
-    /// Maximum wait time for the next SSE chunk.  `Duration::ZERO` disables the timeout.
+    /// Maximum wait for the next body chunk in a streaming request, including HTTP error bodies.
+    /// Applies after response headers arrive; `Duration::ZERO` disables the timeout.
     /// Sourced from the `STREAMING_CHUNK_TIMEOUT_S` environment variable, defaulting to
     /// [`DEFAULT_STREAMING_TIMEOUT`] when unset or unparseable.
     pub streaming_timeout: Duration,
