@@ -7,6 +7,8 @@ use sqlx::FromRow;
 use tokio_util::sync::CancellationToken;
 
 use super::{DbPool, DbTransaction};
+#[path = "vector_store_lifecycle.rs"]
+mod lifecycle;
 use crate::types::file_search::{
     FileObject, FileSearchError, ListOrder, ListParams, VectorStoreFileObject, VectorStoreObject,
 };
@@ -36,7 +38,6 @@ pub(crate) enum FilePublicationFailure {
 
 #[derive(FromRow)]
 pub(crate) struct StoredVectorStore {
-    pub data: String,
     pub embedding_identity: String,
     pub embedding_dimensions: i64,
 }
@@ -57,6 +58,7 @@ pub(crate) struct PreparedAttachment {
     pub object: VectorStoreFileObject,
     pub chunks: Vec<StoredChunk>,
     pub dimensions: i64,
+    pub parsed_content: String,
 }
 
 #[derive(Clone, Copy)]
@@ -109,9 +111,13 @@ impl FileSearchStorage {
     }
 
     async fn file_visibility(&self) -> Result<String, FileSearchError> {
-        let mut connection = self.pool.acquire().await?;
-        let now = database_now(&mut connection).await?;
-        Ok(format!("(expires_at IS NULL OR expires_at > {now})"))
+        let connection = self.pool.acquire().await?;
+        let clock = if connection.backend_name() == "PostgreSQL" {
+            "EXTRACT(EPOCH FROM clock_timestamp())"
+        } else {
+            "CAST(strftime('%s', 'now') AS BIGINT)"
+        };
+        Ok(format!("(expires_at IS NULL OR expires_at > {clock})"))
     }
 
     pub(crate) async fn delete_file(&self, id: &str) -> Result<(), FileSearchError> {
@@ -197,7 +203,8 @@ impl FileSearchStorage {
             .collect::<Vec<_>>()
             .join(", ");
         let sql = format!(
-            "SELECT DISTINCT file_id FROM file_search_attachments WHERE store_id IN ({store_placeholders}) AND file_id IN ({file_placeholders}) AND file_id IN (SELECT id FROM file_search_files WHERE {})",
+            "SELECT DISTINCT file_id FROM file_search_attachments WHERE status = 'completed' AND store_id IN ({store_placeholders}) AND file_id IN ({file_placeholders}) AND store_id IN (SELECT id FROM file_search_stores WHERE lifecycle_status != 'expired' AND {}) AND file_id IN (SELECT id FROM file_search_files WHERE {})",
+            self.file_visibility().await?,
             self.file_visibility().await?
         );
         let mut query = sqlx::query_scalar::<_, String>(&sql);
@@ -217,7 +224,7 @@ impl FileSearchStorage {
             .join(", ");
         let visibility = self.file_visibility().await?;
         let sql = format!(
-            "SELECT chunk_index FROM file_search_chunks WHERE store_id IN ({placeholders}) AND file_id IN (SELECT id FROM file_search_files WHERE {visibility}) LIMIT 1"
+            "SELECT chunk_index FROM file_search_chunks WHERE (store_id, file_id) IN (SELECT store_id, file_id FROM file_search_attachments WHERE status = 'completed') AND store_id IN ({placeholders}) AND store_id IN (SELECT id FROM file_search_stores WHERE lifecycle_status != 'expired' AND {visibility}) AND file_id IN (SELECT id FROM file_search_files WHERE {visibility}) LIMIT 1"
         );
         let mut query = sqlx::query_scalar::<_, i64>(&sql);
         for store in stores {
@@ -305,22 +312,9 @@ impl FileSearchStorage {
     }
 
     pub(crate) async fn store(&self, id: &str) -> Result<StoredVectorStore, FileSearchError> {
-        sqlx::query_as("SELECT data, embedding_identity, embedding_dimensions FROM file_search_stores WHERE id = $1")
-            .bind(id)
-            .fetch_optional(self.pool.as_ref())
-            .await?
-            .ok_or_else(|| FileSearchError::NotFound("Vector store not found".into()))
-    }
-
-    pub(crate) async fn store_object(&self, id: &str) -> Result<VectorStoreObject, FileSearchError> {
-        let row = self.store(id).await?;
-        let mut store: VectorStoreObject = serde_json::from_str(&row.data)?;
-        let (count, bytes): (i64, i64) = sqlx::query_as(&format!("SELECT COUNT(*), CAST(COALESCE(SUM(usage_bytes), 0) AS BIGINT) FROM file_search_attachments WHERE store_id = $1 AND file_id IN (SELECT id FROM file_search_files WHERE {})", self.file_visibility().await?))
-            .bind(id).fetch_one(self.pool.as_ref()).await?;
-        store.file_counts.completed = count;
-        store.file_counts.total = count;
-        store.usage_bytes = bytes;
-        Ok(store)
+        sqlx::query_as(&format!("SELECT embedding_identity, embedding_dimensions FROM file_search_stores WHERE id = $1 AND lifecycle_status != 'expired' AND {}", self.file_visibility().await?))
+            .bind(id).fetch_optional(self.pool.as_ref()).await?
+            .ok_or_else(|| FileSearchError::NotFound("Vector store not found or expired".into()))
     }
 
     pub(crate) async fn create_store(
@@ -339,8 +333,10 @@ impl FileSearchStorage {
             encoded.push(chunks);
         }
         let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO file_search_stores (id, created_at, data, embedding_identity, embedding_dimensions) VALUES ($1, $2, $3, $4, 0)")
-            .bind(&object.id).bind(object.created_at).bind(serde_json::to_string(object)?).bind(identity)
+        let now = database_now(&mut tx).await?;
+        let days = object.expires_after.as_ref().map(|policy| i64::from(policy.days));
+        sqlx::query("INSERT INTO file_search_stores (id, created_at, data, embedding_identity, embedding_dimensions, last_active_at, expires_after_days, expires_at) VALUES ($1, $2, $3, $4, 0, $5, $6, $7)")
+            .bind(&object.id).bind(object.created_at).bind(serde_json::to_string(object)?).bind(identity).bind(now).bind(days).bind(days.map(|days| now + days * 86400))
             .execute(&mut *tx).await?;
         for (attachment, (chunks, storage_bytes)) in attachments.iter().zip(encoded) {
             publish_attachment(&mut tx, &object.id, identity, attachment, &chunks, storage_bytes).await?;
@@ -369,7 +365,7 @@ impl FileSearchStorage {
         file_id: &str,
     ) -> Result<Option<VectorStoreFileObject>, FileSearchError> {
         let data: Option<String> =
-            sqlx::query_scalar(&format!("SELECT data FROM file_search_attachments WHERE store_id = $1 AND file_id = $2 AND file_id IN (SELECT id FROM file_search_files WHERE {})", self.file_visibility().await?))
+            sqlx::query_scalar(&format!("SELECT data FROM file_search_attachments WHERE store_id = $1 AND file_id = $2 AND store_id IN (SELECT id FROM file_search_stores WHERE lifecycle_status != 'expired' AND {}) AND file_id IN (SELECT id FROM file_search_files WHERE {})", self.file_visibility().await?, self.file_visibility().await?))
                 .bind(store_id)
                 .bind(file_id)
                 .fetch_optional(self.pool.as_ref())
@@ -387,6 +383,25 @@ impl FileSearchStorage {
         store_id: Option<&str>,
     ) -> Result<(), FileSearchError> {
         let mut tx = self.pool.begin().await?;
+        if let Some(store_id) = store_id {
+            sqlx::query("UPDATE file_search_files SET id = id WHERE id = $1")
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+            lifecycle::lock_store(&mut tx, store_id).await?;
+            let now = database_now(&mut tx).await?;
+            lifecycle::require_live_store(&mut tx, store_id, now).await?;
+            let live: Option<String> = sqlx::query_scalar(
+                "SELECT id FROM file_search_files WHERE id = $1 AND (expires_at IS NULL OR expires_at > $2)",
+            )
+            .bind(id)
+            .bind(now)
+            .fetch_optional(&mut *tx)
+            .await?;
+            if live.is_none() {
+                return Err(FileSearchError::NotFound("File not found or expired".into()));
+            }
+        }
         let filter = if store_id.is_some() { " AND store_id = $2" } else { "" };
         let sql = format!(
             "DELETE FROM {} WHERE {} = $1{filter}",
@@ -448,7 +463,9 @@ impl FileSearchStorage {
                 }
             ),
             Collection::Attachments => {
-                format!("{filter} AND file_id IN (SELECT id FROM file_search_files WHERE {visibility})")
+                format!(
+                    "{filter} AND ($5 = '' OR status = $5) AND store_id IN (SELECT id FROM file_search_stores WHERE lifecycle_status != 'expired' AND {visibility}) AND file_id IN (SELECT id FROM file_search_files WHERE {visibility})"
+                )
             }
             Collection::Stores => filter.to_owned(),
         };
@@ -462,6 +479,13 @@ impl FileSearchStorage {
         let mut query = sqlx::query_scalar(&sql).bind(cursor).bind(created).bind(limit);
         if let Some(store_id) = store_id {
             query = query.bind(store_id);
+        }
+        if matches!(collection, Collection::Attachments) {
+            query = query.bind(
+                params
+                    .filter
+                    .map_or("", crate::types::file_search::AttachmentStatus::as_str),
+            );
         }
         if matches!(collection, Collection::Files) {
             query = query.bind(params.purpose.as_deref().unwrap_or(""));
@@ -481,7 +505,7 @@ impl FileSearchStorage {
             .join(", ");
         let visibility = self.file_visibility().await?;
         let sql = format!(
-            "SELECT data FROM file_search_chunks WHERE store_id IN ({placeholders}) AND file_id IN (SELECT id FROM file_search_files WHERE {visibility}) ORDER BY store_id, file_id, chunk_index"
+            "SELECT data FROM file_search_chunks WHERE (store_id, file_id) IN (SELECT store_id, file_id FROM file_search_attachments WHERE status = 'completed') AND store_id IN ({placeholders}) AND store_id IN (SELECT id FROM file_search_stores WHERE lifecycle_status != 'expired' AND {visibility}) AND file_id IN (SELECT id FROM file_search_files WHERE {visibility}) ORDER BY store_id, file_id, chunk_index"
         );
         let mut query = sqlx::query_scalar::<_, String>(&sql);
         for id in store_ids {
@@ -590,6 +614,7 @@ async fn publish_attachment(
     if live.is_none() {
         return Err(FileSearchError::NotFound("File expired during ingestion".into()));
     }
+    lifecycle::require_live_store(tx, store_id, now).await?;
     let bytes: i64 = sqlx::query_scalar(
         "SELECT CAST(COALESCE(SUM(storage_bytes), 0) AS BIGINT) FROM file_search_attachments WHERE store_id = $1",
     )
@@ -605,9 +630,9 @@ async fn publish_attachment(
         count.saturating_add(i64::try_from(chunks.len()).unwrap_or(i64::MAX)),
     )?;
     let object = &attachment.object;
-    let inserted = sqlx::query("INSERT INTO file_search_attachments (store_id, file_id, created_at, usage_bytes, data, storage_bytes) VALUES ($1, $2, $3, $4, $5, $6)")
+    let inserted = sqlx::query("INSERT INTO file_search_attachments (store_id, file_id, created_at, usage_bytes, data, storage_bytes, status, parsed_content) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)")
         .bind(store_id).bind(&object.id).bind(object.created_at).bind(object.usage_bytes).bind(serde_json::to_string(object)?)
-        .bind(storage_bytes)
+        .bind(storage_bytes).bind(object.status.as_str()).bind(&attachment.parsed_content)
         .execute(&mut **tx).await;
     if let Err(sqlx::Error::Database(error)) = &inserted {
         if error.is_unique_violation() {
@@ -620,6 +645,7 @@ async fn publish_attachment(
         }
     }
     inserted?;
+    lifecycle::touch_store(tx, store_id, now).await?;
     for (chunk, data) in attachment.chunks.iter().zip(chunks) {
         let index =
             i64::try_from(chunk.chunk_index).map_err(|_| FileSearchError::InvalidRequest("Too many chunks".into()))?;
@@ -640,7 +666,9 @@ mod tests {
     use crate::{
         storage::create_pool_with_schema,
         tool::file_search::FileSearchService,
-        types::file_search::{ChunkingStrategy, CreateVectorStoreRequest, FileAttributes, FileSearchConfig},
+        types::file_search::{
+            CreateVectorStoreRequest, FileAttributes, FileSearchConfig, VectorStoreFileChunkingStrategy,
+        },
     };
 
     async fn prepared(
@@ -654,15 +682,16 @@ mod tests {
             .await
             .unwrap();
         PreparedAttachment {
+            parsed_content: "capacity".into(),
             object: VectorStoreFileObject {
                 id: file.id.clone(),
                 object: "vector_store.file".into(),
                 created_at: 0,
                 vector_store_id: store_id.into(),
-                status: "completed".into(),
+                status: crate::types::file_search::AttachmentStatus::Completed,
                 usage_bytes: 0,
                 attributes: FileAttributes::default(),
-                chunking_strategy: ChunkingStrategy::Auto,
+                chunking_strategy: VectorStoreFileChunkingStrategy::Other,
                 last_error: None,
             },
             dimensions: i64::try_from(dimensions).unwrap(),

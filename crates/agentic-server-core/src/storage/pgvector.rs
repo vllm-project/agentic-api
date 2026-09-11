@@ -187,14 +187,16 @@ impl PgvectorStorage {
                 if (semantic && mode == SearchMode::Keyword) || (!semantic && mode == SearchMode::Semantic) {
                     continue;
                 }
-                let mut sql = CandidateSql::new("SELECT data FROM file_search_chunks WHERE store_id IN (");
+                let mut sql = CandidateSql::new(
+                    "SELECT data FROM file_search_chunks WHERE (store_id, file_id) IN (SELECT store_id, file_id FROM file_search_attachments WHERE status = 'completed') AND store_id IN (",
+                );
                 for (i, store) in stores.iter().enumerate() {
                     if i > 0 {
                         sql.push(", ");
                     }
                     sql.push_bind(store);
                 }
-                sql.push(") AND file_id IN (SELECT id FROM file_search_files WHERE expires_at IS NULL OR expires_at > EXTRACT(EPOCH FROM clock_timestamp()))");
+                sql.push(") AND store_id IN (SELECT id FROM file_search_stores WHERE lifecycle_status != 'expired' AND (expires_at IS NULL OR expires_at > EXTRACT(EPOCH FROM clock_timestamp()))) AND file_id IN (SELECT id FROM file_search_files WHERE expires_at IS NULL OR expires_at > EXTRACT(EPOCH FROM clock_timestamp()))");
                 if let Some(filter) = filter {
                     sql.push(" AND ");
                     push_filter(&mut sql, filter)?;

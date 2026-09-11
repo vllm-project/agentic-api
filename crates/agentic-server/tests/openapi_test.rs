@@ -217,3 +217,23 @@ async fn swagger_ui_returns_html() {
         "swagger-ui should return HTML, got: {content_type}"
     );
 }
+
+#[tokio::test]
+async fn vector_store_schema_preserves_required_nullable_contracts() {
+    let spec = fetch_spec().await;
+    let schemas = &spec["components"]["schemas"];
+    let required = schemas["VectorStoreObject"]["required"].as_array().unwrap();
+    assert!(required.iter().any(|field| field == "last_active_at"));
+    assert!(required.iter().any(|field| field == "metadata"));
+    assert_eq!(
+        schemas["UpdateVectorStoreFileRequest"]["required"],
+        serde_json::json!(["attributes"])
+    );
+    assert!(schemas["UpdateVectorStoreRequest"]["required"].is_null());
+    let chunking = schemas["VectorStoreFileChunkingStrategy"]["oneOf"].as_array().unwrap();
+    let kinds: Vec<_> = chunking
+        .iter()
+        .filter_map(|variant| variant["properties"]["type"]["enum"][0].as_str())
+        .collect();
+    assert_eq!(kinds, ["static", "other"]);
+}

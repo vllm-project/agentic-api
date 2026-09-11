@@ -5,7 +5,7 @@ use agentic_core::tool::ToolError;
 use agentic_core::tool::file_search::{FileSearchService, MAX_FILE_BYTES};
 use agentic_core::types::file_search::{
     AttachFileRequest, CreateVectorStoreRequest, FileExpirationAnchor, FileExpiresAfter, FileSearchError, ListParams,
-    SearchRequest,
+    SearchRequest, UpdateVectorStoreFileRequest, UpdateVectorStoreRequest,
 };
 #[path = "multipart_limits.rs"]
 mod multipart_limits;
@@ -34,7 +34,9 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/v1/vector_stores", post(create_vector_store).get(list_vector_stores))
         .route(
             "/v1/vector_stores/{store_id}",
-            get(get_vector_store).delete(delete_vector_store),
+            get(get_vector_store)
+                .post(update_vector_store)
+                .delete(delete_vector_store),
         )
         .route(
             "/v1/vector_stores/{store_id}/files",
@@ -42,7 +44,13 @@ pub(crate) fn router() -> Router<AppState> {
         )
         .route(
             "/v1/vector_stores/{store_id}/files/{file_id}",
-            get(get_vector_store_file).delete(detach_file),
+            get(get_vector_store_file)
+                .post(update_vector_store_file)
+                .delete(detach_file),
+        )
+        .route(
+            "/v1/vector_stores/{store_id}/files/{file_id}/content",
+            get(vector_store_file_content),
         )
         .route("/v1/vector_stores/{store_id}/search", post(search))
 }
@@ -376,7 +384,7 @@ pub(crate) async fn attach_file(
 
 #[cfg_attr(feature = "openapi", utoipa::path(
     get, path = "/v1/vector_stores/{store_id}/files",
-    params(("store_id" = String, Path, description = "Object identifier"), ("limit" = Option<usize>, Query, description = "Page size, 1 to 100"), ("after" = Option<String>, Query), ("before" = Option<String>, Query), ("order" = Option<String>, Query)),
+    params(("store_id" = String, Path, description = "Object identifier"), ("filter" = Option<agentic_core::types::file_search::AttachmentStatus>, Query), ("limit" = Option<usize>, Query, description = "Page size, 1 to 100"), ("after" = Option<String>, Query), ("before" = Option<String>, Query), ("order" = Option<String>, Query)),
     responses((status = 200, description = "Success", body = agentic_core::types::file_search::ListResponse<agentic_core::types::file_search::VectorStoreFileObject>), (status = 400, description = "Invalid request", body = crate::openapi::ApiErrorResponse), (status = 404, description = "Object not found", body = crate::openapi::ApiErrorResponse)),
     security(("bearer_auth" = [])), tag = "file_search",
 ))]
@@ -451,4 +459,67 @@ pub(crate) async fn search(
         Err(error) => return *error,
     };
     result(search.search(&[id], &request).await)
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post, path = "/v1/vector_stores/{store_id}",
+    params(("store_id" = String, Path, description = "Object identifier")),
+    request_body = agentic_core::types::file_search::UpdateVectorStoreRequest,
+    responses((status = 200, description = "Success", body = agentic_core::types::file_search::VectorStoreObject), (status = 400, description = "Invalid request", body = crate::openapi::ApiErrorResponse), (status = 404, description = "Object not found", body = crate::openapi::ApiErrorResponse)),
+    security(("bearer_auth" = [])), tag = "file_search",
+))]
+pub(crate) async fn update_vector_store(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    request: Result<Json<UpdateVectorStoreRequest>, JsonRejection>,
+) -> Response {
+    let search = match service(&state) {
+        Ok(service) => service,
+        Err(error) => return *error,
+    };
+    let request = match body(request) {
+        Ok(request) => request,
+        Err(error) => return *error,
+    };
+    result(search.update_vector_store(&id, request).await)
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post, path = "/v1/vector_stores/{store_id}/files/{file_id}",
+    params(("store_id" = String, Path, description = "Object identifier"), ("file_id" = String, Path, description = "Object identifier")),
+    request_body = agentic_core::types::file_search::UpdateVectorStoreFileRequest,
+    responses((status = 200, description = "Success", body = agentic_core::types::file_search::VectorStoreFileObject), (status = 400, description = "Invalid request", body = crate::openapi::ApiErrorResponse), (status = 404, description = "Object not found", body = crate::openapi::ApiErrorResponse)),
+    security(("bearer_auth" = [])), tag = "file_search",
+))]
+pub(crate) async fn update_vector_store_file(
+    State(state): State<AppState>,
+    Path((store_id, file_id)): Path<(String, String)>,
+    request: Result<Json<UpdateVectorStoreFileRequest>, JsonRejection>,
+) -> Response {
+    let search = match service(&state) {
+        Ok(service) => service,
+        Err(error) => return *error,
+    };
+    let request = match body(request) {
+        Ok(request) => request,
+        Err(error) => return *error,
+    };
+    result(search.update_vector_store_file(&store_id, &file_id, request).await)
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get, path = "/v1/vector_stores/{store_id}/files/{file_id}/content",
+    params(("store_id" = String, Path, description = "Object identifier"), ("file_id" = String, Path, description = "Object identifier")),
+    responses((status = 200, description = "Success", body = agentic_core::types::file_search::VectorStoreFileContentPage), (status = 400, description = "Invalid request", body = crate::openapi::ApiErrorResponse), (status = 404, description = "Object not found", body = crate::openapi::ApiErrorResponse)),
+    security(("bearer_auth" = [])), tag = "file_search",
+))]
+pub(crate) async fn vector_store_file_content(
+    State(state): State<AppState>,
+    Path((store_id, file_id)): Path<(String, String)>,
+) -> Response {
+    let search = match service(&state) {
+        Ok(service) => service,
+        Err(error) => return *error,
+    };
+    result(search.vector_store_file_content(&store_id, &file_id).await)
 }
