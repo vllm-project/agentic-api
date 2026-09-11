@@ -195,6 +195,16 @@ async fn contextual_embedding_changes_retrieval_but_preserves_original_source() 
         .await
         .unwrap();
     let id = attach(&setup.service, &store.id, "unadorned source", Some(contextual())).await;
+    let attachment = setup.service.get_vector_store_file(&store.id, &id).await.unwrap();
+    assert_eq!(
+        serde_json::to_value(attachment).unwrap()["chunking_strategy"],
+        json!({"type":"static","static":{"max_chunk_size_tokens":700,"chunk_overlap_tokens":400}})
+    );
+    let content = setup.service.vector_store_file_content(&store.id, &id).await.unwrap();
+    assert_eq!(
+        serde_json::to_value(content).unwrap()["data"][0]["text"],
+        "unadorned source"
+    );
     let result = setup
         .service
         .search(
@@ -900,4 +910,33 @@ async fn expiration_during_reranking_discards_cached_candidates() {
         .unwrap();
     setup.state.rerank_resume.notify_one();
     assert!(search.await.unwrap().unwrap().data.is_empty());
+}
+
+#[tokio::test]
+async fn store_expiration_during_reranking_rejects_cached_candidates() {
+    let setup = setup(false).await;
+    let store = setup
+        .service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    attach(&setup.service, &store.id, "coral preferred", None).await;
+    *setup.state.rerank_pause.lock().unwrap() = true;
+    let service = setup.service.clone();
+    let store_id = store.id.clone();
+    let request: SearchRequest =
+        serde_json::from_value(json!({"query":"coral","ranking_options":{"ranker":"neural"}})).unwrap();
+    let search = tokio::spawn(async move { service.search(&[store_id], &request).await });
+    setup.state.rerank_started.notified().await;
+    sqlx::query("UPDATE file_search_stores SET expires_at = 1 WHERE id = $1")
+        .bind(&store.id)
+        .execute(setup.pool.as_ref())
+        .await
+        .unwrap();
+    setup.state.rerank_resume.notify_one();
+    assert_eq!(search.await.unwrap().unwrap_err().status_code(), 404);
+    assert_eq!(
+        setup.service.get_vector_store(&store.id).await.unwrap().expires_at,
+        Some(1)
+    );
 }

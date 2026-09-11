@@ -13,6 +13,9 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 #[path = "files.rs"]
 mod files;
 pub use files::{FileDownload, FileUpload};
+#[path = "stores.rs"]
+mod stores;
+use stores::validate_store_fields;
 
 use super::{embeddings::Embeddings, ingest, models::Models, ranking};
 use crate::{
@@ -22,10 +25,10 @@ use crate::{
         local_files::LocalFiles,
     },
     types::file_search::{
-        AttachFileRequest, ChunkingStrategy, CreateVectorStoreRequest, DeleteObject, FileAttributes, FileCounts,
-        FileObject, FileSearchConfig, FileSearchError, ListParams, ListResponse, Ranker, RankingOptions, SearchMode,
-        SearchQuery, SearchRequest, SearchResponse, VectorStoreFileObject, VectorStoreObject, invalid,
-        validate_attributes,
+        AttachFileRequest, AttachmentStatus, ChunkingStrategy, CreateVectorStoreRequest, DeleteObject, FileAttributes,
+        FileCounts, FileObject, FileSearchConfig, FileSearchError, ListParams, ListResponse, Ranker, RankingOptions,
+        SearchMode, SearchQuery, SearchRequest, SearchResponse, VectorStoreFileChunkingStrategy, VectorStoreFileObject,
+        VectorStoreObject, VectorStoreStatus, invalid, validate_attributes,
     },
 };
 
@@ -162,6 +165,9 @@ impl FileSearchService {
         let mut params = params.clone();
         params.limit = Some(params.limit.unwrap_or(10000));
         validate_pagination(&params, 10000)?;
+        if params.filter.is_some() {
+            return invalid("filter applies only to vector store file lists");
+        }
         if let Some(purpose) = &params.purpose {
             files::validate_purpose(purpose)?;
         }
@@ -243,16 +249,13 @@ impl FileSearchService {
         request: CreateVectorStoreRequest,
     ) -> Result<VectorStoreObject, FileSearchError> {
         let permit = self.permit()?;
-        if request.name.as_ref().is_some_and(|name| name.len() > 256) {
-            return invalid("vector store name must not exceed 256 bytes");
-        }
-        if request.metadata.len() > 16
-            || request
-                .metadata
-                .iter()
-                .any(|(key, value)| key.is_empty() || key.len() > 64 || value.len() > 512)
-        {
-            return invalid("metadata accepts at most 16 entries, with 1 to 64 byte keys and values up to 512 bytes");
+        validate_store_fields(
+            request.name.as_deref(),
+            request.metadata.as_ref(),
+            request.expires_after.as_ref(),
+        )?;
+        if request.description.as_ref().is_some_and(|value| value.len() > 512) {
+            return invalid("description must not exceed 512 bytes");
         }
         if request.file_ids.len() > 16
             || request.file_ids.iter().collect::<HashSet<_>>().len() != request.file_ids.len()
@@ -268,7 +271,11 @@ impl FileSearchService {
             name: request.name.unwrap_or_default(),
             usage_bytes: 0,
             file_counts: FileCounts::default(),
-            status: "completed".into(),
+            status: VectorStoreStatus::Completed,
+            description: request.description,
+            last_active_at: None,
+            expires_at: None,
+            expires_after: request.expires_after,
             metadata: request.metadata,
         };
         let mut attachments = Vec::new();
@@ -315,6 +322,9 @@ impl FileSearchService {
         params: &ListParams,
     ) -> Result<ListResponse<VectorStoreObject>, FileSearchError> {
         validate_list(params)?;
+        if params.filter.is_some() {
+            return invalid("filter applies only to vector store file lists");
+        }
         let stores: Vec<VectorStoreObject> = self.storage.list(Collection::Stores, None, params).await?;
         let mut page = page(stores, params, |store| &store.id);
         for store in &mut page.data {
@@ -363,6 +373,10 @@ impl FileSearchService {
         Ok(prepared.object)
     }
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "keeps bounded parsing, contextualization, and atomic attachment preparation together"
+    )]
     async fn prepare(
         &self,
         store_id: &str,
@@ -395,6 +409,9 @@ impl FileSearchService {
                 self.config.contextual_retrieval_params.model.as_ref(),
             )?;
         }
+        let resolved_chunking = VectorStoreFileChunkingStrategy::Static {
+            config: chunking.clone(),
+        };
         let filename = file.filename.clone();
         let worker_permit = permit.clone();
         let cancelled = Arc::new(AtomicBool::new(false));
@@ -457,13 +474,14 @@ impl FileSearchService {
             object: "vector_store.file".into(),
             created_at: chrono::Utc::now().timestamp(),
             vector_store_id: store_id.into(),
-            status: "completed".into(),
+            status: AttachmentStatus::Completed,
             usage_bytes: size_i64(usage_bytes)?,
             attributes: request.attributes,
-            chunking_strategy: strategy,
+            chunking_strategy: resolved_chunking,
             last_error: None,
         };
         Ok(PreparedAttachment {
+            parsed_content: document.text,
             object,
             chunks,
             dimensions: size_i64(embedding_dimensions)?,
@@ -704,6 +722,7 @@ impl FileSearchService {
         if prepare_context {
             data = self.prepare_context(data, permit).await?;
         }
+        self.storage.refresh_activity(store_ids).await?;
         let visible = self.storage.visible_result_files(store_ids, &data).await?;
         data.retain(|result| visible.contains(&result.file_id));
         Ok(SearchResponse {

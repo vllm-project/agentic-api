@@ -96,6 +96,21 @@ pub(super) fn extract_and_chunk(
     chunking: &StaticChunking,
     cancelled: &AtomicBool,
 ) -> Result<ExtractedDocument, FileSearchError> {
+    let text = extract_text(bytes, filename, content_type, cancelled)?;
+    let chunks = chunks(&text, chunking, cancelled)?;
+    Ok(ExtractedDocument { text, chunks })
+}
+
+/// Extracts bounded original text without applying a new chunking policy.
+pub(super) fn extract_text(
+    bytes: Vec<u8>,
+    filename: &str,
+    content_type: &str,
+    cancelled: &AtomicBool,
+) -> Result<String, FileSearchError> {
+    if cancelled.load(Ordering::Relaxed) {
+        return Err(FileSearchError::Unavailable("File ingestion was cancelled".into()));
+    }
     validate_content_type(filename, content_type)?;
     let content_type = content_type.split(';').next().unwrap_or_default().trim();
     let text = if is_pdf(filename, content_type) {
@@ -113,8 +128,10 @@ pub(super) fn extract_and_chunk(
     if text.contains('\0') {
         return invalid("The file contains binary content instead of text");
     }
-    let chunks = chunks(&text, chunking, cancelled)?;
-    Ok(ExtractedDocument { text, chunks })
+    if cancelled.load(Ordering::Relaxed) {
+        return Err(FileSearchError::Unavailable("File ingestion was cancelled".into()));
+    }
+    Ok(text)
 }
 
 #[cfg(not(feature = "file-search-pdf"))]
@@ -275,6 +292,32 @@ pub(super) fn limit_context(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn original_text_extraction_retains_validation_limits_and_cancellation() {
+        let active = AtomicBool::new(false);
+        let text = b"Original text.\n".to_vec();
+        assert_eq!(
+            extract_text(text.clone(), "source.txt", "text/plain", &active).unwrap(),
+            "Original text.\n"
+        );
+        assert!(matches!(
+            extract_text(text, "source.txt", "text/plain", &AtomicBool::new(true)),
+            Err(FileSearchError::Unavailable(_))
+        ));
+        for bytes in [
+            vec![0xff],
+            vec![0],
+            Vec::new(),
+            b" \n ".to_vec(),
+            vec![b'a'; MAX_EXTRACTED_BYTES + 1],
+        ] {
+            assert!(matches!(
+                extract_text(bytes, "source.txt", "text/plain", &active),
+                Err(FileSearchError::InvalidRequest(_))
+            ));
+        }
+    }
 
     #[test]
     fn cancelled_context_preparation_exits_before_tokenizing() {

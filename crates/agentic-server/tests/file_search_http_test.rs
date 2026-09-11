@@ -82,7 +82,12 @@ async fn detaching_or_deleting_a_vector_store_preserves_the_uploaded_file() {
         store
     );
     let attachment_url = format!("{store_url}/files/{file_id}");
-    assert_eq!(api_json(client.get(&attachment_url)).await["id"], file_id);
+    let attachment = api_json(client.get(&attachment_url)).await;
+    assert_eq!(attachment["id"], file_id);
+    assert_eq!(
+        attachment["chunking_strategy"],
+        json!({"type":"static","static":{"max_chunk_size_tokens":800,"chunk_overlap_tokens":400}})
+    );
     assert_eq!(
         api_json(client.get(format!("{store_url}/files"))).await["data"][0]["id"],
         file_id
@@ -525,4 +530,89 @@ async fn oversized_multipart_part_headers_are_rejected_early() {
         b"--upload\r\nContent-Disposition: form-data; name=\"file\"; filename=\"",
     )
     .await;
+}
+
+#[tokio::test]
+async fn store_nullable_updates_and_expiration_contract() {
+    let server = gateway().await;
+    let client = reqwest::Client::new();
+    let store = api_json(client.post(format!("{}/v1/vector_stores", server.url)).json(&json!({
+        "name":"original", "description":"A collection", "metadata":null,
+        "expires_after":{"anchor":"last_active_at","days":1}
+    })))
+    .await;
+    assert_eq!(
+        store["expires_at"].as_i64(),
+        Some(store["last_active_at"].as_i64().unwrap() + 86400)
+    );
+    let url = format!("{}/v1/vector_stores/{}", server.url, store["id"].as_str().unwrap());
+    let updated = api_json(
+        client
+            .post(&url)
+            .json(&json!({"name":null,"metadata":{"project":"test"},"expires_after":null})),
+    )
+    .await;
+    assert_eq!(updated["name"], "");
+    assert!(updated["expires_after"].is_null());
+    assert!(updated["expires_at"].is_null());
+    let retained = api_json(client.post(&url).json(&json!({}))).await;
+    assert_eq!(retained["metadata"], json!({"project":"test"}));
+    let cleared = api_json(client.post(&url).json(&json!({"metadata":null}))).await;
+    assert!(cleared["metadata"].is_null());
+    for days in [0, 366] {
+        assert_eq!(
+            client
+                .post(&url)
+                .json(&json!({"expires_after":{"anchor":"last_active_at","days":days}}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+}
+
+#[tokio::test]
+async fn attachment_nullable_attributes_original_content_and_status_filter() {
+    let server = gateway().await;
+    let client = reqwest::Client::new();
+    let text = "Original lunar policy.\n".repeat(100);
+    let file = api_json(
+        client
+            .post(format!("{}/v1/files", server.url))
+            .header("content-type", "multipart/form-data; boundary=upload")
+            .body(multipart("original.txt", &text)),
+    )
+    .await;
+    let store = api_json(client.post(format!("{}/v1/vector_stores", server.url)).json(&json!({}))).await;
+    let url = format!(
+        "{}/v1/vector_stores/{}/files",
+        server.url,
+        store["id"].as_str().unwrap()
+    );
+    let file_id = file["id"].as_str().unwrap();
+    api_json(client.post(&url).json(&json!({"file_id":file_id,"attributes":null,"chunking_strategy":{"type":"static","static":{"max_chunk_size_tokens":100,"chunk_overlap_tokens":50}}}))).await;
+    let attachment = format!("{url}/{file_id}");
+    assert_eq!(
+        client.post(&attachment).json(&json!({})).send().await.unwrap().status(),
+        StatusCode::BAD_REQUEST
+    );
+    let updated = api_json(client.post(&attachment).json(&json!({"attributes":{"kind":"lunar"}}))).await;
+    assert_eq!(updated["attributes"]["kind"], "lunar");
+    let cleared = api_json(client.post(&attachment).json(&json!({"attributes":null}))).await;
+    assert_eq!(cleared["attributes"], json!({}));
+    let content = api_json(client.get(format!("{attachment}/content"))).await;
+    assert_eq!(
+        content,
+        json!({"object":"vector_store.file_content.page","data":[{"type":"text","text":text}],"has_more":false,"next_page":null})
+    );
+    assert_eq!(
+        api_json(client.get(format!("{url}?filter=completed&limit=1"))).await["data"][0]["id"],
+        file_id
+    );
+    assert_eq!(
+        api_json(client.get(format!("{url}?filter=failed&limit=1"))).await["data"],
+        json!([])
+    );
 }

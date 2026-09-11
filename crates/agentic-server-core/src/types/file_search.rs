@@ -461,10 +461,12 @@ impl Default for StaticChunking {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CreateVectorStoreRequest {
     pub name: Option<String>,
+    pub description: Option<String>,
+    pub expires_after: Option<VectorStoreExpiresAfter>,
     #[serde(default)]
     pub file_ids: Vec<String>,
     #[serde(default)]
-    pub metadata: BTreeMap<String, String>,
+    pub metadata: Option<BTreeMap<String, String>>,
     pub chunking_strategy: Option<ChunkingStrategy>,
 }
 
@@ -473,7 +475,8 @@ pub struct CreateVectorStoreRequest {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct AttachFileRequest {
     pub file_id: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
+    #[cfg_attr(feature = "openapi", schema(nullable = true))]
     pub attributes: FileAttributes,
     pub chunking_strategy: Option<ChunkingStrategy>,
 }
@@ -497,8 +500,18 @@ pub struct VectorStoreObject {
     pub name: String,
     pub usage_bytes: i64,
     pub file_counts: FileCounts,
-    pub status: String,
-    pub metadata: BTreeMap<String, String>,
+    pub status: VectorStoreStatus,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required = true))]
+    pub last_active_at: Option<i64>,
+    #[serde(default)]
+    pub expires_after: Option<VectorStoreExpiresAfter>,
+    #[serde(default)]
+    pub expires_at: Option<i64>,
+    #[cfg_attr(feature = "openapi", schema(required = true))]
+    pub metadata: Option<BTreeMap<String, String>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -508,17 +521,17 @@ pub struct VectorStoreFileObject {
     pub object: String,
     pub created_at: i64,
     pub vector_store_id: String,
-    pub status: String,
+    pub status: AttachmentStatus,
     pub usage_bytes: i64,
     pub attributes: FileAttributes,
-    pub chunking_strategy: ChunkingStrategy,
+    pub chunking_strategy: VectorStoreFileChunkingStrategy,
     pub last_error: Option<VectorStoreFileError>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct VectorStoreFileError {
-    pub code: String,
+    pub code: VectorStoreFileErrorCode,
     pub message: String,
 }
 
@@ -553,6 +566,7 @@ pub enum ListOrder {
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ListParams {
+    pub filter: Option<AttachmentStatus>,
     pub purpose: Option<String>,
     pub limit: Option<usize>,
     pub after: Option<String>,
@@ -760,4 +774,173 @@ impl SearchFilter {
 
 fn same_type(left: &AttributeValue, right: &AttributeValue) -> bool {
     std::mem::discriminant(left) == std::mem::discriminant(right)
+}
+
+/// A nullable patch distinguishes an omitted member from explicit JSON null.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct NullablePatch<T>(pub Option<Option<T>>);
+
+impl<T> Default for NullablePatch<T> {
+    fn default() -> Self {
+        Self(None)
+    }
+}
+
+impl<T> NullablePatch<T> {
+    #[must_use]
+    pub const fn is_missing(&self) -> bool {
+        self.0.is_none()
+    }
+}
+
+fn deserialize_patch<'de, D, T>(deserializer: D) -> Result<NullablePatch<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(|value| NullablePatch(Some(value)))
+}
+
+fn null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de> + Default,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct UpdateVectorStoreRequest {
+    #[serde(
+        default,
+        deserialize_with = "deserialize_patch",
+        skip_serializing_if = "NullablePatch::is_missing"
+    )]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<String>))]
+    pub name: NullablePatch<String>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_patch",
+        skip_serializing_if = "NullablePatch::is_missing"
+    )]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<BTreeMap<String, String>>))]
+    pub metadata: NullablePatch<BTreeMap<String, String>>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_patch",
+        skip_serializing_if = "NullablePatch::is_missing"
+    )]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<VectorStoreExpiresAfter>))]
+    pub expires_after: NullablePatch<VectorStoreExpiresAfter>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct UpdateVectorStoreFileRequest {
+    #[serde(deserialize_with = "null_default")]
+    #[cfg_attr(feature = "openapi", schema(nullable = true))]
+    pub attributes: FileAttributes,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum VectorStoreExpirationAnchor {
+    LastActiveAt,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct VectorStoreExpiresAfter {
+    pub anchor: VectorStoreExpirationAnchor,
+    pub days: u16,
+}
+
+impl VectorStoreExpiresAfter {
+    /// # Errors
+    /// Rejects policies outside the supported one to 365 day window.
+    pub fn validate(&self) -> Result<(), FileSearchError> {
+        if !(1..=365).contains(&self.days) {
+            return invalid("expires_after.days must be between 1 and 365");
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum VectorStoreStatus {
+    InProgress,
+    #[default]
+    Completed,
+    Expired,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum AttachmentStatus {
+    InProgress,
+    #[default]
+    Completed,
+    Cancelled,
+    Failed,
+}
+
+impl AttachmentStatus {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::InProgress => "in_progress",
+            Self::Completed => "completed",
+            Self::Cancelled => "cancelled",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum VectorStoreFileErrorCode {
+    ServerError,
+    UnsupportedFile,
+    InvalidFile,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct VectorStoreFileContentPage {
+    pub object: String,
+    pub data: Vec<ParsedFileContent>,
+    pub has_more: bool,
+    pub next_page: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum ParsedFileContent {
+    Text { text: String },
+}
+
+/// Reported chunk boundaries, distinct from request-only auto/contextual configuration.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum VectorStoreFileChunkingStrategy {
+    Static {
+        #[serde(rename = "static")]
+        config: StaticChunking,
+    },
+    // Legacy rows retained request settings rather than resolved chunk boundaries.
+    #[serde(alias = "auto", alias = "contextual")]
+    Other,
 }

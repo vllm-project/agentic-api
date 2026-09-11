@@ -340,6 +340,7 @@ async fn before_pagination_returns_adjacent_files_stores_and_attachments() {
             order: Some(order),
             after: None,
             purpose: None,
+            filter: None,
         };
         let page = service.list_files(&before(&file_ids[5])).await.unwrap();
         assert!(page.has_more);
@@ -780,6 +781,18 @@ async fn embedding_service() -> (
     Arc<agentic_core::storage::DbPool>,
     FileSearchConfig,
 ) {
+    embedding_service_database("sqlite::memory:").await
+}
+
+async fn embedding_service_database(
+    database: &str,
+) -> (
+    TestService,
+    ProviderState,
+    tokio::task::JoinHandle<()>,
+    Arc<agentic_core::storage::DbPool>,
+    FileSearchConfig,
+) {
     let state = ProviderState {
         mode: Arc::new(std::sync::Mutex::new(ProviderMode::Good)),
         started: Arc::new(tokio::sync::Notify::new()),
@@ -801,7 +814,7 @@ async fn embedding_service() -> (
         embedding_api_key: Some("never-log-this-key".into()),
         ..FileSearchConfig::default()
     };
-    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let pool = create_pool_with_schema(Some(database)).await.unwrap();
     let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), config.clone()).unwrap();
     (TestService { service, files }, state, task, pool, config)
 }
@@ -2323,4 +2336,91 @@ async fn postgres_file_expiring_while_publication_waits_for_store_lock_is_not_at
         "publication after file expiration must fail: {result:?}"
     );
     assert_eq!(chunks, 0);
+}
+
+async fn store_expiration_during_models(database: &str) {
+    let (service, state, task, pool, _) = embedding_service_database(database).await;
+    let store = service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    let file = service
+        .upload_file("expire.txt", "text/plain", "assistants", b"coral reefs".to_vec())
+        .await
+        .unwrap();
+    *state.mode.lock().unwrap() = ProviderMode::Pause;
+    let worker = service.service.clone();
+    let store_id = store.id.clone();
+    let file_id = file.id.clone();
+    let ingestion = tokio::spawn(async move {
+        worker
+            .attach_file(
+                &store_id,
+                AttachFileRequest {
+                    file_id,
+                    ..Default::default()
+                },
+            )
+            .await
+    });
+    state.started.notified().await;
+    sqlx::query("UPDATE file_search_stores SET expires_at = 1 WHERE id = $1")
+        .bind(&store.id)
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    state.resume.notify_one();
+    let result = ingestion.await.unwrap();
+    let chunks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_chunks WHERE store_id = $1")
+        .bind(&store.id)
+        .fetch_one(pool.as_ref())
+        .await
+        .unwrap();
+    service.delete_vector_store(&store.id).await.unwrap();
+    service.delete_file(&file.id).await.unwrap();
+    assert_eq!(result.unwrap_err().status_code(), 404);
+    assert_eq!(chunks, 0, "late model completion must not publish expired search data");
+    *state.mode.lock().unwrap() = ProviderMode::Good;
+    let store = service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    let file = attach_text(
+        &service,
+        &store.id,
+        "source.txt",
+        "coral reefs",
+        FileAttributes::default(),
+    )
+    .await;
+    *state.mode.lock().unwrap() = ProviderMode::Pause;
+    let worker = service.service.clone();
+    let store_id = store.id.clone();
+    let search = tokio::spawn(async move { worker.search(&[store_id], &query("aquatic")).await });
+    state.started.notified().await;
+    sqlx::query("UPDATE file_search_stores SET expires_at = 1 WHERE id = $1")
+        .bind(&store.id)
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    state.resume.notify_one();
+    let result = search.await.unwrap();
+    let expired = service.get_vector_store(&store.id).await.unwrap();
+    service.delete_vector_store(&store.id).await.unwrap();
+    service.delete_file(&file.id).await.unwrap();
+    task.abort();
+    assert_eq!(result.unwrap_err().status_code(), 404);
+    assert_eq!(expired.status, VectorStoreStatus::Expired);
+    assert_eq!(expired.expires_at, Some(1), "late search must not revive expiry");
+}
+
+#[tokio::test]
+async fn sqlite_store_expiration_during_model_calls_cannot_publish_or_revive() {
+    store_expiration_during_models("sqlite::memory:").await;
+}
+
+#[tokio::test]
+#[ignore = "requires isolated TEST_POSTGRES_URL"]
+async fn postgres_store_expiration_during_model_calls_cannot_publish_or_revive() {
+    store_expiration_during_models(&std::env::var("TEST_POSTGRES_URL").unwrap()).await;
 }

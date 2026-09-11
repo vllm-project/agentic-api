@@ -16,8 +16,10 @@ the missing OGX capabilities and OpenAI API operations as stacked PRs.
 4. `codex/files-api`, based on the retrieval branch: streaming Files API,
    documented upload purposes, expiration and list/delete contracts.
 5. `codex/vector-store-lifecycle`, based on the Files API branch: store/file
-   updates, expiration, asynchronous durable batches and parsed content.
-6. `codex/file-search-openai-api`, based on the lifecycle branch: Responses
+   updates, expiration and parsed content.
+6. `codex/vector-store-batches`, based on the lifecycle branch: asynchronous
+   durable batches, restart recovery, cancellation and explicit worker shutdown.
+7. `codex/file-search-openai-api`, based on the batches branch: Responses
    annotation events, SDK contract verification and compatibility documentation.
 
 Each layer must build and pass its relevant tests independently. Open PRs only

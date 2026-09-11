@@ -397,9 +397,10 @@ parts, output items, and the terminal response.
 | Retrieve/delete file metadata | `GET` / `DELETE /v1/files/{file_id}` |
 | Download original bytes | `GET /v1/files/{file_id}/content` |
 | Create/list vector stores | `POST` / `GET /v1/vector_stores` |
-| Retrieve/delete a vector store | `GET` / `DELETE /v1/vector_stores/{store_id}` |
+| Retrieve/update/delete a vector store | `GET` / `POST` / `DELETE /v1/vector_stores/{store_id}` |
 | Attach/list files in a store | `POST` / `GET /v1/vector_stores/{store_id}/files` |
-| Retrieve/detach a store file | `GET` / `DELETE /v1/vector_stores/{store_id}/files/{file_id}` |
+| Retrieve/update/detach a store file | `GET` / `POST` / `DELETE /v1/vector_stores/{store_id}/files/{file_id}` |
+| Retrieve parsed original text | `GET /v1/vector_stores/{store_id}/files/{file_id}/content` |
 | Search a store | `POST /v1/vector_stores/{store_id}/search` |
 
 Lists accept `limit`, `after`, `before`, and `order`. Files lists additionally accept
@@ -408,6 +409,76 @@ Lists accept `limit`, `after`, `before`, and `order`. Files lists additionally a
 original upload. Deleting an upload removes its metadata, attachments, and chunks
 from all stores, then removes its local file bytes. Deleting a vector store
 preserves uploaded files.
+
+
+### Store updates, activity, and expiration
+
+Create accepts optional `name`, `description` (up to 512 bytes), nullable `metadata`,
+and `expires_after: {"anchor": "last_active_at", "days": 1}`. Days must be 1–365.
+Store responses include nullable `last_active_at`, `expires_after`, and `expires_at`.
+`POST /v1/vector_stores/{store_id}` updates `name`, `metadata`, and `expires_after`:
+omitted fields are preserved; null clears them. Clearing `name` produces an empty
+string; clearing metadata produces null; clearing the policy removes the deadline.
+
+In this implementation, creation initializes activity using the database clock.
+Successful attachment publication and successful search completion refresh
+`last_active_at` and recompute the policy deadline. This applies to both the search
+endpoint and the Responses built-in tool, including searches with no matches.
+Reads, lists, attribute changes, and store metadata/policy updates do not refresh
+activity. Setting a policy on an idle permanent store uses its previous activity
+and can expire it immediately. This refresh-event policy describes this server;
+it is not a claim about undocumented hosted-service behavior.
+
+An expired store remains retrievable and listable with `status: "expired"`, zero
+visible file counts, and zero usage bytes. Its attachments, parsed content, and
+search are unavailable immediately, before any cleanup. Updates and late model
+completions cannot revive it. Explicit store deletion still works. Search checks
+all selected stores after model calls; if any expired or was deleted, it returns
+not-found. A successful search linearizes activity at this final database check;
+a subsequent deletion or expiration cannot retract an already returned response.
+Publication locks the source upload before the store, then checks fresh database
+time after both locks. Policy updates and cleanup share the same store guard.
+
+`FileSearchService::cleanup_expired_vector_stores(limit)` processes 1–1000 due
+stores per call and returns the number expired. It rechecks each deadline after
+acquiring its store lock, commits expired status and removal of attachments/chunks
+atomically, and preserves uploaded files, including those used by other stores.
+Repeated cleanup is safe after a restart. This layer exposes explicit cleanup;
+it does not start a worker from service construction or cloning.
+
+### Attachment updates and parsed content
+
+Attachment creation accepts null `attributes`, equivalent to an empty map.
+`POST /v1/vector_stores/{store_id}/files/{file_id}` requires the `attributes` member;
+an object replaces the attributes and null clears them. Updates also change the
+attributes used by exact and indexed search in the same transaction.
+Attachment responses report `chunking_strategy` separately from request options:
+new auto, static, and contextual ingestion report `type: "static"` with the actual
+resolved chunk size and overlap. Legacy auto/contextual records report
+`type: "other"`; their original request settings did not persist resolved boundaries.
+Legacy static settings remain static. Contextual ingestion retains its extension
+semantics, including its default 700-token size and 400-token overlap; reporting
+those boundaries does not make that overlap valid for an OpenAI-style static request.
+Store-file lists accept `filter=in_progress|completed|cancelled|failed`. Filtering
+happens before keyset pagination and only completed attachments are searchable.
+`filter` is rejected on Files and vector store lists.
+
+The content endpoint returns one bounded page:
+
+```json
+{
+  "object": "vector_store.file_content.page",
+  "data": [{"type": "text", "text": "Original extracted document text"}],
+  "has_more": false,
+  "next_page": null
+}
+```
+
+Parsed text is saved during ingestion, before overlapping chunks or contextual
+hints are generated. It is bounded by the existing 16 MiB extracted-document limit.
+Legacy attachments reparse their original uploaded bytes without model calls.
+This endpoint returns extracted text; the Files content endpoint returns the
+original bytes, including a PDF's binary representation.
 
 Uploads publish complete, synced files before committing metadata. Failures and
 cancellation before commit clean up the upload. Filesystem and SQL commits are
