@@ -171,6 +171,11 @@ impl ExecutionContext {
             cfg.tools.file_search.clone(),
         )
         .map_err(|error| Error::Config(error.public_message()))?;
+        file_search.initialize().await.map_err(|error| {
+            Error::Config(format!(
+                "file search storage initialization failed: {error}; check pgvector extension and schema permissions"
+            ))
+        })?;
         gateway_executors.insert(GatewayExecutorRegistration::FileSearch(Arc::new(
             crate::tool::file_search::FileSearchHandler::new(file_search.clone()),
         )));

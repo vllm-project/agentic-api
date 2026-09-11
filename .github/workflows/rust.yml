@@ -89,7 +89,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+        image: pgvector/pgvector:0.8.6-pg17-trixie@sha256:724a4041afdb1750446e3f6b5cfa8f3b0ac5a2cf538ddfa6bfee4f94c2fa85c6
         env:
           POSTGRES_DB: agentic_api_test
           POSTGRES_PASSWORD: postgres
@@ -102,6 +102,9 @@ jobs:
           --health-retries 10
     env:
       TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/agentic_api_test?sslmode=disable
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -123,6 +126,9 @@ jobs:
             cargo-postgres-${{ runner.os }}-
             cargo-${{ runner.os }}-
 
+      - name: Provision pgvector extension
+        run: psql "$TEST_POSTGRES_URL" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS vector"
+
       - name: Verify PostgreSQL schema upgrades and validation
         run: cargo test -p agentic-server-core --lib -- --ignored --test-threads=1
 
@@ -131,6 +137,9 @@ jobs:
 
       - name: Verify PostgreSQL file search persistence
         run: cargo test -p agentic-server-core --test file_search_service postgres_file_search -- --ignored --test-threads=1
+
+      - name: Verify real pgvector indexed retrieval and transactional publication
+        run: cargo test -p agentic-server-core --test file_search_service postgres_pgvector -- --ignored --test-threads=1
 
       - name: Verify bounded PDF ingestion
         run: cargo test -p agentic-server-core --features file-search-pdf --test file_search_service pdf

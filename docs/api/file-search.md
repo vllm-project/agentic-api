@@ -49,6 +49,72 @@ A vector store records its embedding endpoint, model, and vector dimensions.
 Changing that configuration requires a new store and reingestion for semantic
 search. Existing stores remain available for keyword search.
 
+## Select PostgreSQL indexed retrieval
+
+The default `exact` backend works with SQLite and plain PostgreSQL. To use
+pgvector, configure PostgreSQL as the database and add this deployment setting
+alongside the embedding configuration above:
+
+```toml
+[file_search.backend]
+type = "pgvector"
+dimensions = 768
+candidate_limit = 100
+
+[file_search.backend.index]
+type = "hnsw"
+m = 16
+ef_construction = 64
+ef_search = 100
+```
+
+The pgvector extension must be version 0.8.0 or later. Provision it with
+`CREATE EXTENSION vector` as a database administrator. Startup verifies the
+extension and initializes the optional projection and indexes; the runtime role
+needs schema/table/index modification permissions. Selecting pgvector on SQLite
+or without configured embeddings is a configuration error. `dimensions` must
+match the provider and existing stores, between 1 and 2000. Embeddings must be
+finite, nonzero float32 vectors. Deployment settings never accept client-supplied
+endpoints or credentials.
+
+For IVFFlat, replace the index table with:
+
+```toml
+[file_search.backend.index]
+type = "ivfflat"
+lists = 100
+probes = 10
+```
+
+`lists` must be 2–32768 and `probes` 1–`lists - 1`. HNSW accepts `m` 2–100,
+`ef_construction` 4–1000 and at least twice `m`, and `ef_search` 1–1000.
+`candidate_limit` is 50–1000 per query and retrieval method. Queries use cosine
+distance operators, SQL store/attribute filters, and transaction-local search
+settings with iterative scans. ANN recall depends on index/search settings;
+PostgreSQL can choose an exact scan for small or selective corpora. Keyword
+candidates use a `simple` text-search GIN index; the shared ranker applies BM25
+and hybrid fusion to the bounded candidate union before the final result limit.
+This candidate selection can differ from portable full-corpus BM25. The aggregate
+candidate transfer is capped at 64 MiB and 10000 rows across queries and methods;
+exceeding either bound returns a resource-limit error.
+
+The optional vector column is generated from the existing chunk row, so legacy
+vectors are backfilled when it is installed. Metadata and vector publication,
+rollback, updates, and cascading deletion remain one database transaction.
+Extension setup does not modify the portable migrations. Back up first and plan
+for a table lock during initial projection creation or index replacement.
+Incompatible legacy vectors cause initialization to fail without partial schema
+publication. Restart preserves indexes; changing construction settings atomically
+replaces the selected index for that dimension. All replicas sharing a database
+must use the same index construction settings. HNSW is suitable for empty stores. IVFFlat training waits for at least
+`lists * 1000` rows of the configured dimension, matching OGX; until then queries
+use bounded SQL cosine retrieval without an ANN index. Search creates the index
+when sufficient rows exist. IVFFlat may need
+`REINDEX INDEX file_search_vector_768` after substantial corpus growth.
+
+To return to portable retrieval, configure `[file_search.backend]` with
+`type = "exact"`. Existing projected columns and indexes remain consistent.
+
 ## Upload and ingest
 
 ```bash

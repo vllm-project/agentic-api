@@ -287,6 +287,7 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
         sqlite,
         tools: ToolRuntimeConfig {
             file_search: agentic_core::types::file_search::FileSearchConfig {
+                backend: file.file_search.backend.clone(),
                 files_storage_dir: std::env::var_os("AGENTIC_FILES_STORAGE_DIR")
                     .map(std::path::PathBuf::from)
                     .or_else(|| file.files.storage_dir.clone()),

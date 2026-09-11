@@ -24,6 +24,8 @@ impl FilesFileConfig {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct FileSearchFileConfig {
+    #[serde(default)]
+    pub backend: agentic_core::types::file_search::FileSearchBackend,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub embedding_base_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -34,7 +36,10 @@ pub(crate) struct FileSearchFileConfig {
 
 impl FileSearchFileConfig {
     fn is_empty(&self) -> bool {
-        self.embedding_base_url.is_none() && self.embedding_model.is_none() && self.api_key_env.is_none()
+        self.backend == agentic_core::types::file_search::FileSearchBackend::Exact
+            && self.embedding_base_url.is_none()
+            && self.embedding_model.is_none()
+            && self.api_key_env.is_none()
     }
 }
 
@@ -319,6 +324,37 @@ mod tests {
                 .to_string()
                 .contains("files.storage_dir")
         );
+    }
+
+    #[test]
+    fn loads_pgvector_backend_configuration() {
+        let home = tempdir().unwrap();
+        fs::write(
+            home.path().join("config.toml"),
+            r#"
+[file_search.backend]
+type = "pgvector"
+dimensions = 768
+candidate_limit = 100
+[file_search.backend.index]
+type = "hnsw"
+m = 16
+ef_construction = 64
+ef_search = 100
+"#,
+        )
+        .unwrap();
+        let config = FileConfig::load(home.path()).unwrap().unwrap();
+        assert!(matches!(
+            config.file_search.backend,
+            agentic_core::types::file_search::FileSearchBackend::Pgvector {
+                dimensions: 768,
+                candidate_limit: 100,
+                ..
+            }
+        ));
+        config.file_search.backend.validate().unwrap();
+        assert!(!config.file_search.is_empty());
     }
 
     #[test]

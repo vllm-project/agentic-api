@@ -39,3 +39,5 @@ pub use types::{
 };
 pub(crate) mod file_search;
 pub(crate) mod local_files;
+
+pub(crate) mod pgvector;

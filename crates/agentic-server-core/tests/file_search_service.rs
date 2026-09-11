@@ -787,6 +787,7 @@ async fn embedding_service() -> (
         embedding_base_url: Some(format!("http://{addr}/v1")),
         embedding_model: Some("fixture".into()),
         embedding_api_key: Some("never-log-this-key".into()),
+        ..FileSearchConfig::default()
     };
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
     let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), config.clone()).unwrap();
@@ -1077,6 +1078,7 @@ fn ogx_vector_mode_alias_and_secret_safe_debug_are_supported() {
         embedding_base_url: Some("https://private.example/v1".into()),
         embedding_model: Some("model".into()),
         embedding_api_key: Some("secret-credential".into()),
+        ..FileSearchConfig::default()
     };
     assert!(!format!("{config:?}").contains("secret-credential"));
 }
@@ -1376,4 +1378,462 @@ async fn compressed_pdf_expansion_is_rejected_without_publishing_chunks() {
         );
         assert_eq!(service.get_vector_store(&store.id).await.unwrap().file_counts.total, 0);
     }
+}
+
+#[tokio::test]
+async fn pgvector_configuration_rejects_sqlite() {
+    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let files = tempfile::tempdir().unwrap();
+    let parsed = serde_json::from_value::<FileSearchConfig>(serde_json::json!({
+        "files_storage_dir": files.path(),
+        "backend": {"type":"pgvector", "dimensions":2, "index":{"type":"hnsw", "m":16, "ef_construction":64, "ef_search":40}, "candidate_limit":100},
+        "embedding_base_url":"http://localhost:8000/v1", "embedding_model":"fixture"
+    }));
+    assert!(
+        parsed.is_ok(),
+        "pgvector must be a typed deployment configuration: {parsed:?}"
+    );
+    let error = FileSearchService::new(pool, Arc::new(reqwest::Client::new()), parsed.unwrap()).unwrap_err();
+    assert!(error.to_string().contains("PostgreSQL"), "{error}");
+}
+
+#[tokio::test]
+#[ignore = "requires TEST_POSTGRES_URL pointing to an isolated pgvector PostgreSQL database"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "isolated indexed retrieval lifecycle and filter compatibility cases"
+)]
+async fn postgres_pgvector_indexed_semantics_restart_filters_and_deletion() {
+    let (_fixture, _, task, _, mut config) = embedding_service().await;
+    let files = tempfile::tempdir().unwrap();
+    config.files_storage_dir = Some(files.path().to_owned());
+    let mut value = serde_json::to_value(&config).unwrap();
+    value["backend"] = serde_json::json!({"type":"pgvector", "dimensions":2, "index":{"type":"hnsw", "m":16, "ef_construction":64, "ef_search":100}, "candidate_limit":100});
+    let config: FileSearchConfig = serde_json::from_value(value).expect("typed pgvector configuration");
+    let url = std::env::var("TEST_POSTGRES_URL").unwrap();
+    let pool = create_pool_with_schema(Some(&url)).await.unwrap();
+    let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), config.clone()).unwrap();
+    let store = service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    let coral = attach_text(
+        &service,
+        &store.id,
+        "reef.txt",
+        "coral reef",
+        [
+            ("region".into(), AttributeValue::String("sea".into())),
+            ("rank".into(), AttributeValue::Number(42.0)),
+            ("active".into(), AttributeValue::Boolean(true)),
+        ]
+        .into(),
+    )
+    .await;
+    let other = service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    attach_text(
+        &service,
+        &other.id,
+        "hidden.txt",
+        "coral hidden",
+        FileAttributes::default(),
+    )
+    .await;
+    let query = SearchRequest {
+        search_mode: Some(SearchMode::Semantic),
+        ..query("aquatic")
+    };
+    let found = service.search(std::slice::from_ref(&store.id), &query).await.unwrap();
+    assert_eq!(found.data.len(), 1);
+    assert_eq!(found.data[0].file_id, coral.id);
+    let keyword = SearchRequest {
+        search_mode: Some(SearchMode::Keyword),
+        query: SearchQuery::Text("coral absent".into()),
+        ..SearchRequest::default()
+    };
+    assert_eq!(
+        service
+            .search(std::slice::from_ref(&store.id), &keyword)
+            .await
+            .unwrap()
+            .data[0]
+            .file_id,
+        coral.id,
+        "multiword keyword retrieval must retain partial term matches"
+    );
+
+    let indexes: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pg_indexes WHERE tablename = 'file_search_chunks' AND indexdef LIKE '%USING hnsw%'",
+    )
+    .fetch_one(pool.as_ref())
+    .await
+    .unwrap();
+    assert!(indexes > 0);
+    let mut filtered = query.clone();
+    filtered.filters =
+        Some(serde_json::from_value(serde_json::json!({"type":"eq", "key":"region", "value":"land"})).unwrap());
+    assert!(
+        service
+            .search(std::slice::from_ref(&store.id), &filtered)
+            .await
+            .unwrap()
+            .data
+            .is_empty()
+    );
+    for (filter, expected) in [
+        (serde_json::json!({"type":"eq", "key":"region", "value":"sea"}), 1),
+        (serde_json::json!({"type":"ne", "key":"region", "value":"sea"}), 0),
+        (serde_json::json!({"type":"ne", "key":"region", "value":5}), 0),
+        (serde_json::json!({"type":"ne", "key":"missing", "value":"sea"}), 0),
+        (
+            serde_json::json!({"type":"in", "key":"region", "value":["land", "sea"]}),
+            1,
+        ),
+        (serde_json::json!({"type":"nin", "key":"region", "value":["land"]}), 1),
+        (serde_json::json!({"type":"gt", "key":"rank", "value":40}), 1),
+        (serde_json::json!({"type":"lte", "key":"rank", "value":41}), 0),
+        (serde_json::json!({"type":"eq", "key":"active", "value":true}), 1),
+        (
+            serde_json::json!({"type":"eq", "key":"region", "value":"sea' OR true --"}),
+            0,
+        ),
+        (
+            serde_json::json!({"type":"eq", "key":"region') OR true --", "value":"sea"}),
+            0,
+        ),
+        (
+            serde_json::json!({"type":"and", "filters":[{"type":"eq", "key":"region", "value":"sea"}, {"type":"gt", "key":"rank", "value":40}]}),
+            1,
+        ),
+    ] {
+        filtered.filters = Some(serde_json::from_value(filter.clone()).unwrap());
+        assert_eq!(
+            service
+                .search(std::slice::from_ref(&store.id), &filtered)
+                .await
+                .unwrap()
+                .data
+                .len(),
+            expected,
+            "{filter}"
+        );
+    }
+    drop(service);
+    let restarted = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), config).unwrap();
+    assert_eq!(
+        restarted
+            .search(std::slice::from_ref(&store.id), &query)
+            .await
+            .unwrap()
+            .data[0]
+            .file_id,
+        coral.id
+    );
+    restarted.detach_file(&store.id, &coral.id).await.unwrap();
+    assert!(
+        restarted
+            .search(std::slice::from_ref(&store.id), &query)
+            .await
+            .unwrap()
+            .data
+            .is_empty()
+    );
+    restarted.delete_vector_store(&store.id).await.unwrap();
+    restarted.delete_vector_store(&other.id).await.unwrap();
+    task.abort();
+}
+
+#[test]
+fn pgvector_index_parameters_are_validated() {
+    for backend in [
+        FileSearchBackend::Pgvector {
+            dimensions: 0,
+            index: PgvectorIndex::Hnsw {
+                m: 16,
+                ef_construction: 64,
+                ef_search: 40,
+            },
+            candidate_limit: 100,
+        },
+        FileSearchBackend::Pgvector {
+            dimensions: 2001,
+            index: PgvectorIndex::Hnsw {
+                m: 16,
+                ef_construction: 64,
+                ef_search: 40,
+            },
+            candidate_limit: 100,
+        },
+        FileSearchBackend::Pgvector {
+            dimensions: 2,
+            index: PgvectorIndex::Hnsw {
+                m: 16,
+                ef_construction: 16,
+                ef_search: 40,
+            },
+            candidate_limit: 100,
+        },
+        FileSearchBackend::Pgvector {
+            dimensions: 2,
+            index: PgvectorIndex::Ivfflat { lists: 2, probes: 2 },
+            candidate_limit: 100,
+        },
+        FileSearchBackend::Pgvector {
+            dimensions: 2,
+            index: PgvectorIndex::Ivfflat { lists: 2, probes: 1 },
+            candidate_limit: 0,
+        },
+    ] {
+        assert!(backend.validate().is_err(), "{backend:?}");
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires TEST_POSTGRES_URL pointing to an isolated pgvector PostgreSQL database"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one isolated database lifecycle verifies migration, reconfiguration, and rollback"
+)]
+async fn postgres_pgvector_migrates_exact_data_and_rolls_back_failed_publication() {
+    let (_fixture, state, task, _, mut config) = embedding_service().await;
+    let files = tempfile::tempdir().unwrap();
+    config.files_storage_dir = Some(files.path().to_owned());
+    let url = std::env::var("TEST_POSTGRES_URL").unwrap();
+    let pool = create_pool_with_schema(Some(&url)).await.unwrap();
+    // This ignored test requires an isolated database and resets only file-search stores.
+    sqlx::query("DELETE FROM file_search_stores")
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    // Remove only the optional projection to exercise a legacy deployment upgrade.
+    sqlx::query("ALTER TABLE file_search_chunks DROP COLUMN IF EXISTS embedding CASCADE")
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    let exact = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), config.clone()).unwrap();
+    let store = exact
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    let file = attach_text(
+        &exact,
+        &store.id,
+        "legacy.txt",
+        "coral legacy",
+        FileAttributes::default(),
+    )
+    .await;
+    config.backend = FileSearchBackend::Pgvector {
+        dimensions: 2,
+        index: PgvectorIndex::Ivfflat { lists: 2, probes: 1 },
+        candidate_limit: 50,
+    };
+    let vector = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), config.clone()).unwrap();
+    let query = SearchRequest {
+        search_mode: Some(SearchMode::Semantic),
+        ..query("aquatic")
+    };
+    assert_eq!(
+        vector
+            .search(std::slice::from_ref(&store.id), &query)
+            .await
+            .unwrap()
+            .data[0]
+            .file_id,
+        file.id
+    );
+    let early_indexes: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM pg_indexes WHERE tablename = 'file_search_chunks' AND indexdef LIKE '%USING ivfflat%'",
+    )
+    .fetch_one(pool.as_ref())
+    .await
+    .unwrap();
+    assert_eq!(early_indexes, 0, "IVFFlat must wait for representative training rows");
+    let training_store = exact
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    let training = exact
+        .upload_file(
+            "training.txt",
+            "text/plain",
+            "assistants",
+            "forest ".repeat(200_000).into_bytes(),
+        )
+        .await
+        .unwrap();
+    exact
+        .attach_file(
+            &training_store.id,
+            AttachFileRequest {
+                file_id: training.id,
+                chunking_strategy: Some(ChunkingStrategy::Static {
+                    config: StaticChunking {
+                        max_chunk_size_tokens: 100,
+                        chunk_overlap_tokens: 0,
+                    },
+                }),
+                ..AttachFileRequest::default()
+            },
+        )
+        .await
+        .unwrap();
+    vector.search(std::slice::from_ref(&store.id), &query).await.unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::query("SET LOCAL enable_seqscan = off")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let plan: Vec<String> = sqlx::query_scalar("EXPLAIN (ANALYZE, COSTS OFF) SELECT data FROM file_search_chunks WHERE vector_dims(embedding) = 2 ORDER BY embedding::vector(2) <=> '[1,0]'::vector LIMIT 50").fetch_all(&mut *tx).await.unwrap();
+    assert!(plan.join("\n").contains("Index Scan"), "{plan:?}");
+    tx.rollback().await.unwrap();
+    let mut bounded_config = config.clone();
+    bounded_config.backend = FileSearchBackend::Pgvector {
+        dimensions: 2,
+        index: PgvectorIndex::Ivfflat { lists: 2, probes: 1 },
+        candidate_limit: 1000,
+    };
+    let bounded = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), bounded_config).unwrap();
+    let many_queries = SearchRequest {
+        query: SearchQuery::Texts(vec!["forest".into(); 11]),
+        search_mode: Some(SearchMode::Semantic),
+        ..SearchRequest::default()
+    };
+    assert_eq!(
+        bounded
+            .search(std::slice::from_ref(&training_store.id), &many_queries)
+            .await
+            .unwrap_err()
+            .status_code(),
+        503,
+        "candidate row limits apply across all queries before deduplication"
+    );
+    let generated: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM file_search_chunks WHERE store_id = $1 AND embedding IS NOT NULL")
+            .bind(&store.id)
+            .fetch_one(pool.as_ref())
+            .await
+            .unwrap();
+    assert_eq!(generated, 1);
+    config.backend = FileSearchBackend::Pgvector {
+        dimensions: 2,
+        index: PgvectorIndex::Hnsw {
+            m: 16,
+            ef_construction: 64,
+            ef_search: 100,
+        },
+        candidate_limit: 50,
+    };
+    let changed = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), config).unwrap();
+    changed.search(std::slice::from_ref(&store.id), &query).await.unwrap();
+    let indexes: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pg_indexes WHERE tablename = 'file_search_chunks' AND indexdef LIKE '%vector_cosine_ops%'").fetch_one(pool.as_ref()).await.unwrap();
+    assert_eq!(indexes, 1, "changing index configuration must replace the prior index");
+    // Provider dimensional drift must not publish attachment metadata or vectors.
+    *state.mode.lock().unwrap() = ProviderMode::WrongDimensions;
+    let bad = vector
+        .upload_file("wrong.txt", "text/plain", "assistants", b"wrong".to_vec())
+        .await
+        .unwrap();
+    assert!(
+        vector
+            .attach_file(
+                &store.id,
+                AttachFileRequest {
+                    file_id: bad.id.clone(),
+                    ..AttachFileRequest::default()
+                }
+            )
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        vector.get_vector_store(&store.id).await.unwrap().file_counts.completed,
+        1
+    );
+    *state.mode.lock().unwrap() = ProviderMode::Good;
+    sqlx::query(
+        "ALTER TABLE file_search_chunks ADD CONSTRAINT task1_reject_second_chunk CHECK (chunk_index < 1) NOT VALID",
+    )
+    .execute(pool.as_ref())
+    .await
+    .unwrap();
+    let bad = vector
+        .upload_file(
+            "rollback.txt",
+            "text/plain",
+            "assistants",
+            "coral ".repeat(300).into_bytes(),
+        )
+        .await
+        .unwrap();
+    let result = vector
+        .attach_file(
+            &store.id,
+            AttachFileRequest {
+                file_id: bad.id.clone(),
+                chunking_strategy: Some(ChunkingStrategy::Static {
+                    config: StaticChunking {
+                        max_chunk_size_tokens: 100,
+                        chunk_overlap_tokens: 0,
+                    },
+                }),
+                ..AttachFileRequest::default()
+            },
+        )
+        .await;
+    sqlx::query("ALTER TABLE file_search_chunks DROP CONSTRAINT task1_reject_second_chunk")
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    assert!(result.is_err());
+    let remaining: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_chunks WHERE file_id = $1")
+        .bind(&bad.id)
+        .fetch_one(pool.as_ref())
+        .await
+        .unwrap();
+    assert_eq!(remaining, 0);
+    assert!(vector.get_vector_store_file(&store.id, &bad.id).await.is_err());
+    vector.delete_file(&file.id).await.unwrap();
+    assert!(
+        vector
+            .search(std::slice::from_ref(&store.id), &query)
+            .await
+            .unwrap()
+            .data
+            .is_empty()
+    );
+    vector.delete_vector_store(&store.id).await.unwrap();
+    vector.delete_vector_store(&training_store.id).await.unwrap();
+    task.abort();
+}
+
+#[tokio::test]
+async fn empty_semantic_search_does_not_require_the_embedding_provider() {
+    let (service, state, task, _, _) = embedding_service().await;
+    let store = service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    *state.mode.lock().unwrap() = ProviderMode::Fail;
+    let request = SearchRequest {
+        search_mode: Some(SearchMode::Semantic),
+        ..query("aquatic")
+    };
+    assert!(
+        service
+            .search(std::slice::from_ref(&store.id), &request)
+            .await
+            .unwrap()
+            .data
+            .is_empty()
+    );
+    *state.mode.lock().unwrap() = ProviderMode::Good;
+    let file = attach_text(&service, &store.id, "transient.txt", "coral", FileAttributes::default()).await;
+    service.detach_file(&store.id, &file.id).await.unwrap();
+    *state.mode.lock().unwrap() = ProviderMode::Fail;
+    assert!(service.search(&[store.id], &request).await.unwrap().data.is_empty());
+    task.abort();
 }
