@@ -33,17 +33,25 @@ pub(crate) fn normalize_sse_data_checked(data: &SseLine) -> Result<Option<EventF
 }
 
 /// Normalizes an already parsed SSE payload.
-fn normalize_sse_value(json: Value) -> Result<Option<EventFrame>, InvalidOutputIndex> {
+fn normalize_sse_value(mut json: Value) -> Result<Option<EventFrame>, InvalidOutputIndex> {
     if let Some(index) = json.get("output_index") {
         index
             .as_u64()
             .and_then(|index| u32::try_from(index).ok())
             .ok_or(InvalidOutputIndex)?;
     }
-    let event_type = json
+    let mut event_type = json
         .get("type")
         .and_then(Value::as_str)
         .map_or(SSEEventType::Other, SSEEventType::from);
+
+    // vLLM can emit a completion event even when its response ran out of tokens.
+    // Reconcile the explicit status before validation, accumulation, and delivery
+    // so all consumers retain the same incomplete outcome and terminal details.
+    if event_type == SSEEventType::ResponseCompleted && json["response"]["status"] == "incomplete" {
+        event_type = SSEEventType::ResponseIncomplete;
+        json["type"] = Value::String("response.incomplete".to_owned());
+    }
 
     let payload = extract_payload(event_type, &json);
     let Some(wire) = deserialize_from_value_opt::<WireEvent>(json) else {

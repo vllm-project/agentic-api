@@ -12,6 +12,20 @@ export const metadata: Metadata = {
     'Meet the maintainers of vLLM Agentic API, the application layer for open-model agents.',
   alternates: { canonical: '/community/team' },
 };
+
+// The deployment refresh keeps contributors in descending contribution order.
+const contributionOrder = new Map(
+  community.contributors.map((person, index) => [
+    person.login.toLowerCase(),
+    index,
+  ]),
+);
+const maintainers = [...community.maintainers].sort(
+  (a, b) =>
+    (contributionOrder.get(a.login.toLowerCase()) ?? contributionOrder.size) -
+    (contributionOrder.get(b.login.toLowerCase()) ?? contributionOrder.size),
+);
+
 export default function Team() {
   return (
     <main id="main" className="container community-page">
@@ -48,7 +62,7 @@ export default function Team() {
           </p>
         </div>
         <div className="team-grid">
-          {community.maintainers.map((p, i) => (
+          {maintainers.map((p) => (
             <a className="person-card" href={p.url} key={p.login}>
               <div className="person-top">
                 <Image
@@ -58,10 +72,7 @@ export default function Team() {
                   width={72}
                   height={72}
                 />
-                <span className="person-number">
-                  {String(i + 1).padStart(2, '0')}
-                </span>
-                <ArrowUpRight size={18} />
+                <ArrowUpRight size={18} className="ml-auto" />
               </div>
               <h3>{p.name}</h3>
               <span className="person-handle">@{p.login}</span>
