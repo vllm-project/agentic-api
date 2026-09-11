@@ -251,6 +251,9 @@ async fn run_job(
     let result = loop {
         tokio::select! {biased;
             ()=stop.cancelled()=>break None,
+            // A renewal can take longer than the interval: observe ready work before
+            // another overdue tick, while retaining shutdown as the first priority.
+            result=&mut prepare=>break Some(result.unwrap_or_else(|error|Err(error.into()))),
             _=heartbeat.tick()=>{
                 match service.storage.renew_claim(job,LEASE_SECONDS).await {
                     Ok(ClaimOutcome::Applied)=>{},
@@ -258,7 +261,6 @@ async fn run_job(
                     Err(error)=>{tracing::warn!(%error,"claim renewal failed");break None;}
                 }
             }
-            result=&mut prepare=>break Some(result.unwrap_or_else(|error|Err(error.into()))),
         }
     };
     if let Some(result) = result {
@@ -463,5 +465,229 @@ mod tests {
         assert_eq!(service.workers.available_permits(), 4);
         service.delete_vector_store(&store.id).await.unwrap();
         service.delete_file(&retained.id).await.unwrap();
+    }
+    #[tokio::test]
+    #[ignore = "requires TEST_POSTGRES_URL"]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "exercises both duplicate-creation outcomes across a real post-commit lock timeout"
+    )]
+    async fn postgres_committed_creation_survives_response_read_timeout() {
+        use crate::storage::file_search::batches::{BatchTestHooks, CommitBarrier};
+        let pool = crate::storage::create_pool_with_schema_and_configs(
+            Some(&std::env::var("TEST_POSTGRES_URL").unwrap()),
+            crate::config::SqliteConfig::default(),
+            crate::config::PostgresConfig {
+                lock_timeout: Duration::from_millis(100),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        for completed in [true, false] {
+            let mut service = FileSearchService::new(
+                pool.clone(),
+                Arc::new(reqwest::Client::new()),
+                crate::types::file_search::FileSearchConfig {
+                    files_storage_dir: Some(directory.path().into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let store = service
+                .create_vector_store(serde_json::from_str("{}").unwrap())
+                .await
+                .unwrap();
+            let file = service
+                .upload_file("committed.txt", "text/plain", "assistants", b"durable member".to_vec())
+                .await
+                .unwrap();
+            if completed {
+                service
+                    .attach_file(
+                        &store.id,
+                        AttachFileRequest {
+                            file_id: file.id.clone(),
+                            ..Default::default()
+                        },
+                    )
+                    .await
+                    .unwrap();
+            }
+            let hooks = Arc::new(BatchTestHooks {
+                after_commit: Some(CommitBarrier::default()),
+                ..Default::default()
+            });
+            service.storage.batch_test_hooks = Some(hooks.clone());
+            let creating = service.clone();
+            let store_id = store.id.clone();
+            let file_id = file.id.clone();
+            let creation = tokio::spawn(async move {
+                creating
+                    .create_file_batch(
+                        &store_id,
+                        serde_json::from_value(serde_json::json!({"file_ids":[file_id]})).unwrap(),
+                    )
+                    .await
+            });
+            let barrier = hooks.after_commit.as_ref().unwrap();
+            tokio::time::timeout(Duration::from_secs(5), barrier.reached.notified())
+                .await
+                .unwrap();
+            let committed_id: String = sqlx::query_scalar("SELECT id FROM file_search_batches WHERE store_id=$1")
+                .bind(&store.id)
+                .fetch_one(pool.as_ref())
+                .await
+                .unwrap();
+            let mut held = pool.begin().await.unwrap();
+            sqlx::query("UPDATE file_search_stores SET id=id WHERE id=$1")
+                .bind(&store.id)
+                .execute(&mut *held)
+                .await
+                .unwrap();
+            let read_error = service.get_file_batch(&store.id, &committed_id).await.unwrap_err();
+            assert!(
+                matches!(&read_error,FileSearchError::Storage(sqlx::Error::Database(error)) if error.code().as_deref()==Some("55P03"))
+            );
+            barrier.resume.notify_one();
+            // The old follow-up read times out; its retry starts after we release the lock.
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            held.commit().await.unwrap();
+            let response = tokio::time::timeout(Duration::from_secs(5), creation)
+                .await
+                .unwrap()
+                .unwrap();
+            let ids: Vec<String> = sqlx::query_scalar("SELECT id FROM file_search_batches WHERE store_id=$1")
+                .bind(&store.id)
+                .fetch_all(pool.as_ref())
+                .await
+                .unwrap();
+            let retrieved = service.get_file_batch(&store.id, &committed_id).await.unwrap();
+            service.delete_vector_store(&store.id).await.unwrap();
+            service.delete_file(&file.id).await.unwrap();
+            assert_eq!(
+                ids,
+                vec![committed_id.clone()],
+                "post-commit response failure must not repeat creation"
+            );
+            let response = response.expect("creation must recover its committed ID without another database read");
+            assert_eq!(response.id, committed_id);
+            assert_eq!(response.id, retrieved.id);
+            assert_eq!(response.file_counts.total, 1);
+            assert_eq!(response.file_counts.completed, i64::from(completed));
+            assert_eq!(response.file_counts.in_progress, i64::from(!completed));
+        }
+    }
+
+    #[tokio::test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "keeps the owned model barrier and slow-renewal completion assertions in one fixture"
+    )]
+    async fn ready_preparation_is_not_starved_by_slow_renewals() {
+        use crate::storage::file_search::batches::BatchTestHooks;
+        let started = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}/v1", listener.local_addr().unwrap());
+        let entered = started.clone();
+        let resume = release.clone();
+        let app = axum::Router::new().route(
+            "/v1/embeddings",
+            axum::routing::post(move || {
+                let entered = entered.clone();
+                let resume = resume.clone();
+                async move {
+                    entered.notify_one();
+                    resume.notified().await;
+                    axum::Json(serde_json::json!({"model":"fixture","data":[{"index":0,"embedding":[1.0,0.0]}]}))
+                }
+            }),
+        );
+        let http = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let pool = crate::storage::create_pool_with_schema(Some("sqlite::memory:"))
+            .await
+            .unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let mut service = FileSearchService::new(
+            pool,
+            Arc::new(reqwest::Client::new()),
+            crate::types::file_search::FileSearchConfig {
+                files_storage_dir: Some(directory.path().into()),
+                embedding_base_url: Some(endpoint),
+                embedding_model: Some("fixture".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let store = service
+            .create_vector_store(serde_json::from_str("{}").unwrap())
+            .await
+            .unwrap();
+        let file = service
+            .upload_file(
+                "slow-renewal.txt",
+                "text/plain",
+                "assistants",
+                b"successful preparation".to_vec(),
+            )
+            .await
+            .unwrap();
+        let batch = service
+            .create_file_batch(
+                &store.id,
+                serde_json::from_value(serde_json::json!({"file_ids":[file.id]})).unwrap(),
+            )
+            .await
+            .unwrap();
+        let claim = service.storage.claim_next(30, 3, 10).await.unwrap().unwrap();
+        let hooks = Arc::new(BatchTestHooks {
+            renewal_delay: Duration::from_millis(1100),
+            ..Default::default()
+        });
+        service.storage.batch_test_hooks = Some(hooks.clone());
+        let stop = CancellationToken::new();
+        let owned_stop = stop.clone();
+        let worker = service.clone();
+        let permit = service.permit().unwrap();
+        let mut task = tokio::spawn(async move {
+            run_job(&worker, &claim, permit, &owned_stop).await;
+        });
+        tokio::time::timeout(Duration::from_secs(2), hooks.renewal_started.notified())
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), started.notified())
+            .await
+            .unwrap();
+        release.notify_one();
+        tokio::time::timeout(Duration::from_millis(500), async {
+            while service.workers.available_permits() != 4 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("preparation must complete during the first slow renewal");
+        let completed = tokio::time::timeout(Duration::from_millis(2500), &mut task).await;
+        stop.cancel();
+        let completed = if let Ok(result) = completed {
+            result.unwrap();
+            true
+        } else {
+            task.await.unwrap();
+            false
+        };
+        let object = service.get_file_batch(&store.id, &batch.id).await.unwrap();
+        service.delete_vector_store(&store.id).await.unwrap();
+        service.delete_file(&file.id).await.unwrap();
+        http.abort();
+        let _ = http.await;
+        assert!(
+            completed,
+            "ready preparation was starved behind overdue successful renewals"
+        );
+        assert_eq!(object.file_counts.completed, 1);
     }
 }

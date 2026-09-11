@@ -8,6 +8,23 @@ use crate::{
     },
 };
 
+// Per-storage timing controls keep concurrency regressions deterministic without global failpoints.
+#[cfg(test)]
+#[derive(Default)]
+pub(crate) struct BatchTestHooks {
+    pub after_commit: Option<CommitBarrier>,
+    pub renewal_delay: std::time::Duration,
+    pub renewal_started: tokio::sync::Notify,
+}
+
+#[cfg(test)]
+#[derive(Default)]
+pub(crate) struct CommitBarrier {
+    pub reached: tokio::sync::Notify,
+    pub resume: tokio::sync::Notify,
+    used: std::sync::atomic::AtomicBool,
+}
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub(crate) struct BatchFileOptions {
     pub request: AttachFileRequest,
@@ -96,6 +113,7 @@ impl FileSearchStorage {
             .bind(now)
             .execute(&mut *tx)
             .await?;
+        let mut counts = FileCounts::default();
         for (saved_options, queued) in members {
             let options = &saved_options.request;
             let exists: Option<String> = sqlx::query_scalar(
@@ -127,17 +145,45 @@ impl FileSearchStorage {
                             .into(),
                     ));
                 }
+                counts.completed += 1;
                 "completed"
             } else {
                 sqlx::query("INSERT INTO file_search_attachments (store_id,file_id,created_at,usage_bytes,storage_bytes,data,status,generation) VALUES ($1,$2,$3,0,0,$4,'in_progress',$5)")
                     .bind(store_id).bind(&options.file_id).bind(now).bind(serde_json::to_string(&object)?).bind(&generation).execute(&mut *tx).await?;
+                counts.in_progress += 1;
                 "queued"
             };
+            counts.total += 1;
             sqlx::query("INSERT INTO file_search_jobs (id,batch_id,store_id,file_id,generation,created_at,updated_at,state,options,identity,snapshot) VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,$9,$10)")
                 .bind(uuid::Uuid::now_v7().to_string()).bind(&id).bind(store_id).bind(&options.file_id).bind(generation).bind(now).bind(state).bind(serde_json::to_string(saved_options)?).bind(identity).bind(serde_json::to_string(&object)?).execute(&mut *tx).await?;
         }
+        // Build the response from this transaction's membership. After COMMIT succeeds,
+        // no fallible response read may turn success into a retry of batch creation.
+        let object = FileBatchObject {
+            id,
+            object: "vector_store.files_batch".into(),
+            created_at: now,
+            vector_store_id: store_id.into(),
+            status: if counts.in_progress > 0 {
+                BatchStatus::InProgress
+            } else {
+                BatchStatus::Completed
+            },
+            file_counts: counts,
+        };
         tx.commit().await?;
-        self.batch(store_id, &id).await
+        #[cfg(test)]
+        if let Some(barrier) = self
+            .batch_test_hooks
+            .as_ref()
+            .and_then(|hooks| hooks.after_commit.as_ref())
+        {
+            if !barrier.used.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                barrier.reached.notify_one();
+                barrier.resume.notified().await;
+            }
+        }
+        Ok(object)
     }
 
     pub(crate) async fn batch(&self, store_id: &str, id: &str) -> Result<FileBatchObject, FileSearchError> {
@@ -322,6 +368,11 @@ impl FileSearchStorage {
         }
         let n=sqlx::query("UPDATE file_search_jobs SET lease_until=$3,updated_at=$4 WHERE id=$1 AND claim_token=$2 AND state='running' AND lease_until>$4").bind(&job.id.0).bind(&job.token.0).bind(now+lease).bind(now).execute(&mut *tx).await?.rows_affected();
         tx.commit().await?;
+        #[cfg(test)]
+        if let Some(hooks) = &self.batch_test_hooks {
+            hooks.renewal_started.notify_one();
+            tokio::time::sleep(hooks.renewal_delay).await;
+        }
         Ok(if n == 1 {
             ClaimOutcome::Applied
         } else {

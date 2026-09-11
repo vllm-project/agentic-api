@@ -22,6 +22,8 @@ const MAX_CORPUS_CHUNKS: i64 = 10_000;
 pub(crate) struct FileSearchStorage {
     pool: Arc<DbPool>,
     pgvector: Option<super::pgvector::PgvectorStorage>,
+    #[cfg(test)]
+    pub(crate) batch_test_hooks: Option<Arc<batches::BatchTestHooks>>,
 }
 
 #[derive(FromRow)]
@@ -90,7 +92,11 @@ impl Collection {
 impl FileSearchStorage {
     #[cfg(test)]
     pub(crate) fn new(pool: Arc<DbPool>) -> Self {
-        Self { pool, pgvector: None }
+        Self {
+            pool,
+            pgvector: None,
+            batch_test_hooks: None,
+        }
     }
 
     pub(crate) fn with_backend(
@@ -98,7 +104,12 @@ impl FileSearchStorage {
         backend: &crate::types::file_search::FileSearchBackend,
     ) -> Result<Self, FileSearchError> {
         let pgvector = super::pgvector::PgvectorStorage::from_config(&pool, backend)?;
-        Ok(Self { pool, pgvector })
+        Ok(Self {
+            pool,
+            pgvector,
+            #[cfg(test)]
+            batch_test_hooks: None,
+        })
     }
 
     pub(crate) fn vector_dimensions(&self) -> Option<usize> {
