@@ -57,23 +57,37 @@
 - [ ] Implement nullable/optional expiration timestamps and batch-purpose default expiration. Expired files must disappear from read/list/search and their attachments must be removed; expose cleanup for the lifecycle worker without deleting unrelated uploads.
 - [ ] Test real multipart and download bytes, disconnect/error cleanup, expiration visibility/deletion, legacy reads, and boundary errors on SQLite and PostgreSQL. Run covering service/HTTP tests, changed-target clippy, formatting, and pre-commit; commit signed off and review.
 
-## Task 4: Vector Stores lifecycle and durable file batches
+## Task 4: Vector Stores contracts and expiration
 
 **Branch:** `codex/vector-store-lifecycle`, based on the Files API branch.
 
-**Files:** vector store/file/batch types, storage lifecycle modules/migrations, service lifecycle modules, server vector-store handlers and startup/shutdown, OpenAPI schemas, HTTP/service/model-fixture tests, compatibility documentation.
+**Files:** store/file update and content types, storage/service lifecycle modules and migration, server Vector Stores/file handlers, OpenAPI schemas, HTTP/service/model tests, compatibility documentation.
 
-**Interfaces:** Extend existing `FileSearchService` with update/expiration/content/batch operations. Workers have explicit start/shutdown ownership. Batch ingestion uses Tasks 1–2's atomic vector/model pipeline and Task 3's file visibility rules. Store expiration removes search data without deleting independent uploaded files.
+**Interfaces:** Extend FileSearchService with typed store updates, expiration policies/status, attachment attributes/status filtering, and parsed original content. Expose bounded explicit expiration cleanup for the next layer's runtime. Preserve existing atomic ingestion and immediate visibility rules.
 
-- [ ] Use official Vector Stores/file/batch schemas and the SDK contract cases. Add red tests for store and attribute updates, nullable metadata/expiry, attachment status filtering, parsed content, and per-file batch options/pagination.
-- [ ] Implement typed updates, expiration policies/timestamps and parsed content. Preserve omitted-versus-null semantics. Expired stores must stop search and attachment reads and clean associated state.
-- [ ] Implement batch create/retrieve/cancel/list-files with durable portable state, bounded workers, per-file status/counts, restart recovery, and explicit shutdown. Prevent cancelled/replaced workers from publishing stale results; support multiple server instances safely.
-- [ ] Test partial failure, cancellation during an active model call, restart recovery, expiration, pagination and literal response fields. Include real PostgreSQL lifecycle tests and SQLite tests, not only internal serialization tests.
-- [ ] Run covering tests, changed-target clippy, formatting, and pre-commit; commit signed off and review.
+- [ ] Add red tests for nullable store/attribute updates, expiry, filtered pagination and parsed original content, using official schemas and strict SDK cases.
+- [ ] Implement typed omitted/null/value updates, store expiration/activity, attachment attribute updates and content pages. Expired stores stop serving search data while preserving uploaded files and expired metadata.
+- [ ] Serialize policy updates, expiration cleanup and publication on SQLite/PostgreSQL; recheck visibility after slow model calls and prevent expired stores from reviving.
+- [ ] Test expiration during model calls, policy update versus cleanup, original content without duplicated overlap/context, filtered keyset pagination and independent upload preservation on SQLite and real PostgreSQL.
+- [ ] Run covering service/HTTP/SDK tests, changed-target clippy, formatting and pre-commit; commit signed off and review.
 
-## Task 5: Responses citation events and SDK conformance verification
+## Task 5: Durable Vector Store file batches and worker runtime
 
-**Branch:** `codex/file-search-openai-api`, based on the lifecycle branch.
+**Branch:** `codex/vector-store-batches`, based on the Vector Stores lifecycle branch.
+
+**Files:** typed batch/job contracts, portable durable storage migration/modules, service publication integration and worker runtime, server batch handlers/startup/shutdown, OpenAPI schemas, lifecycle/runtime/HTTP/model tests, documentation.
+
+**Interfaces:** Consume Tasks3–4's file/store visibility and cleanup. Reuse the existing prepared attachment and atomic publication path. Runtime ownership stays separate from the cloneable request service.
+
+- [ ] Add red batch/SDK tests for create/retrieve/cancel/list-files, per-file options/counts, in-progress visibility, partial failure and pagination.
+- [ ] Implement durable membership/jobs, bounded admission, claims/leases/generation fencing and restart recovery. Prevent stale publication after cancellation, claim loss, detach/re-attach, deletion or expiry across multiple server instances.
+- [ ] Wire explicit worker start/shutdown into every server exit path. Shutdown joins owned work and preserves resumability; it does not cancel the API batch. Run prior layers' bounded expiration and durable blob cleanup from this runtime.
+- [ ] Test competing runtimes, lease expiry, blocked-model cancellation, restart, parent mutation, counts/pagination, cleanup replay and shutdown on SQLite and real PostgreSQL.
+- [ ] Run covering service/HTTP/SDK tests, changed-target clippy, formatting and pre-commit; commit signed off and review.
+
+## Task 6: Responses citation events and SDK conformance verification
+
+**Branch:** `codex/file-search-openai-api`, based on the durable batches branch.
 
 **Files:** typed Responses annotation events, executor citation event handling, HTTP/tool tests, SDK contract test/script and CI invocation, OpenAPI schemas, compatibility documentation.
 
