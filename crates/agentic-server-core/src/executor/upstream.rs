@@ -182,6 +182,12 @@ fn finalize_payload(ctx: &RequestContext, acc: ResponseAccumulator) -> ResponseP
         ctx.original_request.previous_response_id.as_deref(),
         ctx.original_request.instructions.as_deref(),
     );
+    payload.tools = ctx.enriched_request.tools.clone().unwrap_or_default();
+    for tool in &mut payload.tools {
+        tool.sanitize_for_persistence();
+    }
+    payload.tool_choice = ctx.enriched_request.tool_choice.clone().unwrap_or_default();
+    payload.parallel_tool_calls = ctx.enriched_request.parallel_tool_calls.unwrap_or(false);
     ctx.inject_ids(&mut payload);
     payload
 }
@@ -334,11 +340,32 @@ fn should_defer_stream_event(frame: &EventFrame, defer_from_output_index: Option
 }
 
 async fn emit_stream_frame(frame: &mut EventFrame, emit_ctx: &mut StreamEmitContext<'_>) -> ExecutorResult<bool> {
+    // Delay file citations until completed text provides validated offsets and
+    // final annotation ordering. Non-file and null upstream annotations pass through.
+    if frame.event_type == SSEEventType::OutputTextAnnotationAdded
+        && frame
+            .wire
+            .rest
+            .get("annotation")
+            .and_then(|annotation| annotation.get("type"))
+            .and_then(Value::as_str)
+            == Some("file_citation")
+    {
+        return Ok(false);
+    }
     apply_context_response_ids(&mut frame.wire, emit_ctx.request);
     emit_ctx
         .registry
         .restore_response_tools(&mut frame.wire, &emit_ctx.request.enriched_request)?;
     emit_ctx.registry.restore_stream_event_wire(&mut frame.wire);
+    for mut annotation in emit_ctx.accumulator.citation_frames(frame, emit_ctx.output_offset)? {
+        if emit_ctx
+            .accumulator
+            .process_event(&mut annotation, emit_ctx.output_offset)
+        {
+            emit_sse_frame(emit_ctx.sender, &annotation).await?;
+        }
+    }
     let emitted = emit_ctx.accumulator.process_event(frame, emit_ctx.output_offset);
     if emitted {
         emit_sse_frame(emit_ctx.sender, frame).await?;

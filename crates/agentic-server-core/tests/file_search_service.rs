@@ -1449,6 +1449,7 @@ async fn postgres_pgvector_indexed_semantics_restart_filters_and_deletion() {
         "coral reef",
         [
             ("region".into(), AttributeValue::String("sea".into())),
+            ("界".repeat(64), AttributeValue::String("文".repeat(512))),
             ("rank".into(), AttributeValue::Number(42.0)),
             ("active".into(), AttributeValue::Boolean(true)),
         ]
@@ -1509,6 +1510,10 @@ async fn postgres_pgvector_indexed_semantics_restart_filters_and_deletion() {
             .is_empty()
     );
     for (filter, expected) in [
+        (
+            serde_json::json!({"type":"eq", "key":"界".repeat(64), "value":"文".repeat(512)}),
+            1,
+        ),
         (serde_json::json!({"type":"eq", "key":"region", "value":"sea"}), 1),
         (serde_json::json!({"type":"ne", "key":"region", "value":"sea"}), 0),
         (serde_json::json!({"type":"ne", "key":"region", "value":5}), 0),

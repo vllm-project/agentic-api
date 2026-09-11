@@ -46,7 +46,7 @@ pub(crate) fn validate_frame(frame: &EventFrame) -> Result<ValidatedFrame<'_>, E
         SSEEventType::OutputItemDone => {
             validate_output_item(frame, event_name, true).map(|item| ValidatedFrame { item: Some(item) })
         }
-        SSEEventType::Other => Ok(ValidatedFrame { item: None }),
+        SSEEventType::OutputTextAnnotationAdded | SSEEventType::Other => Ok(ValidatedFrame { item: None }),
         event_type => {
             let output_index = required_output_index(frame, event_name)?;
             let item_id = validate_event_item_id(frame, event_name)?;
@@ -110,6 +110,7 @@ fn expected_item_type(event_type: SSEEventType) -> Option<SSEItemType> {
         | SSEEventType::ResponseIncomplete
         | SSEEventType::OutputItemAdded
         | SSEEventType::OutputItemDone
+        | SSEEventType::OutputTextAnnotationAdded
         | SSEEventType::Other => None,
     }
 }
@@ -276,6 +277,7 @@ fn validate_event_fields(
         | SSEEventType::McpListToolsInProgress
         | SSEEventType::McpListToolsCompleted
         | SSEEventType::McpListToolsFailed
+        | SSEEventType::OutputTextAnnotationAdded
         | SSEEventType::Other => None,
     };
     if let Some(field) = required {

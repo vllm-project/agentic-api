@@ -83,11 +83,19 @@ fn upstream(items: Vec<Value>, streaming: bool) -> support::MockResponse {
         }
         events.push(json!({"type":"response.output_item.added","output_index":index,"item":started}));
         if item["type"] == "message" {
-            let text = item["content"][0]["text"].as_str().unwrap();
-            events.push(json!({"type":"response.content_part.added","output_index":index,"content_index":0,"item_id":item["id"],"part":{"type":"output_text","text":"","annotations":[]}}));
-            events.push(json!({"type":"response.output_text.delta","output_index":index,"content_index":0,"item_id":item["id"],"delta":text}));
-            events.push(json!({"type":"response.output_text.done","output_index":index,"content_index":0,"item_id":item["id"],"text":text}));
-            events.push(json!({"type":"response.content_part.done","output_index":index,"content_index":0,"item_id":item["id"],"part":item["content"][0]}));
+            for (content_index, part) in item["content"].as_array().unwrap().iter().enumerate() {
+                let text = part["text"].as_str().unwrap();
+                events.push(json!({"type":"response.content_part.added","output_index":index,"content_index":content_index,"item_id":item["id"],"part":{"type":"output_text","text":"","annotations":[]}}));
+                let split = text.find('【').map_or(text.len(), |offset| offset + '【'.len_utf8());
+                for delta in [&text[..split], &text[split..]] {
+                    events.push(json!({"type":"response.output_text.delta","output_index":index,"content_index":content_index,"item_id":item["id"],"delta":delta}));
+                }
+                for (annotation_index, annotation) in part["annotations"].as_array().unwrap().iter().enumerate() {
+                    events.push(json!({"type":"response.output_text.annotation.added","output_index":index,"content_index":content_index,"item_id":item["id"],"annotation_index":annotation_index,"annotation":annotation}));
+                }
+                events.push(json!({"type":"response.output_text.done","output_index":index,"content_index":content_index,"item_id":item["id"],"text":text}));
+                events.push(json!({"type":"response.content_part.done","output_index":index,"content_index":content_index,"item_id":item["id"],"part":part}));
+            }
         }
         events.push(json!({"type":"response.output_item.done","output_index":index,"item":item}));
     }
@@ -155,6 +163,21 @@ fn assert_file_search_stream(events: &[Value], output: &Value) {
         .find(|event| event["type"] == "response.content_part.done")
         .unwrap();
     assert_eq!(content_done["part"], output[1]["content"][0]);
+    let annotations: Vec<_> = events
+        .iter()
+        .filter(|event| event["type"] == "response.output_text.annotation.added")
+        .collect();
+    assert_eq!(
+        annotations.len(),
+        1,
+        "one grounded annotation across all done representations"
+    );
+    assert_eq!(annotations[0]["annotation"], output[1]["content"][0]["annotations"][0]);
+    assert_eq!(annotations[0]["item_id"], "msg_answer");
+    assert_eq!(annotations[0]["output_index"], 1);
+    assert_eq!(annotations[0]["content_index"], 0);
+    assert_eq!(annotations[0]["annotation_index"], 0);
+    assert!(annotations[0]["sequence_number"].as_u64() < content_done["sequence_number"].as_u64());
     assert_eq!(
         events
             .iter()
@@ -162,6 +185,27 @@ fn assert_file_search_stream(events: &[Value], output: &Value) {
             .collect::<Vec<_>>(),
         (0..u64::try_from(events.len()).unwrap()).collect::<Vec<_>>()
     );
+}
+
+async fn assert_stored_effective_tools(ctx: &ExecutionContext, response_id: &str, tools: &Value) {
+    let lookup = support::make_request("", true, false, Some(response_id.to_owned()), None);
+    let stored = ctx
+        .resp_handler
+        .get(&agentic_core::executor::RequestContext {
+            original_request: lookup.clone(),
+            enriched_request: lookup,
+            new_input_items: vec![],
+            response_id: String::new(),
+            conversation_id: None,
+            conversation_version: None,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(stored.metadata.effective_tool_choice).unwrap(),
+        "auto"
+    );
+    assert_eq!(serde_json::to_value(stored.metadata.effective_tools).unwrap(), *tools);
 }
 
 #[tokio::test]
@@ -172,15 +216,23 @@ async fn file_search_blocking_and_streaming_preserve_context_include_and_citatio
             let llm = support::MockServer::start_deque(vec![
                 upstream(vec![search_call()], streaming),
                 upstream(vec![answer(&file_id)], streaming),
-                upstream(vec![answer(&file_id)], false),
+                upstream(vec![answer(&file_id)], streaming),
             ])
             .await;
             let ctx = context(service, llm.url()).await;
             let mut request = support::make_request("What does the coral policy protect?", true, streaming, None, None);
             request.tools =
                 Some(serde_json::from_value(json!([{"type":"file_search","vector_store_ids":[store_id]}])).unwrap());
+            request.tool_choice = Some(agentic_core::types::io::ToolChoice::Required);
             request.include = include_results.then(|| vec!["file_search_call.results".to_owned()]);
             let (response, events) = collect(ExecuteRequest::new(request, Arc::clone(&ctx)).run().await.unwrap()).await;
+            let public = serde_json::to_value(&response).unwrap();
+            assert_eq!(
+                public["tools"],
+                json!([{"type":"file_search", "vector_store_ids":[store_id]}])
+            );
+            assert_eq!(public["tool_choice"], "required");
+            assert_eq!(public["parallel_tool_calls"], false);
             let output = serde_json::to_value(&response.output).unwrap();
             assert_eq!(output[0]["type"], "file_search_call");
             assert_eq!(output[0]["status"], "completed");
@@ -215,8 +267,19 @@ async fn file_search_blocking_and_streaming_preserve_context_include_and_citatio
             if streaming {
                 assert_file_search_stream(&events, &output);
             }
-            let continuation = support::make_request("Explain that policy", true, false, Some(response.id), None);
-            let (continued, _) = collect(ExecuteRequest::new(continuation, ctx).run().await.unwrap()).await;
+            assert_stored_effective_tools(&ctx, &response.id, &public["tools"]).await;
+            let continuation = support::make_request("Explain that policy", true, streaming, Some(response.id), None);
+            let (continued, continued_events) =
+                collect(ExecuteRequest::new(continuation, ctx).run().await.unwrap()).await;
+            if streaming {
+                let annotations: Vec<_> = continued_events
+                    .iter()
+                    .filter(|event| event["type"] == "response.output_text.annotation.added")
+                    .collect();
+                assert_eq!(annotations.len(), 1);
+                assert_eq!(annotations[0]["output_index"], 0);
+                assert_eq!(annotations[0]["annotation"]["file_id"], file_id);
+            }
             let continued = serde_json::to_value(continued).unwrap();
             assert_eq!(
                 continued["output"][0]["content"][0]["annotations"][0]["file_id"],
@@ -386,5 +449,72 @@ async fn file_search_selector_rejects_missing_declaration_before_inference() {
         assert_eq!(error.http_status().as_u16(), 400);
         assert!(error.error_message().contains("requires a declared file_search tool"));
         assert!(llm.request_bodies().await.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn stream_citations_reconcile_upstream_events_and_preserve_other_annotations() {
+    let (service, store_id, file_id, _files) = fixture().await;
+    let url =
+        json!({"type":"url_citation","start_index":0,"end_index":1,"url":"https://example.org","title":"Reference"});
+    let mut message = answer(&file_id);
+    message["content"] = json!([
+        {"type":"output_text", "text":format!("【{file_id}】 and 【{file_id}】 【forged】"), "annotations":[url,
+            {"type":"file_citation","file_id":file_id,"filename":"untrusted.txt","index":0},
+            {"type":"file_citation","file_id":"forged","filename":"forged.txt","index":0}]},
+        {"type":"output_text", "text":format!("Second 【{file_id}】"), "annotations":[]}
+    ]);
+    let mut mock = upstream(vec![message], true);
+    if let support::MockResponse::Sse(body) = &mut mock {
+        let null = json!({"type":"response.output_text.annotation.added","item_id":"msg_answer","output_index":0,"content_index":0,"annotation_index":9,"annotation":null});
+        let done = body.find("\"type\":\"response.content_part.done\"").unwrap();
+        let event_start = body[..done].rfind("data: ").unwrap();
+        body.insert_str(event_start, &format!("data: {null}\n\n"));
+    }
+    let llm = support::MockServer::start_deque(vec![upstream(vec![search_call()], true), mock]).await;
+    let ctx = context(service, llm.url()).await;
+    let mut request = support::make_request("Search", false, true, None, None);
+    request.tools =
+        Some(serde_json::from_value(json!([{"type":"file_search","vector_store_ids":[store_id]}])).unwrap());
+    request.parallel_tool_calls = Some(true);
+    let (response, events) = collect(ExecuteRequest::new(request, ctx).run().await.unwrap()).await;
+    assert!(response.parallel_tool_calls);
+    let output = serde_json::to_value(response.output).unwrap();
+    let annotations: Vec<_> = events
+        .iter()
+        .filter(|event| event["type"] == "response.output_text.annotation.added")
+        .collect();
+    assert_eq!(annotations.len(), 5, "three grounded files, one URL, one null");
+    assert_eq!(annotations.iter().filter(|event| event["annotation"] == url).count(), 1);
+    assert_eq!(
+        annotations.iter().filter(|event| event["annotation"].is_null()).count(),
+        1
+    );
+    let files: Vec<_> = annotations
+        .iter()
+        .filter(|event| event["annotation"]["type"] == "file_citation")
+        .collect();
+    assert_eq!(files.len(), 3);
+    for (event, (content, annotation)) in files.iter().zip([(0, 1), (0, 2), (1, 0)]) {
+        assert_eq!(event["output_index"], 1);
+        assert_eq!(event["content_index"], content);
+        assert_eq!(event["annotation_index"], annotation);
+        assert_eq!(
+            event["annotation"],
+            output[1]["content"][content]["annotations"][annotation]
+        );
+        assert_eq!(event["annotation"]["file_id"], file_id);
+        assert_eq!(event["annotation"]["filename"], "policy.txt");
+        let done = events
+            .iter()
+            .find(|candidate| {
+                candidate["type"] == "response.content_part.done" && candidate["content_index"] == content
+            })
+            .unwrap();
+        assert!(event["sequence_number"].as_u64() < done["sequence_number"].as_u64());
+    }
+    assert_eq!(output[1]["content"][0]["annotations"][0], url);
+    for (sequence, event) in events.iter().enumerate() {
+        assert_eq!(event["sequence_number"], sequence);
     }
 }

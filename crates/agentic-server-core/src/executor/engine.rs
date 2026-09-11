@@ -190,6 +190,7 @@ async fn build_tool_registry(
         }
         None => ToolRegistry::default(),
     };
+    registry.capture_response_tool_choice(&ctx.enriched_request);
     registry.install_tool_search_state(tool_search_state)?;
     registry.cache_listed_mcp_tools(&ctx.enriched_request.input);
     Ok(registry)
@@ -381,9 +382,13 @@ async fn run_compaction_trigger(
         previous_response_id: ctx.original_request.previous_response_id.clone(),
         conversation_id: ctx.conversation_id.clone(),
         instructions,
-        tools: None,
-        tool_choice: None,
+        tools: ctx.enriched_request.tools.clone().unwrap_or_default(),
+        tool_choice: ctx.enriched_request.tool_choice.clone().unwrap_or_default(),
+        parallel_tool_calls: ctx.enriched_request.parallel_tool_calls.unwrap_or(false),
     };
+    for tool in &mut payload.tools {
+        tool.sanitize_for_persistence();
+    }
     ctx.inject_ids(&mut payload);
     Ok((payload, ctx))
 }
@@ -533,10 +538,9 @@ fn finalize_loop(
     payload.output = combined_output;
     payload.usage = combined_usage;
     ctx.inject_ids(payload);
-    if let Some(tools) = registry.response_tools(ctx.enriched_request.tools.as_deref()) {
-        payload.tools = Some(tools);
-        payload.tool_choice = Some(ctx.enriched_request.tool_choice.clone().unwrap_or_default());
-    }
+    payload.tools = registry.response_tools(ctx.enriched_request.tools.as_deref());
+    payload.tool_choice = registry.response_tool_choice(&ctx.enriched_request);
+    payload.parallel_tool_calls = ctx.enriched_request.parallel_tool_calls.unwrap_or(false);
 }
 
 async fn run_blocking(
@@ -656,6 +660,9 @@ struct StreamFailureContext {
     model: String,
     previous_response_id: Option<String>,
     instructions: Option<String>,
+    tools: Vec<crate::types::tools::ResponsesTool>,
+    tool_choice: ToolChoice,
+    parallel_tool_calls: bool,
 }
 
 impl From<&RequestContext> for StreamFailureContext {
@@ -666,6 +673,19 @@ impl From<&RequestContext> for StreamFailureContext {
             model: ctx.enriched_request.model.clone(),
             previous_response_id: ctx.original_request.previous_response_id.clone(),
             instructions: ctx.original_request.instructions.clone(),
+            tools: ctx
+                .enriched_request
+                .tools
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|mut tool| {
+                    tool.sanitize_for_persistence();
+                    tool
+                })
+                .collect(),
+            tool_choice: ctx.enriched_request.tool_choice.clone().unwrap_or_default(),
+            parallel_tool_calls: ctx.enriched_request.parallel_tool_calls.unwrap_or(false),
         }
     }
 }
@@ -689,8 +709,9 @@ impl StreamFailureContext {
             previous_response_id: self.previous_response_id.clone(),
             conversation_id: self.conversation_id.clone(),
             instructions: self.instructions.clone(),
-            tools: None,
-            tool_choice: None,
+            tools: self.tools.clone(),
+            tool_choice: self.tool_choice.clone(),
+            parallel_tool_calls: self.parallel_tool_calls,
         }
     }
 }

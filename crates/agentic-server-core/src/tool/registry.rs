@@ -163,6 +163,7 @@ fn insert_code_interpreter_entry(entries: &mut HashMap<String, ToolEntry>, _para
 /// Maps the name the LLM sees → routing metadata.
 #[derive(Debug, Default)]
 pub struct ToolRegistry {
+    response_tool_choice: Option<ToolChoice>,
     entries: HashMap<String, ToolEntry>,
     file_search_citations: FileSearchCitations,
 
@@ -333,6 +334,7 @@ impl ToolRegistry {
         let custom_tool_map = CustomHandler::build_tool_map(tools);
 
         Ok(Self {
+            response_tool_choice: None,
             file_search_citations: FileSearchCitations::default(),
             entries,
             tool_search: None,
@@ -350,22 +352,32 @@ impl ToolRegistry {
         Ok(())
     }
 
-    /// Public declarations to expose in response metadata. `Some([])` is
-    /// intentionally distinct from an inactive request. Shell declarations are
-    /// also restored because their upstream function shape is private.
+    /// Keep the effective client selection before the execution loop relaxes it to auto.
+    pub(crate) fn capture_response_tool_choice(&mut self, request: &RequestPayload) {
+        self.response_tool_choice = Some(request.tool_choice.clone().unwrap_or_default());
+    }
+
+    pub(crate) fn response_tool_choice(&self, request: &RequestPayload) -> ToolChoice {
+        self.response_tool_choice
+            .as_ref()
+            .or(request.tool_choice.as_ref())
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Sanitized public declarations, including loaded tool-search availability.
+    /// Response metadata must never expose private upstream function lowering.
     #[must_use]
-    pub(crate) fn response_tools(&self, request_tools: Option<&[ResponsesTool]>) -> Option<Vec<ResponsesTool>> {
+    pub(crate) fn response_tools(&self, request_tools: Option<&[ResponsesTool]>) -> Vec<ResponsesTool> {
         let mut tools = if let Some(state) = self.tool_search.as_deref().filter(|state| state.is_active()) {
             state.public_response_tools()
         } else {
-            request_tools
-                .filter(|tools| tools.iter().any(|tool| matches!(tool, ResponsesTool::Shell(_))))?
-                .to_vec()
+            request_tools.unwrap_or_default().to_vec()
         };
         for tool in &mut tools {
             tool.sanitize_for_persistence();
         }
-        Some(tools)
+        tools
     }
 
     /// Move the public tool projection into response persistence metadata.
@@ -399,18 +411,16 @@ impl ToolRegistry {
         let Some(response) = wire.rest.get_mut("response").and_then(Value::as_object_mut) else {
             return Ok(());
         };
-        let Some(tools) = self.response_tools(request.tools.as_deref()) else {
-            return Ok(());
-        };
-        if response.contains_key("tools") {
-            response.insert("tools".to_owned(), serialize_to_value(&tools)?);
-        }
-        if response.contains_key("tool_choice") {
-            response.insert(
-                "tool_choice".to_owned(),
-                serialize_to_value(request.tool_choice.as_ref().unwrap_or(&ToolChoice::Auto))?,
-            );
-        }
+        let tools = self.response_tools(request.tools.as_deref());
+        response.insert("tools".to_owned(), serialize_to_value(&tools)?);
+        response.insert(
+            "tool_choice".to_owned(),
+            serialize_to_value(&self.response_tool_choice(request))?,
+        );
+        response.insert(
+            "parallel_tool_calls".to_owned(),
+            Value::Bool(request.parallel_tool_calls.unwrap_or(false)),
+        );
         Ok(())
     }
 
