@@ -406,6 +406,11 @@ impl ContextualChunking {
         {
             return invalid("invalid contextual chunk size, overlap, model, timeout, or concurrency");
         }
+        if self.context_prompt.matches("{{WHOLE_DOCUMENT}}").count() != 1
+            || self.context_prompt.matches("{{CHUNK_CONTENT}}").count() != 1
+        {
+            return invalid("context_prompt requires each document and chunk placeholder exactly once");
+        }
         match (
             self.context_prompt.find("{{WHOLE_DOCUMENT}}"),
             self.context_prompt.find("{{CHUNK_CONTENT}}"),

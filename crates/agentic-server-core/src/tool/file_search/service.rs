@@ -103,8 +103,19 @@ impl FileSearchService {
         self.storage.initialize().await
     }
 
-    pub(super) fn context_token_limit(&self) -> usize {
-        self.config.chunk_retrieval_params.max_tokens_in_context
+    async fn prepare_context(
+        &self,
+        data: Vec<crate::types::file_search::SearchResult>,
+        permit: Arc<OwnedSemaphorePermit>,
+    ) -> Result<Vec<crate::types::file_search::SearchResult>, FileSearchError> {
+        let budget = self.config.chunk_retrieval_params.max_tokens_in_context;
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let _cancel_on_drop = CancelIngestionOnDrop(cancelled.clone());
+        tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            ingest::limit_context(data, budget, &cancelled)
+        })
+        .await?
     }
 
     fn permit(&self) -> Result<Arc<OwnedSemaphorePermit>, FileSearchError> {
@@ -624,6 +635,23 @@ impl FileSearchService {
         store_ids: &[String],
         request: &SearchRequest,
     ) -> Result<SearchResponse, FileSearchError> {
+        self.search_impl(store_ids, request, false).await
+    }
+
+    pub(super) async fn search_for_tool(
+        &self,
+        store_ids: &[String],
+        request: &SearchRequest,
+    ) -> Result<SearchResponse, FileSearchError> {
+        self.search_impl(store_ids, request, true).await
+    }
+
+    async fn search_impl(
+        &self,
+        store_ids: &[String],
+        request: &SearchRequest,
+        prepare_context: bool,
+    ) -> Result<SearchResponse, FileSearchError> {
         request.validate()?;
         if store_ids.is_empty() || store_ids.len() > 16 || store_ids.iter().any(|id| id.is_empty() || id.len() > 128) {
             return invalid("search requires 1 to 16 vector store IDs of at most 128 bytes each");
@@ -708,6 +736,9 @@ impl FileSearchService {
             data.retain(|result| result.score >= options.score_threshold.unwrap_or(0.0));
         }
         data.truncate(limit);
+        if prepare_context {
+            data = self.prepare_context(data, permit).await?;
+        }
         Ok(SearchResponse {
             object: "vector_store.search_results.page".into(),
             search_query: queries,
@@ -775,6 +806,73 @@ fn page<T>(mut data: Vec<T>, params: &ListParams, id: impl Fn(&T) -> &str) -> Li
 #[cfg(test)]
 mod local_file_tests {
     use super::*;
+
+    #[test]
+    fn cancelled_context_jobs_retain_all_four_slots_until_blocking_work_exits() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .max_blocking_threads(1)
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let directory = tempfile::tempdir().unwrap();
+            let pool = crate::storage::create_pool_with_schema(Some("sqlite::memory:"))
+                .await
+                .unwrap();
+            let service = FileSearchService::new(
+                pool,
+                Arc::new(reqwest::Client::new()),
+                FileSearchConfig {
+                    files_storage_dir: Some(directory.path().to_owned()),
+                    ..FileSearchConfig::default()
+                },
+            )
+            .unwrap();
+            let (release, resume) = std::sync::mpsc::channel();
+            let (started, waiting) = tokio::sync::oneshot::channel();
+            let blocker = tokio::task::spawn_blocking(move || {
+                started.send(()).unwrap();
+                resume.recv().unwrap();
+            });
+            waiting.await.unwrap();
+            let mut jobs = Vec::new();
+            for _ in 0..4 {
+                let mut job = Box::pin(service.prepare_context(Vec::new(), service.permit().unwrap()));
+                assert!(
+                    tokio::time::timeout(std::time::Duration::from_millis(20), &mut job)
+                        .await
+                        .is_err()
+                );
+                jobs.push(job);
+            }
+            let admitted_slots = service.workers.available_permits();
+            drop(jobs);
+            let cancelled_slots = service.workers.available_permits();
+            let fifth_is_busy = service.permit().is_err();
+            // Always release the blocker before assertions, including on the red run.
+            release.send(()).unwrap();
+            blocker.await.unwrap();
+            tokio::time::timeout(std::time::Duration::from_secs(3), async {
+                while service.workers.available_permits() != 4 {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .unwrap();
+            assert_eq!(
+                admitted_slots, 0,
+                "queued context jobs must occupy the four operation slots"
+            );
+            assert_eq!(
+                cancelled_slots, 0,
+                "cancelling the caller cannot release a queued blocking job's slot"
+            );
+            assert!(
+                fifth_is_busy,
+                "new work must be rejected until cancelled blocking work exits"
+            );
+        });
+    }
 
     #[test]
     fn cancelled_local_read_retains_capacity_until_filesystem_io_finishes() {

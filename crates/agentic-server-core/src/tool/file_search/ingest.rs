@@ -236,35 +236,51 @@ fn chunks(text: &str, config: &StaticChunking, cancelled: &AtomicBool) -> Result
 pub(super) fn limit_context(
     results: Vec<crate::types::file_search::SearchResult>,
     mut budget: usize,
-) -> Vec<crate::types::file_search::SearchResult> {
+    cancelled: &AtomicBool,
+) -> Result<Vec<crate::types::file_search::SearchResult>, FileSearchError> {
+    if cancelled.load(Ordering::Relaxed) {
+        return Err(FileSearchError::Unavailable(
+            "File search context preparation was cancelled".into(),
+        ));
+    }
     let tokenizer = tiktoken_rs::cl100k_base_singleton();
-    results
-        .into_iter()
-        .filter(|result| {
-            let mut tokens = 0usize;
-            for content in &result.content {
-                let mut text = content.text.as_str();
-                while !text.is_empty() {
-                    let mut end = text.len().min(TOKENIZATION_BLOCK_BYTES);
-                    while !text.is_char_boundary(end) {
-                        end -= 1;
-                    }
-                    tokens = tokens.saturating_add(tokenizer.encode_ordinary(&text[..end]).len());
-                    if tokens > budget {
-                        return false;
-                    }
-                    text = &text[end..];
+    let mut selected = Vec::with_capacity(results.len());
+    'passages: for result in results {
+        let mut tokens = 0usize;
+        for content in &result.content {
+            let mut text = content.text.as_str();
+            while !text.is_empty() {
+                if cancelled.load(Ordering::Relaxed) {
+                    return Err(FileSearchError::Unavailable(
+                        "File search context preparation was cancelled".into(),
+                    ));
                 }
+                let mut end = text.len().min(TOKENIZATION_BLOCK_BYTES);
+                while !text.is_char_boundary(end) {
+                    end -= 1;
+                }
+                tokens = tokens.saturating_add(tokenizer.encode_ordinary(&text[..end]).len());
+                if tokens > budget {
+                    continue 'passages;
+                }
+                text = &text[end..];
             }
-            budget -= tokens;
-            true
-        })
-        .collect()
+        }
+        budget -= tokens;
+        selected.push(result);
+    }
+    Ok(selected)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cancelled_context_preparation_exits_before_tokenizing() {
+        let cancelled = AtomicBool::new(true);
+        assert!(limit_context(Vec::new(), 4000, &cancelled).is_err());
+    }
 
     #[test]
     fn unicode_tokens_never_split_scalars_or_drop_text() {

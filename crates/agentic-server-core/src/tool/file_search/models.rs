@@ -14,6 +14,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::{sync::Arc, time::Duration};
 
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
+const MAX_REQUEST_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Clone)]
 pub(super) struct Models {
@@ -35,7 +36,7 @@ impl Models {
             FileSearchError::InvalidRequest("rewrite_query requires configured rewrite_query_params".into())
         })?;
         let (provider, model) = self.config.resolve(None, params.model.as_ref())?;
-        let prompt = params.prompt.replace("{query}", &queries.join(" "));
+        let prompt = expand_prompt(&params.prompt, "{query}", &queries.join(" "))?;
         self.chat(
             provider,
             &RetrievalChatRequest {
@@ -59,6 +60,7 @@ impl Models {
         chunks: &[String],
         params: &ContextualChunking,
     ) -> Result<Vec<String>, FileSearchError> {
+        params.validate()?;
         let defaults = &self.config.contextual_retrieval_params;
         let (provider, model) = self
             .config
@@ -70,7 +72,7 @@ impl Models {
             .context_prompt
             .split_once("{{CHUNK_CONTENT}}")
             .ok_or_else(|| FileSearchError::InvalidRequest("contextual chunk placeholder is missing".into()))?;
-        let prefix = prefix.replace("{{WHOLE_DOCUMENT}}", document);
+        let prefix = expand_prompt(prefix, "{{WHOLE_DOCUMENT}}", document)?;
         let concurrency = params
             .max_concurrency
             .unwrap_or(defaults.default_max_concurrency)
@@ -203,16 +205,19 @@ impl Models {
         request: &T,
         timeout: u64,
     ) -> Result<R, FileSearchError> {
-        let bytes = serde_json::to_vec(request)?;
-        if bytes.len() > 32 * 1024 * 1024 {
-            return invalid("model request exceeds 32 MiB");
+        let mut body = LimitedRequestBody::default();
+        if let Err(error) = serde_json::to_writer(&mut body, request) {
+            if body.exceeded {
+                return invalid("model request exceeds 32 MiB");
+            }
+            return Err(error.into());
         }
         let mut request = self
             .client
             .post(provider.endpoint(operation)?)
             .timeout(Duration::from_secs(timeout))
             .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(bytes);
+            .body(body.bytes);
         if let Some(key) = &provider.api_key {
             request = request.bearer_auth(key);
         }
@@ -235,5 +240,97 @@ impl Models {
             bytes.extend_from_slice(&part);
         }
         serde_json::from_slice(&bytes).map_err(FileSearchError::ProviderDecode)
+    }
+}
+
+/// Preflight interpolation before allocating expanded text, including query-list rewrite templates.
+fn expand_prompt(template: &str, placeholder: &str, value: &str) -> Result<String, FileSearchError> {
+    let occurrences = template.matches(placeholder).count();
+    let expanded = value
+        .len()
+        .checked_mul(occurrences)
+        .and_then(|replacements| (template.len() - placeholder.len() * occurrences).checked_add(replacements));
+    if expanded.is_none_or(|size| size > MAX_REQUEST_BYTES) {
+        return invalid("expanded model prompt exceeds 32 MiB");
+    }
+    Ok(template.replace(placeholder, value))
+}
+
+/// Reject writes before growing the request buffer beyond the transport limit.
+#[derive(Default)]
+struct LimitedRequestBody {
+    bytes: Vec<u8>,
+    exceeded: bool,
+}
+impl std::io::Write for LimitedRequestBody {
+    fn write(&mut self, input: &[u8]) -> std::io::Result<usize> {
+        if input.len() > MAX_REQUEST_BYTES - self.bytes.len() {
+            self.exceeded = true;
+            return Err(std::io::Error::other("model request exceeds byte limit"));
+        }
+        let required = self.bytes.len() + input.len();
+        if required > self.bytes.capacity() {
+            let capacity = self
+                .bytes
+                .capacity()
+                .max(4096)
+                .saturating_mul(2)
+                .max(required)
+                .min(MAX_REQUEST_BYTES);
+            self.bytes.reserve_exact(capacity - self.bytes.len());
+        }
+        self.bytes.extend_from_slice(input);
+        Ok(input.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::ser::SerializeSeq;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn query_template_expansion_is_checked_before_allocating() {
+        assert!(expand_prompt(&"{query}".repeat(2000), "{query}", &"x".repeat(64 * 1024)).is_err());
+        assert_eq!(
+            expand_prompt("Query: {query}", "{query}", "coral").unwrap(),
+            "Query: coral"
+        );
+    }
+
+    struct CountedRequest<'a>(&'a AtomicUsize);
+    impl Serialize for CountedRequest<'_> {
+        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            let mut sequence = serializer.serialize_seq(Some(33_000))?;
+            let text = "x".repeat(1024);
+            for _ in 0..33_000 {
+                self.0.fetch_add(1, Ordering::Relaxed);
+                sequence.serialize_element(&text)?;
+            }
+            sequence.end()
+        }
+    }
+
+    #[tokio::test]
+    async fn oversized_request_stops_serialization_at_the_byte_limit() {
+        let models = Models::new(
+            Arc::new(reqwest::Client::new()),
+            Arc::new(VectorStoresConfig::default()),
+        );
+        let provider: ModelProvider =
+            serde_json::from_str(r#"{"base_url":"http://127.0.0.1:9/v1","models":["unused"]}"#).unwrap();
+        let serialized = AtomicUsize::new(0);
+        let result: Result<RetrievalChatResponse, _> = models
+            .post(&provider, "chat/completions", &CountedRequest(&serialized), 1)
+            .await;
+        assert_eq!(result.err().unwrap().status_code(), 400);
+        assert!(
+            serialized.load(Ordering::Relaxed) < 33_000,
+            "serialization must stop at the limit, before traversing the entire payload"
+        );
     }
 }

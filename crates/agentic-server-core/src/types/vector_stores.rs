@@ -76,7 +76,7 @@ pub enum Ranker {
     Classifier,
     #[serde(rename = "default-2024-11-15")]
     Default20241115,
-    #[serde(rename = "default_2024_08_21")]
+    #[serde(rename = "default-2024-08-21", alias = "default_2024_08_21")]
     Default20240821,
 }
 impl Ranker {
@@ -337,7 +337,7 @@ impl std::str::FromStr for Ranker {
             "neural" => Ok(Self::Neural),
             "classifier" => Ok(Self::Classifier),
             "default-2024-11-15" => Ok(Self::Default20241115),
-            "default_2024_08_21" => Ok(Self::Default20240821),
+            "default-2024-08-21" | "default_2024_08_21" => Ok(Self::Default20240821),
             _ => invalid("unsupported file search ranker"),
         }
     }

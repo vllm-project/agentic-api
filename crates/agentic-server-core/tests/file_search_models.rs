@@ -272,7 +272,13 @@ async fn reranker_sees_candidates_before_truncation_and_none_bypasses_model() {
         None,
     )
     .await;
-    for ranker in ["neural", "classifier", "default-2024-11-15", "default_2024_08_21"] {
+    for ranker in [
+        "neural",
+        "classifier",
+        "default-2024-11-15",
+        "default-2024-08-21",
+        "default_2024_08_21",
+    ] {
         let request: SearchRequest =
             serde_json::from_value(json!({"query":"coral","max_num_results":1,"ranking_options":{"ranker":ranker}}))
                 .unwrap();
@@ -289,7 +295,7 @@ async fn reranker_sees_candidates_before_truncation_and_none_bypasses_model() {
             .unwrap();
     setup.service.search(&[store.id], &request).await.unwrap();
     let requests = setup.state.requests.lock().unwrap();
-    assert_eq!(requests.len(), 4);
+    assert_eq!(requests.len(), 5);
     assert_eq!(requests[0].1["model"], "org/rerank");
     assert_eq!(requests[0].1["documents"].as_array().unwrap().len(), 2);
 }
@@ -805,4 +811,61 @@ async fn provider_routing_keeps_embedding_and_generation_credentials_independent
         *generation.state.authorization.lock().unwrap(),
         vec!["Bearer generation-secret", "Bearer generation-secret"]
     );
+}
+
+#[tokio::test]
+async fn repeated_context_placeholders_are_rejected_before_expansion_or_model_calls() {
+    let setup = setup(true).await;
+    let contextual = ContextualChunking {
+        context_prompt: format!("{}{{{{CHUNK_CONTENT}}}}", "{{WHOLE_DOCUMENT}}".repeat(900)),
+        ..ContextualChunking::default()
+    };
+    // Validate before allocating the large document: the old implementation would amplify it 900-fold.
+    assert!(contextual.validate().is_err());
+    let file = setup
+        .service
+        .upload_file(
+            "amplification.txt",
+            "text/plain",
+            "assistants",
+            "word ".repeat(79_000).into_bytes(),
+        )
+        .await
+        .unwrap();
+    let store = setup
+        .service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    let error = setup
+        .service
+        .attach_file(
+            &store.id,
+            AttachFileRequest {
+                file_id: file.id,
+                chunking_strategy: Some(ChunkingStrategy::Contextual { contextual }),
+                ..AttachFileRequest::default()
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.status_code(), 400);
+    assert!(setup.state.requests.lock().unwrap().is_empty());
+    assert_eq!(
+        setup
+            .service
+            .get_vector_store(&store.id)
+            .await
+            .unwrap()
+            .file_counts
+            .total,
+        0
+    );
+}
+
+#[test]
+fn hyphenated_openai_ranker_is_accepted_in_deployment_configuration() {
+    let ranker: Ranker = serde_json::from_str("\"default-2024-08-21\"").unwrap();
+    assert_eq!(ranker, Ranker::Default20240821);
+    assert_eq!(serde_json::to_string(&ranker).unwrap(), "\"default-2024-08-21\"");
 }

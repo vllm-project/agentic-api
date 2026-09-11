@@ -136,8 +136,8 @@ overrides the deployment timeout (10–600, default 120). `max_concurrency` (1�
 can reduce per-ingestion concurrency, still capped by the deployment's shared
 contextual semaphore (1–32, default 3). Document size uses a character-count/4 token
 estimate, bounded by `max_document_tokens` (1000–1000000) and existing extraction
-byte limits. Optional `context_prompt` must contain `{{WHOLE_DOCUMENT}}` before
-`{{CHUNK_CONTENT}}` and fit 16 KiB.
+byte limits. Optional `context_prompt` must contain `{{WHOLE_DOCUMENT}}` exactly
+once before `{{CHUNK_CONTENT}}`, also exactly once, and fit 16 KiB.
 
 The model receives the document as a shared system prefix and the chunk in a user
 message, with temperature zero and at most 256 output tokens. Nonempty context is
@@ -145,8 +145,9 @@ prepended to the embedding input and stored separately as `embedding_text`.
 Returned/cited source text stays original. Every context call must succeed before
 embedding or publishing the attachment; partial failure, timeout, cancellation,
 or malformed/empty output publishes nothing. Contextual ingestion requires
-embeddings. Calls have no retries or silent fallback. Model request bodies are
-limited to 32 MiB, chat/rerank responses to 1 MiB, contextual output to 8 KiB, and
+embeddings. Calls have no retries or silent fallback. Prompt expansion is
+size-checked before allocation. JSON request bodies are bounded to 32 MiB while
+being serialized, chat/rerank responses to 1 MiB, contextual output to 8 KiB, and
 rewritten queries to 4096 bytes. Rewrite and rerank calls time out after 45 seconds.
 
 ### Rewrite and ranking semantics
@@ -172,9 +173,9 @@ remain supported; do not combine these two weight forms. Explicit parameters
 override deployment defaults. Fusion weights require hybrid mode. Neural score
 blending is not supported.
 
-OpenAI selectors `default-2024-11-15` (vector store search) and
-`default_2024_08_21` (Responses file search) select the configured model ranker;
-they do not reproduce OpenAI's hosted models or scores. `ranking_options.model`
+OpenAI selectors `default-2024-11-15` and `default-2024-08-21` select the configured
+model ranker; `default_2024_08_21` remains accepted as a compatibility alias. These
+selectors do not reproduce OpenAI's hosted models or scores. `ranking_options.model`
 overrides `default_reranker_model` for both neural and classifier ranking. Missing
 model configuration is an error. Both use vLLM/Cohere-style text reranking
 (`documents`, `top_n`, `results`) before final truncation. The deployment
@@ -195,7 +196,10 @@ Provider errors return no partial search response.
 The Responses tool keeps whole source chunks within `max_tokens_in_context`
 (1–32768, default 4000), using bounded `cl100k_base` token counting. Chunks that do
 not fit are omitted. Direct search is independent of that context budget.
-Citation item types and file IDs remain unchanged.
+Search and context preparation share the service admission slot; queued or running
+tokenization retains that slot until it exits, including after caller cancellation.
+Cancellation is checked between bounded tokenization blocks. Citation item types
+and file IDs remain unchanged.
 
 ## Select PostgreSQL indexed retrieval
 
