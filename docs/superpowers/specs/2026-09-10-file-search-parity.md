@@ -13,9 +13,12 @@ the missing OGX capabilities and OpenAI API operations as stacked PRs.
 3. `codex/file-search-retrieval`, based on the pgvector branch: OGX-style vector
    store configuration, contextual chunk embeddings, neural/classifier
    reranking, configurable fusion, and query rewriting.
-4. `codex/file-search-openai-api`, based on the retrieval branch: remaining
-   Files/Vector Stores contracts, updates, expiration, asynchronous durable file
-   batches, parsed content, and Responses annotation streaming compatibility.
+4. `codex/files-api`, based on the retrieval branch: streaming Files API,
+   documented upload purposes, expiration and list/delete contracts.
+5. `codex/vector-store-lifecycle`, based on the Files API branch: store/file
+   updates, expiration, asynchronous durable batches and parsed content.
+6. `codex/file-search-openai-api`, based on the lifecycle branch: Responses
+   annotation events, SDK contract verification and compatibility documentation.
 
 Each layer must build and pass its relevant tests independently. Open PRs only
 after pre-commit verification, with Summary and Test Plan sections, explicit
