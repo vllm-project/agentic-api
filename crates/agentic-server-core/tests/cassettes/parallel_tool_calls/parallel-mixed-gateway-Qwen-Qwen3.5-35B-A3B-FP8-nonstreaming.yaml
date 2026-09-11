@@ -43,53 +43,42 @@ turns:
   response:
     body:
       conversation_id: null
-      created_at: 1788257381
+      created_at: 1789100620
       error: null
-      id: resp_01a05c72-25cf-74f1-a923-76de9d59a9b7
+      id: resp_01a08eb4-f72f-7991-b9fb-3a5640701062
       incomplete_details: null
       instructions: null
       model: Qwen/Qwen3.5-35B-A3B-FP8
       object: response
       output:
       - content:
-        - text: 'The user wants me to do three things in parallel in a single turn:
+        - text: 'The user wants me to do three things in parallel:
 
             1. Call get_weather for "Tokyo"
 
-            2. Call set_temperature_unit to set the unit to "fahrenheit"
+            2. Call set_temperature_unit to set to "fahrenheit"
 
-            3. Search the web for "Tokyo weather today"
-
-
-            I can use the web_search function for the third item, get_weather for
-            the first, and set_temperature_unit for the second. Let me make these
-            three calls in parallel.
+            3. Call web_search for "Tokyo weather today"
 
 
-            For set_temperature_unit, the input should be "fahrenheit" as plain text
-            according to the description.
-
-
-            For get_weather, the city parameter should be "Tokyo".
-
-
-            For web_search, the query should be "Tokyo weather today".
+            I need to make all three function calls in a single turn. Let me structure
+            this properly.
 
             '
           type: reasoning_text
         encrypted_content: null
-        id: rs_a36d41d75e0f3573
+        id: rs_a48b9075525fe346
         status: null
         summary: []
         type: reasoning
       - arguments: '{"city": "Tokyo"}'
-        call_id: chatcmpl-tool-b43577f763b96804
-        id: fc_b95acd1cd53501a7
+        call_id: chatcmpl-tool-98bfb82f7c21a9bc
+        id: fc_99a2151e9872f7e3
         name: get_weather
         status: completed
         type: function_call
-      - call_id: chatcmpl-tool-a717cb0e37bb56a9
-        id: ctc_bcffe761b9af01cf
+      - call_id: chatcmpl-tool-8e51137f3a21add8
+        id: ctc_a1d2daac2c03b92b
         input: fahrenheit
         name: set_temperature_unit
         status: completed
@@ -106,34 +95,34 @@ turns:
             url: https://weather.com/jp/tokyo-prefecture/city/tokyo/tenday
           - title: Weather & Geography | Japan's Weather | Travel Japan | JNTO
             url: https://www.japan.travel/en/weather/
+          - title: Tokyo, JP Hourly Weather Forecast | Weather Underground
+            url: https://www.wunderground.com/hourly/jp/tokyo
           - title: Japan Meteorological Agency | Weather forecast
             url: https://www.data.jma.go.jp/multi/yoho/yoho_detail.html?code=130010&lang=en
-          - title: Tokyo, Japan Hourly Weather Forecast | Weather Underground
-            url: https://www.wunderground.com/hourly/jp/tokyo
           - title: Tokyo - BBC Weather
             url: https://www.bbc.com/weather/1850147
+          - title: Tokyo, JP Weather Forecast, Conditions, and Maps – Yahoo Weather
+            url: https://weather.yahoo.com/jp/tokyo-prefecture/tokyo/
           - title: Tokyo, Japan Weather Conditions | Weather Underground
             url: https://www.wunderground.com/weather/jp/tokyo
           - title: Tokyo, Japan 14 day weather forecast
             url: https://www.timeanddate.com/weather/japan/tokyo/ext
-          - title: Tokyo, JP Weather Forecast, Conditions, and Maps – Yahoo Weather
-            url: https://weather.yahoo.com/jp/tokyo-prefecture/tokyo/
-          - title: Japan Weather Forecast | NHK WORLD-JAPAN News
-            url: https://www3.nhk.or.jp/nhkworld/news/weather/
+          - title: Yr - Tokyo - Detailed weather forecast as a table
+            url: https://www.yr.no/en/details/table/2-1850147/Japan/Tokyo/Tokyo
           type: search
-        id: ws_9592b419b8a63a35
+        id: ws_bdce6ba21fc74539
         status: completed
         type: web_search_call
       previous_response_id: null
       status: completed
       usage:
-        input_tokens: 893
+        input_tokens: 901
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 228
+        output_tokens: 155
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 1121
+        total_tokens: 1056
     headers:
       content-type: application/json
     status_code: 200
@@ -141,10 +130,10 @@ turns:
   request:
     body:
       input:
-      - call_id: chatcmpl-tool-b43577f763b96804
+      - call_id: chatcmpl-tool-98bfb82f7c21a9bc
         output: '{"city": "Tokyo", "temperature_c": 22, "condition": "Clear"}'
         type: function_call_output
-      - call_id: chatcmpl-tool-a717cb0e37bb56a9
+      - call_id: chatcmpl-tool-8e51137f3a21add8
         output: '{"status": "ok", "unit": "fahrenheit"}'
         type: custom_tool_call_output
       - content: Now report Tokyo's current temperature using the unit I just told
@@ -154,7 +143,7 @@ turns:
       max_output_tokens: 2048
       model: Qwen/Qwen3.5-35B-A3B-FP8
       parallel_tool_calls: true
-      previous_response_id: resp_01a05c72-25cf-74f1-a923-76de9d59a9b7
+      previous_response_id: resp_01a08eb4-f72f-7991-b9fb-3a5640701062
       store: true
       stream: false
       tool_choice: auto
@@ -188,40 +177,27 @@ turns:
   response:
     body:
       conversation_id: null
-      created_at: 1788257383
+      created_at: 1789100622
       error: null
-      id: resp_01a05c72-2cdc-7e30-9799-ed38e34d8354
+      id: resp_01a08eb4-fc77-7ff0-9742-f4610a3171b8
       incomplete_details: null
       instructions: null
       model: Qwen/Qwen3.5-35B-A3B-FP8
       object: response
       output:
       - content:
-        - text: 'The user asked me to call three tools in parallel: (1) get_weather
-            for Tokyo, (2) set_temperature_unit to fahrenheit, and (3) web search
-            for "Tokyo weather today". I''ve now received results from all three.
-            The get_weather tool returned 22°C in Tokyo with clear conditions. The
-            set_temperature_unit returned success for fahrenheit. The web search returned
-            various weather sources for Tokyo.
-
-
-            Now the user is asking me to report Tokyo''s current temperature using
-            the unit they just told me to prefer (fahrenheit). The get_weather result
-            shows 22°C, so I need to convert this to fahrenheit: 22°C × 9/5 + 32 =
-            71.6°F (or approximately 72°F).
-
-
-            Let me convert 22°C to Fahrenheit properly: F = (C × 9/5) + 32 = (22 ×
-            1.8) + 32 = 39.6 + 32 = 71.6°F
-
-
-            So I should report that Tokyo''s current temperature is approximately
-            72°F (or 71.6°F).
-
-            '
+        - text: "The user asked me to set their temperature unit to fahrenheit, and\
+            \ I did that. Now they want me to report Tokyo's current temperature using\
+            \ that preferred unit. \n\nFrom the get_weather call, I got that Tokyo's\
+            \ temperature is 22°C. Since the user wants it in fahrenheit, I need to\
+            \ convert 22°C to fahrenheit.\n\nThe formula for converting Celsius to\
+            \ Fahrenheit is: F = (C × 9/5) + 32\n\nSo: F = (22 × 9/5) + 32 = (198/5)\
+            \ + 32 = 39.6 + 32 = 71.6°F\n\nRounded to a reasonable number, that would\
+            \ be about 72°F.\n\nI have all the information I need - the weather data\
+            \ from the get_weather call and the unit preference from set_temperature_unit.\n"
           type: reasoning_text
         encrypted_content: null
-        id: rs_b596cf7142590aba
+        id: rs_b8e65a2487881659
         status: null
         summary: []
         type: reasoning
@@ -230,23 +206,23 @@ turns:
           text: '
 
 
-            Based on the weather data, Tokyo''s current temperature is **72°F** (22°C).
-            The weather condition is clear.'
+            Tokyo''s current temperature is **72°F** (22°C). The weather is currently
+            clear.'
           type: output_text
-        id: msg_ac7c4e463ce06ab0
+        id: msg_8cfaa76080509dd0
         role: assistant
         status: completed
         type: message
-      previous_response_id: resp_01a05c72-25cf-74f1-a923-76de9d59a9b7
+      previous_response_id: resp_01a08eb4-f72f-7991-b9fb-3a5640701062
       status: completed
       usage:
-        input_tokens: 3546
+        input_tokens: 3447
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 273
+        output_tokens: 213
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 3819
+        total_tokens: 3660
     headers:
       content-type: application/json
     status_code: 200

@@ -3,7 +3,7 @@ use crate::executor::persist::persist_prepared_turn;
 use crate::executor::prepare::prepare_request_tools;
 use crate::executor::rehydrate::rehydrate_conversation;
 use crate::executor::request::{ExecutionContext, RequestContext};
-use crate::executor::upstream::fetch_blocking_payload;
+use crate::executor::upstream::{agent_pipeline, fetch_blocking_payload};
 use crate::tool::ToolSearchState;
 use crate::types::event::MessageStatus;
 use crate::types::io::input::latest_compaction_window;
@@ -418,7 +418,9 @@ pub(crate) async fn compact_items(
         conversation_id: None,
         conversation_version: None,
     };
-    let response = fetch_blocking_payload(&ctx, exec_ctx, auth, &crate::tool::ToolRegistry::default(), None).await?;
+    let mut agent = agent_pipeline(ctx, None, None);
+    let response =
+        fetch_blocking_payload(&mut agent, exec_ctx, auth, &crate::tool::ToolRegistry::default(), None).await?;
     let summary = completed_summary_text(&response)?;
 
     Ok((
