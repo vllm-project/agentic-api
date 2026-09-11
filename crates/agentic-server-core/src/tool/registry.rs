@@ -1,33 +1,26 @@
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
 use std::future::{Future, ready};
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use super::codex::insert_namespace_entries;
 use super::custom::{CustomHandler, CustomToolMap, insert_custom_entry};
 use super::executors::GatewayExecutors;
-use super::file_search::handler::{FileSearchCitations, insert_file_search_entry};
+use super::file_search::handler::insert_file_search_entry;
 use super::function::insert_function_entry;
 use super::mcp::registry::insert_discovered_mcp_entry;
 use super::ownership::{GatewayBinding, ToolOwnership};
 use super::shell::insert_shell_entry;
-use super::tool_search::{
-    TOOL_SEARCH_NAME, ensure_request_prepared, insert_tool_search_entry, validate_blocking_response,
-};
+use super::tool_search::{TOOL_SEARCH_NAME, insert_tool_search_entry};
 use super::web_search::insert_web_search_entry;
-use super::{
-    CodexNamespaceHandler, McpHandler, NamespaceMap, ToolError, ToolOutput, ToolSearchMetadata, ToolSearchState,
-};
-use crate::events::WireEvent;
+use super::{CodexNamespaceHandler, McpHandler, NamespaceMap, ToolError, ToolOutput};
 
 use crate::types::io::output::{FunctionToolCall, McpListTools};
-use crate::types::io::{InputItem, OutputItem, ResponsesInput, ToolChoice};
-use crate::types::request_response::RequestPayload;
+use crate::types::io::{InputItem, ResponsesInput};
 use crate::types::tools::{CodeInterpreterToolParam, ResponsesTool};
-use crate::utils::common::serialize_to_value;
 
 const MAX_MCP_SERVERS_PER_REQUEST: usize = 64;
 const MAX_DISCOVERED_MCP_TOOLS_PER_REQUEST: usize = 128;
@@ -164,13 +157,8 @@ fn insert_code_interpreter_entry(entries: &mut HashMap<String, ToolEntry>, _para
 #[derive(Debug, Default)]
 pub struct ToolRegistry {
     entries: HashMap<String, ToolEntry>,
-    file_search_citations: FileSearchCitations,
 
-    /// Prepared public/private tool-search projection for this request.
-    tool_search: Option<Box<ToolSearchState>>,
-
-    /// Built once from the declared tools, so final payload and streaming event
-    /// restoration don't rebuild it on every call.
+    /// Original namespace lookup facts, built once from the declared tools.
     namespace_map: Option<NamespaceMap>,
 
     /// Maps normalized custom function names back to their public declarations
@@ -333,85 +321,19 @@ impl ToolRegistry {
         let custom_tool_map = CustomHandler::build_tool_map(tools);
 
         Ok(Self {
-            file_search_citations: FileSearchCitations::default(),
             entries,
-            tool_search: None,
             namespace_map,
             custom_tool_map,
             mcp_list_tools_items,
         })
     }
 
-    pub(crate) fn install_tool_search_state(&mut self, state: Option<ToolSearchState>) -> Result<(), ToolError> {
-        if let Some(state) = state {
-            self.validate_tool_search_state(&state)?;
-            self.tool_search = Some(Box::new(state));
-        }
-        Ok(())
+    pub(crate) fn namespace_map(&self) -> Option<&NamespaceMap> {
+        self.namespace_map.as_ref()
     }
 
-    /// Public declarations to expose in response metadata. `Some([])` is
-    /// intentionally distinct from an inactive request. Shell declarations are
-    /// also restored because their upstream function shape is private.
-    #[must_use]
-    pub(crate) fn response_tools(&self, request_tools: Option<&[ResponsesTool]>) -> Option<Vec<ResponsesTool>> {
-        let mut tools = if let Some(state) = self.tool_search.as_deref().filter(|state| state.is_active()) {
-            state.public_response_tools()
-        } else {
-            request_tools
-                .filter(|tools| tools.iter().any(|tool| matches!(tool, ResponsesTool::Shell(_))))?
-                .to_vec()
-        };
-        for tool in &mut tools {
-            tool.sanitize_for_persistence();
-        }
-        Some(tools)
-    }
-
-    /// Move the public tool projection into response persistence metadata.
-    pub(crate) fn take_tool_search_metadata(&mut self) -> Option<ToolSearchMetadata> {
-        self.tool_search
-            .take()
-            .filter(|state| state.is_active())
-            .map(|state| (*state).into_public_metadata())
-    }
-
-    pub(crate) fn validate_blocking_response(&self, body: &str) -> Result<(), ToolError> {
-        let empty = HashSet::new();
-        let state = self.tool_search.as_deref();
-        validate_blocking_response(
-            body,
-            state.is_some_and(ToolSearchState::is_active),
-            state.map_or(&empty, ToolSearchState::withheld_function_names),
-        )
-    }
-
-    /// Ensure tool-search requests went through the request-scoped preparation seam.
-    pub(crate) fn ensure_request_prepared(&self, request: &RequestPayload) -> Result<(), ToolError> {
-        ensure_request_prepared(request, self.tool_search.is_some())
-    }
-
-    pub(crate) fn restore_response_tools(
-        &self,
-        wire: &mut WireEvent,
-        request: &RequestPayload,
-    ) -> Result<(), serde_json::Error> {
-        let Some(response) = wire.rest.get_mut("response").and_then(Value::as_object_mut) else {
-            return Ok(());
-        };
-        let Some(tools) = self.response_tools(request.tools.as_deref()) else {
-            return Ok(());
-        };
-        if response.contains_key("tools") {
-            response.insert("tools".to_owned(), serialize_to_value(&tools)?);
-        }
-        if response.contains_key("tool_choice") {
-            response.insert(
-                "tool_choice".to_owned(),
-                serialize_to_value(request.tool_choice.as_ref().unwrap_or(&ToolChoice::Auto))?,
-            );
-        }
-        Ok(())
+    pub(crate) fn custom_tool_map(&self) -> Option<&CustomToolMap> {
+        self.custom_tool_map.as_ref()
     }
 
     #[must_use]
@@ -420,22 +342,14 @@ impl ToolRegistry {
     }
 
     pub(crate) fn tool_type(&self, name: &str) -> ToolType {
-        if name == TOOL_SEARCH_NAME && self.tool_search.as_deref().is_some_and(ToolSearchState::is_active) {
-            return ToolType::ToolSearch;
-        }
         self.entries
             .get(name)
             .map_or(ToolType::Function, |entry| entry.tool_type)
     }
 
-    pub(crate) fn is_withheld_function(&self, name: &str) -> bool {
-        self.tool_search
-            .as_deref()
-            .is_some_and(|state| state.withheld_function_names().contains(name))
-    }
-
-    pub(crate) fn tool_search_is_active(&self) -> bool {
-        self.tool_type(TOOL_SEARCH_NAME) == ToolType::ToolSearch
+    /// Effective classification facts, without execution bindings.
+    pub(crate) fn tool_classifications(&self) -> impl Iterator<Item = (&str, ToolType)> {
+        self.entries.keys().map(|name| (name.as_str(), self.tool_type(name)))
     }
 
     #[cfg(test)]
@@ -508,23 +422,20 @@ impl ToolRegistry {
         self.mcp_list_tools_items.clear();
     }
 
-    /// Validate the private dispatch table against prepared tool-search state.
-    fn validate_tool_search_state(&self, state: &ToolSearchState) -> Result<(), ToolError> {
-        if !state.is_active() {
-            return Ok(());
-        }
-        if self
-            .entries
-            .keys()
-            .any(|name| state.withheld_function_names().contains(name))
-        {
+    /// Check catalog entries against borrowed availability constraints without retaining request state.
+    pub(crate) fn validate_tool_availability(
+        &self,
+        withheld_function_names: &HashSet<String>,
+        requires_tool_search: bool,
+    ) -> Result<(), ToolError> {
+        if self.entries.keys().any(|name| withheld_function_names.contains(name)) {
             return Err(ToolError::Config(
                 "a loaded tool collides with a withheld function name".to_owned(),
             ));
         }
-        let Some(_) = state.synthetic_tool_search() else {
+        if !requires_tool_search {
             return Ok(());
-        };
+        }
         let entry = self.entries.get(TOOL_SEARCH_NAME).ok_or_else(|| {
             ToolError::Config("prepared tool-search declaration is missing from the private registry".to_owned())
         })?;
@@ -534,23 +445,6 @@ impl ToolRegistry {
             ));
         }
         Ok(())
-    }
-
-    pub(crate) fn cache_file_search_context(&mut self, input: &ResponsesInput) {
-        self.file_search_citations = FileSearchCitations::from_input(input);
-    }
-
-    pub fn restore_final_payload_output(&self, output: &mut [OutputItem]) {
-        for item in output.iter_mut() {
-            self.file_search_citations.restore_output(item);
-        }
-        CodexNamespaceHandler.restore_output_items(output, self.namespace_map.as_ref());
-    }
-
-    pub fn restore_stream_event_wire(&self, wire: &mut WireEvent) -> bool {
-        self.file_search_citations.restore_wire(wire);
-        let custom_restored = CustomHandler::restore_response_wire(wire, self.custom_tool_map.as_ref());
-        CodexNamespaceHandler.restore_response_wire(wire, self.namespace_map.as_ref()) | custom_restored
     }
 
     /// Returns the subset of `calls` whose names map to gateway-owned tools.
@@ -634,7 +528,6 @@ mod tests {
     use super::*;
     use crate::tool::executors::GatewayExecutorRegistration;
     use crate::tool::mcp::{McpDiscoveredHandler, McpHandler};
-    use crate::types::event::MessageStatus;
     use crate::types::io::output::McpListTool;
     use crate::types::tools::McpDiscoveredToolParam;
 
@@ -657,6 +550,16 @@ mod tests {
             "server_label": server_label
         }))
         .expect("MCP declaration")
+    }
+
+    fn unreachable_declaration(server_label: &str) -> ResponsesTool {
+        serde_json::from_value(serde_json::json!({
+            "type": "mcp",
+            "server_label": server_label,
+            "server_url": "http://127.0.0.1:1/mcp",
+            "require_approval": "never"
+        }))
+        .expect("unreachable MCP declaration")
     }
 
     fn discovered_handler(server_label: &str, tool_name: &str, internal_name: &str) -> McpDiscoveredHandler {
@@ -723,21 +626,52 @@ mod tests {
         .expect("mixed tool declarations")
     }
 
-    fn assert_namespace_call_restoration(registry: &ToolRegistry) {
-        let mut output = vec![OutputItem::FunctionCall(FunctionToolCall {
-            id: "fc_1".to_owned(),
-            call_id: "call_1".to_owned(),
-            name: "agentic_ns__mcp__shell__run".to_owned(),
-            namespace: None,
-            arguments: "{}".to_owned(),
-            status: MessageStatus::Completed,
-        })];
-        registry.restore_final_payload_output(&mut output);
-        let OutputItem::FunctionCall(call) = &output[0] else {
-            panic!("expected restored function call");
-        };
-        assert_eq!(call.namespace.as_deref(), Some("mcp__shell"));
-        assert_eq!(call.name, "run");
+    #[test]
+    fn catalog_validation_uses_borrowed_availability_constraints() {
+        let withheld = HashSet::from(["hidden".to_owned()]);
+        let registry = ToolRegistry::from_tool_types(HashMap::from([
+            (TOOL_SEARCH_NAME.to_owned(), ToolType::ToolSearch),
+            ("weather".to_owned(), ToolType::Function),
+        ]));
+        registry.validate_tool_availability(&withheld, true).unwrap();
+        assert!(registry.lookup("weather").is_some());
+        assert!(registry.lookup("hidden").is_none());
+        let collision = HashSet::from(["weather".to_owned()]);
+        assert!(
+            registry
+                .validate_tool_availability(&collision, true)
+                .unwrap_err()
+                .to_string()
+                .contains("collides with a withheld")
+        );
+        let empty = ToolRegistry::default();
+        assert!(
+            empty
+                .validate_tool_availability(&withheld, true)
+                .unwrap_err()
+                .to_string()
+                .contains("missing from the private registry")
+        );
+        empty.validate_tool_availability(&withheld, false).unwrap();
+        let ordinary =
+            ToolRegistry::from_tool_types(HashMap::from([(TOOL_SEARCH_NAME.to_owned(), ToolType::Function)]));
+        assert!(
+            ordinary
+                .validate_tool_availability(&withheld, true)
+                .unwrap_err()
+                .to_string()
+                .contains("invalid private registry ownership")
+        );
+        assert_eq!(ordinary.tool_type(TOOL_SEARCH_NAME), ToolType::Function);
+    }
+
+    fn assert_namespace_mapping(registry: &ToolRegistry) {
+        assert_eq!(
+            registry
+                .namespace_map()
+                .and_then(|map| map.public_member("agentic_ns__mcp__shell__run")),
+            Some(("mcp__shell", "run"))
+        );
     }
 
     fn assert_mcp_list_tools_metadata(registry: &ToolRegistry) {
@@ -880,12 +814,18 @@ mod tests {
             ],
         });
         let mut tools = mixed_tool_declarations();
+        tools.push(
+            serde_json::from_value(serde_json::json!({
+                "type": "shell", "environment": {"type": "local"}
+            }))
+            .expect("shell declaration"),
+        );
 
         let registry = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
             .await
             .expect("mixed registry");
 
-        assert_eq!(registry.len(), 8);
+        assert_eq!(registry.len(), 9);
         assert!(registry.contains_mcp_server_label("counter"));
         assert!(!registry.contains_mcp_server_label("missing"));
         assert_mcp_list_tools_metadata(&registry);
@@ -893,6 +833,7 @@ mod tests {
         let expected_entries = [
             ("echo", ToolType::Function, None, false),
             ("freeform", ToolType::Custom, None, false),
+            ("shell", ToolType::Shell, None, false),
             ("mcp__counter__increment", ToolType::Mcp, Some("counter"), true),
             ("mcp__counter__get_value", ToolType::Mcp, Some("counter"), true),
             ("web_search", ToolType::WebSearch, None, true),
@@ -930,7 +871,7 @@ mod tests {
         ] {
             assert!(registry.is_gateway_owned_name(name), "'{name}' should be gateway-owned");
         }
-        for name in ["echo", "freeform", "agentic_ns__mcp__shell__run"] {
+        for name in ["echo", "freeform", "shell", "agentic_ns__mcp__shell__run"] {
             assert!(!registry.is_gateway_owned_name(name), "'{name}' should be client-owned");
         }
 
@@ -954,12 +895,12 @@ mod tests {
             namespace.tools.as_slice(),
             [crate::types::tools::CodexNamespaceMember::Function(function)] if function.name.as_str() == "run"
         ));
-        assert_namespace_call_restoration(&registry);
+        assert_namespace_mapping(&registry);
     }
 
     #[tokio::test]
     async fn build_with_handlers_retains_mcp_discovery_failure_output() {
-        let mut tools = vec![declaration("unreachable")];
+        let mut tools = vec![unreachable_declaration("unreachable")];
         let mut executors = GatewayExecutors::default();
 
         let registry = ToolRegistry::build_with_handlers(&mut tools, &mut executors)

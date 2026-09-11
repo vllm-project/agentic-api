@@ -153,7 +153,7 @@ async fn persist(
     ctx: &ExecutionContext,
 ) -> ExecutorResult<ResponsePayload> {
     let live = RequestContext::from(unseal(&context, &signing_key())?);
-    let payload = decode_upstream(&live, upstream)?;
+    let (payload, live) = decode_upstream(live, upstream).await?;
     commit(live, payload, ctx).await
 }
 
