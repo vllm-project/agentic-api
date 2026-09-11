@@ -23,6 +23,7 @@ either.workspace = true
 futures.workspace = true
 http.workspace = true
 jsonwebtoken.workspace = true
+multer = "3.1"
 reqwest = { workspace = true, default-features = false, features = ["rustls-tls"] }
 serde.workspace = true
 serde_json.workspace = true

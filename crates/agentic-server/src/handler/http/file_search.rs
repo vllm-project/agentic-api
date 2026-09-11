@@ -7,13 +7,15 @@ use agentic_core::types::file_search::{
     AttachFileRequest, CreateVectorStoreRequest, FileExpirationAnchor, FileExpiresAfter, FileSearchError, ListParams,
     SearchRequest,
 };
-use axum::extract::multipart::MultipartRejection;
+#[path = "multipart_limits.rs"]
+mod multipart_limits;
 use axum::extract::rejection::{JsonRejection, QueryRejection};
-use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
+use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use http::{StatusCode, header};
+use multipart_limits::BoundedMultipart;
 use serde::Serialize;
 
 use crate::app::AppState;
@@ -94,14 +96,15 @@ fn query(params: Result<Query<ListParams>, QueryRejection>) -> Result<ListParams
 ))]
 pub(crate) async fn upload_file(
     State(state): State<AppState>,
-    multipart: Result<Multipart, MultipartRejection>,
+    multipart: Result<BoundedMultipart, Response>,
 ) -> Response {
     let search = match service(&state) {
         Ok(service) => service,
         Err(error) => return *error,
     };
-    let Ok(mut multipart) = multipart else {
-        return invalid("Expected multipart/form-data with file and purpose fields");
+    let mut multipart = match multipart {
+        Ok(BoundedMultipart(multipart)) => multipart,
+        Err(rejection) => return rejection,
     };
     let mut purpose = None;
     let mut anchor = None;
@@ -195,7 +198,9 @@ pub(crate) async fn upload_file(
 }
 
 fn multipart_error(failure: &axum::extract::multipart::MultipartError) -> Response {
-    if failure.status() == StatusCode::PAYLOAD_TOO_LARGE {
+    if multipart_limits::is_framing_limit(failure) {
+        executor_error_response(ExecutorError::PayloadTooLarge("Multipart framing exceeds 8 KiB".into()))
+    } else if failure.status() == StatusCode::PAYLOAD_TOO_LARGE {
         executor_error_response(ExecutorError::PayloadTooLarge("Upload exceeds 512 MiB".into()))
     } else {
         invalid("Malformed multipart upload")

@@ -487,3 +487,42 @@ async fn files_default_page_and_expiration_bounds_match_contract() {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }
+
+async fn oversized_framing_is_rejected_before_body_finishes(prefix: &[u8]) {
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    let server = gateway().await;
+    let address = server.url.strip_prefix("http://").unwrap();
+    let mut socket = tokio::net::TcpStream::connect(address).await.unwrap();
+    let headers = format!(
+        "POST /v1/files HTTP/1.1\r\nHost: {address}\r\nContent-Type: multipart/form-data; boundary=upload\r\nContent-Length: 536870912\r\n\r\n"
+    );
+    socket.write_all(headers.as_bytes()).await.unwrap();
+    socket.write_all(prefix).await.unwrap();
+    // Deliberately leave the declared 512 MiB body unfinished. Framing must
+    // fail after this small prefix rather than await/buffer the remaining body.
+    socket.write_all(&vec![b'x'; 16 * 1024]).await.unwrap();
+    let mut response = [0; 1024];
+    let length = tokio::time::timeout(std::time::Duration::from_secs(2), socket.read(&mut response))
+        .await
+        .expect("multipart framing must be rejected before the body finishes")
+        .unwrap();
+    assert!(
+        std::str::from_utf8(&response[..length])
+            .unwrap()
+            .starts_with("HTTP/1.1 413")
+    );
+    assert_eq!(std::fs::read_dir(server.files.path()).unwrap().count(), 0);
+}
+
+#[tokio::test]
+async fn oversized_multipart_preamble_is_rejected_early() {
+    oversized_framing_is_rejected_before_body_finishes(b"unbounded preamble ").await;
+}
+
+#[tokio::test]
+async fn oversized_multipart_part_headers_are_rejected_early() {
+    oversized_framing_is_rejected_before_body_finishes(
+        b"--upload\r\nContent-Disposition: form-data; name=\"file\"; filename=\"",
+    )
+    .await;
+}

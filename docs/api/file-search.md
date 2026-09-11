@@ -293,7 +293,10 @@ the uploaded file ID, filename, attributes, and chunking strategy.
 The Files API accepts binary uploads independently of search ingestion. Uploads
 stream to disk with a 512 MiB limit (including zero-byte files). Accepted purposes are
 `assistants`, `batch`, `fine-tune`, `vision`, `user_data`, and `evals`. The multipart
-fields may occur in any order. Optional `expires_after[anchor]=created_at` and
+fields may occur in any order. Preambles, individual part-header blocks, and boundary
+padding are each limited to 8 KiB; boundary values are limited to 70 bytes. A bounded
+HTTP adapter enforces these limits before multipart parsing and yields between
+64 KiB deliveries, including when the incoming body is immediately available. Optional `expires_after[anchor]=created_at` and
 `expires_after[seconds]` (3600 through 2592000) set expiration. Batch-purpose files
 expire after 30 days by default; other purposes persist by default. Responses
 include `expires_at` when set. OpenAI Python SDK 3.13.0 accepts `evals` in upload

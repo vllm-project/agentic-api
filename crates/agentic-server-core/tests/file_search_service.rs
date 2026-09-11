@@ -2225,3 +2225,102 @@ async fn file_expiration_during_embedding_prevents_publication_and_search() {
     );
     task.abort();
 }
+
+#[tokio::test]
+#[ignore = "requires isolated TEST_POSTGRES_URL"]
+async fn postgres_file_expiring_while_publication_waits_for_store_lock_is_not_attached() {
+    let pool = create_pool_with_schema(Some(&std::env::var("TEST_POSTGRES_URL").unwrap()))
+        .await
+        .unwrap();
+    let files = tempfile::tempdir().unwrap();
+    let service = FileSearchService::new(pool.clone(), Arc::new(reqwest::Client::new()), file_config(&files)).unwrap();
+    let file = service
+        .upload_file(
+            "lock-expiry.txt",
+            "text/plain",
+            "assistants",
+            b"coral lock expiration".to_vec(),
+        )
+        .await
+        .unwrap();
+    let store = service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    let mut blocker = pool.begin().await.unwrap();
+    let blocker_pid: i64 = sqlx::query_scalar("SELECT CAST(pg_backend_pid() AS BIGINT)")
+        .fetch_one(&mut *blocker)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE file_search_stores SET embedding_dimensions = embedding_dimensions WHERE id = $1")
+        .bind(&store.id)
+        .execute(&mut *blocker)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE file_search_files SET expires_at = CAST(FLOOR(EXTRACT(EPOCH FROM clock_timestamp())) AS BIGINT) + 2 WHERE id = $1").bind(&file.id).execute(pool.as_ref()).await.unwrap();
+    let worker = service.clone();
+    let file_id = file.id.clone();
+    let store_id = store.id.clone();
+    let publication = tokio::spawn(async move {
+        worker
+            .attach_file(
+                &store_id,
+                AttachFileRequest {
+                    file_id,
+                    ..Default::default()
+                },
+            )
+            .await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            let waiting_on_store: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND CAST($1 AS INTEGER) = ANY(pg_blocking_pids(pid)))")
+                .bind(blocker_pid).fetch_one(pool.as_ref()).await.unwrap();
+            if waiting_on_store { break; }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }).await.expect("publication must reach the contended store row before expiry");
+    let still_live: bool = sqlx::query_scalar(
+        "SELECT expires_at > EXTRACT(EPOCH FROM clock_timestamp()) FROM file_search_files WHERE id = $1",
+    )
+    .bind(&file.id)
+    .fetch_one(pool.as_ref())
+    .await
+    .unwrap();
+    assert!(
+        still_live,
+        "publication must be observed blocked while its source file is still live"
+    );
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            let expired: bool = sqlx::query_scalar(
+                "SELECT expires_at <= EXTRACT(EPOCH FROM clock_timestamp()) FROM file_search_files WHERE id = $1",
+            )
+            .bind(&file.id)
+            .fetch_one(pool.as_ref())
+            .await
+            .unwrap();
+            if expired {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    blocker.commit().await.unwrap();
+    let result = publication.await.unwrap();
+    let chunks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_chunks WHERE store_id = $1")
+        .bind(&store.id)
+        .fetch_one(pool.as_ref())
+        .await
+        .unwrap();
+    // Clean up before asserting, including on the red run.
+    service.delete_vector_store(&store.id).await.unwrap();
+    service.delete_file(&file.id).await.unwrap();
+    assert!(
+        matches!(result, Err(FileSearchError::NotFound(_))),
+        "publication after file expiration must fail: {result:?}"
+    );
+    assert_eq!(chunks, 0);
+}

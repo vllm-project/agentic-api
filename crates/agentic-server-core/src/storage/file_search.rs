@@ -568,6 +568,17 @@ async fn publish_attachment(
     if locked != 1 {
         return Err(FileSearchError::NotFound("File was deleted during ingestion".into()));
     }
+    // The conditional write serializes concurrent ingestions and establishes the
+    // model dimension exactly once; no network work takes place in this transaction.
+    let changed = sqlx::query("UPDATE file_search_stores SET embedding_dimensions = $1 WHERE id = $2 AND embedding_identity = $3 AND (embedding_dimensions = 0 OR embedding_dimensions = $1)")
+        .bind(attachment.dimensions).bind(store_id).bind(identity).execute(&mut **tx).await?.rows_affected();
+    if changed != 1 {
+        return Err(FileSearchError::Conflict(
+            "Vector store embedding configuration changed or the vector store was deleted".into(),
+        ));
+    }
+    // The store guard can wait past the source deadline even while we own the
+    // file row lock. Refresh wall time after both contended parent writes.
     let now = database_now(&mut *tx).await?;
     let live: Option<String> = sqlx::query_scalar(
         "SELECT id FROM file_search_files WHERE id = $1 AND (expires_at IS NULL OR expires_at > $2)",
@@ -578,15 +589,6 @@ async fn publish_attachment(
     .await?;
     if live.is_none() {
         return Err(FileSearchError::NotFound("File expired during ingestion".into()));
-    }
-    // The conditional write serializes concurrent ingestions and establishes the
-    // model dimension exactly once; no network work takes place in this transaction.
-    let changed = sqlx::query("UPDATE file_search_stores SET embedding_dimensions = $1 WHERE id = $2 AND embedding_identity = $3 AND (embedding_dimensions = 0 OR embedding_dimensions = $1)")
-        .bind(attachment.dimensions).bind(store_id).bind(identity).execute(&mut **tx).await?.rows_affected();
-    if changed != 1 {
-        return Err(FileSearchError::Conflict(
-            "Vector store embedding configuration changed or the vector store was deleted".into(),
-        ));
     }
     let bytes: i64 = sqlx::query_scalar(
         "SELECT CAST(COALESCE(SUM(storage_bytes), 0) AS BIGINT) FROM file_search_attachments WHERE store_id = $1",
