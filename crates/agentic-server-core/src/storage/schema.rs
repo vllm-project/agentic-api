@@ -15,8 +15,8 @@ use crate::config::DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS;
 type DbResult<T> = Result<T, sqlx::Error>;
 
 const POSTGRES_SCHEMA_ADVISORY_LOCK: i64 = 7_194_963_546_799_751;
-const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 49;
-const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 15;
+const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 68;
+const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 20;
 const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 4;
 const POSTGRES_INTEGER_WIDENING_SQL: &str = "
     ALTER TABLE conversations
@@ -111,6 +111,25 @@ where
                  ('file_search_attachments', 'data', 'text', 'NO'), \
                  ('file_search_attachments', 'status', 'text', 'NO'), \
                  ('file_search_attachments', 'parsed_content', 'text', 'YES'), \
+                 ('file_search_attachments', 'generation', 'text', 'NO'), \
+                 ('file_search_batches', 'id', 'text', 'NO'), \
+                 ('file_search_batches', 'store_id', 'text', 'NO'), \
+                 ('file_search_batches', 'created_at', 'bigint', 'NO'), \
+                 ('file_search_batches', 'cancelled', 'bigint', 'NO'), \
+                 ('file_search_jobs', 'id', 'text', 'NO'), \
+                 ('file_search_jobs', 'batch_id', 'text', 'NO'), \
+                 ('file_search_jobs', 'store_id', 'text', 'NO'), \
+                 ('file_search_jobs', 'file_id', 'text', 'NO'), \
+                 ('file_search_jobs', 'generation', 'text', 'NO'), \
+                 ('file_search_jobs', 'created_at', 'bigint', 'NO'), \
+                 ('file_search_jobs', 'updated_at', 'bigint', 'NO'), \
+                 ('file_search_jobs', 'state', 'text', 'NO'), \
+                 ('file_search_jobs', 'options', 'text', 'NO'), \
+                 ('file_search_jobs', 'identity', 'text', 'NO'), \
+                 ('file_search_jobs', 'snapshot', 'text', 'NO'), \
+                 ('file_search_jobs', 'claim_token', 'text', 'YES'), \
+                 ('file_search_jobs', 'lease_until', 'bigint', 'YES'), \
+                 ('file_search_jobs', 'attempts', 'bigint', 'NO'), \
                  ('file_search_chunks', 'store_id', 'text', 'NO'), \
                  ('file_search_chunks', 'file_id', 'text', 'NO'), \
                  ('file_search_chunks', 'chunk_index', 'bigint', 'NO'), \
@@ -154,6 +173,11 @@ where
                   'FOREIGN KEY (previous_response_id) REFERENCES responses(id) ON DELETE SET NULL'), \
                  ('conversations', 'f', \
                   'FOREIGN KEY (latest_response_id) REFERENCES responses(id) ON DELETE SET NULL'), \
+                 ('file_search_batches', 'p', 'PRIMARY KEY (id)'), \
+                 ('file_search_batches', 'f', 'FOREIGN KEY (store_id) REFERENCES file_search_stores(id) ON DELETE CASCADE'), \
+                 ('file_search_jobs', 'p', 'PRIMARY KEY (id)'), \
+                 ('file_search_jobs', 'f', 'FOREIGN KEY (batch_id) REFERENCES file_search_batches(id) ON DELETE CASCADE'), \
+                 ('file_search_jobs', 'u', 'UNIQUE (batch_id, file_id)'), \
                  ('file_search_files', 'p', 'PRIMARY KEY (id)'), \
                  ('file_search_blob_cleanup', 'p', 'PRIMARY KEY (file_id)'), \
                  ('file_search_stores', 'p', 'PRIMARY KEY (id)'), \
@@ -318,7 +342,7 @@ pub(crate) async fn pin_postgres_persistence_schema(connection: &mut sqlx::AnyCo
          WHERE table_namespace.nspname = ANY(current_schemas(false)) \
          AND table_relation.relkind IN ('r', 'p', 'v', 'm', 'f') \
          AND table_relation.relname IN ('_sqlx_migrations', 'conversations', 'items', 'responses', \
-              'file_search_files', 'file_search_stores', 'file_search_attachments', 'file_search_chunks', 'file_search_blob_cleanup') \
+              'file_search_files', 'file_search_stores', 'file_search_attachments', 'file_search_chunks', 'file_search_blob_cleanup', 'file_search_batches', 'file_search_jobs') \
          ORDER BY table_namespace.nspname::text",
     )
     .fetch_all(&mut *connection)
@@ -407,6 +431,14 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                          ('items', 'INSERT'), \
                          ('responses', 'SELECT'), \
                          ('responses', 'INSERT'), \
+                         ('file_search_batches', 'SELECT'), \
+                         ('file_search_batches', 'INSERT'), \
+                         ('file_search_batches', 'UPDATE'), \
+                         ('file_search_batches', 'DELETE'), \
+                         ('file_search_jobs', 'SELECT'), \
+                         ('file_search_jobs', 'INSERT'), \
+                         ('file_search_jobs', 'UPDATE'), \
+                         ('file_search_jobs', 'DELETE'), \
                          ('file_search_files', 'SELECT'), \
                          ('file_search_files', 'INSERT'), \
                          ('file_search_files', 'UPDATE'), \
@@ -427,7 +459,7 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                          ('file_search_chunks', 'INSERT') \
                  ) \
                  SELECT current_setting('transaction_read_only') = 'off' \
-                    AND COUNT(table_relation.oid) = 25 \
+                    AND COUNT(table_relation.oid) = 33 \
                     AND COALESCE(BOOL_AND( \
                         has_table_privilege(current_user, table_relation.oid, required.privilege) \
                     ), false) \
@@ -458,8 +490,10 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                 "SELECT id FROM responses LIMIT 0",
                 "SELECT id, created_at, data, content_type, content_base64, expires_at, purpose FROM file_search_files LIMIT 0",
                 "SELECT file_id FROM file_search_blob_cleanup LIMIT 0",
+                "SELECT id, store_id, created_at, cancelled FROM file_search_batches LIMIT 0",
+                "SELECT id,batch_id,store_id,file_id,generation,created_at,updated_at,state,options,identity,snapshot,claim_token,lease_until,attempts FROM file_search_jobs LIMIT 0",
                 "SELECT id, created_at, data, embedding_identity, embedding_dimensions, last_active_at, expires_after_days, expires_at, lifecycle_status FROM file_search_stores LIMIT 0",
-                "SELECT store_id, file_id, created_at, usage_bytes, storage_bytes, data, status, parsed_content FROM file_search_attachments LIMIT 0",
+                "SELECT store_id, file_id, created_at, usage_bytes, storage_bytes, data, status, parsed_content, generation FROM file_search_attachments LIMIT 0",
                 "SELECT store_id, file_id, chunk_index, data FROM file_search_chunks LIMIT 0",
             ] {
                 sqlx::query(statement).execute(&mut *connection).await?;
@@ -731,6 +765,14 @@ mod tests {
             .execute(pool.as_ref())
             .await
             .unwrap();
+        assert!(
+            verify_persistence_ready(pool.as_ref()).await.is_err(),
+            "batch migration is required"
+        );
+        sqlx::raw_sql(include_str!("../../migrations/0008_vector_store_batches.sql"))
+            .execute(pool.as_ref())
+            .await
+            .unwrap();
         verify_persistence_ready(pool.as_ref()).await.unwrap();
         wrapper.ensure_schema_ready_with_marker(true).await.unwrap();
     }
@@ -849,6 +891,14 @@ mod tests {
             .execute(&mut *connection)
             .await
             .unwrap();
+        assert!(
+            supervisor.ensure_schema_ready_with_marker(true).await.is_err(),
+            "batch migration is required"
+        );
+        sqlx::raw_sql(include_str!("../../migrations/0008_vector_store_batches.sql"))
+            .execute(&mut *connection)
+            .await
+            .unwrap();
         supervisor.ensure_schema_ready_with_marker(true).await.unwrap();
         supervisor.pool.close().await;
         sqlx::query("SET search_path TO public")
@@ -892,6 +942,7 @@ mod tests {
             include_str!("../../migrations/0005_file_search.sql"),
             include_str!("../../migrations/0006_file_expiration.sql"),
             include_str!("../../migrations/0007_vector_store_lifecycle.sql"),
+            include_str!("../../migrations/0008_vector_store_batches.sql"),
         ] {
             sqlx::raw_sql(migration)
                 .execute(&mut *connection)

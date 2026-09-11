@@ -20,6 +20,9 @@ struct ServerProcess {
 
 impl ServerProcess {
     fn start(upstream_port: u16, extra_args: &[&str]) -> Self {
+        Self::start_on(upstream_port, 0, extra_args)
+    }
+    fn start_on(upstream_port: u16, gateway_port: u16, extra_args: &[&str]) -> Self {
         let directory = tempfile::tempdir().expect("temporary server home");
         let python = directory.path().join("python");
         // exec preserves the child PID without spawning any grandchildren.
@@ -38,7 +41,7 @@ impl ServerProcess {
                 "--gateway-host",
                 "127.0.0.1",
                 "--gateway-port",
-                "0",
+                &gateway_port.to_string(),
                 "--llm-ready-interval-s",
                 "60",
             ])
@@ -234,4 +237,46 @@ async fn sigterm_after_gateway_startup_still_reaps_model() {
     .await
     .unwrap_or_else(|_| panic!("gateway did not start: {}", server.log()));
     server.stop("-TERM").await;
+}
+
+async fn wait_serving(server: &ServerProcess) {
+    timeout(TEST_TIMEOUT, async {
+        while !server.log().contains("gateway listening") {
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("server must finish initialization");
+}
+
+#[tokio::test]
+async fn worker_runtime_joins_on_bind_failure() {
+    let occupied = listener().await;
+    let mut server = ServerProcess::start_on(
+        0,
+        occupied.local_addr().unwrap().port(),
+        &["--skip-llm-ready-check", "--db-url", "sqlite::memory:"],
+    );
+    assert!(!server.wait().await.success());
+    assert!(server.log().contains("file search workers stopped"), "{}", server.log());
+    assert!(!process_exists(server.model_pid()));
+}
+
+#[tokio::test]
+async fn worker_runtime_joins_on_subprocess_exit() {
+    let mut server = ServerProcess::start(0, &["--skip-llm-ready-check", "--db-url", "sqlite::memory:"]);
+    wait_serving(&server).await;
+    send_signal(server.model_pid(), "-KILL");
+    assert!(!server.wait().await.success());
+    assert!(server.log().contains("file search workers stopped"), "{}", server.log());
+}
+
+#[tokio::test]
+async fn worker_runtime_joins_on_serving_signals() {
+    for signal in ["-TERM", "-INT"] {
+        let mut server = ServerProcess::start(0, &["--skip-llm-ready-check", "--db-url", "sqlite::memory:"]);
+        wait_serving(&server).await;
+        server.stop(signal).await;
+        assert!(server.log().contains("file search workers stopped"), "{}", server.log());
+    }
 }

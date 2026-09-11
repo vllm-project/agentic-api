@@ -4,8 +4,8 @@ use agentic_core::executor::ExecutorError;
 use agentic_core::tool::ToolError;
 use agentic_core::tool::file_search::{FileSearchService, MAX_FILE_BYTES};
 use agentic_core::types::file_search::{
-    AttachFileRequest, CreateVectorStoreRequest, FileExpirationAnchor, FileExpiresAfter, FileSearchError, ListParams,
-    SearchRequest, UpdateVectorStoreFileRequest, UpdateVectorStoreRequest,
+    AttachFileRequest, CreateFileBatchRequest, CreateVectorStoreRequest, FileExpirationAnchor, FileExpiresAfter,
+    FileSearchError, ListParams, SearchRequest, UpdateVectorStoreFileRequest, UpdateVectorStoreRequest,
 };
 #[path = "multipart_limits.rs"]
 mod multipart_limits;
@@ -51,6 +51,19 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/v1/vector_stores/{store_id}/files/{file_id}/content",
             get(vector_store_file_content),
+        )
+        .route("/v1/vector_stores/{store_id}/file_batches", post(create_file_batch))
+        .route(
+            "/v1/vector_stores/{store_id}/file_batches/{batch_id}",
+            get(get_file_batch),
+        )
+        .route(
+            "/v1/vector_stores/{store_id}/file_batches/{batch_id}/cancel",
+            post(cancel_file_batch),
+        )
+        .route(
+            "/v1/vector_stores/{store_id}/file_batches/{batch_id}/files",
+            get(list_file_batch_files),
         )
         .route("/v1/vector_stores/{store_id}/search", post(search))
 }
@@ -522,4 +535,83 @@ pub(crate) async fn vector_store_file_content(
         Err(error) => return *error,
     };
     result(search.vector_store_file_content(&store_id, &file_id).await)
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post, path = "/v1/vector_stores/{store_id}/file_batches",
+    params(("store_id" = String, Path)),
+    request_body = agentic_core::types::file_search::CreateFileBatchRequest,
+    responses((status = 200, description = "Success", body = agentic_core::types::file_search::FileBatchObject), (status = 400, description = "Invalid request", body = crate::openapi::ApiErrorResponse), (status = 404, description = "Object not found", body = crate::openapi::ApiErrorResponse)),
+    security(("bearer_auth" = [])), tag = "file_search",
+))]
+pub(crate) async fn create_file_batch(
+    State(state): State<AppState>,
+    Path(store_id): Path<String>,
+    request: Result<Json<CreateFileBatchRequest>, JsonRejection>,
+) -> Response {
+    let search = match service(&state) {
+        Ok(service) => service,
+        Err(error) => return *error,
+    };
+    let request = match body(request) {
+        Ok(request) => request,
+        Err(error) => return *error,
+    };
+    result(search.create_file_batch(&store_id, request).await)
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get, path = "/v1/vector_stores/{store_id}/file_batches/{batch_id}",
+    params(("store_id" = String, Path), ("batch_id" = String, Path)),
+    responses((status = 200, description = "Success", body = agentic_core::types::file_search::FileBatchObject), (status = 400, description = "Invalid request", body = crate::openapi::ApiErrorResponse), (status = 404, description = "Object not found", body = crate::openapi::ApiErrorResponse)),
+    security(("bearer_auth" = [])), tag = "file_search",
+))]
+pub(crate) async fn get_file_batch(
+    State(state): State<AppState>,
+    Path((store_id, batch_id)): Path<(String, String)>,
+) -> Response {
+    let search = match service(&state) {
+        Ok(service) => service,
+        Err(error) => return *error,
+    };
+    result(search.get_file_batch(&store_id, &batch_id).await)
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post, path = "/v1/vector_stores/{store_id}/file_batches/{batch_id}/cancel",
+    params(("store_id" = String, Path), ("batch_id" = String, Path)),
+    responses((status = 200, description = "Success", body = agentic_core::types::file_search::FileBatchObject), (status = 400, description = "Invalid request", body = crate::openapi::ApiErrorResponse), (status = 404, description = "Object not found", body = crate::openapi::ApiErrorResponse)),
+    security(("bearer_auth" = [])), tag = "file_search",
+))]
+pub(crate) async fn cancel_file_batch(
+    State(state): State<AppState>,
+    Path((store_id, batch_id)): Path<(String, String)>,
+) -> Response {
+    let search = match service(&state) {
+        Ok(service) => service,
+        Err(error) => return *error,
+    };
+    result(search.cancel_file_batch(&store_id, &batch_id).await)
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get, path = "/v1/vector_stores/{store_id}/file_batches/{batch_id}/files",
+    params(("store_id" = String, Path), ("batch_id" = String, Path), ("filter" = Option<agentic_core::types::file_search::AttachmentStatus>, Query), ("limit" = Option<usize>, Query, description="Page size, 1 to 100"), ("order" = Option<String>, Query), ("before" = Option<String>, Query), ("after" = Option<String>, Query)),
+    responses((status = 200, description = "Success", body = agentic_core::types::file_search::ListResponse<agentic_core::types::file_search::VectorStoreFileObject>), (status = 400, description = "Invalid request", body = crate::openapi::ApiErrorResponse), (status = 404, description = "Object not found", body = crate::openapi::ApiErrorResponse)),
+    security(("bearer_auth" = [])), tag = "file_search",
+))]
+pub(crate) async fn list_file_batch_files(
+    State(state): State<AppState>,
+    Path((store_id, batch_id)): Path<(String, String)>,
+    params: Result<Query<ListParams>, QueryRejection>,
+) -> Response {
+    let search = match service(&state) {
+        Ok(service) => service,
+        Err(error) => return *error,
+    };
+    let params = match query(params) {
+        Ok(params) => params,
+        Err(error) => return *error,
+    };
+    result(search.list_file_batch_files(&store_id, &batch_id, &params).await)
 }

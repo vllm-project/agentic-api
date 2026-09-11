@@ -182,6 +182,7 @@ impl FileSearchStorage {
             let changed = sqlx::query("UPDATE file_search_stores SET lifecycle_status = 'expired' WHERE id = $1 AND lifecycle_status != 'expired' AND expires_at <= $2")
                 .bind(&id).bind(now).execute(&mut *tx).await?.rows_affected();
             if changed == 1 {
+                super::batches::invalidate(&mut tx, Some(&id), None).await?;
                 sqlx::query("DELETE FROM file_search_attachments WHERE store_id = $1")
                     .bind(&id)
                     .execute(&mut *tx)
@@ -217,6 +218,10 @@ impl FileSearchStorage {
             .bind(serde_json::to_string(&object)?)
             .execute(&mut *tx)
             .await?;
+        if object.status == AttachmentStatus::InProgress {
+            sqlx::query("UPDATE file_search_jobs SET snapshot=$3 WHERE store_id=$1 AND file_id=$2 AND state IN ('queued','running') AND generation=(SELECT generation FROM file_search_attachments WHERE store_id=$1 AND file_id=$2)")
+                .bind(store_id).bind(file_id).bind(serde_json::to_string(&object)?).execute(&mut *tx).await?;
+        }
         // Bounded by the store's existing serialized corpus budget; preserve every other chunk field.
         let rows: Vec<(i64, String)> =
             sqlx::query_as("SELECT chunk_index, data FROM file_search_chunks WHERE store_id = $1 AND file_id = $2")

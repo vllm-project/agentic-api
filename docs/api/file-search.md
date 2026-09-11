@@ -443,8 +443,8 @@ time after both locks. Policy updates and cleanup share the same store guard.
 stores per call and returns the number expired. It rechecks each deadline after
 acquiring its store lock, commits expired status and removal of attachments/chunks
 atomically, and preserves uploaded files, including those used by other stores.
-Repeated cleanup is safe after a restart. This layer exposes explicit cleanup;
-it does not start a worker from service construction or cloning.
+Repeated cleanup is safe after a restart. The server runtime invokes explicit cleanup;
+service construction and cloning never start workers.
 
 ### Attachment updates and parsed content
 
@@ -486,8 +486,8 @@ separate: a process crash or uncertain upload commit can leave unreferenced file
 Deletion and expiration atomically persist a blob-cleanup intent with SQL deletion;
 `FileSearchService::cleanup_expired_files(limit)` retries pending filesystem deletion
 and acknowledges it only after directory synchronization. It never sweeps arbitrary
-unreferenced files that another upload might be publishing. A lifecycle worker must
-invoke this method to reclaim expired bytes; visibility does not depend on that worker.
+unreferenced files that another upload might be publishing. The server runtime
+invokes this method to reclaim expired bytes; visibility does not depend on that worker.
 Expired files disappear from reads, lists, attachment reads, and search immediately,
 and publication rechecks expiry after model work. Cleanup removes attachments and
 chunks from every store while preserving independent uploads. Servers sharing SQL
@@ -506,3 +506,58 @@ Each store is limited to 10,000 chunks and 64 MiB of serialized chunk data,
 including embeddings; ingestion enforces these limits before publication.
 Searching multiple stores shares the same aggregate retrieval budget.
 It does not expose OGX's provider catalog or asynchronous file batches.
+
+### Durable file batches and workers
+
+`POST /v1/vector_stores/{store_id}/file_batches` accepts exactly one of `file_ids`
+or `files`, with 1–2000 members. Shared `attributes` and `chunking_strategy` apply
+only to `file_ids`; `files` contains independent attachment requests and ignores
+shared options. Auto chunk boundaries and contextual model identity are resolved
+at creation. Responses use `object: "vector_store.files_batch"`. Retrieve a batch
+at `.../file_batches/{batch_id}`, cancel unfinished work with POST to its `/cancel`
+path, and list membership snapshots at `/files` with the usual `filter`, `limit`,
+`order`, `after`, and `before` parameters.
+
+Creation atomically saves every member and its immediately visible `in_progress`
+attachment. Duplicate IDs reject the entire request. A completed existing
+attachment contributes a completed member with its existing options and no new
+model calls. Any existing in-progress, failed, or cancelled attachment rejects the
+entire batch with conflict. Detach unsuccessful attachments before retrying them.
+Missing or expired source files reject creation atomically. An unsupported or
+malformed uploaded document fails independently during processing. A batch becomes
+`completed` when every member finishes, including when individual members failed;
+its five `file_counts` fields describe those results.
+
+Cancellation preserves completed and failed members, marks unfinished members
+cancelled, and invalidates their claims transactionally. Membership snapshots
+survive detach and source deletion; deleting the store removes its batch history.
+Source deletion, store expiration, and detach invalidate pending work. Expiration
+visibility remains immediate even before cleanup. Pending attribute updates are
+applied to both the eventual attachment and its chunks at publication.
+
+Server startup explicitly owns a `FileSearchRuntime`, separate from the cloneable
+request service. SQL is the durable queue. Four worker slots share the service's
+four-operation admission limit with synchronous ingestion; capacity is acquired
+before claiming. `file_batch_params.max_concurrent_files_per_batch` additionally
+limits active claims for each batch across instances, `file_batch_chunk_size`
+bounds candidate and cleanup scans, and `cleanup_interval_seconds` schedules
+expired-file, expired-store, and durable blob-intent cleanup. Failed cleanup is
+retried after one second.
+
+Claims have a 30-second database-clock lease and renew once per second. Every
+attempt receives a fresh token; each pending attachment has a separate generation.
+Publication locks source, store, and job, checks fresh time after contention, then
+uses the same atomic chunk writer as synchronous ingestion. Reclaimed work may
+repeat provider calls, but stale attempts cannot publish. Recovery rejects changed
+embedding or contextual model identities instead of mixing configurations. All
+instances sharing SQL must share the Files storage mount.
+
+Signals stop admission and cancel model preparation. Shutdown joins worker and
+parser work and releases only still-owned claims for later recovery; it does not
+cancel the API batch. SQL transactions and COMMIT are allowed to finish. Worker
+drain can outlast the eight-second HTTP drain while bounded extraction/filesystem
+operations and configured database waits finish. PostgreSQL defaults are 30 seconds
+for pool acquisition/statement execution and five seconds for lock waits; SQLite
+uses a five-second busy timeout. Embedding HTTP calls have a 45-second timeout;
+contextual calls use the bounded configured timeout, and both respond to runtime
+cancellation. Library callers must explicitly consume the runtime with `shutdown`.
