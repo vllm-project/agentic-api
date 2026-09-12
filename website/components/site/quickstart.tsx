@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Check, Copy, Terminal, Code2, ArrowUpRight } from 'lucide-react';
 import {
-  BUILD_COMMAND,
+  CARGO_COMMAND,
+  PYTHON_COMMAND,
   LAUNCH_COMMANDS,
   getLaunchInstructions,
 } from '@/lib/quickstart';
@@ -116,10 +117,10 @@ export function Quickstart() {
             <li>
               <span>02</span>
               <div>
-                <strong>Build Agentic API</strong>
+                <strong>Install and start Agentic API</strong>
                 <p>
-                  Install Rust, clone the repository, and build the gateway and
-                  CLI.
+                  Install the Python wheel with pip, or install the Rust CLI
+                  with Cargo. Start the gateway against your vLLM upstream.
                 </p>
               </div>
             </li>
@@ -128,8 +129,9 @@ export function Quickstart() {
               <div>
                 <strong>Launch your client</strong>
                 <p>
-                  Install Codex or Claude Code, then choose your client and
-                  served model.
+                  For the Cargo CLI, choose Codex or Claude Code below. The
+                  client launcher starts its own gateway; use it instead of the
+                  standalone serve command.
                 </p>
               </div>
             </li>
@@ -148,7 +150,40 @@ export function Quickstart() {
             <span>QUICKSTART</span>
             <span>bash</span>
           </div>
-          <CopyCode code={BUILD_COMMAND} label="Build from source" />
+          <Tabs defaultValue="python" className="launch-tabs">
+            <TabsList
+              className="launch-tab-list"
+              aria-label="Choose installation method"
+            >
+              <TabsTrigger value="python">Python / pip</TabsTrigger>
+              <TabsTrigger value="cargo">Cargo</TabsTrigger>
+            </TabsList>
+            <TabsContent value="python">
+              <CopyCode
+                code={PYTHON_COMMAND}
+                label="Install and start with Python"
+              />
+              <div className="terminal-note">
+                <p>
+                  Python 3.10+. Download your platform wheel from the{' '}
+                  <a href={`${REPO}/actions/workflows/release-python.yml`}>
+                    release workflow
+                  </a>
+                  . PyPI publication is pending; once published, install with{' '}
+                  <code>python -m pip install agentic-api</code>.
+                </p>
+              </div>
+            </TabsContent>
+            <TabsContent value="cargo">
+              <CopyCode
+                code={CARGO_COMMAND}
+                label="Install and start with Cargo"
+              />
+            </TabsContent>
+          </Tabs>
+          <p className="terminal-note">
+            Coding clients with the Cargo-installed CLI
+          </p>
           <Tabs defaultValue="codex" className="launch-tabs">
             <TabsList
               className="launch-tab-list"

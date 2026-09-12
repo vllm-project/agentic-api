@@ -2,6 +2,40 @@
 
 All notable changes to Agentic API are documented here.
 
+## [0.7.0] - 2026-09-11
+
+### Added
+
+- Added client-executed shell tools with typed `shell_call` and `shell_call_output` items, incremental command
+  streaming, explicit tool selection, and stored-history continuation (#264).
+- Added a configurable serialized request size limit for HTTP bodies and WebSocket messages through
+  `--max-request-body-size-bytes`, `AGENTIC_MAX_REQUEST_BODY_SIZE_BYTES`, or `[server] max_request_body_size_bytes`,
+  retaining the 10 MiB default (#260).
+- Added the Agentic API website, versioned documentation navigation, contributor profiles, and automatic website
+  deployment after crate releases (#272, #285, #287).
+
+### Changed
+
+- Unified Responses JSON and SSE processing under `AgentPipeline`, sharing synchronous ingestion, typed output-item
+  assembly, tool-call translation, lifecycle validation, and ordered client delivery (#274).
+- Introduced `MessagesRequestContext` for the Messages tool loop, preserving unmodeled upstream fields while
+  centralizing request mutation and web-search budgets (#249).
+- Changed Rust integration APIs: Messages loops now accept `MessagesRequestContext`, the public `function_sse` module
+  was removed, and gateway configuration uses `GatewayOptions`. Downstream crate consumers must adapt affected
+  integrations (#249, #274, #260).
+
+### Fixed
+
+- Preserved incomplete upstream terminal status when an SSE completion event carries an incomplete response (#277).
+- Honored Responses WebSocket storage settings with bounded connection-local sessions (#257).
+- Applied the configured streaming chunk timeout to stalled upstream error-body reads in Responses streaming and
+  Messages tool-loop requests (#286).
+
+### Testing
+
+- Expanded shell-tool replay and continuation coverage, shared-ingestion lifecycle checks, WebSocket session and
+  storage tests, request-size boundary tests, and stalled upstream error-body regressions.
+
 ## [0.6.0] - 2026-09-09
 
 ### Added
