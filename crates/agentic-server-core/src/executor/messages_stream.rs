@@ -10,6 +10,8 @@
 //!   * intermediate `message_delta`/`message_stop` (the per-round terminals)
 //!     suppressed; the final round's terminal is forwarded once.
 //!
+//! Each `message_stop` ends its upstream round without waiting for HTTP EOF.
+//!
 //! Structurally the Anthropic-native analogue of the Responses `GatewayStreamAccumulator`
 //! (#119/#132); kept deliberately parallel for a future consolidation. Reuses
 //! only the neutral tool layer via [`crate::types::messages::tool_seam`].
@@ -106,7 +108,13 @@ pub async fn run_messages_stream(
                 if acc.has_upstream_error() {
                     return;
                 }
+                if acc.has_completed_round() {
+                    break;
+                }
             }
+            // Release an upstream body that can remain open after its terminal,
+            // including before awaiting gateway tool execution for the next round.
+            drop(response_stream);
 
             // Round finished. Continue only for a pure gateway-tool round; a
             // client-owned tool_use (or any non-tool_use stop) is terminal.
@@ -166,6 +174,7 @@ struct BufferedBlock {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RoundState {
     Active,
+    Completed,
     UpstreamError,
 }
 
@@ -232,7 +241,7 @@ struct MessagesStreamAccumulator {
     has_client_tool_use: bool,
     /// Buffered terminal `message_delta` from the final round (emitted by `finish`).
     final_message_delta: Option<Value>,
-    /// Whether this round is still active or terminated with an upstream error.
+    /// Whether this round is active, complete, or terminated with an upstream error.
     round_state: RoundState,
     /// Operator-configured client-tool → gateway-executor aliases, so a client
     /// tool like Claude Code's `WebSearch` is classified gateway-owned (and
@@ -305,6 +314,10 @@ impl MessagesStreamAccumulator {
         self.round_state == RoundState::UpstreamError
     }
 
+    fn has_completed_round(&self) -> bool {
+        self.round_state == RoundState::Completed
+    }
+
     /// Translate one upstream SSE line into zero or more client SSE lines.
     fn push(&mut self, line: &str) -> Vec<String> {
         let ClassifiedSseLine::Data(data) = SseLine::parse(line) else {
@@ -328,8 +341,12 @@ impl MessagesStreamAccumulator {
                 self.round_state = RoundState::UpstreamError;
                 vec![sse("error", &event)]
             }
-            // `message_stop` (per-round terminal) is suppressed; `finish` emits
-            // the single client-visible terminal. Everything else is dropped.
+            Some("message_stop") => {
+                self.round_state = RoundState::Completed;
+                // `finish` emits the single client-visible terminal at loop end.
+                Vec::new()
+            }
+            // Unknown events do not end the round.
             _ => Vec::new(),
         }
     }
