@@ -25,7 +25,7 @@ use crate::executor::inference::DONE_MARKER;
 use crate::executor::persist::persist_if_needed;
 use crate::executor::pipeline::{AgentPipeline, emit_deferred_stream_events};
 use crate::executor::prepare::prepare_request_tools;
-use crate::executor::rehydrate::{prepare_reasoning_for_vllm, rehydrate_conversation, validate_reasoning_for_vllm};
+use crate::executor::rehydrate::{prepare_reasoning_for_vllm, validate_reasoning_for_vllm};
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::response_budget::ExecutorResponseBudget;
 #[cfg(test)]
@@ -199,6 +199,34 @@ fn prepare_initial_reasoning_for_vllm(input: &mut ResponsesInput, round: usize, 
     Ok(())
 }
 
+fn record_round_history(
+    ctx: &mut RequestContext,
+    output_items: &[OutputItem],
+    registry: &ToolRegistry,
+    public_output_count: usize,
+) {
+    // Explicit conversations append public output through their durable handler;
+    // the session lease still serializes execution but must not record it twice.
+    if let Some(continuation) = ctx
+        .continuation
+        .as_mut()
+        .filter(|_| ctx.original_request.conversation_id.is_none())
+    {
+        // The canonical sequence includes reasoning and intermediate messages in
+        // their original positions, followed by this round's tool call outputs.
+        // Discovery records are appended separately from the public response.
+        ctx.new_input_items.extend(
+            output_items
+                .iter()
+                .filter(|item| !matches!(item, OutputItem::McpListTools(_)))
+                .filter_map(OutputItem::to_input_item),
+        );
+        continuation.mark_outputs_recorded(public_output_count);
+    } else {
+        append_gateway_calls_to_new_input(ctx, output_items, registry);
+    }
+}
+
 /// Request-scoped owner of registry-backed tool orchestration and its shared byte budget.
 struct EngineOrchestration<'a> {
     agent: &'a mut AgentPipeline,
@@ -282,11 +310,17 @@ impl<'a> EngineOrchestration<'a> {
                 .await?;
             let public_output = public_output_items(&current_output, &self.registry, &gateway_results)?;
             combined_output.extend(public_output);
+            record_round_history(
+                &mut self.agent.request,
+                &current_output,
+                &self.registry,
+                combined_output.len(),
+            );
 
             // A terminal incomplete response may still contain completed gateway
             // calls. Record those results, but never start another inference round.
             if payload.status == "incomplete" {
-                self.record_round_input(&current_output, gateway_results);
+                self.record_gateway_results(gateway_results);
                 finalize_loop(&mut payload, combined_output, combined_usage, &self.agent.request);
                 let tool_search_metadata = self.agent.take_tool_search_metadata();
                 return Ok((payload, tool_search_metadata));
@@ -297,7 +331,7 @@ impl<'a> EngineOrchestration<'a> {
                 // are handed back to the caller. Gateway calls in the same round are
                 // still recorded so the returned conversation is complete.
                 LoopDecision::RequiresClientAction => {
-                    self.record_round_input(&current_output, gateway_results);
+                    self.record_gateway_results(gateway_results);
                     finalize_loop(&mut payload, combined_output, combined_usage, &self.agent.request);
                     let tool_search_metadata = self.agent.take_tool_search_metadata();
                     return Ok((payload, tool_search_metadata));
@@ -314,7 +348,7 @@ impl<'a> EngineOrchestration<'a> {
                 // The final round's gateway calls and outputs are recorded so a
                 // continuation is not fed a dangling tool call.
                 LoopDecision::Incomplete(reason) => {
-                    self.record_round_input(&current_output, gateway_results);
+                    self.record_gateway_results(gateway_results);
                     finalize_loop(&mut payload, combined_output, combined_usage, &self.agent.request);
                     "incomplete".clone_into(&mut payload.status);
                     payload.incomplete_details = Some(IncompleteDetails { reason: Some(reason) });
@@ -325,7 +359,7 @@ impl<'a> EngineOrchestration<'a> {
                 LoopDecision::Continue => {
                     self.agent.request.enriched_request.tool_choice = Some(ToolChoice::Auto);
                     append_output_items_to_input(&mut self.agent.request.enriched_request.input, &current_output);
-                    self.record_round_input(&current_output, gateway_results);
+                    self.record_gateway_results(gateway_results);
                 }
             }
         }
@@ -333,8 +367,7 @@ impl<'a> EngineOrchestration<'a> {
         unreachable!("the final round returns Done, RequiresClientAction, or Incomplete");
     }
 
-    fn record_round_input(&mut self, output: &[OutputItem], results: Vec<GatewayCallResult>) {
-        append_gateway_calls_to_new_input(&mut self.agent.request, output, &self.registry);
+    fn record_gateway_results(&mut self, results: Vec<GatewayCallResult>) {
         append_tool_outputs(
             &mut self.agent.request,
             results.into_iter().map(|result| result.input_item).collect(),
@@ -450,6 +483,9 @@ async fn run_compaction_trigger(
         unreachable!("compact_items always appends a compaction item");
     };
     ctx.new_input_items = compacted;
+    if let Some(continuation) = &mut ctx.continuation {
+        continuation.mark_history_replaced();
+    }
     let mut payload = ResponsePayload {
         id: ctx.response_id.clone(),
         object: "response".to_owned(),
@@ -683,6 +719,7 @@ pub struct ExecuteRequest {
     payload: RequestPayload,
     exec_ctx: Arc<ExecutionContext>,
     client_auth: Option<String>,
+    continuation: Option<super::session::ResponseContinuation>,
 }
 
 impl ExecuteRequest {
@@ -692,6 +729,7 @@ impl ExecuteRequest {
             payload,
             exec_ctx,
             client_auth: None,
+            continuation: None,
         }
     }
 
@@ -700,6 +738,15 @@ impl ExecuteRequest {
     pub fn with_auth(mut self, token: Option<String>) -> Self {
         self.client_auth = token;
         self
+    }
+
+    /// Retain this turn's continuation state in the supplied serial session.
+    ///
+    /// # Errors
+    /// Returns an error when the session is busy or closed.
+    pub fn with_session(mut self, session: &super::ResponseSession) -> ExecutorResult<Self> {
+        self.continuation = Some(session.begin(self.payload.previous_response_id.as_deref())?);
+        Ok(self)
     }
 
     /// Execute one stateful conversation turn.
@@ -720,7 +767,8 @@ impl ExecuteRequest {
             tools = self.payload.tools.as_ref().map_or(0, Vec::len),
             "executor received responses request"
         );
-        let ctx = rehydrate_conversation(self.payload, &self.exec_ctx).await?;
+        let ctx =
+            super::rehydrate::rehydrate_with_continuation(self.payload, &self.exec_ctx, self.continuation).await?;
         if !ctx.enriched_request.input.has_compaction_trigger() {
             validate_reasoning_for_vllm(&ctx.enriched_request.input)?;
         }
@@ -838,10 +886,18 @@ mod tests {
             "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_upstream\",\"status\":\"completed\",\"usage\":null}}\n\n",
             "data: [DONE]\n\n",
         );
-        let app = axum::Router::new().route(
-            "/v1/responses",
-            axum::routing::post(|| async { ([(axum::http::header::CONTENT_TYPE, "text/event-stream")], UPSTREAM_SSE) }),
-        );
+        let app = axum::Router::new()
+            .route(
+                "/v1/responses",
+                axum::routing::post(|_body: axum::body::Bytes| async {
+                    ([(axum::http::header::CONTENT_TYPE, "text/event-stream")], UPSTREAM_SSE)
+                }),
+            )
+            // Read the oversized test request before replying, allowing JSON framing
+            // above the response budget without relying on an early HTTP response.
+            .layer(axum::extract::DefaultBodyLimit::max(
+                MAX_EXECUTOR_RESPONSE_BYTES + 64 * 1024,
+            ));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind streaming mock inference server");
@@ -874,6 +930,7 @@ mod tests {
             response_id: "resp_test".to_owned(),
             conversation_id: None,
             conversation_version: None,
+            continuation: None,
         };
         let mut exec_ctx = ExecutionContext::new(
             ConversationHandler::new(ConversationStore::disabled()),
@@ -934,6 +991,7 @@ mod tests {
             response_id: "resp_mcp".to_owned(),
             conversation_id: None,
             conversation_version: None,
+            continuation: None,
         };
         let plain_payload: RequestPayload = serde_json::from_value(serde_json::json!({
             "model": "test-model",
@@ -948,6 +1006,7 @@ mod tests {
             response_id: "resp_plain".to_owned(),
             conversation_id: None,
             conversation_version: None,
+            continuation: None,
         };
         let mut exec_ctx = ExecutionContext::new(
             ConversationHandler::new(ConversationStore::disabled()),

@@ -417,6 +417,7 @@ pub(crate) async fn compact_items(
         response_id: uuid7_str("resp_"),
         conversation_id: None,
         conversation_version: None,
+        continuation: None,
     };
     let mut agent = agent_pipeline(ctx, None, None);
     let response =
@@ -469,6 +470,9 @@ pub(crate) async fn maybe_compact_context(
     let (compacted, usage) = compact_items(&model, input, instructions.as_deref(), exec_ctx, auth).await?;
     ctx.enriched_request.input = ResponsesInput::Items(compacted.clone());
     ctx.new_input_items = compacted;
+    if let Some(continuation) = &mut ctx.continuation {
+        continuation.mark_history_replaced();
+    }
     Ok(Some(usage))
 }
 
@@ -605,6 +609,7 @@ mod tests {
             response_id: "resp_test".to_owned(),
             conversation_id: None,
             conversation_version: None,
+            continuation: None,
         }
     }
 
@@ -622,7 +627,7 @@ mod tests {
     async fn mock_execution_context(response_store: ResponseStore) -> (ExecutionContext, tokio::task::JoinHandle<()>) {
         let app = Router::new().route(
             "/v1/responses",
-            post(|| async {
+            post(|_body: axum::body::Bytes| async {
                 axum::Json(serde_json::json!({
                     "id": "resp_upstream",
                     "object": "response",

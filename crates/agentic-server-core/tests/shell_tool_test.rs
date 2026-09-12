@@ -42,6 +42,7 @@ fn context() -> RequestContext {
         response_id: "resp_reserved".to_owned(),
         conversation_id: None,
         conversation_version: None,
+        continuation: None,
     }
 }
 

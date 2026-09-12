@@ -178,7 +178,7 @@ reads `response.create` messages off the socket and drives the *same*
 `stream_id` values run concurrently, while requests in the same lane remain FIFO;
 requests without a `stream_id` share a default FIFO lane. The session admits at most
 64 active or queued requests and 12 MiB of aggregate request data. WebSocket sessions
-always force `stream: true, store: true`. Because axum's built-in graceful shutdown
+force `stream: true` and honor the requested `store` value. Because axum's built-in graceful shutdown
 doesn't wait for upgraded connections, `AppState` carries a separate
 `WebSocketTracker` so shutdown can drain in-flight sessions.
 
@@ -196,6 +196,59 @@ rechecked at request dispatch so queued work cannot start after identity expiry.
 Errors are modeled by a dedicated `WsError` enum (`handler/websocket/error.rs`) rather
 than reusing the HTTP JSON-error path, since some failure modes (a dead socket) must
 not attempt to write a response.
+
+### Opt-in core continuation sessions (`executor/session.rs`)
+
+Core callers can use `ExecuteRequest::with_session` or `rehydrate_in_session` to
+retain response state without durable storage. The WebSocket multiplexer owns one
+`ResponseSessionGroup` per connection and keeps one session per lane, including idle
+lanes. No-session HTTP and split execution keep their existing behavior.
+
+The connection retains at most 128 lanes (including the default lane), 32,768 items
+and 16 MiB per checkpoint, and 32 MiB of aggregate serialized checkpoints. These are
+retention ceilings, not measured process-memory bounds. New lanes receive an
+immediate 429 once the lifetime lane limit is reached. Request-count and request-byte
+overloads also return immediate 429 responses without mutating retained state, so
+rejected work cannot invalidate an earlier accepted queued continuation. Other
+validation errors execute in lane order and evict only a matching referenced parent
+when routing is valid. Parent lookup happens when execution begins; accepted queues
+do not reserve parent snapshots. Existing fork and execution-failure eviction rules
+still apply. Disconnect aborts and joins request tasks, waits for active leases to
+release pinned state, and drops the entire connection group before the close handshake.
+
+A `ResponseSession` owns one latest canonical checkpoint and one execution slot.
+The executor pins a parent before inference and publishes completed or incomplete
+state before exposing terminal completion. Failed continuations discard only a
+referenced checkpoint owned by that session. Dropping the owner closes the session
+and rejects late publication. Callers still cancel and join active work explicitly;
+`wait_until_idle` waits for the execution lease to end, but does not cancel it.
+
+`ResponseSessionGroup` allows independent serial members to find and pin each
+other's latest checkpoints. Failed forks cannot evict the source member's state.
+The group bounds lifetime member count, each checkpoint's items and serialized
+bytes, and aggregate retained bytes. Shared parent references count once; replaced
+parents still pinned by active work and prepared checkpoints awaiting persistence
+remain charged until their last reference is released. Reservation happens before
+durable writes, and failure or cancellation returns unused capacity. Replacement
+requires room for both old and new snapshots until publication. These retention
+budgets are not a bound on temporary allocations, execution copies or process
+memory. Scheduling, FIFO queues and active-work limits remain caller concerns.
+
+Response-scoped session history records reasoning, messages and calls in inference-round order,
+then built-in call outputs. Public output is accumulated separately and is not
+appended to retained history twice. Compaction replaces the canonical window while
+preserving MCP discovery records needed for orchestration. Durable restoration
+and replayed compaction input select the effective compacted window before validating current calls;
+obsolete stored rows are not deleted or charged to that retained window.
+
+For response-scoped session execution, `store: false` has no durable writes or
+database fallback. A stored child of a transient parent persists the complete
+canonical window without creating a row or dangling database reference for that
+parent. Explicit `conversation_id` requests keep the existing durable Conversations
+policy and append output only through the conversation handler. Their session lease
+still serializes execution without recording a second copy. Core commit supports
+prewarming without inference; WebSocket `generate: false` uses that same session
+rehydration and commit path.
 
 ### `handler/common.rs`
 

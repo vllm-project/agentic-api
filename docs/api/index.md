@@ -84,10 +84,22 @@ continuations. Send one JSON text frame per turn:
 ```
 
 The server normalizes the frame into the internal Responses request model and
-uses the same response-store continuation path as HTTP. WebSocket replies are
+uses the same core executor as HTTP, with connection-local continuation state. WebSocket replies are
 JSON Responses stream events, including `response.created`,
 `response.output_item.added`, `response.output_text.delta`, and
 `response.completed`.
+
+`store: false` keeps response state only in memory on the active connection. Each
+lane retains its latest response, including `generate: false` prewarm responses,
+so you can continue with `previous_response_id` without a database. After reconnecting,
+replay the full item history or a compacted window; an unstored response ID returns
+`400 previous_response_not_found`. With `store: true`, an uncached response can be
+loaded from durable storage. Explicit `conversation_id` requests retain the durable
+Conversations API behavior.
+
+A failed same-lane continuation evicts its referenced cached parent. Failed forks
+preserve the source lane's parent. Admission rejections (429) preserve existing
+checkpoints and accepted queued work. Parent lookup happens when execution begins.
 
 Set `stream_id` to a string containing 1 to 256 characters to multiplex
 responses over one connection. Requests with different `stream_id` values can
@@ -97,7 +109,12 @@ its `stream_id`.
 Requests that omit `stream_id` share a default first-in, first-out lane for
 backward compatibility. A connection accepts at most 64 outstanding requests and
 12 MiB of aggregate request data; additional requests receive a `429` error event
-until capacity is available. Upstream SSE lines are limited to 256 KiB, normalized
+until capacity is available. A connection retains at most 128 lanes, including the
+default lane; reconnect to start new lanes after that limit. Each retained checkpoint
+is limited to 32,768 items and 16 MiB of serialized state, with a 32 MiB connection
+budget covering cached, active-parent and prepared replacement checkpoints. Exceeding
+a checkpoint budget returns 413 before writing response state. These limits do not
+measure total process memory. Upstream SSE lines are limited to 256 KiB, normalized
 executor events are limited to 1 MiB, and each request shares a 1 MiB response
 budget across MCP discovery, upstream rounds, and normalized gateway tool output.
 Every outbound WebSocket event, including `stream_id`, is limited to 1 MiB of
@@ -112,11 +129,12 @@ Invalid requests are returned as JSON WebSocket error events:
 {
   "type": "error",
   "stream_id": "turn-1",
-  "status": 404,
+  "status": 400,
   "error": {
-    "message": "human-readable error details",
-    "type": "not_found",
-    "code": "not_found"
+    "message": "Previous response with id 'resp_missing' not found.",
+    "type": "invalid_request_error",
+    "code": "previous_response_not_found",
+    "param": "previous_response_id"
   }
 }
 ```
