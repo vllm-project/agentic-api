@@ -7,6 +7,8 @@ use std::time::Duration;
 use agentic_core::executor::{ConversationHandler, ExecuteRequest, ExecutionContext, ResponseHandler};
 use agentic_core::storage::{ConversationStore, ResponseStore};
 use agentic_core::tool::{GatewayExecutor, WebSearchHandler};
+use agentic_core::types::event::MessageStatus;
+use agentic_core::types::io::output::{FunctionToolCall, WebSearchCallStatus};
 use agentic_core::types::io::{
     FunctionToolResultMessage, InputItem, OutputItem, ResponsesInput, ToolCallOutput, ToolChoice,
 };
@@ -460,6 +462,137 @@ async fn web_search_handler_requires_base_url() {
         err.to_string(),
         "invalid tool config: YOU_API_BASE_URL must be set to use the web_search tool"
     );
+}
+
+/// Exact pre-refactor serialization of [`spawn_mock_you`]'s response for the
+/// request below, captured before the typed normalization introduced for
+/// #291. For a response that only carries modeled fields in wire order, the
+/// typed path must reproduce the legacy pass-through output byte-for-byte.
+const MOCK_YOU_TOOL_OUTPUT: &str = concat!(
+    r#"{"query":"rust async","queries":["rust async"],"#,
+    r#""results":{"web":[{"url":"https://example.com/rust","title":"Rust async guide","#,
+    r#""description":"A useful guide","snippets":["Use async carefully."]}],"news":[]},"#,
+    r#""metadata":[{"query":"rust async","search_uuid":"search_123","latency":0.12}]}"#
+);
+
+#[tokio::test]
+async fn web_search_handler_output_is_byte_identical_for_mock_you_response() {
+    let (base_url, _captured, _handle) = spawn_mock_you().await;
+    let handler =
+        WebSearchHandler::with_api_key(Arc::new(reqwest::Client::new()), "secret-you-key".to_owned(), &base_url);
+    let params = WebSearchToolParam::default();
+    let arguments = r#"{"query":"rust async","count":2,"exclude_domains":["example.com","example.org"]}"#;
+
+    let output = handler
+        .execute("call_search", "web_search", arguments, &params)
+        .await
+        .unwrap();
+
+    assert_eq!(output.output, MOCK_YOU_TOOL_OUTPUT);
+
+    let call = FunctionToolCall {
+        id: "fc_search".to_owned(),
+        call_id: "call_search".to_owned(),
+        name: "web_search".to_owned(),
+        namespace: None,
+        arguments: arguments.to_owned(),
+        status: MessageStatus::Completed,
+    };
+    let public = handler
+        .public_output(&call, &output, WebSearchCallStatus::Completed, &params)
+        .expect("web_search_call public output");
+    assert_eq!(
+        serde_json::to_value(&public).unwrap(),
+        serde_json::json!({
+            "id": "ws_search",
+            "type": "web_search_call",
+            "status": "completed",
+            "action": {
+                "type": "search",
+                "query": "rust async",
+                "queries": ["rust async"],
+                "sources": [{"url": "https://example.com/rust", "title": "Rust async guide"}]
+            }
+        })
+    );
+}
+
+/// Synthetic You.com `GET /v1/search` response built from the documented
+/// schema (not a live capture): every documented result and metadata field
+/// appears at least once, with full-page `contents` and `highlights`
+/// extraction on separate results as the API returns them.
+const YOU_SEARCH_RESPONSE_FIXTURE: &str = include_str!("fixtures/you_search_response.json");
+
+#[tokio::test]
+async fn web_search_handler_preserves_every_non_cosmetic_you_field() {
+    let fixture: serde_json::Value = serde_json::from_str(YOU_SEARCH_RESPONSE_FIXTURE).unwrap();
+    let (base_url, _captured, _handle) = spawn_mock_you_with_response(StatusCode::OK, fixture.clone()).await;
+    let handler =
+        WebSearchHandler::with_api_key(Arc::new(reqwest::Client::new()), "secret-you-key".to_owned(), &base_url);
+
+    let output = handler
+        .execute(
+            "call_search",
+            "web_search",
+            r#"{"query":"rust programming language"}"#,
+            &WebSearchToolParam::default(),
+        )
+        .await
+        .unwrap();
+    let output_json: serde_json::Value = serde_json::from_str(&output.output).unwrap();
+
+    let cosmetic_fields = ["thumbnail_url", "favicon_url"];
+    for section in ["web", "news"] {
+        let expected = fixture["results"][section].as_array().unwrap();
+        let actual = output_json["results"][section].as_array().unwrap();
+        assert_eq!(actual.len(), expected.len(), "{section} result count");
+        for (expected, actual) in expected.iter().zip(actual) {
+            let expected_object = expected.as_object().unwrap();
+            let actual_object = actual.as_object().unwrap();
+            for (field, value) in expected_object {
+                if cosmetic_fields.contains(&field.as_str()) {
+                    assert!(!actual_object.contains_key(field), "{section}.{field} is cosmetic");
+                } else if value.as_array().is_some_and(Vec::is_empty) {
+                    assert!(
+                        !actual_object.contains_key(field),
+                        "{section}.{field} empty list is elided"
+                    );
+                } else {
+                    assert_eq!(actual_object.get(field), Some(value), "{section}.{field}");
+                }
+            }
+            let unexpected: Vec<&String> = actual_object
+                .keys()
+                .filter(|key| !expected_object.contains_key(*key))
+                .collect();
+            assert!(unexpected.is_empty(), "{section} gained fields {unexpected:?}");
+        }
+    }
+    assert_eq!(output_json["metadata"], serde_json::json!([fixture["metadata"]]));
+
+    let call = FunctionToolCall {
+        id: "fc_search".to_owned(),
+        call_id: "call_search".to_owned(),
+        name: "web_search".to_owned(),
+        namespace: None,
+        arguments: r#"{"query":"rust programming language"}"#.to_owned(),
+        status: MessageStatus::Completed,
+    };
+    let public = handler
+        .public_output(
+            &call,
+            &output,
+            WebSearchCallStatus::Completed,
+            &WebSearchToolParam::default(),
+        )
+        .expect("web_search_call public output");
+    let public = serde_json::to_value(&public).unwrap();
+    let expected_sources: Vec<serde_json::Value> = ["web", "news"]
+        .into_iter()
+        .flat_map(|section| fixture["results"][section].as_array().unwrap().iter())
+        .map(|result| serde_json::json!({"url": result["url"], "title": result["title"]}))
+        .collect();
+    assert_eq!(public["action"]["sources"], serde_json::Value::Array(expected_sources));
 }
 
 fn web_search_function_call_response() -> support::MockResponse {

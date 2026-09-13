@@ -1,0 +1,59 @@
+{
+  "results": {
+    "web": [
+      {
+        "url": "https://www.rust-lang.org/",
+        "title": "Rust Programming Language",
+        "description": "A language empowering everyone to build reliable and efficient software.",
+        "snippets": [
+          "Rust is blazingly fast and memory-efficient: with no runtime or garbage collector.",
+          "Rust's rich type system and ownership model guarantee memory-safety and thread-safety."
+        ],
+        "thumbnail_url": "https://cdn.example/redacted/thumb-1.png",
+        "favicon_url": "https://cdn.example/redacted/favicon-1.ico",
+        "page_age": "2025-06-14T09:12:33",
+        "contents": {
+          "markdown": "# Rust\n\nA language empowering everyone to build reliable and efficient software.",
+          "html": "<h1>Rust</h1><p>A language empowering everyone to build reliable and efficient software.</p>"
+        }
+      },
+      {
+        "url": "https://doc.rust-lang.org/book/",
+        "title": "The Rust Programming Language - The Rust Programming Language",
+        "description": "This version of the text assumes you're using Rust 1.85.0 or later.",
+        "snippets": [
+          "This version of the text assumes you're using Rust 1.85.0 or later with edition = \"2024\"."
+        ],
+        "thumbnail_url": "https://cdn.example/redacted/thumb-2.png",
+        "favicon_url": "https://cdn.example/redacted/favicon-2.ico",
+        "page_age": "2025-05-02T00:00:00"
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/Rust_(programming_language)",
+        "title": "Rust (programming language) - Wikipedia",
+        "description": "Rust is a general-purpose programming language emphasizing performance, type safety, and concurrency.",
+        "snippets": [],
+        "favicon_url": "https://cdn.example/redacted/favicon-3.ico",
+        "contents": {
+          "highlights": [
+            "Rust is a general-purpose programming language emphasizing performance, type safety, and concurrency."
+          ]
+        }
+      }
+    ],
+    "news": [
+      {
+        "url": "https://blog.rust-lang.org/2025/06/01/redacted-release.html",
+        "title": "Announcing a redacted Rust release",
+        "description": "The Rust team is happy to announce a new version of Rust.",
+        "page_age": "2025-06-01T15:00:00",
+        "thumbnail_url": "https://cdn.example/redacted/news-thumb-1.png"
+      }
+    ]
+  },
+  "metadata": {
+    "query": "rust programming language",
+    "search_uuid": "00000000-0000-4000-8000-000000000000",
+    "latency": 0.41
+  }
+}

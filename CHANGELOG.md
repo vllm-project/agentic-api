@@ -15,6 +15,16 @@ All notable changes to Agentic API are documented here.
   list-tools emission on later turns.
 - Clarified Codex tool execution roles by replacing ambiguous ownership language
   with the preferred client-executed and gateway-executed terminology.
+- Refactored `web_search` into a typed provider contract and module split (`tool/web_search/{mod,args,you}`) as
+  the extension seam for further providers (#291): provider responses now normalize into `WebSearchResult` /
+  `WebSearchProviderMetadata` instead of forwarding raw You.com JSON, and `WebSearchProviderKind`,
+  `WebSearchProviderConfig::{provider, max_concurrent_queries}` (non-exhaustive; build with
+  `WebSearchProviderConfig::new`), and `WebSearchHandler::from_config` select and bound the provider. The
+  model-facing tool output keeps You.com's field names and the public `web_search_call.action.sources` list is
+  unchanged, but the normalization contract is now explicit: cosmetic `thumbnail_url` / `favicon_url` and unknown
+  fields are dropped, keys follow the typed struct order, `null` and empty fields are omitted, and an invalid
+  `freshness` fails fast with a tool config error instead of a provider round trip. `WebSearchProviderConfig` and the
+  You.com credential redact the API key in `Debug` output.
 
 ### Fixed
 

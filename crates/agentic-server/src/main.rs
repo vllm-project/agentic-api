@@ -286,10 +286,7 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
         postgres,
         sqlite,
         tools: ToolRuntimeConfig {
-            web_search: WebSearchProviderConfig {
-                api_key: web_search_api_key,
-                base_url: web_search_base_url,
-            },
+            web_search: WebSearchProviderConfig::new(web_search_api_key, web_search_base_url),
             mcp_servers: file.mcp_servers.clone(),
             mcp_allowed_hosts,
             messages_gateway_tool_aliases: file.messages_gateway.tool_aliases.clone(),

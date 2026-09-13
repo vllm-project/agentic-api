@@ -653,7 +653,7 @@ the behavioral layer — routing, handler traits, normalization, and execution.
     (`FunctionHandler`), `custom.rs` (`CustomHandler`), `codex.rs`
     (`CodexNamespaceHandler`). Their calls are returned for the client to resolve — the
     gateway never executes them.
-  - **Gateway-owned / built-in** tools implement both traits: see `web_search.rs`
+  - **Gateway-owned / built-in** tools implement both traits: see `web_search/mod.rs`
     (`WebSearchHandler`, backed by You.com) and `mcp/handler.rs` (`McpHandler`, backed
     by `mcp/client.rs`'s MCP protocol client and `mcp/pool.rs`'s connection pool).
 - **`ownership.rs`** — `ToolOwnership::Client` versus
@@ -706,7 +706,7 @@ the behavioral layer — routing, handler traits, normalization, and execution.
 1. Implement `ToolHandler`, including its typed `ToolParams`, for it. If it's client-executed,
    stop there — see `function.rs`/`custom.rs` for the pattern.
 2. If it's gateway-executed, also declare typed `GatewayExecutor::ExecutionParams`
-   and implement `execute` — see `web_search.rs`/`mcp/handler.rs`.
+   and implement `execute` — see `web_search/mod.rs`/`mcp/handler.rs`.
 3. Wire it into `tool/normalize.rs`'s `validate`/`to_function_tools` match arms.
 4. Wire it into `tool/registry.rs`'s `build_with_handlers` (an `insert_*_entry` call).
 5. If it needs lazy per-request connection setup, add a slot to `GatewayExecutors` in

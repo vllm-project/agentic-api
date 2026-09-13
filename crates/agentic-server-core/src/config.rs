@@ -3,6 +3,8 @@ use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
+
 use crate::error::Error;
 use crate::tool::McpServerEntry;
 
@@ -85,10 +87,70 @@ impl Default for SqliteConfig {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+/// Backend that serves the gateway-owned `web_search` tool.
+///
+/// Additional providers are added here (#291). The enum is non-exhaustive so
+/// downstream crates keep a fallback arm when a new variant lands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum WebSearchProviderKind {
+    #[default]
+    You,
+}
+
+impl WebSearchProviderKind {
+    /// Environment variable that conventionally carries this provider's API key.
+    #[must_use]
+    pub const fn default_api_key_env(self) -> &'static str {
+        match self {
+            Self::You => "YOU_API_KEY",
+        }
+    }
+}
+
+/// Credentials and limits for the gateway-owned `web_search` provider.
+///
+/// Non-exhaustive so provider options can grow without breaking downstream
+/// construction; build it with [`WebSearchProviderConfig::new`] or
+/// [`Default`] and assign the remaining public fields.
+#[derive(Clone, Default)]
+#[non_exhaustive]
 pub struct WebSearchProviderConfig {
+    /// Backend serving `web_search`; defaults to You.com.
+    pub provider: WebSearchProviderKind,
     pub api_key: Option<String>,
     pub base_url: Option<String>,
+    /// Optional limit on concurrent provider queries across all `web_search`
+    /// calls. `None` inherits [`ToolRuntimeConfig::max_concurrent_gateway_calls`];
+    /// an explicit value never raises the effective limit above that ceiling.
+    pub max_concurrent_queries: Option<NonZeroUsize>,
+}
+
+impl WebSearchProviderConfig {
+    /// Builds a default-provider config from the credential and endpoint the
+    /// deployment resolved; `provider` and `max_concurrent_queries` keep their
+    /// defaults and may be assigned afterwards.
+    #[must_use]
+    pub fn new(api_key: Option<String>, base_url: Option<String>) -> Self {
+        Self {
+            api_key,
+            base_url,
+            ..Self::default()
+        }
+    }
+}
+
+impl std::fmt::Debug for WebSearchProviderConfig {
+    /// Redacts `api_key` so debug-printing any enclosing config never logs the secret.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebSearchProviderConfig")
+            .field("provider", &self.provider)
+            .field("api_key", &self.api_key.as_ref().map(|_| "<redacted>"))
+            .field("base_url", &self.base_url)
+            .field("max_concurrent_queries", &self.max_concurrent_queries)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -237,6 +299,31 @@ pub fn normalize_base_url(url: &str) -> String {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn web_search_provider_config_debug_redacts_api_key() {
+        let mut config = WebSearchProviderConfig::new(
+            Some("super-secret-key".to_owned()),
+            Some("https://api.example".to_owned()),
+        );
+        config.max_concurrent_queries = NonZeroUsize::new(3);
+        let rendered = format!("{config:?}");
+        assert!(!rendered.contains("super-secret-key"));
+        assert!(rendered.contains(r#"api_key: Some("<redacted>")"#));
+        assert!(rendered.contains(r#"base_url: Some("https://api.example")"#));
+        assert!(rendered.contains("provider: You"));
+        assert!(rendered.contains("max_concurrent_queries: Some(3)"));
+
+        let tools = ToolRuntimeConfig {
+            web_search: config,
+            ..ToolRuntimeConfig::default()
+        };
+        assert!(!format!("{tools:?}").contains("super-secret-key"));
+        assert_eq!(
+            format!("{:?}", WebSearchProviderConfig::default()),
+            "WebSearchProviderConfig { provider: You, api_key: None, base_url: None, max_concurrent_queries: None }"
+        );
+    }
 
     #[test]
     fn strip_trailing_v1() {
