@@ -1,59 +1,64 @@
 {
   "results": {
-    "web": [
-      {
-        "url": "https://www.rust-lang.org/",
-        "title": "Rust Programming Language",
-        "description": "A language empowering everyone to build reliable and efficient software.",
-        "snippets": [
-          "Rust is blazingly fast and memory-efficient: with no runtime or garbage collector.",
-          "Rust's rich type system and ownership model guarantee memory-safety and thread-safety."
-        ],
-        "thumbnail_url": "https://cdn.example/redacted/thumb-1.png",
-        "favicon_url": "https://cdn.example/redacted/favicon-1.ico",
-        "page_age": "2025-06-14T09:12:33",
-        "contents": {
-          "markdown": "# Rust\n\nA language empowering everyone to build reliable and efficient software.",
-          "html": "<h1>Rust</h1><p>A language empowering everyone to build reliable and efficient software.</p>"
-        }
-      },
-      {
-        "url": "https://doc.rust-lang.org/book/",
-        "title": "The Rust Programming Language - The Rust Programming Language",
-        "description": "This version of the text assumes you're using Rust 1.85.0 or later.",
-        "snippets": [
-          "This version of the text assumes you're using Rust 1.85.0 or later with edition = \"2024\"."
-        ],
-        "thumbnail_url": "https://cdn.example/redacted/thumb-2.png",
-        "favicon_url": "https://cdn.example/redacted/favicon-2.ico",
-        "page_age": "2025-05-02T00:00:00"
-      },
-      {
-        "url": "https://en.wikipedia.org/wiki/Rust_(programming_language)",
-        "title": "Rust (programming language) - Wikipedia",
-        "description": "Rust is a general-purpose programming language emphasizing performance, type safety, and concurrency.",
-        "snippets": [],
-        "favicon_url": "https://cdn.example/redacted/favicon-3.ico",
-        "contents": {
-          "highlights": [
-            "Rust is a general-purpose programming language emphasizing performance, type safety, and concurrency."
-          ]
-        }
-      }
-    ],
     "news": [
       {
-        "url": "https://blog.rust-lang.org/2025/06/01/redacted-release.html",
-        "title": "Announcing a redacted Rust release",
-        "description": "The Rust team is happy to announce a new version of Rust.",
-        "page_age": "2025-06-01T15:00:00",
-        "thumbnail_url": "https://cdn.example/redacted/news-thumb-1.png"
+        "description": "C won't be disappearing tomorrow, says the stable kernel maintainer, but the future of Linux belongs to Rust.",
+        "page_age": "2026-07-15T16:13:42",
+        "thumbnail_url": "https://s.yimg.com/lo/mysterio/api/2bdc8a3e1869eab0452a0fac6e599caba4c8496223475dd9e0a193f7b3fd8d98/lightyear_networkapi/resizefill_w1200;quality_80;format_webp/https:%2F%2Fmedia.zenfs.com%2Fen%2Fzdnet_articles_730%2F5ea4c915b08f4417f23ec9143f381180",
+        "title": "'Rust makes coding fun again': Why Linux is moving away from C, according to Greg Kroah-Hartman",
+        "url": "https://tech.yahoo.com/computing/articles/rust-makes-coding-fun-again-161342409.html"
+      },
+      {
+        "description": "Xiaomi just rolled out the stable Android 17 update to the Xiaomi 17 Ultra and Xiaomi 17. The only issue is that it's still based on HyperOS 3.0, so you won't see any new features.",
+        "page_age": "2026-07-16T07:45:51",
+        "thumbnail_url": "https://s.yimg.com/lo/mysterio/api/ad2d7ffb2de57f87b99027ef35c0ab6878da2a854f5421ea2d052f32ea2bb61b/lightyear_networkapi/resizefill_w1200;quality_80;format_webp/https:%2F%2Fmedia.zenfs.com%2Fen%2Fandroid_central_347%2F339a43e3965ba3504f0886c44b62e9e0",
+        "title": "Xiaomi somehow rolls out stable Android 17 update ahead of its rivals",
+        "url": "https://tech.yahoo.com/phones/articles/xiaomi-somehow-rolls-stable-android-074551979.html"
+      }
+    ],
+    "web": [
+      {
+        "description": "Rust Versions # Stable: 1.95.0 Beta: 1.96.0 (28 May, 2026, 8 days left) Nightly: 1.97.0 (9 July, 2026, 50 days left) Ongoing Stabilization PRs # Stabilize core::range::{legacy, RangeFull, RangeTo} (4 days old) T-compiler - Relevant to the compiler team, which will review and decide on the PR/issue.",
+        "favicon_url": "https://you.com/favicon?domain=releases.rs&size=128",
+        "page_age": "2026-06-02T03:45:04",
+        "snippets": [
+          "T-rustdoc - Relevant to the rustdoc team, which will review and decide on the PR/issue. ... T-compiler - Relevant to the compiler team, which will review and decide on the PR/issue. S-blocked - Status: Blocked on something else such as an RFC or other implementation work. needs-fcp - This change is insta-stable, or significant enough to need a team FCP to proceed.",
+          "T-rustdoc - Relevant to the rustdoc team, which will review and decide on the PR/issue. S-waiting-on-review - Status: Awaiting review from the assignee but also interested parties. proposed-final-comment-period - Proposed to merge/close by relevant subteam, see T- ... T-libs-api - Relevant to the library API team, which will review and decide on the PR/issue. needs-fcp - This change is insta-stable, or significant enough to need a team FCP to proceed.",
+          "T-rustdoc - Relevant to the rustdoc team, which will review and decide on the PR/issue. T-compiler - Relevant to the compiler team, which will review and decide on the PR/issue. S-waiting-on-review - Status: Awaiting review from the assignee but also interested parties. S-blocked - Status: Blocked on something else such as an RFC or other implementation work. needs-fcp - This change is insta-stable, or significant enough to need a team FCP to proceed.",
+          "needs-fcp - This change is insta-stable, or significant enough to need a team FCP to proceed. A-rust-for-linux - Relevant for the Rust-for-Linux project"
+        ],
+        "title": "Rust Versions | Rust Changelogs",
+        "url": "https://releases.rs/"
+      },
+      {
+        "description": "Click here to be redirected to the latest Rust release announcement",
+        "favicon_url": "https://you.com/favicon?domain=blog.rust-lang.org&size=128",
+        "page_age": "2026-07-09T05:20:01",
+        "snippets": [
+          "Click here to be redirected to the latest Rust release announcement."
+        ],
+        "title": "Announcing Rust 1.97.0",
+        "url": "https://blog.rust-lang.org/releases/latest/"
+      },
+      {
+        "description": "Empowering everyone to build reliable and efficient software. - Releases · rust-lang/rust",
+        "favicon_url": "https://you.com/favicon?domain=github.com&size=128",
+        "original_thumbnail_url": "https://opengraph.githubassets.com/965c2fcedff6dbee97c6e81ff9e86ca7d93ba06b36c08dd84d449d801ca3195b/rust-lang/rust",
+        "snippets": [
+          "Empowering everyone to build reliable and efficient software. - rust-lang/rust",
+          "Allow a dependency to specify both a git repository and an alternate registry. Just like with crates.io, the git repository will be used locally, but the registry version will be used when published. Added target.'cfg(..)'.rustdocflags support in configuration.",
+          "Refer to Rust's platform support page for more information on Rust's tiered platform support. Relax T: Ord bound for some BinaryHeap methods. ... Stabilize the config include key. The top-level include config key allows loading additional config files, enabling better organization, sharing, and management of Cargo configurations across projects and environments. docs #16284 · Stabilize the pubtime field in registry index. This records when a crate version was published and enables time-based dependency resolution in the future.",
+          "Putting the #[test] attribute in these places is no longer ignored, and will now result in an error; this may also result in errors when generating rustdoc. Error when test attribute is applied to structs · Cargo now sets the CARGO_CFG_DEBUG_ASSERTIONS environment variable in more situations. This will cause crates depending on static-init versions 1.0.1 to 1.0.3 to fail compilation with \"failed to resolve: use of unresolved module or unlinked crate parking_lot\"."
+        ],
+        "thumbnail_url": "https://opengraph.githubassets.com/965c2fcedff6dbee97c6e81ff9e86ca7d93ba06b36c08dd84d449d801ca3195b/rust-lang/rust",
+        "title": "Releases · rust-lang/rust",
+        "url": "https://github.com/rust-lang/rust/releases"
       }
     ]
   },
   "metadata": {
-    "query": "rust programming language",
-    "search_uuid": "00000000-0000-4000-8000-000000000000",
-    "latency": 0.41
+    "latency": 0.634,
+    "query": "latest stable Rust version number",
+    "search_uuid": "00000000-0000-4000-8000-000000000000"
   }
 }

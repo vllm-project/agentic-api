@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::storage::StorageError;
-use crate::types::io::{InputItem, OutputItem};
+use crate::types::io::{InputItem, OutputItem, ResponsesInput};
 use crate::utils::common::serialize_to_value;
 
 pub(crate) const STORED_ITEM_KIND_KEY: &str = "_agentic_item_kind";
@@ -106,14 +106,17 @@ impl InOutItem {
     /// Internal items are removed later by `ResponsesInput::model_input`.
     #[must_use]
     pub fn into_input_items(history: Vec<InOutItem>) -> Vec<InputItem> {
-        history
+        let items = history
             .into_iter()
             .filter_map(|item| match item {
                 InOutItem::Input(item) if item.is_unknown() => None,
                 InOutItem::Input(item) => Some(item),
                 InOutItem::Output(output) => output.to_input_item(),
             })
-            .collect()
+            .collect();
+        // Stored inputs retain their public tool types; lower only the history
+        // copy used for continuation, using the same conversion as new inputs.
+        Vec::from(ResponsesInput::Items(items))
     }
 }
 
@@ -124,7 +127,7 @@ mod tests {
     use crate::types::io::output::McpListTools;
     use crate::types::io::{
         FunctionToolCall, InputContent, InputMessage, InputMessageContent, OutputMessage, OutputTextContent,
-        ReasoningOutput, ReasoningTextContent, ResponsesInput,
+        ReasoningOutput, ReasoningTextContent, ResponsesInput, ShellCall, ShellCallAction, ShellCallStatus,
     };
 
     #[test]
@@ -243,6 +246,27 @@ mod tests {
         if let InputItem::FunctionCall(f) = &inputs[0] {
             assert_eq!(f.name, "my_tool");
         }
+    }
+
+    #[test]
+    fn test_into_input_items_preserves_shell_calls() {
+        let call = ShellCall {
+            id: Some("sh_1".to_owned()),
+            call_id: "call_shell".to_owned(),
+            action: ShellCallAction {
+                commands: vec!["pwd".to_owned()],
+                timeout_ms: Some(1_000),
+                max_output_length: Some(4_096),
+                extra: std::collections::HashMap::new(),
+            },
+            status: Some(ShellCallStatus::Completed),
+            extra: std::collections::HashMap::new(),
+        };
+
+        let inputs = InOutItem::into_input_items(vec![InOutItem::Output(OutputItem::ShellCall(call))]);
+        assert!(
+            matches!(inputs.as_slice(), [InputItem::FunctionCall(call)] if call.call_id == "call_shell" && call.name == "shell")
+        );
     }
 
     #[test]

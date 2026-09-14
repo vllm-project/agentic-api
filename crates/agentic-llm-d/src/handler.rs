@@ -147,8 +147,8 @@ pub async fn persist(State(state): State<BackendState>, req: Request) -> Respons
         Err(error) => return error_response(error),
     };
     let ctx = RequestContext::from(context);
-    let stored = match decode_upstream(&ctx, upstream) {
-        Ok(payload) => commit(ctx, payload, state.exec_ctx.as_ref()).await,
+    let stored = match decode_upstream(ctx, upstream).await {
+        Ok((payload, ctx)) => commit(ctx, payload, state.exec_ctx.as_ref()).await,
         Err(error) => Err(error),
     };
     match stored {

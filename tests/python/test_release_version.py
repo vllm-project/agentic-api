@@ -9,6 +9,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VALIDATOR = REPO_ROOT / "scripts" / "validate-python-release-version.sh"
 RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release-python.yml"
+CRATE_RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release-crates.yml"
 PYTHON_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "python.yml"
 BUILD_CONSTRAINTS = REPO_ROOT / "python-build-constraints.txt"
 WORKSPACE_VERSION = re.search(
@@ -46,6 +47,61 @@ def test_release_workflow_keeps_dispatch_version_out_of_shell_source() -> None:
     assert all("${{ inputs.version }}" not in block for block in run_blocks)
 
 
+def test_release_workflow_default_matches_workspace_version() -> None:
+    workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    version_input = re.search(r'(?ms)^      version:\n.*?^        default: "([^"]+)"', workflow)
+
+    assert version_input is not None
+    assert version_input.group(1) == WORKSPACE_VERSION
+
+
+def test_crate_release_dry_run_packages_server_against_the_local_core() -> None:
+    workflow = CRATE_RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    dry_run_block = next(block for block in _workflow_run_blocks(workflow) if "Would release commit" in block)
+    normalized_block = " ".join(dry_run_block.split())
+
+    for command in (
+        "cargo check --workspace --locked",
+        "cargo clippy --all-targets --locked -- -D warnings",
+        "cargo test --locked",
+        "cargo publish --locked -p agentic-server-core",
+        "cargo publish --locked -p agentic-server",
+    ):
+        assert command in workflow
+    assert "cargo package --no-verify --locked -p agentic-server" in normalized_block
+    assert (
+        "--config 'patch.crates-io.agentic-server-core.path=\"crates/agentic-server-core\"'" in normalized_block
+    )
+    assert "cargo package --list" not in normalized_block
+
+    package = subprocess.run(
+        [
+            "cargo",
+            "package",
+            "--no-verify",
+            "--locked",
+            "--allow-dirty",
+            "-p",
+            "agentic-server",
+            "--config",
+            'patch.crates-io.agentic-server-core.path="crates/agentic-server-core"',
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert package.returncode == 0, package.stderr
+    assert (REPO_ROOT / "target" / "package" / f"agentic-server-{WORKSPACE_VERSION}.crate").is_file()
+
+
+def test_crate_release_published_version_checks_query_crates_io() -> None:
+    workflow = CRATE_RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    published_check = next(block for block in _workflow_run_blocks(workflow) if "is already published" in block)
+
+    assert published_check.count("cargo info --registry crates-io") == 2
+
+
 def test_python_workflows_pin_build_tools_and_manylinux_artifact_contract() -> None:
     release_workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
     python_workflow = PYTHON_WORKFLOW.read_text(encoding="utf-8")
@@ -70,6 +126,14 @@ def test_python_workflows_pin_build_tools_and_manylinux_artifact_contract() -> N
     assert "hashFiles('Cargo.lock', 'python-build-constraints.txt')" in python_workflow
 
 
+def test_python_workflow_validates_crate_release_workflow_changes() -> None:
+    workflow = PYTHON_WORKFLOW.read_text(encoding="utf-8")
+
+    for trigger in ("pull_request", "push"):
+        section = _workflow_trigger_section(workflow, trigger)
+        assert section.count('".github/workflows/release-crates.yml"') == 1
+
+
 def _workflow_run_blocks(workflow: str) -> list[str]:
     lines = workflow.splitlines()
     blocks: list[str] = []
@@ -88,3 +152,14 @@ def _workflow_run_blocks(workflow: str) -> list[str]:
             block.append(candidate)
         blocks.append("\n".join(block))
     return blocks
+
+
+def _workflow_trigger_section(workflow: str, trigger: str) -> str:
+    lines = workflow.splitlines()
+    start = lines.index(f"  {trigger}:")
+    section: list[str] = []
+    for line in lines[start + 1 :]:
+        if line.startswith("  ") and not line.startswith("    ") and line.strip():
+            break
+        section.append(line)
+    return "\n".join(section)

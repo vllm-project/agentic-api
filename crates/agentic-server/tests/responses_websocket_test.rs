@@ -29,9 +29,9 @@ use agentic_core::storage::{
 };
 use agentic_core::tool::{WebSearchHandler, model_visible_namespace_member_name};
 use agentic_core::types::RequestPayload;
-use agentic_core::types::io::{InputItem, ResponsesInput};
+use agentic_core::types::io::{CompactionItem, InputItem, ResponsesInput};
 use agentic_core::types::tools::ResponsesTool;
-use agentic_server::app::{AppState, WebSocketTracker};
+use agentic_server::app::{AppState, DEFAULT_MAX_REQUEST_BODY_SIZE, WebSocketTracker};
 
 use common::{spawn_gateway, test_config};
 
@@ -109,6 +109,17 @@ enum MockResponse {
     Gated {
         response: String,
         arrived: oneshot::Sender<()>,
+        release: oneshot::Receiver<()>,
+    },
+    ObservedGated {
+        response: String,
+        arrived: oneshot::Sender<Value>,
+        release: oneshot::Receiver<()>,
+    },
+    ObservedPhased {
+        first_chunk: String,
+        remaining_chunks: String,
+        arrived: oneshot::Sender<Value>,
         release: oneshot::Receiver<()>,
     },
     Hanging {
@@ -189,7 +200,7 @@ impl MockResponsesServer {
                 let requests = Arc::clone(&route_requests);
                 async move {
                     let body = serde_json::from_slice::<Value>(&body).expect("request body should be JSON");
-                    requests.lock().await.push(body);
+                    requests.lock().await.push(body.clone());
                     let response = queue.lock().await.pop_front().expect("mock response queue exhausted");
                     let body = match response {
                         MockResponse::Static(response) => axum::body::Body::from(response),
@@ -201,6 +212,30 @@ impl MockResponsesServer {
                             let _ = arrived.send(());
                             let _ = release.await;
                             axum::body::Body::from(response)
+                        }
+                        MockResponse::ObservedGated {
+                            response,
+                            arrived,
+                            release,
+                        } => {
+                            let _ = arrived.send(body);
+                            let _ = release.await;
+                            axum::body::Body::from(response)
+                        }
+                        MockResponse::ObservedPhased {
+                            first_chunk,
+                            remaining_chunks,
+                            arrived,
+                            release,
+                        } => {
+                            let _ = arrived.send(body);
+                            let first =
+                                futures::stream::once(async move { Ok::<_, Infallible>(Bytes::from(first_chunk)) });
+                            let remaining = futures::stream::once(async move {
+                                let _ = release.await;
+                                Ok::<_, Infallible>(Bytes::from(remaining_chunks))
+                            });
+                            axum::body::Body::from_stream(first.chain(remaining))
                         }
                         MockResponse::Hanging { first_chunk, drop_tx } => {
                             axum::body::Body::from_stream(HangingSse::new(first_chunk, drop_tx))
@@ -288,6 +323,7 @@ fn persistence_disabled_state(llm_url: &str) -> AppState {
         llm_api_base: config.llm_api_base,
         skip_llm_ready_check: config.skip_llm_ready_check,
         openai_api_key: config.openai_api_key,
+        max_request_body_size: DEFAULT_MAX_REQUEST_BODY_SIZE,
     }
 }
 
@@ -323,9 +359,13 @@ async fn storage_backed_state_with_web_search(llm_url: &str, web_search_base_url
         llm_api_base: config.llm_api_base,
         skip_llm_ready_check: config.skip_llm_ready_check,
         openai_api_key: config.openai_api_key,
+        max_request_body_size: DEFAULT_MAX_REQUEST_BODY_SIZE,
     };
     StorageBackedState { state, pool, _db: db }
 }
+
+/// Deliberately tiny ceiling used to exercise the limit without large allocations.
+const SMALL_REQUEST_SIZE_LIMIT: std::num::NonZeroUsize = std::num::NonZeroUsize::new(500).expect("nonzero");
 
 const COMPETING_RESPONSE_ID: &str = "resp_competing";
 const CONFLICT_MESSAGE: &str = "conversation changed while the response was being generated; retry the request";
@@ -528,6 +568,13 @@ fn sse_response(response_id: &str, message_id: &str, text: &str) -> String {
     format!("data: {created}\n\ndata: {added}\n\ndata: {delta}\n\ndata: {completed}\n\ndata: [DONE]\n\n")
 }
 
+fn phased_sse_response(response_id: &str, message_id: &str, text: &str) -> (String, String) {
+    let response = sse_response(response_id, message_id, text);
+    let split_at = response.find("\n\n").expect("SSE response has a first event") + 2;
+    let (first_chunk, remaining_chunks) = response.split_at(split_at);
+    (first_chunk.to_owned(), remaining_chunks.to_owned())
+}
+
 fn sse_failed_response() -> String {
     let created = json!({
         "type": "response.created",
@@ -591,6 +638,86 @@ fn sse_function_call_response(response_id: &str, call_name: &str) -> String {
         "response": {"id": response_id, "status": "completed", "usage": null}
     });
     format!("data: {created}\n\ndata: {added}\n\ndata: {done}\n\ndata: {completed}\n\ndata: [DONE]\n\n")
+}
+
+fn sse_tool_search_call_response() -> String {
+    let created = json!({
+        "type": "response.created",
+        "response": {
+            "id": "resp_search", "status": "in_progress",
+            "tools": [{"type": "function", "name": "tool_search", "parameters": {"type": "object"}}]
+        }
+    });
+    let in_progress = json!({
+        "type": "response.in_progress",
+        "response": {
+            "id": "resp_search", "status": "in_progress",
+            "tools": [{"type": "function", "name": "tool_search", "parameters": {"type": "object"}}]
+        }
+    });
+    let added = json!({
+        "type": "response.output_item.added", "output_index": 0,
+        "item": {"id": "fc_search", "type": "function_call", "status": "in_progress",
+            "name": "tool_search", "call_id": "call_search", "arguments": ""}
+    });
+    let delta = json!({
+        "type": "response.function_call_arguments.delta", "output_index": 0,
+        "item_id": "fc_search", "delta": "{\"query\":\"weather\"}"
+    });
+    let arguments_done = json!({
+        "type": "response.function_call_arguments.done", "output_index": 0,
+        "item_id": "fc_search", "name": "tool_search", "arguments": "{\"query\":\"weather\"}"
+    });
+    let done = json!({
+        "type": "response.output_item.done", "output_index": 0,
+        "item": {"id": "fc_search", "type": "function_call", "status": "completed",
+            "name": "tool_search", "call_id": "call_search", "arguments": "{\"query\":\"weather\"}"}
+    });
+    let completed = json!({
+        "type": "response.completed", "response": {"id": "resp_search", "status": "completed", "usage": null}
+    });
+    format!(
+        "data: {created}\n\ndata: {in_progress}\n\ndata: {added}\n\ndata: {delta}\n\ndata: {arguments_done}\n\ndata: {done}\n\ndata: {completed}\n\ndata: [DONE]\n\n"
+    )
+}
+
+fn sse_weather_function_call_response() -> String {
+    let created = json!({
+        "type": "response.created", "response": {"id": "resp_weather", "status": "in_progress"}
+    });
+    let added = json!({
+        "type": "response.output_item.added", "output_index": 0,
+        "item": {"id": "fc_weather", "type": "function_call", "status": "in_progress",
+            "name": "get_weather", "call_id": "call_weather", "arguments": ""}
+    });
+    let done = json!({
+        "type": "response.output_item.done", "output_index": 0,
+        "item": {"id": "fc_weather", "type": "function_call", "status": "completed",
+            "name": "get_weather", "call_id": "call_weather", "arguments": "{\"city\":\"Paris\"}"}
+    });
+    let completed = json!({
+        "type": "response.completed", "response": {"id": "resp_weather", "status": "completed", "usage": null}
+    });
+    format!("data: {created}\n\ndata: {added}\n\ndata: {done}\n\ndata: {completed}\n\ndata: [DONE]\n\n")
+}
+
+fn tool_search_declaration() -> Value {
+    json!({
+        "type": "tool_search",
+        "execution": "client",
+        "description": "Search the client catalog",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}
+    })
+}
+
+fn deferred_weather_function() -> Value {
+    json!({
+        "type": "function",
+        "name": "get_weather",
+        "description": "Get weather",
+        "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+        "defer_loading": true
+    })
 }
 
 fn sse_custom_tool_call_response() -> String {
@@ -687,7 +814,65 @@ fn web_search_function_call_sse_response() -> String {
 }
 
 #[tokio::test]
-async fn test_websocket_generate_false_prewarm_persists_context_without_inference() {
+async fn websocket_generate_false_rejects_oversized_events_before_persistence() {
+    assert_oversized_local_completion_rejected(false).await;
+}
+
+#[tokio::test]
+async fn websocket_generate_false_checks_completed_event_before_persistence_or_delivery() {
+    assert_oversized_local_completion_rejected(true).await;
+}
+
+async fn assert_oversized_local_completion_rejected(only_completion_oversized: bool) {
+    let fixture = storage_backed_state("http://127.0.0.1:9").await;
+    let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    let mut payload = json!({
+        "type": "response.create", "model": "test-model", "input": [],
+        "generate": false, "stream_id": "oversized-local", "instructions": ""
+    });
+    let instruction_bytes = if only_completion_oversized {
+        send_json(&mut ws, payload.clone()).await;
+        let baseline = recv_until_completed(&mut ws).await;
+        assert_eq!(baseline.len(), 2);
+        let created_bytes = baseline[0].to_string().len();
+        assert!(baseline[1].to_string().len() > created_bytes);
+        // Fill the created event exactly to the wire limit. The completed event
+        // is larger because it includes usage, so both must be checked up front.
+        1024 * 1024 - created_bytes
+    } else {
+        2 * 1024 * 1024
+    };
+    payload["instructions"] = json!("x".repeat(instruction_bytes));
+    payload["input"] = json!("must not be stored");
+    send_json(&mut ws, payload).await;
+    let event = recv_json(&mut ws).await;
+    assert_eq!(
+        event["type"], "error",
+        "no lifecycle event may be emitted for an oversized local response"
+    );
+    assert_eq!(event["stream_id"], "oversized-local");
+    assert!(event["error"]["message"].as_str().unwrap().contains("exceeded"));
+    assert!(event.to_string().len() <= 1024 * 1024);
+    let responses = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM responses")
+        .fetch_one(fixture.pool.as_ref())
+        .await
+        .unwrap();
+    assert_eq!(
+        responses,
+        i64::from(only_completion_oversized),
+        "rejected response must not be persisted"
+    );
+    let items = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM items")
+        .fetch_one(fixture.pool.as_ref())
+        .await
+        .unwrap();
+    assert_eq!(items, 0, "rejected response must not leave orphaned items");
+    gateway.abort();
+}
+
+#[tokio::test]
+async fn test_websocket_generate_false_prewarm_retains_context_without_inference() {
     let mock = MockResponsesServer::start(vec![sse_response("resp_upstream_1", "msg_upstream_1", "READY")]).await;
     let fixture = storage_backed_state(&mock.url).await;
     let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
@@ -782,7 +967,7 @@ async fn test_websocket_generate_false_prewarm_redacts_mcp_runtime_credentials()
                 "require_approval": "never"
             }],
             "generate": false,
-            "store": false,
+            "store": true,
             "stream": true
         }),
     )
@@ -808,6 +993,7 @@ async fn test_websocket_generate_false_prewarm_redacts_mcp_runtime_credentials()
         response_id: "resp_lookup".to_owned(),
         conversation_id: None,
         conversation_version: None,
+        continuation: None,
     };
     let stored = fixture
         .state
@@ -823,6 +1009,406 @@ async fn test_websocket_generate_false_prewarm_redacts_mcp_runtime_credentials()
 
     assert!(tool.headers.is_none());
     assert!(tool.authorization.is_none());
+}
+
+#[tokio::test]
+async fn test_websocket_generate_false_rejects_mismatched_search_output_without_persistence() {
+    let mock = MockResponsesServer::start(vec![]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "model": "test-model",
+            "input": [
+                {
+                    "type": "tool_search_call",
+                    "id": "tsc_1",
+                    "call_id": "call_search_1",
+                    "arguments": {"query": "weather"}
+                },
+                {
+                    "type": "tool_search_output",
+                    "call_id": "call_mismatch",
+                    "tools": [{
+                        "type": "mcp",
+                        "server_label": "private",
+                        "server_url": "https://mcp.example.test/mcp",
+                        "headers": {"Authorization": "Bearer must-not-persist"}
+                    }]
+                }
+            ],
+            "tools": [],
+            "generate": false,
+            "store": false,
+            "stream": true
+        }),
+    )
+    .await;
+
+    let events = recv_until_completed(&mut ws).await;
+    let error = events.last().expect("terminal tool-search error");
+    assert_eq!(error["type"], "error");
+    assert_eq!(error["status"], StatusCode::BAD_REQUEST.as_u16());
+    assert_eq!(error["error"]["type"], "invalid_request_error");
+    assert!(mock.request_bodies().await.is_empty());
+
+    let response_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM responses")
+        .fetch_one(fixture.pool.as_ref())
+        .await
+        .expect("response count");
+    let item_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM items")
+        .fetch_one(fixture.pool.as_ref())
+        .await
+        .expect("item count");
+    assert_eq!(response_count, 0, "fail-closed request must not persist a response");
+    assert_eq!(item_count, 0, "fail-closed request must not persist tool-search items");
+}
+
+fn assert_public_ws_search_lifecycle(first: &[Value]) -> String {
+    let expected_public_tools = json!([tool_search_declaration(), deferred_weather_function()]);
+    let response_tool_envelopes = first
+        .iter()
+        .filter_map(|event| event.get("response"))
+        .filter_map(|response| response.get("tools"))
+        .collect::<Vec<_>>();
+    assert!(!response_tool_envelopes.is_empty());
+    assert!(
+        response_tool_envelopes
+            .iter()
+            .all(|tools| *tools == &expected_public_tools)
+    );
+    assert!(first.iter().all(|event| {
+        event["response"]["tools"].as_array().is_none_or(|tools| {
+            tools
+                .iter()
+                .all(|tool| !(tool["type"] == "function" && tool["name"] == "tool_search"))
+        })
+    }));
+    assert_eq!(
+        first
+            .iter()
+            .map(|event| event["sequence_number"].as_u64())
+            .collect::<Vec<_>>(),
+        (0..u64::try_from(first.len()).unwrap()).map(Some).collect::<Vec<_>>()
+    );
+    assert!(first.iter().all(|event| {
+        !matches!(
+            event["type"].as_str(),
+            Some("response.function_call_arguments.delta" | "response.function_call_arguments.done" | "error")
+        )
+    }));
+    let lifecycle = first
+        .iter()
+        .filter(|event| {
+            matches!(
+                event["type"].as_str(),
+                Some("response.output_item.added" | "response.output_item.done")
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(lifecycle.len(), 2);
+    assert_eq!(lifecycle[0]["item"]["type"], "tool_search_call");
+    assert_eq!(lifecycle[1]["item"]["type"], "tool_search_call");
+    assert_eq!(lifecycle[0]["item"]["id"], lifecycle[1]["item"]["id"]);
+    assert_eq!(lifecycle[0]["output_index"], lifecycle[1]["output_index"]);
+    let first_terminal = first.last().expect("first terminal");
+    assert_eq!(first_terminal["response"]["output"][0], lifecycle[1]["item"]);
+    first_terminal["response"]["id"].as_str().unwrap().to_owned()
+}
+
+async fn assert_ws_search_persistence(requests: &[Value], pool: &DbPool) {
+    assert_eq!(requests.len(), 3);
+    assert_eq!(requests[0]["tools"].as_array().map(Vec::len), Some(1));
+    assert_eq!(requests[0]["tools"][0]["name"], "tool_search");
+    assert!(
+        requests[1]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "get_weather")
+    );
+    assert!(requests[1]["input"].as_array().unwrap().iter().any(|item| {
+        item["type"] == "function_call" && item["name"] == "tool_search" && item["call_id"] == "call_search"
+    }));
+    assert!(
+        requests[2]["input"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| { item["type"] == "function_call_output" && item["call_id"] == "call_weather" })
+    );
+    let stored_items = sqlx::query_scalar::<_, String>("SELECT data FROM items ORDER BY created_at, seq")
+        .fetch_all(pool)
+        .await
+        .expect("stored public items");
+    assert!(stored_items.iter().any(|item| item.contains("tool_search_call")));
+    assert!(stored_items.iter().any(|item| item.contains("tool_search_output")));
+    assert!(
+        stored_items
+            .iter()
+            .all(|item| !item.contains("\"name\":\"tool_search\""))
+    );
+}
+
+#[tokio::test]
+async fn test_websocket_tool_search_streaming_continuation_is_public_and_persisted() {
+    let mock = MockResponsesServer::start(vec![
+        sse_tool_search_call_response(),
+        sse_weather_function_call_response(),
+        sse_response("resp_final", "msg_final", "PARIS_WEATHER_OK"),
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "stream_id": "tool-search",
+            "model": "test-model",
+            "input": "find weather",
+            "tools": [tool_search_declaration(), deferred_weather_function()],
+            "parallel_tool_calls": false,
+            "store": true,
+            "stream": true
+        }),
+    )
+    .await;
+    let first = recv_until_completed(&mut ws).await;
+    let first_response_id = assert_public_ws_search_lifecycle(&first);
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "stream_id": "tool-search",
+            "model": "test-model",
+            "previous_response_id": first_response_id,
+            "input": [{
+                "type": "tool_search_output",
+                "call_id": "call_search",
+                "tools": [deferred_weather_function()]
+            }],
+            "store": true,
+            "stream": true
+        }),
+    )
+    .await;
+    let second = recv_until_completed(&mut ws).await;
+    let second_terminal = second.last().expect("second terminal");
+    assert_eq!(second_terminal["response"]["output"][0]["type"], "function_call");
+    assert_eq!(second_terminal["response"]["output"][0]["name"], "get_weather");
+    let second_response_id = second_terminal["response"]["id"].as_str().unwrap().to_owned();
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "stream_id": "tool-search",
+            "model": "test-model",
+            "previous_response_id": second_response_id,
+            "input": [{
+                "type": "function_call_output",
+                "call_id": "call_weather",
+                "output": "sunny"
+            }],
+            "store": true,
+            "stream": true
+        }),
+    )
+    .await;
+    let third = recv_until_completed(&mut ws).await;
+    assert_eq!(
+        third.last().unwrap()["response"]["output"][0]["content"][0]["text"],
+        "PARIS_WEATHER_OK"
+    );
+
+    for events in [&first, &second, &third] {
+        assert!(events.iter().all(|event| event["stream_id"] == "tool-search"));
+        assert_eq!(
+            events
+                .iter()
+                .map(|event| event["sequence_number"].as_u64())
+                .collect::<Vec<_>>(),
+            (0..u64::try_from(events.len()).unwrap()).map(Some).collect::<Vec<_>>()
+        );
+    }
+
+    let requests = mock.request_bodies().await;
+    assert!(requests.iter().all(|request| request.get("stream_id").is_none()));
+    assert_ws_search_persistence(&requests, fixture.pool.as_ref()).await;
+}
+
+#[tokio::test]
+async fn test_websocket_generate_false_persists_valid_tool_search_state_for_reuse() {
+    let mock = MockResponsesServer::start(vec![sse_weather_function_call_response()]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "model": "test-model",
+            "input": [
+                {
+                    "type": "tool_search_call", "id": "tsc_prewarm", "call_id": "call_prewarm",
+                    "arguments": {"query": "weather"}
+                },
+                {
+                    "type": "tool_search_output", "call_id": "call_prewarm",
+                    "tools": [deferred_weather_function()]
+                }
+            ],
+            "tools": [tool_search_declaration(), deferred_weather_function()],
+            "parallel_tool_calls": false,
+            "generate": false,
+            "store": false,
+            "stream": true
+        }),
+    )
+    .await;
+    let prewarm = recv_until_completed(&mut ws).await;
+    assert!(
+        mock.request_bodies().await.is_empty(),
+        "generate:false must not run inference"
+    );
+    let response_id = prewarm.last().unwrap()["response"]["id"].as_str().unwrap().to_owned();
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "model": "test-model",
+            "previous_response_id": response_id,
+            "input": "call the loaded weather tool",
+            "store": true,
+            "stream": true
+        }),
+    )
+    .await;
+    let response = recv_until_completed(&mut ws).await;
+    assert_eq!(response.last().unwrap()["response"]["output"][0]["name"], "get_weather");
+
+    let requests = mock.request_bodies().await;
+    assert_eq!(requests.len(), 1);
+    assert!(
+        requests[0]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "get_weather")
+    );
+    assert!(
+        requests[0]["input"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["type"] == "function_call_output")
+    );
+}
+
+#[tokio::test]
+async fn websocket_empty_prewarm_replaces_compacted_conversation_tool_search_state() {
+    let mock = MockResponsesServer::start(vec![sse_tool_search_call_response()]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let conversation_id = create_conversation(&gateway_url).await;
+    let conversation_store = ConversationStore::new(Arc::clone(&fixture.pool));
+    conversation_store
+        .persist(
+            &conversation_id,
+            "resp_before_prewarm",
+            None,
+            vec![InOutItem::Input(InputItem::Compaction(CompactionItem {
+                id: Some("cmp_before_prewarm".to_owned()),
+                encrypted_content: "Existing compacted conversation state".to_owned(),
+            }))],
+            &ResponseMetadata::default(),
+        )
+        .await
+        .expect("seed compacted conversation state");
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "model": "test-model",
+            "conversation_id": conversation_id,
+            "input": [],
+            "tools": [tool_search_declaration(), deferred_weather_function()],
+            "parallel_tool_calls": false,
+            "generate": false,
+            "store": false,
+            "stream": true
+        }),
+    )
+    .await;
+    let prewarm = recv_until_completed(&mut ws).await;
+    let prewarm_response_id = prewarm.last().unwrap()["response"]["id"]
+        .as_str()
+        .expect("prewarm response ID")
+        .to_owned();
+    assert!(
+        mock.request_bodies().await.is_empty(),
+        "generate:false must not run inference"
+    );
+    let item_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM items WHERE conversation_id = $1")
+        .bind(&conversation_id)
+        .fetch_one(fixture.pool.as_ref())
+        .await
+        .expect("conversation item count");
+    assert_eq!(item_count, 1, "an empty prewarm must not advance item history");
+    let prewarm_checkpoint: String = sqlx::query_scalar("SELECT latest_response_id FROM conversations WHERE id = $1")
+        .bind(&conversation_id)
+        .fetch_one(fixture.pool.as_ref())
+        .await
+        .expect("prewarm conversation checkpoint");
+    assert_eq!(prewarm_checkpoint, prewarm_response_id);
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "model": "test-model",
+            "conversation_id": conversation_id,
+            "input": "find the weather tool",
+            "store": true,
+            "stream": true
+        }),
+    )
+    .await;
+    let response = recv_until_completed(&mut ws).await;
+    assert_eq!(
+        response.last().unwrap()["response"]["output"][0]["type"],
+        "tool_search_call"
+    );
+
+    let requests = mock.request_bodies().await;
+    assert_eq!(requests.len(), 1);
+    assert!(
+        requests[0]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["type"] == "function" && tool["name"] == "tool_search")
+    );
+    assert!(
+        requests[0]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|tool| tool["name"] != "get_weather"),
+        "deferred definitions remain withheld until the client returns them"
+    );
 }
 
 #[tokio::test]
@@ -876,6 +1462,529 @@ async fn test_websocket_first_turn_forwards_incremental_events_and_final_payload
         json!({"format": {"type": "json_object"}, "verbosity": "high"})
     );
     assert!(requests[0].get("type").is_none());
+}
+
+#[tokio::test]
+async fn websocket_distinct_stream_ids_run_concurrently_and_tag_every_event() {
+    // Arrange: hold both upstream responses so the second request can arrive
+    // only if the WebSocket handler starts distinct lanes concurrently.
+    let (first_arrived_tx, first_arrived_rx) = oneshot::channel();
+    let (first_release_tx, first_release_rx) = oneshot::channel();
+    let (second_arrived_tx, second_arrived_rx) = oneshot::channel();
+    let (second_release_tx, second_release_rx) = oneshot::channel();
+    let (first_chunk, first_remaining) = phased_sse_response("resp_upstream_first", "msg_upstream_first", "FIRST");
+    let (second_chunk, second_remaining) = phased_sse_response("resp_upstream_second", "msg_upstream_second", "SECOND");
+    let mock = MockResponsesServer::start_with_responses(vec![
+        MockResponse::Static(sse_response("resp_upstream_parent", "msg_upstream_parent", "PARENT")),
+        MockResponse::ObservedPhased {
+            first_chunk,
+            remaining_chunks: first_remaining,
+            arrived: first_arrived_tx,
+            release: first_release_rx,
+        },
+        MockResponse::ObservedPhased {
+            first_chunk: second_chunk,
+            remaining_chunks: second_remaining,
+            arrived: second_arrived_tx,
+            release: second_release_rx,
+        },
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "model": "test-model",
+            "input": "remember the parent context",
+            "store": true
+        }),
+    )
+    .await;
+    let parent = recv_until_completed(&mut ws).await;
+    let parent_response_id = parent
+        .last()
+        .and_then(|event| event["response"]["id"].as_str())
+        .expect("parent response id")
+        .to_owned();
+
+    // Act: fork the stored parent into two independent lanes.
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "stream_id": "lane-a",
+            "model": "test-model",
+            "previous_response_id": &parent_response_id,
+            "input": "request-a",
+            "metadata": {"test_lane": "lane-a"}
+        }),
+    )
+    .await;
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "stream_id": "lane-b",
+            "model": "test-model",
+            "previous_response_id": &parent_response_id,
+            "input": "request-b",
+            "metadata": {"test_lane": "lane-b"}
+        }),
+    )
+    .await;
+
+    let first_request = tokio::time::timeout(std::time::Duration::from_secs(2), first_arrived_rx)
+        .await
+        .expect("first lane did not reach upstream")
+        .expect("first arrival sender dropped");
+    let second_request = tokio::time::timeout(std::time::Duration::from_secs(2), second_arrived_rx)
+        .await
+        .expect("distinct WebSocket lane was serialized behind the active lane")
+        .expect("second arrival sender dropped");
+    assert!(first_request.get("stream_id").is_none());
+    assert!(second_request.get("stream_id").is_none());
+
+    let first_stream_id = first_request["metadata"]["test_lane"]
+        .as_str()
+        .expect("first request test lane");
+    let second_stream_id = second_request["metadata"]["test_lane"]
+        .as_str()
+        .expect("second request test lane");
+    assert_ne!(first_stream_id, second_stream_id);
+
+    // Both lanes publish an initial event before either completes. Releasing
+    // the first lane then proves its remaining events can follow an event from
+    // the still-active second lane: first, second, first.
+    let created_events = [recv_json(&mut ws).await, recv_json(&mut ws).await];
+    assert!(created_events.iter().all(|event| event["type"] == "response.created"));
+    assert!(created_events.iter().any(|event| event["stream_id"] == first_stream_id));
+    assert!(
+        created_events
+            .iter()
+            .any(|event| event["stream_id"] == second_stream_id)
+    );
+
+    first_release_tx.send(()).expect("release first upstream response");
+    let first_events = recv_until_completed(&mut ws).await;
+    assert_eq!(first_events.len(), 3);
+    assert!(first_events.iter().all(|event| event["stream_id"] == first_stream_id));
+
+    second_release_tx.send(()).expect("release second upstream response");
+    let second_events = recv_until_completed(&mut ws).await;
+    assert_eq!(second_events.len(), 3);
+    assert!(second_events.iter().all(|event| event["stream_id"] == second_stream_id));
+}
+
+#[tokio::test]
+async fn websocket_requests_with_the_same_stream_id_run_fifo() {
+    let (first_arrived_tx, first_arrived_rx) = oneshot::channel();
+    let (first_release_tx, first_release_rx) = oneshot::channel();
+    let (second_arrived_tx, mut second_arrived_rx) = oneshot::channel();
+    let (second_release_tx, second_release_rx) = oneshot::channel();
+    let mock = MockResponsesServer::start_with_responses(vec![
+        MockResponse::ObservedGated {
+            response: sse_response("resp_upstream_first", "msg_upstream_first", "FIRST"),
+            arrived: first_arrived_tx,
+            release: first_release_rx,
+        },
+        MockResponse::ObservedGated {
+            response: sse_response("resp_upstream_second", "msg_upstream_second", "SECOND"),
+            arrived: second_arrived_tx,
+            release: second_release_rx,
+        },
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    for input in ["first", "second"] {
+        send_json(
+            &mut ws,
+            json!({
+                "type": "response.create",
+                "stream_id": "ordered-lane",
+                "model": "test-model",
+                "input": input
+            }),
+        )
+        .await;
+    }
+
+    tokio::time::timeout(std::time::Duration::from_secs(2), first_arrived_rx)
+        .await
+        .expect("timed out waiting for first request to reach upstream")
+        .expect("first arrival sender dropped");
+    send_ping_and_wait_for_pong(&mut ws, Bytes::from_static(b"same-lane-request-received")).await;
+    assert_eq!(
+        mock.request_bodies().await.len(),
+        1,
+        "second request on the same lane started before the first completed"
+    );
+
+    first_release_tx.send(()).expect("release first response");
+    let first_events = recv_until_completed(&mut ws).await;
+    assert!(first_events.iter().all(|event| event["stream_id"] == "ordered-lane"));
+
+    tokio::time::timeout(std::time::Duration::from_secs(2), &mut second_arrived_rx)
+        .await
+        .expect("second request did not start after first completed")
+        .expect("second arrival sender dropped");
+    second_release_tx.send(()).expect("release second response");
+    let second_events = recv_until_completed(&mut ws).await;
+    assert!(second_events.iter().all(|event| event["stream_id"] == "ordered-lane"));
+}
+
+async fn assert_validation_error_waits_for_active_lane(stream_id: Option<&str>) {
+    let (mock, arrived, release) =
+        MockResponsesServer::start_gated(sse_response("resp_upstream_first", "msg_upstream_first", "FIRST")).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    let mut valid = json!({
+        "type": "response.create",
+        "model": "test-model",
+        "input": "first"
+    });
+    let mut invalid = json!({
+        "type": "response.create",
+        "input": "missing model"
+    });
+    if let Some(stream_id) = stream_id {
+        valid["stream_id"] = json!(stream_id);
+        invalid["stream_id"] = json!(stream_id);
+    }
+
+    send_json(&mut ws, valid).await;
+    tokio::time::timeout(std::time::Duration::from_secs(2), arrived)
+        .await
+        .expect("timed out waiting for first request to reach upstream")
+        .expect("first arrival sender dropped");
+    send_json(&mut ws, invalid).await;
+    send_ping_and_wait_for_pong(&mut ws, Bytes::from_static(b"validation-error-queued")).await;
+
+    release.send(()).expect("release first response");
+    let events = recv_until_completed(&mut ws).await;
+    assert_eq!(events.last().expect("terminal event")["type"], "response.completed");
+
+    let error = recv_json(&mut ws).await;
+    assert_eq!(error["type"], "error");
+    assert_eq!(error["status"], StatusCode::BAD_REQUEST.as_u16());
+    if let Some(stream_id) = stream_id {
+        assert_eq!(error["stream_id"], stream_id);
+    } else {
+        assert!(error.get("stream_id").is_none());
+    }
+}
+
+#[tokio::test]
+async fn websocket_validation_errors_wait_for_their_named_lane() {
+    assert_validation_error_waits_for_active_lane(Some("ordered-lane")).await;
+}
+
+#[tokio::test]
+async fn websocket_validation_errors_wait_for_the_default_lane() {
+    assert_validation_error_waits_for_active_lane(None).await;
+}
+
+#[tokio::test]
+async fn websocket_invalid_stream_ids_return_400_and_leave_connection_usable() {
+    let mock = MockResponsesServer::start(vec![sse_response("resp_valid", "msg_valid", "done")]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    for stream_id in [json!(""), json!("x".repeat(257)), json!(42)] {
+        send_json(
+            &mut ws,
+            json!({
+                "type": "response.create",
+                "stream_id": stream_id,
+                "model": "test-model",
+                "input": "invalid stream ID"
+            }),
+        )
+        .await;
+        let error = recv_json(&mut ws).await;
+        assert_eq!(error["type"], "error");
+        assert_eq!(error["status"], StatusCode::BAD_REQUEST.as_u16());
+        assert!(error.get("stream_id").is_none());
+        assert!(mock.request_bodies().await.is_empty());
+    }
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "stream_id": "x",
+            "model": "test-model",
+            "input": "valid request"
+        }),
+    )
+    .await;
+    let events = recv_until_completed(&mut ws).await;
+    assert!(events.iter().all(|event| event["stream_id"] == "x"));
+    assert_eq!(mock.request_bodies().await.len(), 1);
+}
+
+#[tokio::test]
+async fn websocket_rejects_more_than_64_outstanding_requests() {
+    let first_chunk = format!(
+        "data: {}\n\n",
+        json!({
+            "type": "response.created",
+            "sequence_number": 0,
+            "response": {"id": "resp_upstream_hanging", "status": "in_progress"}
+        })
+    );
+    let (mock, upstream_dropped) = MockResponsesServer::start_hanging(first_chunk).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    for index in 0..64 {
+        send_json(
+            &mut ws,
+            json!({
+                "type": "response.create",
+                "stream_id": "capacity-lane",
+                "model": "test-model",
+                "input": format!("request {index}")
+            }),
+        )
+        .await;
+    }
+    wait_for_request_count(&mock, 1).await;
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "stream_id": "capacity-lane",
+            "model": "test-model",
+            "input": "request 65"
+        }),
+    )
+    .await;
+
+    let overload = loop {
+        let event = recv_json(&mut ws).await;
+        if event["type"] == "error" {
+            break event;
+        }
+    };
+    assert_eq!(overload["status"], StatusCode::TOO_MANY_REQUESTS.as_u16());
+    assert_eq!(overload["error"]["code"], "rate_limit_exceeded");
+    assert_eq!(overload["stream_id"], "capacity-lane");
+    assert_eq!(mock.request_bodies().await.len(), 1);
+
+    ws.close(None).await.expect("close websocket");
+    tokio::time::timeout(std::time::Duration::from_secs(2), upstream_dropped)
+        .await
+        .expect("timed out waiting for upstream stream cancellation")
+        .expect("upstream drop sender should notify");
+}
+
+#[tokio::test]
+async fn websocket_rejects_a_65th_active_stream_lane() {
+    let mut responses = Vec::new();
+    let mut upstream_drops = Vec::new();
+    for index in 0..64 {
+        let first_chunk = format!(
+            "data: {}\n\n",
+            json!({
+                "type": "response.created",
+                "sequence_number": 0,
+                "response": {"id": format!("resp_active_{index}"), "status": "in_progress"}
+            })
+        );
+        let (drop_tx, drop_rx) = oneshot::channel();
+        responses.push(MockResponse::Hanging { first_chunk, drop_tx });
+        upstream_drops.push(drop_rx);
+    }
+    let mock = MockResponsesServer::start_with_responses(responses).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    for index in 0..64 {
+        send_json(
+            &mut ws,
+            json!({
+                "type": "response.create",
+                "stream_id": format!("active-{index}"),
+                "model": "test-model",
+                "input": format!("request {index}")
+            }),
+        )
+        .await;
+    }
+    wait_for_request_count(&mock, 64).await;
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "stream_id": "active-64",
+            "model": "test-model",
+            "input": "request 65"
+        }),
+    )
+    .await;
+
+    let overload = loop {
+        let event = recv_json(&mut ws).await;
+        if event["type"] == "error" {
+            break event;
+        }
+    };
+    assert_eq!(overload["status"], StatusCode::TOO_MANY_REQUESTS.as_u16());
+    assert_eq!(overload["stream_id"], "active-64");
+    assert_eq!(mock.request_bodies().await.len(), 64);
+
+    ws.close(None).await.expect("close websocket");
+    for upstream_dropped in upstream_drops {
+        tokio::time::timeout(std::time::Duration::from_secs(2), upstream_dropped)
+            .await
+            .expect("timed out waiting for active upstream stream cancellation")
+            .expect("upstream drop sender should notify");
+    }
+}
+
+#[tokio::test]
+async fn websocket_rejects_requests_over_the_aggregate_input_budget() {
+    let (mock, arrived, release) =
+        MockResponsesServer::start_gated(sse_response("resp_large", "msg_large", "done")).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "stream_id": "large-a",
+            "model": "test-model",
+            "input": "x".repeat(512 * 1024)
+        }),
+    )
+    .await;
+    tokio::time::timeout(std::time::Duration::from_secs(10), arrived)
+        .await
+        .expect("timed out waiting for large request to reach upstream")
+        .expect("arrival sender dropped");
+
+    for index in 1..23 {
+        send_json(
+            &mut ws,
+            json!({
+                "type": "response.create",
+                "stream_id": "large-a",
+                "model": "test-model",
+                "input": "q".repeat(512 * 1024),
+                "metadata": {"queued_index": index}
+            }),
+        )
+        .await;
+    }
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "stream_id": "large-b",
+            "model": "test-model",
+            "input": "y".repeat(512 * 1024)
+        }),
+    )
+    .await;
+    let overload = recv_json(&mut ws).await;
+    assert_eq!(overload["type"], "error");
+    assert_eq!(overload["status"], StatusCode::TOO_MANY_REQUESTS.as_u16());
+    assert_eq!(overload["error"]["code"], "rate_limit_exceeded");
+    assert_eq!(overload["stream_id"], "large-b");
+    assert_eq!(mock.request_bodies().await.len(), 1);
+
+    release.send(()).expect("release large response");
+    let events = recv_until_completed(&mut ws).await;
+    assert!(events.iter().all(|event| event["stream_id"] == "large-a"));
+}
+
+#[tokio::test]
+async fn websocket_reclaims_completed_request_capacity_before_admission() {
+    let (first_arrived_tx, first_arrived_rx) = oneshot::channel();
+    let (first_release_tx, first_release_rx) = oneshot::channel();
+    let (second_drop_tx, second_drop_rx) = oneshot::channel();
+    let second_chunk = format!(
+        "data: {}\n\n",
+        json!({
+            "type": "response.created",
+            "sequence_number": 0,
+            "response": {"id": "resp_capacity_second", "status": "in_progress"}
+        })
+    );
+    let mock = MockResponsesServer::start_with_responses(vec![
+        MockResponse::Gated {
+            response: sse_response("resp_capacity_first", "msg_capacity_first", "first"),
+            arrived: first_arrived_tx,
+            release: first_release_rx,
+        },
+        MockResponse::Hanging {
+            first_chunk: second_chunk,
+            drop_tx: second_drop_tx,
+        },
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    for index in 0..64 {
+        send_json(
+            &mut ws,
+            json!({
+                "type": "response.create",
+                "stream_id": "capacity-lane",
+                "model": "test-model",
+                "input": format!("request {index}")
+            }),
+        )
+        .await;
+    }
+    tokio::time::timeout(std::time::Duration::from_secs(2), first_arrived_rx)
+        .await
+        .expect("timed out waiting for first request to reach upstream")
+        .expect("first arrival sender dropped");
+    first_release_tx.send(()).expect("release first response");
+    let first_events = recv_until_completed(&mut ws).await;
+    assert_eq!(
+        first_events.last().expect("terminal event")["type"],
+        "response.completed"
+    );
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "stream_id": "capacity-lane",
+            "model": "test-model",
+            "input": "request after completed capacity is reclaimed"
+        }),
+    )
+    .await;
+
+    let second_created = recv_json(&mut ws).await;
+    assert_eq!(second_created["type"], "response.created");
+    assert_eq!(second_created["stream_id"], "capacity-lane");
+    send_ping_and_wait_for_pong(&mut ws, Bytes::from_static(b"capacity-reclaimed")).await;
+
+    ws.close(None).await.expect("close websocket");
+    tokio::time::timeout(std::time::Duration::from_secs(2), second_drop_rx)
+        .await
+        .expect("timed out waiting for upstream stream cancellation")
+        .expect("upstream drop sender should notify");
 }
 
 #[tokio::test]
@@ -1118,6 +2227,7 @@ async fn test_websocket_generate_false_is_local_and_reusable() {
         &mut ws,
         json!({
             "type": "response.create",
+            "stream_id": "warmup-lane",
             "model": "test-model",
             "input": [],
             "generate": false,
@@ -1134,6 +2244,7 @@ async fn test_websocket_generate_false_is_local_and_reusable() {
     assert_eq!(warmup[0]["response"]["id"], warmup[1]["response"]["id"]);
     assert_eq!(warmup[1]["response"]["output"], json!([]));
     assert_eq!(warmup[1]["response"]["usage"]["total_tokens"], 0);
+    assert!(warmup.iter().all(|event| event["stream_id"] == "warmup-lane"));
     assert!(mock.request_bodies().await.is_empty());
 
     let warmup_id = warmup[1]["response"]["id"].as_str().unwrap();
@@ -1152,6 +2263,7 @@ async fn test_websocket_generate_false_is_local_and_reusable() {
 
     let response = recv_until_completed(&mut ws).await;
     assert_eq!(response.last().unwrap()["response"]["previous_response_id"], warmup_id);
+    assert!(response.iter().all(|event| event.get("stream_id").is_none()));
     let requests = mock.request_bodies().await;
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0]["input"].as_array().unwrap().len(), 1);
@@ -1612,6 +2724,7 @@ async fn test_websocket_unknown_previous_response_returns_error_event() {
         &mut ws,
         json!({
             "type": "response.create",
+            "stream_id": "missing-response-lane",
             "model": "test-model",
             "previous_response_id": "resp_missing",
             "input": [{"type": "message", "role": "user", "content": "continue"}],
@@ -1623,8 +2736,9 @@ async fn test_websocket_unknown_previous_response_returns_error_event() {
 
     let error = recv_json(&mut ws).await;
     assert_eq!(error["type"], "error");
-    assert_eq!(error["status"], StatusCode::NOT_FOUND.as_u16());
-    assert_eq!(error["error"]["code"], "not_found");
+    assert_eq!(error["status"], StatusCode::BAD_REQUEST.as_u16());
+    assert_eq!(error["error"]["code"], "previous_response_not_found");
+    assert_eq!(error["stream_id"], "missing-response-lane");
     assert!(mock.request_bodies().await.is_empty());
 }
 
@@ -1656,15 +2770,18 @@ async fn test_websocket_rejects_binary_json_without_upstream_request() {
     assert!(mock.request_bodies().await.is_empty());
 }
 
+/// Over-limit messages are rejected by the transport before any JSON is parsed,
+/// so the connection closes instead of carrying a JSON error event.
 #[tokio::test]
-async fn test_websocket_rejects_messages_larger_than_http_body_limit() {
+async fn test_websocket_rejects_messages_larger_than_the_configured_request_size_limit() {
     let mock = MockResponsesServer::start(vec![]).await;
-    let fixture = storage_backed_state(&mock.url).await;
-    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut state = storage_backed_state(&mock.url).await;
+    state.state.max_request_body_size = SMALL_REQUEST_SIZE_LIMIT;
+    let (gateway_url, _gateway) = spawn_gateway(state.state.clone()).await;
     let mut ws = connect_responses_ws(&gateway_url).await;
 
     if ws
-        .send(Message::Text("x".repeat(10 * 1024 * 1024 + 1).into()))
+        .send(Message::Text("x".repeat(SMALL_REQUEST_SIZE_LIMIT.get() + 1).into()))
         .await
         .is_ok()
     {
@@ -1675,6 +2792,33 @@ async fn test_websocket_rejects_messages_larger_than_http_body_limit() {
         assert!(message.is_err() || matches!(message, Ok(Message::Close(_))));
     }
     assert!(mock.request_bodies().await.is_empty());
+}
+
+/// A raised ceiling admits a request that the small limit above would have closed.
+#[tokio::test]
+async fn test_websocket_accepts_messages_within_a_raised_request_size_limit() {
+    let mock = MockResponsesServer::start(vec![sse_response("resp_upstream_1", "msg_upstream_1", "HELLO")]).await;
+    let mut state = storage_backed_state(&mock.url).await;
+    state.state.max_request_body_size = std::num::NonZeroUsize::new(64 * 1024).expect("nonzero");
+    let (gateway_url, _gateway) = spawn_gateway(state.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    let request = json!({
+        "type": "response.create",
+        "model": "test-model",
+        "input": [{"type": "message", "role": "user", "content": "x".repeat(4 * 1024)}],
+        "store": true,
+        "stream": true
+    });
+    assert!(
+        request.to_string().len() > SMALL_REQUEST_SIZE_LIMIT.get(),
+        "the payload must exceed the small limit to prove the ceiling is what changed"
+    );
+    send_json(&mut ws, request).await;
+
+    let events = recv_until_completed(&mut ws).await;
+    assert_eq!(events.last().unwrap()["type"], "response.completed");
+    assert_eq!(mock.request_bodies().await.len(), 1);
 }
 
 #[tokio::test]
@@ -1724,7 +2868,10 @@ async fn test_websocket_shutdown_drains_active_response_before_closing() {
         }),
     )
     .await;
-    arrived.await.expect("upstream request should arrive");
+    tokio::time::timeout(std::time::Duration::from_secs(2), arrived)
+        .await
+        .expect("timed out waiting for shutdown request to reach upstream")
+        .expect("arrival sender dropped");
 
     shutdown_token.cancel();
     send_json(
@@ -1749,6 +2896,81 @@ async fn test_websocket_shutdown_drains_active_response_before_closing() {
         .await
         .expect("server did not receive the websocket close acknowledgement");
     assert_eq!(mock.request_bodies().await.len(), 1);
+}
+
+#[tokio::test]
+async fn websocket_shutdown_drains_all_active_lanes_and_discards_queued_work() {
+    let (first_arrived_tx, first_arrived_rx) = oneshot::channel();
+    let (first_release_tx, first_release_rx) = oneshot::channel();
+    let (second_arrived_tx, second_arrived_rx) = oneshot::channel();
+    let (second_release_tx, second_release_rx) = oneshot::channel();
+    let mock = MockResponsesServer::start_with_responses(vec![
+        MockResponse::Gated {
+            response: sse_response("resp_shutdown_a", "msg_shutdown_a", "A"),
+            arrived: first_arrived_tx,
+            release: first_release_rx,
+        },
+        MockResponse::Gated {
+            response: sse_response("resp_shutdown_b", "msg_shutdown_b", "B"),
+            arrived: second_arrived_tx,
+            release: second_release_rx,
+        },
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let shutdown_token = fixture.state.shutdown_token.clone();
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    for (stream_id, input) in [("shutdown-a", "active a"), ("shutdown-b", "active b")] {
+        send_json(
+            &mut ws,
+            json!({
+                "type": "response.create",
+                "stream_id": stream_id,
+                "model": "test-model",
+                "input": input
+            }),
+        )
+        .await;
+    }
+    tokio::time::timeout(std::time::Duration::from_secs(2), first_arrived_rx)
+        .await
+        .expect("timed out waiting for first shutdown lane")
+        .expect("first arrival sender dropped");
+    tokio::time::timeout(std::time::Duration::from_secs(2), second_arrived_rx)
+        .await
+        .expect("timed out waiting for second shutdown lane")
+        .expect("second arrival sender dropped");
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "stream_id": "shutdown-a",
+            "model": "test-model",
+            "input": "queued and discarded"
+        }),
+    )
+    .await;
+    send_ping_and_wait_for_pong(&mut ws, Bytes::from_static(b"queued-before-shutdown")).await;
+
+    shutdown_token.cancel();
+    first_release_tx.send(()).expect("release first shutdown lane");
+    second_release_tx.send(()).expect("release second shutdown lane");
+
+    let mut events = Vec::new();
+    let mut terminal_count = 0;
+    while terminal_count < 2 {
+        let event = recv_json(&mut ws).await;
+        if event["type"] == "response.completed" {
+            terminal_count += 1;
+        }
+        events.push(event);
+    }
+    assert!(events.iter().any(|event| event["stream_id"] == "shutdown-a"));
+    assert!(events.iter().any(|event| event["stream_id"] == "shutdown-b"));
+    recv_clean_close(&mut ws).await;
+    assert_eq!(mock.request_bodies().await.len(), 2);
 }
 
 #[tokio::test]
@@ -1786,4 +3008,469 @@ async fn test_websocket_client_close_cancels_hanging_upstream_stream() {
         .expect("timed out waiting for upstream stream to be dropped")
         .expect("upstream drop sender should notify");
     assert_eq!(mock.request_bodies().await.len(), 1);
+}
+
+#[tokio::test]
+async fn websocket_client_close_cancels_all_active_stream_lanes() {
+    let mut responses = Vec::new();
+    let mut upstream_drops = Vec::new();
+    for stream_id in ["disconnect-a", "disconnect-b"] {
+        let first_chunk = format!(
+            "data: {}\n\n",
+            json!({
+                "type": "response.created",
+                "sequence_number": 0,
+                "response": {"id": format!("resp_{stream_id}"), "status": "in_progress"}
+            })
+        );
+        let (drop_tx, drop_rx) = oneshot::channel();
+        responses.push(MockResponse::Hanging { first_chunk, drop_tx });
+        upstream_drops.push(drop_rx);
+    }
+    let mock = MockResponsesServer::start_with_responses(responses).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    for stream_id in ["disconnect-a", "disconnect-b"] {
+        send_json(
+            &mut ws,
+            json!({
+                "type": "response.create",
+                "stream_id": stream_id,
+                "model": "test-model",
+                "input": "hang"
+            }),
+        )
+        .await;
+    }
+    wait_for_request_count(&mock, 2).await;
+    ws.close(None).await.expect("close websocket");
+
+    for upstream_dropped in upstream_drops {
+        tokio::time::timeout(std::time::Duration::from_secs(2), upstream_dropped)
+            .await
+            .expect("timed out waiting for active upstream stream cancellation")
+            .expect("upstream drop sender should notify");
+    }
+}
+
+async fn assert_no_response_state(pool: &DbPool) {
+    for table in ["responses", "items"] {
+        let count: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
+            .fetch_one(pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "store:false wrote to {table}");
+    }
+}
+
+#[tokio::test]
+async fn websocket_unstored_continuation_is_connection_local() {
+    for generate in [false, true] {
+        for lane in [None, Some("private")] {
+            let mock = MockResponsesServer::start(vec![
+                sse_response("resp_first", "msg_first", "PRIVATE"),
+                sse_response("resp_second", "msg_second", "CONTINUED"),
+            ])
+            .await;
+            let fixture = storage_backed_state(&mock.url).await;
+            let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+            let mut ws = connect_responses_ws(&gateway_url).await;
+            let mut request = json!({"type":"response.create", "model":"test-model",
+                "input":"private prefix", "store":false, "generate":generate});
+            if let Some(lane) = lane {
+                request["stream_id"] = json!(lane);
+            }
+            send_json(&mut ws, request.clone()).await;
+            let events = recv_until_completed(&mut ws).await;
+            assert_eq!(events.last().unwrap()["type"], "response.completed");
+            let parent = events.last().unwrap()["response"]["id"].as_str().unwrap().to_owned();
+            assert_no_response_state(&fixture.pool).await;
+            request["previous_response_id"] = json!(parent);
+            request["input"] = json!("next turn");
+            request["generate"] = json!(true);
+            send_json(&mut ws, request.clone()).await;
+            let events = recv_until_completed(&mut ws).await;
+            assert_eq!(events.last().unwrap()["type"], "response.completed");
+            let child = events.last().unwrap()["response"]["id"].as_str().unwrap().to_owned();
+            assert_no_response_state(&fixture.pool).await;
+            let bodies = mock.request_bodies().await;
+            let input = bodies.last().unwrap()["input"].to_string();
+            assert!(input.contains("private prefix"));
+            assert!(input.contains("next turn"));
+            ws.close(None).await.unwrap();
+            for store in [false, true] {
+                let mut fresh = connect_responses_ws(&gateway_url).await;
+                request["previous_response_id"] = json!(child);
+                request["store"] = json!(store);
+                send_json(&mut fresh, request.clone()).await;
+                let events = recv_until_completed(&mut fresh).await;
+                assert_eq!(events.last().unwrap()["error"]["code"], "previous_response_not_found");
+                fresh.close(None).await.unwrap();
+            }
+            assert_eq!(mock.request_bodies().await.len(), bodies.len());
+        }
+    }
+}
+
+#[tokio::test]
+async fn websocket_unstored_prewarm_and_generation_work_without_storage() {
+    let mock = MockResponsesServer::start(vec![sse_response("resp_answer", "msg_answer", "READY")]).await;
+    let (gateway_url, _gateway) = spawn_gateway(persistence_disabled_state(&mock.url)).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    send_json(
+        &mut ws,
+        json!({"type":"response.create", "model":"test-model",
+        "input":"warmup prefix", "generate":false, "store":false}),
+    )
+    .await;
+    let events = recv_until_completed(&mut ws).await;
+    assert_eq!(events.last().unwrap()["type"], "response.completed");
+    let parent = events.last().unwrap()["response"]["id"].as_str().unwrap();
+    send_json(
+        &mut ws,
+        json!({"type":"response.create", "model":"test-model",
+        "previous_response_id":parent, "input":"next", "store":false}),
+    )
+    .await;
+    let events = recv_until_completed(&mut ws).await;
+    assert_eq!(events.last().unwrap()["type"], "response.completed");
+    assert!(
+        mock.request_bodies().await[0]["input"]
+            .to_string()
+            .contains("warmup prefix")
+    );
+}
+
+async fn prewarm_private(
+    ws: &mut WebSocketStream<MaybeTlsStream<TcpStream>>,
+    lane: Option<&str>,
+    text: &str,
+) -> String {
+    let mut request = json!({"type":"response.create", "model":"test-model", "store":false,
+        "generate":false, "input":text});
+    if let Some(lane) = lane {
+        request["stream_id"] = json!(lane);
+    }
+    send_json(ws, request).await;
+    let events = recv_until_completed(ws).await;
+    assert_eq!(events.last().unwrap()["type"], "response.completed");
+    events.last().unwrap()["response"]["id"].as_str().unwrap().to_owned()
+}
+
+#[tokio::test]
+async fn websocket_validation_failure_evicts_only_its_valid_lane_parent() {
+    for (routing, should_evict) in [(json!("source"), true), (json!("fork"), false), (Value::Null, false)] {
+        let mock = MockResponsesServer::start(vec![]).await;
+        let (gateway_url, _gateway) = spawn_gateway(persistence_disabled_state(&mock.url)).await;
+        let mut ws = connect_responses_ws(&gateway_url).await;
+        // Null routing must never be interpreted as the default lane for eviction.
+        let lane = if routing.is_null() { None } else { Some("source") };
+        let parent = prewarm_private(&mut ws, lane, "private").await;
+        send_json(
+            &mut ws,
+            json!({"type":"response.create", "stream_id":routing,
+            "previous_response_id":parent, "model":7, "store":false, "input":[]}),
+        )
+        .await;
+        assert_eq!(recv_json(&mut ws).await["type"], "error");
+        let mut request = json!({"type":"response.create", "model":"test-model",
+            "previous_response_id":parent, "input":[], "store":false, "generate":false});
+        if let Some(lane) = lane {
+            request["stream_id"] = json!(lane);
+        }
+        send_json(&mut ws, request).await;
+        let events = recv_until_completed(&mut ws).await;
+        if should_evict {
+            assert_eq!(events.last().unwrap()["error"]["code"], "previous_response_not_found");
+        } else {
+            assert_eq!(events.last().unwrap()["type"], "response.completed");
+        }
+        assert!(mock.request_bodies().await.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn websocket_stored_child_of_unstored_parent_survives_reconnect() {
+    let mock = MockResponsesServer::start(vec![sse_response("resp_final", "msg_final", "READY")]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    let parent = prewarm_private(&mut ws, Some("source"), "private prefix").await;
+    send_json(
+        &mut ws,
+        json!({"type":"response.create", "stream_id":"source", "model":"test-model",
+        "previous_response_id":parent, "input":"stored child", "store":true, "generate":false}),
+    )
+    .await;
+    let events = recv_until_completed(&mut ws).await;
+    assert_eq!(events.last().unwrap()["type"], "response.completed");
+    let child = events.last().unwrap()["response"]["id"].as_str().unwrap().to_owned();
+    let ids: Vec<String> = sqlx::query_scalar("SELECT id FROM responses")
+        .fetch_all(fixture.pool.as_ref())
+        .await
+        .unwrap();
+    assert_eq!(
+        ids,
+        vec![child.clone()],
+        "only the explicitly stored child gets a response row"
+    );
+    ws.close(None).await.unwrap();
+    let mut fresh = connect_responses_ws(&gateway_url).await;
+    send_json(
+        &mut fresh,
+        json!({"type":"response.create", "model":"test-model",
+        "previous_response_id":child, "input":"after reconnect", "store":true}),
+    )
+    .await;
+    let events = recv_until_completed(&mut fresh).await;
+    assert_eq!(events.last().unwrap()["type"], "response.completed");
+    let input = mock.request_bodies().await[0]["input"].to_string();
+    assert!(input.contains("private prefix"));
+    assert!(input.contains("stored child"));
+    assert!(input.contains("after reconnect"));
+}
+
+#[tokio::test]
+async fn websocket_unstored_custom_tool_round_trip() {
+    let mock = MockResponsesServer::start(vec![
+        sse_custom_tool_call_response(),
+        sse_response("resp_after_custom", "msg_after_custom", "DONE"),
+    ])
+    .await;
+    let (gateway_url, _gateway) = spawn_gateway(persistence_disabled_state(&mock.url)).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    send_json(
+        &mut ws,
+        json!({"type":"response.create", "model":"test-model", "input":"apply patch",
+        "tools":[{"type":"custom", "name":"apply_patch"}], "store":false}),
+    )
+    .await;
+    let events = recv_until_completed(&mut ws).await;
+    assert_eq!(
+        events.last().unwrap()["response"]["output"][0]["type"],
+        "custom_tool_call"
+    );
+    let parent = events.last().unwrap()["response"]["id"].as_str().unwrap();
+    send_json(&mut ws, json!({"type":"response.create", "model":"test-model", "store":false,
+        "previous_response_id":parent, "input":[{"type":"custom_tool_call_output", "call_id":"call_custom_1", "output":"Done!"}]})).await;
+    let events = recv_until_completed(&mut ws).await;
+    assert_eq!(
+        events.last().unwrap()["response"]["output"][0]["content"][0]["text"],
+        "DONE"
+    );
+    let requests = mock.request_bodies().await;
+    let input = requests[1]["input"].as_array().unwrap();
+    assert_eq!(input.iter().filter(|item| item["type"] == "function_call").count(), 1);
+    assert_eq!(
+        input
+            .iter()
+            .filter(|item| item["type"] == "function_call_output")
+            .count(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn websocket_overload_preserves_parent_for_accepted_queued_continuation() {
+    for byte_limit in [false, true] {
+        for lane in [None, Some("source")] {
+            let (mock, arrived, release) = MockResponsesServer::start_gated(sse_failed_response()).await;
+            let (gateway_url, _gateway) = spawn_gateway(persistence_disabled_state(&mock.url)).await;
+            let mut ws = connect_responses_ws(&gateway_url).await;
+            let parent = prewarm_private(&mut ws, lane, "private parent").await;
+            let mut active =
+                json!({"type":"response.create", "model":"test-model", "store":false, "input":"independent turn"});
+            if let Some(lane) = lane {
+                active["stream_id"] = json!(lane);
+            }
+            send_json(&mut ws, active.clone()).await;
+            tokio::time::timeout(std::time::Duration::from_secs(2), arrived)
+                .await
+                .unwrap()
+                .unwrap();
+            let mut queued = active.clone();
+            queued["previous_response_id"] = json!(parent);
+            queued["generate"] = json!(false);
+            queued["input"] = json!("accepted continuation");
+            if byte_limit {
+                queued["metadata"] = json!({"padding":"x".repeat(7 * 1024 * 1024)});
+            }
+            send_json(&mut ws, queued.clone()).await;
+            if !byte_limit {
+                let mut filler = active.clone();
+                filler["model"] = json!(7);
+                for _ in 0..62 {
+                    send_json(&mut ws, filler.clone()).await;
+                }
+            }
+            send_json(&mut ws, queued).await;
+            let rejected = recv_until_completed(&mut ws).await;
+            assert_eq!(
+                rejected.last().unwrap()["status"],
+                429,
+                "overload must reply without waiting for active work"
+            );
+            release.send(()).unwrap();
+            let failed = recv_until_completed(&mut ws).await;
+            assert_eq!(failed.last().unwrap()["type"], "response.failed");
+            let accepted = recv_until_completed(&mut ws).await;
+            assert_eq!(
+                accepted.last().unwrap()["type"],
+                "response.completed",
+                "rejection must not evict accepted work's parent"
+            );
+            if !byte_limit {
+                for _ in 0..62 {
+                    assert_eq!(recv_json(&mut ws).await["type"], "error");
+                }
+            }
+            assert_eq!(mock.request_bodies().await.len(), 1, "queued prewarm stays local");
+        }
+    }
+}
+
+#[tokio::test]
+async fn websocket_bounds_idle_lane_retention_and_preserves_existing_lanes() {
+    let mock = MockResponsesServer::start(vec![]).await;
+    let (gateway_url, _gateway) = spawn_gateway(persistence_disabled_state(&mock.url)).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    let parent = prewarm_private(&mut ws, None, "default parent").await;
+    for lane in 1..128 {
+        prewarm_private(&mut ws, Some(&format!("lane-{lane}")), "private").await;
+    }
+    send_json(
+        &mut ws,
+        json!({"type":"response.create", "model":"test-model", "stream_id":"overflow",
+        "input":[], "store":false, "generate":false}),
+    )
+    .await;
+    assert_eq!(recv_json(&mut ws).await["status"], 429);
+    send_json(
+        &mut ws,
+        json!({"type":"response.create", "model":"test-model",
+        "previous_response_id":parent, "input":[], "store":false, "generate":false}),
+    )
+    .await;
+    assert_eq!(
+        recv_until_completed(&mut ws).await.last().unwrap()["type"],
+        "response.completed"
+    );
+    assert!(mock.request_bodies().await.is_empty());
+}
+
+#[tokio::test]
+async fn websocket_retention_budget_rejects_before_durable_write() {
+    let mock = MockResponsesServer::start(vec![]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    let text = "x".repeat(9 * 1024 * 1024);
+    for lane in 0..3 {
+        prewarm_private(&mut ws, Some(&format!("lane-{lane}")), &text).await;
+    }
+    send_json(
+        &mut ws,
+        json!({"type":"response.create", "model":"test-model", "stream_id":"overflow",
+        "input":text, "store":true, "generate":false}),
+    )
+    .await;
+    let events = recv_until_completed(&mut ws).await;
+    assert_eq!(events.len(), 1, "budget rejection precedes response.created");
+    assert_eq!(events[0]["status"], 413);
+    assert_no_response_state(&fixture.pool).await;
+    assert!(mock.request_bodies().await.is_empty());
+}
+
+#[tokio::test]
+async fn websocket_unstored_disconnect_cancels_active_and_queued_work() {
+    let (first_chunk, _) = phased_sse_response("resp_hanging", "msg_hanging", "never complete");
+    let (mock, upstream_dropped) = MockResponsesServer::start_hanging(first_chunk).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    let parent = prewarm_private(&mut ws, None, "private").await;
+    let request = json!({"type":"response.create", "model":"test-model", "store":false,
+        "previous_response_id":parent, "input":"continue"});
+    send_json(&mut ws, request.clone()).await;
+    assert_eq!(recv_json(&mut ws).await["type"], "response.created");
+    send_json(&mut ws, request).await;
+    ws.close(None).await.unwrap();
+    drop(ws);
+    tokio::time::timeout(std::time::Duration::from_secs(2), upstream_dropped)
+        .await
+        .unwrap()
+        .unwrap();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        fixture.state.websocket_tracker.wait_until_idle(),
+    )
+    .await
+    .unwrap();
+    assert_no_response_state(&fixture.pool).await;
+    assert_eq!(mock.request_bodies().await.len(), 1);
+    let mut fresh = connect_responses_ws(&gateway_url).await;
+    send_json(
+        &mut fresh,
+        json!({"type":"response.create", "model":"test-model", "store":false,
+        "previous_response_id":parent, "input":[], "generate":false}),
+    )
+    .await;
+    assert_eq!(
+        recv_json(&mut fresh).await["error"]["code"],
+        "previous_response_not_found"
+    );
+}
+
+#[tokio::test]
+async fn websocket_unstored_fork_keeps_pinned_parent_after_source_failure() {
+    let (arrived_tx, arrived_rx) = oneshot::channel();
+    let (release_tx, release_rx) = oneshot::channel();
+    let mock = MockResponsesServer::start_with_responses(vec![
+        MockResponse::Gated {
+            response: sse_response("resp_fork", "msg_fork", "FORK"),
+            arrived: arrived_tx,
+            release: release_rx,
+        },
+        MockResponse::Static(sse_failed_response()),
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    let parent = prewarm_private(&mut ws, Some("source"), "shared private parent").await;
+    let mut request = json!({"type":"response.create", "model":"test-model", "store":false,
+        "stream_id":"fork", "previous_response_id":parent, "input":"fork input"});
+    send_json(&mut ws, request.clone()).await;
+    tokio::time::timeout(std::time::Duration::from_secs(2), arrived_rx)
+        .await
+        .unwrap()
+        .unwrap();
+    request["stream_id"] = json!("source");
+    request["input"] = json!("source fails");
+    send_json(&mut ws, request.clone()).await;
+    let failed = recv_until_completed(&mut ws).await;
+    assert_eq!(failed.last().unwrap()["type"], "response.failed");
+    assert_eq!(failed.last().unwrap()["stream_id"], "source");
+    request["generate"] = json!(false);
+    send_json(&mut ws, request.clone()).await;
+    assert_eq!(recv_json(&mut ws).await["error"]["code"], "previous_response_not_found");
+    release_tx.send(()).unwrap();
+    let fork = recv_until_completed(&mut ws).await;
+    assert_eq!(fork.last().unwrap()["type"], "response.completed");
+    assert_eq!(fork.last().unwrap()["stream_id"], "fork");
+    request["stream_id"] = json!("fork");
+    request["previous_response_id"] = fork.last().unwrap()["response"]["id"].clone();
+    request["input"] = json!([]);
+    send_json(&mut ws, request).await;
+    assert_eq!(
+        recv_until_completed(&mut ws).await.last().unwrap()["type"],
+        "response.completed"
+    );
+    let requests = mock.request_bodies().await;
+    assert_eq!(requests.len(), 2);
+    assert!(requests[0]["input"].to_string().contains("shared private parent"));
+    assert!(!requests[0]["input"].to_string().contains("source fails"));
+    assert_no_response_state(&fixture.pool).await;
 }

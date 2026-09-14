@@ -90,9 +90,43 @@ greater than `compact_threshold`. Inference then continues using the compacted w
 executor configuration and is not sent to vLLM. If compaction runs, the response usage is the saturating sum of every
 summary call and all answer/tool-loop inference rounds.
 
-The current estimate is deterministic JSON size divided by four, rounded up. It is not a model-specific tokenizer, so
-choose a threshold with headroom. An entry without `compact_threshold` is ignored because this server has no global
-default threshold.
+The estimate is deterministic but is not a model-specific tokenizer. Textual fields are aggregated as UTF-8 bytes,
+divided by four and rounded up, with fixed allowances for Responses item and content-part framing. Each image receives
+a fixed 1,024-token allowance, independent of its URL, inline base64 size, dimensions, or `detail` setting. Actual
+vision-token usage depends on the model and image processor, so choose a threshold with headroom. An entry without
+`compact_threshold` is ignored because this server has no global default threshold.
+
+## File inputs
+
+Message content parts with `type: "input_file"` are parsed without dropping `file_data`, `file_id`, `file_url`,
+or `filename`, but the typed Responses executor does not support resolving or reading those files. It returns an
+HTTP 400 `invalid_request_error` (or the equivalent WebSocket error) before inference. The same validation applies
+to files restored from response/conversation history, explicit and automatic compaction, `compaction_trigger`,
+and WebSocket `generate: false` requests. Use supported `input_text` or `input_image` content instead.
+
+Eligible raw `store: false` proxy requests remain byte-transparent and leave file support to the upstream. Merely
+setting `store: false` does not select that path when history or an in-process feature requires typed execution.
+Structured function/custom tool call outputs containing files retain their existing pass-through behavior.
+
+API `input_file` content is distinct from mentioning a local filename in Codex or asking a client-executed read tool
+to read a file. A local file mention is not a file upload, and this gateway does not resolve local paths or implement
+a file-ID resolver, OCR, or document parser.
+
+## File inputs
+
+Message content parts with `type: "input_file"` are parsed without dropping `file_data`, `file_id`, `file_url`,
+or `filename`, but the typed Responses executor does not support resolving or reading those files. It returns an
+HTTP 400 `invalid_request_error` (or the equivalent WebSocket error) before inference. The same validation applies
+to files restored from response/conversation history, explicit and automatic compaction, `compaction_trigger`,
+and WebSocket `generate: false` requests. Use supported `input_text` or `input_image` content instead.
+
+Eligible raw `store: false` proxy requests remain byte-transparent and leave file support to the upstream. Merely
+setting `store: false` does not select that path when history or an in-process feature requires typed execution.
+Structured function/custom tool call outputs containing files retain their existing pass-through behavior.
+
+API `input_file` content is distinct from mentioning a local filename in Codex or asking a client-executed read tool
+to read a file. A local file mention is not a file upload, and this gateway does not resolve local paths or implement
+a file-ID resolver, OCR, or document parser.
 
 ## Local plaintext limitation
 

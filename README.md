@@ -123,8 +123,8 @@ permission checks and disables Codex approvals and sandboxing.
 ### Python distribution
 
 The `agentic-api` wheel packages the Rust gateway and a small Python launcher. This release produces wheel artifacts
-for 0.5.0 as a build-only release: download the wheel for your platform from the release workflow, then install that local file. It is
-not published on PyPI yet.
+for 0.6.0 as a build-only release: download the wheel for your platform from the release workflow, then install that
+local file. It is not published on PyPI yet.
 
 ```bash
 WHEEL_PATH=/absolute/path/to/agentic_api-PLATFORM.whl
@@ -176,6 +176,9 @@ Serving through [NVIDIA Dynamo](https://github.com/ai-dynamo/dynamo) instead of 
 gateway at the Dynamo frontend the same way; see
 [Running Agentic API in front of NVIDIA Dynamo](docs/guides/dynamo-upstream.md).
 
+For SGLang, see [Running Agentic API in front of SGLang](docs/guides/sglang-upstream.md), including the pinned
+launch configuration, cassette recorder, and shared provider replay tests.
+
 **2. Start Agentic API**, pointing it at the vLLM server (set the `YOU_*` variables to enable built-in web search):
 
 ```bash
@@ -222,6 +225,11 @@ api_key_env = "YOU_API_KEY"
 [mcp]
 allowed_hosts = ["mcp.example.com"]
 
+[server]
+# Maximum serialized request size in bytes for HTTP bodies and WebSocket
+# messages and frames. Must be greater than zero.
+max_request_body_size_bytes = 10485760
+
 [tools]
 # Upper bound for gateway-owned calls within one Responses round and for
 # provider requests inside a batched web-search call.
@@ -234,8 +242,18 @@ allowed_tools = ["tool_1_name", "tool_2_name"]
 require_approval = "never"
 ```
 
+`max_request_body_size_bytes` bounds the serialized request the gateway accepts on `/v1/responses`,
+`/v1/responses/compact`, `/v1/conversations`, the Anthropic Messages endpoints, and the Responses WebSocket. It counts
+encoded bytes — JSON overhead, replayed conversation history, and base64 image attachments included — and is unrelated
+to the model's token context limit, so raising it does not raise what the upstream will accept. It defaults to
+10 MiB (10485760); inline base64 attachments cost roughly a third more than the source image, so conversations that
+replay several images may need a higher value. Oversized HTTP requests are answered with `413 Payload Too Large`;
+oversized WebSocket messages and frames are rejected by the transport, which closes the connection before any JSON is
+parsed. Order of precedence is `--max-request-body-size-bytes`, then `AGENTIC_MAX_REQUEST_BODY_SIZE_BYTES`, then this
+file setting.
+
 `api_key_env` names the process environment variable containing the web-search credential; it does not contain the
-credential itself. `YOU_API_BASE_URL`, `AGENTIC_MCP_ALLOWED_HOSTS`, and
+credential itself. `YOU_API_BASE_URL`, `AGENTIC_MCP_ALLOWED_HOSTS`, `AGENTIC_MAX_REQUEST_BODY_SIZE_BYTES`, and
 `AGENTIC_MAX_CONCURRENT_GATEWAY_CALLS` can override their typed file settings. The concurrency value is a sliding-window
 upper bound; handlers may further serialize calls to the same tool name. The MCP allowlist is used only for
 request-declared remote MCP URLs; configured `[mcp_servers]` entries are trusted operator configuration.

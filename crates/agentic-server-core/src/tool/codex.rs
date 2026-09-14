@@ -1,11 +1,9 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
-
-use serde_json::{Map, Value};
 
 use super::handler::{ToolError, ToolHandler};
 use super::registry::{ToolEntry, ToolType};
-use crate::events::WireEvent;
-use crate::types::io::{FunctionTool, FunctionToolCall, OutputItem, ToolChoice};
+use crate::types::io::{FunctionTool, InputItem, ResponsesInput, ToolChoice};
 use crate::types::tools::{CodexNamespaceMember, CodexNamespaceToolParam, NonEmptyToolName, ResponsesTool};
 
 // Upstream Responses-compatible backends only see flat function names. Prefix
@@ -76,11 +74,7 @@ struct NamespaceCallMapping {
 /// A pre-built, reusable namespace rename map, computed once per request from
 /// the declared tools via [`CodexNamespaceHandler::build_namespace_map`].
 ///
-/// Passing this into [`CodexNamespaceHandler::restore_output_items`],
-/// [`CodexNamespaceHandler::restore_response_value`], and
-/// [`CodexNamespaceHandler::resolve_tool_choice`] avoids
-/// rebuilding the map on every call — important for streaming responses,
-/// which call the restore path once per SSE line.
+/// Shared lookup facts for request normalization and public namespace translation.
 #[derive(Clone, Debug, Default)]
 pub struct NamespaceMap {
     calls: HashMap<String, NamespaceCallMapping>,
@@ -88,6 +82,11 @@ pub struct NamespaceMap {
 }
 
 impl NamespaceMap {
+    pub(crate) fn public_member(&self, name: &str) -> Option<(&str, &str)> {
+        self.mapping_for_call(name)
+            .map(|mapping| (mapping.member.namespace.as_str(), mapping.member.name.as_str()))
+    }
+
     fn mapping_for_call(&self, name: &str) -> Option<&NamespaceCallMapping> {
         self.calls.get(name)
     }
@@ -278,31 +277,29 @@ impl CodexNamespaceHandler {
         rewrite_tool_choice_with_map(tool_choice, map)
     }
 
-    pub fn restore_output_items(&self, output: &mut [OutputItem], map: Option<&NamespaceMap>) {
+    /// Rewrite public namespaced function-call history to the exact flat names
+    /// from the request-scoped namespace map used for tool declarations.
+    #[must_use]
+    pub fn resolve_input<'a>(
+        &self,
+        map: Option<&NamespaceMap>,
+        input: Cow<'a, ResponsesInput>,
+    ) -> Cow<'a, ResponsesInput> {
         let Some(map) = map else {
-            return;
+            return input;
         };
-        for item in output {
-            if let OutputItem::FunctionCall(call) = item {
-                restore_function_call_with_map(call, map);
-            }
+        let should_rewrite = matches!(&*input, ResponsesInput::Items(items) if items.iter().any(|item| {
+            matches!(item, InputItem::FunctionCall(call)
+                if call.namespace.as_deref().is_some_and(|namespace| {
+                    map.mapping_for_member(namespace, &call.name).is_some()
+                }))
+        }));
+        if !should_rewrite {
+            return input;
         }
-    }
-
-    #[must_use]
-    pub fn restore_response_value(&self, value: &mut Value, map: Option<&NamespaceMap>) -> bool {
-        let Some(map) = map else {
-            return false;
-        };
-        restore_response_value_with_map(value, map)
-    }
-
-    #[must_use]
-    pub fn restore_response_wire(&self, wire: &mut WireEvent, map: Option<&NamespaceMap>) -> bool {
-        let Some(map) = map else {
-            return false;
-        };
-        restore_response_map_with_map(&mut wire.rest, map)
+        let mut input = input.into_owned();
+        rewrite_input_with_map(&mut input, map);
+        Cow::Owned(input)
     }
 }
 
@@ -344,6 +341,25 @@ fn namespace_map_from_tools(tools: Option<&[ResponsesTool]>) -> Result<Option<Na
         }
     }
     Ok(Some(builder.finish()))
+}
+
+fn rewrite_input_with_map(input: &mut ResponsesInput, map: &NamespaceMap) {
+    let ResponsesInput::Items(items) = input else {
+        return;
+    };
+    for item in items {
+        let InputItem::FunctionCall(call) = item else {
+            continue;
+        };
+        let Some(namespace) = call.namespace.as_deref() else {
+            continue;
+        };
+        let Some(mapping) = map.mapping_for_member(namespace, &call.name) else {
+            continue;
+        };
+        call.name.clone_from(&mapping.upstream_name);
+        call.namespace = None;
+    }
 }
 
 /// Returns `namespace` with its function members' names rewritten to their
@@ -404,7 +420,9 @@ fn typed_top_level_registry_keys(tools: &[ResponsesTool]) -> HashMap<String, Too
                 ResponsesTool::WebSearch(_) => "web_search".to_owned(),
                 ResponsesTool::FileSearch(_) => "file_search".to_owned(),
                 ResponsesTool::CodeInterpreter(_) => "code_interpreter".to_owned(),
-                ResponsesTool::Mcp(_)
+                ResponsesTool::ToolSearch(_)
+                | ResponsesTool::Mcp(_)
+                | ResponsesTool::Shell(_)
                 | ResponsesTool::Namespace(_)
                 | ResponsesTool::Custom(_)
                 | ResponsesTool::Unknown => return None,
@@ -423,26 +441,6 @@ fn typed_function_member_names(namespace: &CodexNamespaceToolParam) -> Vec<Strin
             CodexNamespaceMember::Unknown => None,
         })
         .collect()
-}
-
-fn restore_function_call_with_map(call: &mut FunctionToolCall, map: &NamespaceMap) -> bool {
-    if call.namespace.is_some() {
-        return false;
-    }
-    let Some(mapping) = map.mapping_for_call(&call.name) else {
-        return false;
-    };
-    let original_name = call.name.clone();
-
-    call.namespace = Some(mapping.member.namespace.clone());
-    call.name.clone_from(&mapping.member.name);
-    tracing::debug!(
-        upstream_name = %original_name,
-        namespace = %mapping.member.namespace,
-        member = %mapping.member.name,
-        "restored upstream namespace function call"
-    );
-    true
 }
 
 fn rewrite_tool_choice_with_map(choice: &ToolChoice, map: &NamespaceMap) -> ToolChoice {
@@ -468,92 +466,9 @@ fn rewrite_tool_choice_with_map(choice: &ToolChoice, map: &NamespaceMap) -> Tool
     ToolChoice::Function { namespace: None, name }
 }
 
-fn restore_response_value_with_map(value: &mut Value, map: &NamespaceMap) -> bool {
-    let mut changed = false;
-
-    if let Some(item) = value.as_object_mut().and_then(|object| object.get_mut("item")) {
-        changed |= restore_call_value_with_map(item, map);
-    }
-
-    changed |= restore_call_value_with_map(value, map);
-
-    for key in ["response", "payload"] {
-        if let Some(nested) = value.as_object_mut().and_then(|object| object.get_mut(key)) {
-            changed |= restore_response_value_with_map(nested, map);
-        }
-    }
-
-    if let Some(Value::Array(items)) = value.as_object_mut().and_then(|object| object.get_mut("output")) {
-        for item in items {
-            changed |= restore_call_value_with_map(item, map);
-        }
-    }
-
-    changed
-}
-
-fn restore_call_value_with_map(value: &mut Value, map: &NamespaceMap) -> bool {
-    let Some(object) = value.as_object_mut() else {
-        return false;
-    };
-    if object.get("type").and_then(Value::as_str) != Some("function_call") {
-        return false;
-    }
-    if object.get("namespace").and_then(Value::as_str).is_some() {
-        return false;
-    }
-    let Some(name) = object.get("name").and_then(Value::as_str) else {
-        return false;
-    };
-    let Some(mapping) = map.mapping_for_call(name) else {
-        return false;
-    };
-    let original_name = name.to_string();
-
-    object.insert("namespace".to_string(), Value::String(mapping.member.namespace.clone()));
-    object.insert("name".to_string(), Value::String(mapping.member.name.clone()));
-    tracing::debug!(
-        upstream_name = %original_name,
-        namespace = %mapping.member.namespace,
-        member = %mapping.member.name,
-        "restored upstream namespace function call"
-    );
-    true
-}
-
-fn restore_response_map_with_map(object: &mut Map<String, Value>, map: &NamespaceMap) -> bool {
-    let mut changed = false;
-    if let Some(item) = object.get_mut("item") {
-        changed |= restore_call_value_with_map(item, map);
-    }
-    for key in ["response", "payload"] {
-        if let Some(nested) = object.get_mut(key) {
-            changed |= restore_response_value_with_map(nested, map);
-        }
-    }
-    if let Some(Value::Array(items)) = object.get_mut("output") {
-        for item in items {
-            changed |= restore_call_value_with_map(item, map);
-        }
-    }
-    changed
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::event::MessageStatus;
-
-    fn completed_call(name: &str, arguments: &str) -> OutputItem {
-        OutputItem::FunctionCall(FunctionToolCall {
-            id: "fc_1".to_string(),
-            call_id: "call_1".to_string(),
-            name: name.to_string(),
-            namespace: None,
-            arguments: arguments.to_string(),
-            status: MessageStatus::Completed,
-        })
-    }
 
     #[test]
     fn unqualified_function_tool_choice_is_not_rewritten_to_namespace_member() {
@@ -681,54 +596,6 @@ mod tests {
     }
 
     #[test]
-    fn long_namespace_member_round_trips_through_shortened_name() {
-        let namespace = "mcp__codex_apps__github";
-        let member = "_remove_reaction_from_pr_review_comment";
-        let tools: Vec<ResponsesTool> = serde_json::from_value(serde_json::json!([
-            {
-                "type": "namespace",
-                "name": namespace,
-                "tools": [{"type": "function", "name": member}]
-            }
-        ]))
-        .unwrap();
-        let upstream_name = model_visible_namespace_member_name(namespace, member);
-        let mut output = vec![completed_call(&upstream_name, "{}")];
-
-        let resolved = CodexNamespaceHandler
-            .resolve_namespace_members(&tools)
-            .expect("valid namespace members");
-        assert!(matches!(
-            resolved.as_slice(),
-            [ResponsesTool::Namespace(namespace)]
-                if matches!(&namespace.tools[0], CodexNamespaceMember::Function(function)
-                    if function.name.as_str() == upstream_name)
-        ));
-
-        let map = CodexNamespaceHandler
-            .build_namespace_map(Some(&tools))
-            .expect("valid namespace map");
-        let choice = ToolChoice::Function {
-            namespace: Some(namespace.to_string()),
-            name: NonEmptyToolName::try_from(member).unwrap(),
-        };
-        assert_eq!(
-            CodexNamespaceHandler.resolve_tool_choice(map.as_ref(), Some(&choice)),
-            ToolChoice::Function {
-                namespace: None,
-                name: NonEmptyToolName::try_from(upstream_name).unwrap(),
-            }
-        );
-        CodexNamespaceHandler.restore_output_items(&mut output, map.as_ref());
-
-        let OutputItem::FunctionCall(call) = &output[0] else {
-            panic!("expected function call");
-        };
-        assert_eq!(call.namespace.as_deref(), Some(namespace));
-        assert_eq!(call.name, member);
-    }
-
-    #[test]
     fn validate_namespace_collisions_rejects_top_level_flat_name_collision() {
         let tools: Vec<ResponsesTool> = serde_json::from_value(serde_json::json!([
             {"type": "function", "name": "agentic_ns__mcp__shell__run"},
@@ -821,94 +688,5 @@ mod tests {
             "agentic_ns__a__b__c"
         );
         let _ = builder.record_flat_member_with_flat_name("a", "b__c", "agentic_ns__a__b__c".to_owned());
-    }
-
-    #[test]
-    fn flat_namespace_member_call_preserves_tools_argument() {
-        let tools: Vec<ResponsesTool> = serde_json::from_value(serde_json::json!([
-            {
-                "type": "namespace",
-                "name": "mcp__agentic_fixture",
-                "tools": [{"type": "function", "name": "run"}]
-            }
-        ]))
-        .unwrap();
-        let mut output = vec![completed_call(
-            "agentic_ns__mcp__agentic_fixture__run",
-            "{\"tools\":\"legitimate\",\"cmd\":\"pwd\"}",
-        )];
-
-        let map = CodexNamespaceHandler
-            .build_namespace_map(Some(&tools))
-            .expect("valid namespace map");
-        CodexNamespaceHandler.restore_output_items(&mut output, map.as_ref());
-
-        let OutputItem::FunctionCall(call) = &output[0] else {
-            panic!("expected function call");
-        };
-        assert_eq!(call.namespace.as_deref(), Some("mcp__agentic_fixture"));
-        assert_eq!(call.name, "run");
-        assert_eq!(call.arguments, "{\"tools\":\"legitimate\",\"cmd\":\"pwd\"}");
-    }
-
-    #[test]
-    fn plain_function_call_round_trip() {
-        let tools: Vec<ResponsesTool> = serde_json::from_value(serde_json::json!([
-            {
-                "type": "function",
-                "name": "get_weather",
-                "parameters": {"type": "object"}
-            }
-        ]))
-        .unwrap();
-        let resolved = CodexNamespaceHandler
-            .resolve_namespace_members(&tools)
-            .expect("valid namespace members");
-        let mut output = vec![completed_call("get_weather", "{\"city\":\"SF\"}")];
-
-        let map = CodexNamespaceHandler
-            .build_namespace_map(Some(&tools))
-            .expect("valid namespace map");
-        CodexNamespaceHandler.restore_output_items(&mut output, map.as_ref());
-
-        assert!(matches!(
-            resolved.as_slice(),
-            [ResponsesTool::Function(function)] if function.name.as_str() == "get_weather"
-        ));
-        let OutputItem::FunctionCall(call) = &output[0] else {
-            panic!("expected function call");
-        };
-        assert!(call.namespace.is_none());
-        assert_eq!(call.name, "get_weather");
-        assert_eq!(call.arguments, "{\"city\":\"SF\"}");
-    }
-
-    #[test]
-    fn response_value_normalizes_nested_function_call_item() {
-        let tools: Vec<ResponsesTool> = serde_json::from_value(serde_json::json!([
-            {
-                "type": "namespace",
-                "name": "mcp__agentic_fixture",
-                "tools": [{"type": "function", "name": "add_numbers"}]
-            }
-        ]))
-        .unwrap();
-        let mut value = serde_json::json!({
-            "type": "response.output_item.done",
-            "item": {
-                "type": "function_call",
-                "name": "agentic_ns__mcp__agentic_fixture__add_numbers",
-                "call_id": "call_1",
-                "arguments": "{\"numbers\":[8,0]}"
-            }
-        });
-
-        let map = CodexNamespaceHandler
-            .build_namespace_map(Some(&tools))
-            .expect("valid namespace map");
-        assert!(CodexNamespaceHandler.restore_response_value(&mut value, map.as_ref()));
-        assert_eq!(value["item"]["namespace"], "mcp__agentic_fixture");
-        assert_eq!(value["item"]["name"], "add_numbers");
-        assert_eq!(value["item"]["arguments"], "{\"numbers\":[8,0]}");
     }
 }

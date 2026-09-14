@@ -41,51 +41,70 @@ turns:
   response:
     body:
       conversation_id: null
-      created_at: 1788257392
+      created_at: 1789100631
       error: null
-      id: resp_01a05c72-565c-7d81-8656-8223460d99d2
+      id: resp_01a08eb5-1e9b-78b3-bcce-a4a5d6683419
       incomplete_details: null
       instructions: null
       model: Qwen/Qwen3.5-35B-A3B-FP8
       object: response
       output:
       - content:
-        - text: 'The user wants me to call get_weather for both London and Tokyo in
-            parallel. I can make both function calls in a single turn without waiting
-            for one to complete before starting the other.
+        - text: 'The user wants me to call get_weather for two cities in parallel
+            - London and Tokyo. However, looking at the available tools, I only see
+            one get_weather function, not two separate ones. I need to call the get_weather
+            function twice, once for each city.
 
 
-            Let me make both calls:
+            Looking at the web_search function, I can see it has a "queries" parameter
+            that allows multiple independent search queries to run in parallel. However,
+            get_weather doesn''t seem to have that capability based on its schema
+            - it only takes a single "city" parameter.
+
+
+            Since get_weather doesn''t support parallel calls within a single function
+            call, I would need to make two separate function calls. However, I''m
+            not sure if the system allows me to make multiple parallel function calls
+            in one turn. Let me check the instructions again...
+
+
+            The user explicitly said "do not wait for one before starting another"
+            and "in parallel". This suggests they want me to make both calls simultaneously.
+            Since I can make multiple tool calls in a single response, I should make
+            both get_weather calls in parallel.
+
+
+            Let me make both calls now.
 
             '
           type: reasoning_text
         encrypted_content: null
-        id: rs_b773f3e211517503
+        id: rs_86f674f763fce554
         status: null
         summary: []
         type: reasoning
       - arguments: '{"city": "London"}'
-        call_id: chatcmpl-tool-84466ff41f937c71
-        id: fc_8a5f4e8ea24842cf
+        call_id: chatcmpl-tool-b416b31db516a7f3
+        id: fc_86a185536261ae4d
         name: get_weather
         status: completed
         type: function_call
       - arguments: '{"city": "Tokyo"}'
-        call_id: chatcmpl-tool-9a9171e338a11812
-        id: fc_bddfe8400c3bec7d
+        call_id: chatcmpl-tool-88dc9ba7d5866e6c
+        id: fc_a1d6a05eb6f215ee
         name: get_weather
         status: completed
         type: function_call
       previous_response_id: null
       status: completed
       usage:
-        input_tokens: 862
+        input_tokens: 870
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 100
+        output_tokens: 279
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 962
+        total_tokens: 1149
     headers:
       content-type: application/json
     status_code: 200
@@ -93,10 +112,10 @@ turns:
   request:
     body:
       input:
-      - call_id: chatcmpl-tool-84466ff41f937c71
+      - call_id: chatcmpl-tool-b416b31db516a7f3
         output: '{"error": "weather service unavailable: upstream timeout"}'
         type: function_call_output
-      - call_id: chatcmpl-tool-9a9171e338a11812
+      - call_id: chatcmpl-tool-88dc9ba7d5866e6c
         output: '{"city": "Tokyo", "temperature_c": 22, "condition": "Clear"}'
         type: function_call_output
       - content: What did you find for each of those two cities?
@@ -105,7 +124,7 @@ turns:
       max_output_tokens: 2048
       model: Qwen/Qwen3.5-35B-A3B-FP8
       parallel_tool_calls: true
-      previous_response_id: resp_01a05c72-565c-7d81-8656-8223460d99d2
+      previous_response_id: resp_01a08eb5-1e9b-78b3-bcce-a4a5d6683419
       store: true
       stream: false
       tool_choice: auto
@@ -139,56 +158,71 @@ turns:
   response:
     body:
       conversation_id: null
-      created_at: 1788257394
+      created_at: 1789100632
       error: null
-      id: resp_01a05c72-5963-7e21-accc-b96ea391a18f
+      id: resp_01a08eb5-260e-7b00-bef7-23e4c5f01346
       incomplete_details: null
       instructions: null
       model: Qwen/Qwen3.5-35B-A3B-FP8
       object: response
       output:
       - content:
-        - text: 'The user is asking for the results of the two parallel weather calls
-            I just made. I got results for both:
+        - text: 'The user is asking me to report the weather information I found for
+            London and Tokyo. I received two responses from the parallel tool calls:
 
 
-            1. London: Error - weather service unavailable: upstream timeout
+            1. London: There was an error - "weather service unavailable: upstream
+            timeout"
 
-            2. Tokyo: 22°C, Clear conditions
+            2. Tokyo: The weather was 22°C with clear conditions
 
 
-            I should report both results to the user.
+            I should report these results clearly to the user.
 
             '
           type: reasoning_text
         encrypted_content: null
-        id: rs_ab20f07dbe362545
+        id: rs_a4415ea7e349883c
         status: null
         summary: []
         type: reasoning
       - content:
         - annotations: []
-          text: "\n\nHere are the weather results for both cities:\n\n**London:**\
-            \ \n❌ Unable to retrieve current weather. The service experienced an upstream\
-            \ timeout error.\n\n**Tokyo:** \n✅ Current conditions: 22°C (72°F), Clear\
-            \ skies.\n\nTokyo's weather was successfully retrieved, while London's\
-            \ data wasn't available due to a service timeout. Would you like me to\
-            \ try again for London?"
+          text: '
+
+
+            Here are the results for both cities:
+
+
+            **London:** Unfortunately, I wasn''t able to retrieve the weather information.
+            The weather service was unavailable and timed out when I tried to fetch
+            London''s current weather.
+
+
+            **Tokyo:** The current weather in Tokyo is:
+
+            - **Temperature:** 22°C
+
+            - **Condition:** Clear
+
+
+            Would you like me to try getting the weather for London again, or is there
+            anything else I can help you with?'
           type: output_text
-        id: msg_bcefdc9cacf951b2
+        id: msg_96e70413ff2c4388
         role: assistant
         status: completed
         type: message
-      previous_response_id: resp_01a05c72-565c-7d81-8656-8223460d99d2
+      previous_response_id: resp_01a08eb5-1e9b-78b3-bcce-a4a5d6683419
       status: completed
       usage:
-        input_tokens: 981
+        input_tokens: 989
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 146
+        output_tokens: 169
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 1127
+        total_tokens: 1158
     headers:
       content-type: application/json
     status_code: 200
@@ -234,53 +268,55 @@ turns:
   response:
     body:
       conversation_id: null
-      created_at: 1788257396
+      created_at: 1789100635
       error: null
-      id: resp_01a05c72-6342-72b3-b738-f1d826a6ea16
+      id: resp_01a08eb5-303b-7341-a29a-00afa0c107b8
       incomplete_details: null
       instructions: null
       model: Qwen/Qwen3.5-35B-A3B-FP8
       object: response
       output:
       - content:
-        - text: 'The user is asking me to make two get_weather calls in parallel for
-            two different cities: Tokyo and Atlantis. They want both calls to happen
-            in the same turn without waiting for one to complete before starting the
-            other.
+        - text: 'The user wants me to call get_weather for two cities in parallel
+            - Tokyo and Atlantis. They want me to do both in a single turn without
+            waiting for one to complete before starting the other.
 
 
-            I should call both functions in parallel using the tool call syntax. Let
-            me make both calls now.
+            Looking at the get_weather function, it takes a "city" parameter which
+            is a string. I need to make two separate function calls in parallel.
+
+
+            Let me make both calls now.
 
             '
           type: reasoning_text
         encrypted_content: null
-        id: rs_b137c59f30dd0201
+        id: rs_8b1ec069b0efe178
         status: null
         summary: []
         type: reasoning
       - arguments: '{"city": "Tokyo"}'
-        call_id: chatcmpl-tool-867ebbb068e2e88b
-        id: fc_91cbf17c08976bcc
+        call_id: chatcmpl-tool-8c7d5507725aa2d3
+        id: fc_9fb7a7b4b29ddd89
         name: get_weather
         status: completed
         type: function_call
       - arguments: '{"city": "Atlantis"}'
-        call_id: chatcmpl-tool-806cf3d74cadc12e
-        id: fc_8bf521790984dcf0
+        call_id: chatcmpl-tool-a60292dfaf243432
+        id: fc_9d92ea10feb92c57
         name: get_weather
         status: completed
         type: function_call
       previous_response_id: null
       status: completed
       usage:
-        input_tokens: 863
+        input_tokens: 871
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 121
+        output_tokens: 135
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 984
+        total_tokens: 1006
     headers:
       content-type: application/json
     status_code: 200
@@ -288,7 +324,7 @@ turns:
   request:
     body:
       input:
-      - call_id: chatcmpl-tool-867ebbb068e2e88b
+      - call_id: chatcmpl-tool-8c7d5507725aa2d3
         output: '{"city": "Tokyo", "temperature_c": 22, "condition": "Clear"}'
         type: function_call_output
       - content: What's the weather in Tokyo?
@@ -297,7 +333,7 @@ turns:
       max_output_tokens: 2048
       model: Qwen/Qwen3.5-35B-A3B-FP8
       parallel_tool_calls: true
-      previous_response_id: resp_01a05c72-6342-72b3-b738-f1d826a6ea16
+      previous_response_id: resp_01a08eb5-303b-7341-a29a-00afa0c107b8
       store: true
       stream: false
       tool_choice: auto
@@ -332,7 +368,7 @@ turns:
     body:
       error:
         code: null
-        message: No tool output found for function call chatcmpl-tool-806cf3d74cadc12e.
+        message: No tool output found for function call chatcmpl-tool-a60292dfaf243432.
         param: input
         type: invalid_request_error
     headers:
@@ -380,9 +416,9 @@ turns:
   response:
     body:
       conversation_id: null
-      created_at: 1788257399
+      created_at: 1789100637
       error: null
-      id: resp_01a05c72-6cab-7691-8ab5-fa110980196b
+      id: resp_01a08eb5-39e7-7162-8645-6b2ee970936f
       incomplete_details: null
       instructions: null
       model: Qwen/Qwen3.5-35B-A3B-FP8
@@ -391,23 +427,19 @@ turns:
       - content:
         - text: 'The user wants me to do two things in parallel:
 
-            1. Search the web for the exact query "Atlantis weather today"
+            1. Search the web for "Atlantis weather today"
 
             2. Call get_weather for "Atlantis"
 
 
-            I need to make both function calls in the same turn without waiting for
-            one before starting the other. Let me make both calls now.
-
-
-            For web_search, I need to use the exact query "Atlantis weather today"
-
-            For get_weather, I need to use city "Atlantis"
+            I need to use the web_search function with the query "Atlantis weather
+            today" and also call get_weather with city "Atlantis". I can run these
+            in parallel by making both function calls in this turn.
 
             '
           type: reasoning_text
         encrypted_content: null
-        id: rs_a7c629bf1bfc21fa
+        id: rs_9139a3531356d993
         status: null
         summary: []
         type: reasoning
@@ -426,40 +458,40 @@ turns:
           - title: Hourly Weather Forecast for Atlantis, Florida 33462 - The Weather
               ...
             url: https://weather.com/weather/hourbyhour/l/Atlantis+FL+USFL0626:1:US
-          - title: Atlantis, Western Cape, South Africa Weather Forecast | AccuWeather
-            url: https://www.accuweather.com/en/za/atlantis/301275/weather-forecast/301275
-          - title: National Weather Service
-            url: https://forecast.weather.gov/MapClick.php?site=mfl&map.x=264&map.y=64
-          - title: Atlantis, FL Hourly Weather Forecast | Weather Underground
-            url: https://www.wunderground.com/hourly/us/fl/atlantis/26.592058,-80.111839/date/2024-01-02
-          - title: 'Atlantis Weather Forecast: Hourly & 7-Day Outlook for Florida
-              • ...'
-            url: https://www.predictwind.com/weather/united-states/florida/atlantis
-          - title: Atlantis The weather today | na.freemeteo.com
-            url: https://na.freemeteo.com/weather/atlantis/daily-forecast/today/?gid=4146372&language=english&country=us-united-states
           - title: Atlantis, Florida | Current Weather Forecasts, Live Radar Maps
               ...
             url: https://www.weatherbug.com/weather-forecast/now/atlantis-fl-33462
+          - title: Atlantis, FL Weather forecast, Conditions and Maps - Yahoo Weather
+            url: https://weather.yahoo.com/en-sg/us/fl/atlantis/
+          - title: National Weather Service
+            url: https://forecast.weather.gov/MapClick.php?site=mfl&map.x=264&map.y=64
+          - title: Atlantis, MD Weather Forecast | AccuWeather
+            url: https://www.accuweather.com/en/us/atlantis/21409/weather-forecast/2169413
+          - title: 'Atlantis Weather Forecast: Hourly & 7-Day Outlook for Florida
+              • ...'
+            url: https://www.predictwind.com/weather/united-states/florida/atlantis
+          - title: Atlantis, FL Hourly Weather | AccuWeather
+            url: https://www.accuweather.com/en/us/atlantis/33462/hourly-weather-forecast/328118
           type: search
-        id: ws_afc5f8e3eda7ce04
+        id: ws_9c2bcb4107d95c43
         status: completed
         type: web_search_call
       - arguments: '{"city": "Atlantis"}'
-        call_id: chatcmpl-tool-b81909e7bda06efa
-        id: fc_95768cb8772dfc89
+        call_id: chatcmpl-tool-826e3db0aa97d186
+        id: fc_a849c1b37edcfe32
         name: get_weather
         status: completed
         type: function_call
       previous_response_id: null
       status: completed
       usage:
-        input_tokens: 868
+        input_tokens: 876
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 157
+        output_tokens: 138
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 1025
+        total_tokens: 1014
     headers:
       content-type: application/json
     status_code: 200
@@ -474,7 +506,7 @@ turns:
       max_output_tokens: 2048
       model: Qwen/Qwen3.5-35B-A3B-FP8
       parallel_tool_calls: true
-      previous_response_id: resp_01a05c72-6cab-7691-8ab5-fa110980196b
+      previous_response_id: resp_01a08eb5-39e7-7162-8645-6b2ee970936f
       store: true
       stream: false
       tool_choice: auto
@@ -509,7 +541,7 @@ turns:
     body:
       error:
         code: null
-        message: No tool output found for function call chatcmpl-tool-b81909e7bda06efa.
+        message: No tool output found for function call chatcmpl-tool-826e3db0aa97d186.
         param: input
         type: invalid_request_error
     headers:

@@ -9,7 +9,7 @@ on:
         description: "Build-only Python release version already merged into main"
         required: true
         type: string
-        default: "0.5.0"
+        default: "0.6.0"
 
 concurrency:
   group: release-python-${{ inputs.version }}

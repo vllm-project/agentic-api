@@ -78,6 +78,10 @@ pub enum ExecutorError {
     #[error("{entity} not found: {id}")]
     NotFound { entity: String, id: String },
 
+    /// A response session cannot resolve the requested continuation checkpoint.
+    #[error("Previous response with id '{id}' not found.")]
+    PreviousResponseNotFound { id: String },
+
     #[error("invalid request: {0}")]
     InvalidRequest(String),
 
@@ -97,6 +101,13 @@ pub enum ExecutorError {
 }
 
 impl ExecutorError {
+    pub(crate) fn is_invalid_upstream_tool_search(&self) -> bool {
+        matches!(
+            self,
+            Self::Tool(ToolError::InvalidUpstreamToolSearch | ToolError::UpstreamWithheldFunctionCall)
+        )
+    }
+
     fn client_visible_error(&self) -> &Self {
         match self {
             Self::Persistence(source) if source.contains_conversation_locked() => source.client_visible_error(),
@@ -121,10 +132,16 @@ impl ExecutorError {
             Self::ConversationLocked { .. }
             | Self::Tool(ToolError::Config(_) | ToolError::MissingOutput { .. })
             | Self::InvalidRequest(_)
+            | Self::PreviousResponseNotFound { .. }
             | Self::JsonError(_) => StatusCode::BAD_REQUEST,
+            Self::Tool(
+                ToolError::Execution(_)
+                | ToolError::InvalidUpstreamToolSearch
+                | ToolError::UpstreamWithheldFunctionCall,
+            )
+            | Self::CompactionFailed { .. } => StatusCode::BAD_GATEWAY,
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
-            Self::Tool(ToolError::Execution(_)) | Self::CompactionFailed { .. } => StatusCode::BAD_GATEWAY,
             Self::ParseError(_) => StatusCode::UNPROCESSABLE_ENTITY,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -137,13 +154,18 @@ impl ExecutorError {
             Self::ConversationLocked { .. }
             | Self::Tool(ToolError::Config(_) | ToolError::MissingOutput { .. })
             | Self::InvalidRequest(_)
+            | Self::PreviousResponseNotFound { .. }
             | Self::ParseError(_)
             | Self::JsonError(_)
             | Self::PayloadTooLarge(_) => "invalid_request_error",
             Self::Storage(e) if e.is_not_found() => "not_found",
             Self::Conflict(_) => "conflict_error",
             Self::LLMRequest { .. } | Self::LLMTransport { .. } | Self::CompactionFailed { .. } => "upstream_error",
-            Self::Tool(ToolError::Execution(_)) => "tool_error",
+            Self::Tool(
+                ToolError::Execution(_)
+                | ToolError::InvalidUpstreamToolSearch
+                | ToolError::UpstreamWithheldFunctionCall,
+            ) => "tool_error",
             _ => "server_error",
         }
     }
@@ -153,6 +175,7 @@ impl ExecutorError {
     pub fn error_code(&self) -> &'static str {
         match self.client_visible_error() {
             Self::ConversationLocked { .. } => "conversation_locked",
+            Self::PreviousResponseNotFound { .. } => "previous_response_not_found",
             Self::Conflict(_) => "response_already_stored",
             Self::PayloadTooLarge(_) => "body_too_large",
             other => other.error_type(),
@@ -164,6 +187,7 @@ impl ExecutorError {
     pub fn error_param(&self) -> Option<&'static str> {
         match self.client_visible_error() {
             Self::ConversationLocked { .. } => Some("conversation"),
+            Self::PreviousResponseNotFound { .. } => Some("previous_response_id"),
             Self::Tool(ToolError::MissingOutput { .. }) => Some("input"),
             _ => None,
         }
@@ -242,6 +266,30 @@ mod tests {
         let storage_err = StorageError::NotConfigured;
         let exec_err = ExecutorError::from(storage_err);
         assert!(exec_err.to_string().contains("storage error"));
+    }
+
+    #[test]
+    fn previous_response_error_has_the_continuation_envelope() {
+        let error = ExecutorError::PreviousResponseNotFound {
+            id: "resp_missing".to_owned(),
+        };
+        assert_eq!(error.http_status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&error.into_response_body()).unwrap(),
+            serde_json::json!({"error": {
+                "message": "Previous response with id 'resp_missing' not found.",
+                "type": "invalid_request_error", "code": "previous_response_not_found",
+                "param": "previous_response_id"
+            }})
+        );
+    }
+
+    #[test]
+    fn tool_search_configuration_errors_are_bad_requests() {
+        let error = ExecutorError::from(ToolError::Config("invalid tool_search request".to_owned()));
+
+        assert_eq!(error.http_status(), StatusCode::BAD_REQUEST);
+        assert_eq!(error.error_type(), "invalid_request_error");
     }
 
     #[test]

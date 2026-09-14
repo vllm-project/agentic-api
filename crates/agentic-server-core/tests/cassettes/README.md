@@ -74,8 +74,9 @@ model requested by Codex 0.149.1.
 ```
 --turns N              Number of turns
 --output PATH          Output YAML path
---mode MODE            responses | conv | isolation | mixed | store_true_then_store_false  (default: conv)
+--mode MODE            responses | messages | conv | isolation | mixed | store_true_then_store_false  (default: conv)
 --stream / --no-stream Streaming or non-streaming (default: streaming)
+--transport TRANSPORT  http | websocket  (default: http; WebSocket requires responses mode)
 --model NAME           Model name sent in requests
 --no-store             Set store=false
 --vllm URL             vLLM upstream, e.g. http://localhost:8000 (responses mode only)
@@ -83,6 +84,16 @@ model requested by Codex 0.149.1.
 --openai URL           OpenAI upstream (default https://api.openai.com)
 --tools FILE           JSON file containing a tools array (responses mode only)
 --tool-choice VALUE    "auto", "none", "required", or JSON e.g. '{"type":"function","name":"foo"}'
+--tool-choice-sequence FILE
+                       JSON array with one tool_choice value per linear Responses turn
+--parallel-tool-calls / --no-parallel-tool-calls
+                       Allow or forbid parallel tool calls
+--tool-outputs FILE    JSON object mapping called tool names to output strings
+--tool-search-output-tools FILE
+                       JSON array returned for a client tool-search call
+--tools-after-search FILE
+                       Effective tools after normalized direct-vLLM search
+--manual-item-replay   Replay accumulated items with store=false for direct-vLLM or gateway tool search
 --reasoning JSON       JSON object containing Responses reasoning settings
 --input-file FILE       JSON string or item array for one HTTP Responses turn
 --max-output-tokens N  max_output_tokens for Responses requests (default 1024; use 0 to omit)
@@ -197,9 +208,12 @@ turns:
 | `record_tool_call_cassettes.sh` | 8 tool-call cassettes (4 tool_choice modes x streaming + non-streaming) | vLLM |
 | `record_codex_cli_tool_call_cassettes.sh` | Codex function/namespace/custom-tool matrix | gateway, vLLM, and OpenAI |
 | `record_custom_tool_cassettes.sh` | Matching two-turn custom-tool flows (streaming + non-streaming) | gateway and OpenAI reference |
+| `record_shell_cassettes.sh` | Four two-turn local-shell scenarios (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_mcp_cassettes.sh` | Native MCP counter tool discovery and calls (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_web_search_cassettes.sh` | Matching web-search calls (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_dynamo_cassettes.sh` | Stateful two-turn and client-executed function tool call cassettes (streaming + non-streaming) | NVIDIA Dynamo frontend |
+| `record_sglang_cassettes.sh` | Same shared executor scenarios as Dynamo, staged validation and sanitized provenance | SGLang |
+| `record_tool_search_cassettes.sh` | Four-turn mixed function/namespace client tool-search characterization; gateway blocking, HTTP/SSE, and WebSocket acceptance | gateway and OpenAI reference |
 
 ### Text-only (OpenAI)
 
@@ -267,6 +281,56 @@ hydrated item history the gateway sends upstream), records it, and merges both i
 DYNAMO_URL=http://127.0.0.1:8000 MODEL=openai/gpt-oss-20b bash tests/cassettes/record_dynamo_cassettes.sh
 ```
 
+### SGLang
+
+For SGLang launch, recording, sanitation, and replay instructions, see
+[the SGLang upstream guide](../../../../docs/guides/sglang-upstream.md).
+
+### Client tool search (OpenAI reference and gateway)
+
+The recorder captures four turns: a search call, a linked search output followed by one loaded ordinary function
+call, its linked function call output followed by one loaded namespace-member call, then that call's linked output and
+the final message. The initial catalog contains several deferred ordinary functions and a namespace with several
+deferred members; the search output loads exactly one ordinary function and exactly one member of that namespace.
+OpenAI and gateway use public `tool_search_call`/`tool_search_output` and public `{ namespace, name }` calls. Gateway
+blocking uses `store: false` full-item replay; gateway SSE/WebSocket profiles use stored continuation. The private
+projection is not the gateway-to-upstream envelope.
+
+Each profile also records a four-entry `tool_choice` sequence so inference cannot repeat a prior call or emit another
+call on the final turn. OpenAI uses `required`, selected `get_weather`, `auto`, then `none`: its function selector
+cannot identify a function nested in a namespace, and the stored continuation intentionally omits the repeated `tools`
+parameter required by `required`, so the third-turn prompt identifies `travel.get_timezone` and the characterization
+strictly rejects a wrong or multiple call. Gateway profiles use `required`, selected `get_weather`,
+selected public `travel.get_timezone`, then `none`, so the gateway can resolve the namespace member to its flattened
+upstream identity. The first public choice is `required` because the gateway's typed public `tool_choice` currently
+has no `type: "tool_search"` selector; deferred declarations leave tool search as the only available choice on that
+turn.
+
+The checked-in set is exactly five public-contract flows: OpenAI blocking/SSE and gateway blocking/SSE/WebSocket.
+HTTP uses the embedded proxy; WebSocket uses bounded direct capture. `TOOL_SEARCH_RECORD_SET=all` records those five
+profiles. Use a fresh gateway database. After recording, the script runs `tool_search_characterization_test` as the
+single semantic validator for the matrix.
+
+Start the gateway with this SQLite path absent:
+
+```bash
+GATEWAY_PORT=3099 \
+DATABASE_URL=sqlite:///tmp/agentic_api_tool_search_matrix.db \
+V_API_BASE=http://127.0.0.1:8000 \
+V_API_KEY="" \
+V_MODEL=Qwen/Qwen3.6-35B-A3B-FP8 \
+./scripts/codex-start-gateway.sh
+```
+
+```bash
+OPENAI_API_KEY=sk-... \
+TOOL_SEARCH_RECORD_SET=all \
+OPENAI_MODEL=gpt-5.6 \
+GATEWAY_URL=http://127.0.0.1:3099 \
+GATEWAY_MODEL=Qwen/Qwen3.6-35B-A3B-FP8 \
+bash crates/agentic-server-core/tests/cassettes/record_tool_search_cassettes.sh
+```
+
 ### Web search (gateway and OpenAI)
 
 The default records both providers. Use `WEB_SEARCH_RECORD_SET=gateway` or
@@ -275,6 +339,16 @@ The default records both providers. Use `WEB_SEARCH_RECORD_SET=gateway` or
 ```bash
 OPENAI_API_KEY=sk-... \
 bash crates/agentic-server-core/tests/cassettes/record_web_search_cassettes.sh
+```
+
+The typed You.com normalization tests replay sanitized provider responses in `tests/fixtures/you_search_response*.json`.
+Regenerate them from a recorded cassette instead of editing them by hand:
+
+```bash
+python crates/agentic-server-core/tests/cassettes/extract_you_search_fixture.py \
+  --cassette crates/agentic-server-core/tests/cassettes/messages_multiround/sequential-web-search-qwen3-nonstreaming.yaml \
+  --query "latest stable Rust version number" --web 3 --news 2 \
+  --output crates/agentic-server-core/tests/fixtures/you_search_response.json
 ```
 
 ### Custom tool (gateway and OpenAI)
@@ -291,6 +365,26 @@ bash crates/agentic-server-core/tests/cassettes/record_custom_tool_cassettes.sh
 
 Use `CUSTOM_TOOL_RECORD_SET=gateway` or `CUSTOM_TOOL_RECORD_SET=openai` to
 record only one provider.
+
+### Shell (gateway and OpenAI)
+
+See [the shell recording guide](shell/README.md) for branch build, gateway startup,
+and recording commands. Each scenario records two requests: a shell call, then
+matching structured `shell_call_output` and a follow-up user message chained with
+`previous_response_id`. The cases cover successful output, stderr with a nonzero
+exit code, timeout, and multiple commands with ordered outputs. Both streaming
+and non-streaming modes are recorded for each provider.
+
+The client command outputs are simulated by `shell/scenarios.py`; no commands are
+executed. The requests and model responses are captured live by the standard
+recorder. Each recording is written directly to its output YAML, which is retained
+if recording or validation fails. Streaming validation requires command added/delta/done
+events. Use `SHELL_RECORD_SET=gateway`, `openai`, or `all` (default).
+
+The shared recorder's `--tool-outputs` option accepts a Python `shell(action=...)`
+callback or a JSON `shell` key containing an object with `output` and optional
+`max_output_length`. It builds `shell_call_output` using the actual `call_id` and
+preserves the structured stdout/stderr/outcome entries.
 
 ### Codex custom tools (gateway, vLLM, and OpenAI)
 

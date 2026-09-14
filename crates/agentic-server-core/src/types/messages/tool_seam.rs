@@ -21,7 +21,7 @@ use crate::types::tools::{
 };
 use crate::utils::common::deserialize_from_value_opt;
 
-use super::request::ToolParam;
+use super::request::{GatewayToolResult, ToolParam};
 
 /// The one built-in gateway executor exposed on `/v1/messages` today. The
 /// registry keys it under this exact name (`tool::web_search`).
@@ -215,13 +215,8 @@ pub fn adapt_web_search_input(input: &Value) -> Value {
 /// next round, from a dispatched tool's output. `is_error` marks a failed/invalid
 /// call so the model knows the tool did not run normally.
 #[must_use]
-pub fn tool_result_block(tool_use_id: &str, output: &str, is_error: bool) -> Value {
-    json!({
-        "type": "tool_result",
-        "tool_use_id": tool_use_id,
-        "content": output,
-        "is_error": is_error,
-    })
+pub fn tool_result_block(tool_use_id: &str, output: String, is_error: bool) -> GatewayToolResult {
+    GatewayToolResult::new(tool_use_id, output, is_error)
 }
 
 /// Parse a reconstructed `tool_use` input (a JSON string) into the object the
@@ -429,13 +424,14 @@ mod tests {
 
     #[test]
     fn tool_result_block_pairs_by_id() {
-        let block = tool_result_block("toolu_1", "the answer", false);
+        let block = serde_json::to_value(tool_result_block("toolu_1", "the answer".to_owned(), false)).unwrap();
         assert_eq!(block["type"], "tool_result");
         assert_eq!(block["tool_use_id"], "toolu_1");
         assert_eq!(block["content"], "the answer");
         assert_eq!(block["is_error"], false);
         // Error results carry is_error: true (F4).
-        assert_eq!(tool_result_block("t", "bad args", true)["is_error"], true);
+        let error = serde_json::to_value(tool_result_block("t", "bad args".to_owned(), true)).unwrap();
+        assert_eq!(error["is_error"], true);
     }
 
     #[test]

@@ -129,9 +129,13 @@ jobs:
       - name: Verify PostgreSQL migrations and restart persistence
         run: cargo test -p agentic-server-core --test postgres_storage_integration -- --ignored --test-threads=1
 
-  dynamo-upstream:
+  provider-upstream:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [dynamo, sglang]
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
@@ -150,9 +154,10 @@ jobs:
           cache-bin: false
 
       - name: Validate recorded cassettes
+        if: matrix.provider == 'dynamo'
         run: |
           python3 -m pip install 'PyYAML==6.0.3'
           python3 scripts/validate-cassettes.py
 
-      - name: Replay Dynamo upstream cassettes
-        run: cargo test -p agentic-server-core --test dynamo_cassette_test
+      - name: Replay provider upstream cassettes
+        run: cargo test -p agentic-server-core --test ${{ matrix.provider }}_cassette_test

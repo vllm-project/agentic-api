@@ -84,9 +84,10 @@ impl GatewayExecutors {
             } else {
                 config.mcp_allowed_hosts.clone()
             },
-            web_search: Some(Arc::new(WebSearchHandler::from_config(
+            web_search: Some(Arc::new(WebSearchHandler::from_values(
                 client,
-                &config.web_search,
+                config.web_search.api_key.clone(),
+                config.web_search.base_url.clone(),
                 config.max_concurrent_gateway_calls,
             ))),
         };

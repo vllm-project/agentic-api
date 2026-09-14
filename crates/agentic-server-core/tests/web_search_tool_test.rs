@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use agentic_core::executor::{ConversationHandler, ExecuteRequest, ExecutionContext, ResponseHandler};
 use agentic_core::storage::{ConversationStore, ResponseStore};
-use agentic_core::tool::{GatewayExecutor, WebSearchHandler};
+use agentic_core::tool::{GatewayExecutor, ToolOutput, WebSearchHandler};
 use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::output::{FunctionToolCall, WebSearchCallStatus};
 use agentic_core::types::io::{
@@ -517,31 +517,40 @@ async fn web_search_handler_output_is_byte_identical_for_mock_you_response() {
     );
 }
 
-/// Synthetic You.com `GET /v1/search` response built from the documented
-/// schema (not a live capture): every documented result and metadata field
-/// appears at least once, with full-page `contents` and `highlights`
-/// extraction on separate results as the API returns them.
+/// Sanitized live You.com `GET /v1/search` responses, extracted from
+/// `cassettes/messages_multiround/sequential-web-search-qwen3-nonstreaming.yaml`
+/// with `cassettes/extract_you_search_fixture.py`. That cassette was recorded
+/// while the gateway forwarded You.com's `results` and `metadata` verbatim, so
+/// the fixtures carry the provider's real field set: `original_thumbnail_url`
+/// alongside `thumbnail_url` / `favicon_url`, results without `page_age`, and a
+/// response whose `results` has no `news` section at all. Only `search_uuid`
+/// and `latency` were sanitized and the result lists truncated.
 const YOU_SEARCH_RESPONSE_FIXTURE: &str = include_str!("fixtures/you_search_response.json");
+const YOU_SEARCH_RESPONSE_WITHOUT_NEWS_FIXTURE: &str = include_str!("fixtures/you_search_response_without_news.json");
 
-#[tokio::test]
-async fn web_search_handler_preserves_every_non_cosmetic_you_field() {
-    let fixture: serde_json::Value = serde_json::from_str(YOU_SEARCH_RESPONSE_FIXTURE).unwrap();
+/// Fields You.com returns that the typed normalization deliberately drops.
+const YOU_COSMETIC_FIELDS: [&str; 3] = ["thumbnail_url", "original_thumbnail_url", "favicon_url"];
+
+async fn execute_recorded_you_response(fixture: &serde_json::Value, query: &str) -> (WebSearchHandler, ToolOutput) {
     let (base_url, _captured, _handle) = spawn_mock_you_with_response(StatusCode::OK, fixture.clone()).await;
     let handler =
         WebSearchHandler::with_api_key(Arc::new(reqwest::Client::new()), "secret-you-key".to_owned(), &base_url);
-
+    let arguments = serde_json::json!({ "query": query }).to_string();
     let output = handler
-        .execute(
-            "call_search",
-            "web_search",
-            r#"{"query":"rust programming language"}"#,
-            &WebSearchToolParam::default(),
-        )
+        .execute("call_search", "web_search", &arguments, &WebSearchToolParam::default())
         .await
         .unwrap();
+    (handler, output)
+}
+
+#[tokio::test]
+async fn web_search_handler_normalizes_recorded_you_response() {
+    let fixture: serde_json::Value = serde_json::from_str(YOU_SEARCH_RESPONSE_FIXTURE).unwrap();
+    let query = fixture["metadata"]["query"].as_str().unwrap();
+    let (handler, output) = execute_recorded_you_response(&fixture, query).await;
     let output_json: serde_json::Value = serde_json::from_str(&output.output).unwrap();
 
-    let cosmetic_fields = ["thumbnail_url", "favicon_url"];
+    let mut seen_cosmetic_fields = std::collections::BTreeSet::new();
     for section in ["web", "news"] {
         let expected = fixture["results"][section].as_array().unwrap();
         let actual = output_json["results"][section].as_array().unwrap();
@@ -550,7 +559,8 @@ async fn web_search_handler_preserves_every_non_cosmetic_you_field() {
             let expected_object = expected.as_object().unwrap();
             let actual_object = actual.as_object().unwrap();
             for (field, value) in expected_object {
-                if cosmetic_fields.contains(&field.as_str()) {
+                if YOU_COSMETIC_FIELDS.contains(&field.as_str()) {
+                    seen_cosmetic_fields.insert(field.as_str());
                     assert!(!actual_object.contains_key(field), "{section}.{field} is cosmetic");
                 } else if value.as_array().is_some_and(Vec::is_empty) {
                     assert!(
@@ -568,6 +578,11 @@ async fn web_search_handler_preserves_every_non_cosmetic_you_field() {
             assert!(unexpected.is_empty(), "{section} gained fields {unexpected:?}");
         }
     }
+    assert_eq!(
+        seen_cosmetic_fields.into_iter().collect::<Vec<_>>(),
+        ["favicon_url", "original_thumbnail_url", "thumbnail_url"],
+        "recorded fixture must exercise every cosmetic field"
+    );
     assert_eq!(output_json["metadata"], serde_json::json!([fixture["metadata"]]));
 
     let call = FunctionToolCall {
@@ -575,7 +590,7 @@ async fn web_search_handler_preserves_every_non_cosmetic_you_field() {
         call_id: "call_search".to_owned(),
         name: "web_search".to_owned(),
         namespace: None,
-        arguments: r#"{"query":"rust programming language"}"#.to_owned(),
+        arguments: serde_json::json!({ "query": query }).to_string(),
         status: MessageStatus::Completed,
     };
     let public = handler
@@ -593,6 +608,31 @@ async fn web_search_handler_preserves_every_non_cosmetic_you_field() {
         .map(|result| serde_json::json!({"url": result["url"], "title": result["title"]}))
         .collect();
     assert_eq!(public["action"]["sources"], serde_json::Value::Array(expected_sources));
+}
+
+#[tokio::test]
+async fn web_search_handler_tolerates_recorded_you_response_without_news() {
+    let fixture: serde_json::Value = serde_json::from_str(YOU_SEARCH_RESPONSE_WITHOUT_NEWS_FIXTURE).unwrap();
+    assert!(
+        fixture["results"].get("news").is_none(),
+        "fixture must lack a news section"
+    );
+    let query = fixture["metadata"]["query"].as_str().unwrap();
+    let (_handler, output) = execute_recorded_you_response(&fixture, query).await;
+    let output_json: serde_json::Value = serde_json::from_str(&output.output).unwrap();
+
+    assert_eq!(output_json["results"]["news"], serde_json::json!([]));
+    let expected_web = fixture["results"]["web"].as_array().unwrap();
+    let actual_web = output_json["results"]["web"].as_array().unwrap();
+    assert_eq!(actual_web.len(), expected_web.len());
+    for (expected, actual) in expected_web.iter().zip(actual_web) {
+        assert_eq!(actual["url"], expected["url"]);
+        assert_eq!(actual["title"], expected["title"]);
+        assert_eq!(actual["snippets"], expected["snippets"]);
+        assert_eq!(actual.get("page_age"), expected.get("page_age"));
+        assert!(actual.get("favicon_url").is_none());
+    }
+    assert_eq!(output_json["metadata"], serde_json::json!([fixture["metadata"]]));
 }
 
 fn web_search_function_call_response() -> support::MockResponse {
@@ -1218,6 +1258,7 @@ async fn execute_runs_web_search_and_sends_tool_output_back_to_model() {
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -1323,6 +1364,7 @@ async fn execute_relaxes_forced_tool_choice_after_web_search_result() {
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -1357,6 +1399,7 @@ fn base_payload(input: ResponsesInput) -> RequestPayload {
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -1491,6 +1534,7 @@ async fn execute_accumulates_usage_across_web_search_model_rounds() {
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -1538,6 +1582,7 @@ async fn stream_emits_web_search_lifecycle_events_before_final_payload() {
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -1660,6 +1705,7 @@ async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence()
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
+        ignore_eos: None,
         truncation: None,
         cache_salt: None,
         metadata: None,
@@ -1737,6 +1783,7 @@ async fn stream_hides_web_search_function_events_when_name_arrives_on_done() {
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -1803,6 +1850,7 @@ async fn stream_orders_gateway_lifecycle_before_later_client_function_events() {
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -1888,6 +1936,7 @@ async fn execute_runs_multiple_web_search_calls_concurrently() {
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -1940,6 +1989,7 @@ async fn execute_feeds_web_search_execution_errors_back_to_model() {
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -1994,6 +2044,7 @@ async fn execute_returns_incomplete_after_max_gateway_tool_rounds() {
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -2048,6 +2099,7 @@ async fn execute_feeds_invalid_web_search_arguments_back_to_model() {
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -2109,6 +2161,7 @@ async fn execute_runs_large_gateway_fanout_without_hard_cap() {
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -2178,6 +2231,7 @@ async fn stream_error_events_escape_error_messages() {
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -2254,6 +2308,7 @@ async fn incomplete_turn_persists_a_consistent_conversation_for_continuation() {
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -2284,6 +2339,7 @@ async fn incomplete_turn_persists_a_consistent_conversation_for_continuation() {
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -2358,6 +2414,7 @@ async fn stream_returns_incomplete_after_max_gateway_tool_rounds() {
         temperature: None,
         top_p: None,
         max_output_tokens: Some(1024),
+        ignore_eos: None,
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,

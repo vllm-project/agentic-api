@@ -1,3 +1,5 @@
+use std::num::NonZeroUsize;
+
 use axum::body::Body;
 use axum::http::HeaderMap;
 use axum::response::Response;
@@ -9,8 +11,6 @@ use tracing::warn;
 
 use agentic_core::executor::{BoxStream, ExecutorError};
 use agentic_core::proxy::{ProxyAuth, ProxyBody, ProxyResponse, error_response_for_auth};
-
-pub(super) const MAX_BODY_SIZE: usize = 10 * 1024 * 1024;
 
 /// # Panics
 /// Panics if the response builder produces an invalid response (unreachable in practice).
@@ -25,13 +25,32 @@ pub fn convert_response(resp: ProxyResponse) -> Response {
     }
 }
 
+/// Forward an upstream error verbatim: its status, body, and processed metadata headers.
+///
+/// The headers were already filtered by `processed_response_headers` when the inference
+/// call captured them, so hop-by-hop and stale representation headers are gone while
+/// `retry-after`, request IDs, and rate-limit metadata remain. `content-type` is only
+/// defaulted to JSON when the upstream did not label its body, so a plain-text error is
+/// not relabelled as JSON.
+pub fn upstream_error_response(status: StatusCode, body: String, mut headers: HeaderMap) -> Response {
+    headers
+        .entry(http::header::CONTENT_TYPE)
+        .or_insert(http::HeaderValue::from_static("application/json"));
+    convert_response(ProxyResponse {
+        status,
+        headers,
+        body: ProxyBody::Full(Bytes::from(body)),
+    })
+}
+
 /// # Panics
 /// Panics if the response builder produces an invalid response (unreachable in practice).
 pub fn executor_error_response(err: ExecutorError) -> Response {
-    let status = err.http_status();
-    if !matches!(err, ExecutorError::LLMRequest { .. }) {
-        warn!("executor error ({status}): {err}");
+    if let ExecutorError::LLMRequest { status, body, headers } = err {
+        return upstream_error_response(status, body, headers);
     }
+    let status = err.http_status();
+    warn!("executor error ({status}): {err}");
     Response::builder()
         .status(status)
         .header("Content-Type", "application/json")
@@ -40,13 +59,13 @@ pub fn executor_error_response(err: ExecutorError) -> Response {
 }
 
 #[allow(clippy::result_large_err)]
-pub(super) async fn read_bytes(body: Body) -> Result<Bytes, Response> {
-    read_bytes_with_auth(body, ProxyAuth::OpenAiBearer).await
+pub(super) async fn read_bytes(body: Body, limit: NonZeroUsize) -> Result<Bytes, Response> {
+    read_bytes_with_auth(body, ProxyAuth::OpenAiBearer, limit).await
 }
 
 #[allow(clippy::result_large_err)]
-pub(super) async fn read_bytes_with_auth(body: Body, auth: ProxyAuth) -> Result<Bytes, Response> {
-    axum::body::to_bytes(body, MAX_BODY_SIZE).await.map_err(|_| {
+pub(super) async fn read_bytes_with_auth(body: Body, auth: ProxyAuth, limit: NonZeroUsize) -> Result<Bytes, Response> {
+    axum::body::to_bytes(body, limit.get()).await.map_err(|_| {
         convert_response(error_response_for_auth(
             StatusCode::PAYLOAD_TOO_LARGE,
             "body_too_large",
@@ -57,8 +76,8 @@ pub(super) async fn read_bytes_with_auth(body: Body, auth: ProxyAuth) -> Result<
 }
 
 #[allow(clippy::result_large_err)]
-pub(super) async fn read_json<T: DeserializeOwned>(body: Body) -> Result<T, Response> {
-    let bytes = read_bytes(body).await?;
+pub(super) async fn read_json<T: DeserializeOwned>(body: Body, limit: NonZeroUsize) -> Result<T, Response> {
+    let bytes = read_bytes(body, limit).await?;
     serde_json::from_slice::<T>(&bytes).map_err(|error| executor_error_response(ExecutorError::from(error)))
 }
 

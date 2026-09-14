@@ -1,3 +1,4 @@
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 
@@ -18,6 +19,11 @@ use crate::auth::{ANTHROPIC_COUNT_TOKENS_PATH, ANTHROPIC_MESSAGES_PATH, OidcAuth
 use crate::handler::{
     compact_response, conversations, count_tokens, health, messages, models, ready, responses, responses_ws_with_auth,
 };
+
+/// Default ceiling on serialized inbound request bytes for HTTP bodies and
+/// WebSocket messages.
+pub const DEFAULT_MAX_REQUEST_BODY_SIZE: NonZeroUsize =
+    NonZeroUsize::new(10 * 1024 * 1024).expect("default is nonzero");
 
 #[derive(Clone, Default)]
 pub struct WebSocketTracker {
@@ -172,6 +178,10 @@ impl Drop for WebSocketGuard {
 /// Server-level configuration read from environment variables.
 pub struct ServerConfig {
     pub cors_allowed_origins: Vec<String>,
+    /// Serve `/openapi.json` and `/swagger-ui` on the public router.
+    /// Controlled by `ENABLE_OPENAPI_DOCS=true`; disabled by default.
+    #[cfg(feature = "openapi")]
+    pub enable_openapi_docs: bool,
 }
 
 impl ServerConfig {
@@ -187,7 +197,14 @@ impl ServerConfig {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-        Self { cors_allowed_origins }
+        #[cfg(feature = "openapi")]
+        let enable_openapi_docs =
+            std::env::var("ENABLE_OPENAPI_DOCS").is_ok_and(|v| v.eq_ignore_ascii_case("true") || v == "1");
+        Self {
+            cors_allowed_origins,
+            #[cfg(feature = "openapi")]
+            enable_openapi_docs,
+        }
     }
 
     fn cors_layer(&self) -> CorsLayer {
@@ -233,6 +250,16 @@ pub struct AppState {
     /// Server-configured API key; used as fallback when the request carries no
     /// `Authorization` header on the executor path.
     pub openai_api_key: Option<String>,
+    /// Ceiling on serialized inbound request bytes, applied uniformly to every
+    /// request-bearing endpoint and to WebSocket messages and frames.
+    ///
+    /// This bounds the encoded request — JSON overhead, replayed conversation
+    /// history, and base64 image attachments included — and is unrelated to the
+    /// upstream token context limit. One gateway-wide value keeps `/v1/messages`,
+    /// which carries the same inline attachments as `/v1/responses`, aligned with
+    /// it; `/v1/conversations` bodies are small enough that a raised ceiling has
+    /// no effect on them.
+    pub max_request_body_size: NonZeroUsize,
 }
 
 pub fn build_router(state: AppState, server_config: &ServerConfig) -> Router {
@@ -245,6 +272,12 @@ pub fn build_router_with_auth(
     authenticator: Option<OidcAuthenticator>,
 ) -> Router {
     let public_routes = Router::new().route("/health", get(health)).route("/ready", get(ready));
+    #[cfg(feature = "openapi")]
+    let public_routes = if server_config.enable_openapi_docs {
+        public_routes.merge(crate::openapi::swagger_ui_router())
+    } else {
+        public_routes
+    };
     let protected_routes = Router::new()
         .route("/v1/conversations", post(conversations))
         .route("/v1/models", get(models))

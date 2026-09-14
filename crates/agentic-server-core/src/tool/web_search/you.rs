@@ -13,6 +13,7 @@ use serde::Deserialize;
 use super::args::{Freshness, WebSearchArguments, clean_string, clean_vec, validate_count};
 use super::{
     WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, null_as_default,
+    read_response_limited,
 };
 use crate::config::WebSearchProviderKind;
 use crate::tool::handler::ToolError;
@@ -90,16 +91,15 @@ impl WebSearchProvider for YouSearchProvider {
 
             if !resp.status().is_success() {
                 let status = resp.status();
-                let body = resp.text().await.unwrap_or_default();
+                let body = read_response_limited(resp, WebSearchProviderKind::You)
+                    .await
+                    .unwrap_or_default();
                 return Err(ToolError::Execution(format!(
                     "You.com search returned {status}: {body}"
                 )));
             }
 
-            let response_text = resp
-                .text()
-                .await
-                .map_err(|e| ToolError::Execution(format!("failed to read You.com search response: {e}")))?;
+            let response_text = read_response_limited(resp, WebSearchProviderKind::You).await?;
             let response: YouSearchResponse = serde_json::from_str(&response_text)
                 .map_err(|e| ToolError::Execution(format!("You.com search returned invalid JSON: {e}")))?;
             Ok(response.into_provider_response(&request.query))
@@ -236,8 +236,9 @@ fn clean_base_url(value: &str) -> Option<String> {
 }
 
 /// You.com's `GET /v1/search` response envelope. Result items deserialize
-/// straight into [`WebSearchResult`]; cosmetic fields such as `thumbnail_url`
-/// and `favicon_url` are not modeled and therefore dropped.
+/// straight into [`WebSearchResult`]; cosmetic fields (`thumbnail_url`,
+/// `original_thumbnail_url`, `favicon_url`) are not modeled and therefore
+/// dropped.
 #[derive(Debug, Deserialize)]
 struct YouSearchResponse {
     #[serde(default, deserialize_with = "null_as_default")]

@@ -1,0 +1,202 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: 'The local shell environment is Linux bash. Use the shell tool exactly
+        once with this exact action, preserving the commands array and its order:
+        {"commands": ["sleep 2"], "timeout_ms": 1000, "max_output_length": 4096}.
+        Keep semicolon-separated statements in the same command string. Wait for the
+        client to return shell_call_output before interpreting the results.'
+      max_output_tokens: 4096
+      model: Qwen/Qwen3.5-35B-A3B-FP8
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - environment:
+          type: local
+        type: shell
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1789101042
+      error: null
+      id: resp_01a08ebb-6669-7d80-bd2b-b4a0bb8cbcd4
+      incomplete_details: null
+      instructions: null
+      model: Qwen/Qwen3.5-35B-A3B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user is asking me to use the shell tool exactly once with specific
+            parameters. They want me to run a sleep command for 2 seconds, with a
+            timeout of 1000ms (which is less than the sleep time, so it will timeout),
+            and a max output length of 4096 bytes.
+
+
+            The user explicitly states:
+
+            1. Use the shell tool exactly once
+
+            2. Use the exact action: {"commands": ["sleep 2"], "timeout_ms": 1000,
+            "max_output_length": 4096}
+
+            3. Keep semicolon-separated statements in the same command string (though
+            in this case there''s only one command: "sleep 2")
+
+            4. Wait for the client to return shell_call_output before interpreting
+            the results
+
+
+            I need to call the shell function with these exact parameters.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_a4d392f4da0abc04
+        status: null
+        summary: []
+        type: reasoning
+      - action:
+          commands:
+          - sleep 2
+          max_output_length: 4096
+          timeout_ms: 1000
+        call_id: chatcmpl-tool-a20309dc0d65d3a2
+        id: sh_8fea39331b31880a
+        status: completed
+        type: shell_call
+      previous_response_id: null
+      status: completed
+      tool_choice: auto
+      tools:
+      - environment:
+          type: local
+        type: shell
+      usage:
+        input_tokens: 480
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 241
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 721
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: chatcmpl-tool-a20309dc0d65d3a2
+        max_output_length: 4096
+        output:
+        - outcome:
+            type: timeout
+          stderr: ''
+          stdout: ''
+        type: shell_call_output
+      - content: Use the shell output above without calling any more tools. For each
+          command, report its stdout, stderr, and exit code or timeout outcome in
+          order.
+        role: user
+        type: message
+      max_output_tokens: 4096
+      model: Qwen/Qwen3.5-35B-A3B-FP8
+      previous_response_id: resp_01a08ebb-6669-7d80-bd2b-b4a0bb8cbcd4
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - environment:
+          type: local
+        type: shell
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1789101045
+      error: null
+      id: resp_01a08ebb-6ca9-7531-aed5-79729b324a16
+      incomplete_details: null
+      instructions: null
+      model: Qwen/Qwen3.5-35B-A3B-FP8
+      object: response
+      output:
+      - content:
+        - text: "The user is asking me to analyze the shell output and report the\
+            \ results for each command. Let me break down what happened:\n\n1. I executed\
+            \ a shell command with:\n   - commands: [\"sleep 2\"]\n   - timeout_ms:\
+            \ 1000 (1 second timeout)\n   - max_output_length: 4096\n\n2. The output\
+            \ shows:\n   - stdout: \"\" (empty)\n   - stderr: \"\" (empty)\n   - outcome:\
+            \ {\"type\":\"timeout\"}\n\nThis makes sense because the command was to\
+            \ \"sleep 2\" (sleep for 2 seconds), but the timeout was set to 1000ms\
+            \ (1 second). So the command timed out before it could complete.\n\nThe\
+            \ exit code isn't explicitly shown in the output, but since it's a timeout,\
+            \ we can report that as the outcome.\n\nLet me report this in the format\
+            \ requested.\n"
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_84af51c4a09b6932
+        status: null
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            Based on the shell output, here are the results for each command:
+
+
+            **Command 1: `sleep 2`**
+
+            - **stdout:** (empty)
+
+            - **stderr:** (empty)
+
+            - **Outcome:** Timeout (the command was terminated after 1000ms)
+
+
+            **Summary:**
+
+            The `sleep 2` command (intended to sleep for 2 seconds) timed out because
+            the timeout limit was set to 1000ms (1 second). Since the command didn''t
+            complete within the allowed time, no output was captured and the outcome
+            is reported as a timeout rather than a standard exit code.'
+          type: output_text
+        id: msg_a40a096d4cb97552
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: resp_01a08ebb-6669-7d80-bd2b-b4a0bb8cbcd4
+      status: completed
+      tool_choice: auto
+      tools:
+      - environment:
+          type: local
+        type: shell
+      usage:
+        input_tokens: 603
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 328
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 931
+    headers:
+      content-type: application/json
+    status_code: 200

@@ -7,8 +7,10 @@ use std::collections::HashMap;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::modes::{ConversationHandler, ResponseHandler};
+use crate::executor::prepare::prepare_request_tools;
 use crate::executor::request::{ExecutionContext, RequestContext};
-use crate::storage::InOutItem;
+use crate::storage::{InOutItem, ResponseMetadata};
+use crate::tool::{ToolSearchMetadata, ToolSearchState};
 use crate::types::event::ResponseStatus;
 use crate::types::io::{InputItem, OutputItem};
 use crate::types::request_response::ResponsePayload;
@@ -16,7 +18,8 @@ use tracing::error;
 
 #[must_use]
 pub(crate) fn should_persist(ctx: &RequestContext) -> bool {
-    ctx.original_request.store
+    ctx.continuation.is_some()
+        || ctx.original_request.store
         || ctx.original_request.previous_response_id.is_some()
         || ctx.original_request.conversation_id.is_some()
 }
@@ -24,12 +27,13 @@ pub(crate) fn should_persist(ctx: &RequestContext) -> bool {
 pub(crate) async fn persist_if_needed(
     payload: ResponsePayload,
     ctx: RequestContext,
+    tool_search_metadata: Option<ToolSearchMetadata>,
     conv_handler: ConversationHandler,
     resp_handler: ResponseHandler,
 ) -> ExecutorResult<()> {
     if should_persist(&ctx) {
-        match persist_response(payload, ctx, conv_handler, resp_handler).await {
-            Err(error @ ExecutorError::Conflict(_)) => Err(error),
+        match persist_prepared_response(payload, ctx, tool_search_metadata, conv_handler, resp_handler).await {
+            Err(error @ (ExecutorError::Conflict(_) | ExecutorError::PayloadTooLarge(_))) => Err(error),
             Err(source) => {
                 error!(error = ?source, "failed to persist response");
                 Err(ExecutorError::Persistence(Box::new(source)))
@@ -64,7 +68,27 @@ pub async fn persist_response(
         return Ok(());
     }
 
-    persist_turn(ctx, payload.output, &conv_handler, &resp_handler).await
+    let (ctx, tool_search_state) = prepare_request_tools(ctx, &conv_handler, &resp_handler).await?;
+    let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
+    persist_prepared_turn(ctx, tool_search_metadata, payload.output, &conv_handler, &resp_handler).await
+}
+
+async fn persist_prepared_response(
+    payload: ResponsePayload,
+    ctx: RequestContext,
+    tool_search_metadata: Option<ToolSearchMetadata>,
+    conv_handler: ConversationHandler,
+    resp_handler: ResponseHandler,
+) -> ExecutorResult<()> {
+    if !matches!(
+        payload.status.parse::<ResponseStatus>().unwrap_or_default(),
+        ResponseStatus::Completed | ResponseStatus::Incomplete
+    ) || payload.id.is_empty()
+    {
+        return Ok(());
+    }
+
+    persist_prepared_turn(ctx, tool_search_metadata, payload.output, &conv_handler, &resp_handler).await
 }
 
 /// Persists one completed turn with the handler selected by its explicit conversation discriminator.
@@ -77,10 +101,38 @@ pub async fn persist_turn(
     conv_handler: &ConversationHandler,
     resp_handler: &ResponseHandler,
 ) -> ExecutorResult<()> {
+    let (ctx, tool_search_state) = prepare_request_tools(ctx, conv_handler, resp_handler).await?;
+    let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
+    persist_prepared_turn(ctx, tool_search_metadata, output_items, conv_handler, resp_handler).await
+}
+
+pub(crate) async fn persist_prepared_turn(
+    mut ctx: RequestContext,
+    tool_search_metadata: Option<ToolSearchMetadata>,
+    output_items: Vec<OutputItem>,
+    conv_handler: &ConversationHandler,
+    resp_handler: &ResponseHandler,
+) -> ExecutorResult<()> {
+    let mut metadata = ResponseMetadata {
+        model: std::mem::take(&mut ctx.enriched_request.model),
+        previous_response_id: ctx.original_request.previous_response_id.take(),
+        effective_tools: ctx.enriched_request.tools.take(),
+        tool_search_loaded_tools: None,
+        effective_tool_choice: ctx.enriched_request.tool_choice.take().unwrap_or_default(),
+        effective_instructions: ctx.enriched_request.instructions.take(),
+    };
+    if let Some(tool_search_metadata) = tool_search_metadata {
+        metadata.effective_tools = tool_search_metadata.effective_tools;
+        metadata.tool_search_loaded_tools = Some(tool_search_metadata.loaded_tools);
+    }
     if ctx.original_request.conversation_id.is_some() {
-        conv_handler.execute_turn(ctx, output_items).await
+        conv_handler
+            .execute_turn_with_metadata(ctx, output_items, metadata)
+            .await
     } else {
-        resp_handler.execute_turn(ctx, output_items).await
+        resp_handler
+            .execute_turn_with_metadata(ctx, output_items, metadata)
+            .await
     }
 }
 
@@ -116,6 +168,7 @@ pub async fn commit(
     persist_if_needed(
         payload.clone(),
         ctx,
+        None,
         exec_ctx.conv_handler.clone(),
         exec_ctx.resp_handler.clone(),
     )
@@ -132,7 +185,9 @@ async fn validate_output_call_ids(
     for (index, item) in output_items.iter().enumerate() {
         let (item_type, call_id) = match item {
             OutputItem::FunctionCall(call) => ("function_call", call.call_id.as_str()),
+            OutputItem::ToolSearchCall(call) => ("tool_search_call", call.call_id.as_str()),
             OutputItem::CustomToolCall(call) => ("custom_tool_call", call.call_id.as_str()),
+            OutputItem::ShellCall(call) => ("shell_call", call.call_id.as_str()),
             _ => continue,
         };
         if call_id.is_empty() {
@@ -150,13 +205,13 @@ async fn validate_output_call_ids(
         return Ok(());
     }
 
-    for (history_index, item) in resp_handler.rehydrate(ctx).await?.iter().enumerate() {
-        if let Some((output_index, item_type)) = stored_call_id(item).and_then(|call_id| call_ids.get(call_id)) {
-            return Err(ExecutorError::InvalidRequest(format!(
-                "upstream response output[{output_index}] {item_type} repeats 'call_id' from continued history item[{history_index}]"
-            )));
-        }
+    if ctx.continuation.is_some() {
+        // Rehydration already combined the pinned parent with normalized input.
+        // Validate that effective window, excluding calls superseded by compaction.
+        return validate_history_call_ids(ctx.enriched_request.input.model_items().map(input_call_id), &call_ids);
     }
+    let history = resp_handler.rehydrate(ctx).await?;
+    validate_history_call_ids(history.iter().map(stored_call_id), &call_ids)?;
     for (input_index, item) in ctx.new_input_items.iter().enumerate() {
         if let Some((output_index, item_type)) = input_call_id(item).and_then(|call_id| call_ids.get(call_id)) {
             return Err(ExecutorError::InvalidRequest(format!(
@@ -167,11 +222,27 @@ async fn validate_output_call_ids(
     Ok(())
 }
 
+fn validate_history_call_ids<'a>(
+    history: impl Iterator<Item = Option<&'a str>>,
+    call_ids: &HashMap<&str, (usize, &str)>,
+) -> ExecutorResult<()> {
+    for (history_index, call_id) in history.enumerate() {
+        if let Some((output_index, item_type)) = call_id.and_then(|id| call_ids.get(id)) {
+            return Err(ExecutorError::InvalidRequest(format!(
+                "upstream response output[{output_index}] {item_type} repeats 'call_id' from continued history item[{history_index}]"
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn stored_call_id(item: &InOutItem) -> Option<&str> {
     match item {
         InOutItem::Input(item) => input_call_id(item),
         InOutItem::Output(OutputItem::FunctionCall(call)) => Some(&call.call_id),
+        InOutItem::Output(OutputItem::ToolSearchCall(call)) => Some(&call.call_id),
         InOutItem::Output(OutputItem::CustomToolCall(call)) => Some(&call.call_id),
+        InOutItem::Output(OutputItem::ShellCall(call)) => Some(&call.call_id),
         InOutItem::Output(_) => None,
     }
 }
@@ -179,7 +250,9 @@ fn stored_call_id(item: &InOutItem) -> Option<&str> {
 fn input_call_id(item: &InputItem) -> Option<&str> {
     match item {
         InputItem::FunctionCall(call) => Some(&call.call_id),
+        InputItem::ToolSearchCall(call) => Some(&call.call_id),
         InputItem::CustomToolCall(call) => Some(&call.call_id),
+        InputItem::ShellCall(call) => Some(&call.call_id),
         _ => None,
     }
 }

@@ -11,6 +11,7 @@ pub(crate) mod you;
 
 use std::collections::HashMap;
 use std::future::Future;
+use std::io::{self, Write};
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -22,13 +23,33 @@ use tokio::sync::Semaphore;
 
 use self::args::{MAX_WEB_SEARCH_QUERIES, WebSearchArguments};
 use self::you::{YOU_API_BASE_URL, YOU_API_KEY, YouSearchProvider};
+use super::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
 use super::handler::{GatewayExecutor, GatewayToolEventPlan, ToolError, ToolHandler, ToolOutput};
 use super::ownership::GatewayBinding;
 use super::registry::{ToolEntry, ToolType};
-use crate::config::{DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS, WebSearchProviderConfig, WebSearchProviderKind};
+use crate::config::{DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS, WebSearchProviderKind};
 use crate::types::io::output::{FunctionToolCall, WebSearchCall, WebSearchCallStatus, WebSearchSource};
 use crate::types::io::{FunctionTool, OutputItem};
 use crate::types::tools::WebSearchToolParam;
+
+#[derive(Default)]
+struct CountingWriter {
+    bytes: usize,
+}
+
+impl Write for CountingWriter {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        self.bytes = self
+            .bytes
+            .checked_add(buffer.len())
+            .ok_or_else(|| io::Error::other("serialized JSON size overflow"))?;
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
 
 pub(crate) type WebSearchExecutor =
     dyn GatewayExecutor<ToolParams = WebSearchToolParam, ExecutionParams = WebSearchToolParam>;
@@ -154,6 +175,10 @@ impl WebSearchHandler {
         )
     }
 
+    /// Builds the You.com-backed handler.
+    ///
+    /// `max_concurrent_queries` is the gateway-wide ceiling; the provider's own
+    /// [`WebSearchProvider::max_concurrent_requests`] ceiling caps it again.
     #[must_use]
     pub fn from_values(
         client: Arc<reqwest::Client>,
@@ -161,35 +186,8 @@ impl WebSearchHandler {
         base_url: Option<String>,
         max_concurrent_queries: NonZeroUsize,
     ) -> Self {
-        Self::with_provider_and_query_concurrency(
-            Arc::new(YouSearchProvider::from_values(client, api_key, base_url)),
-            max_concurrent_queries,
-        )
-    }
-
-    /// Builds the handler for the provider selected in `config`.
-    ///
-    /// `max_concurrent_queries` is the gateway-wide ceiling. An explicit
-    /// [`WebSearchProviderConfig::max_concurrent_queries`] may only lower it,
-    /// and the provider's own [`WebSearchProvider::max_concurrent_requests`]
-    /// ceiling caps the result again.
-    #[must_use]
-    pub fn from_config(
-        client: Arc<reqwest::Client>,
-        config: &WebSearchProviderConfig,
-        max_concurrent_queries: NonZeroUsize,
-    ) -> Self {
-        let provider: Arc<dyn WebSearchProvider> = match config.provider {
-            WebSearchProviderKind::You => Arc::new(YouSearchProvider::from_values(
-                client,
-                config.api_key.clone(),
-                config.base_url.clone(),
-            )),
-        };
-        let requested = config
-            .max_concurrent_queries
-            .map_or(max_concurrent_queries, |limit| limit.min(max_concurrent_queries));
-        let effective = effective_query_concurrency(provider.as_ref(), requested);
+        let provider = Arc::new(YouSearchProvider::from_values(client, api_key, base_url));
+        let effective = effective_query_concurrency(provider.as_ref(), max_concurrent_queries);
         Self::with_provider_and_query_concurrency(provider, effective)
     }
 
@@ -242,25 +240,36 @@ impl WebSearchHandler {
         let args = WebSearchArguments::from_json(arguments)?;
         let queries = args.queries();
         let args_ref = &args;
-        let responses = futures::stream::iter(queries.iter().cloned())
-            .map(|query| {
-                let provider = Arc::clone(provider);
-                let query_permits = Arc::clone(&self.query_permits);
-                async move {
-                    let _permit = query_permits
-                        .acquire_owned()
-                        .await
-                        .map_err(|error| ToolError::Execution(format!("web_search query scheduler closed: {error}")))?;
-                    provider.search(&query, args_ref, params).await
-                }
-            })
-            .buffered(self.max_concurrent_queries.get())
-            .try_collect::<Vec<_>>()
-            .await?;
+        let mut responses = Box::pin(
+            futures::stream::iter(queries.iter().cloned())
+                .map(|query| {
+                    let provider = Arc::clone(provider);
+                    let query_permits = Arc::clone(&self.query_permits);
+                    async move {
+                        let _permit = query_permits.acquire_owned().await.map_err(|error| {
+                            ToolError::Execution(format!("web_search query scheduler closed: {error}"))
+                        })?;
+                        provider.search(&query, args_ref, params).await
+                    }
+                })
+                .buffered(self.max_concurrent_queries.get()),
+        );
 
         let mut results = WebSearchResultSections::default();
-        let mut metadata = Vec::with_capacity(responses.len());
-        for response in responses {
+        let mut metadata = Vec::with_capacity(queries.len());
+        let mut accumulated_bytes = 0usize;
+        while let Some(response) = responses.try_next().await? {
+            let mut counter = CountingWriter::default();
+            serde_json::to_writer(&mut counter, &response.web)
+                .and_then(|()| serde_json::to_writer(&mut counter, &response.news))
+                .and_then(|()| serde_json::to_writer(&mut counter, &response.metadata))
+                .map_err(|error| ToolError::Execution(format!("failed to size web_search output: {error}")))?;
+            accumulated_bytes = accumulated_bytes.saturating_add(counter.bytes);
+            if accumulated_bytes > MAX_GATEWAY_TOOL_OUTPUT_BYTES {
+                return Err(ToolError::Execution(format!(
+                    "web_search output exceeded {MAX_GATEWAY_TOOL_OUTPUT_BYTES} bytes"
+                )));
+            }
             results.web.extend(response.web);
             results.news.extend(response.news);
             metadata.push(response.metadata);
@@ -272,6 +281,11 @@ impl WebSearchHandler {
             metadata,
         })
         .map_err(|e| ToolError::Execution(format!("failed to serialize web_search output: {e}")))?;
+        if output.len() > MAX_GATEWAY_TOOL_OUTPUT_BYTES {
+            return Err(ToolError::Execution(format!(
+                "web_search output exceeded {MAX_GATEWAY_TOOL_OUTPUT_BYTES} bytes"
+            )));
+        }
 
         Ok(ToolOutput {
             call_id: call_id.to_owned(),
@@ -392,6 +406,28 @@ where
     Option::<T>::deserialize(deserializer).map(Option::unwrap_or_default)
 }
 
+/// Reads a provider HTTP response body, failing as soon as it exceeds
+/// [`MAX_GATEWAY_TOOL_OUTPUT_BYTES`] so an oversized provider reply is never
+/// buffered in full. Every provider module reads its responses through here.
+pub(super) async fn read_response_limited(
+    resp: reqwest::Response,
+    provider: WebSearchProviderKind,
+) -> Result<String, ToolError> {
+    let mut stream = resp.bytes_stream();
+    let mut body = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk
+            .map_err(|error| ToolError::Execution(format!("failed to read {provider} search response: {error}")))?;
+        if chunk.len() > MAX_GATEWAY_TOOL_OUTPUT_BYTES.saturating_sub(body.len()) {
+            return Err(ToolError::Execution(format!(
+                "{provider} search response exceeded {MAX_GATEWAY_TOOL_OUTPUT_BYTES} bytes"
+            )));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    String::from_utf8(body).map_err(|_| ToolError::Execution(format!("{provider} search response was not valid UTF-8")))
+}
+
 impl ToolHandler for WebSearchHandler {
     type ToolParams = WebSearchToolParam;
 
@@ -506,6 +542,9 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
 
+    use axum::body::Body;
+    use bytes::Bytes;
+
     use super::*;
 
     fn metadata(provider_label: &str) -> WebSearchProviderMetadata {
@@ -536,6 +575,29 @@ mod tests {
                     }],
                     news: Vec::new(),
                     metadata: metadata("mock"),
+                })
+            })
+        }
+    }
+
+    #[derive(Debug)]
+    struct LargeSearchProvider;
+
+    impl WebSearchProvider for LargeSearchProvider {
+        fn search<'a>(
+            &'a self,
+            _query: &'a str,
+            _args: &'a WebSearchArguments,
+            _config: &'a WebSearchToolParam,
+        ) -> Pin<Box<dyn Future<Output = Result<WebSearchProviderResponse, ToolError>> + Send + 'a>> {
+            Box::pin(async move {
+                Ok(WebSearchProviderResponse {
+                    web: vec![WebSearchResult {
+                        snippets: vec!["x".repeat(600 * 1024)],
+                        ..WebSearchResult::default()
+                    }],
+                    news: Vec::new(),
+                    metadata: metadata("large"),
                 })
             })
         }
@@ -580,6 +642,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn you_search_response_body_is_bounded_while_reading() {
+        let chunk = Bytes::from(vec![b'x'; MAX_GATEWAY_TOOL_OUTPUT_BYTES / 2 + 1]);
+        let app = axum::Router::new().route(
+            "/v1/search",
+            axum::routing::get(move || {
+                let chunks = [Ok::<_, std::convert::Infallible>(chunk.clone()), Ok(chunk.clone())];
+                async move { Body::from_stream(futures::stream::iter(chunks)) }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind search response limit server");
+        let address = listener.local_addr().expect("search response limit server address");
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.ok();
+        });
+        let response = reqwest::Client::new()
+            .get(format!("http://{address}/v1/search"))
+            .send()
+            .await
+            .expect("fetch oversized search response");
+
+        let error = read_response_limited(response, WebSearchProviderKind::You)
+            .await
+            .expect_err("oversized search response must fail");
+        assert!(error.to_string().contains("search response exceeded"));
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn web_search_handler_delegates_to_provider() {
         let handler = WebSearchHandler::with_provider(Arc::new(MockSearchProvider));
         let output = handler
@@ -617,6 +709,22 @@ mod tests {
         assert_eq!(body["queries"], serde_json::json!(["potato", "tomato"]));
         assert_eq!(body["results"]["web"].as_array().unwrap().len(), 2);
         assert_eq!(body["metadata"].as_array().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn web_search_handler_bounds_aggregate_query_results() {
+        let handler = WebSearchHandler::with_provider(Arc::new(LargeSearchProvider));
+        let error = handler
+            .execute(
+                "call_search",
+                "web_search",
+                r#"{"queries":["potato","tomato"]}"#,
+                &WebSearchToolParam::default(),
+            )
+            .await
+            .expect_err("aggregate query results must be bounded");
+
+        assert!(error.to_string().contains("web_search output exceeded"));
     }
 
     #[tokio::test]
@@ -693,50 +801,24 @@ mod tests {
     }
 
     #[test]
-    fn from_config_selects_you_and_inherits_gateway_concurrency() {
-        let handler = WebSearchHandler::from_config(
+    fn from_values_inherits_gateway_concurrency() {
+        let handler = WebSearchHandler::from_values(
             Arc::new(reqwest::Client::new()),
-            &WebSearchProviderConfig::default(),
+            None,
+            None,
             NonZeroUsize::new(7).expect("nonzero test limit"),
         );
         assert_eq!(handler.max_concurrent_queries.get(), 7);
         assert_eq!(handler.query_permits.available_permits(), 7);
         assert!(format!("{handler:?}").contains("YouSearchProvider"));
-
-        let handler = WebSearchHandler::from_config(
-            Arc::new(reqwest::Client::new()),
-            &WebSearchProviderConfig {
-                max_concurrent_queries: NonZeroUsize::new(2),
-                ..WebSearchProviderConfig::default()
-            },
-            NonZeroUsize::new(7).expect("nonzero test limit"),
-        );
-        assert_eq!(handler.max_concurrent_queries.get(), 2);
     }
 
     #[test]
-    fn from_config_override_cannot_exceed_gateway_ceiling() {
-        let handler = WebSearchHandler::from_config(
+    fn from_values_does_not_leak_api_key_in_debug_output() {
+        let handler = WebSearchHandler::from_values(
             Arc::new(reqwest::Client::new()),
-            &WebSearchProviderConfig {
-                max_concurrent_queries: NonZeroUsize::new(10),
-                ..WebSearchProviderConfig::default()
-            },
-            NonZeroUsize::new(5).expect("nonzero test limit"),
-        );
-        assert_eq!(handler.max_concurrent_queries.get(), 5);
-        assert_eq!(handler.query_permits.available_permits(), 5);
-    }
-
-    #[test]
-    fn from_config_does_not_leak_api_key_in_debug_output() {
-        let handler = WebSearchHandler::from_config(
-            Arc::new(reqwest::Client::new()),
-            &WebSearchProviderConfig {
-                api_key: Some("super-secret-key".to_owned()),
-                base_url: Some("https://api.example".to_owned()),
-                ..WebSearchProviderConfig::default()
-            },
+            Some("super-secret-key".to_owned()),
+            Some("https://api.example".to_owned()),
             DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS,
         );
         let rendered = format!("{handler:?}");

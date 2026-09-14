@@ -1,0 +1,33 @@
+{
+  "results": {
+    "web": [
+      {
+        "description": "1.95.0 # Released on: 16 April, 2026 Branched from master on: 27 February, 2026 Language # Stabilize if let guards on match arms irrefutable_let_patterns lint no longer lints on let chains Support importing path-segment keywords with renaming Stabilize inline assembly for PowerPC and PowerPC64 ...",
+        "favicon_url": "https://you.com/favicon?domain=releases.rs&size=128",
+        "snippets": [
+          "1.95.0 # Released on: 16 April, 2026 Branched from master on: 27 February, 2026 Language # Stabilize if let guards on match arms irrefutable_let_patterns lint no longer lints on let chains Support importing path-segment keywords with renaming Stabilize inline assembly for PowerPC and PowerPC64 const-eval: be more consistent in the behavior of padding during typed copies Const blocks are no longer evaluated to determine if expressions involving fallible operations can implicitly be constant-promoted..",
+          "Refer to Rust’s platform support page for more information on Rust’s tiered platform support.",
+          "In preparation for the build-std project adding that support, JSON target specs are being proactively gated to ensure they remain unstable even if build-std is stabilized. Cargo now includes the -Z json-target-spec CLI flag to automatically pass -Z unstable-options to the compiler when needed. See #150151, #151534, and rust-lang/cargo#16557.",
+          "These changes do not affect any public interfaces of Rust, but they represent significant improvements to the performance or internals of rustc and related tools."
+        ],
+        "title": "1.95.0 | Rust Changelogs",
+        "url": "https://releases.rs/docs/1.95.0/"
+      },
+      {
+        "description": "Version 1.95.0 of the Rust language has been released. Changes include the addition of a cfg_select! macro, the capability to use if let guards to allow conditionals based on pattern matching, and many newly stabilized APIs. See the release notes for a full list of changes.",
+        "favicon_url": "https://you.com/favicon?domain=lwn.net&size=128",
+        "page_age": "2026-04-16T00:00:00",
+        "snippets": [
+          "Version 1.95.0 of the Rust language has been released. Changes include the addition of a cfg_se [...]"
+        ],
+        "title": "Rust 1.95.0 released [LWN.net]",
+        "url": "https://lwn.net/Articles/1068011/"
+      }
+    ]
+  },
+  "metadata": {
+    "latency": 0.506,
+    "query": "Rust 1.95.0 release notes",
+    "search_uuid": "00000000-0000-4000-8000-000000000000"
+  }
+}

@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
+use crate::tool::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
 use crate::tool::{GatewayExecutor, GatewayToolEventPlan, ToolError, ToolHandler, ToolOutput, ToolType};
 use crate::types::io::FunctionTool;
 use crate::types::io::output::{
@@ -224,7 +225,13 @@ impl ToolHandler for McpHandler {
         ToolType::Mcp
     }
 
-    fn validate(&self, _params: &McpToolParam) -> Result<(), ToolError> {
+    fn validate(&self, params: &McpToolParam) -> Result<(), ToolError> {
+        if params.defer_loading == Some(true) {
+            return Err(ToolError::Config(format!(
+                "MCP tool '{}' cannot use defer_loading because deferred MCP tools are not supported",
+                params.server_label
+            )));
+        }
         Ok(())
     }
 
@@ -318,20 +325,31 @@ fn parse_tool_arguments(arguments: &str) -> Result<Value, ToolError> {
 }
 
 fn mcp_tool_result_text(result: &rmcp::model::CallToolResult) -> Result<String, ToolError> {
-    let text = result
+    let mut text = String::new();
+    for part in result
         .content
         .iter()
         .filter_map(|content| content.as_text().map(|text| text.text.as_str()))
-        .collect::<Vec<_>>()
-        .join("\n");
+    {
+        let separator_bytes = usize::from(!text.is_empty());
+        ensure_mcp_output_size(text.len().saturating_add(separator_bytes).saturating_add(part.len()))?;
+        if separator_bytes == 1 {
+            text.push('\n');
+        }
+        text.push_str(part);
+    }
     let output = if !text.is_empty() {
         text
     } else if let Some(structured_content) = &result.structured_content {
-        serialize_to_string(structured_content)
-            .map_err(|error| ToolError::Execution(format!("failed to serialize MCP structured content: {error}")))?
+        let output = serialize_to_string(structured_content)
+            .map_err(|error| ToolError::Execution(format!("failed to serialize MCP structured content: {error}")))?;
+        ensure_mcp_output_size(output.len())?;
+        output
     } else {
-        serialize_to_string(&result.content)
-            .map_err(|error| ToolError::Execution(format!("failed to serialize MCP tool content: {error}")))?
+        let output = serialize_to_string(&result.content)
+            .map_err(|error| ToolError::Execution(format!("failed to serialize MCP tool content: {error}")))?;
+        ensure_mcp_output_size(output.len())?;
+        output
     };
 
     if result.is_error == Some(true) {
@@ -339,6 +357,15 @@ fn mcp_tool_result_text(result: &rmcp::model::CallToolResult) -> Result<String, 
     } else {
         Ok(output)
     }
+}
+
+fn ensure_mcp_output_size(bytes: usize) -> Result<(), ToolError> {
+    if bytes > MAX_GATEWAY_TOOL_OUTPUT_BYTES {
+        return Err(ToolError::Execution(format!(
+            "MCP tool output exceeded {MAX_GATEWAY_TOOL_OUTPUT_BYTES} bytes"
+        )));
+    }
+    Ok(())
 }
 
 pub(crate) fn discovered_mcp_function_tool(param: &McpDiscoveredToolParam) -> FunctionTool {
@@ -458,6 +485,21 @@ mod tests {
         let handler = McpHandler::spec_from_param(&param);
 
         assert!(handler.normalize(&param).is_empty());
+    }
+
+    #[test]
+    fn deferred_mcp_tools_are_rejected() {
+        let param = serde_json::from_value::<McpToolParam>(serde_json::json!({
+            "server_label": "counter",
+            "server_url": "http://127.0.0.1:8000/mcp",
+            "defer_loading": true
+        }))
+        .expect("MCP tool param");
+
+        let error = McpHandler::spec_from_param(&param)
+            .validate(&param)
+            .expect_err("deferred MCP tools are not supported");
+        assert!(error.to_string().contains("deferred MCP tools are not supported"));
     }
 
     #[test]
@@ -710,6 +752,22 @@ mod tests {
 
         let error = mcp_tool_result_text(&result).unwrap_err();
         assert!(matches!(error, ToolError::Execution(message) if message == "missing field `b`"));
+    }
+
+    #[test]
+    fn mcp_text_result_is_bounded_before_joining_content() {
+        let part = "x".repeat(MAX_GATEWAY_TOOL_OUTPUT_BYTES / 2 + 1);
+        let result = serde_json::from_value::<rmcp::model::CallToolResult>(serde_json::json!({
+            "content": [
+                {"type": "text", "text": part},
+                {"type": "text", "text": part}
+            ],
+            "isError": false
+        }))
+        .expect("valid MCP result");
+
+        let error = mcp_tool_result_text(&result).expect_err("oversized MCP text must fail");
+        assert!(error.to_string().contains("MCP tool output exceeded"));
     }
 
     #[test]

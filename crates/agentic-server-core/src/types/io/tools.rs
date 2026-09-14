@@ -4,6 +4,7 @@ use serde_json::Value;
 use crate::types::tools::{NonEmptyToolName, ResponsesTool};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct FunctionTool {
     #[serde(rename = "type")]
     pub type_: String,
@@ -19,6 +20,7 @@ pub enum ToolChoice {
     Auto,
     None,
     Required,
+    Shell,
     Function {
         namespace: Option<String>,
         name: NonEmptyToolName,
@@ -33,6 +35,7 @@ pub enum ToolChoice {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct AllowedTool {
     #[serde(rename = "type")]
     pub type_: NonEmptyToolName,
@@ -40,10 +43,70 @@ pub struct AllowedTool {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum AllowedToolsMode {
     Auto,
     Required,
+}
+
+#[cfg(feature = "openapi")]
+impl utoipa::PartialSchema for ToolChoice {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::{
+            ObjectBuilder, Ref,
+            schema::{ArrayBuilder, OneOfBuilder, SchemaType, Type},
+        };
+
+        let str_type = || ObjectBuilder::new().schema_type(SchemaType::new(Type::String));
+
+        let name_ref = || Ref::from_schema_name("NonEmptyToolName");
+
+        OneOfBuilder::new()
+            .item(str_type().enum_values(Some(["auto", "none", "required"])))
+            .item(
+                ObjectBuilder::new()
+                    .property("type", str_type().enum_values(Some(["function"])))
+                    .required("type")
+                    .property("name", name_ref())
+                    .required("name")
+                    .property("namespace", str_type()),
+            )
+            .item(
+                ObjectBuilder::new()
+                    .property("type", str_type().enum_values(Some(["custom"])))
+                    .required("type")
+                    .property("name", name_ref())
+                    .required("name"),
+            )
+            .item(
+                ObjectBuilder::new()
+                    .property("type", str_type().enum_values(Some(["allowed_tools"])))
+                    .required("type")
+                    .property("mode", Ref::from_schema_name("AllowedToolsMode"))
+                    .required("mode")
+                    .property("tools", ArrayBuilder::new().items(Ref::from_schema_name("AllowedTool")))
+                    .required("tools"),
+            )
+            .item(
+                ObjectBuilder::new()
+                    .property(
+                        "function",
+                        ObjectBuilder::new()
+                            .property("name", name_ref())
+                            .required("name")
+                            .property("namespace", str_type()),
+                    )
+                    .required("function"),
+            )
+            .into()
+    }
+}
+#[cfg(feature = "openapi")]
+impl utoipa::ToSchema for ToolChoice {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("ToolChoice")
+    }
 }
 
 impl Serialize for ToolChoice {
@@ -55,6 +118,11 @@ impl Serialize for ToolChoice {
             Self::Auto => serializer.serialize_str("auto"),
             Self::None => serializer.serialize_str("none"),
             Self::Required => serializer.serialize_str("required"),
+            Self::Shell => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("type", "shell")?;
+                map.end()
+            }
             Self::Function { namespace, name } => {
                 let mut map = serializer.serialize_map(Some(2 + usize::from(namespace.is_some())))?;
                 map.serialize_entry("type", "function")?;
@@ -98,6 +166,9 @@ impl<'de> Deserialize<'de> for ToolChoice {
                 )),
             },
             Value::Object(object) => {
+                if object.get("type").and_then(Value::as_str) == Some("shell") {
+                    return Ok(Self::Shell);
+                }
                 if object.get("type").and_then(Value::as_str) == Some("function") {
                     let namespace = object.get("namespace").and_then(Value::as_str).map(str::to_string);
                     let name = object
@@ -158,6 +229,11 @@ impl ToolChoice {
     #[must_use]
     pub(crate) fn normalized_for_upstream(&self) -> Self {
         match self {
+            Self::Shell => Self::Function {
+                namespace: None,
+                name: NonEmptyToolName::try_from(crate::tool::shell::SHELL_FUNCTION_NAME)
+                    .expect("shell is a non-empty tool name"),
+            },
             Self::Custom { name } => Self::Function {
                 namespace: None,
                 name: name.clone(),

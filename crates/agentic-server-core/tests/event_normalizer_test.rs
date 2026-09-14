@@ -4,6 +4,35 @@ use serde::Deserialize;
 // --- Unit tests (per-event-type parsing) ---
 
 #[test]
+fn negative_sequence_numbers_preserve_event_payloads() {
+    for sequence in [-1, -2, i64::MIN] {
+        let line = format!(
+            r#"data: {{"type":"response.output_text.delta","delta":"hello","item_id":"msg_1","output_index":0,"content_index":0,"sequence_number":{sequence}}}"#
+        );
+        let frame = normalize_sse_line(&line).expect("negative sequence must not discard the event");
+        assert_eq!(frame.sequence_number(), None);
+        assert!(matches!(frame.payload, EventPayload::TextDelta { ref delta, .. } if delta == "hello"));
+        assert_eq!(frame.wire.output_index, Some(0));
+    }
+}
+
+#[test]
+fn sequence_number_deserialization_preserves_unsigned_range_and_rejects_nonintegers() {
+    for sequence in [0, 1, u64::MAX] {
+        let line = format!(r#"data: {{"type":"response.in_progress","sequence_number":{sequence}}}"#);
+        assert_eq!(normalize_sse_line(&line).unwrap().sequence_number(), Some(sequence));
+    }
+    for sequence in [r#""-1""#, "-1.5", "true", "{}", "[]"] {
+        let line = format!(r#"data: {{"type":"response.in_progress","sequence_number":{sequence}}}"#);
+        assert!(normalize_sse_line(&line).is_none(), "invalid sequence: {sequence}");
+    }
+    for fields in ["", r#", "sequence_number": null"#] {
+        let line = format!(r#"data: {{"type":"response.in_progress"{fields}}}"#);
+        assert_eq!(normalize_sse_line(&line).unwrap().sequence_number(), None);
+    }
+}
+
+#[test]
 fn test_text_delta() {
     let line = r#"data: {"type":"response.output_text.delta","delta":"hello","item_id":"msg_1","output_index":0,"content_index":0,"sequence_number":4}"#;
     let frame = normalize_sse_line(line).unwrap();
@@ -18,7 +47,7 @@ fn test_text_delta() {
     {
         assert_eq!(delta, "hello");
         assert_eq!(item_id, "msg_1");
-        assert_eq!(*output_index, 0);
+        assert_eq!(*output_index, Some(0));
         assert_eq!(*content_index, 0);
     } else {
         panic!("expected TextDelta payload");
@@ -41,7 +70,7 @@ fn test_function_call_args_delta() {
         assert_eq!(delta, r#"{"city":"#);
         assert_eq!(call_id.as_deref(), Some("call_abc"));
         assert_eq!(item_id, "fc_1");
-        assert_eq!(*output_index, 0);
+        assert_eq!(*output_index, Some(0));
     } else {
         panic!("expected FunctionCallArgsDelta payload");
     }
@@ -191,7 +220,7 @@ fn test_output_item_added_message() {
     {
         assert_eq!(item_id, "msg_1");
         assert_eq!(item_type, "message");
-        assert_eq!(*output_index, 0);
+        assert_eq!(*output_index, Some(0));
     } else {
         panic!("expected OutputItemAdded payload");
     }
@@ -209,11 +238,13 @@ fn test_output_item_added_function_call() {
         name,
         namespace,
         call_id,
+        shell_call,
     } = &frame.payload
     {
+        assert!(shell_call.is_none());
         assert_eq!(item_id, "fc_1");
         assert_eq!(item_type, "function_call");
-        assert_eq!(*output_index, 1);
+        assert_eq!(*output_index, Some(1));
         assert_eq!(name.as_deref(), Some("get_weather"));
         assert_eq!(namespace.as_deref(), Some("mcp__weather"));
         assert_eq!(call_id.as_deref(), Some("call_1"));
@@ -252,7 +283,7 @@ fn test_reasoning_delta() {
     {
         assert_eq!(delta, "Let me think");
         assert_eq!(item_id, "rs_1");
-        assert_eq!(*output_index, 2);
+        assert_eq!(*output_index, Some(2));
         assert_eq!(*summary_index, 1);
     } else {
         panic!("expected ReasoningSummaryTextDelta payload");
@@ -273,7 +304,7 @@ fn test_reasoning_done_reads_text_not_delta() {
     {
         assert_eq!(text, "Full reasoning summary here");
         assert_eq!(item_id, "rs_1");
-        assert_eq!(*output_index, 2);
+        assert_eq!(*output_index, Some(2));
         assert_eq!(*summary_index, 1);
     } else {
         panic!("expected ReasoningSummaryTextDone payload");
@@ -294,7 +325,7 @@ fn test_reasoning_text_delta() {
     {
         assert_eq!(delta, "The user asks");
         assert_eq!(item_id, "rs_1");
-        assert_eq!(*output_index, 0);
+        assert_eq!(*output_index, Some(0));
         assert_eq!(*content_index, 0);
     } else {
         panic!("expected ReasoningTextDelta payload");
@@ -315,7 +346,7 @@ fn test_reasoning_text_done() {
     {
         assert_eq!(text, "The user asks about math.");
         assert_eq!(item_id, "rs_1");
-        assert_eq!(*output_index, 0);
+        assert_eq!(*output_index, Some(0));
         assert_eq!(*content_index, 0);
     } else {
         panic!("expected ReasoningTextDone payload");
@@ -489,6 +520,28 @@ fn test_text_accumulation() {
         }
     }
     assert_eq!(text, "GLOBE");
+}
+
+#[test]
+fn sentinel_sequence_stream_preserves_terminal_usage_and_text() {
+    use agentic_core::executor::accumulator::ResponseAccumulator;
+    use agentic_core::types::io::OutputItem;
+
+    // Synthetic protocol regression data, not a captured provider recording.
+    let lines = SIMULATED_SSE.iter().map(|line| {
+        let mut event: serde_json::Value = serde_json::from_str(line.strip_prefix("data: ").unwrap()).unwrap();
+        event["sequence_number"] = (-1).into();
+        format!("data: {event}")
+    });
+    let payload = ResponseAccumulator::from_sse_lines(lines, None)
+        .expect("sentinel frames remain valid")
+        .finalize("test-model", None, None);
+    assert_eq!(payload.status, "completed");
+    assert_eq!(payload.output.len(), 1);
+    assert!(matches!(&payload.output[0], OutputItem::Message(message) if message.id == "msg_1"));
+    let serialized = serde_json::to_value(&payload).unwrap();
+    assert_eq!(serialized["output"][0]["content"][0]["text"], "GLOBE");
+    assert_eq!(serialized["usage"]["total_tokens"], 18);
 }
 
 #[test]
@@ -749,7 +802,7 @@ fn test_custom_tool_input_stream_events_are_typed() {
         EventPayload::CustomToolCallInputDelta {
             ref delta,
             ref item_id,
-            output_index: 2
+            output_index: Some(2)
         } if delta == "*** Begin" && item_id == "ctc_1"
     ));
 
@@ -763,7 +816,7 @@ fn test_custom_tool_input_stream_events_are_typed() {
         EventPayload::CustomToolCallInputDone {
             ref input,
             ref item_id,
-            output_index: 2
+            output_index: Some(2)
         } if input == "*** Begin Patch" && item_id == "ctc_1"
     ));
 }

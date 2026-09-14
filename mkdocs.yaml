@@ -99,6 +99,7 @@ nav:
     - Responses Compaction: guides/responses-compaction.md
     - Harness CLI Testing: guides/harness-cli-testing.md
     - NVIDIA Dynamo Upstream: guides/dynamo-upstream.md
+    - SGLang Upstream: guides/sglang-upstream.md
   - Developing:
     - Getting Started: developing/getting-started.md
   - Architecture:

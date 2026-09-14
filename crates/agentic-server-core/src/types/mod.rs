@@ -8,11 +8,12 @@ pub use io::{
     AllowedTool, AllowedToolsMode, CompactionItem, CustomToolCall, CustomToolCallOutputMessage, FunctionTool,
     FunctionToolCall, FunctionToolResultMessage, GatewayCallStatus, InputContent, InputFileContent,
     InputFunctionToolCall, InputImageContent, InputItem, InputMessage, InputMessageContent, InputTextContent,
-    InputTokenDetails, McpCall, McpCallError, McpCallStatus, McpToolExecutionError, McpToolExecutionErrorContent,
-    OutputItem, OutputMessage, OutputTextContent, OutputTokenDetails, ReasoningOutput, ReasoningTextContent,
-    ResponseUsage, ResponsesInput, ToolCallOutput, ToolChoice, ToolOutputContent, WebSearchAction,
-    WebSearchActionError, WebSearchActionFindInPage, WebSearchActionOpenPage, WebSearchActionSearch, WebSearchCall,
-    WebSearchCallStatus, WebSearchSource,
+    InputTokenDetails, InputToolSearchCall, McpCall, McpCallError, McpCallStatus, McpToolExecutionError,
+    McpToolExecutionErrorContent, OutputItem, OutputMessage, OutputTextContent, OutputTokenDetails, ReasoningOutput,
+    ReasoningTextContent, ResponseUsage, ResponsesInput, ShellCall, ShellCallAction, ShellCallOutcome,
+    ShellCallOutputContent, ShellCallOutputMessage, ShellCallStatus, ToolCallOutput, ToolChoice, ToolOutputContent,
+    ToolSearchCall, ToolSearchOutputMessage, WebSearchAction, WebSearchActionError, WebSearchActionFindInPage,
+    WebSearchActionOpenPage, WebSearchActionSearch, WebSearchCall, WebSearchCallStatus, WebSearchSource,
 };
 pub use request_response::{
     CompactRequest, CompactedResponse, ContextManagement, IncompleteDetails, ReasoningConfig, RequestPayload,
@@ -20,6 +21,7 @@ pub use request_response::{
 };
 pub use tools::{
     CodeInterpreterToolParam, CodexNamespaceMember, CodexNamespaceToolParam, CustomToolParam, EmptyToolNameError,
-    FileSearchToolParam, FunctionToolParam, McpToolParam, NonEmptyToolName, ResponsesTool, WebSearchContextSize,
+    FileSearchToolParam, FunctionToolParam, LocalShellEnvironment, McpToolParam, NonEmptyToolName, ResponsesTool,
+    ShellEnvironment, ShellToolParam, ToolSearchExecution, ToolSearchStatus, ToolSearchToolParam, WebSearchContextSize,
     WebSearchFilters, WebSearchToolParam, WebSearchUserLocation,
 };
