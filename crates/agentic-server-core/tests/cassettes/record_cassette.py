@@ -1092,7 +1092,10 @@ def run_responses(
             click.echo(
                 f"\n[Branch] turn {turn} chains from turn {branch_from} (response_id={previous_response_id})"
             )
-        if preset_input is not None:
+        if preset_input is not None and turn == 1:
+            # The preset value replaces the first prompt only; later turns are
+            # typed as usual so a structured opening turn (for example an
+            # input_image item array) can still be continued by previous_response_id.
             input_value: Any = preset_input
         else:
             prompt = _prompt(f"Turn {turn}/{turns} — enter prompt: ")
@@ -1372,7 +1375,10 @@ def run_responses(
 @click.option(
     "--input-file",
     type=click.Path(exists=True, dir_okay=False),
-    help="JSON file containing one Responses input value; requires HTTP --mode responses --turns 1.",
+    help=(
+        "JSON file containing the Responses input value for turn 1; later turns are prompted. "
+        "Requires HTTP --mode responses without branches."
+    ),
 )
 @click.option(
     "--reasoning",
@@ -1501,9 +1507,9 @@ def main(
         )
     if max_output_tokens < 0:
         raise click.UsageError("--max-output-tokens must be >= 0.")
-    if input_file and (mode != "responses" or turns != 1 or branches or transport != "http"):
+    if input_file and (mode != "responses" or branches or transport != "http"):
         raise click.UsageError(
-            "--input-file requires HTTP --mode responses --turns 1 without branches."
+            "--input-file requires HTTP --mode responses without branches."
         )
     if reasoning_raw is not None and mode != "responses":
         raise click.UsageError("--reasoning is only supported with --mode responses.")

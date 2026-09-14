@@ -1,0 +1,106 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content:
+        - text: 'Reply with exactly two words: the color on the left half of this
+            image, then the color on the right half.'
+          type: input_text
+        - detail: low
+          image_url: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg==
+          type: input_image
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: gpt-4o
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1789399969
+      error: null
+      id: resp_01a0a08c-a9d9-7d82-9dd2-f31a33399ebe
+      incomplete_details: null
+      instructions: null
+      model: gpt-4o
+      object: response
+      output:
+      - content:
+        - annotations: []
+          text: Red blue
+          type: output_text
+        id: msg_0d485f10b6bda87a006aa813a14f7c87d2b47d163bdb0a1e1e
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: null
+      status: completed
+      usage:
+        input_tokens: 116
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 3
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 119
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: 'Without repeating the colors, reply with exactly one word: did my previous
+        message include an image? YES or NO.'
+      max_output_tokens: 64
+      model: gpt-4o
+      previous_response_id: resp_01a0a08c-a9d9-7d82-9dd2-f31a33399ebe
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1789399972
+      error: null
+      id: resp_01a0a08c-aea4-7313-87c9-08e581cf2e32
+      incomplete_details: null
+      instructions: null
+      model: gpt-4o
+      object: response
+      output:
+      - content:
+        - annotations: []
+          text: 'YES'
+          type: output_text
+        id: msg_0d485f10b6bda87a006aa813a4056c87d286eea21a27db35e6
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: resp_01a0a08c-a9d9-7d82-9dd2-f31a33399ebe
+      status: completed
+      usage:
+        input_tokens: 149
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 2
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 151
+    headers:
+      content-type: application/json
+    status_code: 200

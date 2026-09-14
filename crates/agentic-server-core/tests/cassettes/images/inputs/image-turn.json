@@ -1,0 +1,17 @@
+[
+  {
+    "type": "message",
+    "role": "user",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "Reply with exactly two words: the color on the left half of this image, then the color on the right half."
+      },
+      {
+        "type": "input_image",
+        "image_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg==",
+        "detail": "low"
+      }
+    ]
+  }
+]

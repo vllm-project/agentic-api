@@ -10,7 +10,7 @@ pub use io::{
     InputFunctionToolCall, InputImageContent, InputItem, InputMessage, InputMessageContent, InputTextContent,
     InputTokenDetails, InputToolSearchCall, McpCall, McpCallError, McpCallStatus, McpToolExecutionError,
     McpToolExecutionErrorContent, OutputItem, OutputMessage, OutputTextContent, OutputTokenDetails, ReasoningOutput,
-    ReasoningTextContent, ResponseUsage, ResponsesInput, ShellCall, ShellCallAction, ShellCallOutcome,
+    ReasoningTextContent, RefusalContent, ResponseUsage, ResponsesInput, ShellCall, ShellCallAction, ShellCallOutcome,
     ShellCallOutputContent, ShellCallOutputMessage, ShellCallStatus, ToolCallOutput, ToolChoice, ToolOutputContent,
     ToolSearchCall, ToolSearchOutputMessage, WebSearchAction, WebSearchActionError, WebSearchActionFindInPage,
     WebSearchActionOpenPage, WebSearchActionSearch, WebSearchCall, WebSearchCallStatus, WebSearchSource,

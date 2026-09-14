@@ -1690,6 +1690,6 @@ mod tests {
         let InputMessageContent::Parts(parts) = &message.content else {
             panic!("expected message parts");
         };
-        assert!(matches!(parts.as_slice(), [InputContent::Unknown]));
+        assert!(matches!(parts.as_slice(), [InputContent::Unknown(kind)] if kind == "future_content"));
     }
 }

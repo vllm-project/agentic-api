@@ -25,6 +25,9 @@ printf 'Use web search to look up potato, then summarize in one sentence.\n' | p
 
 # structured single-turn input -- sends the JSON string or item array from input.json
 python tests/cassettes/record_cassette.py --mode responses --turns 1 --no-stream --no-store --max-output-tokens 0 --input-file input.json --model gpt-4o --output out.yaml
+
+# structured opening turn, then a typed follow-up chained by previous_response_id
+printf 'What did I just show you?\n' | python tests/cassettes/record_cassette.py --mode responses --turns 2 --no-stream --input-file input.json --model gpt-4o --output out.yaml
 ```
 
 The recorder scripts (`record_reasoning_cassettes.sh`, `record_tool_call_cassettes.sh`, etc.) use `printf` to feed fixed prompts per test so no manual input is needed.
@@ -95,7 +98,7 @@ model requested by Codex 0.149.1.
                        Effective tools after normalized direct-vLLM search
 --manual-item-replay   Replay accumulated items with store=false for direct-vLLM or gateway tool search
 --reasoning JSON       JSON object containing Responses reasoning settings
---input-file FILE       JSON string or item array for one HTTP Responses turn
+--input-file FILE       JSON string or item array for turn 1 of an HTTP Responses recording; later turns are prompted
 --max-output-tokens N  max_output_tokens for Responses requests (default 1024; use 0 to omit)
 --proxy-port PORT      Local proxy port (default 7070)
 --branch-from TURN     Branch from this turn's response id (repeatable)
@@ -212,6 +215,7 @@ turns:
 | `record_mcp_cassettes.sh` | Native MCP counter tool discovery and calls (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_web_search_cassettes.sh` | Matching web-search calls (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_messages_tool_choice.py` | Forced `any` and named Messages searches followed by an automatic answer (JSON + SSE) | gateway's upstream traffic to vLLM |
+| `record_image_input_cassettes.sh` | Matching two-turn image-input conversations (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_dynamo_cassettes.sh` | Stateful two-turn and client-executed function tool call cassettes (streaming + non-streaming) | NVIDIA Dynamo frontend |
 | `record_sglang_cassettes.sh` | Same shared executor scenarios as Dynamo, staged validation and sanitized provenance | SGLang |
 | `record_tool_search_cassettes.sh` | Four-turn mixed function/namespace client tool-search characterization; gateway blocking, HTTP/SSE, and WebSocket acceptance | gateway and OpenAI reference |
@@ -390,6 +394,34 @@ The default records both providers. Use `WEB_SEARCH_RECORD_SET=gateway` or
 OPENAI_API_KEY=sk-... \
 bash crates/agentic-server-core/tests/cassettes/record_web_search_cassettes.sh
 ```
+
+### Image input (gateway and OpenAI)
+
+This records the same two-turn conversation against OpenAI and the gateway: turn 1 sends the committed
+`images/inputs/red-blue-64.png` inline as an `input_image` data URL beside an `input_text` part (the exact item array
+is `images/inputs/image-turn.json`), and turn 2 continues that response by `previous_response_id` with a text-only
+follow-up. `image_input_test.rs` replays both providers and compares request shape, response structure, the streaming
+event lifecycle, and the rehydrated history the gateway forwards on continuation — never the model's wording.
+
+The gateway is pointed at the same OpenAI model as the reference so the pair isolates gateway handling from model
+differences. Every recording is validated (fixture bytes preserved, `previous_response_id` chained, completed message
+present) and staged before any final fixture is replaced.
+
+```bash
+# Start the gateway against OpenAI in one terminal.
+OPENAI_API_KEY=sk-... \
+cargo run -p agentic-server -- \
+  --llm-api-base https://api.openai.com \
+  --skip-llm-ready-check
+
+# Record the OpenAI-reference and gateway pairs from another terminal.
+OPENAI_API_KEY=sk-... \
+GATEWAY_URL=http://localhost:9000 \
+bash crates/agentic-server-core/tests/cassettes/record_image_input_cassettes.sh
+```
+
+Use `IMAGE_RECORD_SET=gateway` or `IMAGE_RECORD_SET=openai` to record only one provider. To change the image, replace
+the PNG and regenerate `image-turn.json` from it; the script refuses to record when the two disagree.
 
 ### Custom tool (gateway and OpenAI)
 

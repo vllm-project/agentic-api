@@ -147,8 +147,9 @@ fn item_has_meaningful_context(item: &InputItem) -> bool {
                     !text.text.trim().is_empty()
                 }
                 InputContent::InputImage(image) => image.image_url.as_deref().is_some_and(|url| !url.trim().is_empty()),
-                // Message files are rejected during typed input validation.
-                InputContent::InputFile(_) | InputContent::Unknown => false,
+                InputContent::Refusal(refusal) => !refusal.refusal.trim().is_empty(),
+                // Message files and unmodeled parts are rejected during typed input validation.
+                InputContent::InputFile(_) | InputContent::Unknown(_) => false,
             }),
         },
         InputItem::FunctionCall(call) => !call.name.trim().is_empty() || !call.arguments.trim().is_empty(),
@@ -205,9 +206,13 @@ fn add_message_content(estimate: &mut InputTokenEstimate, content: &InputMessage
                         estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
                         estimate.add_text(&text.text);
                     }
+                    InputContent::Refusal(refusal) => {
+                        estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
+                        estimate.add_text(&refusal.refusal);
+                    }
                     InputContent::InputImage(_) => estimate.add_tokens(ESTIMATED_IMAGE_TOKENS),
                     InputContent::InputFile(file) => add_file_content(estimate, file),
-                    InputContent::Unknown => estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS),
+                    InputContent::Unknown(_) => estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS),
                 }
             }
         }
