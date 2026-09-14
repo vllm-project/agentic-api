@@ -205,7 +205,7 @@ pub fn error_response_for_auth(status: StatusCode, code: &str, message: &str, au
         ProxyAuth::Anthropic => serde_json::json!({
             "type": "error",
             "error": {
-                "type": "api_error",
+                "type": if status == StatusCode::BAD_REQUEST { "invalid_request_error" } else { "api_error" },
                 "message": message,
             }
         }),

@@ -117,8 +117,8 @@ pub async fn run_messages_stream(
             drop(response_stream);
 
             // Round finished. Continue only for a pure gateway-tool round; a
-            // client-owned tool_use (or any non-tool_use stop) is terminal.
-            if !acc.should_continue_loop() {
+            // client-executed function tool makes the round terminal.
+            if !acc.should_continue_loop(&ctx) {
                 for out in acc.finish() {
                     yield out;
                 }
@@ -233,8 +233,6 @@ struct MessagesStreamAccumulator {
     /// the full turn — `thinking`/`text`/`signature` + gateway `tool_use` — can
     /// be reconstructed for the next round's history (F3). Cleared each round.
     blocks: BTreeMap<u64, BufferedBlock>,
-    /// Did this round end with `stop_reason: tool_use`?
-    ended_on_tool_use: bool,
     /// Did this round surface a client-owned `tool_use`? If so the loop cannot
     /// continue server-side (the client must supply that tool's result), so it
     /// is terminal — matching the non-streaming path's E7 handling.
@@ -257,7 +255,6 @@ impl MessagesStreamAccumulator {
             index_map: HashMap::new(),
             suppressed_indices: HashSet::new(),
             blocks: BTreeMap::new(),
-            ended_on_tool_use: false,
             has_client_tool_use: false,
             final_message_delta: None,
             round_state: RoundState::Active,
@@ -269,7 +266,6 @@ impl MessagesStreamAccumulator {
         self.index_map.clear();
         self.suppressed_indices.clear();
         self.blocks.clear();
-        self.ended_on_tool_use = false;
         self.has_client_tool_use = false;
         self.round_state = RoundState::Active;
         // F6: clear the previous round's terminal so a clean-EOF round can't
@@ -306,8 +302,23 @@ impl MessagesStreamAccumulator {
     /// The loop should continue only when the round asked for a gateway tool AND
     /// did not also surface a client-owned tool (which the client must handle,
     /// making the round terminal — E7).
-    fn should_continue_loop(&self) -> bool {
-        self.ended_on_tool_use && self.gateway_call_count() > 0 && !self.has_client_tool_use
+    fn should_continue_loop(&self, ctx: &MessagesRequestContext) -> bool {
+        let stop_reason = self
+            .final_message_delta
+            .as_ref()
+            .and_then(|event| event["delta"]["stop_reason"].as_str());
+        // Preserve clean-EOF behavior for ordinary tool_use rounds. The named
+        // end_turn compatibility case requires an explicit message_stop.
+        (self.has_completed_round() || stop_reason == Some("tool_use"))
+            && self.gateway_call_count() > 0
+            && !self.has_client_tool_use
+            && ctx.is_tool_call_stop(
+                stop_reason,
+                self.blocks
+                    .values()
+                    .filter(|block| block.is_gateway_tool)
+                    .filter_map(|block| block.block["name"].as_str()),
+            )
     }
 
     fn has_upstream_error(&self) -> bool {
@@ -333,7 +344,6 @@ impl MessagesStreamAccumulator {
             Some("content_block_stop") => self.on_block_stop(&mut event),
             Some("message_delta") => {
                 // Buffer as the (possibly) final terminal; suppress mid-loop.
-                self.ended_on_tool_use = event["delta"]["stop_reason"].as_str() == Some("tool_use");
                 self.final_message_delta = Some(event);
                 Vec::new()
             }
@@ -429,7 +439,12 @@ impl MessagesStreamAccumulator {
     /// Emit the terminal `message_delta` + `message_stop` once, at loop end.
     fn finish(&mut self) -> Vec<String> {
         let mut out = Vec::new();
-        if let Some(delta) = self.final_message_delta.take() {
+        if let Some(mut delta) = self.final_message_delta.take() {
+            // A completed client call requires client action, even when vLLM
+            // labels a named call end_turn. Do not hide truncation or clean EOF.
+            if self.has_client_tool_use && self.has_completed_round() && delta["delta"]["stop_reason"] == "end_turn" {
+                delta["delta"]["stop_reason"] = json!("tool_use");
+            }
             out.push(sse("message_delta", &delta));
         }
         out.push(sse("message_stop", &json!({"type": "message_stop"})));
@@ -518,6 +533,84 @@ mod tests {
         MessagesStreamAccumulator::new(tool_seam::GatewayToolMap::default())
     }
 
+    fn context() -> MessagesRequestContext {
+        MessagesRequestContext::from_value(json!({"model":"test", "max_tokens":64, "messages":[]})).unwrap()
+    }
+
+    #[test]
+    fn client_terminal_normalization_preserves_metadata_and_requires_completion() {
+        for completed in [false, true] {
+            for reason in ["end_turn", "tool_use", "max_tokens", "stop_sequence", "future"] {
+                let mut acc = acc();
+                acc.push(&line(
+                    &json!({"type":"content_block_start", "index":0, "content_block":{
+                        "type":"tool_use", "id":"client", "name":"client_echo", "input":{}
+                    }}),
+                ));
+                acc.push(&line(&json!({"type":"content_block_stop", "index":0})));
+                let mut terminal = json!({"type":"message_delta", "delta":{
+                    "stop_reason":reason, "stop_sequence":null, "extension":{"value":1}
+                }, "usage":{"output_tokens":7}, "provider_extension":[1,2]});
+                acc.push(&line(&terminal));
+                if completed {
+                    acc.push(&line(&json!({"type":"message_stop"})));
+                }
+                assert!(!acc.should_continue_loop(&context()));
+                if completed && reason == "end_turn" {
+                    terminal["delta"]["stop_reason"] = json!("tool_use");
+                }
+                assert_eq!(
+                    acc.finish(),
+                    vec![
+                        sse("message_delta", &terminal),
+                        sse("message_stop", &json!({"type":"message_stop"}))
+                    ]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn named_end_turn_requires_completion_matching_gateway_and_no_client_tool() {
+        for (name, stop, completed, client_tool, expected) in [
+            ("web_search", "end_turn", true, false, true),
+            ("web_search", "end_turn", false, false, false),
+            ("client_echo", "end_turn", true, false, false),
+            ("web_search", "max_tokens", true, false, false),
+            ("web_search", "stop_sequence", true, false, false),
+            ("web_search", "end_turn", true, true, false),
+        ] {
+            let ctx = MessagesRequestContext::from_value(json!({
+                "model":"test", "max_tokens":64, "messages":[], "tool_choice":{"type":"tool", "name":name}
+            }))
+            .unwrap();
+            let mut acc = acc();
+            acc.push(&line(
+                &json!({"type":"content_block_start", "index":0, "content_block":{
+                    "type":"tool_use", "id":"search", "name":"web_search", "input":{"query":"proof"}
+                }}),
+            ));
+            acc.push(&line(&json!({"type":"content_block_stop", "index":0})));
+            if client_tool {
+                acc.push(&line(
+                    &json!({"type":"content_block_start", "index":1, "content_block":{
+                        "type":"tool_use", "id":"client", "name":"client_echo", "input":{}
+                    }}),
+                ));
+                acc.push(&line(&json!({"type":"content_block_stop", "index":1})));
+            }
+            acc.push(&line(&json!({"type":"message_delta", "delta":{"stop_reason":stop}})));
+            if completed {
+                acc.push(&line(&json!({"type":"message_stop"})));
+            }
+            assert_eq!(
+                acc.should_continue_loop(&ctx),
+                expected,
+                "{name}, {stop}, {completed}, {client_tool}"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn messages_bridge_accepts_optional_data_space() {
         for prefix in ["data:", "data: "] {
@@ -572,7 +665,7 @@ mod tests {
             &json!({"type": "message_delta", "delta": {"stop_reason": "end_turn"}}),
         )));
         out.extend(acc.push(&line(&json!({"type": "message_stop"}))));
-        assert!(!acc.should_continue_loop(), "text-only round is terminal");
+        assert!(!acc.should_continue_loop(&context()), "text-only round is terminal");
         out.extend(acc.finish());
         let s = out.join("");
         assert_eq!(s.matches("event: message_start").count(), 1);
@@ -605,7 +698,10 @@ mod tests {
         out.extend(acc.push(&line(&json!({"type": "message_stop"}))));
 
         let s = out.join("");
-        assert!(acc.should_continue_loop(), "pure gateway-tool round continues the loop");
+        assert!(
+            acc.should_continue_loop(&context()),
+            "pure gateway-tool round continues the loop"
+        );
         assert!(!s.contains("tool_use"), "gateway tool_use must not surface: {s}");
         assert!(!s.contains("message_stop"), "intermediate terminal suppressed");
         assert!(s.contains("thinking"), "thinking forwarded");
@@ -666,7 +762,7 @@ mod tests {
         );
         // The loop must terminate despite a gateway call being present.
         assert!(
-            !acc.should_continue_loop(),
+            !acc.should_continue_loop(&context()),
             "mixed round is terminal — loop must not continue"
         );
     }

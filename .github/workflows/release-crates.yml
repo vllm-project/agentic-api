@@ -56,30 +56,6 @@ jobs:
           toolchain: 1.98.0
           components: clippy, rustfmt
 
-      - name: Verify lockfile
-        run: cargo check --workspace --locked
-
-      - name: Cache cargo registry and build
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: cargo-release-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: |
-            cargo-release-${{ runner.os }}-
-            cargo-${{ runner.os }}-
-
-      - name: Check formatting
-        run: cargo fmt -- --check
-
-      - name: Run clippy
-        run: cargo clippy --all-targets --locked -- -D warnings
-
-      - name: Run tests
-        run: cargo test --locked
-
       - name: Read and verify package versions
         id: version
         run: |
@@ -130,19 +106,51 @@ jobs:
           fi
 
       - name: Check published versions
+        env:
+          AGENTIC_RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          version="${{ steps.version.outputs.version }}"
+          for crate in agentic-server-core agentic-server; do
+            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              --user-agent 'agentic-api-release (https://github.com/vllm-project/agentic-api)' \
+              --connect-timeout 10 --max-time 30 \
+              "https://crates.io/api/v1/crates/$crate/$AGENTIC_RELEASE_VERSION")"
+            case "$status" in
+              404) echo "$crate $AGENTIC_RELEASE_VERSION is not published" ;;
+              200)
+                echo "::error::$crate $AGENTIC_RELEASE_VERSION is already published; bump the Cargo workspace version"
+                exit 1
+                ;;
+              *)
+                echo "::error::Unable to check crates.io release availability for $crate (HTTP $status)"
+                exit 1
+                ;;
+            esac
+          done
 
-          if cargo info --registry crates-io "agentic-server-core@$version" >/dev/null 2>&1; then
-            echo "::error::agentic-server-core $version is already published"
-            exit 1
-          fi
+      - name: Verify lockfile
+        run: cargo check --workspace --locked
 
-          if cargo info --registry crates-io "agentic-server@$version" >/dev/null 2>&1; then
-            echo "::error::agentic-server $version is already published"
-            exit 1
-          fi
+      - name: Cache cargo registry and build
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-release-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            cargo-release-${{ runner.os }}-
+            cargo-${{ runner.os }}-
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Run tests
+        run: cargo test --locked
 
       - name: Dry-run package publication
         if: inputs.dry_run

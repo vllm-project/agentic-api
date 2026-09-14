@@ -14,6 +14,6 @@ if [[ -z "$workspace_version" ]]; then
 fi
 
 if [[ "$requested_version" != "$workspace_version" ]]; then
-  echo "release-python.yml is a ${workspace_version} build-only workflow; requested version does not match" >&2
+  echo "release-python.yml is a ${workspace_version} release workflow; requested version does not match" >&2
   exit 1
 fi

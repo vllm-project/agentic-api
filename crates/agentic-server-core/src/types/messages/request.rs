@@ -11,6 +11,8 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::tool_choice::MessagesToolChoice;
+
 /// Top-level Anthropic Messages request body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -23,7 +25,7 @@ pub struct MessagesRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<ToolParam>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tool_choice: Option<Value>,
+    pub tool_choice: Option<MessagesToolChoice>,
     #[serde(default)]
     pub stream: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -36,6 +38,14 @@ pub struct MessagesRequest {
     /// Any other top-level field (e.g. `metadata`, `stop_sequences`) preserved verbatim.
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
+}
+
+/// Routing view used when a full request fails validation. A malformed request
+/// declaring a gateway tool must not escape validation through the proxy path.
+#[derive(Deserialize)]
+pub(crate) struct MessagesToolDeclarations {
+    #[serde(default)]
+    pub tools: Option<Vec<ToolParam>>,
 }
 
 /// Anthropic `output_config` object. Unmodeled keys are preserved via `extra`.

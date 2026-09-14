@@ -503,3 +503,47 @@ async fn messages_without_gateway_tool_uses_proxy() {
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].body.as_ref(), body);
 }
+
+#[tokio::test]
+async fn gateway_messages_reject_invalid_selectors_before_inference() {
+    let (llm_url, requests, upstream) =
+        spawn_recording_upstream(StatusCode::OK, "application/json", r#"{"id":"unexpected"}"#).await;
+    let (gateway_url, gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+    for stream in [false, true] {
+        for choice in [
+            serde_json::json!([]),
+            serde_json::json!(true),
+            serde_json::json!("any"),
+            serde_json::json!({}),
+            serde_json::json!({"type":false}),
+            serde_json::json!({"type":"future"}),
+            serde_json::json!({"type":"tool"}),
+            serde_json::json!({"type":"tool", "name":""}),
+            serde_json::json!({"type":"tool", "name":42}),
+            serde_json::json!({"type":"any", "disable_parallel_tool_use":"true"}),
+        ] {
+            let request = serde_json::json!({"model":"test", "max_tokens":64, "stream":stream,
+                "messages":[{"role":"user", "content":"hi"}],
+                "tools":[{"name":"web_search", "input_schema":{"type":"object"}}],
+                "tool_choice":choice});
+            let response = reqwest::Client::new()
+                .post(format!("{gateway_url}/v1/messages"))
+                .json(&request)
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{choice}, stream={stream}");
+            let body: serde_json::Value = response.json().await.unwrap();
+            assert_eq!(body["type"], "error");
+            assert_eq!(body["error"]["type"], "invalid_request_error");
+        }
+    }
+    assert!(
+        requests.lock().await.is_empty(),
+        "invalid selectors must not bypass the loop through proxying"
+    );
+    gateway.abort();
+    upstream.abort();
+    let _ = gateway.await;
+    let _ = upstream.await;
+}

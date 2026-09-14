@@ -1,0 +1,123 @@
+turns:
+- filename: t1
+  request:
+    body:
+      chat_template_kwargs:
+        enable_thinking: false
+      max_tokens: 1024
+      messages:
+      - content: Search for the verification token for the Messages tool-choice test.
+          Then reply with only the token returned by web_search. Do not search again
+          after receiving a result.
+        role: user
+      model: Qwen/Qwen3-4B
+      stream: false
+      temperature: 0
+      tool_choice:
+        disable_parallel_tool_use: true
+        name: web_search
+        type: tool
+      tools:
+      - description: Search the web for current information. Executed server-side
+          by the gateway.
+        input_schema:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    body:
+      content:
+      - id: chatcmpl-tool-a8ab65459ef8ece8
+        input:
+          query: verification token for the Messages tool-choice test
+        name: web_search
+        type: tool_use
+      id: chatcmpl-b05100afb1b7861d
+      model: Qwen/Qwen3-4B
+      role: assistant
+      stop_reason: end_turn
+      type: message
+      usage:
+        input_tokens: 199
+        output_tokens: 27
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      chat_template_kwargs:
+        enable_thinking: false
+      max_tokens: 1024
+      messages:
+      - content: Search for the verification token for the Messages tool-choice test.
+          Then reply with only the token returned by web_search. Do not search again
+          after receiving a result.
+        role: user
+      - content:
+        - id: chatcmpl-tool-a8ab65459ef8ece8
+          input:
+            query: verification token for the Messages tool-choice test
+          name: web_search
+          type: tool_use
+        role: assistant
+      - content:
+        - content: '{"query":"verification token for the Messages tool-choice test","queries":["verification
+            token for the Messages tool-choice test"],"results":{"web":[{"url":"https://example.com/proof","title":"proof","description":"SEARCH_PROOF_雪"}],"news":[]},"metadata":[null]}'
+          is_error: false
+          tool_use_id: chatcmpl-tool-a8ab65459ef8ece8
+          type: tool_result
+        role: user
+      model: Qwen/Qwen3-4B
+      stream: false
+      temperature: 0
+      tool_choice:
+        disable_parallel_tool_use: true
+        type: auto
+      tools:
+      - description: Search the web for current information. Executed server-side
+          by the gateway.
+        input_schema:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    body:
+      content:
+      - text: SEARCH_PROOF_雪
+        type: text
+      id: chatcmpl-9553ad47cfc1b7ac
+      model: Qwen/Qwen3-4B
+      role: assistant
+      stop_reason: end_turn
+      type: message
+      usage:
+        input_tokens: 295
+        output_tokens: 6
+    headers:
+      content-type: application/json
+    status_code: 200

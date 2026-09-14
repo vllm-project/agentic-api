@@ -1,0 +1,140 @@
+turns:
+- filename: t1
+  request:
+    body:
+      chat_template_kwargs:
+        enable_thinking: false
+      max_tokens: 1024
+      messages:
+      - content: Call client_echo to get a verification string. After receiving its
+          result, copy the ENTIRE result text verbatim, including its prefix, underscores
+          and all characters. Output nothing else. Do not call tools again after receiving
+          a result.
+        role: user
+      model: Qwen/Qwen3-4B
+      stream: false
+      temperature: 0
+      tool_choice:
+        disable_parallel_tool_use: true
+        name: client_echo
+        type: tool
+      tools:
+      - description: Search the web for current information. Executed server-side
+          by the gateway.
+        input_schema:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+      - description: Return a verification token.
+        input_schema:
+          properties:
+            query:
+              type: string
+          required:
+          - query
+          type: object
+        name: client_echo
+    headers:
+      accept: application/json
+      content-type: application/json
+      user-agent: Anthropic/Python 1.5.0
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    body:
+      content:
+      - id: chatcmpl-tool-9ff199a9f372cbcf
+        input:
+          query: Call client_echo to get a verification string.
+        name: client_echo
+        type: tool_use
+      id: chatcmpl-8ef6183e5afa22e3
+      model: Qwen/Qwen3-4B
+      role: assistant
+      stop_reason: end_turn
+      type: message
+      usage:
+        input_tokens: 268
+        output_tokens: 28
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      chat_template_kwargs:
+        enable_thinking: false
+      max_tokens: 1024
+      messages:
+      - content: Call client_echo to get a verification string. After receiving its
+          result, copy the ENTIRE result text verbatim, including its prefix, underscores
+          and all characters. Output nothing else. Do not call tools again after receiving
+          a result.
+        role: user
+      - content:
+        - id: chatcmpl-tool-9ff199a9f372cbcf
+          input:
+            query: Call client_echo to get a verification string.
+          name: client_echo
+          type: tool_use
+        role: assistant
+      - content:
+        - content: CLIENT_PROOF_雪
+          tool_use_id: chatcmpl-tool-9ff199a9f372cbcf
+          type: tool_result
+        role: user
+      model: Qwen/Qwen3-4B
+      stream: false
+      temperature: 0
+      tool_choice:
+        type: auto
+      tools:
+      - description: Search the web for current information. Executed server-side
+          by the gateway.
+        input_schema:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+      - description: Return a verification token.
+        input_schema:
+          properties:
+            query:
+              type: string
+          required:
+          - query
+          type: object
+        name: client_echo
+    headers:
+      accept: application/json
+      content-type: application/json
+      user-agent: Anthropic/Python 1.5.0
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    body:
+      content:
+      - text: CLIENT_PROOF_雪
+        type: text
+      id: chatcmpl-837a5d4f1dcf4440
+      model: Qwen/Qwen3-4B
+      role: assistant
+      stop_reason: end_turn
+      type: message
+      usage:
+        input_tokens: 314
+        output_tokens: 6
+    headers:
+      content-type: application/json
+    status_code: 200

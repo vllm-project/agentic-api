@@ -1,0 +1,358 @@
+turns:
+- filename: t1
+  request:
+    body:
+      chat_template_kwargs:
+        enable_thinking: false
+      max_tokens: 1024
+      messages:
+      - content: Search for the verification token for the Messages tool-choice test.
+          Then reply with only the token returned by web_search. Do not search again
+          after receiving a result.
+        role: user
+      model: Qwen/Qwen3-4B
+      stream: true
+      temperature: 0
+      tool_choice:
+        disable_parallel_tool_use: false
+        name: web_search
+        type: any
+      tools:
+      - description: Search the web for current information. Executed server-side
+          by the gateway.
+        input_schema:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: message_start
+
+      '
+    - 'data: {"type":"message_start","message":{"id":"chatcmpl-aa1540073b22d545","type":"message","role":"assistant","content":[],"model":"Qwen/Qwen3-4B","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":199,"output_tokens":0}}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_start
+
+      '
+    - 'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"chatcmpl-tool-a6f83f7079311a44","name":"web_search","input":{}},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"query"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"\":"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      \""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"verification"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      token"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      for"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      the"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      Messages"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      tool"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"-choice"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      test"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"\"}"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_stop
+
+      '
+    - 'data: {"type":"content_block_stop","index":0}
+
+      '
+    - '
+
+      '
+    - 'event: message_delta
+
+      '
+    - 'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":199,"output_tokens":27}}
+
+      '
+    - '
+
+      '
+    - 'event: message_stop
+
+      '
+    - 'data: {"type":"message_stop"}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      chat_template_kwargs:
+        enable_thinking: false
+      max_tokens: 1024
+      messages:
+      - content: Search for the verification token for the Messages tool-choice test.
+          Then reply with only the token returned by web_search. Do not search again
+          after receiving a result.
+        role: user
+      - content:
+        - id: chatcmpl-tool-a6f83f7079311a44
+          input:
+            query: verification token for the Messages tool-choice test
+          name: web_search
+          type: tool_use
+        role: assistant
+      - content:
+        - content: '{"query":"verification token for the Messages tool-choice test","queries":["verification
+            token for the Messages tool-choice test"],"results":{"web":[{"url":"https://example.com/proof","title":"proof","description":"SEARCH_PROOF_雪"}],"news":[]},"metadata":[null]}'
+          is_error: false
+          tool_use_id: chatcmpl-tool-a6f83f7079311a44
+          type: tool_result
+        role: user
+      model: Qwen/Qwen3-4B
+      stream: true
+      temperature: 0
+      tool_choice:
+        disable_parallel_tool_use: false
+        name: web_search
+        type: auto
+      tools:
+      - description: Search the web for current information. Executed server-side
+          by the gateway.
+        input_schema:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: message_start
+
+      '
+    - 'data: {"type":"message_start","message":{"id":"chatcmpl-922f66e30db99deb","type":"message","role":"assistant","content":[],"model":"Qwen/Qwen3-4B","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":295,"output_tokens":0}}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_start
+
+      '
+    - 'data: {"type":"content_block_start","content_block":{"type":"text","text":""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"SEARCH"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"_PRO"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"OF"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"_"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"雪"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_stop
+
+      '
+    - 'data: {"type":"content_block_stop","index":0}
+
+      '
+    - '
+
+      '
+    - 'event: message_delta
+
+      '
+    - 'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":295,"output_tokens":6}}
+
+      '
+    - '
+
+      '
+    - 'event: message_stop
+
+      '
+    - 'data: {"type":"message_stop"}
+
+      '
+    - '
+
+      '
+    status_code: 200

@@ -1,0 +1,383 @@
+turns:
+- filename: t1
+  request:
+    body:
+      chat_template_kwargs:
+        enable_thinking: false
+      max_tokens: 1024
+      messages:
+      - content: Call client_echo to get a verification string. After receiving its
+          result, copy the ENTIRE result text verbatim, including its prefix, underscores
+          and all characters. Output nothing else. Do not call tools again after receiving
+          a result.
+        role: user
+      model: Qwen/Qwen3-4B
+      stream: true
+      temperature: 0
+      tool_choice:
+        disable_parallel_tool_use: true
+        name: client_echo
+        type: tool
+      tools:
+      - description: Search the web for current information. Executed server-side
+          by the gateway.
+        input_schema:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+      - description: Return a verification token.
+        input_schema:
+          properties:
+            query:
+              type: string
+          required:
+          - query
+          type: object
+        name: client_echo
+    headers:
+      accept: application/json
+      content-type: application/json
+      user-agent: Anthropic/Python 1.5.0
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: message_start
+
+      '
+    - 'data: {"type":"message_start","message":{"id":"chatcmpl-a9feed070fc0ea47","type":"message","role":"assistant","content":[],"model":"Qwen/Qwen3-4B","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":268,"output_tokens":0}}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_start
+
+      '
+    - 'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"chatcmpl-tool-8c15019f89f47afd","name":"client_echo","input":{}},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"query"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"\":"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      \""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"Call"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      client"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"_echo"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      to"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      get"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      a"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      verification"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+      string"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":".\""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"}"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_stop
+
+      '
+    - 'data: {"type":"content_block_stop","index":0}
+
+      '
+    - '
+
+      '
+    - 'event: message_delta
+
+      '
+    - 'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":268,"output_tokens":28}}
+
+      '
+    - '
+
+      '
+    - 'event: message_stop
+
+      '
+    - 'data: {"type":"message_stop"}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      chat_template_kwargs:
+        enable_thinking: false
+      max_tokens: 1024
+      messages:
+      - content: Call client_echo to get a verification string. After receiving its
+          result, copy the ENTIRE result text verbatim, including its prefix, underscores
+          and all characters. Output nothing else. Do not call tools again after receiving
+          a result.
+        role: user
+      - content:
+        - id: chatcmpl-tool-8c15019f89f47afd
+          input:
+            query: Call client_echo to get a verification string.
+          name: client_echo
+          type: tool_use
+        role: assistant
+      - content:
+        - content: CLIENT_PROOF_雪
+          tool_use_id: chatcmpl-tool-8c15019f89f47afd
+          type: tool_result
+        role: user
+      model: Qwen/Qwen3-4B
+      stream: true
+      temperature: 0
+      tool_choice:
+        type: auto
+      tools:
+      - description: Search the web for current information. Executed server-side
+          by the gateway.
+        input_schema:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+      - description: Return a verification token.
+        input_schema:
+          properties:
+            query:
+              type: string
+          required:
+          - query
+          type: object
+        name: client_echo
+    headers:
+      accept: application/json
+      content-type: application/json
+      user-agent: Anthropic/Python 1.5.0
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: message_start
+
+      '
+    - 'data: {"type":"message_start","message":{"id":"chatcmpl-b70a4a0c39271fb6","type":"message","role":"assistant","content":[],"model":"Qwen/Qwen3-4B","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":314,"output_tokens":0}}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_start
+
+      '
+    - 'data: {"type":"content_block_start","content_block":{"type":"text","text":""},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"CLIENT"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"_PRO"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"OF"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"_"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"雪"},"index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_stop
+
+      '
+    - 'data: {"type":"content_block_stop","index":0}
+
+      '
+    - '
+
+      '
+    - 'event: message_delta
+
+      '
+    - 'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":314,"output_tokens":6}}
+
+      '
+    - '
+
+      '
+    - 'event: message_stop
+
+      '
+    - 'data: {"type":"message_stop"}
+
+      '
+    - '
+
+      '
+    status_code: 200

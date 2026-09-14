@@ -211,9 +211,59 @@ turns:
 | `record_shell_cassettes.sh` | Four two-turn local-shell scenarios (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_mcp_cassettes.sh` | Native MCP counter tool discovery and calls (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_web_search_cassettes.sh` | Matching web-search calls (streaming + non-streaming) | gateway and OpenAI reference |
+| `record_messages_tool_choice.py` | Forced `any` and named Messages searches followed by an automatic answer (JSON + SSE) | gateway's upstream traffic to vLLM |
 | `record_dynamo_cassettes.sh` | Stateful two-turn and client-executed function tool call cassettes (streaming + non-streaming) | NVIDIA Dynamo frontend |
 | `record_sglang_cassettes.sh` | Same shared executor scenarios as Dynamo, staged validation and sanitized provenance | SGLang |
 | `record_tool_search_cassettes.sh` | Four-turn mixed function/namespace client tool-search characterization; gateway blocking, HTTP/SSE, and WebSocket acceptance | gateway and OpenAI reference |
+
+### Messages forced tool choice (vLLM)
+
+`messages-any-*` and `messages-tool-*` in `messages/tool-choice/` record the gateway's two requests for each forced selector. The first
+request forces `web_search`; after one successful search, the second carries the complete assistant/tool-result
+history and `tool_choice.type=auto`. The `any` cases retain a `name` extension and allow parallel tool use; the named
+cases remove `name` and retain `disable_parallel_tool_use=true`. Each exchange ends with the token from the search
+result. Only the local search service is deterministic; the provider responses are captured from vLLM.
+
+vLLM 0.29.0 labels its named calls `end_turn` in both JSON and SSE. The named recordings exercise the gateway's
+compatibility handling for that completed, explicitly selected call as well as the subsequent selector relaxation.
+
+The recordings use vLLM 0.29.0 and `Qwen/Qwen3-4B` revision
+`1cfa9a7208912126459214e8b04321603b3df60c`, with thinking disabled in each request. Start the provider:
+
+```bash
+vllm serve Qwen/Qwen3-4B --revision 1cfa9a7208912126459214e8b04321603b3df60c \
+    --host 127.0.0.1 --port 8000 --tool-call-parser hermes --enable-auto-tool-choice \
+    --reasoning-parser qwen3 --generation-config vllm --enforce-eager \
+    --max-model-len 4096 --max-num-seqs 4 --gpu-memory-utilization 0.7
+```
+
+From the repository root, build the gateway and run the scenario with the usual recorder dependencies:
+
+```bash
+cargo build -p agentic-server --bin agentic-server
+python crates/agentic-server-core/tests/cassettes/record_messages_tool_choice.py \
+    --binary target/debug/agentic-server --vllm http://127.0.0.1:8000
+cargo test -p agentic-server --test messages_tool_choice_cassette_test
+```
+
+The scenario uses the existing `record_cassette.py` proxy between the gateway and vLLM. It validates two provider
+requests, one search and a completed public response per cassette. Replay tests compare every complete upstream
+request to the capture, check the query/result pairing and public lifecycle, repeat on the same gateway, and assert
+that Messages writes no conversation state.
+
+The `messages-client-*` recordings exercise named **client-executed function tools** with an unused gateway tool
+declared. vLLM returns `end_turn`; the gateway surfaces `tool_use`. The Anthropic SDK then executes `client_echo`,
+submits the output using the returned call ID, and receives the token from that output. Each cassette has two public
+requests and no gateway search. The replay tests assert the complete captured requests and response events,
+including the sole public stop-reason correction, and repeat the conversation on the same gateway.
+
+Capture these scenarios with the same provider and gateway build:
+
+```bash
+python -m pip install anthropic==1.5.0
+python crates/agentic-server-core/tests/cassettes/record_messages_tool_choice.py \
+    --binary target/debug/agentic-server --vllm http://localhost:8000 --client-tool
+```
 
 ### Text-only (OpenAI)
 

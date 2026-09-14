@@ -14,7 +14,7 @@ use agentic_core::proxy::{
     ProxyAuth, ProxyRequest, error_response_for_auth, proxy_request_with_path, upstream_request_headers,
 };
 use agentic_core::tool::ToolRegistry;
-use agentic_core::types::messages::{has_gateway_tool, registry_tools};
+use agentic_core::types::messages::registry_tools;
 
 use super::super::common::{
     convert_response, read_bytes_with_auth, sse_response_with_headers, upstream_error_response,
@@ -131,17 +131,18 @@ pub async fn messages(State(state): State<AppState>, request: Request) -> Respon
 
     // Route to the loop only when a gateway-owned tool is declared; everything
     // else keeps the transparent proxy path.
-    if let Ok(parsed) = ParsedMessagesRequest::parse(&bytes) {
-        let route_to_loop = has_gateway_tool(parsed.tools(), &state.exec_ctx.messages_gateway_tools);
-        debug!(
-            route = if route_to_loop { "messages_loop" } else { "proxy" },
-            stream = parsed.stream(),
-            tools = parsed.tools().map_or(0, Vec::len),
-            "routing HTTP messages request"
-        );
-        if route_to_loop {
+    match ParsedMessagesRequest::parse_for_gateway(&bytes, &state.exec_ctx.messages_gateway_tools) {
+        Ok(Some(parsed)) => {
+            debug!(
+                route = "messages_loop",
+                stream = parsed.stream(),
+                tools = parsed.tools().map_or(0, Vec::len),
+                "routing HTTP messages request"
+            );
             return execute_messages(&state, &parts.headers, parts.uri.query(), parsed).await;
         }
+        Err(error) => return messages_error_response(error),
+        Ok(None) => debug!(route = "proxy", "routing HTTP messages request"),
     }
 
     proxy_messages(&state, parts, bytes, "/v1/messages").await

@@ -2190,6 +2190,88 @@ async fn execute_runs_large_gateway_fanout_without_hard_cap() {
 }
 
 #[tokio::test]
+async fn failed_stream_preserves_deferred_diagnostics_without_executing_tools() {
+    let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
+    let call = serde_json::json!({
+        "type": "function_call", "id": "fc_search", "call_id": "call_search",
+        "name": "web_search", "arguments": "{\"query\":\"rust async\"}", "status": "completed"
+    });
+    let diagnostic = serde_json::json!({
+        "type": "error", "code": "provider_specific", "message": "unique upstream diagnostic",
+        "param": "upstream_field"
+    });
+    let llm = support::MockServer::start_deque(vec![sse_response([
+        serde_json::json!({
+            "type": "response.created", "response": {"id": "resp_failed", "status": "in_progress"}
+        }),
+        serde_json::json!({
+            "type": "response.in_progress", "response": {"id": "resp_failed", "status": "in_progress"}
+        }),
+        serde_json::json!({
+            "type": "response.output_item.added", "output_index": 0,
+            "item": {
+                "type": "function_call", "id": "fc_search", "call_id": "call_search",
+                "name": "web_search", "arguments": "", "status": "in_progress"
+            }
+        }),
+        serde_json::json!({
+            "type": "response.function_call_arguments.done", "output_index": 0, "item_id": "fc_search",
+            "name": "web_search", "arguments": "{\"query\":\"rust async\"}"
+        }),
+        serde_json::json!({"type": "response.output_item.done", "output_index": 0, "item": call}),
+        diagnostic.clone(),
+        serde_json::json!({
+            "type": "provider.gateway_metadata", "output_index": 0, "metadata": {"trace_id": "trace_failed"}
+        }),
+        serde_json::json!({
+            "type": "response.failed",
+            "response": {
+                "id": "resp_failed", "status": "failed", "output": [call],
+                "error": {"code": "server_error", "message": "generic failure"}
+            }
+        }),
+    ])])
+    .await;
+    let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
+    let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+        "model": "test-model", "input": "search", "stream": true, "store": false,
+        "tools": [{"type": "web_search_preview"}]
+    }))
+    .unwrap();
+
+    let Either::Right(stream) = ExecuteRequest::new(payload, exec_ctx).run().await.unwrap() else {
+        panic!("expected streaming response");
+    };
+    let chunks: Vec<String> = stream.collect().await;
+    let events = streamed_sse_events(&chunks);
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| event["type"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [
+            "response.created",
+            "response.in_progress",
+            "provider.gateway_metadata",
+            "error",
+            "response.failed"
+        ]
+    );
+    for (index, event) in events.iter().enumerate() {
+        assert_eq!(event["sequence_number"].as_u64(), Some(u64::try_from(index).unwrap()));
+    }
+    let mut delivered_diagnostic = events[3].clone();
+    delivered_diagnostic.as_object_mut().unwrap().remove("sequence_number");
+    assert_eq!(delivered_diagnostic, diagnostic);
+    assert_eq!(events[2]["metadata"]["trace_id"], "trace_failed");
+    assert_eq!(events[4]["response"]["error"]["message"], "generic failure");
+    assert!(
+        captured_you.try_recv().is_err(),
+        "failed rounds must not execute gateway tools"
+    );
+}
+
+#[tokio::test]
 async fn stream_error_events_escape_error_messages() {
     let app = Router::new().route(
         "/v1/responses",

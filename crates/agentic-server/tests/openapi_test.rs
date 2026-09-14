@@ -93,6 +93,32 @@ async fn streaming_endpoints_declare_dual_media_types() {
 }
 
 #[tokio::test]
+async fn messages_tool_choice_schema_matches_the_typed_boundary() {
+    let spec = fetch_spec().await;
+    let schema = serde_json::json!({"components":spec["components"], "$ref":"#/components/schemas/MessagesToolChoice"});
+    let validator = jsonschema::validator_for(&schema).unwrap();
+    for choice in [
+        serde_json::json!({"type":"auto"}),
+        serde_json::json!({"type":"any", "name":"extension", "disable_parallel_tool_use":false}),
+        serde_json::json!({"type":"tool", "name":"client_echo", "disable_parallel_tool_use":true, "extension":[1,2]}),
+        serde_json::json!({"type":"none"}),
+    ] {
+        assert!(validator.is_valid(&choice), "{choice}");
+    }
+    for choice in [
+        serde_json::json!([]),
+        serde_json::json!(false),
+        serde_json::json!({"type":"future"}),
+        serde_json::json!({"type":"tool"}),
+        serde_json::json!({"type":"tool", "name":""}),
+        serde_json::json!({"type":"tool", "name":42}),
+        serde_json::json!({"type":"auto", "disable_parallel_tool_use":null}),
+    ] {
+        assert!(!validator.is_valid(&choice), "{choice}");
+    }
+}
+
+#[tokio::test]
 async fn error_envelopes_match_api_style() {
     let body = fetch_spec().await;
 

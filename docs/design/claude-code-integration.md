@@ -190,7 +190,17 @@ Recommendation: ship A.
 | gateway-owned `tool_use` (web_search, MCP) | gateway executes, appends a `tool_result`, loops |
 | client-owned `tool_use` | returned to the client, which executes and resends `tool_result` |
 | `tool_result` content block (may carry `is_error: true`) | fed into the next upstream turn |
-| `tool_choice` (`auto`/`any`/`tool`/`none`, `disable_parallel_tool_use`) | preserved and forwarded; the loop must not assume one tool per turn |
+| `tool_choice` (`auto`/`any`/`tool`/`none`, `disable_parallel_tool_use`) | forwarded on the first round; a fulfilled forced choice becomes `auto` after gateway tool results are appended; parallel-use settings remain unchanged |
+
+vLLM may label a completed named tool call `end_turn`. The gateway accepts that stop only when the explicitly
+selected gateway tool appears in the round; streaming also requires `message_stop`. Rounds containing
+client-executed function tools return control to the client with `stop_reason: tool_use`, including when vLLM
+labels a completed call `end_turn`. The correction applies to JSON and the terminal streaming `message_delta`;
+gateway calls in a mixed round remain hidden. Truncation and other stop reasons retain their original meaning.
+
+Gateway-tool requests parse `tool_choice` as a typed union with a required non-empty name for `tool`. Malformed
+selectors return HTTP 400 before inference. Known variants preserve parallel-use settings and extension fields;
+requests without gateway tools retain the transparent proxy path and upstream validation.
 
 The gateway-owned vs. client-owned split is already the tool framework's core model; Messages just uses Anthropic's block names in place of Responses item types. Beyond the table, the loop has to handle parallel tool calls (multiple `tool_use` blocks in one assistant turn, with all resulting `tool_result` blocks in a single user message), the full `stop_reason` set (`end_turn`, `max_tokens`, `stop_sequence`, `tool_use`, `pause_turn`, `refusal` — where `pause_turn` means resend to continue), and streaming `tool_use` args arriving as `input_json_delta` partial-JSON frames. When it resolves a gateway-owned `tool_use` mid-stream it must emit correct `content_block_start` → `input_json_delta` → `content_block_stop` frames for surfaced calls, suppress the hidden ones, and keep block `index` contiguous.
 

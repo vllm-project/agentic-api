@@ -651,11 +651,29 @@ the shell call’s public added/done lifecycle.
 
 #### `gateway_accumulator.rs` and `pipeline/delivery.rs` — continuous client SSE
 
-`StreamDelivery`, owned by `AgentPipeline`, is the only path from translated upstream
-frames to the client sender. It withholds terminal upstream lifecycle events for the
-engine, defers frames at and after the first hidden gateway-call index, and later
-releases them in output order around synthesized gateway events. Deferred serialized
-frames have a 256 KiB byte limit.
+`StreamDelivery`, owned by `AgentPipeline`, withholds terminal upstream lifecycle
+events for the engine, defers frames at and after the first hidden gateway-call
+index, and later releases them in output order around synthesized gateway events.
+Deferred frames are bounded by both 1024 entries and the existing 256 KiB
+serialized-wire-data limit. This is separate from response assembly, retained
+session state, and total process memory.
+
+`pipeline/delivery.rs` owns the shared emission path for both translated upstream
+events and gateway-synthesized events. Only the upstream adapter restores response
+IDs and applies the round's output offset; gateway events already use public IDs
+and absolute indexes. Sequence and response-start deduplication state is committed
+after the bounded sender accepts the event. A failed serialization, closed receiver,
+or cancelled send cannot consume that state. Enqueueing is not client receipt or
+playback acknowledgement. Failed or cancelled frames are discarded by the caller;
+this does not make an interrupted pipeline resumable or support retrying an already
+rebased frame.
+
+While a gateway-call defer window is active, index-less frames remain deferred
+and are released after indexed frames. Flushes keep unsent frames and their byte
+accounting in `StreamDelivery` until the bounded sender accepts each event, so a
+cancelled or disconnected flush cannot silently discard the remainder.
+When an upstream round fails, the engine releases its deferred public events through
+the same delivery path before the terminal event, without executing gateway tools.
 
 Its `GatewayStreamAccumulator` carries only cross-round presentation state: monotonic
 `sequence_number`s, public `output_index` rebasing, and deduplication of response start
@@ -747,8 +765,8 @@ not an oversight, per the future-consolidation note.
 
 Both loops take a `MessagesRequestContext` (`messages_context.rs`), the per-request
 type that replaced a bare `serde_json::Value` at that boundary. It holds two views of
-one request: a typed `MessagesRequest` for reading `tools`/`stream`/`model`, and the
-raw JSON body that is actually forwarded upstream. The raw body is deliberately *not*
+one request: typed fields for reading `tools`/`stream`/`model`, the current
+`MessagesToolChoice`, and the raw JSON body that is actually forwarded upstream. The raw body is deliberately *not*
 re-serialized from the typed view — `ContentBlock` catches unmodeled block types in
 `#[serde(other)] Unknown` and models only the fields the gateway reads, so a typed
 round-trip would drop `cache_control` and `is_error` and collapse `image`/
@@ -756,6 +774,30 @@ round-trip would drop `cache_control` and `is_error` and collapse `image`/
 loops make to that body (`force_stream`, `append_round`) and the native web-search
 budget, so the two views cannot drift apart uncontrolled; `messages` and `system` are
 reachable only through the raw body, never the typed view.
+
+`append_round` also changes a fulfilled forced `tool_choice` (`any`, or `tool`
+matching a returned gateway call result) to `auto`. The first round retains the
+client's selector; later rounds can answer from the tool result or choose another
+tool. Parallel-use settings and extension fields remain intact. Rounds containing
+client-executed function tools return before this mutation, and Messages does not
+persist this state.
+
+`MessagesToolChoice` models `auto`, `any`, `tool` with a non-empty name, and
+`none` as an exhaustive enum. It retains parallel-use settings and flattened
+extension fields. The context performs fulfillment checks and transitions using
+that enum, then serializes the changed selector into the raw body. Malformed
+gateway-tool requests return HTTP 400 before inference; a parse failure cannot
+bypass validation by falling back to the proxy. Requests without gateway tools
+retain the transparent proxy contract and upstream validation.
+
+vLLM can label a completed, explicitly named tool call `end_turn`. The shared
+request context accepts that stop only when the selected gateway tool appears in
+the round. Streaming additionally requires `message_stop`; client-executed
+function tools and truncated rounds remain terminal. A completed client-executed
+`tool_use` is surfaced with public `stop_reason: tool_use`, correcting vLLM's
+`end_turn` in JSON and the final SSE `message_delta`. Mixed rounds hide gateway
+calls and await the client's output. Token limits, other stop reasons and streams
+without a completed round keep their original terminal semantics.
 
 ### `storage/` — persistence
 

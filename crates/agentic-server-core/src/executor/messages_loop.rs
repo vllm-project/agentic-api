@@ -2,9 +2,10 @@
 //!
 //! Runs the server-side gateway-tool loop for `/v1/messages` **natively**: the
 //! client's Anthropic request is forwarded to vLLM `/v1/messages` essentially
-//! untouched (preserving every Anthropic field), the assistant turn is
+//! untouched on the first round, the assistant turn is
 //! inspected, any gateway-owned `tool_use` is executed server-side and hidden,
-//! the loop appends the `tool_result` and re-POSTs, until the model stops asking
+//! the loop appends the `tool_result`, relaxes a fulfilled forced tool choice,
+//! and re-POSTs until the model stops asking
 //! for a gateway tool. Only the final assistant message reaches the client.
 //!
 //! This never touches `RequestPayload`/`ResponsePayload`; it reuses only the
@@ -133,28 +134,34 @@ pub async fn run_messages_loop(
             }
         }
 
-        // Terminal when the model didn't ask for a gateway tool, or stopped for
-        // another reason. A client-owned tool_use is also terminal (the client
-        // must run it) — but the gateway tool_use, if any, must still be hidden
-        // (F5): strip gateway blocks from the client-facing content.
-        if gateway_calls.is_empty() || stop_reason != Some("tool_use") {
-            return Ok(MessagesResponse {
-                body: message,
-                headers: response_headers,
-            });
-        }
         if has_client_tool_use {
-            // Strip the gateway tool_use from the client-facing content (compute
-            // before mutating to end the immutable borrow of `message`).
+            // Client execution takes precedence even when the provider labels a
+            // named call end_turn. Keep hidden gateway calls out of this turn.
             let stripped = tool_seam::strip_gateway_tool_use(content, gateway_map);
             let mut message = message;
             message["content"] = Value::Array(stripped);
+            if message["stop_reason"] == "end_turn" {
+                message["stop_reason"] = json!("tool_use");
+            }
             return Ok(MessagesResponse {
                 body: message,
                 headers: response_headers,
             });
         }
 
+        // The shared context accepts tool_use and vLLM's end_turn for a matching
+        // named gateway call. Other stops retain their terminal behavior.
+        if gateway_calls.is_empty()
+            || !ctx.is_tool_call_stop(
+                stop_reason,
+                gateway_calls.iter().filter_map(|call| call["name"].as_str()),
+            )
+        {
+            return Ok(MessagesResponse {
+                body: message,
+                headers: response_headers,
+            });
+        }
         // Pure gateway-tool round: execute the calls, then feed the model's FULL
         // assistant turn (thinking/text/tool_use, order preserved — F3) plus the
         // tool_results back for the next round. Gateway blocks stay internal.
