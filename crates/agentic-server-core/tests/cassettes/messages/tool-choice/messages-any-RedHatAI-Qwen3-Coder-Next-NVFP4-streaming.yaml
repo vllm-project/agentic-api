@@ -10,13 +10,13 @@ turns:
           Then reply with only the token returned by web_search. Do not search again
           after receiving a result.
         role: user
-      model: Qwen/Qwen3-4B
+      model: RedHatAI/Qwen3-Coder-Next-NVFP4
       stream: true
       temperature: 0
       tool_choice:
-        disable_parallel_tool_use: true
+        disable_parallel_tool_use: false
         name: web_search
-        type: tool
+        type: any
       tools:
       - description: Search the web for current information. Executed server-side
           by the gateway.
@@ -43,7 +43,7 @@ turns:
     - 'event: message_start
 
       '
-    - 'data: {"type":"message_start","message":{"id":"chatcmpl-bf110fecde2cfb5c","type":"message","role":"assistant","content":[],"model":"Qwen/Qwen3-4B","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":199,"output_tokens":0}}}
+    - 'data: {"type":"message_start","message":{"id":"chatcmpl-8c59d84753a64960","type":"message","role":"assistant","content":[],"model":"RedHatAI/Qwen3-Coder-Next-NVFP4","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":326,"output_tokens":0}}}
 
       '
     - '
@@ -52,7 +52,7 @@ turns:
     - 'event: content_block_start
 
       '
-    - 'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"chatcmpl-tool-9a62a9ef66ac59fd","name":"web_search","input":{}},"index":0}
+    - 'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"chatcmpl-tool-94022d7967c2a8ba","name":"web_search","input":{}},"index":0}
 
       '
     - '
@@ -61,34 +61,7 @@ turns:
     - 'event: content_block_delta
 
       '
-    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\""},"index":0}
-
-      '
-    - '
-
-      '
-    - 'event: content_block_delta
-
-      '
-    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"query"},"index":0}
-
-      '
-    - '
-
-      '
-    - 'event: content_block_delta
-
-      '
-    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"\":"},"index":0}
-
-      '
-    - '
-
-      '
-    - 'event: content_block_delta
-
-      '
-    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
+    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\"query\":
       \""},"index":0}
 
       '
@@ -119,16 +92,6 @@ turns:
       '
     - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
       for"},"index":0}
-
-      '
-    - '
-
-      '
-    - 'event: content_block_delta
-
-      '
-    - 'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"
-      the"},"index":0}
 
       '
     - '
@@ -194,7 +157,7 @@ turns:
     - 'event: message_delta
 
       '
-    - 'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":199,"output_tokens":27}}
+    - 'data: {"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":326,"output_tokens":28}}
 
       '
     - '
@@ -222,24 +185,26 @@ turns:
           after receiving a result.
         role: user
       - content:
-        - id: chatcmpl-tool-9a62a9ef66ac59fd
+        - id: chatcmpl-tool-94022d7967c2a8ba
           input:
-            query: verification token for the Messages tool-choice test
+            query: verification token for Messages tool-choice test
           name: web_search
           type: tool_use
         role: assistant
       - content:
-        - content: '{"query":"verification token for the Messages tool-choice test","queries":["verification
-            token for the Messages tool-choice test"],"results":{"web":[{"url":"https://example.com/proof","title":"proof","description":"SEARCH_PROOF_雪"}],"news":[]},"metadata":[null]}'
+        - content: '{"query":"verification token for Messages tool-choice test","queries":["verification
+            token for Messages tool-choice test"],"results":{"web":[{"url":"https://example.com/proof","title":"proof","description":"SEARCH_PROOF_雪"}],"news":[]},"metadata":[{"query":"verification
+            token for Messages tool-choice test"}]}'
           is_error: false
-          tool_use_id: chatcmpl-tool-9a62a9ef66ac59fd
+          tool_use_id: chatcmpl-tool-94022d7967c2a8ba
           type: tool_result
         role: user
-      model: Qwen/Qwen3-4B
+      model: RedHatAI/Qwen3-Coder-Next-NVFP4
       stream: true
       temperature: 0
       tool_choice:
-        disable_parallel_tool_use: true
+        disable_parallel_tool_use: false
+        name: web_search
         type: auto
       tools:
       - description: Search the web for current information. Executed server-side
@@ -267,7 +232,7 @@ turns:
     - 'event: message_start
 
       '
-    - 'data: {"type":"message_start","message":{"id":"chatcmpl-89b6e0d4373e99e7","type":"message","role":"assistant","content":[],"model":"Qwen/Qwen3-4B","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":295,"output_tokens":0}}}
+    - 'data: {"type":"message_start","message":{"id":"chatcmpl-a9fdcc8e3cba479e","type":"message","role":"assistant","content":[],"model":"RedHatAI/Qwen3-Coder-Next-NVFP4","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":430,"output_tokens":0}}}
 
       '
     - '
@@ -339,7 +304,7 @@ turns:
     - 'event: message_delta
 
       '
-    - 'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":295,"output_tokens":6}}
+    - 'data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":430,"output_tokens":6}}
 
       '
     - '

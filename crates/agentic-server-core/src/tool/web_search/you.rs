@@ -444,4 +444,22 @@ mod tests {
         let response: YouSearchResponse = serde_json::from_str(r#"{"results": null, "metadata": null}"#).unwrap();
         assert!(response.into_provider_response("rust").web.is_empty());
     }
+
+    #[test]
+    fn missing_or_null_metadata_serializes_with_submitted_query() {
+        for json in [
+            "{}",
+            r#"{"metadata":null}"#,
+            r#"{"metadata":{}}"#,
+            r#"{"metadata":{"query":null}}"#,
+        ] {
+            let response: YouSearchResponse = serde_json::from_str(json).unwrap();
+            let mapped = response.into_provider_response("rust");
+            assert_eq!(
+                serde_json::to_string(&mapped.metadata).unwrap(),
+                r#"{"query":"rust"}"#,
+                "{json}"
+            );
+        }
+    }
 }

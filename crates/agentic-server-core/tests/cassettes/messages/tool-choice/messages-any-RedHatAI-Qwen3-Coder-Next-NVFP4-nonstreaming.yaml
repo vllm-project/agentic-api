@@ -10,7 +10,7 @@ turns:
           Then reply with only the token returned by web_search. Do not search again
           after receiving a result.
         role: user
-      model: Qwen/Qwen3-4B
+      model: RedHatAI/Qwen3-Coder-Next-NVFP4
       stream: false
       temperature: 0
       tool_choice:
@@ -39,19 +39,19 @@ turns:
   response:
     body:
       content:
-      - id: chatcmpl-tool-b4f4530c72bf2fca
+      - id: chatcmpl-tool-8a13ce667c82add0
         input:
-          query: verification token for the Messages tool-choice test
+          query: verification token for Messages tool-choice test
         name: web_search
         type: tool_use
-      id: chatcmpl-b756438c062e8d61
-      model: Qwen/Qwen3-4B
+      id: chatcmpl-b366dbaa4b62c594
+      model: RedHatAI/Qwen3-Coder-Next-NVFP4
       role: assistant
       stop_reason: tool_use
       type: message
       usage:
-        input_tokens: 199
-        output_tokens: 27
+        input_tokens: 326
+        output_tokens: 28
     headers:
       content-type: application/json
     status_code: 200
@@ -67,20 +67,21 @@ turns:
           after receiving a result.
         role: user
       - content:
-        - id: chatcmpl-tool-b4f4530c72bf2fca
+        - id: chatcmpl-tool-8a13ce667c82add0
           input:
-            query: verification token for the Messages tool-choice test
+            query: verification token for Messages tool-choice test
           name: web_search
           type: tool_use
         role: assistant
       - content:
-        - content: '{"query":"verification token for the Messages tool-choice test","queries":["verification
-            token for the Messages tool-choice test"],"results":{"web":[{"url":"https://example.com/proof","title":"proof","description":"SEARCH_PROOF_雪"}],"news":[]},"metadata":[null]}'
+        - content: '{"query":"verification token for Messages tool-choice test","queries":["verification
+            token for Messages tool-choice test"],"results":{"web":[{"url":"https://example.com/proof","title":"proof","description":"SEARCH_PROOF_雪"}],"news":[]},"metadata":[{"query":"verification
+            token for Messages tool-choice test"}]}'
           is_error: false
-          tool_use_id: chatcmpl-tool-b4f4530c72bf2fca
+          tool_use_id: chatcmpl-tool-8a13ce667c82add0
           type: tool_result
         role: user
-      model: Qwen/Qwen3-4B
+      model: RedHatAI/Qwen3-Coder-Next-NVFP4
       stream: false
       temperature: 0
       tool_choice:
@@ -111,13 +112,13 @@ turns:
       content:
       - text: SEARCH_PROOF_雪
         type: text
-      id: chatcmpl-8533542d1dfd70d1
-      model: Qwen/Qwen3-4B
+      id: chatcmpl-b5f562d2ff33c9a4
+      model: RedHatAI/Qwen3-Coder-Next-NVFP4
       role: assistant
       stop_reason: end_turn
       type: message
       usage:
-        input_tokens: 295
+        input_tokens: 430
         output_tokens: 6
     headers:
       content-type: application/json

@@ -196,10 +196,19 @@ async fn continue_client_conversation(client: &reqwest::Client, url: &str, body:
     }
 }
 
+fn cassette_model(kind: &str) -> &'static str {
+    if kind == "client" {
+        "Qwen-Qwen3-4B"
+    } else {
+        "RedHatAI-Qwen3-Coder-Next-NVFP4"
+    }
+}
+
 async fn replay(kind: &str, stream: bool) {
     let suffix = if stream { "streaming" } else { "nonstreaming" };
+    let model = cassette_model(kind);
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
-        "../agentic-server-core/tests/cassettes/messages/tool-choice/messages-{kind}-Qwen-Qwen3-4B-{suffix}.yaml"
+        "../agentic-server-core/tests/cassettes/messages/tool-choice/messages-{kind}-{model}-{suffix}.yaml"
     ));
     let cassette: Value = serde_yml::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     let turns = Arc::new(cassette["turns"].as_array().unwrap().clone());
