@@ -2,7 +2,7 @@
 mod delivery;
 mod ingest;
 
-pub(super) use delivery::emit_deferred_stream_events;
+pub(super) use delivery::{emit_deferred_stream_events, emit_gateway_event};
 pub(super) use ingest::RoundIngestion;
 
 use crate::events::{ClassifiedSseLine, EventFrame, SseLine};

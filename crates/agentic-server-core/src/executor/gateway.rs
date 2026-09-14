@@ -9,7 +9,8 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use crate::config::DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS;
 use crate::events::SSEEventType;
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent, emit_sse_frame, synthetic_event};
+use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent, synthetic_event};
+use crate::executor::pipeline::emit_gateway_event;
 use crate::executor::request::RequestContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::tool::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
@@ -633,17 +634,6 @@ pub(super) async fn execute_and_emit_output_calls(
         .await?;
     }
     Ok(gateway_results)
-}
-
-async fn emit_gateway_event(
-    frame: &mut crate::events::EventFrame,
-    stream_accumulator: &mut GatewayStreamAccumulator,
-    stream_sender: &tokio::sync::mpsc::Sender<StreamEvent>,
-) -> ExecutorResult<()> {
-    if stream_accumulator.process_event(frame, 0) {
-        emit_sse_frame(stream_sender, frame).await?;
-    }
-    Ok(())
 }
 
 pub(super) fn append_input_item(input: &mut ResponsesInput, item: InputItem) {

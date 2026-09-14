@@ -651,11 +651,27 @@ the shell call’s public added/done lifecycle.
 
 #### `gateway_accumulator.rs` and `pipeline/delivery.rs` — continuous client SSE
 
-`StreamDelivery`, owned by `AgentPipeline`, is the only path from translated upstream
-frames to the client sender. It withholds terminal upstream lifecycle events for the
-engine, defers frames at and after the first hidden gateway-call index, and later
-releases them in output order around synthesized gateway events. Deferred serialized
-frames have a 256 KiB byte limit.
+`StreamDelivery`, owned by `AgentPipeline`, withholds terminal upstream lifecycle
+events for the engine, defers frames at and after the first hidden gateway-call
+index, and later releases them in output order around synthesized gateway events.
+Deferred frames are bounded by both 1024 entries and the existing 256 KiB
+serialized-wire-data limit. This is separate from response assembly, retained
+session state, and total process memory.
+
+`pipeline/delivery.rs` owns the shared emission path for both translated upstream
+events and gateway-synthesized events. Only the upstream adapter restores response
+IDs and applies the round's output offset; gateway events already use public IDs
+and absolute indexes. Sequence and response-start deduplication state is committed
+after the bounded sender accepts the event. A failed serialization, closed receiver,
+or cancelled send cannot consume that state. Enqueueing is not client receipt or
+playback acknowledgement. Failed or cancelled frames are discarded by the caller;
+this does not make an interrupted pipeline resumable or support retrying an already
+rebased frame.
+
+While a gateway-call defer window is active, index-less frames remain deferred
+and are released after indexed frames. Flushes keep unsent frames and their byte
+accounting in `StreamDelivery` until the bounded sender accepts each event, so a
+cancelled or disconnected flush cannot silently discard the remainder.
 
 Its `GatewayStreamAccumulator` carries only cross-round presentation state: monotonic
 `sequence_number`s, public `output_index` rebasing, and deduplication of response start
