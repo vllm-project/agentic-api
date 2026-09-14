@@ -3,7 +3,10 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -17,7 +20,7 @@ WORKSPACE_VERSION = re.search(
 ).group(1)
 
 
-def test_release_version_validator_accepts_build_only_version() -> None:
+def test_release_version_validator_accepts_workspace_version() -> None:
     env = os.environ.copy()
     env["AGENTIC_API_RELEASE_VERSION"] = WORKSPACE_VERSION
 
@@ -35,24 +38,37 @@ def test_release_version_validator_rejects_shell_payload_without_executing_it(tm
 
     assert result.returncode != 0
     assert not marker.exists()
-    assert f"{WORKSPACE_VERSION} build-only workflow" in result.stderr
+    assert f"{WORKSPACE_VERSION} release workflow" in result.stderr
 
 
-def test_release_workflow_keeps_dispatch_version_out_of_shell_source() -> None:
-    workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+def test_release_workflow_uses_declared_version_without_dispatch_override() -> None:
 
-    assert "AGENTIC_API_RELEASE_VERSION: ${{ inputs.version }}" in workflow
-    run_blocks = _workflow_run_blocks(workflow)
-    assert run_blocks
-    assert all("${{ inputs.version }}" not in block for block in run_blocks)
+    workflow = RELEASE_WORKFLOW.read_text()
+    assert "inputs.version" not in workflow
+    assert "      version:" not in workflow.split("jobs:", 1)[0]
+    assert "AGENTIC_API_RELEASE_VERSION: ${{ needs.release-version.outputs.version }}" in workflow
+    version_job = workflow.split("  release-version:", 1)[1].split("  build-wheels:", 1)[0]
+    assert 'python-version: "3.12"' in version_job
 
 
-def test_release_workflow_default_matches_workspace_version() -> None:
-    workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
-    version_input = re.search(r'(?ms)^      version:\n.*?^        default: "([^"]+)"', workflow)
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="Release job uses Python 3.12 with stdlib tomllib")
+def test_release_version_reader_follows_cargo_manifest(tmp_path: Path) -> None:
+    import shlex
+    import textwrap
 
-    assert version_input is not None
-    assert version_input.group(1) == WORKSPACE_VERSION
+    workflow = RELEASE_WORKFLOW.read_text()
+    block = next(block for block in _workflow_run_blocks(workflow) if "tomllib" in block)
+    script = textwrap.dedent(block.removeprefix("|").lstrip("\n"))
+    script = script.replace("python3 -", f"{shlex.quote(sys.executable)} -", 1)
+    output = tmp_path / "output"
+    env = os.environ.copy()
+    env["GITHUB_OUTPUT"] = str(output)
+    for version in ("0.7.0", "1.2.3"):
+        (tmp_path / "Cargo.toml").write_text(f'[workspace.package]\nversion = "{version}"\n')
+        output.write_text("")
+        result = subprocess.run(["bash", "-eu", "-c", script], cwd=tmp_path, env=env, capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        assert output.read_text() == f"version={version}\n"
 
 
 def test_crate_release_dry_run_packages_server_against_the_local_core() -> None:
@@ -95,11 +111,26 @@ def test_crate_release_dry_run_packages_server_against_the_local_core() -> None:
     assert (REPO_ROOT / "target" / "package" / f"agentic-server-{WORKSPACE_VERSION}.crate").is_file()
 
 
-def test_crate_release_published_version_checks_query_crates_io() -> None:
-    workflow = CRATE_RELEASE_WORKFLOW.read_text(encoding="utf-8")
-    published_check = next(block for block in _workflow_run_blocks(workflow) if "is already published" in block)
+def test_crate_release_duplicate_check_fails_closed_before_build(tmp_path: Path) -> None:
+    import textwrap
 
-    assert published_check.count("cargo info --registry crates-io") == 2
+    workflow = CRATE_RELEASE_WORKFLOW.read_text()
+    assert workflow.index('name: Check published versions') < workflow.index('name: Verify lockfile')
+    block = next(block for block in _workflow_run_blocks(workflow) if 'api/v1/crates/' in block)
+    script = textwrap.dedent(block.removeprefix('|').lstrip('\n'))
+    curl = tmp_path / 'curl'
+    curl.write_text('#!/bin/sh\ncase "$*" in\n  *agentic-server-core*) printf "%s" "$CORE_STATUS" ;;\n  *) printf "%s" "$SERVER_STATUS" ;;\nesac\nexit "$TEST_CURL_EXIT"\n')
+    curl.chmod(0o755)
+    env = os.environ.copy()
+    env.update(PATH=f'{tmp_path}:{env["PATH"]}', AGENTIC_RELEASE_VERSION=WORKSPACE_VERSION)
+    cases = [('404', '404', '0', True), ('200', '404', '0', False), ('404', '200', '0', False),
+             ('500', '404', '0', False), ('404', '429', '0', False), ('000', '404', '28', False)]
+    for core, server, exit_code, succeeds in cases:
+        env.update(CORE_STATUS=core, SERVER_STATUS=server, TEST_CURL_EXIT=exit_code)
+        result = subprocess.run(['bash', '-eu', '-c', script], env=env, capture_output=True, text=True)
+        assert (result.returncode == 0) == succeeds, (core, server, result.stdout, result.stderr)
+        if '200' in (core, server):
+            assert 'already published' in result.stdout + result.stderr
 
 
 def test_python_workflows_pin_build_tools_and_manylinux_artifact_contract() -> None:
@@ -163,3 +194,82 @@ def _workflow_trigger_section(workflow: str, trigger: str) -> str:
             break
         section.append(line)
     return "\n".join(section)
+
+
+def test_python_publishing_is_opt_in_and_waits_for_validated_wheels() -> None:
+    workflow = RELEASE_WORKFLOW.read_text()
+    assert '      publish:\n' in workflow
+    publish_input = workflow.split('      publish:\n', 1)[1].split('\nconcurrency:', 1)[0]
+    assert 'type: boolean' in publish_input
+    assert 'default: false' in publish_input
+    build, publish = workflow.split('\n  publish:\n', 1)
+    assert 'id-token: write' not in build
+    assert 'needs: [release-version, build-wheels]' in publish
+    assert "if: github.ref == 'refs/heads/main' && inputs.publish" in publish
+    assert 'always()' not in publish
+    assert 'name: pypi' in publish
+    assert 'id-token: write' in publish
+    assert 'actions/download-artifact@' in publish
+    assert 'pattern: agentic-api-${{ needs.release-version.outputs.version }}-*' in publish
+    assert 'merge-multiple: true' in publish
+    assert 'pypa/gh-action-pypi-publish@' in publish
+    assert 'packages-dir: dist/' in publish
+    assert 'skip-existing: true' not in publish
+    assert 'secrets.' not in publish
+    assert 'actions/checkout@' not in publish
+    assert publish.index('Validate publication artifacts') < publish.index('pypa/gh-action-pypi-publish@')
+
+
+def test_publication_artifact_gate_requires_exact_wheel_set(tmp_path: Path) -> None:
+    workflow = RELEASE_WORKFLOW.read_text()
+    block = next(block for block in _workflow_run_blocks(workflow) if 'Expected exactly' in block)
+    # Run the workflow's actual validation body without invoking an upload.
+    import textwrap
+
+    script = textwrap.dedent(block.removeprefix('|').lstrip('\n'))
+    dist = tmp_path / 'dist'
+    dist.mkdir()
+    tags = (
+        'py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64',
+        'py3-none-macosx_10_12_x86_64',
+        'py3-none-macosx_11_0_arm64',
+    )
+    env = os.environ.copy()
+    env['AGENTIC_API_RELEASE_VERSION'] = WORKSPACE_VERSION
+
+    def validate() -> subprocess.CompletedProcess[str]:
+        return subprocess.run(['bash', '-eu', '-c', script], cwd=tmp_path, env=env, capture_output=True, text=True)
+
+    assert validate().returncode != 0
+    for tag in tags:
+        (dist / f'agentic_api-{WORKSPACE_VERSION}-{tag}.whl').touch()
+    assert validate().returncode == 0
+    extra = dist / 'unexpected.whl'
+    extra.touch()
+    assert validate().returncode != 0
+    extra.unlink()
+    wheel = dist / f'agentic_api-{WORKSPACE_VERSION}-{tags[0]}.whl'
+    wheel.rename(dist / f'agentic_api-0.0.0-{tags[0]}.whl')
+    assert validate().returncode != 0
+
+
+def test_pypi_duplicate_version_check_fails_closed(tmp_path: Path) -> None:
+    import textwrap
+
+    workflow = RELEASE_WORKFLOW.read_text()
+    version_job = workflow.split('  build-wheels:', 1)[0]
+    assert 'name: Reject an existing PyPI release\n        if: inputs.publish' in version_job
+    block = next(block for block in _workflow_run_blocks(version_job) if 'pypi.org/pypi/' in block)
+    script = textwrap.dedent(block.removeprefix('|').lstrip('\n'))
+    curl = tmp_path / 'curl'
+    curl.write_text('#!/bin/sh\nprintf "%s" "$TEST_HTTP_STATUS"\nexit "$TEST_CURL_EXIT"\n')
+    curl.chmod(0o755)
+    env = os.environ.copy()
+    env.update(PATH=f'{tmp_path}:{env["PATH"]}', AGENTIC_API_RELEASE_VERSION=WORKSPACE_VERSION)
+    for status, exit_code, succeeds in [('404', '0', True), ('200', '0', False), ('403', '0', False),
+                                        ('429', '0', False), ('500', '0', False), ('000', '28', False)]:
+        env.update(TEST_HTTP_STATUS=status, TEST_CURL_EXIT=exit_code)
+        result = subprocess.run(['bash', '-eu', '-c', script], env=env, capture_output=True, text=True)
+        assert (result.returncode == 0) == succeeds, (status, result.stdout, result.stderr)
+        if status == '200':
+            assert 'already published' in result.stdout + result.stderr
