@@ -298,10 +298,11 @@ impl<'a> EngineOrchestration<'a> {
             accumulate_usage(&mut combined_usage, payload.usage.take());
             let current_output = std::mem::take(&mut payload.output);
             if matches!(payload.status.as_str(), "error" | "failed") {
+                self.emit_failed_round_events(deferred_stream_events, output_offset)
+                    .await?;
                 combined_output.extend(current_output);
                 finalize_loop(&mut payload, combined_output, combined_usage, &self.agent.request);
-                let tool_search_metadata = self.agent.take_tool_search_metadata();
-                return Ok((payload, tool_search_metadata));
+                return Ok((payload, self.agent.take_tool_search_metadata()));
             }
             log_custom_tool_calls(&current_output, &self.agent.request.response_id);
             let has_client_owned = has_client_owned_calls(&current_output, &self.registry);
@@ -365,6 +366,20 @@ impl<'a> EngineOrchestration<'a> {
         }
 
         unreachable!("the final round returns Done, RequiresClientAction, or Incomplete");
+    }
+
+    async fn emit_failed_round_events(
+        &mut self,
+        deferred_events: Vec<EventFrame>,
+        output_offset: usize,
+    ) -> ExecutorResult<()> {
+        // A failed round skips tool execution, but its deferred public events
+        // (including upstream diagnostics) still precede the terminal event.
+        let (ctx, stream) = self.agent.parts_mut();
+        if let Some((accumulator, sender)) = stream {
+            emit_deferred_stream_events(deferred_events, ctx, accumulator, sender, output_offset).await?;
+        }
+        Ok(())
     }
 
     fn record_gateway_results(&mut self, results: Vec<GatewayCallResult>) {

@@ -672,6 +672,8 @@ While a gateway-call defer window is active, index-less frames remain deferred
 and are released after indexed frames. Flushes keep unsent frames and their byte
 accounting in `StreamDelivery` until the bounded sender accepts each event, so a
 cancelled or disconnected flush cannot silently discard the remainder.
+When an upstream round fails, the engine releases its deferred public events through
+the same delivery path before the terminal event, without executing gateway tools.
 
 Its `GatewayStreamAccumulator` carries only cross-round presentation state: monotonic
 `sequence_number`s, public `output_index` rebasing, and deduplication of response start
