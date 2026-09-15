@@ -1,5 +1,10 @@
 # Design: Codex CLI Integration
 
+> **Desktop setup:** See [Codex Desktop with local models](../guides/codex-desktop.md) for the tested Linux launch
+> configuration. The native custom-tool forwarding described below does not match the current custom-tool
+> normalization path, which rejects grammar-constrained declarations. The desktop guide documents the
+> `apply_patch` workaround verified with Codex 0.153.4.
+
 > **References:** [Issue #54](https://github.com/vllm-project/agentic-api/issues/54),
 > [PR #67](https://github.com/vllm-project/agentic-api/pull/67)
 > **Owner:** @haoshan98 for Codex compatibility. Latest `main` owns the shared tool framework lineage from PR #67.

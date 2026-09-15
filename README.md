@@ -283,6 +283,9 @@ override it with `server_url`; otherwise the existing request-declared HTTP MCP 
 
 ## 🤖 Codex on your own GPUs
 
+For the desktop UI, see [Codex Desktop with local models](docs/guides/codex-desktop.md). The guide covers a tested
+Linux setup with an isolated app profile, model catalog, and the current `apply_patch` workaround.
+
 Agentic API speaks the Responses wire protocol Codex expects, including WebSockets, so you can run the full Codex experience against open models.
 
 Add a provider to `~/.codex/config.toml`:
