@@ -135,6 +135,42 @@ extend.
 - Document behavior as it stabilizes, especially where compatibility or tool
   ownership rules are subtle.
 
+## Enterprise Readiness
+
+[Enterprise Readiness](https://github.com/vllm-project/agentic-api/issues/316)
+groups the enhancements needed to operate Responses and Messages as a secure,
+predictable service with explicit capabilities and repeatable release checks.
+
+- **Authenticated state ownership:** scope persisted responses, conversations,
+  items, and continuation to the authenticated user and tenant
+  ([#107](https://github.com/vllm-project/agentic-api/issues/107)).
+- **Predictable Messages execution:** validate streaming lifecycles and bound
+  retained content, pending tool calls, and delivery resources
+  ([#313](https://github.com/vllm-project/agentic-api/issues/313)).
+- **Request and conversation compatibility:** preserve supported fields and
+  transport metadata across execution paths, with explicit handling of
+  unsupported capabilities
+  ([#314](https://github.com/vllm-project/agentic-api/issues/314)); complete
+  standard conversation references, creation payloads, and resource operations
+  ([#155](https://github.com/vllm-project/agentic-api/issues/155)).
+- **MCP tool approvals:** support approval policies and resumable, authorized
+  execution of selected Model Context Protocol tools
+  ([#145](https://github.com/vllm-project/agentic-api/issues/145)).
+- **Complete usage accounting:** report inference usage across all Messages
+  rounds, including supported cache counters, without double-counting
+  ([#315](https://github.com/vllm-project/agentic-api/issues/315)).
+- **Release qualification:** verify authentication, persistence, tools,
+  continuation, streaming, WebSockets, and failure behavior through the actual
+  service in standalone and reverse-proxy deployments
+  ([#110](https://github.com/vllm-project/agentic-api/issues/110)), building on
+  the engine-conformance program
+  ([#211](https://github.com/vllm-project/agentic-api/issues/211)).
+
+Prioritize ownership, Messages reliability, and request fidelity; then complete
+conversation, approval, and metering workflows. Develop qualification tests
+throughout the work. Each supported deployment profile must document its
+capabilities and meet the linked acceptance criteria before release.
+
 ## Longer-Term Direction
 
 Longer-term work should improve production readiness and performance without
@@ -142,7 +178,7 @@ moving inference responsibilities out of vLLM core.
 
 - Production storage backends, retention policy, and compaction.
 - Observability for request lifecycle, tool execution, and continuation.
-- Gateway integration with Praxis and other deployment surfaces.
+- Integration with reverse proxies, ingress, and other deployment surfaces.
 - Cached prefix continuation and other latency optimizations where vLLM core
   owns rendering, tokenization, and KV-cache execution.
 - Coordination with vLLM core and llm-d where token identity, prefix routing,
