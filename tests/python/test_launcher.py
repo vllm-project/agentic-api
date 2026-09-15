@@ -5,6 +5,7 @@ import signal
 import socket
 import sys
 import textwrap
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -137,19 +138,28 @@ def test_run_serve_local_mode_starts_vllm_then_rust(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.skipif(os.name != "posix", reason="requires executable POSIX helpers")
+@pytest.mark.parametrize("fixture_startup_delay", [0.0, 3.2])
 def test_run_serve_recovers_from_disconnected_readiness_and_reaps_children(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, fixture_startup_delay: float,
 ) -> None:
     import agentic_api.launcher as launcher
 
+    listening = tmp_path / "listening"
     ready = tmp_path / "ready"
     started = tmp_path / "gateway-started"
     vllm = tmp_path / "vllm"
     gateway = tmp_path / "agentic-server"
     vllm.write_text(f"#!{sys.executable}\n" + textwrap.dedent(f"""\
         import sys
-        from http.server import BaseHTTPRequestHandler, HTTPServer
+        import socket
+        from http.server import BaseHTTPRequestHandler
         from pathlib import Path
+        from socketserver import TCPServer
+
+        def reject_hostname_lookup(*args, **kwargs):
+            raise AssertionError("loopback fixture must not depend on hostname lookup")
+
+        socket.getfqdn = reject_hostname_lookup
 
         class Handler(BaseHTTPRequestHandler):
             requests = 0
@@ -168,8 +178,14 @@ def test_run_serve_recovers_from_disconnected_readiness_and_reaps_children(
             def log_message(self, *args):
                 pass
 
+        import time
+        time.sleep({fixture_startup_delay})
         port = int(sys.argv[sys.argv.index("--port") + 1])
-        HTTPServer(("127.0.0.1", port), Handler).serve_forever()
+        # HTTPServer resolves its server name during bind; this fixture only
+        # needs a loopback socket and must also work when DNS is unavailable.
+        server = TCPServer(("127.0.0.1", port), Handler)
+        Path({str(listening)!r}).touch()
+        server.serve_forever()
         """))
     gateway.write_text(f"#!{sys.executable}\n" + textwrap.dedent(f"""\
         from pathlib import Path
@@ -187,6 +203,13 @@ def test_run_serve_recovers_from_disconnected_readiness_and_reaps_children(
     def track_start(command: list[str], env: dict[str, str]) -> Any:
         child = start(command, env)
         children.append(child)
+        if command[0] == str(vllm):
+            # Fixture startup is separate from the readiness behavior under test.
+            deadline = time.monotonic() + 30.0
+            while not listening.exists():
+                assert child.poll() is None, "fixture server exited before binding"
+                assert time.monotonic() < deadline, "fixture server did not bind"
+                time.sleep(0.01)
         return child
 
     monkeypatch.setattr(supervisor, "start", track_start)

@@ -3,6 +3,44 @@ name: Release Python
 run-name: Release Python wheels (${{ inputs.publish && 'publish' || 'build only' }})
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/python.yml"
+      - ".github/workflows/release-crates.yml"
+      - ".github/workflows/release-python.yml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rust-toolchain.toml"
+      - "crates/**"
+      - "README.md"
+      - "docs/**"
+      - "pyproject.toml"
+      - "python-build-constraints.txt"
+      - "python/**"
+      - "scripts/check-python-wheel.sh"
+      - "scripts/validate-python-release-version.sh"
+      - "tests/python/**"
+  merge_group:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/python.yml"
+      - ".github/workflows/release-crates.yml"
+      - ".github/workflows/release-python.yml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rust-toolchain.toml"
+      - "crates/**"
+      - "README.md"
+      - "docs/**"
+      - "pyproject.toml"
+      - "python-build-constraints.txt"
+      - "python/**"
+      - "scripts/check-python-wheel.sh"
+      - "scripts/validate-python-release-version.sh"
+      - "tests/python/**"
+
   workflow_dispatch:
     inputs:
       publish:
@@ -12,8 +50,9 @@ on:
         default: false
 
 concurrency:
-  group: release-python
-  cancel-in-progress: false
+  # Keep publication serialized, without letting PR validation occupy its queue.
+  group: release-python-${{ inputs.publish && 'publish' || format('{0}-{1}', github.event_name, github.ref) }}
+  cancel-in-progress: ${{ !inputs.publish }}
 
 permissions:
   contents: read
@@ -22,7 +61,7 @@ jobs:
   release-version:
     name: Read declared workspace version
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || !inputs.publish
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -76,7 +115,7 @@ jobs:
     name: Build ${{ matrix.target }} wheel artifact
     needs: release-version
     runs-on: ${{ matrix.runs-on }}
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || !inputs.publish
     env:
       AGENTIC_API_RELEASE_VERSION: ${{ needs.release-version.outputs.version }}
     strategy:
@@ -117,6 +156,7 @@ jobs:
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
           toolchain: 1.98.0
+          components: clippy, rustfmt
 
       - name: Cache cargo registry and build
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v4
@@ -171,12 +211,17 @@ jobs:
         uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380 # v1.49.4
         with:
           command: build
-          args: --release --locked --out ${{ steps.prepare.outputs.wheel_dir }}
+          # The manylinux image omits OpenSSL headers. Build and statically link
+          # the Cargo.lock-pinned source so the wheel needs no system OpenSSL.
+          args: --release --locked --features vendored-openssl --out ${{ steps.prepare.outputs.wheel_dir }}
           container: quay.io/pypa/manylinux2014_x86_64@sha256:95440e0e72dd3a81dc8d2cf59a84d57af661456620f5bc821ff92048d0e54ff9
           manylinux: "2014"
           maturin-version: v1.14.1
           rust-toolchain: 1.98.0
           target: x86_64-unknown-linux-gnu
+          # OpenSSL's Configure script needs core Perl modules (including
+          # IPC::Cmd) that are absent from the stripped-down manylinux image.
+          before-script-linux: yum install -y perl-core
 
       - name: Build macOS wheel
         if: matrix.os == 'macos'
@@ -218,6 +263,19 @@ jobs:
             scripts/check-python-wheel.sh "$wheel_path"
           echo "wheel_path=$wheel_path" >> "$GITHUB_OUTPUT"
 
+      - name: Check Linux wheel has no system OpenSSL dependency
+        if: matrix.os == 'linux'
+        run: |
+          set -euo pipefail
+          dependencies="$(ldd .venv/bin/agentic)"
+          printf '%s\n' "$dependencies"
+          case "$dependencies" in
+            *libssl.so*|*libcrypto.so*|*"not found"*)
+              echo "::error::wheel binary has a system OpenSSL dependency or an unresolved shared library"
+              exit 1
+              ;;
+          esac
+
       - name: Upload wheel artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -228,7 +286,7 @@ jobs:
   publish:
     name: Publish validated wheels to PyPI
     needs: [release-version, build-wheels]
-    if: github.ref == 'refs/heads/main' && inputs.publish
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish
     runs-on: ubuntu-latest
     environment:
       name: pypi

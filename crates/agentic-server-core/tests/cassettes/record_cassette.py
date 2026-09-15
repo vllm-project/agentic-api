@@ -379,18 +379,19 @@ def _send_messages_streaming(client: httpx.Client, body: dict, proxy_url: str) -
                 elif delta.get("type") == "thinking_delta":
                     blk["type"] = blk.get("type", "thinking")
                     blk["thinking"] = blk.get("thinking", "") + delta.get("thinking", "")
+                elif delta.get("type") == "signature_delta":
+                    blk["type"] = blk.get("type", "thinking")
+                    blk["signature"] = blk.get("signature", "") + delta.get("signature", "")
             elif etype == "message_delta" and message is not None:
                 message.update({k: v for k, v in event.get("delta", {}).items()})
     print()
     if message is not None:
-        # Finalize accumulated tool_use input from partial JSON.
+        # Finalize accumulated tool_use input from partial JSON. Invalid
+        # arguments must fail recording rather than being replaced with `{}`.
         for blk in blocks.values():
             if blk.get("type") == "tool_use" and "_partial_json" in blk:
                 raw = blk.pop("_partial_json")
-                try:
-                    blk["input"] = json.loads(raw) if raw else {}
-                except Exception:
-                    blk["input"] = {}
+                blk["input"] = json.loads(raw) if raw else {}
         message["content"] = [blocks[i] for i in sorted(blocks)]
     return message
 

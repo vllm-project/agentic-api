@@ -205,7 +205,7 @@ def test_python_publishing_is_opt_in_and_waits_for_validated_wheels() -> None:
     build, publish = workflow.split('\n  publish:\n', 1)
     assert 'id-token: write' not in build
     assert 'needs: [release-version, build-wheels]' in publish
-    assert "if: github.ref == 'refs/heads/main' && inputs.publish" in publish
+    assert "if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish" in publish
     assert 'always()' not in publish
     assert 'name: pypi' in publish
     assert 'id-token: write' in publish
@@ -273,3 +273,10 @@ def test_pypi_duplicate_version_check_fails_closed(tmp_path: Path) -> None:
         assert (result.returncode == 0) == succeeds, (status, result.stdout, result.stderr)
         if status == '200':
             assert 'already published' in result.stdout + result.stderr
+
+
+
+def test_release_installs_declared_rust_components_before_cargo() -> None:
+    workflow = RELEASE_WORKFLOW.read_text()
+    install = workflow.split('      - name: Install Rust toolchain', 1)[1].split('      - name:', 1)[0]
+    assert 'components: clippy, rustfmt' in install

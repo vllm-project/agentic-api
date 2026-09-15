@@ -1,0 +1,113 @@
+turns:
+- filename: t1
+  request:
+    body:
+      max_tokens: 2048
+      messages:
+      - content: What is the latest stable Rust release? Use web_search.
+        role: user
+      model: openai/gpt-oss-20b
+      stream: false
+      tools:
+      - description: Search the web for current information. Executed server-side
+          by the gateway.
+        input_schema:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    body:
+      content:
+      - signature: ''
+        thinking: We need to query current stable Rust release. Use web_search.
+        type: thinking
+      - id: call-f56e4c97-9887-4aaa-9bcc-1f2de4d972b1
+        input:
+          query: stable Rust release latest
+        name: web_search
+        type: tool_use
+      id: msg_3e32b97c637b4e7482f8a1e1698c8c87
+      model: openai/gpt-oss-20b
+      role: assistant
+      stop_reason: tool_use
+      stop_sequence: null
+      type: message
+      usage:
+        input_tokens: 144
+        output_tokens: 40
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      max_tokens: 2048
+      messages:
+      - content: What is the latest stable Rust release? Use web_search.
+        role: user
+      - content:
+        - signature: ''
+          thinking: We need to query current stable Rust release. Use web_search.
+          type: thinking
+        - id: call-f56e4c97-9887-4aaa-9bcc-1f2de4d972b1
+          input:
+            query: stable Rust release latest
+          name: web_search
+          type: tool_use
+        role: assistant
+      - content:
+        - content: The latest stable Rust release is version 1.89.0.
+          tool_use_id: call-f56e4c97-9887-4aaa-9bcc-1f2de4d972b1
+          type: tool_result
+        role: user
+      model: openai/gpt-oss-20b
+      stream: false
+      tools:
+      - description: Search the web for current information. Executed server-side
+          by the gateway.
+        input_schema:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    body:
+      content:
+      - text: The most recent stable release of Rust is **1.89.0**.
+        type: text
+      id: msg_a69e97f2e8c242eca4cba9fa1a56d984
+      model: openai/gpt-oss-20b
+      role: assistant
+      stop_reason: end_turn
+      stop_sequence: null
+      type: message
+      usage:
+        cache_read_input_tokens: 144
+        input_tokens: 72
+        output_tokens: 20
+    headers:
+      content-type: application/json
+    status_code: 200

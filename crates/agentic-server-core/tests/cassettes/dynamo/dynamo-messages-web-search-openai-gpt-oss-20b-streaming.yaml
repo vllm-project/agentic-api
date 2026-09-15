@@ -1,0 +1,458 @@
+turns:
+- filename: t1
+  request:
+    body:
+      max_tokens: 2048
+      messages:
+      - content: What is the latest stable Rust release? Use web_search.
+        role: user
+      model: openai/gpt-oss-20b
+      stream: true
+      tools:
+      - description: Search the web for current information. Executed server-side
+          by the gateway.
+        input_schema:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream
+    sse:
+    - 'event: message_start
+
+      '
+    - 'data: {"type":"message_start","message":{"id":"msg_e3cefcbecc1b415bb5bc4754007bca5c","type":"message","role":"assistant","content":[],"model":"openai/gpt-oss-20b","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":85,"output_tokens":0}}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_start
+
+      '
+    - 'data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Need"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"
+      to"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"
+      use"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"
+      web"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"_search"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"
+      function"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"."}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"erased"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_stop
+
+      '
+    - 'data: {"type":"content_block_stop","index":0}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_start
+
+      '
+    - 'data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"call-ba09fb5b-c22c-46dc-8e44-57cac5bb1520","name":"web_search","input":{}}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"query\":\"latest
+      stable Rust release\"}"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_stop
+
+      '
+    - 'data: {"type":"content_block_stop","index":1}
+
+      '
+    - '
+
+      '
+    - 'event: message_delta
+
+      '
+    - 'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"input_tokens":16,"output_tokens":34,"cache_read_input_tokens":128}}
+
+      '
+    - '
+
+      '
+    - 'event: message_stop
+
+      '
+    - 'data: {"type":"message_stop"}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      max_tokens: 2048
+      messages:
+      - content: What is the latest stable Rust release? Use web_search.
+        role: user
+      - content:
+        - signature: erased
+          thinking: Need to use web_search function.
+          type: thinking
+        - id: call-ba09fb5b-c22c-46dc-8e44-57cac5bb1520
+          input:
+            query: latest stable Rust release
+          name: web_search
+          type: tool_use
+        role: assistant
+      - content:
+        - content: The latest stable Rust release is version 1.89.0.
+          tool_use_id: call-ba09fb5b-c22c-46dc-8e44-57cac5bb1520
+          type: tool_result
+        role: user
+      model: openai/gpt-oss-20b
+      stream: true
+      tools:
+      - description: Search the web for current information. Executed server-side
+          by the gateway.
+        input_schema:
+          properties:
+            query:
+              description: the search query
+              type: string
+          required:
+          - query
+          type: object
+        name: web_search
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/messages
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream
+    sse:
+    - 'event: message_start
+
+      '
+    - 'data: {"type":"message_start","message":{"id":"msg_7ca238c6d76448cbab30a35aa1b06790","type":"message","role":"assistant","content":[],"model":"openai/gpt-oss-20b","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":133,"output_tokens":0}}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_start
+
+      '
+    - 'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"The"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"
+      most"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"
+      recent"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"
+      stable"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"
+      release"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"
+      of"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"
+      Rust"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"
+      is"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"
+      **"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Rust"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" "}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"1"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"."}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"89"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"."}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"0"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"**"}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_delta
+
+      '
+    - 'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"."}}
+
+      '
+    - '
+
+      '
+    - 'event: content_block_stop
+
+      '
+    - 'data: {"type":"content_block_stop","index":0}
+
+      '
+    - '
+
+      '
+    - 'event: message_delta
+
+      '
+    - 'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":66,"output_tokens":22,"cache_read_input_tokens":144}}
+
+      '
+    - '
+
+      '
+    - 'event: message_stop
+
+      '
+    - 'data: {"type":"message_stop"}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200

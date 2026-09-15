@@ -42,7 +42,8 @@ build rather than a release. Check what you got with `python -c 'import importli
 This guide was verified with `ai-dynamo==1.4.1` (which installs `vllm==0.26.0` and `torch` cu130) on an aarch64 host
 with a single GB10 GPU. See Dynamo's [release artifacts](https://docs.nvidia.com/dynamo/resources/release-artifacts)
 and [support matrix](https://docs.nvidia.com/dynamo/resources/support-matrix) for the wheel/CUDA combinations of other
-releases. No etcd or NATS is needed for a single-host setup when the components use file-based discovery.
+releases. File discovery can be used for a manually managed single-host setup. The Messages recordings used
+etcd discovery because the file watcher did not deliver model registrations on the tested container host.
 
 ## 2. Start the Dynamo frontend and a worker
 
@@ -103,8 +104,7 @@ worker registered (the `instances` list is simply empty). It does **not** mean a
 per-model readiness endpoint before sending traffic:
 
 ```bash
-curl -s localhost:8000/v1/models/openai%2Fgpt-oss-20b/ready   # 404 "Model not found" until the worker registers,
-                                                                # then {"model": "...", "ready": true, ...}
+curl -s localhost:8000/v1/models/openai%2Fgpt-oss-20b   # 404 until the worker registers, then model metadata
 ```
 
 The harness CLI works the same way: `./target/debug/agentic run codex --upstream http://127.0.0.1:8000`.
@@ -168,5 +168,60 @@ stateless upstream.
 | `Free memory on device … is less than desired GPU memory utilization` | Lower `--gpu-memory-utilization`; it is a fraction of total memory. |
 | `CUDA error: out of memory` right after restarting a worker | A previous `dynamo.vllm` process is still alive and holding memory; `pkill -f "python -m dynamo.vllm"` before relaunching. Closing its terminal or tmux window does not kill it. |
 | `501 Validation: previous_response_id is not supported.` | You are calling Dynamo directly. Send the request to the gateway. |
-| Gateway logs `LLM ready` but requests fail with no model / `model not found` | `/health` is green before the worker registers. Check `/v1/models` or `/v1/models/{model}/ready` and the worker log. |
+| Gateway logs `LLM ready` but requests fail with no model / `model not found` | `/health` is green before the worker registers. Check `/v1/models` or `/v1/models/{model}` and the worker log. |
 | Installed version is `1.5.0.dev…` | `--prerelease=allow` with an unpinned `ai-dynamo` picked a dev build. Reinstall with `"ai-dynamo[vllm]==1.4.1"`. |
+
+## Messages recordings (#213)
+
+The streaming and non-streaming Messages recordings were captured from Dynamo 1.4.1 with vLLM 0.26.0 on Linux
+x86_64, an NVIDIA L40S 46,068 MiB GPU, and NVIDIA driver 580.159.04. The model snapshot was
+`6cee5e81ee83917806bbde320786a8fb61efebee`. The checked-in acceptance test replays both real captures on every run.
+
+The frontend must enable the experimental Anthropic endpoint with `--enable-anthropic-api`. The gateway sends
+`/v1/messages` to that endpoint; it does not convert Messages requests into Chat Completions itself. Check this flag
+with the pinned frontend's `--help` before recording. Keep the worker's `--dyn-reasoning-parser gpt_oss` and
+`--dyn-tool-call-parser harmony` settings.
+
+### Offline replay
+
+The regular Rust CI job runs this integration test through `cargo test`. It replays the checked-in Dynamo responses
+through the production Messages tool loop and compares the next upstream request with the recorded history.
+No GPU, running Dynamo service, Python environment, or external search service is required:
+
+```bash
+cargo test --locked -p agentic-server-core --test dynamo_messages_test
+```
+
+The fixed tool output comes from `messages/tool_outputs.json`; it is not a claim about today's Rust release.
+The legacy vLLM preparation fixture omitted a thinking signature in its next request. Its test recovers that
+expectation from the recorded event; the Dynamo acceptance test compares the recorded history directly.
+
+### Refresh the recordings
+
+Provision and start Dynamo separately, with the Messages endpoint and parsers described above. From the repository
+root, install the recorder dependencies in a separate environment:
+
+```bash
+uv venv --python 3.12 .venv-dynamo-recorder
+uv pip install --python .venv-dynamo-recorder/bin/python \
+  -r crates/agentic-server-core/tests/cassettes/recorder-requirements.txt
+
+PYTHON="$PWD/.venv-dynamo-recorder/bin/python" \
+DYNAMO_URL=http://127.0.0.1:8000 MODEL=openai/gpt-oss-20b \
+bash crates/agentic-server-core/tests/cassettes/record_dynamo_messages_cassettes.sh
+
+cargo test --locked -p agentic-server-core --test dynamo_messages_test
+```
+
+The script records against an existing endpoint; it does not install or manage Dynamo. Both modes must pass
+scenario and structural validation before replacing the destination files. Failed runs retain their staging
+directory for diagnosis. Do not hand-edit captured YAML. The recorder preserves `signature_delta` content and
+fails on malformed tool argument JSON instead of substituting an empty object.
+
+The recording utilities have separate, GPU-independent tests for signature preservation, malformed arguments,
+two-round history, and preserving installed fixtures when recording fails. Run these when changing the recorder:
+
+```bash
+.venv-dynamo-recorder/bin/python -m unittest discover \
+  -s crates/agentic-server-core/tests/cassettes -p 'test_messages.py' -v
+```
