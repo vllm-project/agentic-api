@@ -30,7 +30,9 @@ use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::response_budget::ExecutorResponseBudget;
 #[cfg(test)]
 use crate::executor::response_budget::MAX_EXECUTOR_RESPONSE_BYTES;
-use crate::executor::upstream::{agent_pipeline, fetch_blocking_payload, fetch_stream_payload};
+#[cfg(test)]
+use crate::executor::upstream::agent_pipeline;
+use crate::executor::upstream::{agent_pipeline_with_limits, fetch_blocking_payload, fetch_stream_payload};
 use crate::tool::{ToolRegistry, ToolSearchMetadata, ToolSearchState, mcp};
 use crate::types::io::{InputItem, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
 use crate::types::request_response::{IncompleteDetails, RequestPayload, ResponsePayload};
@@ -237,7 +239,7 @@ struct EngineOrchestration<'a> {
 
 impl<'a> EngineOrchestration<'a> {
     async fn new(agent: &'a mut AgentPipeline, exec_ctx: &'a ExecutionContext) -> ExecutorResult<Self> {
-        let response_budget = ExecutorResponseBudget::new();
+        let response_budget = ExecutorResponseBudget::with_limit(exec_ctx.responses_config.max_retained_bytes);
         let registry = build_tool_registry(agent, exec_ctx, &response_budget).await?;
         Ok(Self {
             agent,
@@ -540,8 +542,9 @@ async fn run_blocking(
     tool_search_state: Option<ToolSearchState>,
     exec_ctx: &ExecutionContext,
     auth: Option<&str>,
+    max_stream_event_bytes: usize,
 ) -> ExecutorResult<ResponsePayload> {
-    let mut agent = agent_pipeline(ctx, tool_search_state, None);
+    let mut agent = agent_pipeline_with_limits(ctx, tool_search_state, None, max_stream_event_bytes);
     let (payload, tool_search_metadata) = run_until_gateway_tools_complete(&mut agent, exec_ctx, auth, false).await?;
     let (ctx, _) = agent.into_parts();
 
@@ -552,18 +555,29 @@ async fn run_blocking(
     Ok(payload)
 }
 
+/// `max_stream_event_bytes` is the effective limit for one serialized client
+/// event on the transport that will deliver this stream. The terminal
+/// `response.completed` frame is validated against it before the response is
+/// persisted or a session checkpoint is published, so a frame the transport
+/// cannot deliver never leaves a stored response behind.
 fn run_stream(
     ctx: RequestContext,
     tool_search_state: Option<ToolSearchState>,
     exec_ctx: Arc<ExecutionContext>,
     auth: Option<String>,
+    max_stream_event_bytes: usize,
 ) -> BoxStream {
     Box::pin(stream! {
         let failure_context = StreamFailureContext::from(&ctx);
         let (event_tx, mut event_rx) = mpsc::channel(STREAM_EVENT_BUFFER);
         let exec_ctx_for_run = Arc::clone(&exec_ctx);
         let event_tx_for_run = event_tx.clone();
-        let mut agent = agent_pipeline(ctx, tool_search_state, Some(event_tx_for_run));
+        let mut agent = agent_pipeline_with_limits(
+            ctx,
+            tool_search_state,
+            Some(event_tx_for_run),
+            max_stream_event_bytes,
+        );
         let mut run_handle = AbortOnDrop::new(tokio::spawn(async move {
             let result = run_until_gateway_tools_complete(
                 &mut agent,
@@ -735,6 +749,7 @@ pub struct ExecuteRequest {
     exec_ctx: Arc<ExecutionContext>,
     client_auth: Option<String>,
     continuation: Option<super::session::ResponseContinuation>,
+    max_stream_event_bytes: Option<usize>,
 }
 
 impl ExecuteRequest {
@@ -745,7 +760,24 @@ impl ExecuteRequest {
             exec_ctx,
             client_auth: None,
             continuation: None,
+            max_stream_event_bytes: None,
         }
+    }
+
+    /// Bound every serialized client event, including the terminal
+    /// `response.completed`, to what the delivering transport can carry after
+    /// its own routing metadata. The configured `max_stream_event_bytes` still
+    /// applies; a larger transport limit does not raise it.
+    #[must_use]
+    pub fn with_max_stream_event_bytes(mut self, max_bytes: usize) -> Self {
+        self.max_stream_event_bytes = Some(max_bytes);
+        self
+    }
+
+    fn effective_max_stream_event_bytes(&self) -> usize {
+        let configured = self.exec_ctx.responses_config.max_stream_event_bytes;
+        self.max_stream_event_bytes
+            .map_or(configured, |transport| transport.min(configured))
     }
 
     /// Override the bearer token for this request only; does not touch the shared [`ExecutionContext`].
@@ -782,6 +814,7 @@ impl ExecuteRequest {
             tools = self.payload.tools.as_ref().map_or(0, Vec::len),
             "executor received responses request"
         );
+        let max_stream_event_bytes = self.effective_max_stream_event_bytes();
         let ctx =
             super::rehydrate::rehydrate_with_continuation(self.payload, &self.exec_ctx, self.continuation).await?;
         if !ctx.enriched_request.input.has_compaction_trigger() {
@@ -795,6 +828,7 @@ impl ExecuteRequest {
                 tool_search_state,
                 self.exec_ctx,
                 self.client_auth,
+                max_stream_event_bytes,
             )))
         } else {
             Ok(Either::Left(
@@ -803,6 +837,7 @@ impl ExecuteRequest {
                     tool_search_state,
                     &self.exec_ctx,
                     self.client_auth.as_deref(),
+                    max_stream_event_bytes,
                 ))
                 .await?,
             ))
@@ -982,8 +1017,10 @@ mod tests {
 
         assert!(matches!(
             error,
-            crate::executor::error::ExecutorError::StreamError(message)
-                if message.contains("response budget exceeded")
+            crate::executor::error::ExecutorError::ResourceLimitExceeded {
+                limit: crate::executor::error::ResourceLimit::ResponseBudget,
+                ..
+            } | crate::executor::error::ExecutorError::StreamError(_)
         ));
     }
 
@@ -1210,6 +1247,8 @@ mod tests {
     #[tokio::test]
     async fn oversized_terminal_response_is_not_persisted() {
         let (mut exec_ctx, server) = streaming_execution_context().await;
+        exec_ctx.responses_config.max_retained_bytes = 512 * 1024;
+        exec_ctx.responses_config.max_stream_event_bytes = 512 * 1024;
         let pool = create_pool_with_schema(Some("sqlite::memory:"))
             .await
             .expect("create response store");

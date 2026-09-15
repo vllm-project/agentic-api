@@ -1,3 +1,4 @@
+use crate::config::DEFAULT_MAX_STREAM_EVENT_BYTES;
 use crate::events::{EventFrame, EventPayload, SSEEventType, WireEvent, normalize_sse_line};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::types::request_response::ResponsePayload;
@@ -9,6 +10,7 @@ pub struct GatewayStreamAccumulator {
     next_sequence_number: u64,
     emitted_created: bool,
     emitted_in_progress: bool,
+    max_stream_event_bytes: usize,
 }
 
 pub(super) struct StreamEvent {
@@ -19,16 +21,27 @@ pub(super) struct StreamEvent {
 /// Executor streams keep only a small number of bounded-size events ahead of
 /// their consumer so downstream backpressure also pauses upstream reads.
 pub(super) const STREAM_EVENT_BUFFER: usize = 1;
-const MAX_STREAM_EVENT_BYTES: usize = 1024 * 1024;
+#[cfg(test)]
+pub(super) const MAX_STREAM_EVENT_BYTES: usize = DEFAULT_MAX_STREAM_EVENT_BYTES;
 
 impl GatewayStreamAccumulator {
     #[must_use]
     pub fn new() -> Self {
+        Self::with_max_stream_event_bytes(DEFAULT_MAX_STREAM_EVENT_BYTES)
+    }
+
+    #[must_use]
+    pub fn with_max_stream_event_bytes(max_stream_event_bytes: usize) -> Self {
         Self {
             next_sequence_number: 0,
             emitted_created: false,
             emitted_in_progress: false,
+            max_stream_event_bytes,
         }
+    }
+
+    pub(crate) fn max_stream_event_bytes(&self) -> usize {
+        self.max_stream_event_bytes
     }
 
     pub fn process_sse_line(&mut self, line: &str, output_offset: usize) -> Option<EventFrame> {
@@ -53,7 +66,7 @@ impl GatewayStreamAccumulator {
     pub(crate) fn terminal_response_chunk(&mut self, payload: &ResponsePayload) -> ExecutorResult<String> {
         let mut frame = terminal_response_frame(payload)?;
         self.stamp_event(&mut frame, 0);
-        checked_stream_event(&frame)
+        checked_stream_event_limited(&frame, self.max_stream_event_bytes)
     }
 
     #[cfg(test)]
@@ -170,14 +183,23 @@ pub(super) fn synthetic_event(
         .ok_or_else(|| ExecutorError::StreamError("synthetic event has no wire representation".to_owned()))
 }
 
+#[cfg(test)]
 pub(super) async fn emit_sse_frame(
     sender: &tokio::sync::mpsc::Sender<StreamEvent>,
     frame: &EventFrame,
 ) -> ExecutorResult<()> {
+    emit_sse_frame_limited(sender, frame, DEFAULT_MAX_STREAM_EVENT_BYTES).await
+}
+
+pub(super) async fn emit_sse_frame_limited(
+    sender: &tokio::sync::mpsc::Sender<StreamEvent>,
+    frame: &EventFrame,
+    max_bytes: usize,
+) -> ExecutorResult<()> {
     let sequence_number = frame
         .sequence_number()
         .ok_or_else(|| ExecutorError::StreamError("stream event has no sequence number".to_owned()))?;
-    let content = checked_stream_event(frame)?;
+    let content = checked_stream_event_limited(frame, max_bytes)?;
     sender
         .send(StreamEvent {
             content,
@@ -187,12 +209,17 @@ pub(super) async fn emit_sse_frame(
         .map_err(|_| ExecutorError::StreamError("stream receiver closed while emitting gateway event".to_owned()))
 }
 
-fn checked_stream_event(frame: &EventFrame) -> ExecutorResult<String> {
+pub(super) fn checked_stream_event(frame: &EventFrame) -> ExecutorResult<String> {
+    checked_stream_event_limited(frame, DEFAULT_MAX_STREAM_EVENT_BYTES)
+}
+
+pub(super) fn checked_stream_event_limited(frame: &EventFrame, max_bytes: usize) -> ExecutorResult<String> {
     let content = serialize_sse_frame(frame)?;
-    if content.len() > MAX_STREAM_EVENT_BYTES {
-        return Err(ExecutorError::StreamError(format!(
-            "stream event exceeded {MAX_STREAM_EVENT_BYTES} bytes"
-        )));
+    if content.len() > max_bytes {
+        return Err(ExecutorError::ResourceLimitExceeded {
+            limit: crate::executor::error::ResourceLimit::StreamEvent,
+            max_bytes,
+        });
     }
     Ok(content)
 }

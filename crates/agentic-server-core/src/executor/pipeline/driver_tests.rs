@@ -35,8 +35,14 @@ async fn live_delivery_applies_backpressure_and_disconnect_stops_input() {
         polled.fetch_add(1, Ordering::SeqCst);
     });
     let registry = ToolRegistry::default();
-    let mut run =
-        Box::pin(agent.run_with_stream_body(body, Validation::Lenient, TranslationContext::default(), &registry, 0));
+    let mut run = Box::pin(agent.run_with_stream_body(
+        body,
+        Validation::Lenient,
+        TranslationContext::default(),
+        &registry,
+        0,
+        None,
+    ));
     assert!(futures::poll!(run.as_mut()).is_pending());
     assert_eq!(
         polled.load(Ordering::SeqCst),
@@ -46,7 +52,7 @@ async fn live_delivery_applies_backpressure_and_disconnect_stops_input() {
     let first = receiver.try_recv().expect("created is delivered before upstream EOF");
     assert!(first.content.contains("resp_test"));
     drop(receiver);
-    let error = run.await.err().expect("disconnect fails the runner");
+    let error = run.await.expect_err("disconnect fails the runner");
     assert!(error.to_string().contains("stream receiver closed"));
     assert_eq!(polled.load(Ordering::SeqCst), 2);
     assert!(agent.round.is_some(), "failed input must not be finalized");
@@ -72,6 +78,7 @@ async fn gateway_sequence_and_lifecycle_survive_rounds_while_items_start_fresh()
                 TranslationContext::default(),
                 &registry,
                 round,
+                None,
             )
             .await
             .unwrap();
@@ -107,7 +114,12 @@ async fn json_and_sse_preserve_the_same_terminal_metadata_and_request_ids() {
         let mut agent = AgentPipeline::new(request_context(), None, None);
         let mut from_json = serde_json::to_value(
             agent
-                .run_with_json_body(&response.to_string(), Validation::Strict, TranslationContext::default())
+                .run_with_json_body(
+                    &response.to_string(),
+                    Validation::Strict,
+                    TranslationContext::default(),
+                    None,
+                )
                 .unwrap(),
         )
         .unwrap();
@@ -123,6 +135,7 @@ async fn json_and_sse_preserve_the_same_terminal_metadata_and_request_ids() {
                 TranslationContext::default(),
                 &ToolRegistry::default(),
                 0,
+                None,
             )
             .await
             .unwrap();
@@ -140,14 +153,14 @@ fn json_preserves_nonterminal_status_and_strict_validation_rejects_it() {
     let mut agent = AgentPipeline::new(request_context(), None, None);
     assert_eq!(
         agent
-            .run_with_json_body(body, Validation::Lenient, TranslationContext::default())
+            .run_with_json_body(body, Validation::Lenient, TranslationContext::default(), None)
             .unwrap()
             .status,
         "in_progress"
     );
     assert!(
         agent
-            .run_with_json_body(body, Validation::Strict, TranslationContext::default())
+            .run_with_json_body(body, Validation::Strict, TranslationContext::default(), None)
             .unwrap_err()
             .to_string()
             .contains("is not terminal")
@@ -164,7 +177,7 @@ fn json_search_validation_precedes_lenient_item_loading() {
         let body = json!({"id":"upstream","status":"completed","output":[item]}).to_string();
         assert!(
             agent
-                .run_with_json_body(&body, Validation::Lenient, search_context())
+                .run_with_json_body(&body, Validation::Lenient, search_context(), None)
                 .is_err()
         );
     }
@@ -181,7 +194,7 @@ fn json_search_projection_handles_completed_and_aborted_calls() {
         let body = json!({"id":"upstream","status":status,"output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"tool_search","arguments":arguments,"status":call_status}]}).to_string();
         let mut agent = AgentPipeline::new(request_context(), None, None);
         let payload = agent
-            .run_with_json_body(&body, Validation::Lenient, search_context())
+            .run_with_json_body(&body, Validation::Lenient, search_context(), None)
             .unwrap();
         let output = serde_json::to_value(payload.output).unwrap();
         if status == "failed" {
@@ -239,6 +252,7 @@ fn prepared_search_state_survives_rounds_and_is_taken_once_for_persistence() {
                 r#"{"id":"upstream","status":"completed","output":[]}"#,
                 Validation::Lenient,
                 search_context(),
+                None,
             )
             .unwrap();
     }

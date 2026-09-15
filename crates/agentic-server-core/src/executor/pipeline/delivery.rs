@@ -4,7 +4,7 @@ use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway::{
     emit_gateway_completed_events, emit_gateway_start_events, mcp_list_tools_event_plans, public_output_items,
 };
-use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent, emit_sse_frame};
+use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent, emit_sse_frame_limited};
 use crate::executor::request::RequestContext;
 use crate::executor::translate::Translation;
 use crate::tool::ToolRegistry;
@@ -32,6 +32,18 @@ impl StreamDelivery {
     pub(super) fn new(sender: Option<Sender<StreamEvent>>) -> Self {
         Self {
             accumulator: GatewayStreamAccumulator::new(),
+            sender,
+            defer_from_output_index: None,
+            deferred_events: Vec::new(),
+            deferred_bytes: 0,
+        }
+    }
+    pub(super) fn with_max_stream_event_bytes(
+        sender: Option<Sender<StreamEvent>>,
+        max_stream_event_bytes: usize,
+    ) -> Self {
+        Self {
+            accumulator: GatewayStreamAccumulator::with_max_stream_event_bytes(max_stream_event_bytes),
             sender,
             defer_from_output_index: None,
             deferred_events: Vec::new(),
@@ -183,7 +195,7 @@ async fn emit_client_frame(
     if !published.process_event(frame, output_offset) {
         return Ok(false);
     }
-    emit_sse_frame(sender, frame).await?;
+    emit_sse_frame_limited(sender, frame, accumulator.max_stream_event_bytes()).await?;
     *accumulator = published;
     Ok(true)
 }
@@ -389,7 +401,7 @@ mod tests {
     async fn rejected_send_does_not_advance_sequence() {
         let request = request_context();
         let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
-        let mut accumulator = GatewayStreamAccumulator::new();
+        let mut accumulator = GatewayStreamAccumulator::with_max_stream_event_bytes(500 * 1024);
         let mut emit_ctx = StreamEmitContext {
             request: &request,
             sender: &sender,

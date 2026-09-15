@@ -77,6 +77,29 @@ impl MessagesGatewayFileConfig {
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
+#[allow(clippy::struct_field_names)]
+pub(crate) struct ResponsesFileConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_retained_bytes: Option<NonZeroUsize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_upstream_json_bytes: Option<NonZeroUsize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_upstream_sse_line_bytes: Option<NonZeroUsize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_stream_event_bytes: Option<NonZeroUsize>,
+}
+
+impl ResponsesFileConfig {
+    fn is_empty(&self) -> bool {
+        self.max_retained_bytes.is_none()
+            && self.max_upstream_json_bytes.is_none()
+            && self.max_upstream_sse_line_bytes.is_none()
+            && self.max_stream_event_bytes.is_none()
+    }
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
 pub(crate) struct FileConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub llm_api_base: Option<String>,
@@ -92,6 +115,8 @@ pub(crate) struct FileConfig {
     pub tools: ToolsFileConfig,
     #[serde(skip_serializing_if = "MessagesGatewayFileConfig::is_empty")]
     pub messages_gateway: MessagesGatewayFileConfig,
+    #[serde(skip_serializing_if = "ResponsesFileConfig::is_empty")]
+    pub responses: ResponsesFileConfig,
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub mcp_servers: HashMap<String, McpServerEntry>,
 }
@@ -489,5 +514,56 @@ mod tests {
         assert_eq!(config.llm_api_base.as_deref(), Some("http://127.0.0.1:5050"));
         assert!(!home.path().join("config.toml").exists());
         fs::set_permissions(home.path(), fs::Permissions::from_mode(0o755)).expect("restore permissions");
+    }
+
+    #[test]
+    fn rejects_zero_max_retained_bytes() {
+        let home = tempdir().expect("temp home");
+        fs::write(home.path().join("config.toml"), "[responses]\nmax_retained_bytes = 0\n").expect("write config");
+
+        let error = FileConfig::load(home.path()).expect_err("zero retained bytes must fail");
+        assert!(error.to_string().contains("max_retained_bytes"));
+    }
+
+    #[test]
+    fn accepts_positive_responses_limits() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            concat!(
+                "[responses]\n",
+                "max_retained_bytes = 2097152\n",
+                "max_upstream_json_bytes = 4194304\n",
+                "max_upstream_sse_line_bytes = 4194304\n",
+                "max_stream_event_bytes = 4194304\n",
+            ),
+        )
+        .expect("write config");
+
+        let config = FileConfig::load(home.path())
+            .expect("positive limits must parse")
+            .expect("existing config");
+        assert_eq!(
+            config.responses.max_retained_bytes.map(std::num::NonZeroUsize::get),
+            Some(2_097_152)
+        );
+        assert_eq!(
+            config
+                .responses
+                .max_upstream_json_bytes
+                .map(std::num::NonZeroUsize::get),
+            Some(4_194_304)
+        );
+        assert_eq!(
+            config
+                .responses
+                .max_upstream_sse_line_bytes
+                .map(std::num::NonZeroUsize::get),
+            Some(4_194_304)
+        );
+        assert_eq!(
+            config.responses.max_stream_event_bytes.map(std::num::NonZeroUsize::get),
+            Some(4_194_304)
+        );
     }
 }

@@ -162,6 +162,7 @@ async fn spawn_gateway(llm_url: &str) -> (Arc<reqwest::Client>, String) {
         postgres: agentic_core::config::PostgresConfig::default(),
         sqlite: agentic_core::config::SqliteConfig::default(),
         tools: agentic_core::config::ToolRuntimeConfig::default(),
+        responses: agentic_core::config::ResponsesConfig::default(),
     };
 
     let proxy_state = ProxyState::new(config.clone()).unwrap();

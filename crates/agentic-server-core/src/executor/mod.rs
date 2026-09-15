@@ -26,7 +26,7 @@ mod upstream;
 
 pub use compaction::compact_response;
 pub use engine::{BoxStream, ExecuteRequest, create_conversation, execute};
-pub use error::{ExecutorError, ExecutorResult};
+pub use error::{ExecutorError, ExecutorResult, ResourceLimit};
 pub use inference::call_inference;
 pub use messages_context::{MessagesRequestContext, ParsedMessagesRequest};
 pub use messages_loop::{MessagesResponse, MessagesUpstream, run_messages_loop};

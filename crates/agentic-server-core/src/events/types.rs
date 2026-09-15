@@ -342,6 +342,7 @@ pub enum EventPayload {
         text: String,
         item_id: String,
         output_index: Option<u32>,
+        content_index: u32,
     },
 
     /// `response.function_call_arguments.delta`

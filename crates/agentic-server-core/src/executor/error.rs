@@ -5,6 +5,25 @@ use crate::StorageError;
 use crate::tool::ToolError;
 use crate::utils::common::serialize_to_vec_or_default;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourceLimit {
+    ResponseBudget,
+    UpstreamSseLine,
+    UpstreamJsonBody,
+    StreamEvent,
+}
+
+impl std::fmt::Display for ResourceLimit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ResponseBudget => write!(f, "executor response budget"),
+            Self::UpstreamSseLine => write!(f, "upstream SSE line"),
+            Self::UpstreamJsonBody => write!(f, "upstream response"),
+            Self::StreamEvent => write!(f, "stream event"),
+        }
+    }
+}
+
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum ExecutorError {
@@ -89,6 +108,10 @@ pub enum ExecutorError {
     #[error("{0}")]
     PayloadTooLarge(String),
 
+    /// A configured response or transport size boundary was exceeded.
+    #[error("{limit} exceeded {max_bytes} bytes")]
+    ResourceLimitExceeded { limit: ResourceLimit, max_bytes: usize },
+
     /// The request conflicts with state already stored.
     #[error("conflict: {0}")]
     Conflict(String),
@@ -143,6 +166,10 @@ impl ExecutorError {
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
             Self::ParseError(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::ResourceLimitExceeded { limit, .. } => match limit {
+                ResourceLimit::UpstreamSseLine | ResourceLimit::UpstreamJsonBody => StatusCode::BAD_GATEWAY,
+                ResourceLimit::ResponseBudget | ResourceLimit::StreamEvent => StatusCode::INTERNAL_SERVER_ERROR,
+            },
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -161,6 +188,10 @@ impl ExecutorError {
             Self::Storage(e) if e.is_not_found() => "not_found",
             Self::Conflict(_) => "conflict_error",
             Self::LLMRequest { .. } | Self::LLMTransport { .. } | Self::CompactionFailed { .. } => "upstream_error",
+            Self::ResourceLimitExceeded { limit, .. } => match limit {
+                ResourceLimit::UpstreamSseLine | ResourceLimit::UpstreamJsonBody => "upstream_error",
+                ResourceLimit::ResponseBudget | ResourceLimit::StreamEvent => "server_error",
+            },
             Self::Tool(
                 ToolError::Execution(_)
                 | ToolError::InvalidUpstreamToolSearch
@@ -178,6 +209,7 @@ impl ExecutorError {
             Self::PreviousResponseNotFound { .. } => "previous_response_not_found",
             Self::Conflict(_) => "response_already_stored",
             Self::PayloadTooLarge(_) => "body_too_large",
+            Self::ResourceLimitExceeded { .. } => "response_resource_limit_exceeded",
             other => other.error_type(),
         }
     }

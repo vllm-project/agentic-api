@@ -50,7 +50,7 @@ fn invalid_output_indexes_are_rejected_under_both_policies() {
             let event = json!({"type":"response.output_item.added","output_index":index,"item":function_item("fc_1")});
             let error = push(&mut acc, &event, strict).expect_err("invalid index must not be skipped or coerced");
             assert!(error.to_string().contains("output_index"), "{index}: {error}");
-            acc.finalize_all();
+            acc.finalize_all().unwrap();
             assert!(acc.output.is_empty());
         }
     }
@@ -78,7 +78,7 @@ fn a_bound_id_cannot_change_even_when_the_index_matches() {
             strict,
         )
         .expect("rejected identity changes leave the original slot intact");
-        acc.finalize_all();
+        acc.finalize_all().unwrap();
         assert_eq!(
             serde_json::to_value(acc.output).unwrap(),
             json!([function_item("fc_1")])
@@ -148,7 +148,7 @@ fn late_bound_id_recovers_subsequent_missing_indexes() {
         .expect("first completion");
     assert_eq!(frame.wire.output_index, Some(7));
     assert!(push(&mut acc, &done, false).expect("equivalent duplicate").is_none());
-    acc.finalize_all();
+    acc.finalize_all().unwrap();
     let output = serde_json::to_value(acc.output).unwrap();
     assert_eq!(output[0]["id"], "fc_zero");
     assert_eq!(output[0]["arguments"], "");
@@ -184,7 +184,7 @@ fn recovered_indexes_reach_translation_and_skip_occupied_indexes() {
                 .expect("delta is emitted");
         assert_eq!(translated.frames[0].wire.output_index, Some(u64::from(expected)));
     }
-    acc.finalize_all();
+    acc.finalize_all().unwrap();
     assert_eq!(
         acc.output.iter().filter_map(OutputItem::id).collect::<Vec<_>>(),
         ["fc_zero", "fc_one", "fc_two", "fc_max"]
@@ -301,7 +301,7 @@ fn generated_public_ids_are_not_upstream_lookup_keys() {
         false,
     )
     .expect("a supplied index permits canonical ID binding");
-    acc.finalize_all();
+    acc.finalize_all().unwrap();
     assert_eq!(acc.output[0].id(), Some("fc_bound"));
 }
 

@@ -236,6 +236,23 @@ max_request_body_size_bytes = 10485760
 # Must be greater than zero.
 max_concurrent_gateway_calls = 5
 
+[responses]
+# Cumulative logical retained response data across all rounds of a turn.
+# Defaults to 8 MiB (8388608).
+max_retained_bytes = 8388608
+
+# Maximum size for a single upstream JSON response body.
+# Defaults to 16 MiB (16777216).
+max_upstream_json_bytes = 16777216
+
+# Maximum size for a single upstream SSE line.
+# Defaults to 16 MiB (16777216).
+max_upstream_sse_line_bytes = 16777216
+
+# Maximum size for a single serialized outbound stream event.
+# Defaults to 16 MiB (16777216).
+max_stream_event_bytes = 16777216
+
 [mcp_servers.counter]
 url = "https://mcp.example.com/mcp"
 allowed_tools = ["tool_1_name", "tool_2_name"]
@@ -257,6 +274,25 @@ credential itself. `YOU_API_BASE_URL`, `AGENTIC_MCP_ALLOWED_HOSTS`, `AGENTIC_MAX
 `AGENTIC_MAX_CONCURRENT_GATEWAY_CALLS` can override their typed file settings. The concurrency value is a sliding-window
 upper bound; handlers may further serialize calls to the same tool name. The MCP allowlist is used only for
 request-declared remote MCP URLs; configured `[mcp_servers]` entries are trusted operator configuration.
+
+`[responses]` configures independent response resource limits across inference, transport, and client delivery:
+- `max_retained_bytes` (`AGENTIC_MAX_RETAINED_RESPONSE_BYTES`, default 8 MiB): bounds cumulative logical retained
+  response data across all rounds of a turn and gateway tool outputs. Unlike raw wire bytes, it is invariant to
+  upstream SSE chunking (1-byte deltas, coarse chunks, and non-streaming JSON consume identical logical budget).
+- `max_upstream_json_bytes` (`AGENTIC_MAX_UPSTREAM_JSON_BYTES`, default 16 MiB): bounds an individual upstream JSON body.
+- `max_upstream_sse_line_bytes` (`AGENTIC_MAX_UPSTREAM_SSE_LINE_BYTES`, default 16 MiB): bounds an individual upstream
+  SSE line buffer.
+- `max_stream_event_bytes` (`AGENTIC_MAX_STREAM_EVENT_BYTES`, default 16 MiB): bounds a single serialized SSE/WebSocket
+  event delivered to the client, including full `response.output_item.done` snapshots and terminal `response.completed`.
+  The WebSocket transport applies the same limit to each routed event (its `stream_id` member counts toward it), and
+  the executor validates the terminal event against that transport limit before persisting the response.
+
+Validation enforces that `max_stream_event_bytes`, `max_upstream_sse_line_bytes`, and `max_upstream_json_bytes` each
+exceed `max_retained_bytes` by proportional wire headroom (`max(64 KiB, max_retained_bytes / 4)`) to account for JSON
+serialization overhead, escaping, and message envelopes. When sizing gateway memory for concurrent streams, note that
+in-flight buffers multiply per active streaming request: a stream in flight may hold an upstream line buffer (up to
+`max_upstream_sse_line_bytes`), its parsed AST, an outbound channel event (up to `max_stream_event_bytes`), and retained
+turn state (`max_retained_bytes`).
 
 With that file in place, inject only the secret when starting the server:
 

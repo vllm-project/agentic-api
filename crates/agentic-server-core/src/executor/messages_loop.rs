@@ -95,8 +95,14 @@ pub async fn run_messages_loop(
 
     for _round in 0..MAX_GATEWAY_TOOL_ROUNDS {
         let body = ctx.upstream_body()?;
-        let (resp_text, response_headers) =
-            fetch_response_json_with_headers(body, &upstream.url, &exec_ctx.client, &upstream.headers).await?;
+        let (resp_text, response_headers) = fetch_response_json_with_headers(
+            body,
+            &upstream.url,
+            &exec_ctx.client,
+            &upstream.headers,
+            exec_ctx.responses_config.max_upstream_json_bytes,
+        )
+        .await?;
         let message: Value = deserialize_from_str(&resp_text).map_err(ExecutorError::JsonError)?;
 
         // Any error body from upstream is surfaced verbatim (handler maps it to

@@ -1066,9 +1066,7 @@ mod tests {
         let web_search: ResponsesTool =
             serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).expect("web_search tool param");
         let mut executors = GatewayExecutors::default();
-        executors.insert(Arc::new(SizedOutputExecutor {
-            bytes: crate::executor::response_budget::MAX_EXECUTOR_RESPONSE_BYTES / 2 + 1,
-        }));
+        executors.insert(Arc::new(SizedOutputExecutor { bytes: 250 * 1024 + 1 }));
         let mut tools = [web_search];
         let registry = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
             .await
@@ -1078,7 +1076,7 @@ mod tests {
             OutputItem::FunctionCall(web_search_call("call_b")),
         ];
         let mut scheduler = GatewayScheduler::plan(&output_items, &registry, 0, GatewaySchedulerPolicy::default());
-        let response_budget = ExecutorResponseBudget::new();
+        let response_budget = ExecutorResponseBudget::with_limit(500 * 1024);
 
         let error = scheduler
             .execute_with_budget(&response_budget)

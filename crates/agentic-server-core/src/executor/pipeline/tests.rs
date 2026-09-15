@@ -19,6 +19,7 @@ fn pipeline(validation: Validation, tools: &[(&str, ToolType)]) -> RoundIngestio
             HashSet::new(),
             tools.contains(&("tool_search", ToolType::ToolSearch)),
         ),
+        None,
     )
 }
 

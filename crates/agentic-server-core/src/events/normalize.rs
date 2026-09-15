@@ -197,11 +197,14 @@ fn extract_text_delta(json: &Value) -> EventPayload {
     }
 }
 
+// Note: If upstream omits `content_index`, `json_u32` defaults to index 0,
+// matching the standard single-part message contract.
 fn extract_text_done(json: &Value) -> EventPayload {
     EventPayload::TextDone {
         text: json_str(json, "text"),
         item_id: json_str(json, "item_id"),
         output_index: json_output_index(json),
+        content_index: json_u32(json, "content_index"),
     }
 }
 

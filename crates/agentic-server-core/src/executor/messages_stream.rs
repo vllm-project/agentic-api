@@ -94,7 +94,11 @@ pub async fn run_messages_stream(
                     Err(e) => { yield executor_error_sse(&e); return; }
                 }
             };
-            let mut response_stream = Box::pin(response_lines(response, exec_ctx.streaming_timeout));
+            let mut response_stream = Box::pin(response_lines(
+                response,
+                exec_ctx.streaming_timeout,
+                exec_ctx.responses_config.max_upstream_sse_line_bytes,
+            ));
 
             acc.begin_round();
             while let Some(line) = response_stream.next().await {
@@ -630,7 +634,11 @@ mod tests {
             }
             write!(body, "{prefix}[DONE]\n\n").expect("write SSE termination marker");
             let response = reqwest::Response::from(http::Response::new(body));
-            let mut lines = Box::pin(response_lines(response, std::time::Duration::ZERO));
+            let mut lines = Box::pin(response_lines(
+                response,
+                std::time::Duration::ZERO,
+                crate::config::DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES,
+            ));
             let mut output = Vec::new();
             while let Some(line) = lines.next().await {
                 output.extend(acc.push(&line.expect("valid SSE transport")));

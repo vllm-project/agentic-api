@@ -4,7 +4,7 @@
 use clap::Parser;
 use tokio_util::sync::CancellationToken;
 
-use agentic_core::config::{Config, PostgresConfig, SqliteConfig, ToolRuntimeConfig};
+use agentic_core::config::{Config, PostgresConfig, ResponsesConfig, SqliteConfig, ToolRuntimeConfig};
 use agentic_llm_d::runner;
 
 #[derive(Parser)]
@@ -47,6 +47,7 @@ async fn main() -> Result<(), runner::Error> {
         postgres: PostgresConfig::default(),
         sqlite: SqliteConfig::default(),
         tools: ToolRuntimeConfig::default(),
+        responses: ResponsesConfig::default(),
     };
 
     let shutdown = CancellationToken::new();

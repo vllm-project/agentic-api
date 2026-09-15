@@ -3,6 +3,7 @@
 use crate::events::{ClassifiedSseLine, EventPayload, SSEItemType};
 use crate::executor::accumulator::{ResponseAccumulator, Validation};
 use crate::executor::error::{ExecutorError, ExecutorResult};
+use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::translate::{Translation, TranslationContext, TranslationDispatcher};
 use crate::types::request_response::ResponsePayload;
 #[derive(PartialEq, Eq)]
@@ -25,10 +26,16 @@ impl RoundIngestion {
         conversation_id: Option<String>,
         validation: Validation,
         translation_context: TranslationContext,
+        budget: Option<ExecutorResponseBudget>,
     ) -> Self {
         Self {
             body_kind: BodyKind::Empty,
-            accumulator: ResponseAccumulator::with_validation(response_id, conversation_id, validation),
+            accumulator: ResponseAccumulator::with_validation_and_budget(
+                response_id,
+                conversation_id,
+                validation,
+                budget,
+            ),
             translator: TranslationDispatcher::new(translation_context),
         }
     }

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::config::{Config, default_database_url};
+use crate::config::{Config, ResponsesConfig, default_database_url};
 use crate::error::Error;
 use crate::executor::gateway::GatewaySchedulerPolicy;
 use crate::executor::modes::{ConversationHandler, ResponseHandler};
@@ -77,6 +77,7 @@ pub struct ExecutionContext {
     pub streaming_timeout: Duration,
     /// Bounded-concurrency policy applied to gateway-owned calls in each round.
     pub(crate) gateway_scheduler_policy: GatewaySchedulerPolicy,
+    pub responses_config: ResponsesConfig,
     storage_pool: Option<Arc<crate::storage::DbPool>>,
 }
 
@@ -110,8 +111,15 @@ impl ExecutionContext {
             llm_base_url,
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::default(),
+            responses_config: ResponsesConfig::default(),
             storage_pool: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_responses_config(mut self, responses_config: ResponsesConfig) -> Self {
+        self.responses_config = responses_config;
+        self
     }
 
     #[must_use]
@@ -181,6 +189,7 @@ impl ExecutionContext {
             llm_base_url: cfg.llm_api_base.clone(),
             streaming_timeout: streaming_timeout_from_env(),
             gateway_scheduler_policy: GatewaySchedulerPolicy::new(cfg.tools.max_concurrent_gateway_calls),
+            responses_config: cfg.responses,
             storage_pool: Some(pool),
         })
     }

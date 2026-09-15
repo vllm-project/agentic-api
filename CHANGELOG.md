@@ -2,6 +2,19 @@
 
 All notable changes to Agentic API are documented here.
 
+## [Unreleased]
+
+### Fixed
+
+- Charged the Responses retained-byte budget for logical output (text, arguments, annotations, nested JSON, and one
+  container per content part) instead of raw upstream SSE line bytes, so fine-grained chunking, coarse chunking, and
+  non-streaming JSON consume identical budget, and empty or done-only parts are charged as they arrive (#288, #304).
+- Replaced the fixed 1 MiB Responses WebSocket event ceiling with the configured `max_stream_event_bytes`; the
+  executor now validates the terminal `response.completed` event against the WebSocket transport limit, including
+  `stream_id` routing metadata, before persisting the response or publishing a session checkpoint (#304).
+- Added independent, validated `[responses]` limits for upstream JSON bodies, upstream SSE lines, retained output, and
+  client stream events, with a typed `ResourceLimitExceeded` error that maps upstream overflows to HTTP 502 (#288).
+
 ## [0.7.0] - 2026-09-14
 
 ### Added

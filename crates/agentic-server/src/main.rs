@@ -6,12 +6,15 @@ use clap::{Args, Parser, Subcommand};
 
 use agentic_core::DatabaseBackend;
 use agentic_core::config::{
-    Config, DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS, DEFAULT_POSTGRES_ACQUIRE_TIMEOUT_SECONDS,
+    Config, DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS, DEFAULT_MAX_RETAINED_RESPONSE_BYTES, DEFAULT_MAX_STREAM_EVENT_BYTES,
+    DEFAULT_MAX_UPSTREAM_JSON_BYTES, DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES, DEFAULT_POSTGRES_ACQUIRE_TIMEOUT_SECONDS,
     DEFAULT_POSTGRES_IDLE_TIMEOUT_SECONDS, DEFAULT_POSTGRES_LOCK_TIMEOUT_SECONDS, DEFAULT_POSTGRES_MAX_CONNECTIONS,
     DEFAULT_POSTGRES_MAX_LIFETIME_SECONDS, DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS,
     DEFAULT_POSTGRES_STATEMENT_TIMEOUT_SECONDS, DEFAULT_SQLITE_JOURNAL_SIZE_LIMIT_BYTES,
-    DEFAULT_SQLITE_MAX_CONNECTIONS, DEFAULT_SQLITE_MMAP_SIZE_BYTES, PostgresConfig, SqliteConfig, SqliteTempStore,
-    ToolRuntimeConfig, WebSearchProviderConfig, default_database_url, ensure_agentic_api_home, normalize_base_url,
+    DEFAULT_SQLITE_MAX_CONNECTIONS, DEFAULT_SQLITE_MMAP_SIZE_BYTES, MAX_RETAINED_RESPONSE_BYTES_ENV,
+    MAX_STREAM_EVENT_BYTES_ENV, MAX_UPSTREAM_JSON_BYTES_ENV, MAX_UPSTREAM_SSE_LINE_BYTES_ENV, PostgresConfig,
+    ResponsesConfig, SqliteConfig, SqliteTempStore, ToolRuntimeConfig, WebSearchProviderConfig, default_database_url,
+    ensure_agentic_api_home, normalize_base_url,
 };
 use agentic_core::error::Error;
 use agentic_server::app::DEFAULT_MAX_REQUEST_BODY_SIZE;
@@ -21,7 +24,8 @@ mod config_file;
 mod server;
 
 use config_file::{
-    FileConfig, McpFileConfig, MessagesGatewayFileConfig, ServerFileConfig, ToolsFileConfig, WebSearchFileConfig,
+    FileConfig, McpFileConfig, MessagesGatewayFileConfig, ResponsesFileConfig, ServerFileConfig, ToolsFileConfig,
+    WebSearchFileConfig,
 };
 use server::GatewayOptions;
 
@@ -315,6 +319,37 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
         "AGENTIC_MAX_CONCURRENT_GATEWAY_CALLS",
         max_concurrent_gateway_calls_default,
     )?;
+    let max_retained_bytes_default = file
+        .responses
+        .max_retained_bytes
+        .unwrap_or_else(|| NonZeroUsize::new(DEFAULT_MAX_RETAINED_RESPONSE_BYTES).expect("nonzero default"));
+    let max_retained_bytes =
+        parse_env_nonzero_usize(MAX_RETAINED_RESPONSE_BYTES_ENV, max_retained_bytes_default)?.get();
+    let max_upstream_json_bytes_default = file
+        .responses
+        .max_upstream_json_bytes
+        .unwrap_or_else(|| NonZeroUsize::new(DEFAULT_MAX_UPSTREAM_JSON_BYTES).expect("nonzero default"));
+    let max_upstream_json_bytes =
+        parse_env_nonzero_usize(MAX_UPSTREAM_JSON_BYTES_ENV, max_upstream_json_bytes_default)?.get();
+    let max_upstream_sse_line_bytes_default = file
+        .responses
+        .max_upstream_sse_line_bytes
+        .unwrap_or_else(|| NonZeroUsize::new(DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES).expect("nonzero default"));
+    let max_upstream_sse_line_bytes =
+        parse_env_nonzero_usize(MAX_UPSTREAM_SSE_LINE_BYTES_ENV, max_upstream_sse_line_bytes_default)?.get();
+    let max_stream_event_bytes_default = file
+        .responses
+        .max_stream_event_bytes
+        .unwrap_or_else(|| NonZeroUsize::new(DEFAULT_MAX_STREAM_EVENT_BYTES).expect("nonzero default"));
+    let max_stream_event_bytes =
+        parse_env_nonzero_usize(MAX_STREAM_EVENT_BYTES_ENV, max_stream_event_bytes_default)?.get();
+    let responses_config = ResponsesConfig {
+        max_retained_bytes,
+        max_upstream_json_bytes,
+        max_upstream_sse_line_bytes,
+        max_stream_event_bytes,
+    };
+    responses_config.validate()?;
     Ok(Config {
         llm_api_base,
         openai_api_key: common.openai_api_key.clone(),
@@ -331,6 +366,7 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
             messages_gateway_tool_aliases: file.messages_gateway.tool_aliases.clone(),
             max_concurrent_gateway_calls,
         },
+        responses: responses_config,
     })
 }
 
@@ -371,6 +407,16 @@ fn generated_file_config(llm_api_base: String) -> FileConfig {
         },
         messages_gateway: MessagesGatewayFileConfig {
             tool_aliases: environment_value("MESSAGES_GATEWAY_TOOL_ALIASES"),
+        },
+        responses: ResponsesFileConfig {
+            max_retained_bytes: environment_value(MAX_RETAINED_RESPONSE_BYTES_ENV)
+                .and_then(|value| value.parse::<NonZeroUsize>().ok()),
+            max_upstream_json_bytes: environment_value(MAX_UPSTREAM_JSON_BYTES_ENV)
+                .and_then(|value| value.parse::<NonZeroUsize>().ok()),
+            max_upstream_sse_line_bytes: environment_value(MAX_UPSTREAM_SSE_LINE_BYTES_ENV)
+                .and_then(|value| value.parse::<NonZeroUsize>().ok()),
+            max_stream_event_bytes: environment_value(MAX_STREAM_EVENT_BYTES_ENV)
+                .and_then(|value| value.parse::<NonZeroUsize>().ok()),
         },
         mcp_servers: HashMap::new(),
         ..FileConfig::default()

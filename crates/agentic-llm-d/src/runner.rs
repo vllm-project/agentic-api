@@ -78,7 +78,7 @@ pub async fn serve(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agentic_core::config::{PostgresConfig, SqliteConfig, ToolRuntimeConfig};
+    use agentic_core::config::{PostgresConfig, ResponsesConfig, SqliteConfig, ToolRuntimeConfig};
 
     #[tokio::test]
     async fn backend_drain_preserves_server_errors() {
@@ -102,6 +102,7 @@ mod tests {
             postgres: PostgresConfig::default(),
             sqlite: SqliteConfig::default(),
             tools: ToolRuntimeConfig::default(),
+            responses: ResponsesConfig::default(),
         };
         let shutdown = CancellationToken::new();
         shutdown.cancel();

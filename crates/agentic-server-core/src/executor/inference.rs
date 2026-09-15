@@ -9,8 +9,10 @@ use std::time::Duration;
 use async_stream::stream;
 use futures::{Stream, StreamExt};
 
-use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::response_budget::MAX_EXECUTOR_RESPONSE_BYTES;
+#[cfg(test)]
+use crate::config::DEFAULT_MAX_UPSTREAM_JSON_BYTES;
+use crate::config::DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES;
+use crate::executor::error::{ExecutorError, ExecutorResult, ResourceLimit};
 use crate::proxy::processed_response_headers;
 
 /// SSE stream of raw lines sent to the client (`data: …\n\n` per event).
@@ -18,7 +20,8 @@ pub type BoxStream = std::pin::Pin<Box<dyn Stream<Item = String> + Send>>;
 
 /// Wire-format marker signalling end-of-stream to the client.
 pub(super) const DONE_MARKER: &str = "data: [DONE]\n\n";
-const MAX_SSE_LINE_BYTES: usize = 256 * 1024;
+#[cfg(test)]
+pub(super) const MAX_SSE_LINE_BYTES: usize = DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES;
 
 /// Fetch the next raw bytes chunk from a streaming response.
 ///
@@ -38,15 +41,28 @@ where
     item.transpose().map_err(ExecutorError::NetworkError)
 }
 
+#[cfg(test)]
 fn drain_complete_utf8_lines(buffer: &mut Vec<u8>) -> ExecutorResult<Vec<String>> {
+    let mut scanned = 0;
+    drain_complete_utf8_lines_limited(buffer, &mut scanned, MAX_SSE_LINE_BYTES)
+}
+
+fn drain_complete_utf8_lines_limited(
+    buffer: &mut Vec<u8>,
+    scanned: &mut usize,
+    max_sse_line_bytes: usize,
+) -> ExecutorResult<Vec<String>> {
     let mut lines = Vec::new();
-    while let Some(pos) = buffer.iter().position(|byte| *byte == b'\n') {
-        if pos > MAX_SSE_LINE_BYTES {
-            return Err(ExecutorError::StreamError(format!(
-                "upstream SSE line exceeded {MAX_SSE_LINE_BYTES} bytes"
-            )));
+    while let Some(rel_pos) = buffer[*scanned..].iter().position(|byte| *byte == b'\n') {
+        let pos = *scanned + rel_pos;
+        if pos > max_sse_line_bytes {
+            return Err(ExecutorError::ResourceLimitExceeded {
+                limit: ResourceLimit::UpstreamSseLine,
+                max_bytes: max_sse_line_bytes,
+            });
         }
         let line = buffer.drain(..=pos).collect::<Vec<_>>();
+        *scanned = 0;
         let line_end = if pos > 0 && line.get(pos - 1) == Some(&b'\r') {
             pos - 1
         } else {
@@ -56,28 +72,38 @@ fn drain_complete_utf8_lines(buffer: &mut Vec<u8>) -> ExecutorResult<Vec<String>
             lines.push(line.to_string());
         }
     }
-    if buffer.len() > MAX_SSE_LINE_BYTES {
-        return Err(ExecutorError::StreamError(format!(
-            "upstream SSE line exceeded {MAX_SSE_LINE_BYTES} bytes"
-        )));
+    *scanned = buffer.len();
+    if buffer.len() > max_sse_line_bytes {
+        return Err(ExecutorError::ResourceLimitExceeded {
+            limit: ResourceLimit::UpstreamSseLine,
+            max_bytes: max_sse_line_bytes,
+        });
     }
     Ok(lines)
 }
 
-async fn response_text_limited(resp: reqwest::Response, chunk_timeout: Duration) -> ExecutorResult<String> {
+async fn response_text_limited(
+    resp: reqwest::Response,
+    chunk_timeout: Duration,
+    max_bytes: usize,
+) -> ExecutorResult<String> {
     let mut stream = resp.bytes_stream();
     let mut body = Vec::new();
     while let Some(chunk) = next_chunk(&mut stream, chunk_timeout).await? {
-        if chunk.len() > MAX_EXECUTOR_RESPONSE_BYTES.saturating_sub(body.len()) {
-            return Err(ExecutorError::StreamError(format!(
-                "upstream response exceeded {MAX_EXECUTOR_RESPONSE_BYTES} bytes"
-            )));
+        if chunk.len() > max_bytes.saturating_sub(body.len()) {
+            return Err(ExecutorError::ResourceLimitExceeded {
+                limit: ResourceLimit::UpstreamJsonBody,
+                max_bytes,
+            });
         }
         body.extend_from_slice(&chunk);
     }
     String::from_utf8(body)
         .map_err(|_| ExecutorError::StreamError("upstream response body was not valid UTF-8".to_owned()))
 }
+
+/// Maximum size of an upstream error response body retained in [`ExecutorError::LLMRequest`].
+pub(super) const MAX_ERROR_RESPONSE_BYTES: usize = 1024 * 1024;
 
 /// Build, send, and validate an HTTP POST to the LLM backend.
 ///
@@ -121,7 +147,7 @@ pub(super) async fn send_request(
         let headers = processed_response_headers(resp.headers());
         // Log and discard any error reading the error body — the status code
         // is the primary signal; an empty body is acceptable here.
-        let body = response_text_limited(resp, chunk_timeout)
+        let body = response_text_limited(resp, chunk_timeout, MAX_ERROR_RESPONSE_BYTES)
             .await
             .inspect_err(|error| tracing::debug!(%error, "failed to read bounded error response body"))
             .unwrap_or_default();
@@ -138,15 +164,26 @@ pub(super) async fn send_request(
 /// Makes a non-streaming HTTP POST to the LLM backend and returns the full JSON body.
 ///
 /// Used by `run_blocking` so it can pass the result to [`ResponseAccumulator::from_json`](crate::executor::accumulator::ResponseAccumulator::from_json).
+#[cfg(test)]
 pub(super) async fn fetch_response_json(
     upstream_json: String,
     url: &str,
     client: &reqwest::Client,
     auth: Option<&str>,
 ) -> ExecutorResult<String> {
+    fetch_response_json_limited(upstream_json, url, client, auth, DEFAULT_MAX_UPSTREAM_JSON_BYTES).await
+}
+
+pub(super) async fn fetch_response_json_limited(
+    upstream_json: String,
+    url: &str,
+    client: &reqwest::Client,
+    auth: Option<&str>,
+    max_upstream_json_bytes: usize,
+) -> ExecutorResult<String> {
     let resp = send_request(client, url, upstream_json, auth, None, Duration::ZERO).await?;
     // Preserve the reqwest::Error as the typed source (NetworkError).
-    response_text_limited(resp, Duration::ZERO).await
+    response_text_limited(resp, Duration::ZERO, max_upstream_json_bytes).await
 }
 
 /// Makes a non-streaming HTTP POST with caller-supplied upstream headers.
@@ -155,10 +192,11 @@ pub(super) async fn fetch_response_json_with_headers(
     url: &str,
     client: &reqwest::Client,
     headers: &reqwest::header::HeaderMap,
+    max_upstream_json_bytes: usize,
 ) -> ExecutorResult<(String, http::HeaderMap)> {
     let resp = send_request(client, url, upstream_json, None, Some(headers), Duration::ZERO).await?;
     let response_headers = processed_response_headers(resp.headers());
-    let body = response_text_limited(resp, Duration::ZERO).await?;
+    let body = response_text_limited(resp, Duration::ZERO, max_upstream_json_bytes).await?;
     Ok((body, response_headers))
 }
 
@@ -178,13 +216,38 @@ pub fn call_inference(
     auth: Option<String>,
     chunk_timeout: Duration,
 ) -> impl Stream<Item = Result<String, ExecutorError>> + Send + 'static {
+    call_inference_limited(
+        upstream_json,
+        url,
+        client,
+        auth,
+        chunk_timeout,
+        DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES,
+    )
+}
+
+pub fn call_inference_limited(
+    upstream_json: String,
+    url: String,
+    client: Arc<reqwest::Client>,
+    auth: Option<String>,
+    chunk_timeout: Duration,
+    max_sse_line_bytes: usize,
+) -> impl Stream<Item = Result<String, ExecutorError>> + Send + 'static {
     stream! {
-        let resp = match send_request(&client, &url, upstream_json, auth.as_deref(), None, chunk_timeout).await {
+        let resp = match send_request(
+            &client,
+            &url,
+            upstream_json,
+            auth.as_deref(),
+            None,
+            chunk_timeout,
+        ).await {
             Ok(r) => r,
             Err(e) => { yield Err(e); return; }
         };
 
-        let mut lines = Box::pin(response_lines(resp, chunk_timeout));
+        let mut lines = Box::pin(response_lines(resp, chunk_timeout, max_sse_line_bytes));
         while let Some(line) = lines.next().await {
             yield line;
         }
@@ -196,10 +259,12 @@ pub fn call_inference(
 pub(super) fn response_lines(
     resp: reqwest::Response,
     chunk_timeout: Duration,
+    max_sse_line_bytes: usize,
 ) -> impl Stream<Item = Result<String, ExecutorError>> + Send + 'static {
     stream! {
         let mut bytes = resp.bytes_stream();
         let mut buf = Vec::with_capacity(8192);
+        let mut scanned = 0;
 
         loop {
             let chunk = match next_chunk(&mut bytes, chunk_timeout).await {
@@ -210,7 +275,7 @@ pub(super) fn response_lines(
 
             buf.extend_from_slice(&chunk);
 
-            let lines = match drain_complete_utf8_lines(&mut buf) {
+            let lines = match drain_complete_utf8_lines_limited(&mut buf, &mut scanned, max_sse_line_bytes) {
                 Ok(lines) => lines,
                 Err(error) => {
                     yield Err(error);
@@ -366,13 +431,18 @@ mod tests {
     }
 
     async fn oversized_body_server(status: StatusCode) -> (String, tokio::task::JoinHandle<()>) {
+        let limit = if status.is_success() {
+            DEFAULT_MAX_UPSTREAM_JSON_BYTES
+        } else {
+            MAX_ERROR_RESPONSE_BYTES
+        };
         let app = axum::Router::new().route(
             "/v1/responses",
             post(move || async move {
-                let half = MAX_EXECUTOR_RESPONSE_BYTES / 2;
+                let half = limit / 2;
                 let chunks = stream::iter([
                     Ok::<_, Infallible>(Bytes::from(vec![b'x'; half + 1])),
-                    Ok(Bytes::from(vec![b'x'; MAX_EXECUTOR_RESPONSE_BYTES - half])),
+                    Ok(Bytes::from(vec![b'x'; limit - half])),
                 ]);
                 Response::builder()
                     .status(status)

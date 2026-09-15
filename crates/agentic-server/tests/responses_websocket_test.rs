@@ -3,6 +3,7 @@ mod common;
 
 use std::collections::VecDeque;
 use std::convert::Infallible;
+use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -22,6 +23,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
 use tokio_util::sync::CancellationToken;
 
+use agentic_core::config::ResponsesConfig;
 use agentic_core::executor::{ConversationHandler, ExecutionContext, RequestContext, ResponseHandler};
 use agentic_core::proxy::ProxyState;
 use agentic_core::storage::{
@@ -300,7 +302,11 @@ struct StorageBackedState {
 }
 
 async fn storage_backed_state(llm_url: &str) -> StorageBackedState {
-    storage_backed_state_with_web_search(llm_url, None).await
+    storage_backed_state_with(llm_url, None, None).await
+}
+
+async fn storage_backed_state_with_responses_config(llm_url: &str, responses: ResponsesConfig) -> StorageBackedState {
+    storage_backed_state_with(llm_url, None, Some(responses)).await
 }
 
 fn persistence_disabled_state(llm_url: &str) -> AppState {
@@ -328,6 +334,14 @@ fn persistence_disabled_state(llm_url: &str) -> AppState {
 }
 
 async fn storage_backed_state_with_web_search(llm_url: &str, web_search_base_url: Option<&str>) -> StorageBackedState {
+    storage_backed_state_with(llm_url, web_search_base_url, None).await
+}
+
+async fn storage_backed_state_with(
+    llm_url: &str,
+    web_search_base_url: Option<&str>,
+    responses: Option<ResponsesConfig>,
+) -> StorageBackedState {
     let db = TestDb::new();
     let db_url = db.url();
     let pool = create_pool_with_schema(Some(&db_url)).await.unwrap();
@@ -345,6 +359,9 @@ async fn storage_backed_state_with_web_search(llm_url: &str, web_search_base_url
             "test-you-key".to_owned(),
             base_url,
         )));
+    }
+    if let Some(responses) = responses {
+        exec_ctx = exec_ctx.with_responses_config(responses);
     }
     let exec_ctx = Arc::new(exec_ctx);
     let proxy_state = ProxyState::new(config.clone()).expect("proxy state");
@@ -566,6 +583,57 @@ fn sse_response(response_id: &str, message_id: &str, text: &str) -> String {
         "response": {"id": response_id, "status": "completed", "usage": null}
     });
     format!("data: {created}\n\ndata: {added}\n\ndata: {delta}\n\ndata: {completed}\n\ndata: [DONE]\n\n")
+}
+
+/// Two message items whose combined text is larger than any single delta, so
+/// the terminal `response.completed` snapshot is the largest event of the stream.
+fn two_message_sse_response(response_id: &str, text_bytes: usize) -> String {
+    let text = "x".repeat(text_bytes);
+    let mut events = vec![json!({
+        "type": "response.created",
+        "sequence_number": 0,
+        "response": {"id": response_id, "status": "in_progress"}
+    })];
+    for (index, message_id) in ["msg_big_0", "msg_big_1"].iter().enumerate() {
+        events.push(json!({
+            "type": "response.output_item.added",
+            "output_index": index,
+            "item": {"id": message_id, "type": "message", "role": "assistant", "status": "in_progress", "content": []}
+        }));
+        events.push(json!({
+            "type": "response.output_text.delta",
+            "item_id": message_id,
+            "output_index": index,
+            "content_index": 0,
+            "delta": text
+        }));
+        events.push(json!({
+            "type": "response.output_item.done",
+            "output_index": index,
+            "item": {
+                "id": message_id, "type": "message", "role": "assistant", "status": "completed",
+                "content": [{"type": "output_text", "text": text, "annotations": []}]
+            }
+        }));
+    }
+    events.push(json!({
+        "type": "response.completed",
+        "response": {"id": response_id, "status": "completed", "usage": null}
+    }));
+    let mut body = String::new();
+    for (sequence_number, mut event) in events.into_iter().enumerate() {
+        event["sequence_number"] = json!(sequence_number);
+        write!(body, "data: {event}\n\n").expect("writing to a String cannot fail");
+    }
+    body.push_str("data: [DONE]\n\n");
+    body
+}
+
+async fn count_rows(pool: &DbPool, table: &str) -> i64 {
+    sqlx::query_scalar::<_, i64>(&format!("SELECT COUNT(*) FROM {table}"))
+        .fetch_one(pool)
+        .await
+        .unwrap()
 }
 
 fn phased_sse_response(response_id: &str, message_id: &str, text: &str) -> (String, String) {
@@ -823,8 +891,20 @@ async fn websocket_generate_false_checks_completed_event_before_persistence_or_d
     assert_oversized_local_completion_rejected(true).await;
 }
 
+/// Event ceiling used by the oversized local-completion tests. Pinned so the
+/// fill computation does not track the configured default.
+const LOCAL_COMPLETION_EVENT_LIMIT: usize = 1024 * 1024;
+
 async fn assert_oversized_local_completion_rejected(only_completion_oversized: bool) {
-    let fixture = storage_backed_state("http://127.0.0.1:9").await;
+    let fixture = storage_backed_state_with_responses_config(
+        "http://127.0.0.1:9",
+        ResponsesConfig {
+            max_retained_bytes: LOCAL_COMPLETION_EVENT_LIMIT / 2,
+            max_stream_event_bytes: LOCAL_COMPLETION_EVENT_LIMIT,
+            ..ResponsesConfig::default()
+        },
+    )
+    .await;
     let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
     let mut ws = connect_responses_ws(&gateway_url).await;
     let mut payload = json!({
@@ -839,9 +919,9 @@ async fn assert_oversized_local_completion_rejected(only_completion_oversized: b
         assert!(baseline[1].to_string().len() > created_bytes);
         // Fill the created event exactly to the wire limit. The completed event
         // is larger because it includes usage, so both must be checked up front.
-        1024 * 1024 - created_bytes
+        LOCAL_COMPLETION_EVENT_LIMIT - created_bytes
     } else {
-        2 * 1024 * 1024
+        2 * LOCAL_COMPLETION_EVENT_LIMIT
     };
     payload["instructions"] = json!("x".repeat(instruction_bytes));
     payload["input"] = json!("must not be stored");
@@ -853,7 +933,7 @@ async fn assert_oversized_local_completion_rejected(only_completion_oversized: b
     );
     assert_eq!(event["stream_id"], "oversized-local");
     assert!(event["error"]["message"].as_str().unwrap().contains("exceeded"));
-    assert!(event.to_string().len() <= 1024 * 1024);
+    assert!(event.to_string().len() <= LOCAL_COMPLETION_EVENT_LIMIT);
     let responses = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM responses")
         .fetch_one(fixture.pool.as_ref())
         .await
@@ -1408,6 +1488,115 @@ async fn websocket_empty_prewarm_replaces_compacted_conversation_tool_search_sta
             .iter()
             .all(|tool| tool["name"] != "get_weather"),
         "deferred definitions remain withheld until the client returns them"
+    );
+}
+
+/// Regression for PR #304 review: the WebSocket transport enforced a fixed
+/// 1 MiB event ceiling while the executor validated the terminal frame against
+/// the configured 16 MiB. Two 600,000-byte messages streamed every delta, then
+/// the socket rejected `response.completed` after the response was persisted.
+/// With one configured limit, the aligned transport delivers the full payload.
+#[tokio::test]
+async fn websocket_delivers_a_terminal_event_larger_than_the_old_fixed_socket_limit() {
+    const TEXT_BYTES: usize = 600_000;
+    let mock = MockResponsesServer::start(vec![two_message_sse_response("resp_upstream_big", TEXT_BYTES)]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create", "model": "test-model", "stream_id": "big",
+            "input": [{"type": "message", "role": "user", "content": "write a lot"}],
+            "store": true, "stream": true
+        }),
+    )
+    .await;
+
+    let events = recv_until_completed(&mut ws).await;
+    let delivered_text = events
+        .iter()
+        .filter(|event| event["type"] == "response.output_text.delta")
+        .map(|event| event["delta"].as_str().unwrap().len())
+        .sum::<usize>();
+    assert_eq!(delivered_text, 2 * TEXT_BYTES);
+    let terminal = events.last().unwrap();
+    assert_eq!(terminal["type"], "response.completed", "{terminal}");
+    assert_eq!(terminal["stream_id"], "big");
+    assert!(
+        terminal.to_string().len() > 1024 * 1024,
+        "the terminal event exceeds the old fixed limit"
+    );
+    assert_eq!(terminal["response"]["output"].as_array().unwrap().len(), 2);
+    for item in terminal["response"]["output"].as_array().unwrap() {
+        assert_eq!(item["content"][0]["text"].as_str().unwrap().len(), TEXT_BYTES);
+    }
+    assert!(events.iter().all(|event| event["stream_id"] == "big"));
+    assert_eq!(count_rows(&fixture.pool, "responses").await, 1);
+}
+
+/// The same stream against a transport whose event ceiling is below the response
+/// it must deliver. `ResponsesConfig::validate` rejects this pairing at startup;
+/// the executor must still refuse the terminal frame before persisting or
+/// publishing a checkpoint, so a client that received every delta but no
+/// `response.completed` cannot later find the response stored.
+#[tokio::test]
+async fn websocket_undeliverable_terminal_event_is_rejected_before_persistence() {
+    const TEXT_BYTES: usize = 600_000;
+    let mock = MockResponsesServer::start(vec![two_message_sse_response("resp_upstream_big", TEXT_BYTES)]).await;
+    let fixture = storage_backed_state_with_responses_config(
+        &mock.url,
+        ResponsesConfig {
+            max_retained_bytes: 4 * 1024 * 1024,
+            max_stream_event_bytes: 1024 * 1024,
+            ..ResponsesConfig::default()
+        },
+    )
+    .await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create", "model": "test-model", "stream_id": "big",
+            "input": [{"type": "message", "role": "user", "content": "write a lot"}],
+            "store": true, "stream": true
+        }),
+    )
+    .await;
+
+    let events = recv_until_completed(&mut ws).await;
+    let delivered_text = events
+        .iter()
+        .filter(|event| event["type"] == "response.output_text.delta")
+        .map(|event| event["delta"].as_str().unwrap().len())
+        .sum::<usize>();
+    assert_eq!(
+        delivered_text,
+        2 * TEXT_BYTES,
+        "every delta fits the event limit and is delivered"
+    );
+    let terminal = events.last().unwrap();
+    assert_eq!(terminal["type"], "error", "{terminal}");
+    assert_eq!(terminal["stream_id"], "big");
+    let message = terminal["error"]["message"].as_str().unwrap();
+    assert!(message.contains("stream event exceeded"), "{message}");
+    assert!(
+        events.iter().all(|event| event["type"] != "response.completed"),
+        "an undeliverable terminal event is never announced as completed"
+    );
+    assert!(events.iter().all(|event| event.to_string().len() <= 1024 * 1024));
+    assert_eq!(
+        count_rows(&fixture.pool, "responses").await,
+        0,
+        "rejected response must not be persisted"
+    );
+    assert_eq!(
+        count_rows(&fixture.pool, "items").await,
+        0,
+        "rejected response must not leave items"
     );
 }
 

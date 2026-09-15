@@ -10,6 +10,7 @@ use crate::executor::accumulator::Validation;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent};
 use crate::executor::request::RequestContext;
+use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::translate::{Translation, TranslationContext};
 use crate::tool::{ToolRegistry, ToolSearchMetadata, ToolSearchState};
 use crate::types::request_response::ResponsePayload;
@@ -17,6 +18,7 @@ use delivery::StreamDelivery;
 use futures::{Stream, StreamExt};
 use tokio::sync::mpsc::Sender;
 
+#[derive(Debug)]
 pub(super) struct StreamPayload {
     pub(super) payload: ResponsePayload,
     pub(super) deferred_events: Vec<EventFrame>,
@@ -40,6 +42,20 @@ impl AgentPipeline {
             request,
             tool_search_state,
             delivery: StreamDelivery::new(sender),
+            round: None,
+        }
+    }
+
+    pub(super) fn with_limits(
+        request: RequestContext,
+        tool_search_state: Option<ToolSearchState>,
+        sender: Option<Sender<StreamEvent>>,
+        max_stream_event_bytes: usize,
+    ) -> Self {
+        Self {
+            request,
+            tool_search_state,
+            delivery: StreamDelivery::with_max_stream_event_bytes(sender, max_stream_event_bytes),
             round: None,
         }
     }
@@ -82,7 +98,12 @@ impl AgentPipeline {
         (self.request, self.delivery.accumulator)
     }
 
-    fn begin_round(&mut self, validation: Validation, context: TranslationContext) -> ExecutorResult<()> {
+    fn begin_round(
+        &mut self,
+        validation: Validation,
+        context: TranslationContext,
+        budget: Option<ExecutorResponseBudget>,
+    ) -> ExecutorResult<()> {
         if self.round.is_some() {
             return Err(ExecutorError::InvalidRequest(
                 "previous pipeline body did not finish".to_owned(),
@@ -93,6 +114,7 @@ impl AgentPipeline {
             self.request.conversation_id.clone(),
             validation,
             context,
+            budget,
         ));
         Ok(())
     }
@@ -126,8 +148,9 @@ impl AgentPipeline {
         context: TranslationContext,
         registry: &ToolRegistry,
         output_offset: usize,
+        budget: Option<ExecutorResponseBudget>,
     ) -> ExecutorResult<StreamPayload> {
-        self.begin_round(validation, context)?;
+        self.begin_round(validation, context, budget)?;
         futures::pin_mut!(body);
         while let Some(line) = body.next().await {
             let translation = self.push(SseLine::parse(&line?))?;
@@ -148,8 +171,9 @@ impl AgentPipeline {
         body: &str,
         validation: Validation,
         context: TranslationContext,
+        budget: Option<ExecutorResponseBudget>,
     ) -> ExecutorResult<ResponsePayload> {
-        self.begin_round(validation, context)?;
+        self.begin_round(validation, context, budget)?;
         self.round
             .as_mut()
             .expect("JSON runner just started its round")

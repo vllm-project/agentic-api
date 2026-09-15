@@ -356,6 +356,7 @@ mod tests {
             postgres: crate::config::PostgresConfig::default(),
             sqlite: crate::config::SqliteConfig::default(),
             tools: crate::config::ToolRuntimeConfig::default(),
+            responses: crate::config::ResponsesConfig::default(),
         }
     }
 
