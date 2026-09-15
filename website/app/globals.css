@@ -1257,6 +1257,24 @@ h2 {
   padding-inline: 6px !important;
   font-size: 12px !important;
 }
+.client-tab-list {
+  overflow-x: auto;
+}
+.desktop-guide:not([hidden]) {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.desktop-guide p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.desktop-guide .text-link {
+  margin-top: 0;
+}
 .install-note {
   margin: -10px 24px 24px;
   color: var(--muted);

@@ -25,6 +25,7 @@ The Markdown guides below track the development branch (`main`). For a released 
 
 ## Harnesses and integrations
 
+- [Codex Desktop](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/guides/codex-desktop.md): Tested Linux desktop setup with a separate app profile, local model catalog, shell editing, and the freeform apply_patch limitation.
 - [Codex integration](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/design/codex-integration.md): Codex integration design and configuration.
 - [Claude Code integration](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/design/claude-code-integration.md): Claude Code integration design and configuration.
 - [MCP gateway integration](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/design/mcp-gateway-integration.md): MCP tool discovery, execution, and gateway integration design.

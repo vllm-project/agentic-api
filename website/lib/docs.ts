@@ -22,6 +22,13 @@ const sections = [
     path: 'api/index.md',
   },
   {
+    id: 'codex-desktop',
+    title: 'Codex Desktop',
+    description:
+      'Use the desktop UI with local models: tested Linux setup and tool limitations.',
+    path: 'guides/codex-desktop.md',
+  },
+  {
     id: 'developing',
     title: 'Developing',
     description: 'Set up a development environment and work on the project.',

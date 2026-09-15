@@ -100,6 +100,11 @@ for (const [file, heading] of pages) {
         `${file}: every guide stays in the selected version`,
       );
     }
+    assert.equal(
+      document.includes('/docs/guides/codex-desktop.md'),
+      version.sections.includes('codex-desktop') && !version.hostedBaseUrl,
+      `${file}: desktop guide follows the selected version's availability`,
+    );
     if (!version.sections.includes('sglang'))
       assert.ok(
         !document.includes('SGLang upstream'),

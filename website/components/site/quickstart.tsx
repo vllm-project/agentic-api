@@ -1,7 +1,14 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Check, Copy, Terminal, Code2, ArrowUpRight } from 'lucide-react';
+import {
+  Check,
+  Copy,
+  Terminal,
+  Monitor,
+  Code2,
+  ArrowUpRight,
+} from 'lucide-react';
 import {
   DEFAULT_INSTALL_METHOD,
   INSTALL_METHODS,
@@ -200,16 +207,18 @@ export function Quickstart() {
             label="Start the standalone server"
           />
           <p className="install-note">
-            Or launch a coding client below; its launcher starts the gateway for
-            you.
+            The CLI launchers below start the gateway for you.
           </p>
           <Tabs defaultValue="codex" className="launch-tabs">
             <TabsList
-              className="launch-tab-list"
+              className="launch-tab-list client-tab-list"
               aria-label="Choose your coding agent"
             >
               <TabsTrigger value="codex">
-                <Terminal size={16} /> Codex
+                <Terminal size={16} /> Codex CLI
+              </TabsTrigger>
+              <TabsTrigger value="codex-desktop">
+                <Monitor size={16} /> Codex Desktop
               </TabsTrigger>
               <TabsTrigger value="claude">
                 <Code2 size={16} /> Claude Code
@@ -221,6 +230,26 @@ export function Quickstart() {
                 code={launchCommands.codex}
                 label="Launch Codex"
               />
+            </TabsContent>
+            <TabsContent value="codex-desktop" className="desktop-guide">
+              <p>
+                Use the desktop UI with a local vLLM model. The tested Linux
+                setup keeps your normal session separate and configures Agentic
+                API as the model provider.
+              </p>
+              <p>
+                Shell commands, file writes, and follow-up turns were verified.
+                Freeform <code>apply_patch</code> must be disabled; file editing
+                uses shell commands.
+              </p>
+              <p>
+                <a
+                  className="text-link"
+                  href={`${REPO}/blob/main/docs/guides/codex-desktop.md`}
+                >
+                  Set up Codex Desktop <ArrowUpRight size={16} />
+                </a>
+              </p>
             </TabsContent>
             <TabsContent value="claude">
               <CopyCode
