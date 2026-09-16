@@ -28,6 +28,22 @@ repos:
 
 -   repo: local
     hooks:
+    -   id: rust-file-sizes
+        name: Rust production file sizes
+        language: python
+        entry: python scripts/check_rust_file_sizes.py
+        additional_dependencies: &rust_size_dependencies
+        - tree-sitter==0.25.2
+        - tree-sitter-rust==0.24.2
+        pass_filenames: false
+        always_run: true
+    -   id: rust-file-size-tests
+        name: Rust file-size checker tests
+        language: python
+        entry: python -m unittest discover -s scripts/tests -p test_rust_file_sizes.py
+        additional_dependencies: *rust_size_dependencies
+        files: '^(scripts/(check_rust_file_sizes.py|tests/test_rust_file_sizes.py)|\.rust-file-sizes.json|\.pre-commit-config.yaml)$'
+        pass_filenames: false
     -   id: rustfmt
         name: rustfmt
         language: system
