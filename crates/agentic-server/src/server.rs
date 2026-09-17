@@ -11,6 +11,7 @@ use agentic_core::proxy::ProxyState;
 use agentic_core::readiness::{llm_readiness_client, wait_llm_ready};
 use agentic_server::app::{AppState, ReadinessTracker, ServerConfig, WebSocketTracker, build_router_with_auth};
 use agentic_server::auth::{OidcAuthError, OidcAuthenticator, OidcConfig};
+use agentic_server::model_capabilities::ModelCapabilities;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
@@ -22,6 +23,7 @@ const GATEWAY_DRAIN_TIMEOUT: Duration = Duration::from_secs(8);
 /// These are deliberately separate from [`Config`], which carries inference,
 /// storage, and tool concerns that core owns.
 pub struct GatewayOptions<'a> {
+    pub model_capabilities: ModelCapabilities,
     pub host: &'a str,
     pub port: u16,
     /// Ceiling on serialized inbound request bytes for HTTP bodies and
@@ -50,6 +52,7 @@ async fn build_state(
     config: &Config,
     shutdown_token: CancellationToken,
     max_request_body_size: NonZeroUsize,
+    model_capabilities: ModelCapabilities,
 ) -> Result<AppState, ServerError> {
     let proxy_state = ProxyState::new(config.clone())?;
     let exec_ctx = Arc::new(ExecutionContext::from_config(config).await?);
@@ -65,6 +68,7 @@ async fn build_state(
         skip_llm_ready_check: config.skip_llm_ready_check,
         openai_api_key: config.openai_api_key.clone(),
         max_request_body_size,
+        model_capabilities: Arc::new(model_capabilities),
     })
 }
 
@@ -169,13 +173,20 @@ pub async fn run(config: Config, gateway: GatewayOptions<'_>) -> Result<(), Serv
         port,
         max_request_body_size,
         oidc,
+        model_capabilities,
     } = gateway;
     let authenticator = match oidc {
         Some(oidc) => Some(OidcAuthenticator::discover(oidc).await?),
         None => None,
     };
     wait_until_llm_ready(&config).await?;
-    let state = build_state(&config, CancellationToken::new(), max_request_body_size).await?;
+    let state = build_state(
+        &config,
+        CancellationToken::new(),
+        max_request_body_size,
+        model_capabilities,
+    )
+    .await?;
     serve_gateway_until_signal(state, host, port, authenticator).await
 }
 
@@ -195,6 +206,7 @@ pub async fn run_with_llm(
         port,
         max_request_body_size,
         oidc,
+        model_capabilities,
     } = gateway;
     let authenticator = match oidc {
         Some(oidc) => Some(OidcAuthenticator::discover(oidc).await?),
@@ -226,7 +238,7 @@ pub async fn run_with_llm(
             }
             state = async {
                 wait_until_llm_ready(&config).await?;
-                build_state(&config, shutdown_token.clone(), max_request_body_size).await
+                build_state(&config, shutdown_token.clone(), max_request_body_size, model_capabilities).await
             } => state?,
         };
 

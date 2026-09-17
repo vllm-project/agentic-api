@@ -7,7 +7,7 @@ pub mod usage;
 pub use input::{
     CompactionItem, CustomToolCallOutputMessage, FunctionToolResultMessage, InputContent, InputFileContent,
     InputFunctionToolCall, InputImageContent, InputItem, InputMessage, InputMessageContent, InputTextContent,
-    InputToolSearchCall, ResponsesInput, ToolCallOutput, ToolOutputContent, ToolSearchOutputMessage,
+    InputToolSearchCall, RefusalContent, ResponsesInput, ToolCallOutput, ToolOutputContent, ToolSearchOutputMessage,
 };
 pub use output::{
     ApplyDone, CustomToolCall, FunctionToolCall, GatewayCallStatus, McpCall, McpCallError, McpCallStatus, McpListTool,

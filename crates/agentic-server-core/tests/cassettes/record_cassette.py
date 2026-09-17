@@ -706,6 +706,27 @@ def _extract_tool_calls(response_data: dict | None) -> list[dict]:
     ]
 
 
+STRUCTURED_OUTPUT_PART_TYPES = frozenset({"input_text", "input_image", "input_file"})
+
+
+def _is_content_part_list(value: Any) -> bool:
+    """Whether a tool handler returned structured Responses content parts.
+
+    Only the part types the Responses API accepts in a structured tool output
+    qualify; any other list -- including dicts that merely carry a `type` key
+    such as `[{"type": "product", ...}]` -- stays an ordinary JSON result and
+    is stringified as before.
+    """
+    return (
+        isinstance(value, list)
+        and bool(value)
+        and all(
+            isinstance(part, dict) and part.get("type") in STRUCTURED_OUTPUT_PART_TYPES
+            for part in value
+        )
+    )
+
+
 def _build_tool_output_input(
     tool_calls: list[dict],
     tool_outputs: "dict[str, Any] | types.ModuleType",
@@ -724,7 +745,10 @@ def _build_tool_output_input(
               matching function with its actual parsed `arguments` as keyword
               arguments -- naturally handling whatever argument types the model
               used (string, number, ...) -- and the JSON-serialized return value
-              becomes the output. A function returning `None` omits that call's
+              becomes the output. A returned list of typed content parts (for
+              example `input_text` and `input_image` dicts) is sent as the
+              structured `output` array instead of a string, which is how a
+              cassette records a tool returning an image. A function returning `None` omits that call's
               output item entirely, which is how a cassette deliberately tests a
               provider's behavior when the client leaves one specific pending
               call unresolved (e.g. one of two parallel calls to the same tool
@@ -815,7 +839,13 @@ def _build_tool_output_input(
             result = fn(**kwargs)
             if result is None:
                 continue
-            output = result if isinstance(result, str) else json.dumps(result)
+            if isinstance(result, str) or _is_content_part_list(result):
+                # A string is the plain tool result; a list of typed content
+                # parts (input_text / input_image / input_file) is the
+                # structured Responses output and must stay an array.
+                output = result
+            else:
+                output = json.dumps(result)
         else:
             if name not in tool_outputs:
                 continue
@@ -1093,7 +1123,10 @@ def run_responses(
             click.echo(
                 f"\n[Branch] turn {turn} chains from turn {branch_from} (response_id={previous_response_id})"
             )
-        if preset_input is not None:
+        if preset_input is not None and turn == 1:
+            # The preset value replaces the first prompt only; later turns are
+            # typed as usual so a structured opening turn (for example an
+            # input_image item array) can still be continued by previous_response_id.
             input_value: Any = preset_input
         else:
             prompt = _prompt(f"Turn {turn}/{turns} — enter prompt: ")
@@ -1373,7 +1406,10 @@ def run_responses(
 @click.option(
     "--input-file",
     type=click.Path(exists=True, dir_okay=False),
-    help="JSON file containing one Responses input value; requires HTTP --mode responses --turns 1.",
+    help=(
+        "JSON file containing the Responses input value for turn 1; later turns are prompted. "
+        "Requires HTTP --mode responses without branches."
+    ),
 )
 @click.option(
     "--reasoning",
@@ -1502,9 +1538,9 @@ def main(
         )
     if max_output_tokens < 0:
         raise click.UsageError("--max-output-tokens must be >= 0.")
-    if input_file and (mode != "responses" or turns != 1 or branches or transport != "http"):
+    if input_file and (mode != "responses" or branches or transport != "http"):
         raise click.UsageError(
-            "--input-file requires HTTP --mode responses --turns 1 without branches."
+            "--input-file requires HTTP --mode responses without branches."
         )
     if reasoning_raw is not None and mode != "responses":
         raise click.UsageError("--reasoning is only supported with --mode responses.")

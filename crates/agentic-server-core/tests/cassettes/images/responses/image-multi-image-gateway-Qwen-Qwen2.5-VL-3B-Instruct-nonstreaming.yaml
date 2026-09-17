@@ -1,0 +1,64 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content:
+        - text: Two images follow. For each, name the color on its left half.
+          type: input_text
+        - detail: low
+          image_url: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg==
+          type: input_image
+        - text: That was the first image. Here is the second.
+          type: input_text
+        - detail: low
+          image_url: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAATUlEQVR42u3PMQ0AAAwDoPo33UnY1Y8EAyTNVMciICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIPA5X1jpWlc21NUAAAAASUVORK5CYII=
+          type: input_image
+        - text: 'Reply with exactly two words: the first image''s left color, then
+            the second image''s left color.'
+          type: input_text
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-VL-3B-Instruct
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1789656350
+      error: null
+      id: resp_01a0afd4-bf4a-7e73-9ddc-e416a4a13e9d
+      incomplete_details: null
+      instructions: null
+      model: Qwen/Qwen2.5-VL-3B-Instruct
+      object: response
+      output:
+      - content:
+        - annotations: []
+          text: Red, Green
+          type: output_text
+        id: msg_8654e3545428658d
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: null
+      status: completed
+      usage:
+        input_tokens: 78
+        input_tokens_details:
+          cached_tokens: 64
+        output_tokens: 4
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 82
+    headers:
+      content-type: application/json
+    status_code: 200

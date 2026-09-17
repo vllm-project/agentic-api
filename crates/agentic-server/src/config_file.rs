@@ -1,25 +1,37 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::Write;
 use std::num::NonZeroUsize;
 use std::path::Path;
 
 use agentic_core::McpServerEntry;
-use agentic_core::config::CONFIG_FILE_NAME;
+use agentic_core::config::{CONFIG_FILE_NAME, WebSearchProviderKind};
 use agentic_core::error::Error;
+use agentic_server::model_capabilities::{InputModalities, ModelCapabilities};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct WebSearchFileConfig {
+    /// Search backend (`you` or `brave`); unset selects You.com.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<WebSearchProviderKind>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
+    /// Environment variable holding the provider's API key; unset uses the
+    /// provider's conventional variable (`YOU_API_KEY`, `BRAVE_API_KEY`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key_env: Option<String>,
+    /// Ceiling on concurrent provider requests within one batched search.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_concurrent_queries: Option<NonZeroUsize>,
 }
 
 impl WebSearchFileConfig {
     fn is_empty(&self) -> bool {
-        self.base_url.is_none() && self.api_key_env.is_none()
+        self.provider.is_none()
+            && self.base_url.is_none()
+            && self.api_key_env.is_none()
+            && self.max_concurrent_queries.is_none()
     }
 }
 
@@ -75,6 +87,20 @@ impl MessagesGatewayFileConfig {
     }
 }
 
+/// Per-model overrides for capabilities the gateway cannot infer from upstream metadata.
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct ModelFileConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_modalities: Option<InputModalities>,
+}
+
+impl ModelFileConfig {
+    fn is_empty(&self) -> bool {
+        self.input_modalities.is_none()
+    }
+}
+
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct FileConfig {
@@ -92,6 +118,8 @@ pub(crate) struct FileConfig {
     pub tools: ToolsFileConfig,
     #[serde(skip_serializing_if = "MessagesGatewayFileConfig::is_empty")]
     pub messages_gateway: MessagesGatewayFileConfig,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub models: BTreeMap<String, ModelFileConfig>,
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub mcp_servers: HashMap<String, McpServerEntry>,
 }
@@ -194,6 +222,16 @@ impl FileConfig {
         Ok(self)
     }
 
+    /// Build the capability resolver from the configured per-model overrides.
+    pub(crate) fn model_capabilities(&self) -> ModelCapabilities {
+        ModelCapabilities::new(
+            self.models
+                .iter()
+                .filter_map(|(model_id, model)| Some((model_id.clone(), model.input_modalities?)))
+                .collect(),
+        )
+    }
+
     fn validate(&self, path: &Path) -> Result<(), Error> {
         if self
             .web_search
@@ -211,6 +249,20 @@ impl FileConfig {
                 "configuration file {} contains an empty MCP allowed host: {host:?}",
                 path.display()
             )));
+        }
+        for (model_id, model) in &self.models {
+            if model_id.trim().is_empty() {
+                return Err(Error::Config(format!(
+                    "configuration file {} contains an empty model ID",
+                    path.display()
+                )));
+            }
+            if model.is_empty() {
+                return Err(Error::Config(format!(
+                    "configuration file {} contains no settings for model {model_id:?}; set input_modalities",
+                    path.display()
+                )));
+            }
         }
         if let Some(label) = self.mcp_servers.keys().find(|label| label.trim().is_empty()) {
             return Err(Error::Config(format!(
@@ -247,11 +299,13 @@ impl FileConfig {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::num::NonZeroUsize;
 
     use agentic_core::McpServerEntry;
+    use agentic_server::model_capabilities::{InputModalities, UpstreamCapabilities};
     use tempfile::tempdir;
 
-    use super::{FileConfig, McpFileConfig, ServerFileConfig, WebSearchFileConfig};
+    use super::{FileConfig, McpFileConfig, ServerFileConfig, WebSearchFileConfig, WebSearchProviderKind};
 
     #[test]
     fn missing_config_file_uses_defaults() {
@@ -267,8 +321,10 @@ mod tests {
         let defaults = FileConfig {
             llm_api_base: Some("http://127.0.0.1:5050".to_owned()),
             web_search: WebSearchFileConfig {
+                provider: Some(WebSearchProviderKind::You),
                 base_url: Some("https://api.ydc-index.io".to_owned()),
                 api_key_env: Some("YOU_API_KEY".to_owned()),
+                max_concurrent_queries: None,
             },
             mcp: McpFileConfig {
                 allowed_hosts: vec!["mcp.example.com".to_owned()],
@@ -285,12 +341,15 @@ mod tests {
         assert_eq!(config.llm_api_base.as_deref(), Some("http://127.0.0.1:5050"));
         assert!(contents.contains("llm_api_base = \"http://127.0.0.1:5050\""));
         assert!(contents.contains("[web_search]"));
+        assert!(contents.contains("provider = \"you\""));
         assert!(contents.contains("api_key_env = \"YOU_API_KEY\""));
+        assert!(!contents.contains("max_concurrent_queries"));
         assert!(contents.contains("allowed_hosts = [\"mcp.example.com\"]"));
         assert!(contents.contains("[server]"));
         assert!(contents.contains("max_request_body_size_bytes = 20971520"));
         assert!(!contents.contains("YOU_API_KEY ="));
         assert!(!contents.contains("[mcp_servers]"));
+        assert!(!contents.contains("[models"));
 
         #[cfg(unix)]
         {
@@ -315,7 +374,9 @@ mod tests {
 
         assert_eq!(config.llm_api_base.as_deref(), Some("http://127.0.0.1:8000/v1"));
         assert_eq!(config.database_url.as_deref(), Some("sqlite:///tmp/agentic.db"));
+        assert_eq!(config.web_search.provider, None);
         assert_eq!(config.web_search.api_key_env.as_deref(), Some("YOU_API_KEY"));
+        assert_eq!(config.web_search.max_concurrent_queries, None);
         assert_eq!(config.mcp.allowed_hosts, vec!["mcp.example.com"]);
         assert!(matches!(config.mcp_servers["remote"], McpServerEntry::Http { .. }));
         assert_eq!(
@@ -323,6 +384,123 @@ mod tests {
             Some(["say_hello".to_owned(), "sum".to_owned()].as_slice())
         );
         assert_eq!(config.mcp_servers["remote"].require_approval(), Some("never"));
+        assert_eq!(
+            config.models["Qwen/Qwen3-VL-8B-Instruct"].input_modalities,
+            Some(InputModalities::TextAndImage)
+        );
+    }
+
+    #[test]
+    fn model_overrides_take_precedence_over_upstream_metadata() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            concat!(
+                "[models.\"vision-model\"]\ninput_modalities = [\"text\", \"image\"]\n\n",
+                "[models.\"pinned-text-model\"]\ninput_modalities = [\"text\"]\n",
+            ),
+        )
+        .expect("write config");
+
+        let capabilities = FileConfig::load(home.path())
+            .expect("per-model overrides must parse")
+            .expect("existing config")
+            .model_capabilities();
+        let advertises_image = UpstreamCapabilities {
+            image: true,
+            reasoning: false,
+        };
+
+        assert_eq!(
+            capabilities.resolve("vision-model", UpstreamCapabilities::default()),
+            InputModalities::TextAndImage
+        );
+        assert_eq!(
+            capabilities.resolve("pinned-text-model", advertises_image),
+            InputModalities::Text
+        );
+        assert_eq!(
+            capabilities.resolve("unconfigured-model", advertises_image),
+            InputModalities::TextAndImage
+        );
+        assert_eq!(
+            capabilities.resolve("unconfigured-model", UpstreamCapabilities::default()),
+            InputModalities::Text
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_input_modality() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[models.\"vision-model\"]\ninput_modalities = [\"text\", \"video\"]\n",
+        )
+        .expect("write config");
+
+        let error = FileConfig::load(home.path()).expect_err("an unknown modality must fail");
+        let message = error.to_string();
+
+        assert!(message.contains("config.toml"), "{message}");
+        assert!(message.contains("video"), "{message}");
+        assert!(message.contains("image"), "{message}");
+    }
+
+    #[test]
+    fn rejects_unusable_input_modality_lists() {
+        for (modalities, expected) in [
+            ("[]", "at least one modality"),
+            ("[\"image\"]", "must include \"text\""),
+            ("[\"text\", \"text\"]", "more than once"),
+        ] {
+            let home = tempdir().expect("temp home");
+            fs::write(
+                home.path().join("config.toml"),
+                format!("[models.\"a-model\"]\ninput_modalities = {modalities}\n"),
+            )
+            .expect("write config");
+
+            let error = FileConfig::load(home.path()).expect_err("an unusable modality list must fail");
+            assert!(error.to_string().contains(expected), "{modalities}: {error}");
+        }
+    }
+
+    #[test]
+    fn rejects_empty_model_id() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[models.\"  \"]\ninput_modalities = [\"text\"]\n",
+        )
+        .expect("write config");
+
+        let error = FileConfig::load(home.path()).expect_err("an empty model ID must fail");
+        assert!(error.to_string().contains("empty model ID"), "{error}");
+    }
+
+    #[test]
+    fn rejects_model_section_without_settings() {
+        let home = tempdir().expect("temp home");
+        fs::write(home.path().join("config.toml"), "[models.\"a-model\"]\n").expect("write config");
+
+        let error = FileConfig::load(home.path()).expect_err("an empty model section must fail");
+        let message = error.to_string();
+
+        assert!(message.contains("no settings for model \"a-model\""), "{message}");
+        assert!(message.contains("input_modalities"), "{message}");
+    }
+
+    #[test]
+    fn rejects_unknown_model_setting() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[models.\"a-model\"]\noutput_modalities = [\"text\"]\n",
+        )
+        .expect("write config");
+
+        let error = FileConfig::load(home.path()).expect_err("an unknown model setting must fail");
+        assert!(error.to_string().contains("unknown field"), "{error}");
     }
 
     #[test]
@@ -409,6 +587,38 @@ mod tests {
                 .map(std::num::NonZeroUsize::get),
             Some(1_048_576)
         );
+    }
+
+    #[test]
+    fn web_search_provider_settings_round_trip_and_reject_invalid_values() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[web_search]\nprovider = \"brave\"\napi_key_env = \"MY_BRAVE_KEY\"\nmax_concurrent_queries = 2\n",
+        )
+        .expect("write config");
+        let config = FileConfig::load(home.path())
+            .expect("load config")
+            .expect("existing config");
+        assert_eq!(config.web_search.provider, Some(WebSearchProviderKind::Brave));
+        assert_eq!(config.web_search.api_key_env.as_deref(), Some("MY_BRAVE_KEY"));
+        assert_eq!(config.web_search.base_url, None);
+        assert_eq!(config.web_search.max_concurrent_queries.map(NonZeroUsize::get), Some(2));
+        let rendered = toml::to_string(&config).expect("serialize config");
+        assert!(rendered.contains("provider = \"brave\""));
+        assert!(rendered.contains("max_concurrent_queries = 2"));
+
+        fs::write(home.path().join("config.toml"), "[web_search]\nprovider = \"bing\"\n").expect("write config");
+        let error = FileConfig::load(home.path()).expect_err("unknown provider must fail");
+        assert!(error.to_string().contains("provider"), "{error}");
+
+        fs::write(
+            home.path().join("config.toml"),
+            "[web_search]\nmax_concurrent_queries = 0\n",
+        )
+        .expect("write config");
+        let error = FileConfig::load(home.path()).expect_err("zero concurrency must fail");
+        assert!(error.to_string().contains("max_concurrent_queries"), "{error}");
     }
 
     #[test]

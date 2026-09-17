@@ -3,7 +3,7 @@ use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::StreamEvent;
 use crate::executor::inference::{call_inference, fetch_response_json};
 use crate::executor::pipeline::{AgentPipeline, StreamPayload};
-use crate::executor::rehydrate::validate_message_files;
+use crate::executor::rehydrate::validate_message_content;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::translate::TranslationContext;
@@ -60,10 +60,10 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
 /// fields removed.
 ///
 /// # Errors
-/// Unsupported message files, a tool-configuration error, or a serialization failure.
+/// Unsupported message content, a tool-configuration error, or a serialization failure.
 pub fn upstream_request(ctx: &RequestContext, stream: bool) -> ExecutorResult<String> {
     // Composable callers may supply RequestContext without the rehydration step.
-    validate_message_files(&ctx.enriched_request.input)?;
+    validate_message_content(&ctx.enriched_request.input)?;
     let request = ctx.enriched_request.to_upstream_request(stream)?;
     serialize_to_string(&request).map_err(ExecutorError::JsonError)
 }

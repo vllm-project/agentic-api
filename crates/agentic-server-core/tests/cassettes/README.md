@@ -25,6 +25,9 @@ printf 'Use web search to look up potato, then summarize in one sentence.\n' | p
 
 # structured single-turn input -- sends the JSON string or item array from input.json
 python tests/cassettes/record_cassette.py --mode responses --turns 1 --no-stream --no-store --max-output-tokens 0 --input-file input.json --model gpt-4o --output out.yaml
+
+# structured opening turn, then a typed follow-up chained by previous_response_id
+printf 'What did I just show you?\n' | python tests/cassettes/record_cassette.py --mode responses --turns 2 --no-stream --input-file input.json --model gpt-4o --output out.yaml
 ```
 
 The recorder scripts (`record_reasoning_cassettes.sh`, `record_tool_call_cassettes.sh`, etc.) use `printf` to feed fixed prompts per test so no manual input is needed.
@@ -56,7 +59,10 @@ Each smoke script starts a replay server and Agentic API, then invokes the insta
 `MESSAGES_GATEWAY_TOOL_ALIASES=WebSearch=web_search`; it asserts the recorded answer, two Messages rounds, one search
 request, a hidden `tool_result`, cache-bearing system and user blocks, and the exact Qwen model requested by Claude
 Code 2.1.245. The Codex job asserts the recorded `HELLO` answer, one streaming Responses request, and the exact Qwen
-model requested by Codex 0.149.1.
+model requested by Codex 0.149.1. It then runs `scripts/codex_image_smoke.py`, which attaches the committed
+`images/inputs/red-blue-64.png` through both launcher modes and compares its bytes with the upstream capture. A third
+run explicitly advertises text-only and requires the image to be absent. These cases replay the existing Qwen2.5-VL
+single-image SSE recording unchanged; they validate client/catalog propagation, not fresh model inference.
 
 ## Modes
 
@@ -95,7 +101,7 @@ model requested by Codex 0.149.1.
                        Effective tools after normalized direct-vLLM search
 --manual-item-replay   Replay accumulated items with store=false for direct-vLLM or gateway tool search
 --reasoning JSON       JSON object containing Responses reasoning settings
---input-file FILE       JSON string or item array for one HTTP Responses turn
+--input-file FILE       JSON string or item array for turn 1 of an HTTP Responses recording; later turns are prompted
 --max-output-tokens N  max_output_tokens for Responses requests (default 1024; use 0 to omit)
 --proxy-port PORT      Local proxy port (default 7070)
 --branch-from TURN     Branch from this turn's response id (repeatable)
@@ -212,6 +218,7 @@ turns:
 | `record_mcp_cassettes.sh` | Native MCP counter tool discovery and calls (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_web_search_cassettes.sh` | Matching web-search calls (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_messages_tool_choice.py` | Forced `any` and named Messages searches followed by an automatic answer (JSON + SSE) | gateway's upstream traffic to vLLM |
+| `record_image_input_cassettes.sh` | Matching two-turn image-input conversations (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_dynamo_cassettes.sh` | Stateful two-turn and client-executed function tool call cassettes (streaming + non-streaming) | NVIDIA Dynamo frontend |
 | `record_dynamo_messages_cassettes.sh` | Two-round Messages web-search cassettes (streaming + non-streaming), validated before replacement | Existing NVIDIA Dynamo frontend |
 | `record_sglang_cassettes.sh` | Same shared executor scenarios as Dynamo, staged validation and sanitized provenance | SGLang |
@@ -399,15 +406,60 @@ OPENAI_API_KEY=sk-... \
 bash crates/agentic-server-core/tests/cassettes/record_web_search_cassettes.sh
 ```
 
-The typed You.com normalization tests replay sanitized provider responses in `tests/fixtures/you_search_response*.json`.
-Regenerate them from a recorded cassette instead of editing them by hand:
+### Image input (gateway → vLLM vision model, and OpenAI)
+
+The reference path is client → OpenAI Responses API. The gateway path is client → Agentic API → vLLM hosting an
+open-source vision model. Both paths receive the same image bytes, prompts, and tool definitions; only the model name
+differs. `image_input_test.rs` replays every pair and compares request shape, completed-response structure, the
+streaming event lifecycle, and the history the gateway forwards on continuation — never the model's wording or token
+counts.
+
+| Scenario | Turns | What it proves |
+|---|---|---|
+| `single-image` | 1 | `input_text` + inline PNG (`images/inputs/single-image.json`) reach the model unchanged |
+| `multi-image` | 1 | text and two different PNGs interleave in order (`images/inputs/multi-image.json`) |
+| `continuation` | 2 | a text follow-up by `previous_response_id` rehydrates the earlier image into context |
+| `tool-image` | 2 | the model calls `view_image`, the client returns a `function_call_output` whose `output` is a content array carrying the PNG, and the model answers from it |
+
+Each scenario is recorded streaming and non-streaming per provider (16 cassettes). Every recording is validated
+(fixture bytes preserved, `previous_response_id` chained, exactly one `view_image` call answered by a structured
+output) and staged before any final fixture is replaced. To change an image, replace the PNG and regenerate the JSON
+turns from it; the script refuses to record when they disagree.
+
+**Recorded configuration.** vLLM 0.29.0 serving `Qwen/Qwen2.5-VL-3B-Instruct` in bfloat16 on one 12 GB GPU
+(RTX 4080 Laptop, WSL2). The stock Qwen2.5-VL chat template renders images but has no `tools` block, so with
+`tool_choice: auto` the model never sees declared functions; `images/qwen2.5-vl-hermes-tools.jinja` adds the
+Hermes-style tools prompt and `<tool_call>` history rendering from Qwen2.5-Instruct while keeping the multimodal
+rendering, including images inside tool responses. It must be passed with `--chat-template`.
 
 ```bash
-python crates/agentic-server-core/tests/cassettes/extract_you_search_fixture.py \
-  --cassette crates/agentic-server-core/tests/cassettes/messages_multiround/sequential-web-search-qwen3-nonstreaming.yaml \
-  --query "latest stable Rust version number" --web 3 --news 2 \
-  --output crates/agentic-server-core/tests/fixtures/you_search_response.json
+# 1. Serve the vision model. VLLM_WSL2_ENABLE_PIN_MEMORY is needed under WSL2 only;
+#    VLLM_USE_FLASHINFER_SAMPLER=0 avoids a JIT build when no CUDA toolkit (nvcc) is installed.
+VLLM_WSL2_ENABLE_PIN_MEMORY=1 VLLM_USE_FLASHINFER_SAMPLER=0 \
+vllm serve Qwen/Qwen2.5-VL-3B-Instruct \
+  --dtype bfloat16 --max-model-len 8192 --max-num-seqs 2 \
+  --gpu-memory-utilization 0.82 --enforce-eager \
+  --limit-mm-per-prompt '{"image": 4}' \
+  --mm-processor-kwargs '{"max_pixels": 200704}' \
+  --enable-auto-tool-choice --tool-call-parser hermes \
+  --chat-template crates/agentic-server-core/tests/cassettes/images/qwen2.5-vl-hermes-tools.jinja \
+  --port 8000
+
+# 2. Start the gateway against it.
+cargo run -p agentic-server -- --llm-api-base http://127.0.0.1:8000
+
+# 3. Record the OpenAI reference and the gateway set.
+OPENAI_API_KEY=sk-... \
+GATEWAY_URL=http://localhost:9000 \
+MODEL=Qwen/Qwen2.5-VL-3B-Instruct \
+bash crates/agentic-server-core/tests/cassettes/record_image_input_cassettes.sh
 ```
+
+Use `IMAGE_RECORD_SET=gateway` or `IMAGE_RECORD_SET=openai` to record one provider, `IMAGE_SCENARIOS="tool-image"`
+(space-separated) to record a subset, and `OPENAI_MODEL` to change the reference model. A different gateway model
+changes the cassette file names; update `GATEWAY_MODEL` and `GATEWAY_MODEL_SLUG` in `image_input_test.rs` to match.
+The `tool-image` scenario uses `tool_choice: auto` so the recording proves the model chose to call the tool; if a
+small model answers without calling it, validation fails and the scenario can simply be re-run.
 
 ### Custom tool (gateway and OpenAI)
 

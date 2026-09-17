@@ -116,18 +116,24 @@ continuous SSE lifecycle.
 
 The crate produces a library plus two independent binaries. `src/lib.rs` exports
 `agentic_cli`, `agentic_harness`, `agentic_output`, `agentic_process`, `app`, `auth`,
-and `handler`. On top of that:
+`handler`, and `model_capabilities`. On top of that:
 
 | Binary | Entry point | Uses |
 |---|---|---|
-| `agentic-server` (the gateway) | `src/main.rs` | `app`, `auth`, `handler`, plus binary-private `server.rs` and `config_file.rs` |
-| `agentic` (the CLI launcher) | `src/bin/agentic.rs` | `agentic_cli`, `agentic_harness`, `agentic_output`, `agentic_process` only |
+| `agentic-server` (the gateway) | `src/main.rs` | `app`, `auth`, `handler`, `model_capabilities`, plus binary-private `server.rs` and `config_file.rs` |
+| `agentic` (the CLI launcher) | `src/bin/agentic.rs` | `agentic_cli`, `agentic_harness`, `agentic_output`, `agentic_process`, `model_capabilities` |
 
 These are two unrelated concerns bundled in one crate. If you're working on request
 handling, ignore `agentic_cli*`/`agentic_harness.rs`/`agentic_output.rs`/
 `agentic_process.rs` entirely — they're the launcher that spawns the gateway binary and
 a coding harness (Codex or Claude Code) as subprocesses for local, single-command use
 (`agentic serve <model>`), and never touch the request path.
+
+`model_capabilities.rs` is the one deliberate exception: it is the shared contract both
+sides speak. The gateway resolves each model's `InputModalities` there and serves them in
+the Codex catalog; the launcher parses that same catalog back through
+`CodexCatalogCapabilities` before writing an isolated Codex home. Keeping one definition is
+what stops the HTTP catalog and a launcher catalog from disagreeing about image support.
 
 ### `app.rs`, `server.rs`, `main.rs`
 
@@ -952,7 +958,8 @@ declaration until they have a complete handler and execution path.
     (`CodexNamespaceHandler`), and `tool_search.rs` (`ToolSearchHandler`). Their calls
     are returned for the client to resolve; the gateway does not execute them.
   - **Gateway-owned / built-in** tools implement both traits: see `web_search/mod.rs`
-    (`WebSearchHandler`, backed by You.com) and `mcp/handler.rs` (`McpHandler`, backed
+    (`WebSearchHandler`, backed by the configured `WebSearchProvider` in `web_search/you.rs`
+    or `web_search/brave.rs`) and `mcp/handler.rs` (`McpHandler`, backed
     by `mcp/client.rs`'s MCP protocol client and `mcp/pool.rs`'s connection pool). They
     have no client translator association because the gateway owns their execution and
     public lifecycle.

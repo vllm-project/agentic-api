@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "baseline": {
+    "crates/agentic-server-core/src/executor/accumulator/mod.rs": 706,
+    "crates/agentic-server-core/src/executor/accumulator/slot.rs": 679,
+    "crates/agentic-server-core/src/executor/engine.rs": 823,
+    "crates/agentic-server-core/src/executor/gateway.rs": 653,
+    "crates/agentic-server-core/src/executor/messages_stream.rs": 520,
+    "crates/agentic-server-core/src/executor/session.rs": 508,
+    "crates/agentic-server-core/src/storage/schema.rs": 552,
+    "crates/agentic-server-core/src/tool/registry.rs": 515,
+    "crates/agentic-server-core/src/tool/tool_search.rs": 1764,
+    "crates/agentic-server-core/src/types/io/input.rs": 629,
+    "crates/agentic-server-core/src/types/io/output.rs": 1110,
+    "crates/agentic-server-core/src/types/request_response.rs": 582,
+    "crates/agentic-server-core/src/types/tools/params.rs": 537,
+    "crates/agentic-server/src/agentic_process.rs": 557,
+    "crates/agentic-server/src/auth.rs": 799,
+    "crates/agentic-server/src/handler/websocket/responses.rs": 864
+  },
+  "exceptions": {},
+  "generated": {}
+}

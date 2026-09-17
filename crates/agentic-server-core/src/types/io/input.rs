@@ -1,3 +1,7 @@
+mod content;
+
+pub use content::{InputContent, InputFileContent, InputImageContent, InputTextContent, RefusalContent};
+
 use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
@@ -9,60 +13,6 @@ use crate::utils::common::deserialize_from_value;
 
 use super::output::{CustomToolCall, FunctionToolCall, McpListTools, ReasoningOutput, ToolSearchCall};
 use super::shell::{ShellCall, ShellCallOutputMessage, ShellCallStatus};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct InputTextContent {
-    pub text: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct InputImageContent {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub file_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub image_url: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub detail: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct InputFileContent {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub file_data: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub file_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub file_url: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub filename: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub detail: Option<String>,
-}
-
-/// Content item inside a message input.
-///
-/// Uses an internally-tagged enum — serde consumes `"type"` for the variant
-/// discriminant so the inner structs must NOT redeclare a `type_` field.
-/// `output_text` and `reasoning_text` reuse `InputTextContent` since they
-/// carry only a `text` field; they are preserved so vLLM sees the full history.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum InputContent {
-    InputText(InputTextContent),
-    InputImage(InputImageContent),
-    /// Preserved on the wire; support is validated after the routing decision.
-    InputFile(InputFileContent),
-    /// Assistant output text in rehydrated history.
-    OutputText(InputTextContent),
-    /// Reasoning step text in rehydrated history.
-    ReasoningText(InputTextContent),
-    /// Any other content type — drop silently.
-    #[serde(other)]
-    Unknown,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -206,6 +156,7 @@ mod openapi_schemas {
                 )
                 .item(tagged_ref("input_file", "InputFileContent"))
                 .item(tagged_text_variant("output_text"))
+                .item(tagged_ref("refusal", "RefusalContent"))
                 .item(tagged_text_variant("reasoning_text"))
                 .into()
         }
@@ -651,9 +602,9 @@ impl ResponsesInput {
                     id: None,
                     role: "assistant".to_owned(),
                     status: None,
-                    content: InputMessageContent::Parts(vec![InputContent::OutputText(InputTextContent {
-                        text: compaction.encrypted_content.clone(),
-                    })]),
+                    content: InputMessageContent::Parts(vec![InputContent::OutputText(InputTextContent::new(
+                        compaction.encrypted_content.clone(),
+                    ))]),
                 }),
                 other => other.clone(),
             })
@@ -956,6 +907,104 @@ mod tests {
         let value = serde_json::to_value(normalized).expect("normalized output serializes");
 
         assert_eq!(value["output"], content);
+    }
+
+    #[test]
+    fn structured_function_tool_output_preserves_image_array() {
+        let content = serde_json::json!([
+            {"type": "input_text", "text": "attached local image path: diagram.png"},
+            {"type": "input_image", "image_url": "data:image/png;base64,abc"}
+        ]);
+        let item: InputItem = serde_json::from_value(serde_json::json!({
+            "type": "function_call_output",
+            "call_id": "call_view_image_1",
+            "output": content
+        }))
+        .expect("valid structured function-tool output");
+
+        let InputItem::FunctionCallOutput(output) = &item else {
+            panic!("expected function-tool output");
+        };
+        assert!(matches!(output.output, ToolCallOutput::Content(_)));
+
+        let value = serde_json::to_value(&item).expect("output serializes");
+        assert_eq!(value["output"], content, "structured output must not be stringified");
+    }
+
+    #[test]
+    fn unmodeled_message_content_part_keeps_its_type_name() {
+        let input: ResponsesInput = serde_json::from_value(serde_json::json!([{
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "before"},
+                {"type": "input_audio", "audio_url": "https://example.com/clip.wav"},
+                {"type": "input_image", "image_url": "data:image/png;base64,abc", "detail": "low"}
+            ]
+        }]))
+        .expect("an unmodeled part must not fail deserialization");
+
+        let ResponsesInput::Items(items) = &input else {
+            panic!("expected items");
+        };
+        let InputItem::Message(message) = &items[0] else {
+            panic!("expected message item");
+        };
+        let InputMessageContent::Parts(parts) = &message.content else {
+            panic!("expected message parts");
+        };
+        assert!(
+            matches!(parts.as_slice(), [InputContent::InputText(_), InputContent::Unknown(kind), InputContent::InputImage(_)]
+                if kind == "input_audio"),
+            "the unmodeled part must keep its position and its type name"
+        );
+        assert!(
+            serde_json::to_value(&input).is_err(),
+            "an unmodeled part must never serialize into a synthetic part"
+        );
+    }
+
+    #[test]
+    fn extension_fields_on_modeled_parts_round_trip() {
+        // The typed path must forward a known part exactly as the client sent
+        // it, unmodeled fields included, like the raw proxy path does.
+        let parts = serde_json::json!([
+            {"type": "input_text", "text": "look", "x_future_text": true},
+            {"type": "input_image", "image_url": "data:image/png;base64,abc", "detail": "low", "x_future_field": "kept"},
+            {"type": "output_text", "text": "seen", "annotations": [], "logprobs": []},
+            {"type": "refusal", "refusal": "no", "x_reason": "policy"}
+        ]);
+        let message: InputMessage = serde_json::from_value(serde_json::json!({"role": "user", "content": parts}))
+            .expect("modeled parts with extension fields deserialize");
+        assert_eq!(
+            serde_json::to_value(&message).expect("message serializes")["content"],
+            parts,
+            "extension fields must survive the typed round trip"
+        );
+
+        let output: ToolCallOutput = serde_json::from_value(serde_json::json!([
+            {"type": "input_image", "image_url": "data:image/png;base64,abc", "x_future_field": "kept"}
+        ]))
+        .expect("structured tool output deserializes");
+        assert_eq!(
+            serde_json::to_value(&output).expect("output serializes")[0]["x_future_field"],
+            "kept",
+            "tool-output image parts keep extension fields too"
+        );
+    }
+
+    #[test]
+    fn message_content_part_without_a_type_is_rejected() {
+        let error = serde_json::from_value::<InputContent>(serde_json::json!({"text": "no type"}))
+            .expect_err("a part without a type has no wire meaning");
+        assert!(error.to_string().contains("missing a string `type`"), "{error}");
+    }
+
+    #[test]
+    fn refusal_content_round_trips_in_assistant_history() {
+        let part = serde_json::json!({"type": "refusal", "refusal": "I can't help with that."});
+        let content: InputContent = serde_json::from_value(part.clone()).expect("refusal is a modeled part");
+        assert!(matches!(&content, InputContent::Refusal(refusal) if refusal.refusal == "I can't help with that."));
+        assert_eq!(serde_json::to_value(&content).expect("refusal serializes"), part);
     }
 
     #[test]

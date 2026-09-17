@@ -1,6 +1,7 @@
 import { REPO } from './site';
 
 export const PUBLISHED_VERSION = '0.7.0';
+const PYPI_EXECUTABLE = `uvx --from agentic-api==${PUBLISHED_VERSION} agentic`;
 
 export const INSTALL_METHODS = {
   crates: {
@@ -10,8 +11,8 @@ export const INSTALL_METHODS = {
   },
   pypi: {
     label: 'PyPI',
-    command: `python -m pip install agentic-api==${PUBLISHED_VERSION}`,
-    note: 'Requires Python 3.10+. The wheel includes the gateway and agentic CLI; vLLM is installed separately.',
+    command: `${PYPI_EXECUTABLE} --version`,
+    note: 'Requires uv. Runs the released agentic CLI in an isolated environment; no global install needed. vLLM is served separately.',
   },
   source: {
     label: 'Build from source',
@@ -33,7 +34,7 @@ export function isInstallMethod(value: unknown): value is InstallMethod {
 
 export function getServeCommand(installation: InstallMethod) {
   if (installation === 'pypi')
-    return 'python -m agentic_api serve --vllm-base-url http://127.0.0.1:5050';
+    return PYPI_EXECUTABLE + ' serve --upstream http://127.0.0.1:5050';
   const executable =
     installation === 'source' ? './target/debug/agentic' : 'agentic';
   return executable + ' serve --upstream http://127.0.0.1:5050';
@@ -41,7 +42,11 @@ export function getServeCommand(installation: InstallMethod) {
 
 export function getLaunchCommands(installation: InstallMethod) {
   const executable =
-    installation === 'source' ? './target/debug/agentic' : 'agentic';
+    installation === 'source'
+      ? './target/debug/agentic'
+      : installation === 'pypi'
+        ? PYPI_EXECUTABLE
+        : 'agentic';
   const options =
     ' \\\n  --upstream http://127.0.0.1:5050 \\\n  --model Qwen/Qwen3-30B-A3B-FP8';
   return {

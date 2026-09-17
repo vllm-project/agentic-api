@@ -1,15 +1,24 @@
+import base64
+import copy
 import json
+import os
+import subprocess
+import time
 import sys
 import tempfile
 import threading
 import unittest
+import urllib.error
 import urllib.request
+from contextlib import contextmanager
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 import claude_code_replay_server as replay
+import codex_image_smoke as image_smoke
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
@@ -91,6 +100,54 @@ def capture_records(first_request: dict, second_request: dict) -> list[dict]:
 
 
 class ReplayServerTests(unittest.TestCase):
+    @contextmanager
+    def catalog_server(self, model):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            capture_path = Path(temp_dir) / "capture.jsonl"
+            capture_path.write_text("")
+            state = replay.ReplayState(replay.load_turns(RESPONSES_CASSETTE), capture_path, model=model)
+            server = ThreadingHTTPServer(("127.0.0.1", 0), replay.make_handler(state))
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                yield f"http://127.0.0.1:{server.server_port}", state
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=5)
+                self.assertFalse(thread.is_alive())
+
+    def test_models_route_is_text_only_and_does_not_consume_recorded_turn(self) -> None:
+        model = "custom/model-with-override"
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with self.catalog_server(model) as (url, state):
+            for _ in range(2):
+                with opener.open(url + "/v1/models", timeout=5) as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(response.headers.get_content_type(), "application/json")
+                    self.assertEqual(
+                        json.load(response),
+                        {"object": "list", "data": [{"id": model, "object": "model", "capabilities": []}]},
+                    )
+            self.assertEqual(state.next_turn, 0)
+            self.assertEqual(replay.load_capture(state.capture_path), [])
+            self.assertEqual(state.take_turn(), replay.load_turns(RESPONSES_CASSETTE)[0])
+
+    def test_unconfigured_model_catalog_keeps_not_found_response(self) -> None:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with self.catalog_server(None) as (url, state):
+            with self.assertRaises(urllib.error.HTTPError) as failure:
+                opener.open(url + "/v1/models", timeout=5)
+            self.assertEqual(failure.exception.code, 404)
+            failure.exception.close()
+            self.assertEqual(state.next_turn, 0)
+
+    def test_serve_accepts_optional_model_catalog(self) -> None:
+        arguments = ["replay", "serve", "--cassette", "fixture.yaml", "--capture", "capture.jsonl", "--port", "0"]
+        for extra, expected in (([], None), (["--model", QWEN_MODEL], QWEN_MODEL)):
+            with self.subTest(model=expected), patch.object(sys, "argv", arguments + extra):
+                self.assertEqual(replay.parse_args().model, expected)
+
     def test_load_turns_reads_recorded_streams(self) -> None:
         turns = replay.load_turns(CASSETTE)
 
@@ -147,6 +204,67 @@ class ReplayServerTests(unittest.TestCase):
 
         with self.assertRaisesRegex(AssertionError, "requested model"):
             replay.validate_responses_capture(records, QWEN_MODEL)
+
+    def image_records(self, images=None):
+        if images is None:
+            images = [REPOSITORY_ROOT / "crates/agentic-server-core/tests/cassettes/images/inputs/red-blue-64.png"]
+        return [
+            {"kind": "responses_transport", "body": {"path": "/v1/responses"}},
+            {"kind": "responses", "body": {
+                "model": QWEN_MODEL,
+                "stream": True,
+                "input": [{"role": "user", "content": [
+                    {"type": "input_text", "text": "Describe the attached image."},
+                    *[{"type": "input_image", "image_url": "data:image/png;base64," +
+                       base64.b64encode(image.read_bytes()).decode()} for image in images],
+                ]}],
+            }},
+        ], images
+
+    def test_responses_capture_checks_exact_attachment_bytes(self) -> None:
+        records, images = self.image_records()
+        replay.validate_responses_capture(records, QWEN_MODEL, expected_images=images)
+
+    def test_responses_capture_rejects_dropped_changed_or_duplicate_images(self) -> None:
+        records, images = self.image_records()
+        for replacement in [[], [{"type": "input_image", "image_url": "data:image/png;base64,YWJj"}],
+                            records[1]["body"]["input"][0]["content"][1:] * 2]:
+            with self.subTest(replacement=replacement), self.assertRaises(AssertionError):
+                changed = copy.deepcopy(records)
+                changed[1]["body"]["input"][0]["content"] = replacement
+                replay.validate_responses_capture(changed, QWEN_MODEL, expected_images=images)
+
+    def test_tool_image_output_cannot_satisfy_user_attachment_check(self) -> None:
+        records, images = self.image_records()
+        parts = records[1]["body"]["input"][0]["content"]
+        records[1]["body"]["input"] = [{"type": "function_call_output", "call_id": "call_1", "output": parts}]
+        with self.assertRaisesRegex(AssertionError, "image"):
+            replay.validate_responses_capture(records, QWEN_MODEL, expected_images=images)
+
+    def test_text_only_control_requires_no_image_parts(self) -> None:
+        records, _ = self.image_records([])
+        replay.validate_responses_capture(records, QWEN_MODEL, expected_images=[])
+        records, _ = self.image_records()
+        with self.assertRaisesRegex(AssertionError, "image"):
+            replay.validate_responses_capture(records, QWEN_MODEL, expected_images=[])
+
+    @unittest.skipUnless(os.name == "posix", "process groups require POSIX")
+    def test_image_smoke_timeout_stops_launcher_descendants(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            marker = Path(temporary) / "orphan-wrote-this"
+            child = "import time,pathlib; time.sleep(1); pathlib.Path(" + repr(str(marker)) + ").touch()"
+            parent = "import subprocess,sys,time; subprocess.Popen([sys.executable, '-c', " + repr(child) + "]); time.sleep(30)"
+            with self.assertRaises(subprocess.TimeoutExpired):
+                image_smoke.run_launcher([sys.executable, "-c", parent], dict(os.environ), timeout=0.3)
+            time.sleep(1)
+            self.assertFalse(marker.exists(), "a launcher descendant survived the timeout")
+
+    def test_capture_cli_accepts_image_and_no_image_assertions(self) -> None:
+        base = ["replay", "assert-capture", "--api", "responses", "--capture", "capture.jsonl", "--model", QWEN_MODEL]
+        with patch.object(sys, "argv", base + ["--expect-image", "image.png"]):
+            self.assertEqual(replay.parse_args().expect_image, [Path("image.png")])
+        with patch.object(sys, "argv", base + ["--expect-no-images"]):
+            self.assertTrue(replay.parse_args().expect_no_images)
 
     def test_responses_route_replays_recorded_stream_and_captures_request(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

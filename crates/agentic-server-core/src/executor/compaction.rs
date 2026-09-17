@@ -1,3 +1,7 @@
+mod context;
+
+use context::item_has_meaningful_context;
+
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::persist::persist_prepared_turn;
 use crate::executor::prepare::prepare_request_tools;
@@ -128,47 +132,6 @@ fn response_output_text(output: &[OutputItem]) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
-fn value_has_content(value: &serde_json::Value) -> bool {
-    match value {
-        serde_json::Value::Null => false,
-        serde_json::Value::String(text) => !text.trim().is_empty(),
-        serde_json::Value::Array(values) => values.iter().any(value_has_content),
-        serde_json::Value::Object(values) => values.values().any(value_has_content),
-        serde_json::Value::Bool(_) | serde_json::Value::Number(_) => true,
-    }
-}
-
-fn item_has_meaningful_context(item: &InputItem) -> bool {
-    match item {
-        InputItem::Message(message) => match &message.content {
-            InputMessageContent::Text(text) => !text.trim().is_empty(),
-            InputMessageContent::Parts(parts) => parts.iter().any(|part| match part {
-                InputContent::InputText(text) | InputContent::OutputText(text) | InputContent::ReasoningText(text) => {
-                    !text.text.trim().is_empty()
-                }
-                InputContent::InputImage(image) => image.image_url.as_deref().is_some_and(|url| !url.trim().is_empty()),
-                // Message files are rejected during typed input validation.
-                InputContent::InputFile(_) | InputContent::Unknown => false,
-            }),
-        },
-        InputItem::FunctionCall(call) => !call.name.trim().is_empty() || !call.arguments.trim().is_empty(),
-        InputItem::FunctionCallOutput(output) => output.output.has_content(),
-        InputItem::ToolSearchCall(call) => !call.call_id.trim().is_empty() || value_has_content(&call.arguments),
-        InputItem::ToolSearchOutput(output) => !output.call_id.trim().is_empty() || !output.tools.is_empty(),
-        InputItem::CustomToolCall(call) => !call.name.trim().is_empty() || !call.input.trim().is_empty(),
-        InputItem::CustomToolCallOutput(output) => output.output.has_content(),
-        InputItem::ShellCall(call) => !call.action.commands.is_empty(),
-        InputItem::ShellCallOutput(output) => !output.output.is_empty(),
-        InputItem::Reasoning(reasoning) => {
-            reasoning.content.iter().any(|content| !content.text.trim().is_empty())
-                || reasoning.summary.iter().any(value_has_content)
-                || reasoning.encrypted_content.as_ref().is_some_and(value_has_content)
-        }
-        InputItem::Compaction(compaction) => !compaction.encrypted_content.trim().is_empty(),
-        InputItem::McpListTools(_) | InputItem::CompactionTrigger | InputItem::Unknown => false,
-    }
-}
-
 fn completed_summary_text(response: &ResponsePayload) -> ExecutorResult<String> {
     if response.status != "completed" || response.error.is_some() {
         let details = response
@@ -205,9 +168,13 @@ fn add_message_content(estimate: &mut InputTokenEstimate, content: &InputMessage
                         estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
                         estimate.add_text(&text.text);
                     }
+                    InputContent::Refusal(refusal) => {
+                        estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
+                        estimate.add_text(&refusal.refusal);
+                    }
                     InputContent::InputImage(_) => estimate.add_tokens(ESTIMATED_IMAGE_TOKENS),
                     InputContent::InputFile(file) => add_file_content(estimate, file),
-                    InputContent::Unknown => estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS),
+                    InputContent::Unknown(_) => estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS),
                 }
             }
         }
@@ -565,9 +532,9 @@ mod tests {
 
     fn inline_image(encoded_bytes: usize) -> InputImageContent {
         InputImageContent {
-            file_id: None,
             image_url: Some(format!("data:image/png;base64,{}", "A".repeat(encoded_bytes))),
             detail: Some("auto".to_owned()),
+            ..InputImageContent::default()
         }
     }
 
@@ -840,6 +807,29 @@ mod tests {
 
             assert_eq!(small, large);
         }
+    }
+
+    #[test]
+    fn an_image_referenced_by_file_id_is_meaningful_context() {
+        let image_by = |content: InputImageContent| {
+            InputItem::Message(InputMessage {
+                id: None,
+                role: "user".to_owned(),
+                status: None,
+                content: InputMessageContent::Parts(vec![InputContent::InputImage(content)]),
+            })
+        };
+
+        assert!(super::item_has_meaningful_context(&image_message(1)));
+        assert!(super::item_has_meaningful_context(&image_by(InputImageContent {
+            file_id: Some("file_diagram".to_owned()),
+            ..InputImageContent::default()
+        })));
+        assert!(!super::item_has_meaningful_context(&image_by(InputImageContent {
+            file_id: Some("  ".to_owned()),
+            image_url: Some(String::new()),
+            ..InputImageContent::default()
+        })));
     }
 
     #[test]

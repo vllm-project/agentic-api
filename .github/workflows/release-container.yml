@@ -1,0 +1,276 @@
+name: Release container
+
+run-name: Release container
+
+on:
+  schedule:
+    # 13:00 GMT+8 (05:00 UTC) every day. GitHub Actions cron uses UTC.
+    - cron: "0 5 * * *"
+  release:
+    types: [published]
+  workflow_call:
+    inputs:
+      source_ref:
+        description: "Git tag to build"
+        required: true
+        type: string
+      image_tag:
+        description: "Docker image tag"
+        required: true
+        type: string
+      release_build:
+        description: "Require source_ref to resolve as a Git tag"
+        required: true
+        type: boolean
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Git tag, commit SHA, or branch to build"
+        required: true
+        type: string
+        default: main
+      image_tag:
+        description: "Docker image tag override (defaults to the source ref)"
+        required: false
+        type: string
+
+concurrency:
+  group: release-container
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  authorize-publication:
+    name: Authorize publication
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify manual publisher permission
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          permission="$(gh api \
+            "repos/$GITHUB_REPOSITORY/collaborators/$GITHUB_ACTOR/permission" \
+            --jq '.role_name')"
+          case "$permission" in
+            admin|maintain)
+              echo "$GITHUB_ACTOR has $permission permission"
+              ;;
+            *)
+              echo "::error::Manual container publication requires admin or maintain permission"
+              exit 1
+              ;;
+          esac
+
+  publish:
+    name: Build and publish Docker image
+    needs: authorize-publication
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: docker-publish
+    steps:
+      - name: Verify configuration
+        env:
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DOCKERHUB_IMAGE" ]; then
+            echo "::error::The DOCKERHUB_IMAGE environment variable is not configured"
+            exit 1
+          fi
+          if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$DOCKERHUB_TOKEN" ]; then
+            echo "::error::The Docker Hub environment secrets are not configured"
+            exit 1
+          fi
+          if [[ ! "$DOCKERHUB_IMAGE" =~ ^[a-z0-9]+([._-][a-z0-9]+)*/[a-z0-9]+([._-][a-z0-9]+)*$ ]]; then
+            echo "::error::DOCKERHUB_IMAGE must be a Docker Hub repository such as vllm/agentic-api"
+            exit 1
+          fi
+
+      - name: Select source
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          REQUESTED_REF: ${{ inputs.source_ref }}
+          REQUESTED_IMAGE_TAG: ${{ inputs.image_tag }}
+          RELEASE_BUILD: ${{ inputs.release_build }}
+        run: |
+          set -euo pipefail
+          # Reusable workflows inherit the caller's event name.
+          if [ "$RELEASE_BUILD" = "true" ]; then
+            source_ref="refs/tags/$REQUESTED_REF"
+          elif [ "$EVENT_NAME" = "schedule" ]; then
+            source_ref="main"
+          elif [ "$EVENT_NAME" = "release" ]; then
+            source_ref="refs/tags/$RELEASE_TAG"
+          else
+            source_ref="$REQUESTED_REF"
+          fi
+
+          if [[ "$source_ref" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            :
+          elif [[ "$source_ref" =~ ^[0-9a-fA-F]{7,39}$ ]]; then
+            echo "::error::Commit SHAs must contain all 40 hexadecimal characters"
+            exit 1
+          elif ! git check-ref-format --allow-onelevel "$source_ref"; then
+            echo "::error::Invalid Git source ref"
+            exit 1
+          fi
+
+          echo "source_ref=$source_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Check out release source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ steps.release.outputs.source_ref }}
+
+      - name: Resolve source commit
+        id: source
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          REQUESTED_IMAGE_TAG: ${{ inputs.image_tag }}
+          REQUESTED_REF: ${{ inputs.source_ref }}
+          RELEASE_BUILD: ${{ inputs.release_build }}
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$REQUESTED_IMAGE_TAG" \
+            && ! "$REQUESTED_IMAGE_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "::error::Invalid Docker image tag override"
+            exit 1
+          fi
+
+          sha="$(git rev-parse HEAD)"
+          git fetch --no-tags origin main
+          main_sha="$(git rev-parse FETCH_HEAD)"
+
+          image_tags=()
+          if [ "$RELEASE_BUILD" = "true" ]; then
+            image_tags+=("$REQUESTED_IMAGE_TAG")
+          elif [ "$EVENT_NAME" = "release" ]; then
+            image_tags+=("$RELEASE_TAG")
+          elif [ "$EVENT_NAME" = "schedule" ] \
+            || { [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$sha" = "$main_sha" ]; }; then
+            image_tags+=("nightly-$sha" "nightly")
+            if [ -n "$REQUESTED_IMAGE_TAG" ]; then
+              image_tags+=("$REQUESTED_IMAGE_TAG")
+            fi
+          else
+            # Normalize slashes only in the default tag derived from a Git ref.
+            image_tags+=("${REQUESTED_IMAGE_TAG:-${REQUESTED_REF//\//-}}")
+          fi
+
+          tags=()
+          for image_tag in "${image_tags[@]}"; do
+            if [[ ! "$image_tag" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+              echo "::error::Invalid Docker image tag"
+              exit 1
+            fi
+            tags+=("$DOCKERHUB_IMAGE:$image_tag")
+          done
+          version="${image_tags[0]}"
+
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          {
+            echo "tags<<EOF"
+            printf '%s\n' "${tags[@]}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          printf 'Publishing %s\n' "${tags[@]}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@e92390c5fb421da1463c202d546fed0ec5c39f20 # v4.0.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: image-metadata
+        run: echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push runtime image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.source.outputs.tags }}
+          build-args: |
+            OCI_BUILD_PIPELINE=${{ github.workflow }}
+            OCI_BUILD_URL=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            OCI_CREATED=${{ steps.image-metadata.outputs.created }}
+            OCI_REVISION=${{ steps.source.outputs.sha }}
+            OCI_VERSION=${{ steps.source.outputs.version }}
+          cache-from: type=gha,scope=agentic-api-container
+          cache-to: type=gha,mode=max,scope=agentic-api-container,ignore-error=true
+
+      - name: Delete nightly tags older than 30 days
+        env:
+          DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set +x
+          set -euo pipefail
+          namespace="${DOCKERHUB_IMAGE%%/*}"
+          repository="${DOCKERHUB_IMAGE#*/}"
+          cutoff="$(date -u --date='30 days ago' '+%Y-%m-%dT%H:%M:%SZ')"
+
+          # Personal access tokens are exchanged for an API bearer token.
+          # Organization access tokens can be used directly as bearer tokens.
+          auth_payload="$(jq --null-input \
+            '{identifier: env.DOCKERHUB_USERNAME, secret: env.DOCKERHUB_TOKEN}')"
+          if api_token="$(printf '%s' "$auth_payload" \
+              | curl --fail --silent --show-error \
+                --request POST 'https://hub.docker.com/v2/auth/token' \
+                --header 'Content-Type: application/json' \
+                --data-binary @- \
+              | jq --exit-status --raw-output '.access_token')"; then
+            :
+          else
+            api_token="$DOCKERHUB_TOKEN"
+          fi
+          printf '::add-mask::%s\n' "$api_token"
+          unset auth_payload
+
+          api_base="https://hub.docker.com/v2/namespaces/$namespace/repositories/$repository"
+          url="$api_base/tags?page_size=100&name=nightly-"
+          candidates=()
+          while [ "$url" != "null" ] && [ -n "$url" ]; do
+            case "$url" in
+              "$api_base/tags?"*) ;;
+              *)
+                echo "::error::Docker Hub returned an unexpected pagination URL"
+                exit 1
+                ;;
+            esac
+            response="$(curl --fail --silent --show-error \
+              --header "Authorization: Bearer $api_token" "$url")"
+            mapfile -t page_candidates < <(jq --raw-output --arg cutoff "$cutoff" '
+              .results[]
+              | select(.name | startswith("nightly-"))
+              | select(.last_updated < $cutoff)
+              | .name
+            ' <<< "$response")
+            candidates+=("${page_candidates[@]}")
+            url="$(jq --raw-output '.next' <<< "$response")"
+          done
+
+          for tag in "${candidates[@]}"; do
+            echo "Deleting expired Docker tag $DOCKERHUB_IMAGE:$tag"
+            curl --fail --silent --show-error \
+              --output /dev/null \
+              --request DELETE \
+              --header "Authorization: Bearer $api_token" \
+              "$api_base/tags/$tag"
+          done

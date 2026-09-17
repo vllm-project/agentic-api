@@ -3,7 +3,6 @@
 //! Owns request shaping against You.com's `GET /v1/search` and the mapping of
 //! its JSON envelope onto the provider-neutral [`WebSearchProviderResponse`].
 
-use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -12,8 +11,8 @@ use serde::Deserialize;
 
 use super::args::{Freshness, WebSearchArguments, clean_string, clean_vec, validate_count};
 use super::{
-    WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, null_as_default,
-    read_response_limited,
+    ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, clean_base_url,
+    null_as_default, read_response_limited,
 };
 use crate::config::WebSearchProviderKind;
 use crate::tool::handler::ToolError;
@@ -21,16 +20,6 @@ use crate::types::tools::{WebSearchContextSize, WebSearchToolParam};
 
 pub(crate) const YOU_API_KEY: &str = WebSearchProviderKind::You.default_api_key_env();
 pub(crate) const YOU_API_BASE_URL: &str = "YOU_API_BASE_URL";
-
-/// Provider credential whose `Debug` output never contains the secret.
-#[derive(Clone)]
-pub(crate) struct ApiKey(pub String);
-
-impl fmt::Debug for ApiKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("ApiKey(<redacted>)")
-    }
-}
 
 #[derive(Debug, Clone)]
 pub(crate) struct YouSearchProvider {
@@ -228,11 +217,6 @@ fn validate_crawl_timeout(timeout: u16) -> Result<u8, ToolError> {
             "web_search crawl_timeout must be between 1 and 60".to_owned(),
         ))
     }
-}
-
-fn clean_base_url(value: &str) -> Option<String> {
-    let trimmed = value.trim().trim_end_matches('/');
-    (!trimmed.is_empty()).then(|| trimmed.to_owned())
 }
 
 /// You.com's `GET /v1/search` response envelope. Result items deserialize

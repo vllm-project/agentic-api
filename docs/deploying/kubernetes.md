@@ -416,8 +416,12 @@ for a saturated database or inference service.
 
 ## Enable and verify web search
 
-The `web_search_preview` built-in tool is executed by Agentic API when `YOU_API_KEY` and `YOU_API_BASE_URL` are
-configured. Keep the key in a Secret and use the current You.com Search API base URL, `https://ydc-index.io`.
+The `web_search_preview` built-in tool is executed by Agentic API against a configured search provider. With the
+default You.com provider it is enabled when `YOU_API_KEY` and `YOU_API_BASE_URL` are configured. Keep the key in a
+Secret and use the current You.com Search API base URL, `https://ydc-index.io`. To use Brave Search instead, set
+`AGENTIC_WEB_SEARCH_PROVIDER=brave` in the ConfigMap and store `BRAVE_API_KEY` in the Secret; no base URL is needed.
+The Brave free plan is rate limited to roughly one request per second, so the gateway runs batched queries serially by
+default; raise `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES` only on a paid plan.
 
 Create the Secret from a protected environment file so the key does not enter shell history or process arguments:
 
@@ -430,8 +434,9 @@ kubectl --namespace agentic-api create secret generic agentic-api-web-search \
   kubectl apply --server-side --field-manager=agentic-api-operator --filename=-
 ```
 
-The file contains one line, `YOU_API_KEY=...`. Remove it securely after creating the Secret. Patch the environment in
-the production overlay:
+The file contains one line, `YOU_API_KEY=...` (or `BRAVE_API_KEY=...` for Brave Search). Remove it securely after
+creating the Secret. Patch the environment in the production overlay (for Brave, replace the `YOU_API_BASE_URL`
+operation with `path: /data/AGENTIC_WEB_SEARCH_PROVIDER`, `value: brave`):
 
 ```yaml
 patches:
@@ -487,4 +492,6 @@ curl --fail --silent --show-error http://127.0.0.1:9000/v1/responses \
 Remove the `Authorization` header when inbound OIDC validation is disabled. A top-level response can have
 `status: "completed"` even when an individual `web_search_call` failed, so inspect the output item status rather than
 only the response status. A `403 Forbidden` from You.com means the external search request was rejected; confirm the
-documented base URL and refresh the Secret, restart the Deployment, and test again without printing the key.
+documented base URL and refresh the Secret, restart the Deployment, and test again without printing the key. A failed
+`web_search_call` naming `BRAVE_API_KEY` means Brave rejected the key; one reporting `429` means the Brave plan's rate
+limit was hit, and the gateway does not retry it.

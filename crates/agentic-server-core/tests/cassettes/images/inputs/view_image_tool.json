@@ -1,0 +1,21 @@
+[
+  {
+    "type": "function",
+    "name": "view_image",
+    "description": "Load an image from the local workspace so you can look at it. Call it before describing any image the user names.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path of the image to load."
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "strict": true
+  }
+]

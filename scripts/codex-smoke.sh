@@ -85,6 +85,7 @@ wait_until_ready() {
 
 "$PYTHON_BIN" scripts/claude_code_replay_server.py serve \
   --cassette "$CASSETTE" \
+  --model "$MODEL" \
   --capture "$capture_path" \
   --port "$REPLAY_PORT" \
   >"$replay_log" 2>&1 &
@@ -128,3 +129,7 @@ PY
   --api responses \
   --model "$MODEL" \
   --capture "$capture_path"
+
+# Exercise image capability propagation with the same pinned CLI, including a
+# text-only negative control. The image response replays the committed vision cassette.
+"$PYTHON_BIN" scripts/codex_image_smoke.py

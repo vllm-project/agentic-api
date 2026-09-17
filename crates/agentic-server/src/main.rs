@@ -11,7 +11,7 @@ use agentic_core::config::{
     DEFAULT_POSTGRES_MAX_LIFETIME_SECONDS, DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS,
     DEFAULT_POSTGRES_STATEMENT_TIMEOUT_SECONDS, DEFAULT_SQLITE_JOURNAL_SIZE_LIMIT_BYTES,
     DEFAULT_SQLITE_MAX_CONNECTIONS, DEFAULT_SQLITE_MMAP_SIZE_BYTES, PostgresConfig, SqliteConfig, SqliteTempStore,
-    ToolRuntimeConfig, WebSearchProviderConfig, default_database_url, ensure_agentic_api_home, normalize_base_url,
+    ToolRuntimeConfig, default_database_url, ensure_agentic_api_home, normalize_base_url,
 };
 use agentic_core::error::Error;
 use agentic_server::app::DEFAULT_MAX_REQUEST_BODY_SIZE;
@@ -19,11 +19,11 @@ use agentic_server::auth::OidcConfig;
 
 mod config_file;
 mod server;
+mod web_search_config;
 
-use config_file::{
-    FileConfig, McpFileConfig, MessagesGatewayFileConfig, ServerFileConfig, ToolsFileConfig, WebSearchFileConfig,
-};
+use config_file::{FileConfig, McpFileConfig, MessagesGatewayFileConfig, ServerFileConfig, ToolsFileConfig};
 use server::GatewayOptions;
+use web_search_config::{generated_web_search_file_config, resolve_web_search_config};
 
 /// Environment override for the serialized request-size ceiling.
 const MAX_REQUEST_BODY_SIZE_ENV: &str = "AGENTIC_MAX_REQUEST_BODY_SIZE_BYTES";
@@ -303,8 +303,7 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
         .or_else(|| file.database_url.clone())
         .map_or_else(default_database_url, Ok)?;
     let (postgres, sqlite) = database_configs_from_env(&db_url)?;
-    let web_search_api_key = file.web_search.api_key_env.as_deref().and_then(environment_value);
-    let web_search_base_url = environment_value("YOU_API_BASE_URL").or_else(|| file.web_search.base_url.clone());
+    let web_search = resolve_web_search_config(&file.web_search, environment_value)?;
     let mcp_allowed_hosts = environment_value("AGENTIC_MCP_ALLOWED_HOSTS")
         .map_or_else(|| file.mcp.allowed_hosts.clone(), |value| parse_comma_separated(&value));
     let max_concurrent_gateway_calls_default = file
@@ -325,7 +324,7 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
         postgres,
         sqlite,
         tools: ToolRuntimeConfig {
-            web_search: WebSearchProviderConfig::new(web_search_api_key, web_search_base_url),
+            web_search,
             mcp_servers: file.mcp_servers.clone(),
             mcp_allowed_hosts,
             messages_gateway_tool_aliases: file.messages_gateway.tool_aliases.clone(),
@@ -340,6 +339,7 @@ fn gateway_options<'a>(
     oidc: Option<OidcConfig>,
 ) -> Result<GatewayOptions<'a>, Error> {
     Ok(GatewayOptions {
+        model_capabilities: file.model_capabilities(),
         host: &common.gateway_host,
         port: common.gateway_port,
         max_request_body_size: resolve_max_request_body_size(
@@ -353,10 +353,7 @@ fn gateway_options<'a>(
 fn generated_file_config(llm_api_base: String) -> FileConfig {
     FileConfig {
         llm_api_base: Some(llm_api_base),
-        web_search: WebSearchFileConfig {
-            base_url: environment_value("YOU_API_BASE_URL"),
-            api_key_env: Some("YOU_API_KEY".to_owned()),
-        },
+        web_search: generated_web_search_file_config(environment_value),
         mcp: McpFileConfig {
             allowed_hosts: environment_value("AGENTIC_MCP_ALLOWED_HOSTS")
                 .map_or_else(Vec::new, |value| parse_comma_separated(&value)),

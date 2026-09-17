@@ -309,7 +309,7 @@ async fn spawn_mock_you_with_response(
                         .and_then(|value| value.to_str().ok())
                         .unwrap_or_default()
                         .to_owned();
-                    let body = query_params_as_json(&uri);
+                    let body = support::query_params_as_json(&uri);
                     tx.send(CapturedSearchRequest { api_key, body }).await.unwrap();
                     (status, Json(response_body.clone()))
                 },
@@ -347,7 +347,7 @@ async fn spawn_mock_you_waiting_for_two_searches() -> (
                         .and_then(|value| value.to_str().ok())
                         .unwrap_or_default()
                         .to_owned();
-                    let body = query_params_as_json(&uri);
+                    let body = support::query_params_as_json(&uri);
                     tx.send(CapturedSearchRequest {
                         api_key,
                         body: body.clone(),
@@ -385,31 +385,6 @@ async fn spawn_mock_you_waiting_for_two_searches() -> (
     let addr = listener.local_addr().unwrap();
     let handle = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     (format!("http://{addr}"), rx, handle)
-}
-
-fn query_params_as_json(uri: &Uri) -> serde_json::Value {
-    let mut params = serde_json::Map::new();
-    for (key, value) in url::form_urlencoded::parse(uri.query().unwrap_or_default().as_bytes()) {
-        let value = if let Ok(number) = value.parse::<u64>() {
-            serde_json::Value::from(number)
-        } else {
-            serde_json::Value::String(value.into_owned())
-        };
-        let key = key.into_owned();
-        match params.remove(&key) {
-            None => {
-                params.insert(key, value);
-            }
-            Some(serde_json::Value::Array(mut values)) => {
-                values.push(value);
-                params.insert(key, serde_json::Value::Array(values));
-            }
-            Some(previous) => {
-                params.insert(key, serde_json::Value::Array(vec![previous, value]));
-            }
-        }
-    }
-    serde_json::Value::Object(params)
 }
 
 #[tokio::test]

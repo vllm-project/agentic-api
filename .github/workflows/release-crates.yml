@@ -27,6 +27,8 @@ jobs:
     name: Release crates.io packages
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - name: Verify maintainer permission
         env:
@@ -34,15 +36,16 @@ jobs:
         run: |
           set -euo pipefail
           permission="$(gh api \
-            "repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission" \
-            --jq '.permission')"
+            "repos/$GITHUB_REPOSITORY/collaborators/$GITHUB_ACTOR/permission" \
+            --jq '.role_name')"
 
           case "$permission" in
             admin|maintain)
-              echo "${{ github.actor }} has $permission permission"
+              echo "$GITHUB_ACTOR has $permission permission"
               ;;
             *)
-              echo "::error::${{ github.actor }} has $permission permission; crates releases require admin or maintain permission"
+              echo "::error::$GITHUB_ACTOR has $permission permission"
+              echo "::error::Crates releases require admin or maintain permission"
               exit 1
               ;;
           esac
@@ -219,6 +222,19 @@ jobs:
             --target "$target_sha" \
             --title "$tag" \
             --generate-notes
+
+  container:
+    name: Publish release container
+    needs: release
+    if: ${{ !inputs.dry_run && github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-container.yml
+    with:
+      source_ref: ${{ needs.release.outputs.tag }}
+      image_tag: ${{ needs.release.outputs.tag }}
+      release_build: true
+    secrets: inherit
 
   website:
     name: Refresh and deploy website

@@ -1,0 +1,57 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content:
+        - text: 'Reply with exactly two words: the color on the left half of this
+            image, then the color on the right half.'
+          type: input_text
+        - detail: low
+          image_url: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg==
+          type: input_image
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-VL-3B-Instruct
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1789656348
+      error: null
+      id: resp_01a0afd4-b583-71c1-bb87-1bc13c868d49
+      incomplete_details: null
+      instructions: null
+      model: Qwen/Qwen2.5-VL-3B-Instruct
+      object: response
+      output:
+      - content:
+        - annotations: []
+          text: Red, Blue
+          type: output_text
+        id: msg_b1de66413b8bd767
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: null
+      status: completed
+      usage:
+        input_tokens: 49
+        input_tokens_details:
+          cached_tokens: 48
+        output_tokens: 4
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 53
+    headers:
+      content-type: application/json
+    status_code: 200

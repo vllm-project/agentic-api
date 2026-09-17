@@ -19,6 +19,7 @@ use crate::auth::{ANTHROPIC_COUNT_TOKENS_PATH, ANTHROPIC_MESSAGES_PATH, OidcAuth
 use crate::handler::{
     compact_response, conversations, count_tokens, health, messages, models, ready, responses, responses_ws_with_auth,
 };
+use crate::model_capabilities::ModelCapabilities;
 
 /// Default ceiling on serialized inbound request bytes for HTTP bodies and
 /// WebSocket messages.
@@ -250,6 +251,8 @@ pub struct AppState {
     /// Server-configured API key; used as fallback when the request carries no
     /// `Authorization` header on the executor path.
     pub openai_api_key: Option<String>,
+    /// Configured per-model input-modality overrides applied to the Codex model catalog.
+    pub model_capabilities: Arc<ModelCapabilities>,
     /// Ceiling on serialized inbound request bytes, applied uniformly to every
     /// request-bearing endpoint and to WebSocket messages and frames.
     ///

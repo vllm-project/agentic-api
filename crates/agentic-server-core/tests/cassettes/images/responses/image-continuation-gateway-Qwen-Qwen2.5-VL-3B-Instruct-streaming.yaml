@@ -1,0 +1,249 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content:
+        - text: 'Reply with exactly two words: the color on the left half of this
+            image, then the color on the right half.'
+          type: input_text
+        - detail: low
+          image_url: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg==
+          type: input_image
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-VL-3B-Instruct
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a0afd4-c40c-7c52-8357-c4b4b08aa4ef","created_at":1789656351,"incomplete_details":null,"instructions":null,"metadata":null,"model":"Qwen/Qwen2.5-VL-3B-Instruct","object":"response","output":[],"parallel_tool_calls":false,"temperature":0.01,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":64,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a0afd4-c40c-7c52-8357-c4b4b08aa4ef","created_at":1789656351,"incomplete_details":null,"instructions":null,"metadata":null,"model":"Qwen/Qwen2.5-VL-3B-Instruct","object":"response","output":[],"parallel_tool_calls":false,"temperature":0.01,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":64,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"9c789b2ec3cb931a","content":[],"role":"assistant","status":"in_progress","type":"message","phase":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","sequence_number":3,"output_index":0,"content_index":0,"item_id":"9c789b2ec3cb931a","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":4,"output_index":0,"content_index":0,"delta":"Red","item_id":"9c789b2ec3cb931a","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":5,"output_index":0,"content_index":0,"delta":",","item_id":"9c789b2ec3cb931a","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":6,"output_index":0,"content_index":0,"delta":"
+      Blue","item_id":"9c789b2ec3cb931a","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","sequence_number":7,"output_index":0,"content_index":0,"item_id":"9c789b2ec3cb931a","logprobs":[],"text":"Red,
+      Blue"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","sequence_number":8,"output_index":0,"content_index":0,"item_id":"9c789b2ec3cb931a","part":{"annotations":[],"text":"Red,
+      Blue","type":"output_text","logprobs":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":9,"output_index":0,"item":{"id":"9c789b2ec3cb931a","content":[{"annotations":[],"text":"Red,
+      Blue","type":"output_text","logprobs":null}],"role":"assistant","status":"completed","type":"message","phase":null,"summary":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":10,"response":{"id":"resp_01a0afd4-c40c-7c52-8357-c4b4b08aa4ef","object":"response","created_at":1789656351,"model":"Qwen/Qwen2.5-VL-3B-Instruct","status":"completed","output":[{"type":"message","id":"9c789b2ec3cb931a","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Red,
+      Blue","annotations":[]}]}],"usage":{"input_tokens":49,"output_tokens":4,"total_tokens":53,"input_tokens_details":{"cached_tokens":48},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: 'Without repeating the colors, reply with exactly one word: did my previous
+        message include an image? YES or NO.'
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-VL-3B-Instruct
+      previous_response_id: resp_01a0afd4-c40c-7c52-8357-c4b4b08aa4ef
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a0afd4-c487-7c82-b0c7-d084da41ac2f","created_at":1789656351,"incomplete_details":null,"instructions":null,"metadata":null,"model":"Qwen/Qwen2.5-VL-3B-Instruct","object":"response","output":[],"parallel_tool_calls":false,"temperature":0.01,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":64,"max_tool_calls":null,"previous_response_id":"resp_01a0afd4-c40c-7c52-8357-c4b4b08aa4ef","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a0afd4-c487-7c82-b0c7-d084da41ac2f","created_at":1789656351,"incomplete_details":null,"instructions":null,"metadata":null,"model":"Qwen/Qwen2.5-VL-3B-Instruct","object":"response","output":[],"parallel_tool_calls":false,"temperature":0.01,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":64,"max_tool_calls":null,"previous_response_id":"resp_01a0afd4-c40c-7c52-8357-c4b4b08aa4ef","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"8cfa869dcbb87d3c","content":[],"role":"assistant","status":"in_progress","type":"message","phase":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","sequence_number":3,"output_index":0,"content_index":0,"item_id":"8cfa869dcbb87d3c","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":4,"output_index":0,"content_index":0,"delta":"NO","item_id":"8cfa869dcbb87d3c","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","sequence_number":5,"output_index":0,"content_index":0,"item_id":"8cfa869dcbb87d3c","logprobs":[],"text":"NO"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","sequence_number":6,"output_index":0,"content_index":0,"item_id":"8cfa869dcbb87d3c","part":{"annotations":[],"text":"NO","type":"output_text","logprobs":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":7,"output_index":0,"item":{"id":"8cfa869dcbb87d3c","content":[{"annotations":[],"text":"NO","type":"output_text","logprobs":null}],"role":"assistant","status":"completed","type":"message","phase":null,"summary":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":8,"response":{"id":"resp_01a0afd4-c487-7c82-b0c7-d084da41ac2f","object":"response","created_at":1789656351,"model":"Qwen/Qwen2.5-VL-3B-Instruct","status":"completed","output":[{"type":"message","id":"8cfa869dcbb87d3c","role":"assistant","status":"completed","content":[{"type":"output_text","text":"NO","annotations":[]}]}],"usage":{"input_tokens":85,"output_tokens":2,"total_tokens":87,"input_tokens_details":{"cached_tokens":48},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":"resp_01a0afd4-c40c-7c52-8357-c4b4b08aa4ef","conversation_id":null,"instructions":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200

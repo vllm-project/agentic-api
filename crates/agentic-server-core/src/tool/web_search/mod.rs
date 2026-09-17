@@ -1,12 +1,13 @@
 //! Gateway-owned `web_search` tool.
 //!
 //! `mod.rs` owns the OpenAI-facing adapter: the [`WebSearchHandler`], the
-//! private [`WebSearchProvider`] contract, the typed result shape every
-//! provider normalizes into, and the mapping to public `web_search_call`
-//! output items. [`args`] parses the model's arguments; provider modules such
-//! as [`you`] shape requests and map responses.
+//! mapping to public `web_search_call` output items. [`provider`] defines the
+//! private provider contract and normalized result types. [`args`] parses the model's arguments; provider modules
+//! ([`you`], [`brave`]) shape requests and map responses.
 
 pub(crate) mod args;
+pub(crate) mod brave;
+mod provider;
 pub(crate) mod you;
 
 use std::collections::HashMap;
@@ -22,12 +23,16 @@ use serde_json::Value;
 use tokio::sync::Semaphore;
 
 use self::args::{MAX_WEB_SEARCH_QUERIES, WebSearchArguments};
+use self::brave::BraveSearchProvider;
+use self::provider::{
+    ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, clean_base_url,
+};
 use self::you::{YOU_API_BASE_URL, YOU_API_KEY, YouSearchProvider};
 use super::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
 use super::handler::{GatewayExecutor, GatewayToolEventPlan, ToolError, ToolHandler, ToolOutput};
 use super::ownership::GatewayBinding;
 use super::registry::{ToolEntry, ToolType};
-use crate::config::{DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS, WebSearchProviderKind};
+use crate::config::{DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS, WebSearchProviderConfig, WebSearchProviderKind};
 use crate::types::io::output::{FunctionToolCall, WebSearchCall, WebSearchCallStatus, WebSearchSource};
 use crate::types::io::{FunctionTool, OutputItem};
 use crate::types::tools::WebSearchToolParam;
@@ -191,6 +196,42 @@ impl WebSearchHandler {
         Self::with_provider_and_query_concurrency(provider, effective)
     }
 
+    /// Builds the handler for the provider selected in `config`.
+    ///
+    /// The query ceiling is the smallest of the gateway-wide limit, the
+    /// operator's `max_concurrent_queries` override, and the provider's own
+    /// [`WebSearchProvider::max_concurrent_requests`] ceiling.
+    #[must_use]
+    pub fn from_config(
+        client: Arc<reqwest::Client>,
+        config: &WebSearchProviderConfig,
+        max_concurrent_gateway_calls: NonZeroUsize,
+    ) -> Self {
+        let requested = config
+            .max_concurrent_queries
+            .map_or(max_concurrent_gateway_calls, |ceiling| {
+                ceiling.min(max_concurrent_gateway_calls)
+            });
+        let provider: Arc<dyn WebSearchProvider> = match config.provider {
+            WebSearchProviderKind::You => Arc::new(YouSearchProvider::from_values(
+                client,
+                config.api_key.clone(),
+                config.base_url.clone(),
+            )),
+            WebSearchProviderKind::Brave => Arc::new(BraveSearchProvider::from_values(
+                client,
+                config.api_key.clone(),
+                config.base_url.clone(),
+                config
+                    .max_concurrent_queries
+                    .or(WebSearchProviderKind::Brave.default_max_concurrent_queries())
+                    .unwrap_or(max_concurrent_gateway_calls),
+            )),
+        };
+        let effective = effective_query_concurrency(provider.as_ref(), requested);
+        Self::with_provider_and_query_concurrency(provider, effective)
+    }
+
     #[must_use]
     pub fn with_api_key(client: Arc<reqwest::Client>, api_key: String, base_url: &str) -> Self {
         Self::with_provider_and_query_concurrency(
@@ -299,86 +340,6 @@ fn effective_query_concurrency(provider: &dyn WebSearchProvider, requested: NonZ
     provider
         .max_concurrent_requests()
         .map_or(requested, |ceiling| requested.min(ceiling))
-}
-
-/// A search backend behind `web_search`.
-///
-/// Implementations shape one provider request per query and normalize the
-/// response into [`WebSearchProviderResponse`]; the handler owns fan-out,
-/// concurrency, and the model-facing output shape.
-pub(crate) trait WebSearchProvider: std::fmt::Debug + Send + Sync {
-    fn search<'a>(
-        &'a self,
-        query: &'a str,
-        args: &'a WebSearchArguments,
-        config: &'a WebSearchToolParam,
-    ) -> Pin<Box<dyn Future<Output = Result<WebSearchProviderResponse, ToolError>> + Send + 'a>>;
-
-    /// Provider-imposed ceiling on concurrent requests, if any. The handler
-    /// never schedules more queries at once than this allows.
-    fn max_concurrent_requests(&self) -> Option<NonZeroUsize> {
-        None
-    }
-}
-
-/// One normalized search hit. Serialized field names are the model-facing
-/// contract and reuse You.com's wire names; `url` is empty when the provider
-/// omitted it, and empty/`None` fields are not serialized. Fields outside this
-/// struct (cosmetic `thumbnail_url` / `favicon_url`, unknown keys) are dropped.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct WebSearchResult {
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub url: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(default, deserialize_with = "null_as_default", skip_serializing_if = "Vec::is_empty")]
-    pub snippets: Vec<String>,
-    /// Kept as `page_age` (You.com's wire name) so existing model-facing output
-    /// is unchanged; a provider-neutral name is deferred to the first provider
-    /// that needs it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub page_age: Option<String>,
-    /// Live-crawled page body, present when the provider fetched the page.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub contents: Option<WebSearchPageContents>,
-}
-
-/// Live-crawled page body in the formats the provider returned.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct WebSearchPageContents {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub html: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub markdown: Option<String>,
-    #[serde(default, deserialize_with = "null_as_default", skip_serializing_if = "Vec::is_empty")]
-    pub highlights: Vec<String>,
-}
-
-/// Per-query provider metadata echoed to the model as `metadata[]`.
-///
-/// `provider` is available to the gateway but not serialized, so `metadata[]`
-/// keeps the You.com shape (`query`, `search_uuid`, `latency`) that existing
-/// consumers see; exposing the provider name is #291 open question Q5.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub(crate) struct WebSearchProviderMetadata {
-    #[serde(skip)]
-    pub provider: WebSearchProviderKind,
-    pub query: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub search_uuid: Option<String>,
-    /// Provider-reported latency in seconds.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub latency: Option<f64>,
-}
-
-/// Normalized response for a single query.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct WebSearchProviderResponse {
-    pub web: Vec<WebSearchResult>,
-    pub news: Vec<WebSearchResult>,
-    pub metadata: WebSearchProviderMetadata,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -811,6 +772,40 @@ mod tests {
         assert_eq!(handler.max_concurrent_queries.get(), 7);
         assert_eq!(handler.query_permits.available_permits(), 7);
         assert!(format!("{handler:?}").contains("YouSearchProvider"));
+    }
+
+    #[test]
+    fn from_config_selects_provider_and_resolves_query_ceiling() {
+        let gateway_limit = NonZeroUsize::new(5).expect("nonzero test limit");
+        let client = Arc::new(reqwest::Client::new());
+
+        // You.com inherits the gateway limit unless the operator lowers it.
+        let you = WebSearchProviderConfig::new(Some("k".to_owned()), Some("https://you.example".to_owned()));
+        let handler = WebSearchHandler::from_config(Arc::clone(&client), &you, gateway_limit);
+        assert!(format!("{handler:?}").contains("YouSearchProvider"));
+        assert_eq!(handler.max_concurrent_queries.get(), 5);
+        let lowered = you.clone().with_max_concurrent_queries(NonZeroUsize::new(2));
+        let handler = WebSearchHandler::from_config(Arc::clone(&client), &lowered, gateway_limit);
+        assert_eq!(handler.max_concurrent_queries.get(), 2);
+        let raised = you.with_max_concurrent_queries(NonZeroUsize::new(9));
+        let handler = WebSearchHandler::from_config(Arc::clone(&client), &raised, gateway_limit);
+        assert_eq!(
+            handler.max_concurrent_queries.get(),
+            5,
+            "gateway limit still caps the override"
+        );
+
+        // Brave defaults to serial queries; the override can raise the ceiling.
+        let brave =
+            WebSearchProviderConfig::new(Some("k".to_owned()), None).with_provider(WebSearchProviderKind::Brave);
+        let handler = WebSearchHandler::from_config(Arc::clone(&client), &brave, gateway_limit);
+        assert!(format!("{handler:?}").contains("BraveSearchProvider"));
+        assert!(!format!("{handler:?}").contains("k\""));
+        assert_eq!(handler.max_concurrent_queries.get(), 1);
+        assert_eq!(handler.query_permits.available_permits(), 1);
+        let raised = brave.with_max_concurrent_queries(NonZeroUsize::new(3));
+        let handler = WebSearchHandler::from_config(client, &raised, gateway_limit);
+        assert_eq!(handler.max_concurrent_queries.get(), 3);
     }
 
     #[test]

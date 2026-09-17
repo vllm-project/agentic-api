@@ -136,10 +136,10 @@ export function Quickstart() {
             <li>
               <span>02</span>
               <div>
-                <strong>Install Agentic API</strong>
+                <strong>Get Agentic API</strong>
                 <p>
-                  Install v{PUBLISHED_VERSION} from PyPI or crates.io, with
-                  source builds available for development.
+                  Run v{PUBLISHED_VERSION} from PyPI with uvx or install from
+                  crates.io, with source builds available for development.
                 </p>
               </div>
             </li>
@@ -193,7 +193,7 @@ export function Quickstart() {
                     method === 'source'
                       ? 'Build from source'
                       : method === 'pypi'
-                        ? `Install from PyPI (v${PUBLISHED_VERSION})`
+                        ? `Check the PyPI CLI (v${PUBLISHED_VERSION})`
                         : `Install from crates.io (v${PUBLISHED_VERSION})`
                   }
                 />

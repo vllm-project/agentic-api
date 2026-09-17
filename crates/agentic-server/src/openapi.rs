@@ -37,6 +37,7 @@ use utoipa::OpenApi;
         agentic_core::types::io::InputTextContent,
         agentic_core::types::io::InputImageContent,
         agentic_core::types::io::InputFileContent,
+        agentic_core::types::io::RefusalContent,
         agentic_core::types::io::InputContent,
         agentic_core::types::io::InputFunctionToolCall,
         agentic_core::types::io::FunctionToolResultMessage,

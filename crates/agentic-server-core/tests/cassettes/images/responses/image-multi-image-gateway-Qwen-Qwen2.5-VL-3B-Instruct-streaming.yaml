@@ -1,0 +1,147 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content:
+        - text: Two images follow. For each, name the color on its left half.
+          type: input_text
+        - detail: low
+          image_url: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg==
+          type: input_image
+        - text: That was the first image. Here is the second.
+          type: input_text
+        - detail: low
+          image_url: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAATUlEQVR42u3PMQ0AAAwDoPo33UnY1Y8EAyTNVMciICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIPA5X1jpWlc21NUAAAAASUVORK5CYII=
+          type: input_image
+        - text: 'Reply with exactly two words: the first image''s left color, then
+            the second image''s left color.'
+          type: input_text
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-VL-3B-Instruct
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a0afd4-ba71-7582-bc82-c3bfaa7eaadf","created_at":1789656349,"incomplete_details":null,"instructions":null,"metadata":null,"model":"Qwen/Qwen2.5-VL-3B-Instruct","object":"response","output":[],"parallel_tool_calls":false,"temperature":0.01,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":64,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a0afd4-ba71-7582-bc82-c3bfaa7eaadf","created_at":1789656349,"incomplete_details":null,"instructions":null,"metadata":null,"model":"Qwen/Qwen2.5-VL-3B-Instruct","object":"response","output":[],"parallel_tool_calls":false,"temperature":0.01,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":64,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"a86fff7e5612abab","content":[],"role":"assistant","status":"in_progress","type":"message","phase":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","sequence_number":3,"output_index":0,"content_index":0,"item_id":"a86fff7e5612abab","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":4,"output_index":0,"content_index":0,"delta":"Red","item_id":"a86fff7e5612abab","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":5,"output_index":0,"content_index":0,"delta":",","item_id":"a86fff7e5612abab","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":6,"output_index":0,"content_index":0,"delta":"
+      Green","item_id":"a86fff7e5612abab","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","sequence_number":7,"output_index":0,"content_index":0,"item_id":"a86fff7e5612abab","logprobs":[],"text":"Red,
+      Green"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","sequence_number":8,"output_index":0,"content_index":0,"item_id":"a86fff7e5612abab","part":{"annotations":[],"text":"Red,
+      Green","type":"output_text","logprobs":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":9,"output_index":0,"item":{"id":"a86fff7e5612abab","content":[{"annotations":[],"text":"Red,
+      Green","type":"output_text","logprobs":null}],"role":"assistant","status":"completed","type":"message","phase":null,"summary":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":10,"response":{"id":"resp_01a0afd4-ba71-7582-bc82-c3bfaa7eaadf","object":"response","created_at":1789656349,"model":"Qwen/Qwen2.5-VL-3B-Instruct","status":"completed","output":[{"type":"message","id":"a86fff7e5612abab","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Red,
+      Green","annotations":[]}]}],"usage":{"input_tokens":78,"output_tokens":4,"total_tokens":82,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200

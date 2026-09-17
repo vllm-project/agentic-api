@@ -23,6 +23,8 @@ pub const DEFAULT_SQLITE_MAX_CONNECTIONS: u32 = 4;
 pub const DEFAULT_SQLITE_JOURNAL_SIZE_LIMIT_BYTES: u64 = 6_144_000;
 pub const DEFAULT_SQLITE_MMAP_SIZE_BYTES: u64 = 268_435_456;
 pub const DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS: NonZeroUsize = NonZeroUsize::new(5).expect("default is nonzero");
+/// Brave Search's free plan allows roughly one request per second.
+pub const DEFAULT_BRAVE_MAX_CONCURRENT_QUERIES: NonZeroUsize = NonZeroUsize::new(1).expect("default is nonzero");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PostgresConfig {
@@ -89,24 +91,50 @@ impl Default for SqliteConfig {
 
 /// Backend that serves the gateway-owned `web_search` tool.
 ///
-/// Additional providers are added here (#291). The enum is non-exhaustive so
-/// downstream crates keep a fallback arm when a new variant lands. Selecting a
-/// provider through [`WebSearchProviderConfig`] is deferred until a second
-/// provider exists.
+/// Selected through [`WebSearchProviderConfig::provider`]; `you` is the
+/// default so existing deployments are unchanged. The enum is non-exhaustive
+/// so downstream crates keep a fallback arm when a new variant lands (#291).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum WebSearchProviderKind {
     #[default]
     You,
+    Brave,
 }
 
 impl WebSearchProviderKind {
+    /// Every selectable provider, in the order operator-facing messages list them.
+    pub const ALL: [Self; 2] = [Self::You, Self::Brave];
+
     /// Environment variable that conventionally carries this provider's API key.
     #[must_use]
     pub const fn default_api_key_env(self) -> &'static str {
         match self {
             Self::You => "YOU_API_KEY",
+            Self::Brave => "BRAVE_API_KEY",
+        }
+    }
+
+    /// Endpoint used when neither the environment nor the configuration file
+    /// sets one. You.com has no default so a deployment that fails today keeps
+    /// failing the same way (#291 Q2).
+    #[must_use]
+    pub const fn default_base_url(self) -> Option<&'static str> {
+        match self {
+            Self::You => None,
+            Self::Brave => Some("https://api.search.brave.com"),
+        }
+    }
+
+    /// Provider-imposed default ceiling on concurrent search requests. `None`
+    /// inherits the gateway-wide limit. Brave's free plan allows roughly one
+    /// request per second, so it defaults to serial queries.
+    #[must_use]
+    pub const fn default_max_concurrent_queries(self) -> Option<NonZeroUsize> {
+        match self {
+            Self::You => None,
+            Self::Brave => Some(DEFAULT_BRAVE_MAX_CONCURRENT_QUERIES),
         }
     }
 
@@ -115,7 +143,46 @@ impl WebSearchProviderKind {
     pub const fn display_name(self) -> &'static str {
         match self {
             Self::You => "You.com",
+            Self::Brave => "Brave Search",
         }
+    }
+
+    /// Configuration label (`you`, `brave`) matching the serialized form.
+    #[must_use]
+    pub const fn config_name(self) -> &'static str {
+        match self {
+            Self::You => "you",
+            Self::Brave => "brave",
+        }
+    }
+
+    /// Whether this is the default provider whose model-facing output must stay
+    /// byte-identical to earlier releases.
+    #[must_use]
+    pub const fn is_you(&self) -> bool {
+        matches!(self, Self::You)
+    }
+}
+
+impl std::str::FromStr for WebSearchProviderKind {
+    type Err = Error;
+
+    /// Parses a configuration or environment value case-insensitively.
+    fn from_str(value: &str) -> Result<Self, Error> {
+        let trimmed = value.trim();
+        Self::ALL
+            .into_iter()
+            .find(|kind| kind.config_name().eq_ignore_ascii_case(trimmed))
+            .ok_or_else(|| {
+                let expected = Self::ALL
+                    .iter()
+                    .map(|kind| kind.config_name())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Error::Config(format!(
+                    "unknown web_search provider {trimmed:?}; expected one of: {expected}"
+                ))
+            })
     }
 }
 
@@ -125,18 +192,46 @@ impl std::fmt::Display for WebSearchProviderKind {
     }
 }
 
-/// Credentials for the gateway-owned `web_search` provider (You.com).
+/// Selection and credentials for the gateway-owned `web_search` provider.
+///
+/// Construct with [`WebSearchProviderConfig::new`] and the `with_*` builders;
+/// the struct is non-exhaustive so adding a provider setting is not a
+/// breaking change for downstream crates.
 #[derive(Clone, Default)]
+#[non_exhaustive]
 pub struct WebSearchProviderConfig {
+    pub provider: WebSearchProviderKind,
     pub api_key: Option<String>,
     pub base_url: Option<String>,
+    /// Operator override for the provider's concurrent-query ceiling. `None`
+    /// uses [`WebSearchProviderKind::default_max_concurrent_queries`].
+    pub max_concurrent_queries: Option<NonZeroUsize>,
 }
 
 impl WebSearchProviderConfig {
-    /// Builds the config from the credential and endpoint the deployment resolved.
+    /// Builds a You.com config from the credential and endpoint the deployment resolved.
     #[must_use]
     pub const fn new(api_key: Option<String>, base_url: Option<String>) -> Self {
-        Self { api_key, base_url }
+        Self {
+            provider: WebSearchProviderKind::You,
+            api_key,
+            base_url,
+            max_concurrent_queries: None,
+        }
+    }
+
+    /// Selects the provider the credential and endpoint belong to.
+    #[must_use]
+    pub const fn with_provider(mut self, provider: WebSearchProviderKind) -> Self {
+        self.provider = provider;
+        self
+    }
+
+    /// Overrides the provider's default concurrent-query ceiling.
+    #[must_use]
+    pub const fn with_max_concurrent_queries(mut self, max_concurrent_queries: Option<NonZeroUsize>) -> Self {
+        self.max_concurrent_queries = max_concurrent_queries;
+        self
     }
 }
 
@@ -144,8 +239,10 @@ impl std::fmt::Debug for WebSearchProviderConfig {
     /// Redacts `api_key` so debug-printing any enclosing config never logs the secret.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("WebSearchProviderConfig")
+            .field("provider", &self.provider)
             .field("api_key", &self.api_key.as_ref().map(|_| "<redacted>"))
             .field("base_url", &self.base_url)
+            .field("max_concurrent_queries", &self.max_concurrent_queries)
             .finish()
     }
 }
@@ -315,7 +412,21 @@ mod tests {
         assert!(!format!("{tools:?}").contains("super-secret-key"));
         assert_eq!(
             format!("{:?}", WebSearchProviderConfig::default()),
-            "WebSearchProviderConfig { api_key: None, base_url: None }"
+            "WebSearchProviderConfig { provider: You, api_key: None, base_url: None, max_concurrent_queries: None }"
+        );
+    }
+
+    #[test]
+    fn web_search_provider_config_builders_select_provider_and_ceiling() {
+        let config = WebSearchProviderConfig::new(Some("k".to_owned()), None)
+            .with_provider(WebSearchProviderKind::Brave)
+            .with_max_concurrent_queries(NonZeroUsize::new(3));
+        assert_eq!(config.provider, WebSearchProviderKind::Brave);
+        assert_eq!(config.api_key.as_deref(), Some("k"));
+        assert_eq!(config.max_concurrent_queries, NonZeroUsize::new(3));
+        assert_eq!(
+            WebSearchProviderConfig::new(None, None).provider,
+            WebSearchProviderKind::You
         );
     }
 
@@ -323,7 +434,53 @@ mod tests {
     fn web_search_provider_kind_labels() {
         assert_eq!(WebSearchProviderKind::You.to_string(), "You.com");
         assert_eq!(WebSearchProviderKind::You.default_api_key_env(), "YOU_API_KEY");
+        assert_eq!(WebSearchProviderKind::You.default_base_url(), None);
+        assert_eq!(WebSearchProviderKind::You.default_max_concurrent_queries(), None);
+        assert!(WebSearchProviderKind::You.is_you());
         assert_eq!(WebSearchProviderKind::default(), WebSearchProviderKind::You);
+
+        assert_eq!(WebSearchProviderKind::Brave.to_string(), "Brave Search");
+        assert_eq!(WebSearchProviderKind::Brave.default_api_key_env(), "BRAVE_API_KEY");
+        assert_eq!(
+            WebSearchProviderKind::Brave.default_base_url(),
+            Some("https://api.search.brave.com")
+        );
+        assert_eq!(
+            WebSearchProviderKind::Brave.default_max_concurrent_queries(),
+            NonZeroUsize::new(1)
+        );
+        assert!(!WebSearchProviderKind::Brave.is_you());
+    }
+
+    #[test]
+    fn web_search_provider_kind_parses_case_insensitively_and_serializes_snake_case() {
+        for value in ["brave", "Brave", " BRAVE "] {
+            assert_eq!(
+                value.parse::<WebSearchProviderKind>().unwrap(),
+                WebSearchProviderKind::Brave
+            );
+        }
+        assert_eq!(
+            "you".parse::<WebSearchProviderKind>().unwrap(),
+            WebSearchProviderKind::You
+        );
+        let error = "bing".parse::<WebSearchProviderKind>().unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "unknown web_search provider \"bing\"; expected one of: you, brave"
+        );
+
+        assert_eq!(
+            serde_json::to_string(&WebSearchProviderKind::Brave).unwrap(),
+            "\"brave\""
+        );
+        assert_eq!(
+            serde_json::from_str::<WebSearchProviderKind>("\"you\"").unwrap(),
+            WebSearchProviderKind::You
+        );
+        for kind in WebSearchProviderKind::ALL {
+            assert_eq!(kind.config_name().parse::<WebSearchProviderKind>().unwrap(), kind);
+        }
     }
 
     #[test]

@@ -1,0 +1,83 @@
+{#- Qwen2.5-VL chat template with Hermes-style tool calling.
+
+    Qwen/Qwen2.5-VL-*-Instruct ships a template that renders images but has no
+    `tools` block, so with `tool_choice: auto` the model never sees declared
+    functions. This template keeps the stock multimodal rendering (any role,
+    including tool responses that carry an image) and adds the tools system
+    prompt, `<tool_call>` history rendering, and `<tool_response>` wrapping
+    from Qwen/Qwen2.5-*-Instruct, which vLLM's `hermes` tool-call parser
+    understands. Pass it to vLLM with `--chat-template`. -#}
+{%- set image_count = namespace(value=0) %}
+{%- set video_count = namespace(value=0) %}
+{%- macro render_content(content) -%}
+    {%- if content is string -%}
+        {{- content }}
+    {%- else -%}
+        {%- for part in content -%}
+            {%- if part['type'] == 'image' or 'image' in part or 'image_url' in part -%}
+                {%- set image_count.value = image_count.value + 1 -%}
+                {%- if add_vision_id -%}Picture {{ image_count.value }}: {% endif -%}
+                <|vision_start|><|image_pad|><|vision_end|>
+            {%- elif part['type'] == 'video' or 'video' in part -%}
+                {%- set video_count.value = video_count.value + 1 -%}
+                {%- if add_vision_id -%}Video {{ video_count.value }}: {% endif -%}
+                <|vision_start|><|video_pad|><|vision_end|>
+            {%- elif 'text' in part -%}
+                {{- part['text'] }}
+            {%- endif -%}
+        {%- endfor -%}
+    {%- endif -%}
+{%- endmacro -%}
+{%- if messages[0]['role'] == 'system' %}
+    {%- set system_text = render_content(messages[0]['content']) %}
+{%- else %}
+    {%- set system_text = 'You are a helpful assistant.' %}
+{%- endif %}
+{%- if tools %}
+    {{- '<|im_start|>system\n' + system_text }}
+    {{- "\n\n# Tools\n\nYou may call one or more functions to assist with the user query.\n\nYou are provided with function signatures within <tools></tools> XML tags:\n<tools>" }}
+    {%- for tool in tools %}
+        {{- "\n" }}
+        {{- tool | tojson }}
+    {%- endfor %}
+    {{- "\n</tools>\n\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\n<tool_call>\n{\"name\": <function-name>, \"arguments\": <args-json-object>}\n</tool_call><|im_end|>\n" }}
+{%- else %}
+    {{- '<|im_start|>system\n' + system_text + '<|im_end|>\n' }}
+{%- endif %}
+{%- for message in messages %}
+    {%- if message['role'] == 'system' and loop.first %}
+    {%- elif message['role'] == 'assistant' and message.tool_calls %}
+        {{- '<|im_start|>assistant' }}
+        {%- if message['content'] %}
+            {{- '\n' + render_content(message['content']) }}
+        {%- endif %}
+        {%- for tool_call in message.tool_calls %}
+            {%- if tool_call.function is defined %}
+                {%- set tool_call = tool_call.function %}
+            {%- endif %}
+            {{- '\n<tool_call>\n{"name": ' }}
+            {{- tool_call.name | tojson }}
+            {{- ', "arguments": ' }}
+            {%- if tool_call.arguments is string %}
+                {{- tool_call.arguments }}
+            {%- else %}
+                {{- tool_call.arguments | tojson }}
+            {%- endif %}
+            {{- '}\n</tool_call>' }}
+        {%- endfor %}
+        {{- '<|im_end|>\n' }}
+    {%- elif message['role'] == 'tool' %}
+        {%- if loop.index0 == 0 or messages[loop.index0 - 1]['role'] != 'tool' %}
+            {{- '<|im_start|>user' }}
+        {%- endif %}
+        {{- '\n<tool_response>\n' + render_content(message['content']) + '\n</tool_response>' }}
+        {%- if loop.last or messages[loop.index0 + 1]['role'] != 'tool' %}
+            {{- '<|im_end|>\n' }}
+        {%- endif %}
+    {%- else %}
+        {{- '<|im_start|>' + message['role'] + '\n' + render_content(message['content']) + '<|im_end|>\n' }}
+    {%- endif %}
+{%- endfor %}
+{%- if add_generation_prompt %}
+    {{- '<|im_start|>assistant\n' }}
+{%- endif %}

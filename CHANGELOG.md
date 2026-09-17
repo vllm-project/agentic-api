@@ -2,6 +2,63 @@
 
 All notable changes to Agentic API are documented here.
 
+## [Unreleased]
+
+### Added
+
+- Added typed per-model input-modality overrides to `config.toml`
+  (`[models."<served-model-id>"] input_modalities = ["text", "image"]`), validated at startup:
+  unknown modality names, empty lists, duplicates, and image-only lists are rejected with the
+  offending file and line (#252).
+- Added Brave Search as a selectable backend for the gateway-owned `web_search` tool (#294, Phase 2 of #291).
+  Select it with `AGENTIC_WEB_SEARCH_PROVIDER=brave` or `[web_search] provider = "brave"` and supply `BRAVE_API_KEY`;
+  the endpoint defaults to `https://api.search.brave.com` and can be overridden with `AGENTIC_WEB_SEARCH_BASE_URL`
+  or `[web_search] base_url`. Web and news results come from one request per query. The gateway adapts the shared
+  tool contract: `allowed_domains` / `blocked_domains` and the model's `include_domains` / `exclude_domains` are
+  enforced client-side on a label boundary, `count` is clamped to Brave's maximum of 20, `freshness` is rendered in
+  Brave syntax, `language` maps to `search_lang`, and the You.com-specific `livecrawl`, `livecrawl_formats`,
+  `crawl_timeout`, and `boost_domains` arguments are ignored. Rejected credentials and HTTP 429 responses fail the
+  `web_search_call` without an automatic retry, naming the key variable or the upstream `Retry-After` value and never
+  echoing the secret. Each Brave `metadata[]` entry carries `"provider": "brave"`.
+- Added `[web_search] max_concurrent_queries` and `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES` to cap concurrent
+  provider requests inside one batched search. Brave defaults to `1` for its free-plan rate limit; You.com keeps
+  inheriting `max_concurrent_gateway_calls`. The effective ceiling is the smallest of the gateway limit, this
+  override, and the provider's own ceiling.
+
+### Changed
+
+- Modeled the Codex model catalog and the upstream model listing as typed Rust structs instead of
+  untyped JSON, and reported an undecodable upstream `/v1/models` payload as `502` rather than
+  serving it as an empty catalog (#252).
+- `agentic run codex` and `agentic harness codex` now resolve the model and its input modalities
+  from a single gateway catalog snapshot before writing an isolated Codex home, retrying a warming
+  gateway and failing with an actionable error when the catalog cannot be fetched or does not list
+  the selected model. A gateway behind OIDC now requires `--api-key` for `agentic harness codex`.
+  `agentic_harness::prepare_codex_home` requires the resolved modalities and is no longer public
+  (#252).
+- `WebSearchProviderConfig` is now `#[non_exhaustive]` and gains `provider` and `max_concurrent_queries` fields;
+  construct it with `WebSearchProviderConfig::new(api_key, base_url)` plus the `with_provider` and
+  `with_max_concurrent_queries` builders. Downstream crates that built it with a struct literal must switch to the
+  constructor; field reads and `Default` are unchanged. `WebSearchProviderKind` gains a `Brave` variant, `FromStr`
+  (case-insensitive), `default_base_url`, `default_max_concurrent_queries`, and `config_name`;
+  `WebSearchHandler::from_config` builds the handler for the selected provider and `GatewayExecutors::from_config`
+  uses it. With `provider` unset, You.com behavior, configuration, and model-facing output are unchanged; a generated
+  `config.toml` now records `provider = "you"` and leaves `api_key_env` unset so provider switches select the matching
+  default credential variable.
+
+### Fixed
+
+- Resolved Codex image capabilities consistently: the HTTP model catalog and both launcher modes
+  now advertise the same resolved `input_modalities`, so a vision-capable model no longer has image
+  content stripped client-side because an isolated catalog hardcoded `["text"]`. Existing persistent
+  Codex session homes must be regenerated to pick this up (#252).
+
+### Testing
+
+- Extended the pinned Codex 0.149.1 smoke with actual PNG attachments through both launcher modes, exact upstream
+  image-byte assertions, and a text-only negative control. The smoke replays the committed vision recording without
+  live API credentials (#261).
+
 ## [0.7.0] - 2026-09-14
 
 ### Added
@@ -84,6 +141,17 @@ All notable changes to Agentic API are documented here.
   stream, and bounded concurrency across streams (#240).
 - Added compile-time OpenAPI 3.1 schema generation and checked-in schema validation for the HTTP API (#229).
 - Added pinned SGLang conformance recordings, replay coverage, and launch and recording guidance (#267).
+- Verified image preservation through the Responses gateway end to end (#253): integration coverage for mixed
+  text/image ordering, multiple images per turn, client-executed `view_image` tool output, `previous_response_id`
+  continuation, `conversation_id` rehydration, stateless `store: false` proxying, and compaction of retained
+  image-bearing user messages, over both the HTTP and WebSocket transports.
+- Recorded paired image cassettes — client → OpenAI as the reference and client → gateway → vLLM serving
+  `Qwen/Qwen2.5-VL-3B-Instruct` — for a text-and-image message, two interleaved images, a `previous_response_id`
+  follow-up, and a client-executed tool returning an image through a structured `function_call_output`, each
+  streaming and non-streaming. Replay coverage compares request shape, completed-response structure, the streaming
+  event lifecycle, and the history the gateway forwards on continuation; model wording is never compared (#253).
+  The cassette recorder accepts `--input-file` for the first of several turns and sends a tool handler's list of
+  content parts as a structured output array.
 
 ### Changed
 
@@ -99,6 +167,8 @@ All notable changes to Agentic API are documented here.
   architecture (#246).
 - Updated the execution architecture documentation to match the current scheduler and llm-d backend (#270).
 - Preserved the typed `ignore_eos` extension when forwarding Responses requests to vLLM (#268).
+- Modeled `refusal` as an assistant-history content part so OpenAI-style history replays through the typed
+  Responses executor instead of being rejected as unmodeled (#253).
 
 ### Fixed
 
@@ -110,6 +180,12 @@ All notable changes to Agentic API are documented here.
 - Required a healthy packaged gateway before `agentic-api doctor --mode local` reports success (#223).
 - Rebuilt workspace crates after `cargo-chef` dependency cooking so container binaries carry current source and package
   metadata (#208, #209).
+- Rejected message content the typed Responses executor cannot convey — unmodeled part types and empty part arrays,
+  alongside the existing `input_file` rejection — with a `400` naming the offending part, instead of forwarding a
+  synthetic `{"type": "unknown"}` part or silently dropping it. Modeled parts keep their unmodeled extension fields
+  through the typed path, so a message is never mutated in transit, never means something different on the typed
+  path than on the raw `store: false` path, and is never persisted with content the client did not send (#253).
+- Counted an image referenced by `file_id` as retained context during compaction, matching inline images (#253).
 - Hardened split execution with atomic duplicate persistence, strict relayed-response validation, independent secret
   validation, bounded hydrate and persist payloads, stable error envelopes, and graceful shutdown error propagation
   (#235).

@@ -4,7 +4,7 @@
 
 vLLM serves the model; Agentic API coordinates the tool loop and state. The project provides Responses and Messages API surfaces, conversation storage, streaming, and WebSocket transport for Responses. Built-in web search and MCP tools can execute on the gateway; client-executed function tools remain in the harness.
 
-Version 0.7.0 is available on PyPI and crates.io. Install with `python -m pip install agentic-api==0.7.0` (Python 3.10+) or `cargo install agentic-server --version 0.7.0 --locked` (Rust and Cargo). Both install the Rust gateway and agentic CLI; the Python wheel does not install vLLM. Start the standalone server with `python -m agentic_api serve --vllm-base-url http://127.0.0.1:5050`, or use `agentic run codex` or `agentic run claude` with your upstream and model.
+Version 0.7.0 is available on PyPI and crates.io. With uv installed, run `uvx --from agentic-api==0.7.0 agentic run codex --upstream http://127.0.0.1:5050` (or `run claude`) without a global install. To start only the gateway, use `uvx --from agentic-api==0.7.0 agentic serve --upstream http://127.0.0.1:5050`. Alternatively, install with `cargo install agentic-server --version 0.7.0 --locked` (Rust and Cargo), then run `agentic`. The Python wheel bundles the Rust executables; serve vLLM separately.
 
 Use a tool-capable model and the appropriate tool-calling configuration. SGLang and NVIDIA Dynamo also have documented, tested upstream configurations. Compatibility depends on the model, serving configuration, and API surface. The separate agentic-llm-d component provides response hydration and persistence for llm-d.
 

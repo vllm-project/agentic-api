@@ -1,0 +1,342 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: 'Call the view_image tool exactly once, with path "diagram.png". After
+        you see the image, reply with exactly two words: the color on its left half,
+        then the color on its right half.'
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-VL-3B-Instruct
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - description: Load an image from the local workspace so you can look at it.
+          Call it before describing any image the user names.
+        name: view_image
+        parameters:
+          additionalProperties: false
+          properties:
+            path:
+              description: Path of the image to load.
+              type: string
+          required:
+          - path
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a0afd4-ce6e-7981-acd2-fdef30678229","created_at":1789656354,"incomplete_details":null,"instructions":null,"metadata":null,"model":"Qwen/Qwen2.5-VL-3B-Instruct","object":"response","output":[],"parallel_tool_calls":false,"temperature":0.01,"tool_choice":"auto","tools":[{"name":"view_image","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Path
+      of the image to load."}},"required":["path"],"additionalProperties":false},"strict":true,"type":"function","allowed_callers":null,"async":null,"defer_loading":null,"description":"Load
+      an image from the local workspace so you can look at it. Call it before describing
+      any image the user names.","output_schema":null}],"top_p":1.0,"background":false,"max_output_tokens":64,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a0afd4-ce6e-7981-acd2-fdef30678229","created_at":1789656354,"incomplete_details":null,"instructions":null,"metadata":null,"model":"Qwen/Qwen2.5-VL-3B-Instruct","object":"response","output":[],"parallel_tool_calls":false,"temperature":0.01,"tool_choice":"auto","tools":[{"name":"view_image","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Path
+      of the image to load."}},"required":["path"],"additionalProperties":false},"strict":true,"type":"function","allowed_callers":null,"async":null,"defer_loading":null,"description":"Load
+      an image from the local workspace so you can look at it. Call it before describing
+      any image the user names.","output_schema":null}],"top_p":1.0,"background":false,"max_output_tokens":64,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"arguments":"","call_id":"call_a147b69426eaea7e","name":"view_image","type":"function_call","id":"854852885ad95f75","async":null,"caller":null,"namespace":null,"status":"in_progress"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":3,"output_index":0,"delta":"{\"","item_id":"854852885ad95f75"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":4,"output_index":0,"delta":"path","item_id":"854852885ad95f75"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":5,"output_index":0,"delta":"\":","item_id":"854852885ad95f75"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":6,"output_index":0,"delta":"
+      \"","item_id":"854852885ad95f75"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":7,"output_index":0,"delta":"di","item_id":"854852885ad95f75"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":8,"output_index":0,"delta":"agram","item_id":"854852885ad95f75"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":9,"output_index":0,"delta":".png","item_id":"854852885ad95f75"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","sequence_number":10,"output_index":0,"delta":"\"}","item_id":"854852885ad95f75"}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.done
+
+      '
+    - 'data: {"type":"response.function_call_arguments.done","sequence_number":11,"output_index":0,"arguments":"{\"path\":
+      \"diagram.png\"}","item_id":"854852885ad95f75","name":"view_image"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":12,"output_index":0,"item":{"arguments":"{\"path\":
+      \"diagram.png\"}","call_id":"call_a147b69426eaea7e","name":"view_image","type":"function_call","id":"854852885ad95f75","async":null,"caller":null,"namespace":null,"status":"completed"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":13,"response":{"id":"resp_01a0afd4-ce6e-7981-acd2-fdef30678229","object":"response","created_at":1789656355,"model":"Qwen/Qwen2.5-VL-3B-Instruct","status":"completed","output":[{"type":"function_call","id":"854852885ad95f75","call_id":"call_a147b69426eaea7e","name":"view_image","arguments":"{\"path\":
+      \"diagram.png\"}","status":"completed"}],"usage":{"input_tokens":232,"output_tokens":22,"total_tokens":254,"input_tokens_details":{"cached_tokens":96},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: call_a147b69426eaea7e
+        output:
+        - text: 'Loaded diagram.png:'
+          type: input_text
+        - detail: low
+          image_url: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg==
+          type: input_image
+        type: function_call_output
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-VL-3B-Instruct
+      previous_response_id: resp_01a0afd4-ce6e-7981-acd2-fdef30678229
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - description: Load an image from the local workspace so you can look at it.
+          Call it before describing any image the user names.
+        name: view_image
+        parameters:
+          additionalProperties: false
+          properties:
+            path:
+              description: Path of the image to load.
+              type: string
+          required:
+          - path
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a0afd4-d0d6-7cc0-877e-69ffe274dcb9","created_at":1789656355,"incomplete_details":null,"instructions":null,"metadata":null,"model":"Qwen/Qwen2.5-VL-3B-Instruct","object":"response","output":[],"parallel_tool_calls":false,"temperature":0.01,"tool_choice":"auto","tools":[{"name":"view_image","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Path
+      of the image to load."}},"required":["path"],"additionalProperties":false},"strict":true,"type":"function","allowed_callers":null,"async":null,"defer_loading":null,"description":"Load
+      an image from the local workspace so you can look at it. Call it before describing
+      any image the user names.","output_schema":null}],"top_p":1.0,"background":false,"max_output_tokens":64,"max_tool_calls":null,"previous_response_id":"resp_01a0afd4-ce6e-7981-acd2-fdef30678229","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a0afd4-d0d6-7cc0-877e-69ffe274dcb9","created_at":1789656355,"incomplete_details":null,"instructions":null,"metadata":null,"model":"Qwen/Qwen2.5-VL-3B-Instruct","object":"response","output":[],"parallel_tool_calls":false,"temperature":0.01,"tool_choice":"auto","tools":[{"name":"view_image","parameters":{"type":"object","properties":{"path":{"type":"string","description":"Path
+      of the image to load."}},"required":["path"],"additionalProperties":false},"strict":true,"type":"function","allowed_callers":null,"async":null,"defer_loading":null,"description":"Load
+      an image from the local workspace so you can look at it. Call it before describing
+      any image the user names.","output_schema":null}],"top_p":1.0,"background":false,"max_output_tokens":64,"max_tool_calls":null,"previous_response_id":"resp_01a0afd4-ce6e-7981-acd2-fdef30678229","prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"8a3451ab70d9c190","content":[],"role":"assistant","status":"in_progress","type":"message","phase":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","sequence_number":3,"output_index":0,"content_index":0,"item_id":"8a3451ab70d9c190","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":4,"output_index":0,"content_index":0,"delta":"Red","item_id":"8a3451ab70d9c190","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":5,"output_index":0,"content_index":0,"delta":",","item_id":"8a3451ab70d9c190","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":6,"output_index":0,"content_index":0,"delta":"
+      Blue","item_id":"8a3451ab70d9c190","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","sequence_number":7,"output_index":0,"content_index":0,"item_id":"8a3451ab70d9c190","logprobs":[],"text":"Red,
+      Blue"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","sequence_number":8,"output_index":0,"content_index":0,"item_id":"8a3451ab70d9c190","part":{"annotations":[],"text":"Red,
+      Blue","type":"output_text","logprobs":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":9,"output_index":0,"item":{"id":"8a3451ab70d9c190","content":[{"annotations":[],"text":"Red,
+      Blue","type":"output_text","logprobs":null}],"role":"assistant","status":"completed","type":"message","phase":null,"summary":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":10,"response":{"id":"resp_01a0afd4-d0d6-7cc0-877e-69ffe274dcb9","object":"response","created_at":1789656355,"model":"Qwen/Qwen2.5-VL-3B-Instruct","status":"completed","output":[{"type":"message","id":"8a3451ab70d9c190","role":"assistant","status":"completed","content":[{"type":"output_text","text":"Red,
+      Blue","annotations":[]}]}],"usage":{"input_tokens":282,"output_tokens":4,"total_tokens":286,"input_tokens_details":{"cached_tokens":240},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":"resp_01a0afd4-ce6e-7981-acd2-fdef30678229","conversation_id":null,"instructions":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200

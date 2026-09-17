@@ -25,6 +25,7 @@ use super::bounded_http::BoundedMcpHttpClient;
 
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(30);
 const TOOL_TIMEOUT: Duration = Duration::from_secs(60);
+const MAX_LIST_TOOLS_PAGES: usize = 32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum McpOperation {
@@ -75,6 +76,12 @@ pub enum McpError {
 
     #[error("MCP operation timed out during {operation}")]
     Timeout { operation: McpOperation },
+
+    #[error("MCP tools/list exceeded maximum page limit of {pages} pages")]
+    PaginationExceeded { pages: usize },
+
+    #[error("MCP tools/list returned a repeated pagination cursor")]
+    PaginationLoop,
 
     #[error("MCP tool arguments must be a JSON object")]
     InvalidArguments,
@@ -212,24 +219,60 @@ impl McpClient {
         })
     }
 
-    /// Lists tools exposed by the connected MCP server.
+    /// Lists all tools exposed by the connected MCP server, following cursor-based pagination.
     ///
     /// # Errors
     ///
     /// Returns [`McpError::Timeout`] if `tools/list` exceeds the configured timeout.
-    /// Returns [`McpError::Operation`] if the server rejects or fails the request.
+    /// Returns [`McpError::PaginationExceeded`] if `tools/list` exceeds [`MAX_LIST_TOOLS_PAGES`].
+    /// Returns [`McpError::PaginationLoop`] if the server repeats the requested cursor.
+    /// Returns [`McpError::Operation`] if the server rejects or fails any page request.
     pub async fn list_tools(&self) -> Result<Vec<Tool>, McpError> {
-        let result = tokio::time::timeout(self.tool_timeout, self.inner.list_tools(None))
-            .await
-            .map_err(|_| McpError::Timeout {
-                operation: McpOperation::ListTools,
-            })?
-            .map_err(|source| McpError::Operation {
-                operation: McpOperation::ListTools,
-                source,
-            })?;
+        tokio::time::timeout(self.tool_timeout, async {
+            let mut tools = Vec::new();
+            let mut cursor: Option<String> = None;
+            let mut pages: usize = 0;
 
-        Ok(result.tools)
+            loop {
+                pages += 1;
+                if pages > MAX_LIST_TOOLS_PAGES {
+                    return Err(McpError::PaginationExceeded {
+                        pages: MAX_LIST_TOOLS_PAGES,
+                    });
+                }
+
+                let params = cursor
+                    .as_ref()
+                    .map(|c| rmcp::model::PaginatedRequestParams::default().with_cursor(Some(c.clone())));
+
+                let result = self
+                    .inner
+                    .list_tools(params)
+                    .await
+                    .map_err(|source| McpError::Operation {
+                        operation: McpOperation::ListTools,
+                        source,
+                    })?;
+
+                tools.extend(result.tools);
+
+                match result.next_cursor {
+                    None => break,
+                    Some(ref next) if cursor.as_ref() == Some(next) => {
+                        return Err(McpError::PaginationLoop);
+                    }
+                    Some(next) => {
+                        cursor = Some(next);
+                    }
+                }
+            }
+
+            Ok(tools)
+        })
+        .await
+        .map_err(|_| McpError::Timeout {
+            operation: McpOperation::ListTools,
+        })?
     }
 
     /// Calls a tool exposed by the connected MCP server.
@@ -319,7 +362,7 @@ fn http_client_for_literal_address() -> Result<http_client::Client, McpError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{McpError, http_client_for_addresses, pinned_http_client};
+    use super::{McpClient, McpError, http_client_for_addresses, pinned_http_client};
     use std::io::{Read, Write};
     use std::net::{Ipv4Addr, SocketAddr, TcpListener as StdTcpListener};
     use std::process::Command;
@@ -473,5 +516,151 @@ mod tests {
         );
         assert!(target_accepted.load(Ordering::SeqCst));
         assert!(!proxy_accepted.load(Ordering::SeqCst));
+    }
+
+    fn mock_mcp_script(tools_list_body: &str) -> String {
+        let preamble = r"
+import sys, json
+
+page = 0
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    req = json.loads(line)
+    method = req.get('method')
+    req_id = req.get('id')
+    if method == 'initialize':
+        resp = {
+            'jsonrpc': '2.0',
+            'id': req_id,
+            'result': {
+                'protocolVersion': '2025-06-18',
+                'capabilities': {'tools': {}},
+                'serverInfo': {'name': 'mock-server', 'version': '1.0.0'}
+            }
+        }
+        sys.stdout.write(json.dumps(resp) + '\n')
+        sys.stdout.flush()
+    elif method == 'tools/list':
+";
+        format!("{preamble}{tools_list_body}")
+    }
+
+    async fn mock_mcp_stdio_client(script: &str) -> McpClient {
+        let python = if cfg!(windows) { "python" } else { "python3" };
+        McpClient::connect_stdio(python, &["-c".to_owned(), script.to_owned()], None, None)
+            .await
+            .expect("mock stdio connection must succeed")
+    }
+
+    #[tokio::test]
+    async fn list_tools_follows_cursor_pagination() {
+        let body = r"
+        cursor = (req.get('params') or {}).get('cursor')
+        if cursor is None:
+            # First page MUST NOT specify a cursor
+            resp = {
+                'jsonrpc': '2.0',
+                'id': req_id,
+                'result': {
+                    'tools': [{'name': 'page1_tool', 'description': 'tool on page 1', 'inputSchema': {'type': 'object'}}],
+                    'nextCursor': 'page2'
+                }
+            }
+        elif cursor == 'page2':
+            resp = {
+                'jsonrpc': '2.0',
+                'id': req_id,
+                'result': {
+                    'tools': [{'name': 'page2_tool', 'description': 'tool on page 2', 'inputSchema': {'type': 'object'}}],
+                    'nextCursor': None
+                }
+            }
+        else:
+            resp = {'jsonrpc': '2.0', 'id': req_id, 'error': {'code': -32602, 'message': 'invalid cursor'}}
+        sys.stdout.write(json.dumps(resp) + '\n')
+        sys.stdout.flush()
+";
+
+        let client = mock_mcp_stdio_client(&mock_mcp_script(body)).await;
+        let tools = client.list_tools().await.expect("list_tools must succeed");
+        assert_eq!(tools.len(), 2, "must discover tools across both pages");
+        assert_eq!(tools[0].name, "page1_tool");
+        assert_eq!(tools[1].name, "page2_tool");
+    }
+
+    #[tokio::test]
+    async fn list_tools_rejects_runaway_pagination() {
+        let body = r"
+        page += 1
+        resp = {
+            'jsonrpc': '2.0',
+            'id': req_id,
+            'result': {
+                'tools': [{'name': f'infinite_tool_{page}', 'description': 'tool', 'inputSchema': {'type': 'object'}}],
+                'nextCursor': f'cursor_{page}'
+            }
+        }
+        sys.stdout.write(json.dumps(resp) + '\n')
+        sys.stdout.flush()
+";
+
+        let client = mock_mcp_stdio_client(&mock_mcp_script(body)).await;
+        let error = client.list_tools().await.expect_err("infinite pagination must fail");
+        assert!(
+            matches!(error, McpError::PaginationExceeded { pages: 32 }),
+            "expected PaginationExceeded error, got {error:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn list_tools_follows_empty_cursor() {
+        let body = r"
+        page += 1
+        if page == 2 and (req.get('params') or {}).get('cursor') != '':
+            resp = {'jsonrpc': '2.0', 'id': req_id, 'error': {'code': -32602, 'message': 'empty cursor missing'}}
+            sys.stdout.write(json.dumps(resp) + '\n')
+            sys.stdout.flush()
+            continue
+        resp = {
+            'jsonrpc': '2.0',
+            'id': req_id,
+            'result': {
+                'tools': [{'name': f'page_{page}_tool', 'description': 'tool', 'inputSchema': {'type': 'object'}}],
+                'nextCursor': '' if page == 1 else None
+            }
+        }
+        sys.stdout.write(json.dumps(resp) + '\n')
+        sys.stdout.flush()
+";
+
+        let client = mock_mcp_stdio_client(&mock_mcp_script(body)).await;
+        let tools = client.list_tools().await.expect("list_tools must succeed");
+        assert_eq!(tools.len(), 2, "an empty cursor is an opaque continuation token");
+    }
+
+    #[tokio::test]
+    async fn list_tools_rejects_stale_cursor() {
+        let body = r"
+        page += 1
+        resp = {
+            'jsonrpc': '2.0',
+            'id': req_id,
+            'result': {
+                'tools': [{'name': f'stale_tool_{page}', 'description': 'tool', 'inputSchema': {'type': 'object'}}],
+                'nextCursor': 'same_cursor'
+            }
+        }
+        sys.stdout.write(json.dumps(resp) + '\n')
+        sys.stdout.flush()
+";
+
+        let client = mock_mcp_stdio_client(&mock_mcp_script(body)).await;
+        let error = client
+            .list_tools()
+            .await
+            .expect_err("a cursor loop must not return a partial tool list");
+        assert!(matches!(error, McpError::PaginationLoop), "{error}");
     }
 }

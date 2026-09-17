@@ -78,7 +78,7 @@ impl From<OutputMessage> for InputMessage {
         let parts = msg
             .content
             .into_iter()
-            .map(|c| InputContent::OutputText(InputTextContent { text: c.text }))
+            .map(|c| InputContent::OutputText(InputTextContent::new(c.text)))
             .collect();
         Self {
             id: Some(msg.id),
@@ -1690,6 +1690,6 @@ mod tests {
         let InputMessageContent::Parts(parts) = &message.content else {
             panic!("expected message parts");
         };
-        assert!(matches!(parts.as_slice(), [InputContent::Unknown]));
+        assert!(matches!(parts.as_slice(), [InputContent::Unknown(kind)] if kind == "future_content"));
     }
 }

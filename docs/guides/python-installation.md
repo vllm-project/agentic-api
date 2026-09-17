@@ -46,11 +46,14 @@ Use `--vllm-port` and the API-key environment-variable options on the launcher i
 
 ### Run with uvx
 
-For an isolated base-package invocation:
+With uv installed, run the packaged Rust CLI in an isolated environment without a global installation.
+Install Codex or Claude Code separately and connect to an existing inference server:
 
 ```bash
-uvx --from agentic-api==0.7.0 agentic-api doctor
-uvx --from agentic-api==0.7.0 agentic-api serve --vllm-base-url http://existing-vllm:8000
+uvx --from agentic-api==0.7.0 agentic --version
+uvx --from agentic-api==0.7.0 agentic run codex --upstream http://existing-vllm:8000
+uvx --from agentic-api==0.7.0 agentic run claude --upstream http://existing-vllm:8000
+uvx --from agentic-api==0.7.0 agentic serve --upstream http://existing-vllm:8000
 ```
 
 ### Install a workflow artifact

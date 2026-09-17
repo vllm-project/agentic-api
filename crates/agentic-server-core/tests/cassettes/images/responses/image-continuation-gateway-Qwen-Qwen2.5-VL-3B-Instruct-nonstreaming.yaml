@@ -1,0 +1,106 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content:
+        - text: 'Reply with exactly two words: the color on the left half of this
+            image, then the color on the right half.'
+          type: input_text
+        - detail: low
+          image_url: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAT0lEQVR42u3PsQkAAAzDsPz/dHpCp2wCzwalybTxvgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+Dq47PDiz8p6GQAAAABJRU5ErkJggg==
+          type: input_image
+        role: user
+        type: message
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-VL-3B-Instruct
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1789656353
+      error: null
+      id: resp_01a0afd4-c939-7c81-8595-8fb4d94eab9a
+      incomplete_details: null
+      instructions: null
+      model: Qwen/Qwen2.5-VL-3B-Instruct
+      object: response
+      output:
+      - content:
+        - annotations: []
+          text: Red, Blue
+          type: output_text
+        id: msg_bad382e40d62feca
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: null
+      status: completed
+      usage:
+        input_tokens: 49
+        input_tokens_details:
+          cached_tokens: 48
+        output_tokens: 4
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 53
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: 'Without repeating the colors, reply with exactly one word: did my previous
+        message include an image? YES or NO.'
+      max_output_tokens: 64
+      model: Qwen/Qwen2.5-VL-3B-Instruct
+      previous_response_id: resp_01a0afd4-c939-7c81-8595-8fb4d94eab9a
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1789656353
+      error: null
+      id: resp_01a0afd4-c9b4-7ab0-841d-da69c2ff3d4a
+      incomplete_details: null
+      instructions: null
+      model: Qwen/Qwen2.5-VL-3B-Instruct
+      object: response
+      output:
+      - content:
+        - annotations: []
+          text: 'NO'
+          type: output_text
+        id: msg_8701f7e574d79382
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: resp_01a0afd4-c939-7c81-8595-8fb4d94eab9a
+      status: completed
+      usage:
+        input_tokens: 85
+        input_tokens_details:
+          cached_tokens: 80
+        output_tokens: 2
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 87
+    headers:
+      content-type: application/json
+    status_code: 200
