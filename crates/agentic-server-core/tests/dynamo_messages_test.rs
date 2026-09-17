@@ -64,7 +64,8 @@ impl GatewayExecutor for RecordedTool {
     }
 }
 
-async fn replay(path: &str, streaming: bool) {
+/// `expected_usage` is the sum of both recorded rounds (part of #315).
+async fn replay(path: &str, streaming: bool, expected_usage: Value) {
     let raw =
         std::fs::read_to_string(path).unwrap_or_else(|error| panic!("real recording required at {path}: {error}"));
     let doc: Value = serde_yaml::from_str(&raw).unwrap();
@@ -133,12 +134,16 @@ async fn replay(path: &str, streaming: bool) {
                     .await
                     .unwrap();
                 let raw = response.body.collect::<Vec<_>>().await.join("");
-                assert_public_stream(&raw, &turns[1]);
+                assert_public_stream(&raw, &turns[1], &expected_usage);
             } else {
                 let request = MessagesRequestContext::from_value(expected[0].clone()).unwrap();
                 let response = run_messages_loop(request, &registry, &ctx, &upstream).await.unwrap();
                 assert_eq!(response.body["stop_reason"], "end_turn");
                 assert_eq!(response.body["content"], turns[1]["response"]["body"]["content"]);
+                assert_eq!(
+                    response.body["usage"], expected_usage,
+                    "the public message sums every round"
+                );
             }
         })
         .catch_unwind(),
@@ -161,28 +166,47 @@ async fn replay(path: &str, streaming: bool) {
 
 #[tokio::test]
 async fn messages_replay_preparation_nonstreaming() {
+    // Recorded rounds: 175/172 and 374/258 tokens.
     replay(
         &format!("{ROOT}/messages/messages-web-search-Qwen-Qwen3-30B-A3B-FP8-nonstreaming.yaml"),
         false,
+        serde_json::json!({"input_tokens": 549, "output_tokens": 430}),
     )
     .await;
 }
 
 #[tokio::test]
 async fn messages_replay_preparation_streaming() {
+    // Recorded message_delta rounds: 175/172 and 374/184 tokens.
     replay(
         &format!("{ROOT}/messages/messages-web-search-Qwen-Qwen3-30B-A3B-FP8-streaming.yaml"),
         true,
+        serde_json::json!({"input_tokens": 549, "output_tokens": 356}),
     )
     .await;
 }
 
 #[tokio::test]
 async fn dynamo_messages_recorded_acceptance() {
-    for (suffix, streaming) in [("nonstreaming", false), ("streaming", true)] {
+    // Recorded rounds: JSON 144/40 then 72/20 with 144 cached; the streaming
+    // message_delta rounds report 16/34 with 128 cached then 66/22 with 144
+    // cached. A cache counter one round reports survives in the total.
+    for (suffix, streaming, usage) in [
+        (
+            "nonstreaming",
+            false,
+            serde_json::json!({"input_tokens": 216, "output_tokens": 60, "cache_read_input_tokens": 144}),
+        ),
+        (
+            "streaming",
+            true,
+            serde_json::json!({"input_tokens": 82, "output_tokens": 56, "cache_read_input_tokens": 272}),
+        ),
+    ] {
         replay(
             &format!("{ROOT}/dynamo/dynamo-messages-web-search-openai-gpt-oss-20b-{suffix}.yaml"),
             streaming,
+            usage,
         )
         .await;
     }
@@ -215,12 +239,15 @@ fn expected_requests(turns: &[Value], legacy_streaming: bool) -> Vec<Value> {
     expected
 }
 
-fn assert_public_stream(raw: &str, final_turn: &Value) {
-    let events: Vec<Value> = raw
-        .lines()
+fn events(raw: &str) -> Vec<Value> {
+    raw.lines()
         .filter_map(|line| line.strip_prefix("data:"))
         .filter_map(|s| serde_json::from_str(s.trim()).ok())
-        .collect();
+        .collect()
+}
+
+fn assert_public_stream(raw: &str, final_turn: &Value, expected_usage: &Value) {
+    let events = events(raw);
     for kind in ["message_start", "message_stop", "message_delta"] {
         assert_eq!(events.iter().filter(|e| e["type"] == kind).count(), 1, "{kind}");
     }
@@ -232,6 +259,10 @@ fn assert_public_stream(raw: &str, final_turn: &Value) {
     }
     let terminal = events.iter().find(|e| e["type"] == "message_delta").unwrap();
     assert_eq!(terminal["delta"]["stop_reason"], "end_turn");
+    assert_eq!(
+        terminal["usage"], *expected_usage,
+        "the public terminal sums every round"
+    );
     let text: String = events
         .iter()
         .filter(|e| e["delta"]["type"] == "text_delta")

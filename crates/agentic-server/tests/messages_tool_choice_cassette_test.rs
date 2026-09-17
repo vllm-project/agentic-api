@@ -83,9 +83,14 @@ async fn search(State(state): State<Replay>, Query(query): Query<HashMap<String,
 }
 
 fn assert_completion(body: &str, turns: &[Value], stream: bool) {
+    // Both two-round recordings cost 326+430 input and 28+6 output tokens; the
+    // public message reports that sum rather than the final round's usage.
+    let usage = json!({"input_tokens": 756, "output_tokens": 34});
     if !stream {
         let message: Value = serde_json::from_str(body).unwrap();
-        assert_eq!(message, turns[1]["response"]["body"]);
+        let mut expected = turns[1]["response"]["body"].clone();
+        expected["usage"] = usage;
+        assert_eq!(message, expected);
         assert_eq!(message["stop_reason"], "end_turn");
         assert!(message["content"].to_string().contains("SEARCH_PROOF_雪"));
         return;
@@ -98,7 +103,9 @@ fn assert_completion(body: &str, turns: &[Value], stream: bool) {
     for kind in ["message_start", "message_delta", "message_stop"] {
         assert_eq!(actual.iter().filter(|event| event["type"] == kind).count(), 1, "{body}");
     }
-    assert_eq!(actual[actual.len() - 2], last[last.len() - 2]);
+    let mut expected_terminal = last[last.len() - 2].clone();
+    expected_terminal["usage"] = usage;
+    assert_eq!(actual[actual.len() - 2], expected_terminal);
     assert_eq!(actual[actual.len() - 2]["delta"]["stop_reason"], "end_turn");
     assert!(
         !actual

@@ -434,6 +434,30 @@ async fn messages_stream_multiround_single_lifecycle() {
         (0..idx.len() as u64).collect::<Vec<_>>(),
         "contiguous indices: {idx:?}"
     );
+    // Part of #315: the recording's rounds report 174+199 and 12128+612 tokens.
+    // The one terminal message_delta carries both; message_start keeps round one's.
+    let events: Vec<Value> = sse
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .filter_map(|data| serde_json::from_str(data).ok())
+        .collect();
+    let start = events
+        .iter()
+        .find(|e| e["type"] == "message_start")
+        .expect("message_start");
+    assert_eq!(
+        start["message"]["usage"],
+        serde_json::json!({"input_tokens": 174, "output_tokens": 0})
+    );
+    let delta = events
+        .iter()
+        .find(|e| e["type"] == "message_delta")
+        .expect("message_delta");
+    assert_eq!(
+        delta["usage"],
+        serde_json::json!({"input_tokens": 12302, "output_tokens": 811}),
+        "terminal usage sums every round"
+    );
 }
 
 #[tokio::test]

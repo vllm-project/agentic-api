@@ -191,6 +191,7 @@ Recommendation: ship A.
 | client-owned `tool_use` | returned to the client, which executes and resends `tool_result` |
 | `tool_result` content block (may carry `is_error: true`) | fed into the next upstream turn |
 | `tool_choice` (`auto`/`any`/`tool`/`none`, `disable_parallel_tool_use`) | forwarded on the first round; a fulfilled forced choice becomes `auto` after gateway tool results are appended; parallel-use settings remain unchanged |
+| `usage` | after hidden gateway rounds, the returned message (JSON) and the terminal `message_delta` (SSE) report the saturating sum of `input_tokens`, `output_tokens`, `cache_creation_input_tokens`, and `cache_read_input_tokens` across every inference round, each streamed round being its `message_start.usage` overlaid by its `message_delta.usage`; a counter no round reported stays absent, other fields pass through from the final round, `message_start.usage` is the first round's snapshot, and a single-round turn is unchanged |
 
 vLLM may label a completed named tool call `end_turn`. The gateway accepts that stop only when the explicitly
 selected gateway tool appears in the round; streaming also requires `message_stop`. Rounds containing

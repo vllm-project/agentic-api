@@ -799,6 +799,13 @@ function tools and truncated rounds remain terminal. A completed client-executed
 calls and await the client's output. Token limits, other stop reasons and streams
 without a completed round keep their original terminal semantics.
 
+Each round's `usage` is folded into `messages_usage.rs`'s `MessagesUsageTotals`, so when
+hidden gateway rounds ran, the returned message (JSON) and the terminal `message_delta` (SSE)
+report the saturating sum of the Anthropic token counters across every round rather than the
+final round alone. A streamed round counts its `message_start.usage` overlaid by its
+`message_delta.usage`. Counters no round reported stay absent, the remaining `usage` fields
+pass through from the final round, and a single-round turn is returned unchanged.
+
 ### `storage/` — persistence
 
 - **`pool.rs`** — `DbPool = sqlx::Pool<sqlx::Any>`, driver-agnostic across SQLite and

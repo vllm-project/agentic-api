@@ -492,6 +492,11 @@ async fn messages_loop_returns_immediately_when_model_does_not_call_tool() {
     assert_eq!(calls, 1, "one round only");
     assert_eq!(result["stop_reason"], "end_turn");
     assert_eq!(result["content"][0]["text"], "Rust 1.89.0.");
+    assert_eq!(
+        result["usage"],
+        serde_json::json!({"input_tokens": 5, "output_tokens": 3}),
+        "a single round's usage is returned unchanged"
+    );
 }
 
 // E7: a client-owned tool_use in the turn must be returned to the client (the
@@ -515,6 +520,59 @@ async fn messages_loop_returns_client_owned_tool_use_to_client() {
     assert_eq!(
         result["content"][0]["name"], "get_weather",
         "client tool_use surfaces to the client"
+    );
+}
+
+fn gateway_round_body(usage: &Value) -> Value {
+    serde_json::json!({
+        "id": "m1", "type": "message", "role": "assistant", "model": "qwen3",
+        "content": [{"type": "tool_use", "id": "t1", "name": "web_search", "input": {"query": "rust"}}],
+        "stop_reason": "tool_use", "usage": usage
+    })
+}
+
+// Part of #315: the hidden gateway round's usage is folded into the returned
+// message whether the turn ends in text or hands a client tool_use back. Cache
+// counters reported by one round survive, and non-counter fields pass through
+// from the final round.
+#[tokio::test]
+async fn messages_loop_reports_usage_of_every_gateway_round() {
+    let first = gateway_round_body(&serde_json::json!({
+        "input_tokens": 10, "output_tokens": 4, "cache_read_input_tokens": 128, "service_tier": "standard"
+    }));
+    let text = serde_json::json!({
+        "id": "m2", "type": "message", "role": "assistant", "model": "qwen3",
+        "content": [{"type": "text", "text": "Rust 1.89.0."}],
+        "stop_reason": "end_turn",
+        "usage": {"input_tokens": 20, "output_tokens": 6, "server_tool_use": {"web_search_requests": 0}}
+    });
+    let (result, calls) = run_against(vec![first.clone(), text], web_search_request()).await;
+    assert_eq!(calls, 2, "tool round + final round");
+    assert_eq!(
+        result["usage"],
+        serde_json::json!({
+            "input_tokens": 30, "output_tokens": 10, "cache_read_input_tokens": 128,
+            "server_tool_use": {"web_search_requests": 0}
+        })
+    );
+
+    let client_call = serde_json::json!({
+        "id": "m2", "type": "message", "role": "assistant", "model": "qwen3",
+        "content": [{"type": "tool_use", "id": "t2", "name": "get_weather", "input": {"city": "SF"}}],
+        "stop_reason": "tool_use", "usage": {"input_tokens": 20, "output_tokens": 6}
+    });
+    let mut request = web_search_request();
+    request["tools"] = serde_json::json!([
+        {"name": "web_search", "description": "s", "input_schema": {"type": "object"}},
+        {"name": "get_weather", "description": "w", "input_schema": {"type": "object"}}
+    ]);
+    let (result, calls) = run_against(vec![first, client_call], request).await;
+    assert_eq!(calls, 2, "tool round + client tool_use round");
+    assert_eq!(result["stop_reason"], "tool_use");
+    assert_eq!(result["content"][0]["name"], "get_weather");
+    assert_eq!(
+        result["usage"],
+        serde_json::json!({"input_tokens": 30, "output_tokens": 10, "cache_read_input_tokens": 128})
     );
 }
 
@@ -543,6 +601,13 @@ async fn messages_loop_multi_round_sequential() {
     let content = result["content"].as_array().unwrap();
     assert!(!content.iter().any(|b| b["type"] == "tool_use"), "gateway tools hidden");
     assert_eq!(result["stop_reason"], "end_turn");
+    // Part of #315: the recording's rounds cost 196+6479+10291 input and
+    // 352+880+427 output tokens; the client sees the whole turn, not round 3.
+    assert_eq!(
+        result["usage"],
+        serde_json::json!({"input_tokens": 16966, "output_tokens": 1659}),
+        "usage sums every round"
+    );
 }
 
 // Parallel: replay the live-recorded parallel cassette (two tool_use blocks in
@@ -575,6 +640,12 @@ async fn messages_loop_parallel_tool_use() {
         .filter(|b| b["type"] == "tool_result")
         .count();
     assert_eq!(tool_results, 2, "both parallel tool_results fed back");
+    // Part of #315: 172+10609 input and 459+331 output tokens across both rounds.
+    assert_eq!(
+        result["usage"],
+        serde_json::json!({"input_tokens": 10781, "output_tokens": 790}),
+        "usage sums the tool round and the final round"
+    );
 }
 
 // E5: a gateway tool that fails to dispatch (search backend returns 500) becomes

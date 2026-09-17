@@ -6,7 +6,8 @@
 //! inspected, any gateway-owned `tool_use` is executed server-side and hidden,
 //! the loop appends the `tool_result`, relaxes a fulfilled forced tool choice,
 //! and re-POSTs until the model stops asking
-//! for a gateway tool. Only the final assistant message reaches the client.
+//! for a gateway tool. Only the final assistant message reaches the client,
+//! carrying the `usage` of every round.
 //!
 //! This never touches `RequestPayload`/`ResponsePayload`; it reuses only the
 //! protocol-neutral tool layer (`ToolRegistry::dispatch`) via
@@ -22,6 +23,7 @@ use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::inference::fetch_response_json_with_headers;
 use crate::executor::messages_context::MessagesRequestContext;
 use crate::executor::messages_request::web_search_budget_exhausted_result;
+use crate::executor::messages_usage::MessagesUsageTotals;
 use crate::executor::request::ExecutionContext;
 use crate::tool::ToolRegistry;
 use crate::types::messages::{GatewayToolResult, tool_seam};
@@ -92,6 +94,7 @@ pub async fn run_messages_loop(
     // The loop drives turns itself; force non-streaming upstream regardless of
     // what the client asked (the handler routes streaming elsewhere).
     ctx.force_stream(false);
+    let mut usage = MessagesUsageTotals::default();
 
     for _round in 0..MAX_GATEWAY_TOOL_ROUNDS {
         let body = ctx.upstream_body()?;
@@ -115,10 +118,7 @@ pub async fn run_messages_loop(
         // client should see. A client-owned tool_use means we cannot continue
         // the loop server-side — return the turn to the client (edge E7).
         let Some(content) = content else {
-            return Ok(MessagesResponse {
-                body: message,
-                headers: response_headers,
-            });
+            return Ok(deliver(message, &mut usage, response_headers));
         };
         let gateway_map = &exec_ctx.messages_gateway_tools;
         let mut gateway_calls: Vec<Value> = Vec::new();
@@ -143,10 +143,7 @@ pub async fn run_messages_loop(
             if message["stop_reason"] == "end_turn" {
                 message["stop_reason"] = json!("tool_use");
             }
-            return Ok(MessagesResponse {
-                body: message,
-                headers: response_headers,
-            });
+            return Ok(deliver(message, &mut usage, response_headers));
         }
 
         // The shared context accepts tool_use and vLLM's end_turn for a matching
@@ -157,14 +154,12 @@ pub async fn run_messages_loop(
                 gateway_calls.iter().filter_map(|call| call["name"].as_str()),
             )
         {
-            return Ok(MessagesResponse {
-                body: message,
-                headers: response_headers,
-            });
+            return Ok(deliver(message, &mut usage, response_headers));
         }
         // Pure gateway-tool round: execute the calls, then feed the model's FULL
         // assistant turn (thinking/text/tool_use, order preserved — F3) plus the
         // tool_results back for the next round. Gateway blocks stay internal.
+        usage.record(message.get("usage"));
         let allowed_searches = ctx.reserve_searches(gateway_calls.len());
         let tool_results = execute_gateway_calls(&gateway_calls, registry, gateway_map, allowed_searches).await;
         ctx.append_round(content, tool_results)?;
@@ -184,6 +179,12 @@ pub async fn run_messages_loop(
         }),
         headers: http::HeaderMap::new(),
     })
+}
+
+/// Return the terminal assistant message with the turn's complete `usage`.
+fn deliver(mut message: Value, usage: &mut MessagesUsageTotals, headers: http::HeaderMap) -> MessagesResponse<Value> {
+    usage.finish(message.get_mut("usage"));
+    MessagesResponse { body: message, headers }
 }
 
 /// Execute the gateway-owned `tool_use` blocks concurrently, each bounded by the

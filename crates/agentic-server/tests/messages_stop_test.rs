@@ -408,7 +408,11 @@ async fn messages_stop_advances_recorded_tool_rounds_and_keeps_requests_stateles
             .any(|event| event["type"] == "error" || event["content_block"]["type"] == "tool_use")
     );
     assert_eq!(events.first().unwrap(), first_expected.first().unwrap());
-    assert_eq!(events[events.len() - 2], final_expected[final_expected.len() - 2]);
+    // The terminal message_delta sums both recorded rounds (175+374 input,
+    // 172+184 output tokens) instead of repeating the final round's usage.
+    let mut expected_terminal = final_expected[final_expected.len() - 2].clone();
+    expected_terminal["usage"] = json!({"input_tokens": 549, "output_tokens": 356});
+    assert_eq!(events[events.len() - 2], expected_terminal);
     let indexes: Vec<u64> = events
         .iter()
         .filter(|event| event["type"] == "content_block_start")
