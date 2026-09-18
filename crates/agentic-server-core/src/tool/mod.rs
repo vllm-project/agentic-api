@@ -28,3 +28,4 @@ pub use shell::ShellHandler;
 pub(crate) use tool_search::ToolSearchMetadata;
 pub use tool_search::{ToolSearchHandler, ToolSearchState};
 pub use web_search::WebSearchHandler;
+pub use web_search::searxng::{SEARXNG_BASE_URL_HINT, validate_searxng_base_url};

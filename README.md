@@ -54,7 +54,7 @@ flowchart LR
 ## ✨ Key Features
 
 - 🔄 **Stateful conversations**: the server manages history via `previous_response_id`. No client-side message tracking, no replaying full transcripts.
-- 🛠️ **Server-side tool execution**: an explicit tool-ownership model (gateway / client / provider) decides exactly what runs where. Web search ships today via [You.com](https://you.com) or [Brave Search](https://brave.com/search/api/), and the model executes multi-step tool chains automatically.
+- 🛠️ **Server-side tool execution**: an explicit tool-ownership model (gateway / client / provider) decides exactly what runs where. Web search ships today via [You.com](https://you.com), [Brave Search](https://brave.com/search/api/), or a self-hosted [SearXNG](https://docs.searxng.org/) instance, and the model executes multi-step tool chains automatically.
 - 📡 **Every transport**: non-streaming HTTP, server-sent events for token streaming, and full **WebSocket** support for interactive clients.
 - 🧰 **Codex-ready**: accepts Codex-shaped Responses traffic out of the box, preserving the tool declarations and response item shapes Codex depends on.
 - 🏃 **Background execution**: fire-and-forget requests that keep processing server-side.
@@ -193,6 +193,14 @@ AGENTIC_WEB_SEARCH_PROVIDER=brave BRAVE_API_KEY=<your-brave-api-key> \
   cargo run -p agentic-server -- --llm-api-base http://0.0.0.0:5050
 ```
 
+Prefer a self-hosted backend? Point the gateway at your own [SearXNG](https://docs.searxng.org/) instance instead;
+no API key is needed, only its URL:
+
+```bash
+AGENTIC_WEB_SEARCH_PROVIDER=searxng AGENTIC_WEB_SEARCH_BASE_URL=http://127.0.0.1:8080 \
+  cargo run -p agentic-server -- --llm-api-base http://0.0.0.0:5050
+```
+
 The default database is `~/.agentic-api/agentic_api.db`, so running an installed binary does not create state in the
 current directory. Set `AGENTIC_API_HOME` to an absolute directory to move both the default database and user
 configuration, or set `DATABASE_URL`/`--db-url` to select a different database.
@@ -226,12 +234,12 @@ llm_api_base = "http://127.0.0.1:5050"
 # database_url = "postgresql://agentic-api@localhost/agentic_api"
 
 [web_search]
-# Search backend for the gateway-owned web_search tool: "you" (default) or "brave".
+# Search backend for the gateway-owned web_search tool: "you" (default), "brave", or "searxng".
 provider = "you"
 base_url = "https://api.ydc-index.io"
 api_key_env = "YOU_API_KEY"
 # Concurrent provider requests inside one batched web-search call; unset uses
-# the provider default (Brave: 1, You.com: max_concurrent_gateway_calls).
+# the provider default (Brave: 1, You.com and SearXNG: max_concurrent_gateway_calls).
 # max_concurrent_queries = 1
 
 [mcp]
@@ -340,9 +348,9 @@ every provider.
 | Setting | Environment variable | `config.toml` key | Default |
 | :--- | :--- | :--- | :--- |
 | Provider | `AGENTIC_WEB_SEARCH_PROVIDER` | `[web_search] provider` | `you` |
-| API key | variable named by `api_key_env` | `[web_search] api_key_env` | `YOU_API_KEY` / `BRAVE_API_KEY` |
-| Endpoint | `AGENTIC_WEB_SEARCH_BASE_URL` (or `YOU_API_BASE_URL` for You.com) | `[web_search] base_url` | none for You.com; `https://api.search.brave.com` for Brave |
-| Concurrent queries | `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES` | `[web_search] max_concurrent_queries` | You.com inherits `max_concurrent_gateway_calls`; Brave `1` |
+| API key | variable named by `api_key_env` | `[web_search] api_key_env` | `YOU_API_KEY` / `BRAVE_API_KEY` / `SEARXNG_API_KEY` (optional) |
+| Endpoint | `AGENTIC_WEB_SEARCH_BASE_URL` (or `YOU_API_BASE_URL` for You.com) | `[web_search] base_url` | none for You.com; `https://api.search.brave.com` for Brave; **required** for SearXNG |
+| Concurrent queries | `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES` | `[web_search] max_concurrent_queries` | You.com and SearXNG inherit `max_concurrent_gateway_calls`; Brave `1` |
 
 **You.com** (`provider = "you"`) is the default and behaves exactly as before: domain filters are applied by the
 provider, `count` accepts 1–100, and the You.com-specific `livecrawl`, `livecrawl_formats`, `crawl_timeout`, and
@@ -372,6 +380,44 @@ message. Example:
 [web_search]
 provider = "brave"
 api_key_env = "BRAVE_API_KEY"
+```
+
+**SearXNG** (`provider = "searxng"`) runs against a [self-hosted SearXNG](https://docs.searxng.org/admin/installation.html)
+instance: the gateway talks only to your instance, no API key is needed, and no search vendor sees your
+deployment. Note that SearXNG itself forwards each query to the engines enabled in its `settings.yml`, so for a
+fully air-gapped setup restrict it to internal or offline engines. The endpoint is mandatory: the server refuses to
+start when `searxng` is selected without `AGENTIC_WEB_SEARCH_BASE_URL` or `[web_search] base_url` (an absolute
+`http(s)` URL without a query or fragment; a sub-path such as `http://host/searxng` is fine). Two instance settings
+matter:
+
+- The JSON output format must be enabled: add `json` to `search.formats` in SearXNG's `settings.yml`
+  (`formats: [html, json]`). Without it SearXNG answers `403`, which the failed `web_search_call` explains.
+- If the instance runs with `server.limiter: true` (the default in the official `searxng-docker` template), its bot
+  detection rejects requests that lack `Accept-Encoding: gzip`, which the gateway deliberately never sends. Add the
+  gateway's address to `botdetection.ip_lists.pass_ip` in `limiter.toml`, or disable the limiter for an internal
+  instance; otherwise every search fails with `429`.
+
+The gateway adapts the shared tool contract to SearXNG:
+
+- Web and news results come from one `categories=general,news` request per query, split by each hit's category.
+- `allowed_domains` / `blocked_domains` (and the model's `include_domains` / `exclude_domains`) are enforced by the
+  gateway after the response arrives; `count` is applied by the gateway after filtering, since SearXNG has no
+  result-count parameter. Without `count` or `search_context_size` every hit the instance returned is passed on.
+- `freshness` maps to `time_range=day|week|month|year`; a `YYYY-MM-DDtoYYYY-MM-DD` range has no SearXNG equivalent
+  and is ignored. `language` is normalized to SearXNG's `xx` / `xx-YY` form (`zh-Hans` becomes `zh`); `safesearch`
+  maps to `0` / `1` / `2`.
+- `country` and the You.com-specific arguments are ignored (logged at debug level).
+- Each per-query `metadata[]` entry carries `"provider": "searxng"`.
+- Concurrency inherits `max_concurrent_gateway_calls`; lower `max_concurrent_queries` for a small instance. Rate
+  limits (`429`) fail that `web_search_call` without an automatic retry.
+
+If the instance sits behind an authenticating reverse proxy, set `SEARXNG_API_KEY` (or the variable named by
+`api_key_env`) and the gateway sends it as a `Bearer` token. Example:
+
+```toml
+[web_search]
+provider = "searxng"
+base_url = "http://searxng.internal:8080"
 ```
 
 Restrict the file to the service account (for example, `chmod 600 ~/.agentic-api/config.toml`), especially if you add
@@ -473,7 +519,7 @@ Claude Code's own tools (Bash, Edit, Read, …) stay **client-owned** — Claude
 
 Current Claude Code versions declare Anthropic's native `web_search_20250305` server tool. Agentic API translates that
 declaration for the upstream model and executes the resulting search server-side against the configured search backend
-(You.com or Brave Search, see [Web search providers](#web-search-providers)); no MCP server or tool alias is required:
+(You.com, Brave Search, or SearXNG, see [Web search providers](#web-search-providers)); no MCP server or tool alias is required:
 
 ```bash
 YOU_API_KEY=<you.com-key> YOU_API_BASE_URL=<you.com-base-url> \

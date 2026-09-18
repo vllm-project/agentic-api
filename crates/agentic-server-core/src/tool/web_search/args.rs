@@ -211,8 +211,8 @@ pub(crate) fn clean_vec(values: Option<&[String]>) -> Option<Vec<String>> {
 /// (label boundary), compared case-insensitively after IDNA normalization. A
 /// URL without a parseable host cannot be checked, so it is rejected whenever
 /// any allowlist or blocklist is active (fail closed). You.com filters
-/// server-side, so this is not applied on that path; Brave Search applies it
-/// to every result section.
+/// server-side, so this is not applied on that path; Brave Search and SearXNG
+/// apply it to every result section.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct DomainFilter {
     include: Vec<String>,

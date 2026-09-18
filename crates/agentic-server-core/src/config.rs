@@ -168,11 +168,12 @@ pub enum WebSearchProviderKind {
     #[default]
     You,
     Brave,
+    Searxng,
 }
 
 impl WebSearchProviderKind {
     /// Every selectable provider, in the order operator-facing messages list them.
-    pub const ALL: [Self; 2] = [Self::You, Self::Brave];
+    pub const ALL: [Self; 3] = [Self::You, Self::Brave, Self::Searxng];
 
     /// Environment variable that conventionally carries this provider's API key.
     #[must_use]
@@ -180,16 +181,18 @@ impl WebSearchProviderKind {
         match self {
             Self::You => "YOU_API_KEY",
             Self::Brave => "BRAVE_API_KEY",
+            Self::Searxng => "SEARXNG_API_KEY",
         }
     }
 
     /// Endpoint used when neither the environment nor the configuration file
     /// sets one. You.com has no default so a deployment that fails today keeps
-    /// failing the same way (#291 Q2).
+    /// failing the same way (#291 Q2); SearXNG is self-hosted, so its endpoint
+    /// is mandatory and never defaulted.
     #[must_use]
     pub const fn default_base_url(self) -> Option<&'static str> {
         match self {
-            Self::You => None,
+            Self::You | Self::Searxng => None,
             Self::Brave => Some("https://api.search.brave.com"),
         }
     }
@@ -200,7 +203,7 @@ impl WebSearchProviderKind {
     #[must_use]
     pub const fn default_max_concurrent_queries(self) -> Option<NonZeroUsize> {
         match self {
-            Self::You => None,
+            Self::You | Self::Searxng => None,
             Self::Brave => Some(DEFAULT_BRAVE_MAX_CONCURRENT_QUERIES),
         }
     }
@@ -211,15 +214,17 @@ impl WebSearchProviderKind {
         match self {
             Self::You => "You.com",
             Self::Brave => "Brave Search",
+            Self::Searxng => "SearXNG",
         }
     }
 
-    /// Configuration label (`you`, `brave`) matching the serialized form.
+    /// Configuration label (`you`, `brave`, `searxng`) matching the serialized form.
     #[must_use]
     pub const fn config_name(self) -> &'static str {
         match self {
             Self::You => "you",
             Self::Brave => "brave",
+            Self::Searxng => "searxng",
         }
     }
 
@@ -518,6 +523,12 @@ mod tests {
             NonZeroUsize::new(1)
         );
         assert!(!WebSearchProviderKind::Brave.is_you());
+
+        assert_eq!(WebSearchProviderKind::Searxng.to_string(), "SearXNG");
+        assert_eq!(WebSearchProviderKind::Searxng.default_api_key_env(), "SEARXNG_API_KEY");
+        assert_eq!(WebSearchProviderKind::Searxng.default_base_url(), None);
+        assert_eq!(WebSearchProviderKind::Searxng.default_max_concurrent_queries(), None);
+        assert!(!WebSearchProviderKind::Searxng.is_you());
     }
 
     #[test]
@@ -532,15 +543,23 @@ mod tests {
             "you".parse::<WebSearchProviderKind>().unwrap(),
             WebSearchProviderKind::You
         );
+        assert_eq!(
+            " SearXNG ".parse::<WebSearchProviderKind>().unwrap(),
+            WebSearchProviderKind::Searxng
+        );
         let error = "bing".parse::<WebSearchProviderKind>().unwrap_err();
         assert_eq!(
             error.to_string(),
-            "unknown web_search provider \"bing\"; expected one of: you, brave"
+            "unknown web_search provider \"bing\"; expected one of: you, brave, searxng"
         );
 
         assert_eq!(
             serde_json::to_string(&WebSearchProviderKind::Brave).unwrap(),
             "\"brave\""
+        );
+        assert_eq!(
+            serde_json::to_string(&WebSearchProviderKind::Searxng).unwrap(),
+            "\"searxng\""
         );
         assert_eq!(
             serde_json::from_str::<WebSearchProviderKind>("\"you\"").unwrap(),
