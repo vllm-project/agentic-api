@@ -183,7 +183,7 @@ pub async fn run_messages_loop(
 
 /// Return the terminal assistant message with the turn's complete `usage`.
 fn deliver(mut message: Value, usage: &mut MessagesUsageTotals, headers: http::HeaderMap) -> MessagesResponse<Value> {
-    usage.finish(message.get_mut("usage"));
+    usage.finish(&mut message);
     MessagesResponse { body: message, headers }
 }
 

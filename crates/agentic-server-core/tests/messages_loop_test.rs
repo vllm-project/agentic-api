@@ -576,6 +576,30 @@ async fn messages_loop_reports_usage_of_every_gateway_round() {
     );
 }
 
+// A final round that omits `usage` must not erase the hidden round's cost;
+// a single round without `usage` stays exactly as the upstream sent it.
+#[tokio::test]
+async fn messages_loop_reports_hidden_round_usage_when_the_final_round_omits_it() {
+    let first = gateway_round_body(&serde_json::json!({"input_tokens": 10, "output_tokens": 4}));
+    let text = serde_json::json!({
+        "id": "m2", "type": "message", "role": "assistant", "model": "qwen3",
+        "content": [{"type": "text", "text": "Rust 1.89.0."}], "stop_reason": "end_turn"
+    });
+    let (result, calls) = run_against(vec![first, text.clone()], web_search_request()).await;
+    assert_eq!(calls, 2, "tool round + final round");
+    assert_eq!(
+        result["usage"],
+        serde_json::json!({"input_tokens": 10, "output_tokens": 4})
+    );
+
+    let (result, calls) = run_against(vec![text], web_search_request()).await;
+    assert_eq!(calls, 1, "one round only");
+    assert!(
+        result.get("usage").is_none(),
+        "no usage is invented for a single round: {result}"
+    );
+}
+
 // Multi-round (3 rounds): replay the live-recorded sequential cassette
 // (tool_use -> tool_use -> text). The loop must run three upstream rounds,
 // hit the search backend twice, and surface only the final text.

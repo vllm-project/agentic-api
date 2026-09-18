@@ -810,7 +810,8 @@ hidden gateway rounds ran, the returned message (JSON) and the terminal `message
 report the saturating sum of the Anthropic token counters across every round rather than the
 final round alone. A streamed round counts its `message_start.usage` overlaid by its
 `message_delta.usage`. Counters no round reported stay absent, the remaining `usage` fields
-pass through from the final round, and a single-round turn is returned unchanged.
+pass through from the final round, a single-round turn is returned unchanged, and a final
+round that omits `usage` still reports the hidden rounds' counters.
 
 ### `storage/` — persistence
 

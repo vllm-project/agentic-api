@@ -444,7 +444,7 @@ impl MessagesStreamAccumulator {
             if self.has_client_tool_use && self.has_completed_round() && delta["delta"]["stop_reason"] == "end_turn" {
                 delta["delta"]["stop_reason"] = json!("tool_use");
             }
-            self.usage.finish(delta.get_mut("usage"));
+            self.usage.finish(&mut delta);
             out.push(sse("message_delta", &delta));
         }
         out.push(sse("message_stop", &json!({"type": "message_stop"})));
@@ -540,6 +540,45 @@ mod tests {
     fn message_start(input_tokens: u64) -> Value {
         json!({"type":"message_start", "message":{"id":"m", "type":"message", "role":"assistant", "content":[],
             "model":"test", "stop_reason":null, "usage":{"input_tokens":input_tokens, "output_tokens":1}}})
+    }
+
+    /// A final round whose `message_delta` carries no `usage` still reports the
+    /// hidden round's counters plus its own `message_start` snapshot.
+    #[test]
+    fn final_message_delta_without_usage_still_reports_hidden_rounds() {
+        let mut acc = acc();
+        acc.begin_round();
+        acc.push(&line(&message_start(10)));
+        acc.push(&line(
+            &json!({"type":"content_block_start", "index":0, "content_block":{
+                "type":"tool_use", "id":"search", "name":"web_search", "input":{}
+            }}),
+        ));
+        acc.push(&line(&json!({"type":"content_block_stop", "index":0})));
+        acc.push(&line(
+            &json!({"type":"message_delta", "delta":{"stop_reason":"tool_use"}, "usage":{"output_tokens":4}}),
+        ));
+        acc.push(&line(&json!({"type":"message_stop"})));
+        assert!(acc.should_continue_loop(&context()));
+        acc.take_round();
+
+        acc.begin_round();
+        acc.push(&line(&message_start(20)));
+        acc.push(&line(
+            &json!({"type":"message_delta", "delta":{"stop_reason":"end_turn"}}),
+        ));
+        acc.push(&line(&json!({"type":"message_stop"})));
+        assert_eq!(
+            acc.finish(),
+            vec![
+                sse(
+                    "message_delta",
+                    &json!({"type":"message_delta", "delta":{"stop_reason":"end_turn"},
+                        "usage":{"input_tokens":30, "output_tokens":5}})
+                ),
+                sse("message_stop", &json!({"type":"message_stop"}))
+            ]
+        );
     }
 
     /// Part of #315: the suppressed gateway round's usage is summed into the final
