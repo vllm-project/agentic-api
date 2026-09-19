@@ -123,10 +123,10 @@ pub async fn run_messages_loop(
         // Split the assistant turn into gateway-owned tool_use vs everything the
         // client should see. A client-owned tool_use means we cannot continue
         // the loop server-side — return the turn to the client (edge E7).
-        let Some(content) = content else {
-            return Ok(deliver(message, &mut usage, response_headers));
-        };
         let gateway_map = &exec_ctx.messages_gateway_tools;
+        let Some(content) = content else {
+            return Ok(deliver(message, &mut usage, gateway_map, response_headers));
+        };
         let mut gateway_calls: Vec<Value> = Vec::new();
         let mut has_client_tool_use = false;
         for block in content {
@@ -142,14 +142,12 @@ pub async fn run_messages_loop(
 
         if has_client_tool_use {
             // Client execution takes precedence even when the provider labels a
-            // named call end_turn. Keep hidden gateway calls out of this turn.
-            let stripped = tool_seam::strip_gateway_tool_use(content, gateway_map);
+            // named call end_turn. `deliver` keeps the hidden gateway calls out.
             let mut message = message;
-            message["content"] = Value::Array(stripped);
             if message["stop_reason"] == "end_turn" {
                 message["stop_reason"] = json!("tool_use");
             }
-            return Ok(deliver(message, &mut usage, response_headers));
+            return Ok(deliver(message, &mut usage, gateway_map, response_headers));
         }
 
         // The shared context accepts tool_use and vLLM's end_turn for a matching
@@ -160,7 +158,7 @@ pub async fn run_messages_loop(
                 gateway_calls.iter().filter_map(|call| call["name"].as_str()),
             )
         {
-            return Ok(deliver(message, &mut usage, response_headers));
+            return Ok(deliver(message, &mut usage, gateway_map, response_headers));
         }
         // Pure gateway-tool round: execute the calls, then feed the model's FULL
         // assistant turn (thinking/text/tool_use, order preserved — F3) plus the
@@ -187,8 +185,29 @@ pub async fn run_messages_loop(
     })
 }
 
-/// Return the terminal assistant message with the turn's complete `usage`.
-fn deliver(mut message: Value, usage: &mut MessagesUsageTotals, headers: http::HeaderMap) -> MessagesResponse<Value> {
+/// Return the terminal assistant message with the turn's complete `usage` and
+/// no gateway-owned `tool_use`.
+///
+/// Hide-the-call applies to every terminal round, not just a round that also
+/// carries a client call. The client declares these tools for the gateway to
+/// execute — a native `web_search_20250305` declaration is even rewritten into
+/// an ordinary function tool for upstream — so a surfaced call names a tool the
+/// client never agreed to run. A round can end while a gateway call is present
+/// whenever the stop reason is not a tool-call stop, for example a `max_tokens`
+/// truncation mid-call. The streaming loop already suppresses these blocks on
+/// every round; this is the non-streaming half of the same contract.
+fn deliver(
+    mut message: Value,
+    usage: &mut MessagesUsageTotals,
+    gateway_map: &tool_seam::GatewayToolMap,
+    headers: http::HeaderMap,
+) -> MessagesResponse<Value> {
+    if let Some(content) = message.get("content").and_then(Value::as_array) {
+        let visible = tool_seam::strip_gateway_tool_use(content, gateway_map);
+        if visible.len() != content.len() {
+            message["content"] = Value::Array(visible);
+        }
+    }
     usage.finish(&mut message);
     MessagesResponse { body: message, headers }
 }

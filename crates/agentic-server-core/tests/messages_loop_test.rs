@@ -600,6 +600,78 @@ async fn messages_loop_reports_hidden_round_usage_when_the_final_round_omits_it(
     );
 }
 
+fn native_web_search_request() -> Value {
+    serde_json::json!({
+        "model": "qwen3", "max_tokens": 1024, "stream": false,
+        "messages": [{"role": "user", "content": "What is the latest stable Rust release?"}],
+        "tools": [{"type": "web_search_20250305", "name": "web_search"}]
+    })
+}
+
+// A round that ends while a gateway call is present must not expose that call.
+// The client declared `web_search` as a server tool, so a surfaced `tool_use`
+// names a tool it never agreed to run. Truncation is the realistic trigger: the
+// model began a search and hit the token limit, so the call is not executed.
+#[tokio::test]
+async fn messages_loop_hides_a_gateway_call_on_a_terminal_round() {
+    for stop in [
+        "max_tokens",
+        "stop_sequence",
+        "pause_turn",
+        "refusal",
+        "surprise_future_stop",
+    ] {
+        let truncated = serde_json::json!({
+            "id": "m1", "type": "message", "role": "assistant", "model": "qwen3",
+            "content": [
+                {"type": "text", "text": "Let me look that up."},
+                {"type": "tool_use", "id": "t1", "name": "web_search", "input": {"query": "rust"}}
+            ],
+            "stop_reason": stop, "usage": {"input_tokens": 10, "output_tokens": 4}
+        });
+        let (result, calls) = run_against(vec![truncated], native_web_search_request()).await;
+        assert_eq!(calls, 1, "{stop}: the round is terminal, so the loop runs once");
+        let content = result["content"].as_array().unwrap();
+        assert!(
+            !content.iter().any(|block| block["type"] == "tool_use"),
+            "{stop}: gateway tool_use surfaced to the client: {content:?}"
+        );
+        assert_eq!(content.len(), 1, "{stop}: the visible blocks survive: {content:?}");
+        assert_eq!(content[0]["text"], "Let me look that up.");
+        assert_eq!(result["stop_reason"], stop, "{stop}: the terminal reason is unchanged");
+        assert_eq!(
+            result["usage"],
+            serde_json::json!({"input_tokens": 10, "output_tokens": 4}),
+            "{stop}: a single round's usage is unchanged"
+        );
+    }
+}
+
+// vLLM labels a completed, explicitly named call `end_turn`, and the loop
+// accepts that stop only when `tool_choice` selected the gateway tool. Any other
+// `end_turn` that still carries a gateway call — here `tool_choice` is unset —
+// is terminal, so the call is not executed and must stay hidden.
+#[tokio::test]
+async fn messages_loop_hides_an_unexecuted_gateway_call_labelled_end_turn() {
+    let body = serde_json::json!({
+        "id": "m1", "type": "message", "role": "assistant", "model": "qwen3",
+        "content": [{"type": "tool_use", "id": "t1", "name": "web_search", "input": {"query": "rust"}}],
+        "stop_reason": "end_turn", "usage": {"input_tokens": 10, "output_tokens": 4}
+    });
+    let (result, calls) = run_against(vec![body], native_web_search_request()).await;
+    assert_eq!(
+        calls, 1,
+        "the loop does not execute a call it does not accept as a tool stop"
+    );
+    let content = result["content"].as_array().unwrap();
+    assert!(
+        !content.iter().any(|block| block["type"] == "tool_use"),
+        "gateway tool_use surfaced to the client: {content:?}"
+    );
+    assert!(content.is_empty(), "the hidden call was the only block: {content:?}");
+    assert_eq!(result["stop_reason"], "end_turn", "the terminal reason is unchanged");
+}
+
 // Multi-round (3 rounds): replay the live-recorded sequential cassette
 // (tool_use -> tool_use -> text). The loop must run three upstream rounds,
 // hit the search backend twice, and surface only the final text.

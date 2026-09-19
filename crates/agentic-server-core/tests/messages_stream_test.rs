@@ -372,6 +372,66 @@ async fn messages_stream_forwards_upstream_sse_error_and_stops() {
 // Multi-round streaming: replay the live-recorded multi-round streaming cassette
 // and assert the same single-lifecycle / contiguous-index / hidden-tool
 // invariants hold across a tool round + a final round.
+/// Streaming parity for `messages_loop_hides_a_gateway_call_on_a_terminal_round`:
+/// a truncated round suppresses the gateway `tool_use` and keeps one lifecycle.
+#[tokio::test]
+async fn messages_stream_hides_a_gateway_call_on_a_terminal_round() {
+    let truncated = [
+        r#"{"type":"message_start","message":{"id":"m","type":"message","role":"assistant","model":"qwen3","content":[],"stop_reason":null,"usage":{"input_tokens":10,"output_tokens":0}}}"#,
+        r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#,
+        r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Let me look that up."}}"#,
+        r#"{"type":"content_block_stop","index":0}"#,
+        r#"{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"t1","name":"web_search","input":{}}}"#,
+        r#"{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"query\":\"ru"}}"#,
+        r#"{"type":"content_block_stop","index":1}"#,
+        r#"{"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":4}}"#,
+        r#"{"type":"message_stop"}"#,
+    ]
+    .map(|event| format!("data: {event}\n\n"))
+    .join("");
+
+    let (vllm_url, upstream, _v) = spawn_mock_vllm_stream(vec![truncated]).await;
+    let (search_url, _s) = spawn_mock_search().await;
+    let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
+    let request = serde_json::json!({
+        "model": "qwen3", "max_tokens": 1024, "stream": true,
+        "messages": [{"role": "user", "content": "What is the latest stable Rust release?"}],
+        "tools": [{"type": "web_search_20250305", "name": "web_search"}]
+    });
+    let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
+    let mut params = registry_tools(Some(&tools), &GatewayToolMap::default());
+    let mut executors = exec_ctx.gateway_executors.clone();
+    let registry = Arc::new(
+        ToolRegistry::build_with_handlers(&mut params, &mut executors)
+            .await
+            .unwrap(),
+    );
+
+    let sse = run_test_messages_stream(request, registry, Arc::clone(&exec_ctx))
+        .await
+        .collect::<Vec<_>>()
+        .await
+        .join("");
+
+    assert_eq!(
+        upstream.calls.load(Ordering::SeqCst),
+        1,
+        "the truncated round is terminal, so no second round runs"
+    );
+    assert!(
+        !sse.contains(r#""type":"tool_use""#),
+        "gateway tool_use surfaced in the client stream:\n{sse}"
+    );
+    assert!(sse.contains("Let me look that up."), "visible text survives:\n{sse}");
+    assert!(
+        sse.contains(r#""stop_reason":"max_tokens""#),
+        "terminal reason preserved:\n{sse}"
+    );
+    for kind in ["message_start", "message_delta", "message_stop"] {
+        assert_eq!(sse.matches(&format!("event: {kind}")).count(), 1, "one {kind}");
+    }
+}
+
 #[tokio::test]
 async fn messages_stream_multiround_single_lifecycle() {
     let (vllm_url, upstream, _v) = spawn_mock_vllm_stream(streams_at(MULTIROUND)).await;

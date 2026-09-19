@@ -833,6 +833,13 @@ function tools and truncated rounds remain terminal. A completed client-executed
 calls and await the client's output. Token limits, other stop reasons and streams
 without a completed round keep their original terminal semantics.
 
+Hide-the-call covers every terminal round, not only a mixed one. A round can end while a
+gateway `tool_use` is present whenever the stop reason is not a tool-call stop — a
+`max_tokens` truncation mid-call, or an `end_turn` the context does not accept — and that
+call is never executed. `messages_loop.rs`'s `deliver` strips gateway-owned `tool_use`
+blocks from the returned message, matching the streaming accumulator, which suppresses them
+on every round. The assistant turn fed back to the model still carries the call.
+
 Each round's `usage` is folded into `messages_usage.rs`'s `MessagesUsageTotals`, so when
 hidden gateway rounds ran, the returned message (JSON) and the terminal `message_delta` (SSE)
 report the saturating sum of the Anthropic token counters across every round rather than the

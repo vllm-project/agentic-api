@@ -199,6 +199,11 @@ client-executed function tools return control to the client with `stop_reason: t
 labels a completed call `end_turn`. The correction applies to JSON and the terminal streaming `message_delta`;
 gateway calls in a mixed round remain hidden. Truncation and other stop reasons retain their original meaning.
 
+A round that ends while a gateway call is present — a `max_tokens` truncation mid-call, or an `end_turn` the
+gateway does not accept as a tool stop — does not execute that call, and both transports keep it hidden. The
+client declared these tools for the gateway to run, so surfacing one would name a tool the client never agreed
+to execute.
+
 Gateway-tool requests parse `tool_choice` as a typed union with a required non-empty name for `tool`. Malformed
 selectors return HTTP 400 before inference. Known variants preserve parallel-use settings and extension fields;
 requests without gateway tools retain the transparent proxy path and upstream validation.
