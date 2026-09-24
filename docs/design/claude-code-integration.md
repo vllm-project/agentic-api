@@ -199,6 +199,23 @@ client-executed function tools return control to the client with `stop_reason: t
 labels a completed call `end_turn`. The correction applies to JSON and the terminal streaming `message_delta`;
 gateway calls in a mixed round remain hidden. Truncation and other stop reasons retain their original meaning.
 
+For streaming requests using the built-in tool loop, every upstream round must end with `message_stop`
+before the gateway dispatches its tools or emits successful completion. EOF or `[DONE]` without that event
+produces an Anthropic SSE `error` (`api_error`), with no terminal `message_delta` or synthetic `message_stop`.
+Malformed JSON in an upstream SSE data payload also terminates the loop with `api_error` before tool dispatch
+or successful completion. The error does not echo upstream data. Well-formed unknown event types and SSE comments
+remain tolerated. Each started content block must receive `content_block_stop` before `message_stop`, including
+hidden built-in tool blocks. Otherwise the round fails before dispatch or successful completion. Full event-schema
+validation remains separate work. Block indexes must be non-negative integers and cannot be reused within a round;
+deltas and stops require an open block, so duplicate stops and post-stop deltas fail before dispatch or completion.
+`message_start` events require a non-empty string message ID, including in later rounds.
+Duplicate `message_start` events within one round fail before usage updates or tool dispatch;
+a new upstream start in a later tool round remains valid. Tool-use blocks require non-empty string IDs and names.
+Invalid identifiers fail before dispatch or completion, including in hidden built-in tool blocks.
+Already-streamed content remains partial. A valid `message_stop` still releases the upstream body immediately,
+without waiting for HTTP EOF. This completion gate does not yet validate every content-block transition;
+full lifecycle validation and aggregate resource limits remain tracked in #313. Pass-through requests are unchanged.
+
 A round that ends while a gateway call is present — a `max_tokens` truncation mid-call, or an `end_turn` the
 gateway does not accept as a tool stop — does not execute that call, and both transports keep it hidden. The
 client declared these tools for the gateway to run, so surfacing one would name a tool the client never agreed

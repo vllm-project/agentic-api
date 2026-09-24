@@ -4,7 +4,6 @@
     "crates/agentic-server-core/src/executor/accumulator/mod.rs": 666,
     "crates/agentic-server-core/src/executor/engine.rs": 651,
     "crates/agentic-server-core/src/executor/gateway.rs": 653,
-    "crates/agentic-server-core/src/executor/messages_stream.rs": 501,
     "crates/agentic-server-core/src/executor/session.rs": 508,
     "crates/agentic-server-core/src/tool/registry.rs": 515,
     "crates/agentic-server-core/src/tool/tool_search.rs": 1764,
