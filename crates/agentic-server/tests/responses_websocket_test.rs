@@ -2462,6 +2462,109 @@ async fn test_websocket_generate_false_is_local_and_reusable() {
     assert_eq!(requests[0]["input"][0]["content"], "hello");
 }
 
+#[cfg(not(feature = "embedded-code-interpreter"))]
+#[tokio::test]
+async fn websocket_generate_false_rejects_code_interpreter_before_rehydration_or_inference() {
+    let mock = MockResponsesServer::start(vec![]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "model": "test-model",
+            "previous_response_id": "resp_missing",
+            "input": [],
+            "tools": [{"type": "code_interpreter", "execution": "gateway"}],
+            "generate": false,
+            "store": false,
+            "stream": true
+        }),
+    )
+    .await;
+
+    let error = recv_json(&mut ws).await;
+    assert_eq!(error["type"], "error");
+    assert_eq!(error["status"], StatusCode::BAD_REQUEST.as_u16());
+    assert_eq!(error["error"]["type"], "invalid_request_error");
+    assert!(
+        error["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("code_interpreter is disabled"))
+    );
+    assert!(
+        mock.request_bodies().await.is_empty(),
+        "local completion must not contact upstream inference"
+    );
+
+    let response_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM responses")
+        .fetch_one(fixture.pool.as_ref())
+        .await
+        .expect("response count");
+    assert_eq!(
+        response_count, 0,
+        "rejected local completion must not persist a response"
+    );
+}
+
+#[cfg(not(feature = "embedded-code-interpreter"))]
+#[tokio::test]
+async fn websocket_generate_false_rejects_rehydrated_code_interpreter_before_persistence() {
+    let mock = MockResponsesServer::start(vec![]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let parent_metadata = ResponseMetadata {
+        effective_tools: Some(vec![
+            serde_json::from_value(json!({
+                "type": "code_interpreter",
+                "execution": "gateway"
+            }))
+            .expect("code interpreter declaration"),
+        ]),
+        ..ResponseMetadata::default()
+    };
+    ResponseStore::new(Arc::clone(&fixture.pool))
+        .persist("resp_parent", None, Vec::new(), &parent_metadata)
+        .await
+        .expect("persist legacy parent response");
+
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create",
+            "model": "test-model",
+            "previous_response_id": "resp_parent",
+            "input": [],
+            "generate": false,
+            "store": true,
+            "stream": true
+        }),
+    )
+    .await;
+
+    let error = recv_json(&mut ws).await;
+    assert_eq!(error["type"], "error");
+    assert_eq!(error["status"], StatusCode::BAD_REQUEST.as_u16());
+    assert!(
+        error["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("code_interpreter is disabled"))
+    );
+    assert!(mock.request_bodies().await.is_empty());
+
+    let response_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM responses")
+        .fetch_one(fixture.pool.as_ref())
+        .await
+        .expect("response count");
+    assert_eq!(
+        response_count, 1,
+        "rejected continuation must not persist a child response"
+    );
+}
+
 #[tokio::test]
 async fn test_websocket_empty_input_without_generate_reaches_upstream() {
     let mock = MockResponsesServer::start(vec![sse_response("resp_upstream_1", "msg_upstream_1", "HELLO")]).await;

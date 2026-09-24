@@ -27,7 +27,7 @@ The original implementation used `ResponsesTool = FunctionTool`. The shipped typ
 1. **One pipeline, many types.** The tool lifecycle is the same for all types. What varies is the behavior at each stage.
 2. **vLLM is function-only.** Model-visible declarations normalize to `type: "function"` before inference. Types without a model-facing implementation are omitted; public tool identity is restored after inference.
 3. **Routing by registry, not heuristics.** After inference, `function_call` items are looked up in a request-scoped registry that maps names back to origin type and config.
-4. **Ownership decides execution.** Each registry entry has explicit `ToolOwnership`; `ToolType::is_gateway_owned()` supplies the declaration-level default. Client-owned types (`function`, `custom`, `codex namespace`) are never gateway-executed — their calls are returned for the client to resolve. Gateway-owned types (`web_search`, `mcp`, `file_search`, `code_interpreter`) are handled by the gateway. Web search and MCP ship executable bindings; a gateway-owned entry without an implementation produces an error tool result for the next inference round rather than silently dropping the call.
+4. **Ownership decides execution.** Each registry entry has explicit `ToolOwnership`; `ToolType::is_gateway_owned()` supplies the declaration-level default. Client-owned types (`function`, `custom`, `codex namespace`) are never gateway-executed — their calls are returned for the client to resolve. Gateway-owned types (`web_search`, `mcp`, `file_search`, `code_interpreter`) are handled by the gateway. Web search, MCP, and the opt-in code interpreter ship executable bindings; a gateway-owned entry without an implementation produces an error tool result for the next inference round rather than silently dropping the call.
 5. **Additive.** New tool types implement a trait and register. The executor loop doesn't change.
 
 ---
@@ -369,14 +369,15 @@ through `started_output` and `public_output`.
 |-------|------------|----------|-------------------|-------|--------------|---------------|--------------------|
 | Validate | name required | name and supported format | member names required | server identity, policy, and allowed tools | typed configuration | vector_store_ids required | typed configuration |
 | Discover | no-op | no-op | no-op | `tools/list` on server | no-op | no-op | no-op |
-| Normalize | passthrough | freeform input → function parameter | flatten members → `FunctionTool` | discovered schema → `FunctionTool` | synthetic `web_search(query)` | omitted (not implemented) | omitted (not implemented) |
-| Route | → client | → client (restore custom shape) | → client (restore `{namespace, name}`) | → gateway binding | → gateway binding | → gateway without binding | → gateway without binding |
-| Execute | N/A | N/A | N/A | JSON-RPC `tools/call` | HTTP search API | error tool result if called | error tool result if called |
-| SSE events | upstream function-call lifecycle | restored custom-call lifecycle | restored namespace call lifecycle | gateway-generated `mcp_call.*` | gateway-generated `web_search_call.*` | none | none |
-| Call handling | returned to client | returned to client | returned to client | gateway executes | gateway executes | error tool result (no handler yet) | error tool result (no handler yet) |
+| Normalize | passthrough | freeform input → function parameter | flatten members → `FunctionTool` | discovered schema → `FunctionTool` | synthetic `web_search(query)` | omitted (not implemented) | synthetic `code_interpreter(code)` when enabled |
+| Route | → client | → client (restore custom shape) | → client (restore `{namespace, name}`) | → gateway binding | → gateway binding | → gateway without binding | → opt-in gateway binding |
+| Execute | N/A | N/A | N/A | JSON-RPC `tools/call` | HTTP search API | error tool result if called | fresh Eryx Python guest |
+| SSE events | upstream function-call lifecycle | restored custom-call lifecycle | restored namespace call lifecycle | gateway-generated `mcp_call.*` | gateway-generated `web_search_call.*` | none | gateway-generated `code_interpreter_call*` lifecycle |
+| Call handling | returned to client | returned to client | returned to client | gateway executes | gateway executes | error tool result (no handler yet) | gateway executes when feature and runtime are enabled |
 
-`codex namespace`, `web_search`, and `mcp` ship today; `file_search` /
-`code_interpreter` are declared gateway-owned `ToolType`s without executors yet.
+`codex namespace`, `web_search`, and `mcp` ship today. `code_interpreter` has an opt-in executor: the binary must
+include the `embedded-code-interpreter` Cargo feature and the operator must enable a ready Eryx runtime. `file_search`
+remains a declared gateway-owned `ToolType` without an executor.
 
 ---
 
@@ -430,7 +431,8 @@ explicit ownership, Responses round execution, and loop control. Actual PRs:
 | Bounded parallel Responses gateway rounds + per-handler same-tool safety | **#181** | ✅ implemented |
 | Multi-turn loop: `classify_round` + `LoopDecision` | **#83** | ✅ implemented |
 | Remote MCP gateway (`read_resource`, `tools/call`) | **#89** | ✅ implemented |
-| `file_search`, `code_interpreter` handlers | — | declared `ToolType`, no handler yet |
+| `file_search` handler | — | declared `ToolType`, no handler yet |
+| Opt-in Eryx `code_interpreter` handler | current embedded-code-interpreter work | ✅ implemented |
 
 The trait split, `Pin<Box>` async, `CodexNamespace`, explicit ownership and round
 execution, and the four-variant `LoopDecision` are the substantive divergences
@@ -451,8 +453,10 @@ from this doc's original sketch — each is annotated inline above.
   `GATEWAY_TOOL_TIMEOUT` remains a shared 60-second per-call constant. Tool types
   with materially different latency profiles may eventually need individual
   timeout policies.
-- **`file_search` / `code_interpreter` handlers.** Both are declared `ToolType`s
-  awaiting `GatewayExecutor` impls.
+- **`file_search` handler.** It remains a declared `ToolType` awaiting a `GatewayExecutor` implementation.
+- **Code-interpreter output variants.** The embedded executor currently returns log output only. Image artifacts,
+  persistent containers, and file outputs remain future work; the OpenAI-compatible code-interpreter streaming
+  lifecycle is implemented through the shared gateway event and delivery path.
 
 ---
 

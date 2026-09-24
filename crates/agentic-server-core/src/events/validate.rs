@@ -92,6 +92,11 @@ pub(crate) fn expected_item_type(event_type: SSEEventType) -> Option<SSEItemType
         SSEEventType::WebSearchCallInProgress
         | SSEEventType::WebSearchCallSearching
         | SSEEventType::WebSearchCallCompleted => Some(SSEItemType::WebSearchCall),
+        SSEEventType::CodeInterpreterCallInProgress
+        | SSEEventType::CodeInterpreterCallCodeDelta
+        | SSEEventType::CodeInterpreterCallCodeDone
+        | SSEEventType::CodeInterpreterCallInterpreting
+        | SSEEventType::CodeInterpreterCallCompleted => Some(SSEItemType::CodeInterpreterCall),
         SSEEventType::McpCallInProgress
         | SSEEventType::McpCallArgumentsDelta
         | SSEEventType::McpCallArgumentsDone
@@ -242,11 +247,13 @@ fn validate_event_fields(
         | SSEEventType::ShellCallCommandDelta
         | SSEEventType::ReasoningTextDelta
         | SSEEventType::ReasoningSummaryTextDelta
-        | SSEEventType::McpCallArgumentsDelta => Some("delta"),
+        | SSEEventType::McpCallArgumentsDelta
+        | SSEEventType::CodeInterpreterCallCodeDelta => Some("delta"),
         SSEEventType::OutputTextDone | SSEEventType::ReasoningTextDone | SSEEventType::ReasoningSummaryTextDone => {
             Some("text")
         }
         SSEEventType::FunctionCallArgumentsDone | SSEEventType::McpCallArgumentsDone => Some("arguments"),
+        SSEEventType::CodeInterpreterCallCodeDone => Some("code"),
         SSEEventType::CustomToolCallInputDone => Some("input"),
         SSEEventType::ShellCallCommandAdded | SSEEventType::ShellCallCommandDone => Some("command"),
         SSEEventType::ContentPartAdded
@@ -268,6 +275,9 @@ fn validate_event_fields(
         | SSEEventType::WebSearchCallInProgress
         | SSEEventType::WebSearchCallSearching
         | SSEEventType::WebSearchCallCompleted
+        | SSEEventType::CodeInterpreterCallInProgress
+        | SSEEventType::CodeInterpreterCallInterpreting
+        | SSEEventType::CodeInterpreterCallCompleted
         | SSEEventType::McpCallInProgress
         | SSEEventType::McpCallCompleted
         | SSEEventType::McpCallFailed

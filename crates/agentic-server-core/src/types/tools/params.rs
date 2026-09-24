@@ -295,10 +295,26 @@ pub struct FileSearchToolParam {
     pub vector_store_ids: Option<Vec<String>>,
 }
 
-/// Parameters for a code interpreter tool (no required fields).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// Selects the required execution location for the code interpreter.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct CodeInterpreterToolParam {}
+#[serde(rename_all = "snake_case")]
+pub enum CodeInterpreterExecution {
+    #[default]
+    Gateway,
+}
+
+/// Parameters for the gateway-executed code interpreter built-in tool.
+///
+/// The first release deliberately accepts no container selectors, client
+/// runtime configuration, or extension fields. `deny_unknown_fields` keeps a
+/// misspelled or unsupported selector from being silently ignored.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(deny_unknown_fields)]
+pub struct CodeInterpreterToolParam {
+    pub execution: CodeInterpreterExecution,
+}
 
 /// Parameters for the shell built-in tool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -418,7 +434,7 @@ pub enum CodexNamespaceMember {
 impl utoipa::PartialSchema for ResponsesTool {
     fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
         use utoipa::openapi::Ref;
-        use utoipa::openapi::schema::{AllOfBuilder, ObjectBuilder, SchemaType, Type};
+        use utoipa::openapi::schema::{AdditionalProperties, AllOfBuilder, ObjectBuilder, SchemaType, Type};
 
         fn tagged(type_value: &str, schema: &str) -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
             AllOfBuilder::new()
@@ -433,6 +449,26 @@ impl utoipa::PartialSchema for ResponsesTool {
                         .required("type"),
                 )
                 .item(Ref::from_schema_name(schema))
+                .into()
+        }
+
+        // `CodeInterpreterToolParam` denies unknown fields. Referencing that
+        // closed component through an `allOf` would make its
+        // `additionalProperties: false` reject the sibling `type` field.
+        // Keep the tagged declaration in one object so the OpenAPI schema has
+        // the same closed shape as serde's tagged enum variant.
+        fn code_interpreter_tagged() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+            ObjectBuilder::new()
+                .property(
+                    "type",
+                    ObjectBuilder::new()
+                        .schema_type(SchemaType::new(Type::String))
+                        .enum_values(Some(["code_interpreter"])),
+                )
+                .property("execution", Ref::from_schema_name("CodeInterpreterExecution"))
+                .required("type")
+                .required("execution")
+                .additional_properties(Some(AdditionalProperties::FreeForm(false)))
                 .into()
         }
 
@@ -461,7 +497,7 @@ impl utoipa::PartialSchema for ResponsesTool {
                     .item(Ref::from_schema_name("WebSearchToolParam")),
             )
             .item(tagged("file_search", "FileSearchToolParam"))
-            .item(tagged("code_interpreter", "CodeInterpreterToolParam"))
+            .item(code_interpreter_tagged())
             .item(tagged("shell", "ShellToolParam"))
             .item(tagged("namespace", "CodexNamespaceToolParam"))
             .item(tagged("custom", "CustomToolParam"))
@@ -829,10 +865,67 @@ mod tests {
 
     #[test]
     fn responses_tool_code_interpreter_round_trips() {
-        let json = serde_json::json!({"type": "code_interpreter"});
-        let tool: ResponsesTool = serde_json::from_value(json).unwrap();
+        let json = serde_json::json!({"type": "code_interpreter", "execution": "gateway"});
+        let tool: ResponsesTool = serde_json::from_value(json.clone()).unwrap();
         assert!(matches!(tool, ResponsesTool::CodeInterpreter(_)));
-        assert_eq!(serde_json::to_value(&tool).unwrap()["type"], "code_interpreter");
+        assert_eq!(serde_json::to_value(&tool).unwrap(), json);
+    }
+
+    #[test]
+    fn code_interpreter_declaration_rejects_unknown_fields() {
+        let error = serde_json::from_value::<ResponsesTool>(serde_json::json!({
+            "type": "code_interpreter",
+            "execution": "gateway",
+            "misspelled_execution": "gateway"
+        }))
+        .expect_err("closed declaration must reject unknown fields");
+
+        assert!(error.to_string().contains("unknown field"));
+    }
+
+    #[test]
+    fn code_interpreter_declaration_rejects_container_fields() {
+        for field in [
+            serde_json::json!({"container": "auto"}),
+            serde_json::json!({"container_id": "cntr_client"}),
+            serde_json::json!({"container": {"id": "cntr_client"}}),
+            serde_json::json!({"container_reuse": "cntr_client"}),
+            serde_json::json!({"runtime": {"packages": ["untrusted"]}}),
+        ] {
+            let mut declaration = serde_json::json!({
+                "type": "code_interpreter",
+                "execution": "gateway"
+            });
+            declaration
+                .as_object_mut()
+                .expect("object declaration")
+                .extend(field.as_object().expect("object field").clone());
+
+            assert!(
+                serde_json::from_value::<ResponsesTool>(declaration).is_err(),
+                "client container or runtime fields must not deserialize"
+            );
+        }
+    }
+
+    #[test]
+    fn code_interpreter_declaration_requires_gateway_execution() {
+        let missing = serde_json::from_value::<ResponsesTool>(serde_json::json!({
+            "type": "code_interpreter"
+        }))
+        .expect_err("execution is required");
+        assert!(missing.to_string().contains("missing field `execution`"));
+
+        for declaration in [
+            serde_json::json!({"type": "code_interpreter", "execution": "client"}),
+            serde_json::json!({"type": "code_interpreter", "execution": "container"}),
+            serde_json::json!({"type": "code_interpreter", "execution": null}),
+        ] {
+            assert!(
+                serde_json::from_value::<ResponsesTool>(declaration).is_err(),
+                "only explicit execution='gateway' is accepted"
+            );
+        }
     }
 
     #[test]

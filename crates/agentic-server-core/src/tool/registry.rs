@@ -6,11 +6,15 @@ use std::future::{Future, ready};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "embedded-code-interpreter")]
+use super::ToolHandler;
+use super::code_interpreter::CodeInterpreterHandler;
 use super::codex::insert_namespace_entries;
 use super::custom::{CustomHandler, CustomToolMap, insert_custom_entry};
 use super::executors::GatewayExecutors;
 use super::function::insert_function_entry;
 use super::mcp::registry::insert_discovered_mcp_entry;
+use super::normalize::code_interpreter_unavailable_error;
 use super::ownership::{GatewayBinding, ToolOwnership};
 use super::shell::insert_shell_entry;
 use super::tool_search::{TOOL_SEARCH_NAME, insert_tool_search_entry};
@@ -151,13 +155,35 @@ fn insert_file_search_entry(entries: &mut HashMap<String, ToolEntry>, _params: &
     );
 }
 
-// TODO: move to a dedicated code_interpreter module alongside its `ToolHandler`
-// once code_interpreter execution is implemented.
-fn insert_code_interpreter_entry(entries: &mut HashMap<String, ToolEntry>, _params: &CodeInterpreterToolParam) {
-    entries.insert(
-        "code_interpreter".to_owned(),
-        ToolEntry::gateway(ToolType::CodeInterpreter, None, None),
-    );
+#[cfg(feature = "embedded-code-interpreter")]
+fn insert_code_interpreter_entry(
+    entries: &mut HashMap<String, ToolEntry>,
+    executors: &GatewayExecutors,
+    param: &CodeInterpreterToolParam,
+) -> Result<(), ToolError> {
+    CodeInterpreterHandler.validate(param)?;
+    let executor = executors
+        .code_interpreter_executor()
+        .ok_or_else(code_interpreter_unavailable_error)?;
+    insert_unique_tool_entries(entries, |resolved| {
+        resolved.insert(
+            super::code_interpreter::CODE_INTERPRETER_FUNCTION_NAME.to_owned(),
+            ToolEntry::gateway(
+                ToolType::CodeInterpreter,
+                None,
+                Some(GatewayBinding::new(executor, param.clone())),
+            ),
+        );
+    })
+}
+
+#[cfg(not(feature = "embedded-code-interpreter"))]
+fn insert_code_interpreter_entry(
+    _entries: &mut HashMap<String, ToolEntry>,
+    _executors: &GatewayExecutors,
+    _param: &CodeInterpreterToolParam,
+) -> Result<(), ToolError> {
+    Err(code_interpreter_unavailable_error())
 }
 
 /// Request-scoped registry built from `RequestPayload.tools`.
@@ -242,6 +268,8 @@ impl ToolRegistry {
         McpHandler::validate_server_labels(&resolved_tools)?;
         validate_mcp_server_count(&resolved_tools)?;
 
+        CodeInterpreterHandler::validate_declarations(&resolved_tools)?;
+
         for (index, tool) in resolved_tools.iter().enumerate() {
             match tool {
                 ResponsesTool::Function(p) => {
@@ -305,10 +333,8 @@ impl ToolRegistry {
                 ResponsesTool::FileSearch(p) => {
                     insert_unique_tool_entries(&mut entries, |resolved| insert_file_search_entry(resolved, p))?;
                 }
-                ResponsesTool::CodeInterpreter(p) => {
-                    insert_unique_tool_entries(&mut entries, |resolved| {
-                        insert_code_interpreter_entry(resolved, p);
-                    })?;
+                ResponsesTool::CodeInterpreter(param) => {
+                    insert_code_interpreter_entry(&mut entries, executors, param)?;
                 }
                 ResponsesTool::Shell(_) => {
                     insert_unique_tool_entries(&mut entries, |resolved| {
@@ -541,6 +567,42 @@ mod tests {
     use crate::types::io::output::McpListTool;
     use crate::types::tools::McpDiscoveredToolParam;
 
+    #[test]
+    fn code_interpreter_tool_type_is_inherently_gateway_owned() {
+        assert!(ToolType::CodeInterpreter.is_gateway_owned());
+    }
+
+    #[cfg(feature = "embedded-code-interpreter")]
+    #[tokio::test]
+    async fn enabled_code_interpreter_registers_a_gateway_binding() {
+        let config = crate::config::ToolRuntimeConfig {
+            code_interpreter: crate::config::CodeInterpreterRuntimeConfig {
+                enabled: true,
+                ..crate::config::CodeInterpreterRuntimeConfig::default()
+            },
+            ..crate::config::ToolRuntimeConfig::default()
+        };
+        let mut executors = GatewayExecutors::from_config(Arc::new(reqwest::Client::new()), &config)
+            .expect("enabled code interpreter executor");
+        let mut tools = vec![
+            serde_json::from_value(serde_json::json!({
+                "type": "code_interpreter",
+                "execution": "gateway"
+            }))
+            .expect("code interpreter declaration"),
+        ];
+
+        let registry = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
+            .await
+            .expect("code interpreter registry");
+        let entry = registry
+            .lookup(super::super::code_interpreter::CODE_INTERPRETER_FUNCTION_NAME)
+            .expect("code interpreter registry entry");
+
+        assert_eq!(entry.tool_type, ToolType::CodeInterpreter);
+        assert!(matches!(entry.ownership, ToolOwnership::Gateway(Some(_))));
+    }
+
     fn declaration(server_label: &str) -> ResponsesTool {
         serde_json::from_value(serde_json::json!({
             "type": "mcp",
@@ -624,7 +686,6 @@ mod tests {
             },
             {"type": "web_search_preview", "search_context_size": "low"},
             {"type": "file_search", "vector_store_ids": ["vs_test"]},
-            {"type": "code_interpreter"},
             {
                 "type": "namespace",
                 "name": "mcp__shell",
@@ -835,7 +896,7 @@ mod tests {
             .await
             .expect("mixed registry");
 
-        assert_eq!(registry.len(), 9);
+        assert_eq!(registry.len(), 8);
         assert!(registry.contains_mcp_server_label("counter"));
         assert!(!registry.contains_mcp_server_label("missing"));
         assert_mcp_list_tools_metadata(&registry);
@@ -848,7 +909,6 @@ mod tests {
             ("mcp__counter__get_value", ToolType::Mcp, Some("counter"), true),
             ("web_search", ToolType::WebSearch, None, true),
             ("file_search", ToolType::FileSearch, None, false),
-            ("code_interpreter", ToolType::CodeInterpreter, None, false),
             (
                 "agentic_ns__mcp__shell__run",
                 ToolType::CodexNamespace,
@@ -877,7 +937,6 @@ mod tests {
             "mcp__counter__get_value",
             "web_search",
             "file_search",
-            "code_interpreter",
         ] {
             assert!(registry.is_gateway_owned_name(name), "'{name}' should be gateway-owned");
         }
@@ -898,7 +957,7 @@ mod tests {
             ["mcp__counter__increment", "mcp__counter__get_value"]
         );
 
-        let ResponsesTool::Namespace(namespace) = &tools[5] else {
+        let ResponsesTool::Namespace(namespace) = &tools[4] else {
             panic!("expected namespace declaration");
         };
         assert!(matches!(
@@ -906,6 +965,52 @@ mod tests {
             [crate::types::tools::CodexNamespaceMember::Function(function)] if function.name.as_str() == "run"
         ));
         assert_namespace_mapping(&registry);
+    }
+
+    #[tokio::test]
+    async fn build_with_handlers_rejects_unavailable_code_interpreter_before_entry_creation() {
+        let mut tools = vec![
+            serde_json::from_value(serde_json::json!({
+                "type": "code_interpreter",
+                "execution": "gateway"
+            }))
+            .expect("code interpreter declaration"),
+        ];
+        let mut executors = GatewayExecutors::default();
+
+        let error = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
+            .await
+            .expect_err("unavailable code interpreter must not register a placeholder entry");
+
+        assert!(matches!(
+            error,
+            ToolError::Config(message) if message.contains("code_interpreter")
+        ));
+    }
+
+    #[tokio::test]
+    async fn build_with_handlers_rejects_code_interpreter_name_collision_before_unavailable() {
+        for conflicting_tool in [
+            serde_json::json!({"type": "function", "name": "code_interpreter"}),
+            serde_json::json!({"type": "custom", "name": "code_interpreter"}),
+        ] {
+            let mut tools = serde_json::from_value::<Vec<ResponsesTool>>(serde_json::json!([
+                {"type": "code_interpreter", "execution": "gateway"},
+                conflicting_tool
+            ]))
+            .expect("individual declarations parse");
+            let mut executors = GatewayExecutors::default();
+
+            let error = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
+                .await
+                .expect_err("fixed model-visible name collisions must fail before availability handling");
+
+            assert!(
+                error
+                    .to_string()
+                    .contains("fixed model-visible tool name 'code_interpreter'")
+            );
+        }
     }
 
     #[tokio::test]

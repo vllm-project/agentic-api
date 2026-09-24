@@ -174,7 +174,7 @@ impl ExecutionContext {
         let resp_handler = ResponseHandler::new(ResponseStore::new(pool.clone()));
         let client = Arc::new(reqwest::Client::new());
         let gateway_executors = GatewayExecutors::from_config(Arc::clone(&client), &cfg.tools)
-            .map_err(|error| Error::Config(format!("failed to validate configured MCP server policies: {error}")))?;
+            .map_err(|error| Error::Config(format!("failed to validate configured gateway tool policies: {error}")))?;
         Ok(Self {
             conv_handler,
             resp_handler,

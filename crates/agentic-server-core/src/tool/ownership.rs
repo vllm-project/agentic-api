@@ -125,7 +125,8 @@ impl GatewayBinding {
 pub enum ToolOwnership {
     Client,
     /// `None` means this tool type is gateway-owned in principle but has no
-    /// handler implemented yet (e.g. `FileSearch`/`CodeInterpreter` today).
+    /// executable handler for this request (for example, `FileSearch`, or an
+    /// operator-disabled optional executor).
     Gateway(Option<GatewayBinding>),
 }
 

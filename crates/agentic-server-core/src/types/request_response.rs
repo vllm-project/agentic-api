@@ -1054,7 +1054,7 @@ mod tests {
             }),
             serde_json::json!({"type": "web_search_preview"}),
             serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_abc"]}),
-            serde_json::json!({"type": "code_interpreter"}),
+            serde_json::json!({"type": "code_interpreter", "execution": "gateway"}),
         ]
     }
 

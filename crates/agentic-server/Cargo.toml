@@ -9,6 +9,10 @@ repository.workspace = true
 [features]
 default = ["openapi"]
 openapi = ["agentic-core/openapi", "dep:utoipa", "dep:utoipa-axum", "dep:utoipa-swagger-ui"]
+# Forward the opt-in Eryx interpreter capability to the core request boundary.
+# The operator must provision a matching runtime.cwasm while building and then
+# explicitly enable the executor at runtime.
+embedded-code-interpreter = ["agentic-core/embedded-code-interpreter"]
 # Package Linux wheels without a dependency on system OpenSSL libraries.
 vendored-openssl = ["reqwest/native-tls-vendored"]
 

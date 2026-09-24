@@ -399,6 +399,34 @@ Configured `allowed_tools` form the maximum tool set; request-provided `allowed_
 `require_approval = "never"` lets requests omit that field. If a label exists in `config.toml`, a request cannot
 override it with `server_url`; otherwise the existing request-declared HTTP MCP flow remains available.
 
+### Optional embedded code interpreter
+
+The Eryx code interpreter is excluded from default builds. To opt in from source, prepare the platform-specific Eryx 0.8 runtime and then enable the Cargo feature:
+
+```bash
+./scripts/setup-eryx-runtime.sh
+cargo build --release -p agentic-server --features embedded-code-interpreter
+```
+
+The setup script installs the `eryx-precompile` version matching `Cargo.lock` when needed and prepares Eryx's cached runtime. During the Cargo build, Eryx finds that `runtime.cwasm`, copies it into Cargo's build output, and embeds it in the server binary. `ERYX_RUNTIME_CWASM=/absolute/path/to/runtime.cwasm` is only needed to select an artifact outside the cache; it does not build the artifact and is not needed when running the resulting binary.
+
+Enable the compiled executor in `~/.agentic-api/config.toml`:
+
+```toml
+[code_interpreter]
+enabled = true
+```
+
+Alternatively, set `AGENTIC_CODE_INTERPRETER_ENABLED=true`, which takes precedence over the file. The Cargo feature and the runtime setting are both required. Before starting the server, create a private temporary directory for Eryx:
+
+```bash
+install -d -m 700 "$HOME/.agentic-api/tmp"
+TMPDIR="$HOME/.agentic-api/tmp" ./target/release/agentic-server
+```
+
+See the [embedded code interpreter design](docs/design/embedded-code-interpreter.md) for resource limits, request
+shape, containment limitations, and feature-enabled verification.
+
 ## 🤖 Codex on your own GPUs
 
 For the desktop UI, see [Codex Desktop with local models](docs/guides/codex-desktop.md). The guide covers a tested

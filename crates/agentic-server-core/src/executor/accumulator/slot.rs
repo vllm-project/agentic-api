@@ -329,6 +329,7 @@ impl SlotMap {
         if let Some(
             mut item @ (OutputItem::Reasoning(_)
             | OutputItem::FunctionCall(_)
+            | OutputItem::CodeInterpreterCall(_)
             | OutputItem::ToolSearchCall(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::ShellCall(_)

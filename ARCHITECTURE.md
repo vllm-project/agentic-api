@@ -360,10 +360,11 @@ access happen — those live in `tool/`, `executor/`, and `storage/` respectivel
   is the seam between the OpenAI-shaped request and vLLM's contract. It: flattens Codex
   namespace tool members to model-visible names, validates every declared tool
   (`ResponsesTool::validate()`), and normalizes each supported model-visible tool to
-  `UpstreamTool::Function` (`ResponsesTool::to_function_tools()`). File search, code
-  interpreter, and unknown typed declarations currently normalize to no upstream
-  tool; every declaration that does reach vLLM is `type: "function"`, because that's
-  the only tool type it speaks. The conversion also resolves/validates `tool_choice`
+  `UpstreamTool::Function` (`ResponsesTool::to_function_tools()`). File search and
+  unknown typed declarations normalize to no upstream tool; a feature-enabled,
+  runtime-ready code interpreter normalizes to a fixed function contract. Every
+  declaration that does reach vLLM is `type: "function"`, because that's the only
+  tool type it speaks. The conversion also resolves/validates `tool_choice`
   and applies `ResponsesInput::model_input()`. It's called from
   `executor/upstream.rs`'s `fetch_blocking_payload` and `fetch_stream_payload` — the
   two functions that actually build the outbound request to vLLM.
@@ -750,17 +751,24 @@ round:
   deadline for the entire round or total call latency. Timeout, execution, and tool-config
   failures become failed tool outputs that can be fed back to the model instead of
   failing the whole response. A tool registered as gateway-owned without an
-  implementation (currently file search/code interpreter) likewise produces an error
-  tool result.
+  implementation (currently file search) likewise produces an error tool result.
 - Parallel safety is a per-handler contract. `GatewayExecutor::supports_parallel_execution`
   defaults to `false`; registration turns that into a `GatewayBinding::self_exclusion`
   semaphore. The semaphore serializes only simultaneous calls to the **same
   model-visible tool name**. It never blocks different tools from running concurrently.
   MCP and web search opt into same-tool parallel execution.
 - Each scheduler slot retains its `GatewayEventPlan`; `emit_gateway_start_events` and
-  `emit_gateway_completed_events` synthesize the OpenAI lifecycle for gateway-executed
-  web search/MCP calls from those same slots. The ordinary path emits all planned start
-  events, executes the round concurrently, then emits ordered completed/failed events.
+  `emit_gateway_completed_events` synthesize public lifecycle events for gateway-executed
+  web search, MCP, and optional code-interpreter calls from those same slots. A code-interpreter
+  call emits `output_item.added`, `code_interpreter_call.in_progress`, the
+  `code_interpreter_call_code.delta`/`done` pair, `code_interpreter_call.interpreting`,
+  `code_interpreter_call.completed`, and `output_item.done`, with indexes and sequence numbers
+  assigned by `GatewayStreamAccumulator`. The dispatcher suppresses the canonical upstream
+  `function_call` lifecycle after classifying the call as gateway-executed. Native upstream
+  `code_interpreter_call` items instead follow the accumulator's typed lifecycle and pass through;
+  contradictory item kinds at one output index are handled by ingestion before translation. The
+  ordinary path emits all planned start events, executes the round concurrently, then emits ordered
+  completed/failed events.
 - Streaming may receive client-visible output interleaved with gateway calls. In that
   case `engine.rs::execute_and_emit_ordered_output_calls` temporarily groups deferred
   upstream frames by `output_index`, executes the same `GatewayScheduler` concurrently,
@@ -926,8 +934,11 @@ RequestPayload::to_upstream_request
 `RequestPayload::to_upstream_request` is the only request-level seam that prepares
 tools for vLLM. New callers must use it rather than rebuilding function schemas or
 normalizing declarations in the executor. Declared placeholders that are not yet
-supported, currently file search and code interpreter, produce no upstream function
-declaration until they have a complete handler and execution path.
+supported, currently file search, produce no upstream function declaration until they
+have a complete handler and execution path. Code interpreter is an opt-in gateway
+executor: it normalizes only in builds with the `embedded-code-interpreter` feature,
+and requests fail closed unless operator enablement and Eryx runtime readiness also
+succeed.
 
 | Component | Responsibility |
 | --- | --- |
@@ -941,13 +952,14 @@ declaration until they have a complete handler and execution path.
   `to_function_tools()`. These are the declaration-level validation and normalization
   entry points used by `RequestPayload::to_upstream_request`. Each supported variant's
   policy belongs to its corresponding `ToolHandler`: `FunctionHandler`,
-  `ToolSearchHandler`, `McpHandler`, `WebSearchHandler`, `CodexNamespaceHandler`, or
-  `CustomHandler`. Web search's fixed canonical builder is shared with
-  `WebSearchHandler::normalize`; it remains one schema even though it has no
+  `ToolSearchHandler`, `McpHandler`, `WebSearchHandler`, `CodexNamespaceHandler`,
+  `CustomHandler`, or `CodeInterpreterHandler`. Web search's fixed canonical builder
+  is shared with `WebSearchHandler::normalize`; it remains one schema even though it has no
   per-declaration normalization state. The method name is plural because namespace and
   MCP declarations may expand to several model-visible function tools.
-  `FileSearch`/`CodeInterpreter` remain unsupported placeholders and normalize to
-  nothing.
+  `FileSearch` remains an unsupported placeholder and normalizes to nothing. The
+  code interpreter normalizes to one fixed function contract only in feature-enabled
+  builds and is bound to `EryxCodeInterpreterExecutor` after startup readiness checks.
 - **`handler.rs`** — the two traits every tool type reasons about:
   ```rust
   pub trait ToolHandler: Send + Sync {

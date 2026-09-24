@@ -7,7 +7,7 @@ use futures::future::join_all;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::config::DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS;
-use crate::events::SSEEventType;
+use crate::events::{EventFrame, EventPayload, SSEEventType};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent, synthetic_event};
 use crate::executor::pipeline::emit_gateway_event;
@@ -16,9 +16,9 @@ use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::tool::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
 use crate::tool::{GatewayBinding, ToolError, ToolOutput, ToolOwnership, ToolRegistry};
 use crate::types::io::output::{FunctionToolCall, GatewayCallStatus, McpCallStatus};
-use crate::types::io::{InputItem, OutputItem, ResponsesInput};
+use crate::types::io::{CodeInterpreterCallStreamEvent, InputItem, OutputItem, ResponsesInput};
 use crate::types::request_response::ResponsePayload;
-use crate::utils::common::{serialize_to_string, serialize_to_value};
+use crate::utils::common::{deserialize_from_value, serialize_to_string, serialize_to_value};
 
 pub(super) const MAX_CONCURRENT_MATERIALIZATIONS: usize = 16;
 
@@ -431,6 +431,84 @@ fn output_item_value(item: &OutputItem) -> ExecutorResult<serde_json::Value> {
     serde_json::to_value(item).map_err(ExecutorError::JsonError)
 }
 
+fn code_interpreter_event_frame(event: &CodeInterpreterCallStreamEvent) -> ExecutorResult<EventFrame> {
+    let event_type = match event {
+        CodeInterpreterCallStreamEvent::InProgress { .. } => SSEEventType::CodeInterpreterCallInProgress,
+        CodeInterpreterCallStreamEvent::CodeDelta { .. } => SSEEventType::CodeInterpreterCallCodeDelta,
+        CodeInterpreterCallStreamEvent::CodeDone { .. } => SSEEventType::CodeInterpreterCallCodeDone,
+        CodeInterpreterCallStreamEvent::Interpreting { .. } => SSEEventType::CodeInterpreterCallInterpreting,
+        CodeInterpreterCallStreamEvent::Completed { .. } => SSEEventType::CodeInterpreterCallCompleted,
+    };
+    let value = serialize_to_value(event).map_err(ExecutorError::JsonError)?;
+    let wire = deserialize_from_value(value).map_err(ExecutorError::JsonError)?;
+    Ok(EventFrame {
+        event_type,
+        payload: EventPayload::None,
+        wire,
+    })
+}
+
+async fn emit_code_interpreter_event(
+    event: &CodeInterpreterCallStreamEvent,
+    stream_accumulator: &mut GatewayStreamAccumulator,
+    stream_sender: &tokio::sync::mpsc::Sender<StreamEvent>,
+) -> ExecutorResult<()> {
+    let mut frame = code_interpreter_event_frame(event)?;
+    emit_gateway_event(&mut frame, stream_accumulator, stream_sender).await
+}
+
+async fn emit_code_interpreter_start_events(
+    call: &crate::types::io::CodeInterpreterCall,
+    output_index: u32,
+    stream_accumulator: &mut GatewayStreamAccumulator,
+    stream_sender: &tokio::sync::mpsc::Sender<StreamEvent>,
+) -> ExecutorResult<()> {
+    let item_id = call.id.clone();
+    emit_code_interpreter_event(
+        &CodeInterpreterCallStreamEvent::InProgress {
+            item_id: item_id.clone(),
+            output_index,
+            sequence_number: stream_accumulator.upcoming_sequence_number(),
+        },
+        stream_accumulator,
+        stream_sender,
+    )
+    .await?;
+    emit_code_interpreter_event(
+        &CodeInterpreterCallStreamEvent::CodeDelta {
+            item_id: item_id.clone(),
+            output_index,
+            sequence_number: stream_accumulator.upcoming_sequence_number(),
+            delta: call.code.clone(),
+        },
+        stream_accumulator,
+        stream_sender,
+    )
+    .await?;
+    emit_code_interpreter_event(
+        &CodeInterpreterCallStreamEvent::CodeDone {
+            item_id: item_id.clone(),
+            output_index,
+            sequence_number: stream_accumulator.upcoming_sequence_number(),
+            code: call.code.clone(),
+        },
+        stream_accumulator,
+        stream_sender,
+    )
+    .await?;
+    emit_code_interpreter_event(
+        &CodeInterpreterCallStreamEvent::Interpreting {
+            item_id,
+            output_index,
+            sequence_number: stream_accumulator.upcoming_sequence_number(),
+        },
+        stream_accumulator,
+        stream_sender,
+    )
+    .await?;
+    Ok(())
+}
+
 pub(super) async fn emit_response_start_events(
     payload: &ResponsePayload,
     stream_accumulator: &mut GatewayStreamAccumulator,
@@ -464,7 +542,14 @@ pub(super) async fn emit_gateway_start_events<'a>(
         let Some(output_item) = &plan.started_output else {
             continue;
         };
-        let item = output_item_value(output_item)?;
+        let item = match output_item {
+            OutputItem::CodeInterpreterCall(call) => {
+                let mut added = call.clone();
+                added.code.clear();
+                output_item_value(&OutputItem::CodeInterpreterCall(added))?
+            }
+            _ => output_item_value(output_item)?,
+        };
         let mut added_event = synthetic_event(
             SSEEventType::OutputItemAdded,
             [
@@ -531,6 +616,15 @@ pub(super) async fn emit_gateway_start_events<'a>(
                 )?;
                 emit_gateway_event(&mut in_progress_event, stream_accumulator, stream_sender).await?;
             }
+            OutputItem::CodeInterpreterCall(code_interpreter_call) => {
+                emit_code_interpreter_start_events(
+                    code_interpreter_call,
+                    plan.output_index,
+                    stream_accumulator,
+                    stream_sender,
+                )
+                .await?;
+            }
             OutputItem::Message(_)
             | OutputItem::FunctionCall(_)
             | OutputItem::ToolSearchCall(_)
@@ -579,7 +673,7 @@ pub(super) async fn emit_gateway_completed_events<'a, T: GatewayPublicOutputSour
                 },
                 list_tools.id.as_str(),
             )),
-            OutputItem::Compaction(_) | OutputItem::ShellCall(_) => None,
+            OutputItem::CodeInterpreterCall(_) | OutputItem::Compaction(_) | OutputItem::ShellCall(_) => None,
             OutputItem::Message(_)
             | OutputItem::FunctionCall(_)
             | OutputItem::ToolSearchCall(_)
@@ -588,6 +682,18 @@ pub(super) async fn emit_gateway_completed_events<'a, T: GatewayPublicOutputSour
             | OutputItem::Unknown => continue,
         };
         let item = output_item_value(public_output)?;
+        if let OutputItem::CodeInterpreterCall(code_interpreter_call) = public_output {
+            emit_code_interpreter_event(
+                &CodeInterpreterCallStreamEvent::Completed {
+                    item_id: code_interpreter_call.id.clone(),
+                    output_index,
+                    sequence_number: stream_accumulator.upcoming_sequence_number(),
+                },
+                stream_accumulator,
+                stream_sender,
+            )
+            .await?;
+        }
         if let Some((event_type, item_id)) = completed_event {
             let mut completed_fields = serde_json::Map::from_iter([
                 ("item_id".to_owned(), serde_json::json!(item_id)),
@@ -681,7 +787,10 @@ mod tests {
     use super::GatewayCallResult;
     use crate::executor::accumulator::ResponseAccumulator;
     use crate::types::io::output::{FunctionToolCall, McpListTool, McpListTools};
-    use crate::types::io::{CompactionItem, InputItem, McpCallStatus};
+    use crate::types::io::{
+        CodeInterpreterCall, CodeInterpreterCallOutput, CodeInterpreterCallStatus, CompactionItem, InputItem,
+        McpCallStatus,
+    };
     use tokio::sync::{Notify, Semaphore, mpsc};
 
     fn parse_named_sse_event(content: &str) -> Value {
@@ -1667,6 +1776,81 @@ mod tests {
             .finalize("test-model", None, None);
         assert_eq!(response.output.len(), 1);
         assert!(matches!(response.output[0], OutputItem::Compaction(_)));
+    }
+
+    #[tokio::test]
+    async fn code_interpreter_gateway_events_follow_openai_lifecycle() {
+        let mut plans = vec![super::GatewayEventPlan {
+            output_index: 4,
+            started_output: Some(OutputItem::CodeInterpreterCall(CodeInterpreterCall {
+                id: "ci_1".to_owned(),
+                container_id: "cntr_1".to_owned(),
+                code: "print(6 * 7)".to_owned(),
+                status: CodeInterpreterCallStatus::InProgress,
+                outputs: None,
+            })),
+            completed_output: None,
+            arguments: None,
+        }];
+        let final_item = OutputItem::CodeInterpreterCall(CodeInterpreterCall {
+            id: "ci_1".to_owned(),
+            container_id: "cntr_1".to_owned(),
+            code: "print(6 * 7)".to_owned(),
+            status: CodeInterpreterCallStatus::Completed,
+            outputs: Some(vec![CodeInterpreterCallOutput::logs("42\n".to_owned())]),
+        });
+        let (sender, mut receiver) = mpsc::channel(16);
+        let mut stream_accumulator = crate::executor::gateway_accumulator::GatewayStreamAccumulator::new();
+
+        super::emit_gateway_start_events(&plans, &mut stream_accumulator, &sender)
+            .await
+            .expect("start events");
+        super::complete_gateway_event_plans(&mut plans, std::slice::from_ref(&final_item));
+        super::emit_gateway_completed_events(
+            std::slice::from_ref(&final_item),
+            &plans,
+            &mut stream_accumulator,
+            &sender,
+        )
+        .await
+        .expect("completed events");
+
+        let events = std::iter::from_fn(|| receiver.try_recv().ok())
+            .map(|event| parse_named_sse_event(&event.content))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            events
+                .iter()
+                .map(|event| event["type"].as_str().expect("event type"))
+                .collect::<Vec<_>>(),
+            vec![
+                "response.output_item.added",
+                "response.code_interpreter_call.in_progress",
+                "response.code_interpreter_call_code.delta",
+                "response.code_interpreter_call_code.done",
+                "response.code_interpreter_call.interpreting",
+                "response.code_interpreter_call.completed",
+                "response.output_item.done",
+            ]
+        );
+        assert_eq!(
+            events
+                .iter()
+                .map(|event| event["sequence_number"].as_u64().expect("sequence number"))
+                .collect::<Vec<_>>(),
+            (0..7).collect::<Vec<_>>()
+        );
+        assert!(events.iter().all(|event| event["output_index"] == 4));
+        assert_eq!(events[0]["item"]["id"], "ci_1");
+        assert_eq!(events[0]["item"]["code"], "");
+        assert!(events[0]["item"]["outputs"].is_null());
+        assert_eq!(events[1]["item_id"], "ci_1");
+        assert_eq!(events[2]["delta"], "print(6 * 7)");
+        assert_eq!(events[3]["code"], "print(6 * 7)");
+        assert_eq!(events[5]["item_id"], "ci_1");
+        assert_eq!(events[6]["item"]["id"], "ci_1");
+        assert_eq!(events[6]["item"]["code"], "print(6 * 7)");
+        assert_eq!(events[6]["item"]["outputs"][0]["logs"], "42\n");
     }
 
     #[tokio::test]

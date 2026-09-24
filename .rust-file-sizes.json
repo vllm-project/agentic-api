@@ -16,6 +16,39 @@
     "crates/agentic-server/src/auth.rs": 799,
     "crates/agentic-server/src/handler/websocket/responses.rs": 841
   },
-  "exceptions": {},
+  "exceptions": {
+    "crates/agentic-server-core/src/config.rs": {
+      "limit": 582,
+      "reason": "Operator-owned code-interpreter limits and their cross-field validation extend the shared runtime configuration model."
+    },
+    "crates/agentic-server-core/src/events/types.rs": {
+      "limit": 518,
+      "reason": "Code-interpreter SSE lifecycle variants extend the shared exhaustive event and item type mappings."
+    },
+    "crates/agentic-server-core/src/executor/gateway.rs": {
+      "limit": 759,
+      "reason": "Gateway-owned code-interpreter calls use the existing tool loop and emit their public lifecycle there."
+    },
+    "crates/agentic-server-core/src/tool/code_interpreter.rs": {
+      "limit": 529,
+      "reason": "The dedicated Eryx executor keeps sandbox admission, cancellation, bounded output capture, and gateway execution lifecycle together."
+    },
+    "crates/agentic-server-core/src/tool/registry.rs": {
+      "limit": 541,
+      "reason": "The code interpreter follows the existing registry validation and executor registration flow."
+    },
+    "crates/agentic-server-core/src/types/io/output.rs": {
+      "limit": 1116,
+      "reason": "The shared output-item enum and exhaustive helpers include the typed code-interpreter output item."
+    },
+    "crates/agentic-server-core/src/types/tools/params.rs": {
+      "limit": 573,
+      "reason": "The shared tagged tool declaration includes the closed gateway code-interpreter contract and schema."
+    },
+    "crates/agentic-server/src/main.rs": {
+      "limit": 611,
+      "reason": "Server configuration applies documented environment precedence to code-interpreter resource limits."
+    }
+  },
   "generated": {}
 }

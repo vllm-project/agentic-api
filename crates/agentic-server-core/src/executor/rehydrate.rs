@@ -167,7 +167,11 @@ pub(crate) async fn rehydrate_with_continuation(
     exec_ctx: &ExecutionContext,
     continuation: Option<ResponseContinuation>,
 ) -> ExecutorResult<RequestContext> {
-    // Fail before storage work for new files; check again once history is resolved.
+    // Fail before storage work for explicitly declared tools and new content;
+    // check again once stored effective settings and history are resolved.
+    exec_ctx
+        .gateway_executors
+        .validate_declarations(request.tools.as_deref())?;
     validate_message_content(&request.input)?;
     let response_id = uuid7_str("resp_");
     // Persistence keeps the public items. Tool lowering belongs to the enriched
@@ -203,6 +207,9 @@ pub(crate) async fn rehydrate_with_continuation(
         ctx.enriched_request.input = ResponsesInput::Items(Vec::from(&ctx.original_request.input));
     }
 
+    exec_ctx
+        .gateway_executors
+        .validate_declarations(ctx.enriched_request.tools.as_deref())?;
     validate_message_content(&ctx.enriched_request.input)?;
     Ok(ctx)
 }

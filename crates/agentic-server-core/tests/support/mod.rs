@@ -556,6 +556,7 @@ pub fn output_text(payload: &ResponsePayload) -> String {
         .filter_map(|item| match item {
             OutputItem::Message(msg) => Some(msg.content.iter().map(|c| c.text.as_str()).collect::<String>()),
             OutputItem::FunctionCall(_)
+            | OutputItem::CodeInterpreterCall(_)
             | OutputItem::ToolSearchCall(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::ShellCall(_)

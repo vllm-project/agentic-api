@@ -217,6 +217,7 @@ turns:
 | `record_shell_cassettes.sh` | Four two-turn local-shell scenarios (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_mcp_cassettes.sh` | Native MCP counter tool discovery and calls (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_web_search_cassettes.sh` | Matching web-search calls (streaming + non-streaming) | gateway and OpenAI reference |
+| `record_code_interpreter_cassettes.sh` | One code-interpreter calculation; OpenAI blocking/SSE and gateway blocking/SSE/WebSocket | gateway and OpenAI reference |
 | `record_messages_tool_choice.py` | Forced `any` and named Messages searches followed by an automatic answer (JSON + SSE) | gateway's upstream traffic to vLLM |
 | `record_image_input_cassettes.sh` | Matching two-turn image-input conversations (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_dynamo_cassettes.sh` | Stateful two-turn and client-executed function tool call cassettes (streaming + non-streaming) | NVIDIA Dynamo frontend |
@@ -395,6 +396,50 @@ GATEWAY_URL=http://127.0.0.1:3099 \
 GATEWAY_MODEL=Qwen/Qwen3.6-35B-A3B-FP8 \
 bash crates/agentic-server-core/tests/cassettes/record_tool_search_cassettes.sh
 ```
+
+### Code interpreter (OpenAI reference and gateway)
+
+The recorder captures one deterministic calculation in exactly five profiles: OpenAI blocking and HTTP/SSE as the
+wire-contract reference, plus gateway blocking, HTTP/SSE, and Responses WebSocket. OpenAI receives its native
+`{"type":"code_interpreter","container":{"type":"auto"}}` declaration. The gateway receives the public
+`{"type":"code_interpreter","execution":"gateway"}` declaration and executes the generated Python in its local
+Eryx sandbox.
+
+The characterization test requires the OpenAI event names and lifecycle order, folds provider-dependent code-delta
+chunking, checks stable item IDs and output indexes, and rejects events after `response.output_item.done`. It also
+checks blocking/streaming transport parity and that the WebSocket messages exactly match the recorder's synthesized
+SSE. OpenAI currently returns `outputs: null` for the completed call; the gateway intentionally returns its local
+`logs` output containing `CODE_INTERPRETER_OK=385`.
+
+Start an embedded-code-interpreter gateway with a fresh database and the Eryx runtime artifact, then record the full
+matrix. Every selected recording is staged, checked for unmasked authorization data, and semantically validated
+before it replaces a checked-in cassette.
+
+```bash
+install -d -m 700 /tmp/agentic-api-code-interpreter
+
+ERYX_RUNTIME_CWASM=/path/to/runtime.cwasm \
+TMPDIR=/tmp/agentic-api-code-interpreter \
+AGENTIC_CODE_INTERPRETER_ENABLED=true \
+DATABASE_URL=sqlite:///tmp/agentic_api_code_interpreter_matrix.db \
+cargo run -p agentic-server --features embedded-code-interpreter -- \
+  --gateway-host 127.0.0.1 \
+  --gateway-port 3098 \
+  --llm-api-base http://127.0.0.1:8000 \
+  --skip-llm-ready-check
+```
+
+```bash
+OPENAI_API_KEY=sk-... \
+CODE_INTERPRETER_RECORD_SET=all \
+OPENAI_MODEL=gpt-5.6 \
+GATEWAY_URL=http://127.0.0.1:3098 \
+GATEWAY_MODEL=Qwen/Qwen3.6-35B-A3B \
+bash crates/agentic-server-core/tests/cassettes/record_code_interpreter_cassettes.sh
+```
+
+Use `CODE_INTERPRETER_RECORD_SET=openai-reference`, `gateway-nonstreaming`, `gateway-streaming`,
+`gateway-websocket`, or `gateway` to refresh only that part of an existing five-profile matrix.
 
 ### Web search (gateway and OpenAI)
 

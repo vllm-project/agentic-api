@@ -85,6 +85,65 @@ jobs:
       - name: Test agentic CLI end to end
         run: python3 scripts/tests/agentic-cli-e2e-test.py
 
+  embedded-code-interpreter:
+    name: Embedded code interpreter
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      ERYX_PRECOMPILE_INSTALL_ROOT: ${{ github.workspace }}/.ci/eryx-precompile
+      XDG_CACHE_HOME: ${{ github.workspace }}/.ci/eryx-cache
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: 1.98.1
+          components: clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-bin: false
+          cache-targets: false
+
+      - name: Cache Eryx precompiler
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v4
+        with:
+          path: ${{ env.ERYX_PRECOMPILE_INSTALL_ROOT }}
+          key: eryx-precompile-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Add Eryx precompiler to PATH
+        run: echo "${ERYX_PRECOMPILE_INSTALL_ROOT}/bin" >> "${GITHUB_PATH}"
+
+      - name: Test Eryx runtime setup script
+        run: bash scripts/tests/setup-eryx-runtime-test.sh
+
+      - name: Prepare Eryx runtime
+        run: ./scripts/setup-eryx-runtime.sh
+
+      - name: Create private Eryx temporary directory
+        run: install -d -m 700 "${RUNNER_TEMP}/eryx-tmp"
+
+      - name: Run feature-enabled clippy
+        env:
+          TMPDIR: ${{ runner.temp }}/eryx-tmp
+        run: |
+          cargo clippy -p agentic-server-core --all-targets --features embedded-code-interpreter -- -D warnings
+          cargo clippy -p agentic-server --all-targets --features embedded-code-interpreter -- -D warnings
+
+      - name: Run feature-enabled tests
+        env:
+          TMPDIR: ${{ runner.temp }}/eryx-tmp
+        run: |
+          cargo test -p agentic-server-core --lib --features embedded-code-interpreter
+          cargo test -p agentic-server-core --test code_interpreter_characterization_test --features embedded-code-interpreter
+          cargo test -p agentic-server --bin agentic-server --features embedded-code-interpreter code_interpreter
+
   postgres:
     runs-on: ubuntu-latest
     services:

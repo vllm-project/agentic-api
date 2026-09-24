@@ -1,17 +1,18 @@
 use std::collections::HashMap;
-use std::num::NonZeroUsize;
+use std::num::{NonZeroU64, NonZeroUsize};
 use std::time::Duration;
 
 use clap::{Args, Parser, Subcommand};
 
 use agentic_core::DatabaseBackend;
 use agentic_core::config::{
-    Config, DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS, DEFAULT_POSTGRES_ACQUIRE_TIMEOUT_SECONDS,
-    DEFAULT_POSTGRES_IDLE_TIMEOUT_SECONDS, DEFAULT_POSTGRES_LOCK_TIMEOUT_SECONDS, DEFAULT_POSTGRES_MAX_CONNECTIONS,
-    DEFAULT_POSTGRES_MAX_LIFETIME_SECONDS, DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS,
-    DEFAULT_POSTGRES_STATEMENT_TIMEOUT_SECONDS, DEFAULT_SQLITE_JOURNAL_SIZE_LIMIT_BYTES,
-    DEFAULT_SQLITE_MAX_CONNECTIONS, DEFAULT_SQLITE_MMAP_SIZE_BYTES, PostgresConfig, SqliteConfig, SqliteTempStore,
-    ToolRuntimeConfig, default_database_url, ensure_agentic_api_home, normalize_base_url,
+    CodeInterpreterRuntimeConfig, Config, DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS,
+    DEFAULT_POSTGRES_ACQUIRE_TIMEOUT_SECONDS, DEFAULT_POSTGRES_IDLE_TIMEOUT_SECONDS,
+    DEFAULT_POSTGRES_LOCK_TIMEOUT_SECONDS, DEFAULT_POSTGRES_MAX_CONNECTIONS, DEFAULT_POSTGRES_MAX_LIFETIME_SECONDS,
+    DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS, DEFAULT_POSTGRES_STATEMENT_TIMEOUT_SECONDS,
+    DEFAULT_SQLITE_JOURNAL_SIZE_LIMIT_BYTES, DEFAULT_SQLITE_MAX_CONNECTIONS, DEFAULT_SQLITE_MMAP_SIZE_BYTES,
+    PostgresConfig, SqliteConfig, SqliteTempStore, ToolRuntimeConfig, default_database_url, ensure_agentic_api_home,
+    normalize_base_url,
 };
 use agentic_core::error::Error;
 use agentic_server::app::DEFAULT_MAX_REQUEST_BODY_SIZE;
@@ -25,7 +26,9 @@ mod server;
 mod web_search_config;
 use responses_config::{generated_responses_file_config, resolve_responses_config};
 
-use config_file::{FileConfig, McpFileConfig, MessagesGatewayFileConfig, ServerFileConfig, ToolsFileConfig};
+use config_file::{
+    CodeInterpreterFileConfig, FileConfig, McpFileConfig, MessagesGatewayFileConfig, ServerFileConfig, ToolsFileConfig,
+};
 use server::GatewayOptions;
 use web_search_config::{generated_web_search_file_config, resolve_web_search_config};
 
@@ -178,6 +181,82 @@ fn parse_env_nonzero_usize_value(
     }
 }
 
+fn parse_env_nonzero_u64_value(
+    name: &str,
+    value: Result<String, std::env::VarError>,
+    default: NonZeroU64,
+) -> Result<NonZeroU64, Error> {
+    match value {
+        Ok(value) => value
+            .parse::<NonZeroU64>()
+            .map_err(|error| Error::Config(format!("{name} must be a positive integer: {error}"))),
+        Err(std::env::VarError::NotPresent) => Ok(default),
+        Err(error) => Err(Error::Config(format!("failed to read {name}: {error}"))),
+    }
+}
+
+fn parse_env_bool_value(name: &str, value: Result<String, std::env::VarError>, default: bool) -> Result<bool, Error> {
+    match value {
+        Ok(value) => match value.trim().to_ascii_lowercase().as_str() {
+            "true" | "1" => Ok(true),
+            "false" | "0" => Ok(false),
+            _ => Err(Error::Config(format!("{name} must be true, false, 1, or 0"))),
+        },
+        Err(std::env::VarError::NotPresent) => Ok(default),
+        Err(error) => Err(Error::Config(format!("failed to read {name}: {error}"))),
+    }
+}
+
+/// The process-environment inputs that can override code-interpreter settings.
+///
+/// Keeping the raw values together lets the configuration builder use the
+/// exact production precedence while tests exercise that path without changing
+/// process-global environment variables in parallel.
+struct CodeInterpreterEnvironmentValues {
+    enabled: Result<String, std::env::VarError>,
+    max_source_bytes: Result<String, std::env::VarError>,
+    execution_wall_time_seconds: Result<String, std::env::VarError>,
+    max_fuel: Result<String, std::env::VarError>,
+    max_guest_memory_bytes: Result<String, std::env::VarError>,
+    max_stdout_bytes: Result<String, std::env::VarError>,
+    max_stderr_bytes: Result<String, std::env::VarError>,
+    max_concurrent_guests: Result<String, std::env::VarError>,
+    max_aggregate_guest_memory_bytes: Result<String, std::env::VarError>,
+}
+
+impl CodeInterpreterEnvironmentValues {
+    fn from_process() -> Self {
+        Self {
+            enabled: std::env::var("AGENTIC_CODE_INTERPRETER_ENABLED"),
+            max_source_bytes: std::env::var("AGENTIC_CODE_INTERPRETER_MAX_SOURCE_BYTES"),
+            execution_wall_time_seconds: std::env::var("AGENTIC_CODE_INTERPRETER_EXECUTION_WALL_TIME_SECONDS"),
+            max_fuel: std::env::var("AGENTIC_CODE_INTERPRETER_MAX_FUEL"),
+            max_guest_memory_bytes: std::env::var("AGENTIC_CODE_INTERPRETER_MAX_GUEST_MEMORY_BYTES"),
+            max_stdout_bytes: std::env::var("AGENTIC_CODE_INTERPRETER_MAX_STDOUT_BYTES"),
+            max_stderr_bytes: std::env::var("AGENTIC_CODE_INTERPRETER_MAX_STDERR_BYTES"),
+            max_concurrent_guests: std::env::var("AGENTIC_CODE_INTERPRETER_MAX_CONCURRENT_GUESTS"),
+            max_aggregate_guest_memory_bytes: std::env::var(
+                "AGENTIC_CODE_INTERPRETER_MAX_AGGREGATE_GUEST_MEMORY_BYTES",
+            ),
+        }
+    }
+
+    #[cfg(test)]
+    fn not_present() -> Self {
+        Self {
+            enabled: Err(std::env::VarError::NotPresent),
+            max_source_bytes: Err(std::env::VarError::NotPresent),
+            execution_wall_time_seconds: Err(std::env::VarError::NotPresent),
+            max_fuel: Err(std::env::VarError::NotPresent),
+            max_guest_memory_bytes: Err(std::env::VarError::NotPresent),
+            max_stdout_bytes: Err(std::env::VarError::NotPresent),
+            max_stderr_bytes: Err(std::env::VarError::NotPresent),
+            max_concurrent_guests: Err(std::env::VarError::NotPresent),
+            max_aggregate_guest_memory_bytes: Err(std::env::VarError::NotPresent),
+        }
+    }
+}
+
 /// Resolves the request-size ceiling as CLI argument > environment variable >
 /// configuration file > default.
 ///
@@ -300,6 +379,59 @@ fn database_configs_from_env(database_url: &str) -> Result<(PostgresConfig, Sqli
     }
 }
 
+/// Resolve operator-owned code-interpreter limits with environment precedence,
+/// then config-file values, then disabled defaults. Availability still depends
+/// on the Cargo feature and successful embedded-runtime initialization.
+fn code_interpreter_config_from_operator_values(
+    file: &CodeInterpreterFileConfig,
+    values: CodeInterpreterEnvironmentValues,
+) -> Result<CodeInterpreterRuntimeConfig, Error> {
+    let defaults = file.with_defaults();
+    let config = CodeInterpreterRuntimeConfig {
+        enabled: parse_env_bool_value("AGENTIC_CODE_INTERPRETER_ENABLED", values.enabled, defaults.enabled)?,
+        max_source_bytes: parse_env_nonzero_usize_value(
+            "AGENTIC_CODE_INTERPRETER_MAX_SOURCE_BYTES",
+            values.max_source_bytes,
+            defaults.max_source_bytes,
+        )?,
+        execution_wall_time: parse_env_duration_value(
+            "AGENTIC_CODE_INTERPRETER_EXECUTION_WALL_TIME_SECONDS",
+            values.execution_wall_time_seconds,
+            defaults.execution_wall_time.as_secs(),
+        )?,
+        max_fuel: parse_env_nonzero_u64_value("AGENTIC_CODE_INTERPRETER_MAX_FUEL", values.max_fuel, defaults.max_fuel)?,
+        max_guest_memory_bytes: parse_env_nonzero_usize_value(
+            "AGENTIC_CODE_INTERPRETER_MAX_GUEST_MEMORY_BYTES",
+            values.max_guest_memory_bytes,
+            defaults.max_guest_memory_bytes,
+        )?,
+        max_stdout_bytes: parse_env_nonzero_usize_value(
+            "AGENTIC_CODE_INTERPRETER_MAX_STDOUT_BYTES",
+            values.max_stdout_bytes,
+            defaults.max_stdout_bytes,
+        )?,
+        max_stderr_bytes: parse_env_nonzero_usize_value(
+            "AGENTIC_CODE_INTERPRETER_MAX_STDERR_BYTES",
+            values.max_stderr_bytes,
+            defaults.max_stderr_bytes,
+        )?,
+        max_concurrent_guests: parse_env_nonzero_usize_value(
+            "AGENTIC_CODE_INTERPRETER_MAX_CONCURRENT_GUESTS",
+            values.max_concurrent_guests,
+            defaults.max_concurrent_guests,
+        )?,
+        max_aggregate_guest_memory_bytes: parse_env_nonzero_usize_value(
+            "AGENTIC_CODE_INTERPRETER_MAX_AGGREGATE_GUEST_MEMORY_BYTES",
+            values.max_aggregate_guest_memory_bytes,
+            defaults.max_aggregate_guest_memory_bytes,
+        )?,
+    };
+    config
+        .validate()
+        .map_err(|error| Error::Config(format!("invalid code interpreter configuration: {error}")))?;
+    Ok(config)
+}
+
 fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) -> Result<Config, Error> {
     let db_url = common
         .db_url
@@ -318,6 +450,10 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
         "AGENTIC_MAX_CONCURRENT_GATEWAY_CALLS",
         max_concurrent_gateway_calls_default,
     )?;
+    let code_interpreter = code_interpreter_config_from_operator_values(
+        &file.code_interpreter,
+        CodeInterpreterEnvironmentValues::from_process(),
+    )?;
     let responses_config = resolve_responses_config(&file.responses)?;
     Ok(Config {
         llm_api_base,
@@ -333,6 +469,7 @@ fn build_config(llm_api_base: String, common: &CommonArgs, file: &FileConfig) ->
             mcp_servers: file.mcp_servers.clone(),
             mcp_allowed_hosts,
             messages_gateway_tool_aliases: file.messages_gateway.tool_aliases.clone(),
+            code_interpreter,
             max_concurrent_gateway_calls,
         },
         responses: responses_config,
@@ -372,6 +509,7 @@ fn generated_file_config(llm_api_base: String) -> FileConfig {
             max_concurrent_gateway_calls: environment_value("AGENTIC_MAX_CONCURRENT_GATEWAY_CALLS")
                 .and_then(|value| value.parse::<NonZeroUsize>().ok()),
         },
+        code_interpreter: CodeInterpreterFileConfig::default(),
         messages_gateway: MessagesGatewayFileConfig {
             tool_aliases: environment_value("MESSAGES_GATEWAY_TOOL_ALIASES"),
         },
@@ -487,15 +625,17 @@ async fn run(cli: Cli) -> Result<(), server::ServerError> {
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZeroUsize;
+    use std::num::{NonZeroU64, NonZeroUsize};
     use std::time::Duration;
 
     use clap::{CommandFactory, Parser};
 
+    use super::config_file::FileConfig;
     use super::{
-        Cli, Commands, database_configs_from_env, oidc_config_from_values, parse_env_duration_value,
-        parse_env_nonzero_usize_value, parse_env_optional_duration_value, parse_env_temp_store_value,
-        parse_env_u32_value, parse_env_u64_value, resolve_max_request_body_size_value,
+        Cli, CodeInterpreterEnvironmentValues, Commands, code_interpreter_config_from_operator_values,
+        database_configs_from_env, oidc_config_from_values, parse_env_bool_value, parse_env_duration_value,
+        parse_env_nonzero_u64_value, parse_env_nonzero_usize_value, parse_env_optional_duration_value,
+        parse_env_temp_store_value, parse_env_u32_value, parse_env_u64_value, resolve_max_request_body_size_value,
     };
     use agentic_core::config::{
         DEFAULT_POSTGRES_ACQUIRE_TIMEOUT_SECONDS, DEFAULT_POSTGRES_IDLE_TIMEOUT_SECONDS,
@@ -677,6 +817,65 @@ mod tests {
         assert!(
             parse_env_nonzero_usize_value("AGENTIC_MAX_CONCURRENT_GATEWAY_CALLS", Ok("0".to_owned()), default,)
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn code_interpreter_environment_parsers_are_strict_and_default_disabled() {
+        assert!(
+            !parse_env_bool_value(
+                "AGENTIC_CODE_INTERPRETER_ENABLED",
+                Err(std::env::VarError::NotPresent),
+                false,
+            )
+            .expect("missing enablement uses the disabled default")
+        );
+        assert!(
+            parse_env_bool_value("AGENTIC_CODE_INTERPRETER_ENABLED", Ok("true".to_owned()), false,)
+                .expect("true is accepted")
+        );
+        assert!(
+            parse_env_bool_value(
+                "AGENTIC_CODE_INTERPRETER_ENABLED",
+                Ok("not-a-boolean".to_owned()),
+                false,
+            )
+            .is_err()
+        );
+
+        let default_fuel = NonZeroU64::new(10).expect("nonzero test default");
+        assert_eq!(
+            parse_env_nonzero_u64_value("AGENTIC_CODE_INTERPRETER_MAX_FUEL", Ok("25".to_owned()), default_fuel,)
+                .expect("positive fuel limit"),
+            NonZeroU64::new(25).expect("nonzero test value")
+        );
+        assert!(
+            parse_env_nonzero_u64_value("AGENTIC_CODE_INTERPRETER_MAX_FUEL", Ok("0".to_owned()), default_fuel,)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn code_interpreter_operator_config_prefers_environment_over_file() {
+        let file: FileConfig = toml::from_str(concat!(
+            "[code_interpreter]\n",
+            "enabled = false\n",
+            "max_source_bytes = 313\n",
+            "max_stdout_bytes = 64\n"
+        ))
+        .expect("valid code-interpreter file configuration");
+        let mut environment = CodeInterpreterEnvironmentValues::not_present();
+        environment.enabled = Ok("true".to_owned());
+        environment.max_stdout_bytes = Ok("512".to_owned());
+        let config = code_interpreter_config_from_operator_values(&file.code_interpreter, environment)
+            .expect("valid operator configuration");
+
+        assert!(config.enabled, "environment overrides the file enablement");
+        assert_eq!(config.max_source_bytes.get(), 313, "file value is retained");
+        assert_eq!(
+            config.max_stdout_bytes.get(),
+            512,
+            "environment overrides the file output budget"
         );
     }
 

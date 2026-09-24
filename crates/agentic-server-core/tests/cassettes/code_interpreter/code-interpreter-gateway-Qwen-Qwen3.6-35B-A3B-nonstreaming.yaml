@@ -1,0 +1,157 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Use the python tool to calculate the sum of the squares of the integers
+        from 1 through 10. The code must print exactly CODE_INTERPRETER_OK=385. After
+        it runs, answer exactly CODE_INTERPRETER_OK=385.
+      max_output_tokens: 2048
+      model: Qwen/Qwen3.6-35B-A3B
+      parallel_tool_calls: false
+      store: false
+      stream: false
+      tool_choice: required
+      tools:
+      - execution: gateway
+        type: code_interpreter
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1790011225
+      error: null
+      id: resp_01a0c4fb-a1c9-7753-8042-c3d1bd60a862
+      incomplete_details: null
+      instructions: null
+      model: Qwen/Qwen3.6-35B-A3B
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to calculate the sum of the squares of integers
+            from 1 through 10 using the Python tool.
+
+            Then, I need to print "CODE_INTERPRETER_OK=385".
+
+            Finally, I need to answer "CODE_INTERPRETER_OK=385".
+
+
+            Let''s write a simple python code to calculate sum(i**2 for i in range(1,
+            11)).
+
+            And print the exact string.
+
+
+            Wait, the sum of squares from 1 to 10 is:
+
+            1^2 = 1
+
+            2^2 = 4
+
+            3^2 = 9
+
+            4^2 = 16
+
+            5^2 = 25
+
+            6^2 = 36
+
+            7^2 = 49
+
+            8^2 = 64
+
+            9^2 = 81
+
+            10^2 = 100
+
+
+            Sum = 1+4+9+16+25+36+49+64+81+100 = 385.
+
+
+            The prompt asks to "print exactly CODE_INTERPRETER_OK=385".
+
+            So in the python tool, I should print exactly "CODE_INTERPRETER_OK=385".
+
+
+            Let''s write the code.
+
+            ```python
+
+            result = sum(i**2 for i in range(1, 11))
+
+            print(f"CODE_INTERPRETER_OK={result}")
+
+            ```
+
+            Wait, the prompt says "The code must print exactly CODE_INTERPRETER_OK=385."
+
+            So I will print that string.
+
+            Then I will answer exactly "CODE_INTERPRETER_OK=385".
+
+            Let''s run the code.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0c4fb-aa31-7e31-b838-a9cc9421eca4
+        status: null
+        summary: []
+        type: reasoning
+      - code: 'result = sum(i**2 for i in range(1, 11))
+
+          print(f"CODE_INTERPRETER_OK={result}")'
+        container_id: cntr_fc_01a0c4fb-aa75-7243-a207-2d78ad79376f
+        id: fc_01a0c4fb-aa75-7243-a207-2d78ad79376f
+        outputs:
+        - logs: 'CODE_INTERPRETER_OK=385
+
+            '
+          type: logs
+        status: completed
+        type: code_interpreter_call
+      - content:
+        - text: "The code executed successfully and printed \"CODE_INTERPRETER_OK=385\"\
+            .\nNow I need to answer exactly \"CODE_INTERPRETER_OK=385\".\nThe instructions\
+            \ say: \"After it runs, answer exactly CODE_INTERPRETER_OK=385.\"\nI will\
+            \ just output that string.\nDone.\nI'll output the exact string as requested.\n\
+            Wait, let's double check. \"The code must print exactly CODE_INTERPRETER_OK=385.\
+            \ After it runs, answer exactly CODE_INTERPRETER_OK=385.\"\nOkay, I will\
+            \ just write \"CODE_INTERPRETER_OK=385\".\nNo extra text.\nDone. \nWait,\
+            \ I should check if there's any formatting requirement. Usually, just\
+            \ the exact string is fine.\nLet's just output it.\n"
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0c4fb-b707-7521-b00b-6e018f15e40b
+        status: null
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            CODE_INTERPRETER_OK=385'
+          type: output_text
+        id: msg_01a0c4fb-b71e-7353-8769-846c5fa56846
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: null
+      status: completed
+      usage:
+        input_tokens: 1180
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 606
+        output_tokens_details:
+          reasoning_tokens: 536
+        total_tokens: 1786
+    headers:
+      content-type: application/json
+    status_code: 200

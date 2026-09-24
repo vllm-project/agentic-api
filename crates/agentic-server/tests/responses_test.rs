@@ -754,6 +754,72 @@ async fn test_store_false_proxies_json_to_vllm() {
     assert_eq!(body["id"], "mock_id");
 }
 
+#[cfg(not(feature = "embedded-code-interpreter"))]
+#[tokio::test]
+async fn code_interpreter_disabled_rejects_before_http_upstream_inference() {
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
+    let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+
+    let response = reqwest::Client::new()
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "input": "test input",
+            "store": false,
+            "tools": [{"type": "code_interpreter", "execution": "gateway"}]
+        }))
+        .send()
+        .await
+        .expect("gateway response");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body: serde_json::Value = response.json().await.expect("error response JSON");
+    assert_eq!(body["error"]["type"], "invalid_request_error");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("code_interpreter is disabled"))
+    );
+    assert!(
+        requests.lock().await.is_empty(),
+        "the upstream mock must receive no requests"
+    );
+}
+
+#[tokio::test]
+async fn code_interpreter_name_collision_fails_before_inference() {
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
+    let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+
+    let response = reqwest::Client::new()
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "input": "test input",
+            "store": false,
+            "tools": [
+                {"type": "function", "name": "code_interpreter"},
+                {"type": "code_interpreter", "execution": "gateway"}
+            ]
+        }))
+        .send()
+        .await
+        .expect("gateway response");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body: serde_json::Value = response.json().await.expect("error response JSON");
+    assert_eq!(body["error"]["type"], "invalid_request_error");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("fixed model-visible tool name 'code_interpreter'"))
+    );
+    assert!(
+        requests.lock().await.is_empty(),
+        "a fixed-name collision must not contact upstream inference"
+    );
+}
+
 /// Regression test for vllm-project/agentic-api#150: a structured message
 /// input item omitting the `"type": "message"` discriminant must still be
 /// accepted by the endpoint, not rejected as an untagged-enum mismatch.

@@ -10,6 +10,7 @@ use crate::types::tools::{ToolSearchExecution, ToolSearchStatus};
 use crate::utils::common::deserialize_from_value_opt;
 use crate::utils::uuid7_str;
 
+use super::code_interpreter::CodeInterpreterCall;
 use super::input::{
     CompactionItem, InputContent, InputFunctionToolCall, InputItem, InputMessage, InputMessageContent,
     InputTextContent, InputToolSearchCall, deserialize_non_blank_string,
@@ -988,6 +989,8 @@ pub enum OutputItem {
     Message(OutputMessage),
     #[serde(rename = "function_call")]
     FunctionCall(FunctionToolCall),
+    #[serde(rename = "code_interpreter_call")]
+    CodeInterpreterCall(CodeInterpreterCall),
     #[serde(rename = "tool_search_call")]
     ToolSearchCall(ToolSearchCall),
     #[serde(rename = "custom_tool_call")]
@@ -1034,6 +1037,7 @@ impl utoipa::PartialSchema for OutputItem {
             .discriminator(Some(utoipa::openapi::schema::Discriminator::new("type")))
             .item(tagged("message", "OutputMessage"))
             .item(tagged("function_call", "FunctionToolCall"))
+            .item(tagged("code_interpreter_call", "CodeInterpreterCall"))
             .item(tagged("tool_search_call", "ToolSearchCall"))
             .item(tagged("custom_tool_call", "CustomToolCall"))
             .item(tagged("shell_call", "ShellCall"))
@@ -1059,6 +1063,7 @@ impl OutputItem {
         match self {
             Self::Message(item) => Some(&item.id),
             Self::FunctionCall(item) => Some(&item.id),
+            Self::CodeInterpreterCall(item) => Some(&item.id),
             Self::ToolSearchCall(item) => Some(&item.id),
             Self::CustomToolCall(item) => Some(&item.id),
             Self::ShellCall(item) => item.id.as_deref(),
@@ -1079,6 +1084,7 @@ impl OutputItem {
                 .is_none_or(|entry| !entry.ownership.is_gateway()),
             Self::ToolSearchCall(_) | Self::CustomToolCall(_) | Self::ShellCall(_) => true,
             Self::Message(_)
+            | Self::CodeInterpreterCall(_)
             | Self::WebSearchCall(_)
             | Self::McpCall(_)
             | Self::McpListTools(_)
@@ -1103,7 +1109,7 @@ impl OutputItem {
             Self::ShellCall(call) => Some(InputItem::FunctionCall(call.clone().into())),
             Self::McpListTools(list_tools) => Some(InputItem::McpListTools(list_tools.clone())),
             Self::Compaction(item) => Some(InputItem::Compaction(item.clone())),
-            Self::WebSearchCall(_) | Self::McpCall(_) | Self::Unknown => None,
+            Self::CodeInterpreterCall(_) | Self::WebSearchCall(_) | Self::McpCall(_) | Self::Unknown => None,
         }
     }
 }

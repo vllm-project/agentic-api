@@ -101,6 +101,11 @@ fn extract_payload(event_type: SSEEventType, json: &Value) -> EventPayload {
         | SSEEventType::WebSearchCallInProgress
         | SSEEventType::WebSearchCallSearching
         | SSEEventType::WebSearchCallCompleted
+        | SSEEventType::CodeInterpreterCallInProgress
+        | SSEEventType::CodeInterpreterCallCodeDelta
+        | SSEEventType::CodeInterpreterCallCodeDone
+        | SSEEventType::CodeInterpreterCallInterpreting
+        | SSEEventType::CodeInterpreterCallCompleted
         | SSEEventType::McpCallInProgress
         | SSEEventType::McpCallArgumentsDelta
         | SSEEventType::McpCallArgumentsDone

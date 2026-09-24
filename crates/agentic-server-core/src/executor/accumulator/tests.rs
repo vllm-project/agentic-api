@@ -145,6 +145,34 @@ fn lifecycle_accumulator(strict: bool) -> ResponseAccumulator {
 }
 
 #[test]
+fn done_only_code_interpreter_call_accumulates_in_lenient_stream() {
+    use serde_json::json;
+
+    let done = json!({
+        "type": "code_interpreter_call",
+        "id": "ci_1",
+        "container_id": "cntr_1",
+        "code": "print(42)",
+        "status": "completed",
+        "outputs": [{"type": "logs", "logs": "42\n"}]
+    });
+    let acc = from_sse_lines(
+        [
+            json!({"type": "response.output_item.done", "output_index": 0, "item": done.clone()}),
+            json!({"type": "response.completed", "response": {"id": "resp_1", "status": "completed"}}),
+        ]
+        .into_iter()
+        .map(|event| format!("data: {event}")),
+        None,
+    );
+
+    assert_eq!(
+        serde_json::to_value(acc.output).expect("serialize output"),
+        json!([done])
+    );
+}
+
+#[test]
 fn completed_slots_cannot_be_reopened_by_id_or_index() {
     use serde_json::json;
 

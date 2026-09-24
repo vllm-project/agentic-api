@@ -49,6 +49,14 @@ impl GatewayStreamAccumulator {
         self.process_event(&mut frame, output_offset).then_some(frame)
     }
 
+    /// Sequence number that the next successfully enqueued event will receive.
+    ///
+    /// Typed gateway event construction may use this value, but
+    /// [`Self::process_event`] remains the authority that stamps and advances it.
+    pub(crate) const fn upcoming_sequence_number(&self) -> u64 {
+        self.next_sequence_number
+    }
+
     #[must_use]
     pub fn process_event(&mut self, frame: &mut EventFrame, output_offset: usize) -> bool {
         if !self.should_emit_lifecycle(frame.event_type) {

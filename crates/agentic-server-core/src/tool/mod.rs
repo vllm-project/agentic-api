@@ -3,6 +3,7 @@
 //! Wire format types (`ResponsesTool`, param structs) live in [`crate::types::tools`].
 //! This module owns the behavioral layer: routing, handler interface, and normalization.
 
+pub mod code_interpreter;
 pub mod codex;
 pub mod custom;
 pub mod executors;
@@ -16,6 +17,7 @@ pub mod shell;
 pub mod tool_search;
 pub mod web_search;
 
+pub use code_interpreter::CodeInterpreterHandler;
 pub use codex::{CodexNamespaceHandler, NamespaceMap, model_visible_namespace_member_name};
 pub use custom::CustomHandler;
 pub use executors::{GatewayExecutorRegistration, GatewayExecutors};

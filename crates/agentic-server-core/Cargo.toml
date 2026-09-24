@@ -17,9 +17,14 @@ name = "agentic_core"
 [features]
 default = []
 openapi = ["dep:utoipa"]
+# Opt-in embedded Eryx runtime. It is additionally operator-gated at startup;
+# default builds retain no Eryx dependency or code-interpreter registration.
+embedded-code-interpreter = ["dep:async-trait", "dep:eryx"]
 
 [dependencies]
 utoipa = { workspace = true, optional = true }
+async-trait = { workspace = true, optional = true }
+eryx = { workspace = true, optional = true }
 
 async-stream.workspace = true
 bytes.workspace = true
