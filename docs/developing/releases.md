@@ -23,7 +23,8 @@ Container releases build the release tag. Manual container runs select their sou
   repository permission. Repository Actions settings and branch/tag rules must allow the workflow to create its
   release branch, PR, tag, and GitHub release.
 - **crates.io:** configure the repository Actions secret `CARGO_REGISTRY_TOKEN` with a crates.io token authorized to
-  publish `agentic-server-core` and `agentic-server`. Publishing uses this token; a dry run does not upload packages.
+  publish `vllm-responses`, `agentic-server-core`, and `agentic-server`. Publishing uses this token; a dry run does
+  not upload packages.
 - **PyPI:** configure a [Trusted Publisher](https://docs.pypi.org/trusted-publishers/adding-a-publisher/) on the
   `agentic-api` project with owner `vllm-project`, repository `agentic-api`, workflow filename `release-python.yml`,
   and environment `pypi`. The GitHub environment must also be named `pypi`; complete any configured environment
@@ -88,9 +89,8 @@ gh workflow run release-python.yml --ref main -F publish=false
 ```
 
 The crates dry run checks versions, unused release refs, registry availability, lockfile consistency, formatting,
-Clippy, and tests. It dry-runs publication of core and packages the server with a local core override and
-`--no-verify`, because the new core version is not in the registry yet. It does not prove registry authentication or
-perform a full server publication rehearsal against the registry.
+Clippy, and tests. It dry-runs publication of `vllm-responses`, then core with a local `vllm-responses` override, and
+then server with local core and `vllm-responses` overrides. It does not prove registry authentication.
 
 Python validation builds these exact wheel variants, installs each wheel, and runs the Python tests and wheel checks:
 
@@ -111,10 +111,11 @@ for rendering errors too, run `uvx --from twine twine check --strict /path/to/wh
 ## 3. Trigger the publishing workflows
 
 After validation, use **Actions → Release crates → Run workflow** on `main`, enter the same version, and **uncheck
-`dry_run`**. The workflow publishes core, waits for it to appear in the crates.io index, publishes the server, creates
-`v<VERSION>` and its GitHub release, then calls the container and website workflows. The container job builds that
+`dry_run`**. The workflow publishes `vllm-responses`, waits for it to appear in the crates.io index, publishes core,
+waits for core, then publishes the server, creates `v<VERSION>` and its GitHub release, and calls the container and
+website workflows. The container job builds that
 Git tag and pushes `DOCKERHUB_IMAGE:v<VERSION>`; it does not add a `latest` tag. Rust publication currently includes
-only `agentic-server-core` and `agentic-server`.
+`vllm-responses`, `agentic-server-core`, and `agentic-server`.
 
 The explicit reusable container call is required because a release created with `GITHUB_TOKEN` does not trigger
 another release-event workflow. Separately published GitHub releases can trigger the container workflow directly.
@@ -140,7 +141,7 @@ completed publication.
 
 A green build job alone is not a release. Check the publishing job and the registry contents:
 
-- Both crates are available at the intended version, and the `v<VERSION>` tag/GitHub release point to the expected SHA.
+- All three crates are available at the intended version, and the `v<VERSION>` tag/GitHub release point to the expected SHA.
 - The PyPI version has all three wheels listed above and the expected project description and links.
 - The container publishing job succeeded and the expected Docker Hub tag exists. Pull it and inspect the
   `org.opencontainers.image.revision` and `org.opencontainers.image.version` labels against the intended SHA and

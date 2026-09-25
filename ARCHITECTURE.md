@@ -616,12 +616,13 @@ merge the concrete item with its retained fields and buffers. `slot.rs` dispatch
 to those implementations after validating identity and lifecycle. Finalization
 promotes each completed typed item once and preserves validated output-index order.
 
-The pipeline's streaming entry is `process_line(ClassifiedSseLine)`. It normalizes and
-validates a data line, applies the event to the slot keyed by its validated output
-index, and returns at most one validated `EventFrame` for translation. For function
-events, `accumulated_function_call(output_index)` exposes a borrowed typed call and its
-folded arguments. `finish` applies SSE end-of-stream policy; `finalize` preserves the
-status loaded from a complete JSON body.
+The pipeline's HTTP/SSE streaming entry is `process_line(ClassifiedSseLine)` in
+`source.rs`; native adapters enter through `process_inference_event(InferenceEvent)`
+in `native.rs`. Both paths materialize the same internal frame and apply the same
+strict lifecycle validation before translation. For function events,
+`accumulated_function_call(output_index)` exposes a borrowed typed call and its folded
+arguments. `finish` applies SSE end-of-stream policy; `finalize` preserves the status
+loaded from a complete JSON body.
 
 When adding an output-item kind, extend its typed construction and completion logic in
 `types/io/output.rs`, the variants and exhaustive dispatch in `accumulator/active.rs`,

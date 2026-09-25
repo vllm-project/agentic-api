@@ -68,14 +68,17 @@ jobs:
             | jq -r '.packages[] | select(.name == "agentic-server-core") | .version')"
           server_version="$(cargo metadata --locked --format-version 1 --no-deps \
             | jq -r '.packages[] | select(.name == "agentic-server") | .version')"
+          responses_version="$(cargo metadata --locked --format-version 1 --no-deps \
+            | jq -r '.packages[] | select(.name == "vllm-responses") | .version')"
 
-          if [ -z "$core_version" ] || [ "$core_version" = "null" ]; then
-            echo "::error::agentic-server-core package not found in workspace metadata"
+          if [ -z "$core_version" ] || [ "$core_version" = "null" ] \
+            || [ -z "$responses_version" ] || [ "$responses_version" = "null" ]; then
+            echo "::error::release package not found in workspace metadata"
             exit 1
           fi
 
-          if [ "$core_version" != "$server_version" ]; then
-            echo "::error::agentic-server-core ($core_version) and agentic-server ($server_version) versions differ"
+          if [ "$core_version" != "$server_version" ] || [ "$core_version" != "$responses_version" ]; then
+            echo "::error::release package versions differ"
             exit 1
           fi
 
@@ -113,7 +116,7 @@ jobs:
           AGENTIC_RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          for crate in agentic-server-core agentic-server; do
+          for crate in vllm-responses agentic-server-core agentic-server; do
             status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
               --user-agent 'agentic-api-release (https://github.com/vllm-project/agentic-api)' \
               --connect-timeout 10 --max-time 30 \
@@ -159,12 +162,40 @@ jobs:
         if: inputs.dry_run
         run: |
           set -euo pipefail
-          cargo publish --dry-run --locked -p agentic-server-core
-          cargo package --no-verify --locked -p agentic-server \
-            --config 'patch.crates-io.agentic-server-core.path="crates/agentic-server-core"'
+          cargo publish --dry-run --locked -p vllm-responses
+          cargo publish --dry-run --locked -p agentic-server-core \
+            --config 'patch.crates-io.vllm-responses.path="crates/vllm-responses"'
+          cargo publish --dry-run --locked -p agentic-server \
+            --config 'patch.crates-io.agentic-server-core.path="crates/agentic-server-core"' \
+            --config 'patch.crates-io.vllm-responses.path="crates/vllm-responses"'
           echo "Would release commit ${{ steps.target.outputs.sha }}"
           echo "Would create tag ${{ steps.version.outputs.tag }}"
           echo "Would create GitHub release ${{ steps.version.outputs.tag }} with generated notes"
+
+      - name: Publish vllm-responses
+        if: ${{ !inputs.dry_run }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked -p vllm-responses
+
+      - name: Wait for vllm-responses index
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+
+          for attempt in {1..30}; do
+            if cargo info "vllm-responses@$version" >/dev/null 2>&1; then
+              echo "vllm-responses $version is available in crates.io index"
+              exit 0
+            fi
+
+            echo "Waiting for crates.io index to expose vllm-responses $version (attempt $attempt/30)"
+            sleep 10
+          done
+
+          echo "::error::vllm-responses $version was not visible in crates.io index in time"
+          exit 1
 
       - name: Publish agentic-server-core
         if: ${{ !inputs.dry_run }}
