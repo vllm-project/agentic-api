@@ -197,7 +197,7 @@ impl WsMultiplexer {
             self.sessions.insert(lane.clone(), Arc::new(session));
         }
         if let WsWorkItem::Execute { request, .. } = &mut work {
-            request.execution = Some(telemetry::QueuedExecution::new());
+            request.execution = Some(telemetry::QueuedExecution::new(&self.state));
         }
         self.byte_budget.reserve(work.input_bytes());
         if let Some(queue) = self.lanes.get_mut(&lane) {
@@ -660,7 +660,7 @@ async fn handle_ws_request(
         generate,
         execution,
     } = request;
-    let mut execution = execution.unwrap_or_else(telemetry::QueuedExecution::new).dispatch();
+    let mut execution = telemetry::dispatch(execution, state);
 
     if generate == Some(false) {
         debug!("handling non-generating websocket request locally");

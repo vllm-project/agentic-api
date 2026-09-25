@@ -2,8 +2,7 @@
   "version": 1,
   "baseline": {
     "crates/agentic-server-core/src/executor/accumulator/mod.rs": 666,
-    "crates/agentic-server-core/src/executor/engine.rs": 522,
-    "crates/agentic-server-core/src/executor/gateway.rs": 612,
+    "crates/agentic-server-core/src/executor/gateway.rs": 611,
     "crates/agentic-server-core/src/executor/session.rs": 508,
     "crates/agentic-server-core/src/tool/registry.rs": 515,
     "crates/agentic-server-core/src/tool/tool_search.rs": 1764,

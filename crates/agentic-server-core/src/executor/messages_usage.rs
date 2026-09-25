@@ -55,6 +55,18 @@ impl MessagesUsageTotals {
         }
     }
 
+    /// The current round's prompt and completion token counts, for metrics.
+    /// The prompt count includes cache reads and writes, which Anthropic
+    /// reports apart from `input_tokens`; a count no counter reported is `None`.
+    pub(super) fn round_tokens(&self) -> (Option<u64>, Option<u64>) {
+        let [input, output, cache_creation, cache_read] = self.round;
+        let prompt = [input, cache_creation, cache_read]
+            .into_iter()
+            .flatten()
+            .reduce(u64::saturating_add);
+        (prompt, output)
+    }
+
     /// Add the current round to the totals and start the next one.
     pub(super) fn commit(&mut self) {
         for (total, value) in self.committed.iter_mut().zip(std::mem::take(&mut self.round)) {

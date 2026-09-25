@@ -12,6 +12,7 @@ pub mod http;
 mod lifecycle;
 pub(crate) mod proxy;
 mod subscriber;
+pub mod websocket;
 
 pub use config::{ExporterSelection, OtlpCompression, OtlpProtocol, TelemetryConfig, TelemetryConfigError};
 pub use lifecycle::{DEFAULT_SHUTDOWN_TIMEOUT, InstrumentationHandles, Signal, TelemetryError, TelemetryGuard};

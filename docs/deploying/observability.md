@@ -6,9 +6,10 @@ selected the gateway creates no provider, exporter thread, or network
 connection, and only prints local logs as before.
 
 This page covers HTTP and execution traces, upstream context propagation,
-standard HTTP request metrics, trace-correlated local logs, and the export
-lifecycle from [#279](https://github.com/vllm-project/agentic-api/issues/279).
-Gateway-specific metrics remain a later phase.
+HTTP, execution, stage, token, timing, delivery, and WebSocket metrics,
+trace-correlated local logs, the export lifecycle, a local Collector setup,
+and measured overhead, from
+[#279](https://github.com/vllm-project/agentic-api/issues/279).
 
 ## Enable export
 
@@ -221,6 +222,16 @@ trace context are separate from this application-attribute contract.
 
 ### Metrics
 
+Metrics are recorded by the same guards that finalize the spans above, so each
+is recorded exactly once on every terminal path — completion, upstream failure,
+client disconnect, and requests abandoned at shutdown — and **regardless of
+the trace sampling decision**: an unsampled request is still counted. Every
+attribute is one of the enumerated values below or a boolean. Instruments come
+from two instrumentation scopes: `agentic_server` (HTTP and WebSocket
+transport) and `agentic_core` (execution).
+
+#### HTTP
+
 | Instrument | Type | Attributes |
 | --- | --- | --- |
 | `http.server.request.duration` (seconds) | histogram | `http.request.method`, `http.route`, `http.response.status_code`, `url.scheme` |
@@ -230,8 +241,114 @@ Duration boundaries are the semantic-convention set extended with `30`, `60`,
 `120`, and `300` seconds because streamed inference responses routinely run
 for minutes. Both instruments are recorded exactly once per request from a
 guard attached to the response body, so a disconnecting client cannot leave
-the active-request count drifting. Metrics are recorded regardless of the
-trace sampling decision.
+the active-request count drifting.
+
+#### Executions
+
+One execution is one `agentic.execute` span: an HTTP request the executor or
+raw proxy handles, or one WebSocket `response.create`.
+
+| Instrument | Type | Unit | Attributes |
+| --- | --- | --- | --- |
+| `agentic.execution.count` | counter | `{execution}` | `agentic.api`, `agentic.route`, `agentic.stream`, `agentic.execution.outcome`, and `error.type` when the outcome is `failed` |
+| `agentic.execution.duration` | histogram | `s` | Same as `agentic.execution.count` |
+| `agentic.execution.active` | up-down counter | `{execution}` | `agentic.api`, `agentic.route`, `agentic.stream` |
+| `agentic.delivery.count` | counter | `{execution}` | `agentic.api`, `agentic.route`, `agentic.stream`, `agentic.delivery.outcome` |
+
+Attribute values are the span's: see [Execution span](#execution-span).
+An execution becomes active when the gateway accepts it — for WebSocket, when
+the request is admitted to its connection's queue — and is finalized when its
+span closes. At that moment the count, duration, and delivery outcome are
+recorded once and the active count is released. Duration runs from acceptance
+to finalization, so for a stream it includes client delivery.
+
+#### Stages, rounds, and tokens
+
+| Instrument | Type | Unit | Attributes |
+| --- | --- | --- | --- |
+| `agentic.stage.duration` | histogram | `s` | `agentic.stage`: `rehydrate`, `inference`, `tool`, `compaction`, or `persist`; `agentic.tool.type` on `tool` samples; `error.type` when the stage failed (a category from the list above) or `cancelled` when it was dropped unfinished |
+| `agentic.inference.rounds` | histogram | `{round}` | `agentic.api` |
+| `gen_ai.client.token.usage` | histogram | `{token}` | `gen_ai.operation.name`: `chat`; `gen_ai.token.type`: `input` or `output`; `agentic.api` |
+
+- An `inference` sample is one upstream round: sending the request and, for a
+  streamed round, reading its whole body. `persist` is recorded only when the
+  request asked for storage. `tool` covers gateway-executed built-in tools in
+  the Responses executor, one sample per tool call. Gateway-executed built-in
+  tools in the Messages loop are not timed yet.
+- `agentic.inference.rounds` is recorded once per execution, however the loop
+  ended, when at least one round started.
+- `gen_ai.client.token.usage` records one sample per token type for each
+  upstream call, from that call's own `usage` (compaction summaries
+  included), never from turn totals. When the upstream omits `usage` or a
+  count, nothing is recorded — the gateway never substitutes zero. For the
+  Messages API the input count adds `cache_creation_input_tokens` and
+  `cache_read_input_tokens` to `input_tokens`.
+- `gen_ai.request.model`, `gen_ai.response.model`, and `gen_ai.provider.name`
+  are deliberately absent: model names are not a bounded dimension for a
+  gateway, and the gateway cannot know which provider serves its upstream.
+- Explicit `/v1/responses/compact` requests record their stage and token
+  samples but no execution, as they have no `agentic.execute` span.
+
+#### First-data timings
+
+These describe streamed executor responses only; non-streaming requests and
+the raw proxy route record none of them. Each is measured from the moment the
+gateway accepted the execution, recorded at most once per execution, and
+carries only `agentic.api`. None of them is labelled time to first token,
+because they measure different boundaries:
+
+| Instrument (seconds, histogram) | Stops when |
+| --- | --- |
+| `agentic.time_to_first_upstream_data` | The first SSE line of the upstream response reaches the executor pipeline. |
+| `agentic.time_to_first_client_event` | The executor's client-facing stream yields the first semantic event of the response, such as `response.created` or `message_start`, to the transport. An executor error frame is not a response event. |
+| `agentic.time_to_first_text` | The executor's client-facing stream yields the first output-text delta (`response.output_text.delta`, or a Messages `text_delta`) to the transport. Reasoning and tool-call deltas do not count. |
+
+For a plain text response every client event derives from upstream data, so
+`first_upstream_data ≤ first_client_event ≤ first_text`. Gateway-generated
+events, such as MCP tool discovery, can reach the client before any upstream
+data.
+
+#### Delivery and WebSocket
+
+| Instrument | Type | Unit | Recorded |
+| --- | --- | --- | --- |
+| `agentic.delivery.wait.duration` | histogram | `s` | Once per streamed execution that handed over at least one frame: the total time the transport took to ask for the next frame after taking one. This is how long a slow client — a full socket buffer or WebSocket send queue — held the execution back. Attribute: `agentic.api`. |
+| `agentic.websocket.connections.active` | up-down counter | `{connection}` | Responses WebSocket connections being upgraded or open. No attributes. |
+| `agentic.websocket.queue.wait.duration` | histogram | `s` | Once per admitted `response.create`: time until dispatch (near 0 when nothing was ahead of it) or until it was discarded. No attributes. |
+
+Each `response.create` is its own execution, so N requests on one connection
+record N executions and one connection.
+
+#### Histogram boundaries
+
+| Instruments | Boundaries |
+| --- | --- |
+| Execution and stage durations | Powers of two from `0.01` to `327.68` s |
+| First-data timings | The `gen_ai.server.time_to_first_token` semantic-convention set, plus `20` s |
+| Delivery wait | `0.001` to `60` s |
+| WebSocket queue wait | `0.001`, then the execution boundaries |
+| Token usage | The `gen_ai.client.token.usage` semantic-convention set |
+| Inference rounds | `1` to `10`, the gateway's round cap |
+
+Temporality is cumulative.
+
+#### Cardinality contract
+
+Request, response, and conversation identifiers, tool names, model names,
+URLs, and prompt or output text never become metric dimensions. The allow-list
+of instruments, attribute keys, and attribute values in
+[`crates/agentic-server-core/tests/execution_metrics/harness.rs`](https://github.com/vllm-project/agentic-api/blob/main/crates/agentic-server-core/tests/execution_metrics/harness.rs)
+mirrors the tables on this page. Every metric test and the Collector smoke test
+fail on anything outside it, so adding a dimension means updating the list and
+this page together.
+
+#### Embedding applications
+
+`agentic-server-core` records through `ExecutorMetrics`, built from a `Meter`.
+`ExecutionContext::new` and `ExecutionContext::from_config` bind it to the
+global meter provider when they run, so register a provider first or pass
+your own with `ExecutionContext::with_metrics(ExecutorMetrics::new(&meter))`.
+Without a provider every instrument is a no-op.
 
 ## Sampling
 
@@ -293,6 +410,78 @@ Correlated lines are written without ANSI colour.
   deadline. A hung Collector therefore cannot hold the process beyond roughly
   12 s, well inside the 30 s termination grace period used by the Kubernetes
   manifests. Spans still buffered when the deadline passes are lost.
+
+## Local Collector
+
+[`deploy/otel`](https://github.com/vllm-project/agentic-api/tree/main/deploy/otel)
+runs a backend-neutral OpenTelemetry Collector (collector-contrib, pinned by
+digest). It receives OTLP/HTTP, applies `memory_limiter` and `batch`, prints
+every span and metric with the `debug` exporter, and serves the metrics in
+Prometheus format with `service.name` on every series. All ports bind to
+`127.0.0.1`.
+
+```bash
+docker compose -f deploy/otel/docker-compose.yaml up -d
+
+OTEL_TRACES_EXPORTER=otlp OTEL_METRICS_EXPORTER=otlp \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+OTEL_METRIC_EXPORT_INTERVAL=5000 \
+agentic-server --llm-api-base http://127.0.0.1:8000
+
+docker compose -f deploy/otel/docker-compose.yaml logs -f otel-collector  # every span and metric
+curl -s http://127.0.0.1:8889/metrics | grep '^agentic_'                  # Prometheus format
+```
+
+The Prometheus exporter rewrites names in Prometheus style, for example
+`agentic_execution_count_total` and `agentic_execution_duration_seconds_bucket`.
+
+To browse traces as well, add Jaeger (UI on <http://127.0.0.1:16686>):
+
+```bash
+docker compose -f deploy/otel/docker-compose.yaml --env-file deploy/otel/jaeger.env up -d
+```
+
+[`scripts/tests/otel-smoke.sh`](https://github.com/vllm-project/agentic-api/blob/main/scripts/tests/otel-smoke.sh)
+checks the whole path against a running Collector. It sends streamed,
+blocking, proxied, and WebSocket requests through a scripted upstream, stops
+the gateway so it flushes, and verifies that every instrument arrived with the
+run's `service.name` and only allow-listed attributes. CI runs it on every
+change.
+
+## Overhead
+
+Measured with
+[`scripts/otel-overhead.py`](https://github.com/vllm-project/agentic-api/blob/main/scripts/otel-overhead.py)
+against a release build. The gateway used SQLite storage (every request is
+rehydrated, executed, and persisted) and a local scripted upstream. Each
+scenario ran 2,000 sequential requests per round after 200 warm-up requests,
+over three rounds that alternated the two modes. *Enabled* exports traces for
+every request (the default `parentbased_always_on` sampler) and all metrics
+over OTLP/HTTP to the local Collector above. Host: 13th Gen Intel Core
+i9-13980HX, Linux 6.6 (WSL2).
+
+| Scenario | Telemetry | p50 (ms) | p90 (ms) | p99 (ms) | Gateway CPU per request (ms) | Peak RSS (MiB) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Streaming | disabled | 0.88 | 1.04 | 13.07 | 0.81 | 27.5 |
+| Streaming | enabled | 0.98 | 1.11 | 13.02 | 0.97 | 33.0 |
+| Non-streaming | disabled | 0.76 | 0.89 | 12.60 | 0.67 | 27.5 |
+| Non-streaming | enabled | 0.81 | 0.96 | 13.01 | 0.74 | 33.0 |
+
+Across three runs, enabling telemetry added 0.05–0.13 ms at p50 and
+0.05–0.18 ms of gateway CPU per request, and about 5 MiB of peak RSS.
+Run-to-run noise at p50 was about
+±0.05 ms. The tail is about 13 ms in both modes and does not change with
+telemetry. The gateway built from before these metrics were added (commit
+`9a9b052`, execution traces only) measured within that noise in both modes,
+so the metrics add no measurable cost at this scale. The streamed responses here are short (five
+events). Longer streams add, per frame, one clock read and a few atomic
+operations.
+
+```bash
+cargo build --release -p agentic-server --bin agentic-server
+docker compose -f deploy/otel/docker-compose.yaml up -d
+scripts/otel-overhead.py --bin target/release/agentic-server --requests 2000 --warmup 200 --rounds 3
+```
 
 ## Kubernetes
 

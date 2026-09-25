@@ -7,6 +7,7 @@ use super::session::{ResponseCheckpoint, ResponseContinuation, ResponseSession, 
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::pending_calls::pending_calls;
 use crate::executor::request::{ExecutionContext, RequestContext};
+use crate::executor::telemetry::metrics::Stage;
 use crate::storage::InOutItem;
 use crate::tool::ToolError;
 use crate::types::io::{
@@ -166,6 +167,18 @@ pub async fn rehydrate_in_session(
     agentic.rehydrate.source = super::telemetry::stages::StateSource::from_request(&request).as_str()
 ))]
 pub(crate) async fn rehydrate_with_continuation(
+    request: RequestPayload,
+    exec_ctx: &ExecutionContext,
+    continuation: Option<ResponseContinuation>,
+) -> ExecutorResult<RequestContext> {
+    let timer = exec_ctx.metrics.stage(Stage::Rehydrate);
+    // Boxed so this wrapper does not hold the request payload twice.
+    let rehydrated = Box::pin(rehydrate_request(request, exec_ctx, continuation)).await;
+    timer.finish_result(&rehydrated);
+    rehydrated
+}
+
+async fn rehydrate_request(
     request: RequestPayload,
     exec_ctx: &ExecutionContext,
     continuation: Option<ResponseContinuation>,

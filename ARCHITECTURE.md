@@ -598,6 +598,16 @@ The boundary contract is one owner and one path per concern:
 - Delivery consumes translated frames and provides ordered, awaited client emission
   across inference rounds.
 
+Telemetry follows the same owners (`executor/telemetry/`; see
+[Observability](docs/deploying/observability.md)). The `ExecutionSpan` guard finalizes
+the `agentic.execute` span and the execution metrics together, exactly once, from `Drop`.
+Instruments come from `ExecutorMetrics` on `ExecutionContext`. The first-data timings
+share an `ExecutionClock`. The pipeline entry marks the first upstream line. The
+client-facing stream marks the first event and first output-text delta it yields to the
+transport, and its `InstrumentedStream` wrapper measures delivery wait. Stage timers wrap
+the code that owns each stage. A refactor that moves one of these boundaries must move its
+mark with it rather than add a second one.
+
 #### `accumulator/` — typed response assembly
 
 `ResponseAccumulator` owns validation, response lifecycle, typed output slots, delta

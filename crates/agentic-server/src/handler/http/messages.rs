@@ -35,7 +35,7 @@ async fn proxy_messages(
                 query: parts.uri.query().map(str::to_owned),
             },
             path,
-            &state.proxy_state,
+            state,
         )
         .await,
     )

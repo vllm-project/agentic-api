@@ -11,6 +11,7 @@ use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent};
 use crate::executor::request::RequestContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
+use crate::executor::telemetry::metrics::ExecutionClock;
 use crate::executor::translate::{Translation, TranslationContext};
 use crate::tool::{ToolRegistry, ToolSearchMetadata, ToolSearchState};
 use crate::types::request_response::ResponsePayload;
@@ -30,6 +31,8 @@ pub(super) struct AgentPipeline {
     tool_search_state: Option<ToolSearchState>,
     delivery: StreamDelivery,
     round: Option<RoundIngestion>,
+    /// Timing state of the execution this pipeline serves, when it streams.
+    clock: Option<ExecutionClock>,
 }
 
 impl AgentPipeline {
@@ -43,6 +46,7 @@ impl AgentPipeline {
             tool_search_state,
             delivery: StreamDelivery::new(sender),
             round: None,
+            clock: None,
         }
     }
 
@@ -57,7 +61,14 @@ impl AgentPipeline {
             tool_search_state,
             delivery: StreamDelivery::with_max_stream_event_bytes(sender, max_stream_event_bytes),
             round: None,
+            clock: None,
         }
+    }
+
+    /// Report the first upstream line of the first streamed body to `clock`.
+    pub(super) fn with_execution_clock(mut self, clock: ExecutionClock) -> Self {
+        self.clock = Some(clock);
+        self
     }
 
     pub(super) fn tool_search_state(&self) -> Option<&ToolSearchState> {
@@ -153,7 +164,11 @@ impl AgentPipeline {
         self.begin_round(validation, context, budget)?;
         futures::pin_mut!(body);
         while let Some(line) = body.next().await {
-            let translation = self.push(SseLine::parse(&line?))?;
+            let line = line?;
+            if let Some(clock) = &self.clock {
+                clock.upstream_data();
+            }
+            let translation = self.push(SseLine::parse(&line))?;
             self.delivery
                 .accept(translation, &self.request, registry, output_offset)
                 .await?;

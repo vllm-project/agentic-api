@@ -8,6 +8,7 @@ use crate::executor::gateway_accumulator::{
 use crate::executor::inference::{BoxStream, DONE_MARKER};
 use crate::executor::persist::persist_if_needed;
 use crate::executor::request::{ExecutionContext, RequestContext};
+use crate::executor::telemetry::metrics::ExecutionClock;
 use crate::executor::telemetry::{ExecutionSpan, FailureCategory, InstrumentedStream};
 use crate::executor::upstream::agent_pipeline_with_limits;
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
@@ -61,6 +62,11 @@ impl<T> Drop for AbortOnDrop<T> {
 /// until the terminal frame has been yielded or the stream is dropped. The
 /// executor task is instrumented with the same span so the stages it runs
 /// are parented correctly on whichever worker thread polls them.
+///
+/// The loop below is the client relay: every semantic event is handed to the
+/// transport here, so this is where the first-event and first-text timings
+/// are taken. The pipeline takes the first-upstream-data timing on the
+/// executor task.
 pub(super) fn run_stream(
     ctx: RequestContext,
     tool_search_state: Option<ToolSearchState>,
@@ -71,6 +77,8 @@ pub(super) fn run_stream(
 ) -> BoxStream {
     let span = execution.span().clone();
     let task_span = span.clone();
+    let clock = execution.clock().clone();
+    let relay_clock = clock.clone();
     let frames: BoxStream = Box::pin(stream! {
             let failure_context = StreamFailureContext::from(&ctx);
             let (event_tx, mut event_rx) = mpsc::channel(STREAM_EVENT_BUFFER);
@@ -81,7 +89,8 @@ pub(super) fn run_stream(
                 tool_search_state,
                 Some(event_tx_for_run),
                 max_stream_event_bytes,
-            );
+            )
+            .with_execution_clock(clock.clone());
             let mut run_handle = AbortOnDrop::new(tokio::spawn(
                 async move {
                     let result = run_until_gateway_tools_complete(
@@ -101,7 +110,7 @@ pub(super) fn run_stream(
             loop {
                 tokio::select! {
                     Some(event) = event_rx.recv() => {
-                        yield consume_stream_event(event, &mut next_sequence_number);
+                        yield consume_stream_event(event, &mut next_sequence_number, &clock);
                     }
                     result = &mut run_handle.handle => {
                         match result {
@@ -111,7 +120,7 @@ pub(super) fn run_stream(
                                 } else {
                                     execution.cancelled();
                                 }
-                                for chunk in panicked_stream_chunks(&e, &mut event_rx, &mut next_sequence_number) {
+                                for chunk in panicked_stream_chunks(&e, &mut event_rx, &mut next_sequence_number, &clock) {
                                     yield chunk;
                                 }
                                 execution.delivered();
@@ -119,7 +128,7 @@ pub(super) fn run_stream(
                             Ok((Err(e), mut stream_accumulator)) => {
                                 execution.failed(&e);
                                 while let Ok(event) = event_rx.try_recv() {
-                                    yield consume_stream_event(event, &mut next_sequence_number);
+                                    yield consume_stream_event(event, &mut next_sequence_number, &clock);
                                 }
                                 if e.is_invalid_upstream_tool_search() {
                                     let payload = failure_context.failed_payload(&e);
@@ -140,7 +149,7 @@ pub(super) fn run_stream(
                             }
                             Ok((Ok((payload, ctx, tool_search_metadata)), stream_accumulator)) => {
                                 while let Ok(event) = event_rx.try_recv() {
-                                    yield consume_stream_event(event, &mut next_sequence_number);
+                                    yield consume_stream_event(event, &mut next_sequence_number, &clock);
                                 }
                                 let terminal = completed_stream_chunk(
                                     payload,
@@ -162,7 +171,7 @@ pub(super) fn run_stream(
                 }
             }
     });
-    Box::pin(InstrumentedStream::new(frames, span))
+    Box::pin(InstrumentedStream::delivering(frames, span, relay_clock))
 }
 
 /// The terminal frame for an execution that produced a response: the
@@ -192,7 +201,7 @@ async fn completed_stream_chunk(
     let status = payload.status.clone();
     let ch = exec_ctx.conv_handler.clone();
     let rh = exec_ctx.resp_handler.clone();
-    match persist_if_needed(payload, ctx, tool_search_metadata, ch, rh).await {
+    match persist_if_needed(payload, ctx, tool_search_metadata, ch, rh, &exec_ctx.metrics).await {
         Ok(()) => {
             execution.completed_with_status(&status);
             chunk
@@ -249,7 +258,13 @@ impl StreamFailureContext {
     }
 }
 
-pub(super) fn consume_stream_event(event: StreamEvent, next_sequence_number: &mut u64) -> String {
+/// Hand one relayed event to the transport.
+pub(super) fn consume_stream_event(
+    event: StreamEvent,
+    next_sequence_number: &mut u64,
+    clock: &ExecutionClock,
+) -> String {
+    clock.client_event(event.text);
     *next_sequence_number = event.sequence_number.saturating_add(1);
     event.content
 }
@@ -262,10 +277,11 @@ pub(super) fn panicked_stream_chunks(
     error: &tokio::task::JoinError,
     event_rx: &mut mpsc::Receiver<StreamEvent>,
     next_sequence_number: &mut u64,
+    clock: &ExecutionClock,
 ) -> Vec<String> {
     let mut chunks = Vec::new();
     while let Ok(event) = event_rx.try_recv() {
-        chunks.push(consume_stream_event(event, next_sequence_number));
+        chunks.push(consume_stream_event(event, next_sequence_number, clock));
     }
     chunks.push(stream_task_failure_chunk(error, *next_sequence_number));
     chunks.push(DONE_MARKER.to_owned());

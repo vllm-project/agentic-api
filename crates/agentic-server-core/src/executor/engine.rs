@@ -6,6 +6,7 @@
 //! need per-request configuration.
 
 mod execute;
+mod round;
 mod streaming;
 mod usage;
 
@@ -19,7 +20,6 @@ use streaming::panicked_stream_chunks;
 use either::Either;
 #[cfg(test)]
 use tokio::sync::mpsc;
-use tracing::Instrument as _;
 use tracing::debug;
 
 use super::compaction::{compact_items, maybe_compact_context};
@@ -43,7 +43,7 @@ use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::response_budget::MAX_EXECUTOR_RESPONSE_BYTES;
 #[cfg(test)]
 use crate::executor::upstream::agent_pipeline;
-use crate::executor::upstream::{agent_pipeline_with_limits, fetch_blocking_payload, fetch_stream_payload};
+use crate::executor::upstream::agent_pipeline_with_limits;
 use crate::tool::{ToolRegistry, ToolSearchMetadata, ToolSearchState, mcp};
 use crate::types::io::{InputItem, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
 #[cfg(test)]
@@ -193,45 +193,6 @@ struct EngineOrchestration<'a> {
 }
 
 impl<'a> EngineOrchestration<'a> {
-    async fn fetch_round(
-        &mut self,
-        auth: Option<&str>,
-        stream_upstream: bool,
-        round: usize,
-        output_offset: usize,
-    ) -> ExecutorResult<(ResponsePayload, Vec<EventFrame>)> {
-        let round_span = super::telemetry::stages::inference_round(round);
-        Ok(if stream_upstream {
-            let stream_payload = fetch_stream_payload(
-                self.agent,
-                self.exec_ctx,
-                auth,
-                &self.registry,
-                output_offset,
-                &self.response_budget,
-            )
-            .instrument(round_span)
-            .await?;
-            if round == 0 {
-                self.registry.clear_mcp_list_tool_items();
-            }
-            (stream_payload.payload, stream_payload.deferred_events)
-        } else {
-            (
-                fetch_blocking_payload(
-                    self.agent,
-                    self.exec_ctx,
-                    auth,
-                    &self.registry,
-                    Some(&self.response_budget),
-                )
-                .instrument(round_span)
-                .await?,
-                Vec::new(),
-            )
-        })
-    }
-
     async fn new(agent: &'a mut AgentPipeline, exec_ctx: &'a ExecutionContext) -> ExecutorResult<Self> {
         let response_budget = ExecutorResponseBudget::with_limit(exec_ctx.responses_config.max_retained_bytes);
         let registry = build_tool_registry(agent, exec_ctx, &response_budget).await?;
@@ -254,6 +215,7 @@ impl<'a> EngineOrchestration<'a> {
             .map(mcp::handler::list_tools_output_item)
             .collect();
         let mut combined_usage = None;
+        let mut rounds = self.exec_ctx.metrics.rounds(super::telemetry::Api::Responses);
 
         for round in 0..MAX_GATEWAY_TOOL_ROUNDS {
             let compaction_usage = maybe_compact_context(&mut self.agent.request, self.exec_ctx, auth).await?;
@@ -264,6 +226,7 @@ impl<'a> EngineOrchestration<'a> {
             )?;
             accumulate_usage(&mut combined_usage, compaction_usage);
             let output_offset = combined_output.len();
+            rounds.begin_round();
             let (mut payload, deferred_stream_events) =
                 self.fetch_round(auth, stream_upstream, round, output_offset).await?;
             accumulate_usage(&mut combined_usage, payload.usage.take());
@@ -375,6 +338,7 @@ impl<'a> EngineOrchestration<'a> {
                     &self.registry,
                     output_offset,
                     self.exec_ctx.gateway_scheduler_policy.clone(),
+                    &self.exec_ctx.metrics,
                     &self.response_budget,
                     stream,
                 )
@@ -402,7 +366,8 @@ impl<'a> EngineOrchestration<'a> {
             &self.registry,
             output_offset,
             self.exec_ctx.gateway_scheduler_policy.clone(),
-        );
+        )
+        .with_metrics(&self.exec_ctx.metrics);
         let initial_event_run_len = scheduler.initial_event_run_len(output_items, &self.registry);
         emit_gateway_start_events(
             scheduler.event_plans().take(initial_event_run_len),
@@ -519,7 +484,7 @@ pub(super) async fn run_blocking(
 
     let ch = exec_ctx.conv_handler.clone();
     let rh = exec_ctx.resp_handler.clone();
-    persist_if_needed(payload.clone(), ctx, tool_search_metadata, ch, rh).await?;
+    persist_if_needed(payload.clone(), ctx, tool_search_metadata, ch, rh, &exec_ctx.metrics).await?;
 
     Ok(payload)
 }
@@ -1155,6 +1120,7 @@ mod tests {
                 .try_send(StreamEvent {
                     content: "event".to_owned(),
                     sequence_number: event.sequence_number().expect("event should be numbered"),
+                    text: false,
                 })
                 .expect("test receiver should remain open");
             panic!("test task panic");
@@ -1162,7 +1128,13 @@ mod tests {
 
         let error = task.await.expect_err("task should panic");
         let mut next_sequence_number = 0;
-        let chunks = panicked_stream_chunks(&error, &mut event_rx, &mut next_sequence_number);
+        let execution = crate::executor::telemetry::ExecutionSpan::start(
+            crate::executor::telemetry::Api::Responses,
+            crate::executor::telemetry::Route::Executor,
+            true,
+            &crate::executor::telemetry::ExecutorMetrics::from_global(),
+        );
+        let chunks = panicked_stream_chunks(&error, &mut event_rx, &mut next_sequence_number, execution.clock());
         let mut error_lines = chunks[1].lines();
         assert_eq!(error_lines.next(), Some("event: error"));
         let error_data = error_lines

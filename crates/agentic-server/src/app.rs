@@ -23,6 +23,7 @@ use crate::handler::{
 };
 use crate::model_capabilities::ModelCapabilities;
 use crate::telemetry::http::{HttpMetrics, track_request};
+use crate::telemetry::websocket::WebSocketMetrics;
 
 /// Default ceiling on serialized inbound request bytes for HTTP bodies and
 /// WebSocket messages.
@@ -34,10 +35,10 @@ pub struct WebSocketTracker {
     inner: Arc<WebSocketTrackerInner>,
 }
 
-#[derive(Default)]
 struct WebSocketTrackerInner {
     active: AtomicUsize,
     idle: Notify,
+    metrics: WebSocketMetrics,
     #[cfg(debug_assertions)]
     local_completion_barrier: std::sync::Mutex<Option<LocalCompletionBarrier>>,
 }
@@ -111,13 +112,45 @@ struct LocalCompletionBarrier {
     release: oneshot::Receiver<()>,
 }
 
+impl Default for WebSocketTrackerInner {
+    fn default() -> Self {
+        Self::with_metrics(WebSocketMetrics::from_global())
+    }
+}
+
+impl WebSocketTrackerInner {
+    fn with_metrics(metrics: WebSocketMetrics) -> Self {
+        Self {
+            active: AtomicUsize::new(0),
+            idle: Notify::new(),
+            metrics,
+            #[cfg(debug_assertions)]
+            local_completion_barrier: std::sync::Mutex::new(None),
+        }
+    }
+}
+
 pub(crate) struct WebSocketGuard {
     inner: Arc<WebSocketTrackerInner>,
 }
 
 impl WebSocketTracker {
+    /// A tracker recording its connection and queue metrics with `metrics`
+    /// instead of the global meter provider's.
+    #[must_use]
+    pub fn with_metrics(metrics: WebSocketMetrics) -> Self {
+        Self {
+            inner: Arc::new(WebSocketTrackerInner::with_metrics(metrics)),
+        }
+    }
+
+    pub(crate) fn metrics(&self) -> &WebSocketMetrics {
+        &self.inner.metrics
+    }
+
     pub(crate) fn track(&self) -> WebSocketGuard {
         self.inner.active.fetch_add(1, Ordering::AcqRel);
+        self.inner.metrics.connection_opened();
         WebSocketGuard {
             inner: Arc::clone(&self.inner),
         }
@@ -173,6 +206,7 @@ impl WebSocketTracker {
 
 impl Drop for WebSocketGuard {
     fn drop(&mut self) {
+        self.inner.metrics.connection_closed();
         if self.inner.active.fetch_sub(1, Ordering::AcqRel) == 1 {
             self.inner.idle.notify_waiters();
         }

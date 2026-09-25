@@ -102,10 +102,14 @@ impl ExecuteRequest {
     /// # Errors
     /// Returns [`crate::executor::error::ExecutorError`] if rehydration or (non-streaming) LLM inference fails.
     pub async fn run(mut self) -> ExecutorResult<Either<ResponsePayload, BoxStream>> {
-        let execution = self
-            .execution
-            .take()
-            .unwrap_or_else(|| ExecutionSpan::start(Api::Responses, Route::Executor, self.payload.stream));
+        let execution = self.execution.take().unwrap_or_else(|| {
+            ExecutionSpan::start(
+                Api::Responses,
+                Route::Executor,
+                self.payload.stream,
+                &self.exec_ctx.metrics,
+            )
+        });
         let span = execution.span().clone();
         self.run_traced(execution).instrument(span).await
     }

@@ -1,5 +1,7 @@
+mod input;
 mod policy;
 
+pub(super) use input::{append_gateway_calls_to_new_input, append_output_items_to_input, append_tool_outputs};
 pub(crate) use policy::GatewaySchedulerPolicy;
 #[cfg(test)]
 pub(super) use policy::MAX_CONCURRENT_MATERIALIZATIONS;
@@ -12,12 +14,13 @@ use crate::events::SSEEventType;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent, synthetic_event};
 use crate::executor::pipeline::emit_gateway_event;
-use crate::executor::request::RequestContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
+use crate::executor::telemetry::FailureCategory;
+use crate::executor::telemetry::metrics::{ExecutorMetrics, Stage};
 use crate::tool::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
 use crate::tool::{GatewayBinding, ToolError, ToolOutput, ToolOwnership, ToolRegistry};
 use crate::types::io::output::{FunctionToolCall, GatewayCallStatus, McpCallStatus};
-use crate::types::io::{InputItem, OutputItem, ResponsesInput};
+use crate::types::io::{InputItem, OutputItem};
 use crate::types::request_response::ResponsePayload;
 use crate::utils::common::{serialize_to_string, serialize_to_value};
 
@@ -91,6 +94,7 @@ pub(super) struct GatewayScheduler {
     calls: Vec<GatewayCallPlan>,
     policy: GatewaySchedulerPolicy,
     timeout: Duration,
+    metrics: Option<ExecutorMetrics>,
 }
 
 impl GatewayScheduler {
@@ -144,7 +148,12 @@ impl GatewayScheduler {
                 })
             })
             .collect();
-        Self { calls, policy, timeout }
+        Self {
+            calls,
+            policy,
+            timeout,
+            metrics: None,
+        }
     }
 
     #[cfg(test)]
@@ -226,6 +235,12 @@ impl GatewayScheduler {
         Ok(results)
     }
 
+    /// Time each call as an `agentic.stage.duration` sample.
+    pub(super) fn with_metrics(mut self, metrics: &ExecutorMetrics) -> Self {
+        self.metrics = Some(metrics.clone());
+        self
+    }
+
     #[tracing::instrument(name = "agentic.tool.execute", skip_all, fields(
         agentic.tool.r#type = super::telemetry::stages::tool_type(plan.tool_type)
     ))]
@@ -235,6 +250,27 @@ impl GatewayScheduler {
         execution_slots: &Semaphore,
         response_budget: &ExecutorResponseBudget,
     ) -> ExecutorResult<GatewayCallResult> {
+        let timer = self
+            .metrics
+            .as_ref()
+            .map(|metrics| metrics.stage(Stage::Tool(plan.tool_type)));
+        let result = self.execute_call(plan, execution_slots, response_budget).await;
+        if let Some(timer) = timer {
+            timer.finish(match &result {
+                Ok((_, GatewayCallStatus::Failed)) => Some(FailureCategory::Tool),
+                Ok(_) => None,
+                Err(error) => Some(FailureCategory::from(error)),
+            });
+        }
+        result.map(|(result, _)| result)
+    }
+
+    async fn execute_call(
+        &self,
+        plan: GatewayCallPlan,
+        execution_slots: &Semaphore,
+        response_budget: &ExecutorResponseBudget,
+    ) -> ExecutorResult<(GatewayCallResult, GatewayCallStatus)> {
         let GatewayCallPlan {
             item_index,
             call,
@@ -248,11 +284,12 @@ impl GatewayScheduler {
             )?;
             enforce_gateway_tool_output_size(output.output.len())?;
             response_budget.consume(output.output.len())?;
-            return Ok(GatewayCallResult {
+            let result = GatewayCallResult {
                 item_index,
                 input_item: InputItem::FunctionCallOutput(output.into()),
                 public_output: None,
-            });
+            };
+            return Ok((result, GatewayCallStatus::Failed));
         };
 
         let _permit = match &binding.self_exclusion {
@@ -292,11 +329,12 @@ impl GatewayScheduler {
         enforce_gateway_tool_output_size(output.output.len())?;
         response_budget.consume(output.output.len())?;
         let public_output = binding.public_output(&call, &output, status);
-        Ok(GatewayCallResult {
+        let result = GatewayCallResult {
             item_index,
             input_item: InputItem::FunctionCallOutput(output.into()),
             public_output,
-        })
+        };
+        Ok((result, status))
     }
 }
 
@@ -577,10 +615,11 @@ pub(super) async fn execute_and_emit_output_calls(
     registry: &ToolRegistry,
     output_offset: usize,
     policy: GatewaySchedulerPolicy,
+    metrics: &ExecutorMetrics,
     response_budget: &ExecutorResponseBudget,
     mut stream: Option<(&mut GatewayStreamAccumulator, &tokio::sync::mpsc::Sender<StreamEvent>)>,
 ) -> ExecutorResult<Vec<GatewayCallResult>> {
-    let mut scheduler = GatewayScheduler::plan(output_items, registry, output_offset, policy);
+    let mut scheduler = GatewayScheduler::plan(output_items, registry, output_offset, policy).with_metrics(metrics);
     if let Some((stream_accumulator, stream_sender)) = stream.as_mut() {
         emit_gateway_start_events(scheduler.event_plans(), stream_accumulator, stream_sender).await?;
     }
@@ -595,46 +634,6 @@ pub(super) async fn execute_and_emit_output_calls(
         .await?;
     }
     Ok(gateway_results)
-}
-
-pub(super) fn append_input_item(input: &mut ResponsesInput, item: InputItem) {
-    match input {
-        ResponsesInput::Items(items) => items.push(item),
-        ResponsesInput::Text(text) => {
-            let text_input = ResponsesInput::Text(std::mem::take(text));
-            let mut items = Vec::<InputItem>::from(&text_input);
-            items.push(item);
-            *input = ResponsesInput::Items(items);
-        }
-    }
-}
-
-pub(super) fn append_output_items_to_input(input: &mut ResponsesInput, output_items: &[OutputItem]) {
-    for input_item in output_items.iter().filter_map(OutputItem::to_input_item) {
-        append_input_item(input, input_item);
-    }
-}
-
-pub(super) fn append_tool_outputs(ctx: &mut RequestContext, tool_outputs: Vec<InputItem>) {
-    for output in tool_outputs {
-        ctx.new_input_items.push(output.clone());
-        append_input_item(&mut ctx.enriched_request.input, output);
-    }
-}
-
-pub(super) fn append_gateway_calls_to_new_input(
-    ctx: &mut RequestContext,
-    output_items: &[OutputItem],
-    registry: &ToolRegistry,
-) {
-    ctx.new_input_items.extend(output_items.iter().filter_map(|item| {
-        let OutputItem::FunctionCall(call) = item else {
-            return None;
-        };
-        registry
-            .is_gateway_owned_name(&call.name)
-            .then(|| InputItem::FunctionCall(call.clone().into()))
-    }));
 }
 
 #[cfg(test)]
@@ -1464,6 +1463,7 @@ mod tests {
             calls,
             policy: GatewaySchedulerPolicy::new(NonZeroUsize::new(2).expect("nonzero test limit")),
             timeout: std::time::Duration::ZERO,
+            metrics: None,
         };
 
         let execution = tokio::spawn(async move { scheduler.execute().await });
@@ -1508,6 +1508,7 @@ mod tests {
             calls,
             policy: GatewaySchedulerPolicy::new(NonZeroUsize::new(2).expect("nonzero test limit")),
             timeout: std::time::Duration::ZERO,
+            metrics: None,
         };
 
         let execution = tokio::spawn(async move { scheduler.execute().await });
