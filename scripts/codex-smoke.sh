@@ -133,3 +133,7 @@ PY
 # Exercise image capability propagation with the same pinned CLI, including a
 # text-only negative control. The image response replays the committed vision cassette.
 "$PYTHON_BIN" scripts/codex_image_smoke.py
+
+# Exercise the actual native patch tool, including its grammar declaration and
+# tool-output continuation, against a deterministic function-calling upstream.
+"$PYTHON_BIN" scripts/codex_apply_patch_smoke.py

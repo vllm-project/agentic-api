@@ -241,7 +241,7 @@ async fn custom_tool_type_normalizes_for_the_model_but_remains_client_owned() {
 }
 
 #[test]
-fn custom_tool_grammar_format_is_rejected() {
+fn custom_tool_grammar_format_is_adapted() {
     let tool = serde_json::from_value::<ResponsesTool>(serde_json::json!({
         "type": "custom",
         "name": "constrained_input",
@@ -253,8 +253,10 @@ fn custom_tool_grammar_format_is_rejected() {
     }))
     .expect("custom declaration");
 
-    let error = tool.validate().expect_err("unsupported grammar must fail closed");
-    assert!(error.to_string().contains("cannot preserve constrained decoding"));
+    tool.validate().expect("grammar format must be supported");
+    let normalized = tool.to_function_tools();
+    assert_eq!(normalized[0].type_, "function");
+    assert!(normalized[0].description.as_deref().unwrap().contains("start: value"));
 }
 
 #[test]

@@ -315,7 +315,7 @@ fn codex_request_payloads_parse_all_recorded_shapes() {
 }
 
 #[test]
-fn codex_custom_grammar_cassettes_fail_closed_before_upstream_normalization() {
+fn codex_custom_grammar_cassettes_preserve_grammar_as_model_guidance() {
     for filename in CODEX_CUSTOM_CASSETTES {
         let cassette = load_codex_cassette(filename);
         assert_eq!(cassette.turns.len(), 2, "{filename} should have two turns");
@@ -330,25 +330,37 @@ fn codex_custom_grammar_cassettes_fail_closed_before_upstream_normalization() {
                     tool,
                     ResponsesTool::Custom(custom)
                         if custom.name.as_str() == "agentic_raw_echo"
-                            && custom.format.as_ref().and_then(|format| format.get("syntax")).and_then(Value::as_str)
-                                == Some("lark")
+                            && matches!(custom.format.as_ref(), Some(agentic_core::types::tools::CustomToolInputFormat::Grammar {
+                                syntax: agentic_core::types::tools::CustomToolGrammarSyntax::Lark, ..
+                            }))
                 )),
                 "{filename} turn {i}: expected native custom grammar declaration"
             );
 
-            // The historical gateway and OpenAI cassettes both returned the
-            // only value allowed by this Lark grammar, but the prompt requested
-            // that exact value too. OpenAI constrained generation; the old
-            // gateway only exposed the grammar as model guidance, so matching
-            // output did not prove equivalent enforcement. Reject the format
-            // rather than silently normalizing it to an unconstrained function.
-            let error = payload
+            // This verifies compatibility and preservation of the instructions,
+            // not equivalence to OpenAI's grammar-constrained decoding.
+            let upstream = payload
                 .to_upstream_request(false)
-                .expect_err("custom grammar must be rejected before normalization");
-            assert!(
-                error.to_string().contains("cannot preserve constrained decoding"),
-                "{filename} turn {i}: unexpected validation error: {error}"
-            );
+                .expect("custom grammar is model guidance in the function adapter");
+            let upstream = serde_json::to_value(upstream).expect("upstream request");
+            for tool in json["tools"].as_array().unwrap() {
+                if tool["type"] != "custom" {
+                    continue;
+                }
+                let normalized = upstream["tools"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|candidate| candidate["name"] == tool["name"])
+                    .expect("normalized tool");
+                assert_eq!(normalized["type"], "function");
+                assert!(
+                    normalized["description"]
+                        .as_str()
+                        .unwrap()
+                        .contains(tool["format"]["definition"].as_str().unwrap())
+                );
+            }
         }
     }
 }

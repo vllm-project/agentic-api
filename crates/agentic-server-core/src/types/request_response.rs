@@ -357,8 +357,8 @@ impl RequestPayload {
     ///
     /// Returns [`ToolError::Config`] when a Codex namespace member's generated
     /// flat name collides with a top-level function tool or another namespace
-    /// member, or when a custom tool declares a format whose constrained
-    /// decoding cannot be preserved upstream.
+    /// member, or when a custom tool declares an empty grammar or unsupported
+    /// deferred loading.
     pub fn to_upstream_request(&self, stream: bool) -> Result<UpstreamRequest<'_>, ToolError> {
         // This is only the upstream model-generation preference: it controls
         // whether the model may emit parallel calls, not how the gateway
@@ -1171,7 +1171,7 @@ mod tests {
     }
 
     #[test]
-    fn to_upstream_request_rejects_custom_tool_grammar_formats() {
+    fn to_upstream_request_carries_custom_tool_grammar_instructions() {
         let payload: RequestPayload = serde_json::from_value(serde_json::json!({
             "model": "test",
             "input": "hi",
@@ -1187,10 +1187,21 @@ mod tests {
         }))
         .expect("request");
 
-        let error = payload
+        let upstream = payload
             .to_upstream_request(false)
-            .expect_err("unsupported grammar must fail closed");
-        assert!(error.to_string().contains("cannot preserve constrained decoding"));
+            .expect("grammar format must be adapted");
+        let upstream = serde_json::to_value(upstream).expect("serialize upstream request");
+        assert_eq!(upstream["tools"][0]["type"], "function");
+        assert!(
+            upstream["tools"][0]["description"]
+                .as_str()
+                .unwrap()
+                .contains("start: value")
+        );
+        assert_eq!(
+            upstream["tools"][0]["parameters"]["properties"]["input"]["type"],
+            "string"
+        );
     }
 
     #[test]

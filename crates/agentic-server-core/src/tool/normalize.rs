@@ -61,9 +61,9 @@ impl ResponsesTool {
     ///   synthetic client-executed function understood by vLLM.
     /// - `Mcp` variants convert gateway MCP built-ins to the function specs
     ///   vLLM can call.
-    /// - Unformatted `Custom` variants become function tools with one string
-    ///   `input` parameter; formatted declarations are rejected by the request
-    ///   path because normalization cannot preserve constrained decoding.
+    /// - `Custom` variants become function tools with one string `input`
+    ///   parameter. Grammar formats are carried as model instructions, not
+    ///   upstream constrained-decoding configuration.
     /// - Unimplemented variants (`FileSearch`, `CodeInterpreter`) return
     ///   an empty list and emit a `tracing::debug!`.
     ///

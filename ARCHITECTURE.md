@@ -948,6 +948,10 @@ declaration until they have a complete handler and execution path.
   MCP declarations may expand to several model-visible function tools.
   `FileSearch`/`CodeInterpreter` remain unsupported placeholders and normalize to
   nothing.
+  Custom tools use a string `input` parameter. Their typed Lark/regex formats are
+  included in model instructions, not converted into upstream constrained decoding.
+  The existing custom translator restores the raw input for client execution;
+  no separate stream or continuation path is introduced for grammar-formatted tools.
 - **`handler.rs`** — the two traits every tool type reasons about:
   ```rust
   pub trait ToolHandler: Send + Sync {

@@ -152,9 +152,8 @@ pub struct FunctionToolParam {
 
 /// Parameters for a freeform (`type: "custom"`) tool.
 ///
-/// `format` remains opaque at the wire boundary so declarations round-trip,
-/// but the gateway rejects formatted custom tools before normalization because
-/// it cannot preserve their constrained-decoding semantics upstream.
+/// The function-tool adapter carries grammar formats as model instructions.
+/// Public declarations retain their format for response metadata and continuation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CustomToolParam {
@@ -162,7 +161,7 @@ pub struct CustomToolParam {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub format: Option<Value>,
+    pub format: Option<super::CustomToolInputFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub defer_loading: Option<bool>,
     #[serde(default)]

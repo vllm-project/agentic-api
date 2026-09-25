@@ -1,9 +1,8 @@
 # Design: Codex CLI Integration
 
 > **Desktop setup:** See [Codex Desktop with local models](../guides/codex-desktop.md) for the tested Linux launch
-> configuration. The native custom-tool forwarding described below does not match the current custom-tool
-> normalization path, which rejects grammar-constrained declarations. The desktop guide documents the
-> `apply_patch` workaround verified with Codex 0.153.4.
+> configuration. Custom tools, including Codex's grammar-formatted `apply_patch`, use the function-tool
+> adapter described below.
 
 > **References:** [Issue #54](https://github.com/vllm-project/agentic-api/issues/54),
 > [PR #67](https://github.com/vllm-project/agentic-api/pull/67)
@@ -16,9 +15,9 @@
 `agentic-api` can sit between Codex CLI and a vLLM-backed Responses-compatible model endpoint.
 
 Codex can declare grouped tools with `type: "namespace"` and freeform tools with `type: "custom"`. Namespace members
-need translation for upstreams that expose ordinary `type: "function"` calling. Custom tools must remain native because
-their calls contain raw text instead of JSON function arguments. The gateway performs the namespace translation while
-preserving custom declarations, calls, streaming events, outputs, and continuation history unchanged.
+need translation for upstreams that expose ordinary `type: "function"` calling. Custom tools are represented upstream
+as function tools with a single string `input` argument. The gateway restores the raw custom-tool input and streaming
+events for Codex, which executes the tool locally and returns its output for continuation.
 
 The important split:
 
@@ -33,10 +32,11 @@ The important split:
 The current integration supports the typed executor path:
 
 - `ResponsesTool::Namespace` preserves the public Codex namespace declaration.
-- `ResponsesTool::Custom` preserves freeform declarations, including opaque `format` grammars.
+- `ResponsesTool::Custom` preserves freeform declarations with typed text, Lark, and regex format metadata.
 - `CodexNamespaceHandler` owns Codex-specific namespace flattening and restoration.
 - `RequestPayload::to_upstream_request()` flattens namespace function members to vLLM-compatible function tools.
-- `RequestPayload::to_upstream_request()` forwards custom tools in their native wire shape.
+- `RequestPayload::to_upstream_request()` converts custom tools to function tools and carries grammar definitions
+  in their model-visible descriptions.
 - Namespaced `tool_choice` values are rewritten to the same flat names sent upstream.
 - `ToolRegistry` builds a request-scoped namespace map once and uses it for final payload and streaming event
   restoration.
@@ -98,7 +98,7 @@ When the model calls that flat function, the gateway restores:
 
 ## Collision Handling
 
-The `agentic_ns__` prefix marks gateway-generated namespace member names. If any other declared tool registers the same function-call name as a namespace member (including a function, MCP tool, or normalized built-in), or if two distinct namespace members generate the same flat name, the typed executor rejects the request as invalid before upstream inference or gateway tool setup. Forwarding either shape would make a later model call ambiguous and impossible to restore reliably to `{ namespace, name }`. Custom tools are excluded from this check because they use `custom_tool_call`, not `function_call`.
+The `agentic_ns__` prefix marks gateway-generated namespace member names. If any other declared tool registers the same function-call name as a namespace member (including a function, custom tool, MCP tool, or normalized built-in), or if two distinct namespace members generate the same flat name, the typed executor rejects the request as invalid before upstream inference or gateway tool setup. Forwarding either shape would make a later model call ambiguous and impossible to restore reliably to `{ namespace, name }`.
 
 ---
 
@@ -109,8 +109,8 @@ These types differ at both the declaration and call boundaries:
 | Property | `namespace` | `custom` |
 |----------|-------------|----------|
 | Declaration | A named group containing function members with JSON Schema parameters. | One named freeform tool with an optional format, commonly a Lark or regex grammar. |
-| Upstream request | Flatten each member to a model-visible `type: "function"` declaration. | Forward the original `type: "custom"` declaration and `format` unchanged. |
-| Model output | `function_call` with JSON text in `arguments`. | `custom_tool_call` with opaque text in `input`. |
+| Upstream request | Flatten each member to a model-visible `type: "function"` declaration. | Convert to a function with a string `input` parameter and grammar instructions in its description. |
+| Model output | `function_call` with JSON text in `arguments`. | `function_call` with a JSON `input` string, restored to `custom_tool_call` for the client. |
 | Streaming | `response.function_call_arguments.delta` and `.done`. | `response.custom_tool_call_input.delta` and `.done`. |
 | Client result | `function_call_output`. | `custom_tool_call_output`. |
 | Gateway execution | Never; the client owns the namespace member execution. | Never; the client owns the freeform tool execution. |
@@ -119,14 +119,18 @@ A client that declares a custom tool consumes the returned raw input, executes i
 `custom_tool_call_output` using the same `call_id`. On the stored WebSocket path, the gateway stores the assistant call
 before exposing `response.completed`, so an immediate close cannot lose the continuation state.
 
-The upstream model still decides whether to select a custom tool when `tool_choice` is `auto`. The gateway does not
-rewrite that choice. The configured Qwen Responses endpoint also requires a `format` on custom declarations. This
-matches the Responses API distinction between JSON-schema function tools and
-[freeform custom tools](https://developers.openai.com/api/docs/guides/function-calling#custom-tools).
+The upstream model still decides whether to select a custom tool when `tool_choice` is `auto`. Named custom-tool
+selectors are converted to named function selectors upstream and restored in public response metadata.
+
+Lark and regex grammar definitions guide the model's decoded `input` string; they are not upstream constrained-decoding
+configuration. This compatibility path does not provide OpenAI's grammar-enforcement guarantee. The gateway validates
+the format's shape and requires a non-empty definition, but does not compile or execute arbitrary grammars. Codex's
+`apply_patch` handler parses and validates the returned patch before editing files and returns tool errors through the
+normal continuation path. The JSON argument envelope is removed before Codex sees the raw patch.
 
 Tool availability is a client-version and configuration concern, separate from gateway protocol support. In the tested
-Codex 0.144.3 integration, a captured request declared `apply_patch` as a native custom tool with a format, and the
-gateway forwarded it unchanged. The `codex features list` line `apply_patch_freeform removed false` is not sufficient by
+Codex 0.144.3 integration, a captured request declared `apply_patch` as a native custom tool with a format. The
+`codex features list` line `apply_patch_freeform removed false` is not sufficient by
 itself to determine the request shape; use a captured request or gateway debug log as the authoritative check.
 
 ---
@@ -140,7 +144,7 @@ Responses tool shapes and execution semantics, so it can be always on.
 |-------|----------|
 | `function` | Client-executed function tool. Preserve the declaration and return matching calls to the client. |
 | `namespace` | Client-executed Codex grouping for function tools. Flatten members only for upstream requests, then restore returned calls. |
-| `custom` | Client-executed custom tool. Preserve its opaque format and forward it natively. |
+| `custom` | Client-executed custom tool. Adapt to a function with raw input and grammar instructions; restore public custom calls and metadata. |
 | `web_search_preview` | Gateway-executed built-in tool normalized to the web-search function tool. Without a usable provider, execution produces a failed tool result instead of returning the call for client execution. |
 | `mcp` | Gateway-executed built-in tool. Normalize discovered MCP tools to model-visible function tools, execute calls with request-scoped MCP bindings, and expose public `mcp_call` items. Streaming emits `response.output_item.added`, `response.mcp_call.in_progress`, `response.mcp_call_arguments.delta`/`.done`, `response.mcp_call.completed` or `.failed`, and `response.output_item.done`. |
 | `file_search`, `code_interpreter` | Accepted by the typed request parser but skipped during upstream normalization because no gateway handler is registered yet. |
@@ -184,14 +188,24 @@ the record before the request is sent to vLLM.
 
 Run the commands in this section from the repository root.
 
-First run the deterministic gateway lifecycle test. Its mock upstream emits the same custom-call streaming events as a
-Responses provider, then the test sends the matching Codex output on a second WebSocket request and verifies the fully
-rehydrated upstream input:
+First run the deterministic gateway lifecycle test. Its mock upstream emits function-call streaming events, which the
+gateway restores to custom-call events. The test sends the matching Codex output on a second WebSocket request and
+verifies the fully rehydrated upstream input:
 
 ```bash
 cargo test -p agentic-server --test responses_websocket_test \
   test_websocket_custom_tool_round_trip_and_continuation -- --nocapture
 ```
+
+To verify an actual Codex file edit over HTTP and WebSocket using a synthetic upstream, run:
+
+```bash
+cargo build -p agentic-server --bin agentic-server
+python3 scripts/codex_apply_patch_smoke.py
+```
+
+This checks the advertised catalog, Codex's grammar declaration, the adapter, file modification, and tool-output
+continuation. It does not measure a live model's ability to generate a valid patch.
 
 The following live smoke test additionally measures whether the configured model selects the custom tool correctly.
 Start the gateway in one terminal:
@@ -214,8 +228,8 @@ curl --max-time 60 -sS http://127.0.0.1:3018/v1/responses \
   --data-binary '{"model":"Qwen/Qwen3.6-35B-A3B","input":"Call echo_raw with exactly CUSTOM_RAW_OK. Do not answer in prose.","tools":[{"type":"custom","name":"echo_raw","description":"Emit the requested raw token exactly.","format":{"type":"grammar","syntax":"lark","definition":"start: \"CUSTOM_RAW_OK\""}}],"tool_choice":"required","store":true,"stream":false}'
 ```
 
-The response should contain a `custom_tool_call` named `echo_raw` whose `input` is `CUSTOM_RAW_OK`. This isolates native
-gateway/upstream support from any client's tool-registration settings.
+The response should contain a `custom_tool_call` named `echo_raw` whose `input` is `CUSTOM_RAW_OK`. This exercises the
+custom-to-function adapter without a client executing the tool.
 
 To test Codex's local custom-tool handler without exposing credentials from the normal Codex home, seed an isolated
 temporary home with the gateway's credential-free model catalog, prepare the fixture, and run Codex there. The helper
@@ -255,8 +269,7 @@ CODEX_HOME=/tmp/agentic-codex-smoke-home codex exec \
 After it succeeds, reply only: CUSTOM_TOOL_OK"
 ```
 
-Success means the file contains `CUSTOM_TOOL_OK`, the gateway log reports `forwarding native custom tool declaration
-upstream` for `apply_patch`, and Codex replies `CUSTOM_TOOL_OK`.
+Success means the file contains `CUSTOM_TOOL_OK`, Codex executes its `apply_patch` tool, and Codex replies `CUSTOM_TOOL_OK`.
 
 The static catalog setting is required for repeatable use with the tested Codex 0.144.3 client. Its ordinary model cache
 expires after 300 seconds. An unauthenticated custom provider does not trigger a remote catalog refresh, so after that
@@ -341,8 +354,8 @@ resolves to text-only. `supports_image_detail_original` stays `false`: the gatew
 writing the isolated home, and take the selected model **and** its modalities from that one response. The client
 version is read from the Codex binary itself (`codex --version`, honoring `AGENTIC_CODEX_BIN`); set
 `AGENTIC_CODEX_CLIENT_VERSION` to skip the probe where it cannot run. Only the modalities are copied — the isolated
-catalog keeps its launcher-specific settings (`shell_type: "local"`, an omitted `apply_patch_tool_type`, and a
-token-based truncation policy), which intentionally differ from the HTTP catalog.
+catalog keeps its launcher-specific shell and truncation settings (`shell_type: "local"` and a token-based truncation
+policy). Both catalogs enable `apply_patch_tool_type: "freeform"`.
 
 `scripts/agentic-codex.sh` copies the gateway catalog verbatim, so it inherits the resolved modalities with no change.
 

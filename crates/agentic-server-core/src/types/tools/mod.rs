@@ -3,8 +3,10 @@
 //! This module contains only serde shapes (serialization/deserialization types).
 //! Behavioral logic (registry, handler trait, normalization) lives in [`crate::tool`].
 
+mod custom;
 pub mod params;
 
+pub use custom::{CustomToolGrammarSyntax, CustomToolInputFormat};
 pub use params::{
     CodeInterpreterToolParam, CodexNamespaceMember, CodexNamespaceToolParam, CustomToolParam, EmptyToolNameError,
     FileSearchToolParam, FunctionToolParam, LocalShellEnvironment, McpDiscoveredToolParam, McpToolParam,

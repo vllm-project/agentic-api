@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
-use serde_json::Value;
-
 use crate::types::io::{CustomToolCall, FunctionTool, FunctionToolCall, OutputItem, ToolChoice};
-use crate::types::tools::{CustomToolParam, ResponsesTool};
+use crate::types::tools::{CustomToolGrammarSyntax, CustomToolInputFormat, CustomToolParam, ResponsesTool};
 
 use super::{ToolEntry, ToolError, ToolHandler, ToolType};
 
@@ -119,6 +117,17 @@ fn model_visible_description(param: &CustomToolParam) -> String {
 
     fragments.push("Provide the raw tool input in the `input` string field.".to_owned());
 
+    if let Some(CustomToolInputFormat::Grammar { syntax, definition, .. }) = &param.format {
+        let syntax = match syntax {
+            CustomToolGrammarSyntax::Lark => "Lark",
+            CustomToolGrammarSyntax::Regex => "regex",
+        };
+        fragments.push(format!(
+            "The decoded `input` string must match the following {syntax} grammar. \
+             Apply the grammar to the raw input, not the JSON argument envelope.\n{definition}"
+        ));
+    }
+
     if !param.extra.is_empty()
         && let Ok(extra) = serde_json::to_string(&param.extra)
     {
@@ -144,13 +153,11 @@ impl ToolHandler for CustomHandler {
                 params.name
             )));
         }
-        if params
-            .format
-            .as_ref()
-            .is_some_and(|format| format.get("type").and_then(Value::as_str) != Some("text"))
+        if let Some(CustomToolInputFormat::Grammar { definition, .. }) = &params.format
+            && definition.trim().is_empty()
         {
             return Err(ToolError::Config(format!(
-                "custom tool '{}' uses an unsupported format; gateway normalization cannot preserve constrained decoding",
+                "custom tool '{}' must declare a non-empty grammar definition",
                 params.name
             )));
         }
@@ -264,20 +271,37 @@ mod tests {
     }
 
     #[test]
-    fn grammar_formats_are_rejected() {
-        for syntax in ["lark", "regex"] {
+    fn grammar_formats_are_carried_as_model_instructions() {
+        for (syntax, definition) in [("lark", "start: \"hello\""), ("regex", "^hello$")] {
             let param = serde_json::from_value::<CustomToolParam>(serde_json::json!({
                 "name": "constrained_input",
                 "format": {
                     "type": "grammar",
                     "syntax": syntax,
-                    "definition": "start: value"
+                    "definition": definition
                 }
             }))
             .expect("custom tool");
 
-            let error = CustomHandler.validate(&param).expect_err("grammar must be rejected");
-            assert!(error.to_string().contains("cannot preserve constrained decoding"));
+            CustomHandler
+                .validate(&param)
+                .expect("grammar declaration is supported");
+            let tool = CustomHandler::to_function_call(&param);
+            let description = tool.description.as_deref().expect("model instructions");
+            assert!(description.contains(definition));
+            assert!(description.contains("not the JSON argument envelope"));
+        }
+    }
+
+    #[test]
+    fn empty_grammar_definitions_are_rejected() {
+        for definition in ["", " \n\t"] {
+            let param: CustomToolParam = serde_json::from_value(serde_json::json!({
+                "name": "apply_patch",
+                "format": {"type": "grammar", "syntax": "lark", "definition": definition}
+            }))
+            .expect("custom tool");
+            assert!(CustomHandler.validate(&param).is_err());
         }
     }
 

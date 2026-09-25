@@ -2617,6 +2617,7 @@ async fn test_websocket_bounds_and_restores_long_namespace_tool_name() {
 
 #[tokio::test]
 async fn test_websocket_custom_tool_round_trip_and_continuation() {
+    let grammar = "start: \"*** Begin Patch\" LF \"*** End Patch\"\n%import common.LF";
     let mock = MockResponsesServer::start(vec![
         sse_custom_tool_call_response(),
         sse_response("resp_after_custom", "msg_after_custom", "CUSTOM TOOL COMPLETE"),
@@ -2635,7 +2636,8 @@ async fn test_websocket_custom_tool_round_trip_and_continuation() {
             "tools": [{
                 "type": "custom",
                 "name": "apply_patch",
-                "description": "Apply a patch."
+                "description": "Apply a patch.",
+                "format": {"type": "grammar", "syntax": "lark", "definition": grammar}
             }],
             "store": true,
             "stream": true
@@ -2698,6 +2700,9 @@ async fn test_websocket_custom_tool_round_trip_and_continuation() {
         item["type"] == "function_call_output" && item["call_id"] == "call_custom_1" && item["output"] == "Done!"
     }));
     assert_eq!(requests[1]["tools"][0]["type"], "function");
+    for request in &requests {
+        assert!(request["tools"][0]["description"].as_str().unwrap().contains(grammar));
+    }
 }
 
 #[tokio::test]
@@ -3430,6 +3435,7 @@ async fn websocket_stored_child_of_unstored_parent_survives_reconnect() {
 
 #[tokio::test]
 async fn websocket_unstored_custom_tool_round_trip() {
+    let grammar = "start: \"*** Begin Patch\" LF \"*** End Patch\"\n%import common.LF";
     let mock = MockResponsesServer::start(vec![
         sse_custom_tool_call_response(),
         sse_response("resp_after_custom", "msg_after_custom", "DONE"),
@@ -3440,7 +3446,9 @@ async fn websocket_unstored_custom_tool_round_trip() {
     send_json(
         &mut ws,
         json!({"type":"response.create", "model":"test-model", "input":"apply patch",
-        "tools":[{"type":"custom", "name":"apply_patch"}], "store":false}),
+        "tools":[{"type":"custom", "name":"apply_patch", "format": {
+            "type":"grammar", "syntax":"lark", "definition":grammar
+        }}], "store":false}),
     )
     .await;
     let events = recv_until_completed(&mut ws).await;
@@ -3458,6 +3466,12 @@ async fn websocket_unstored_custom_tool_round_trip() {
     );
     let requests = mock.request_bodies().await;
     let input = requests[1]["input"].as_array().unwrap();
+    assert!(
+        requests[1]["tools"][0]["description"]
+            .as_str()
+            .unwrap()
+            .contains(grammar)
+    );
     assert_eq!(input.iter().filter(|item| item["type"] == "function_call").count(), 1);
     assert_eq!(
         input
