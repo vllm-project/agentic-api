@@ -507,9 +507,11 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   `MAX_GATEWAY_TOOL_ROUNDS = 10`). It accumulates output and token usage across rounds,
   changes continuation `tool_choice` to `auto`, and persists gateway calls plus their
   outputs as model-facing `InputItem`s. Also home to `run_compaction_trigger`,
-  `run_blocking`, and `run_stream` (spawns the loop, forwards events as SSE, persists
-  before yielding the terminal event). `engine/streaming.rs` owns the streaming task's
-  cancellation, failure delivery, and terminal validation before persistence.
+  `run_blocking`, and `run_stream` (owns and polls the loop alongside its bounded event
+  receiver, forwards events as SSE, and persists before yielding the terminal event).
+  `engine/streaming.rs` owns cancellation, failure delivery, and terminal validation;
+  `engine/streaming/producer.rs` drives the stream-owned orchestration future without
+  spawning a nested producer task.
 - **`persist.rs`** — `persist_response`/`persist_turn`, which route to
   `ConversationHandler` or `ResponseHandler` in `modes/` depending on whether the turn
   is conversation-scoped or response-scoped.
@@ -712,7 +714,24 @@ cancelled or disconnected flush cannot silently discard the remainder.
 When an upstream round fails, the engine releases its deferred public events through
 the same delivery path before the terminal event, without executing gateway tools.
 
-Its `GatewayStreamAccumulator` carries only cross-round presentation state: monotonic
+The Responses `BoxStream` owns its orchestration future directly. It polls that future
+and the existing bounded event receiver on the consumer's task; there is no detached
+producer, asynchronous abort reaper, or producer `JoinHandle`. When the consumer stops
+polling, the producer cannot continue in the background. Dropping an unpolled or active
+stream synchronously drops its producer, active per-request tool futures, and continuation
+lease. Remote services and shared HTTP/MCP connection drivers still have their own
+lifetimes; dropping a local future does not undo external side effects.
+
+Producer completion and panic both dispose of the producer future before draining
+accepted events in order and exposing one outcome. Panic isolation uses `catch_unwind`
+and a typed, static client error; it does not alter the process panic hook. On success,
+the engine still validates terminal size and persists/publishes the checkpoint before
+yielding completion. Cancellation during storage waits drops the pending persistence
+future through the same owner. WebSocket request tasks still need explicit abort/join;
+joining one now also finishes disposal of its nested stream-owned producer. Their
+`wait_until_idle` lease fences remain in place.
+
+`GatewayStreamAccumulator` carries only cross-round presentation state: monotonic
 `sequence_number`s, public `output_index` rebasing, and deduplication of response start
 events. It holds no `OutputItem` assembly state. Sending is awaited before ingestion
 continues, so sender closure or delivery failure propagates through the live pipeline.

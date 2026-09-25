@@ -12,13 +12,9 @@ mod usage;
 use usage::accumulate_usage;
 
 pub use execute::{ExecuteRequest, execute};
-#[cfg(test)]
-use streaming::panicked_stream_chunks;
 
 #[cfg(test)]
 use either::Either;
-#[cfg(test)]
-use tokio::sync::mpsc;
 use tracing::Instrument as _;
 use tracing::debug;
 
@@ -28,12 +24,8 @@ use super::gateway::{
     append_tool_outputs, compaction_event_plans, emit_gateway_completed_events, emit_gateway_start_events,
     emit_response_start_events, execute_and_emit_output_calls, has_client_owned_calls, public_output_items,
 };
-#[cfg(test)]
-use super::gateway_accumulator::{GatewayStreamAccumulator, STREAM_EVENT_BUFFER, StreamEvent};
 use crate::events::EventFrame;
 use crate::executor::error::ExecutorResult;
-#[cfg(test)]
-use crate::executor::inference::DONE_MARKER;
 use crate::executor::persist::persist_if_needed;
 use crate::executor::pipeline::{AgentPipeline, emit_deferred_stream_events};
 use crate::executor::rehydrate::prepare_reasoning_for_vllm;
@@ -1140,42 +1132,5 @@ mod tests {
                 .contains("compaction_trigger")
         );
         server.abort();
-    }
-
-    #[tokio::test]
-    async fn stream_task_panic_after_event_uses_next_sequence_number_for_error() {
-        let accumulator = GatewayStreamAccumulator::new();
-        let (event_tx, mut event_rx) = mpsc::channel(STREAM_EVENT_BUFFER);
-        let task = tokio::spawn(async move {
-            let mut accumulator = accumulator;
-            let event = accumulator
-                .process_sse_line(r#"data: {"type":"response.created"}"#, 0)
-                .expect("event should be emitted");
-            event_tx
-                .try_send(StreamEvent {
-                    content: "event".to_owned(),
-                    sequence_number: event.sequence_number().expect("event should be numbered"),
-                })
-                .expect("test receiver should remain open");
-            panic!("test task panic");
-        });
-
-        let error = task.await.expect_err("task should panic");
-        let mut next_sequence_number = 0;
-        let chunks = panicked_stream_chunks(&error, &mut event_rx, &mut next_sequence_number);
-        let mut error_lines = chunks[1].lines();
-        assert_eq!(error_lines.next(), Some("event: error"));
-        let error_data = error_lines
-            .next()
-            .and_then(|line| line.strip_prefix("data: "))
-            .expect("SSE data");
-        assert!(error_lines.all(str::is_empty), "unexpected SSE frame content");
-        let error_event: serde_json::Value =
-            serde_json::from_str(error_data).expect("error chunk should be valid JSON");
-
-        assert_eq!(chunks[0], "event");
-        assert_eq!(error_event["type"], "error");
-        assert_eq!(error_event["sequence_number"], 1);
-        assert_eq!(chunks[2], DONE_MARKER);
     }
 }

@@ -307,8 +307,8 @@ impl WsMultiplexer {
                     }
                 }
             };
-            // Dropping a failed executor stream aborts its worker asynchronously.
-            // Do not dispatch the next turn until its lease has been released.
+            // Executor stream drop disposes its producer inline. Keep the lease
+            // fence before dispatching another turn in this serial session.
             let result = match session.wait_until_idle().await {
                 Ok(()) => result,
                 Err(error) => Err(WsError::from(error)),
@@ -454,8 +454,8 @@ async fn responses_ws_loop(
     if client_disconnected {
         multiplexer.request_tasks.abort_all();
         while multiplexer.request_tasks.join_next().await.is_some() {}
-        // Executor stream disposal aborts its nested inference worker. Wait for
-        // every lease to release its pinned state before ending this connection.
+        // Joining request tasks also disposes their stream-owned producers.
+        // Verify every lease released pinned state before ending this connection.
         for session in multiplexer.sessions.values() {
             if let Err(error) = session.wait_until_idle().await {
                 warn!(%error, "failed to await websocket continuation disposal");
