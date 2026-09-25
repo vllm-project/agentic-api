@@ -146,7 +146,7 @@ impl<'de> Deserialize<'de> for ConversationItem {
 }
 
 /// Ordering for conversation item pages.
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub enum ItemOrder {
@@ -190,12 +190,7 @@ impl ItemResponse {
             message.status.get_or_insert(MessageStatus::Completed);
             if let InputMessageContent::Text(text) = &mut message.content {
                 let content = InputTextContent::new(std::mem::take(text));
-                let part = if message.role == "assistant" {
-                    InputContent::OutputText(content)
-                } else {
-                    InputContent::InputText(content)
-                };
-                message.content = InputMessageContent::Parts(vec![part]);
+                message.content = InputMessageContent::Parts(vec![InputContent::InputText(content)]);
             }
         }
         Self { id, item }
@@ -226,6 +221,16 @@ impl DeletedResponse {
         Self {
             id,
             object: "conversation.deleted".to_string(),
+            deleted: true,
+        }
+    }
+
+    /// Create a deleted item response.
+    #[must_use]
+    pub fn item(id: String) -> Self {
+        Self {
+            id,
+            object: "conversation.item.deleted".to_string(),
             deleted: true,
         }
     }

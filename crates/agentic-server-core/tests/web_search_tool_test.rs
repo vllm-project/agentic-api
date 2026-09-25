@@ -746,7 +746,8 @@ fn sse_response(events: impl IntoIterator<Item = serde_json::Value>) -> support:
     support::MockResponse::Sse(body)
 }
 
-fn web_search_function_call_sse_response() -> support::MockResponse {
+fn web_search_function_call_sse_response(call_id: &str) -> support::MockResponse {
+    let item_id = format!("fc_{call_id}");
     sse_response([
         serde_json::json!({
             "type": "response.created",
@@ -756,9 +757,9 @@ fn web_search_function_call_sse_response() -> support::MockResponse {
             "type": "response.output_item.added",
             "output_index": 0,
             "item": {
-                "id": "fc_search",
+                "id": item_id,
                 "type": "function_call",
-                "call_id": "call_search",
+                "call_id": call_id,
                 "name": "web_search",
                 "arguments": "",
                 "status": "in_progress"
@@ -766,9 +767,9 @@ fn web_search_function_call_sse_response() -> support::MockResponse {
         }),
         serde_json::json!({
             "type": "response.function_call_arguments.done",
-            "item_id": "fc_search",
+            "item_id": item_id,
             "output_index": 0,
-            "call_id": "call_search",
+            "call_id": call_id,
             "name": "web_search",
             "arguments": "{\"query\":\"rust async\",\"count\":2}"
         }),
@@ -1482,7 +1483,7 @@ async fn execute_accumulates_usage_across_web_search_model_rounds() {
 async fn stream_emits_web_search_lifecycle_events_before_final_payload() {
     let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
     let llm = support::MockServer::start_deque(vec![
-        web_search_function_call_sse_response(),
+        web_search_function_call_sse_response("call_search"),
         text_sse_response("Use async carefully."),
     ])
     .await;
@@ -1590,7 +1591,7 @@ fn assert_output_event_indices_in_order(json_events: &[serde_json::Value], expec
 async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence() {
     let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
     let llm = support::MockServer::start_deque(vec![
-        web_search_function_call_sse_response(),
+        web_search_function_call_sse_response("call_search"),
         two_messages_then_web_search_sse_response(),
         text_sse_response_with_output_index("Use async carefully.", 0),
     ])
@@ -1867,8 +1868,8 @@ async fn execute_feeds_web_search_execution_errors_back_to_model() {
 #[tokio::test]
 async fn execute_returns_incomplete_after_max_gateway_tool_rounds() {
     let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
-    let llm_responses = std::iter::repeat_with(web_search_function_call_response)
-        .take(10)
+    let llm_responses = (0..10)
+        .map(|round| web_search_function_call_response_with_id(&format!("call_r{round}")))
         .collect();
     let llm = support::MockServer::start_deque(llm_responses).await;
     let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
@@ -2229,8 +2230,8 @@ async fn stream_returns_incomplete_after_max_gateway_tool_rounds() {
     // Streaming counterpart of the blocking cap test: past the round budget over
     // an SSE stream, the final streamed payload must carry status "incomplete".
     let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
-    let llm_responses = std::iter::repeat_with(web_search_function_call_sse_response)
-        .take(10)
+    let llm_responses = (0..10)
+        .map(|round| web_search_function_call_sse_response(&format!("call_r{round}")))
         .collect();
     let llm = support::MockServer::start_deque(llm_responses).await;
     let exec_ctx = build_exec_ctx(llm.url(), you_url).await;

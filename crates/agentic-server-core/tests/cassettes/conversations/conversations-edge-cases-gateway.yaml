@@ -1,0 +1,506 @@
+turns:
+- filename: t1
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1790341552
+      id: conv_01a0d8ac-18d7-7d30-9f59-e00a697163a3
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      items:
+      - content: test
+        id: item_wrongprefix_1e01a4032c96efd1
+        role: user
+        type: message
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a0d8ac-18d7-7d30-9f59-e00a697163a3/items
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: 'Invalid ''items[0].id'': ''item_wrongprefix_1e01a4032c96efd1''.
+          Expected an ID that begins with ''msg''.'
+        param: items[0].id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t3
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a0d8ac-18d7-7d30-9f59-e00a697163a3/items
+    query_params: {}
+  response:
+    body:
+      data: []
+      first_id: null
+      has_more: false
+      last_id: null
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1790341552
+      id: conv_01a0d8ac-18fd-72d0-a8f6-005816244731
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      items:
+      - arguments: '{}'
+        call_id: call_prefix_probe
+        id: msg_wrongprefix_d8101297277cae30
+        name: test_fn
+        type: function_call
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a0d8ac-18fd-72d0-a8f6-005816244731/items
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: 'Invalid ''items[0].id'': ''msg_wrongprefix_d8101297277cae30''. Expected
+          an ID that begins with ''fc''.'
+        param: items[0].id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a0d8ac-18fd-72d0-a8f6-005816244731/items
+    query_params: {}
+  response:
+    body:
+      data: []
+      first_id: null
+      has_more: false
+      last_id: null
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1790341552
+      id: conv_01a0d8ac-193c-7f21-903f-6a99b8ce682b
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      items:
+      - content: msg1
+        role: user
+        type: message
+      - content: msg2
+        role: user
+        type: message
+      - content: msg3
+        role: user
+        type: message
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a0d8ac-193c-7f21-903f-6a99b8ce682b/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: msg1
+          type: input_text
+        id: msg_01a0d8ac-1959-77e1-a085-3ab96352406d
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: msg2
+          type: input_text
+        id: msg_01a0d8ac-1959-77e1-a085-3ac1b485bba7
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: msg3
+          type: input_text
+        id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a0d8ac-1959-77e1-a085-3ab96352406d
+      has_more: false
+      last_id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a0d8ac-193c-7f21-903f-6a99b8ce682b/items
+    query_params:
+      limit: '2'
+  response:
+    body:
+      data:
+      - content:
+        - text: msg3
+          type: input_text
+        id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: msg2
+          type: input_text
+        id: msg_01a0d8ac-1959-77e1-a085-3ac1b485bba7
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+      has_more: true
+      last_id: msg_01a0d8ac-1959-77e1-a085-3ac1b485bba7
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/conversations/conv_01a0d8ac-193c-7f21-903f-6a99b8ce682b/items/msg_01a0d8ac-1959-77e1-a085-3ac1b485bba7
+    query_params: {}
+  response:
+    body:
+      created_at: 1790341552
+      id: conv_01a0d8ac-193c-7f21-903f-6a99b8ce682b
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a0d8ac-193c-7f21-903f-6a99b8ce682b/items
+    query_params:
+      after: msg_01a0d8ac-1959-77e1-a085-3ac1b485bba7
+      limit: '2'
+  response:
+    body:
+      error:
+        code: null
+        message: No item found with id 'msg_01a0d8ac-1959-77e1-a085-3ac1b485bba7'
+        param: after
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t12
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1790341552
+      id: conv_01a0d8ac-1a04-7af0-bbcc-f5041c5cfa13
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t13
+  request:
+    body:
+      items:
+      - content: 'Duplicate ID probe: first copy.'
+        id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+        role: user
+        type: message
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a0d8ac-1a04-7af0-bbcc-f5041c5cfa13/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: msg3
+          type: input_text
+        id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+      has_more: false
+      last_id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t14
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a0d8ac-1a04-7af0-bbcc-f5041c5cfa13/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: msg3
+          type: input_text
+        id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+      has_more: false
+      last_id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t15
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1790341552
+      id: conv_01a0d8ac-1aae-7f62-a330-11d8ef4d5afe
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t16
+  request:
+    body:
+      items:
+      - content: 'Duplicate ID probe: first copy.'
+        id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+        role: user
+        type: message
+      - content: 'Duplicate ID probe: second copy.'
+        id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+        role: user
+        type: message
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a0d8ac-1aae-7f62-a330-11d8ef4d5afe/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: msg3
+          type: input_text
+        id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: msg3
+          type: input_text
+        id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+      has_more: false
+      last_id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t17
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a0d8ac-1aae-7f62-a330-11d8ef4d5afe/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: msg3
+          type: input_text
+        id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: msg3
+          type: input_text
+        id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+      has_more: false
+      last_id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t18
+  request:
+    body:
+      items:
+      - content: 'Duplicate ID probe: first copy.'
+        id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+        role: user
+        type: message
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a0d8ac-193c-7f21-903f-6a99b8ce682b/items
+    query_params: {}
+  response:
+    body:
+      error:
+        code: item_already_in_conversation
+        message: Item already in conversation
+        param: items
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t19
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a0d8ac-193c-7f21-903f-6a99b8ce682b/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: msg1
+          type: input_text
+        id: msg_01a0d8ac-1959-77e1-a085-3ab96352406d
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: msg3
+          type: input_text
+        id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a0d8ac-1959-77e1-a085-3ab96352406d
+      has_more: false
+      last_id: msg_01a0d8ac-1959-77e1-a085-3adaa1a67b5f
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200

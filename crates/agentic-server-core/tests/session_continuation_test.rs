@@ -83,7 +83,13 @@ impl GatewayExecutor for LocalSearch {
         _params: &WebSearchToolParam,
     ) -> Option<OutputItem> {
         Some(OutputItem::WebSearchCall(
-            WebSearchCall::try_new(&call.id, status, vec!["local".to_owned()], Vec::new()).unwrap(),
+            WebSearchCall::try_new(
+                format!("ws_{}", call.id.strip_prefix("fc_").unwrap_or(&call.id)),
+                status,
+                vec!["local".to_owned()],
+                Vec::new(),
+            )
+            .unwrap(),
         ))
     }
 }
@@ -345,7 +351,9 @@ async fn explicit_conversation_tool_history(use_session: bool, gateway_tool: boo
         } else {
             execution
         };
-        let result = execution.run().await.unwrap();
+        let result = execution.run().await.unwrap_or_else(|error| {
+            panic!("gateway_tool={gateway_tool}, store={store}, session={use_session}, turn={index}: {error}")
+        });
         assert!(matches!(result, either::Either::Left(_)));
         session.wait_until_idle().await.unwrap();
     }

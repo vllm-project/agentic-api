@@ -148,10 +148,14 @@ impl ResponseHandler {
             Ok(())
         };
         match result {
-            Err(error) if error.is_unique_violation() => Err(ExecutorError::Conflict(format!(
-                "a turn is already stored under '{}'",
-                ctx.response_id
-            ))),
+            Err(error) if error.is_unique_violation() => match self.store.get(&ctx.response_id).await {
+                Ok(_) => Err(ExecutorError::Conflict(format!(
+                    "a turn is already stored under '{}'",
+                    ctx.response_id
+                ))),
+                Err(not_found) if not_found.is_not_found() => Err(ExecutorError::Storage(error)),
+                Err(lookup_error) => Err(ExecutorError::Storage(lookup_error)),
+            },
             Err(error) => Err(ExecutorError::Storage(error)),
             Ok(()) => {
                 if let Some((lease, checkpoint)) = continuation.zip(checkpoint) {

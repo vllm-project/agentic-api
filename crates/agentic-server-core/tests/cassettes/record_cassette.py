@@ -19,6 +19,8 @@ Modes:
               switch to previous_response_id only (drops conversation id).
   responses   No conversation created. Chains turns purely via
               previous_response_id. Supports --openai, --vllm, and --gateway backends.
+  items       Records flat conversation/item API steps. Select --items-scenario
+              continuation, deletion, branch, pagination, or edge-cases.
 
 Usage:
     python tests/cassettes/record_cassette.py --turns 2 --no-stream --output path/to/cassette.yaml
@@ -291,6 +293,219 @@ def _create_conversation(client: httpx.Client, proxy_url: str) -> str:
     conv_id = resp.json().get("id")
     print(f"[conversation created: {conv_id}]")
     return conv_id
+
+
+
+def _item_request(
+    client: httpx.Client,
+    proxy_url: str,
+    method: str,
+    path: str,
+    *,
+    body: dict | None = None,
+    params: dict | None = None,
+    expected_status: int | None = 200,
+) -> dict:
+    """Send management requests through the shared recording proxy."""
+    response = client.request(
+        method, f"{proxy_url}{path}", json=body, params=params, timeout=TIMEOUT
+    )
+    if expected_status is not None and response.status_code != expected_status:
+        raise RuntimeError(
+            f"{method} {path}: expected {expected_status}, got {response.status_code}: "
+            f"{response.text[:1000]}"
+        )
+    return response.json()
+
+
+def _item_response(
+    client: httpx.Client,
+    proxy_url: str,
+    model: str,
+    prompt: str,
+    *,
+    conversation: str | None = None,
+    previous_response_id: str | None = None,
+    stream: bool = False,
+) -> dict:
+    if conversation and previous_response_id:
+        raise ValueError("conversation and previous_response_id are mutually exclusive")
+    body: dict[str, Any] = {
+        "model": model,
+        "input": [{"role": "user", "content": prompt}],
+        "store": True,
+        "stream": stream,
+    }
+    if conversation:
+        body["conversation"] = conversation
+    if previous_response_id:
+        body["previous_response_id"] = previous_response_id
+    result = (
+        _send_streaming(client, body, proxy_url)
+        if stream
+        else _send_nonstreaming(client, body, proxy_url)
+    )
+    if not result or not result.get("id"):
+        raise RuntimeError("Responses call returned no response ID")
+    return result
+
+
+def _record_duplicate_items(
+    client: httpx.Client, proxy_url: str, source_items_path: str, item_id: str
+) -> None:
+    """Probe generated-ID reuse and duplication without assuming acceptance."""
+    first = {"type": "message", "id": item_id, "role": "user",
+             "content": "Duplicate ID probe: first copy."}
+    second = {**first, "content": "Duplicate ID probe: second copy."}
+    # A single-copy control distinguishes rejection of cross-conversation ID
+    # reuse from rejection caused specifically by duplicates within a request.
+    for items in ([first], [first, second]):
+        conversation = _create_conversation(client, proxy_url)
+        items_path = f"/v1/conversations/{conversation}/items"
+        _item_request(client, proxy_url, "POST", items_path,
+                      body={"items": items}, expected_status=None)
+        _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+    _item_request(client, proxy_url, "POST", source_items_path,
+                  body={"items": [first]}, expected_status=None)
+    _item_request(client, proxy_url, "GET", source_items_path, params={"order": "asc"})
+
+
+def run_items(
+    client: httpx.Client, proxy_url: str, model: str, scenario: str, stream: bool
+) -> None:
+    """Record each conversation or item API request as its own numbered step."""
+    if scenario == "edge-cases":
+        for item in (
+            {
+                "type": "message",
+                "id": f"item_wrongprefix_{secrets.token_hex(8)}",
+                "role": "user",
+                "content": "test",
+            },
+            {
+                "type": "function_call",
+                "id": f"msg_wrongprefix_{secrets.token_hex(8)}",
+                "call_id": "call_prefix_probe",
+                "name": "test_fn",
+                "arguments": "{}",
+            },
+        ):
+            probe_conversation = _create_conversation(client, proxy_url)
+            probe_items_path = f"/v1/conversations/{probe_conversation}/items"
+            _item_request(
+                client, proxy_url, "POST", probe_items_path,
+                body={"items": [item]}, expected_status=None,
+            )
+            _item_request(client, proxy_url, "GET", probe_items_path)
+
+        cursor_conversation = _create_conversation(client, proxy_url)
+        cursor_items_path = f"/v1/conversations/{cursor_conversation}/items"
+        _item_request(
+            client, proxy_url, "POST", cursor_items_path,
+            body={"items": [
+                {"type": "message", "role": "user", "content": f"msg{i}"}
+                for i in range(1, 4)
+            ]},
+        )
+        page = _item_request(client, proxy_url, "GET", cursor_items_path, params={"limit": 2})
+        if len(page.get("data", [])) != 2 or not page.get("last_id"):
+            raise RuntimeError(f"expected a two-item page with last_id: {page}")
+        cursor = page["last_id"]
+        _item_request(client, proxy_url, "DELETE", f"{cursor_items_path}/{cursor}")
+        _item_request(
+            client, proxy_url, "GET", cursor_items_path,
+            params={"after": cursor, "limit": 2}, expected_status=None,
+        )
+        # The first item on the page survived deletion; reuse its real public ID.
+        _record_duplicate_items(client, proxy_url, cursor_items_path, page["data"][0]["id"])
+        return
+
+    conv_id = _create_conversation(client, proxy_url)
+    items_path = f"/v1/conversations/{conv_id}/items"
+
+    first = _item_response(
+        client,
+        proxy_url,
+        model,
+        "Remember the secret word SAPPHIRE. Reply with only SAPPHIRE.",
+        conversation=conv_id,
+        stream=stream,
+    )
+    added = _item_request(
+        client,
+        proxy_url,
+        "POST",
+        items_path,
+        body={"items": [{"role": "user", "content": "The new secret word is ORCHID."}]},
+    )
+    item_id = added["data"][0]["id"]
+
+    if scenario == "pagination":
+        _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+        first_page = _item_request(
+            client, proxy_url, "GET", items_path, params={"order": "asc", "limit": 2}
+        )
+        cursor = first_page.get("last_id")
+        if not cursor:
+            raise RuntimeError("first item page has no cursor")
+        _item_request(
+            client,
+            proxy_url,
+            "GET",
+            items_path,
+            params={"order": "asc", "limit": 2, "after": cursor},
+        )
+        _item_request(client, proxy_url, "GET", items_path, params={"order": "desc"})
+        descending_page = _item_request(
+            client, proxy_url, "GET", items_path, params={"order": "desc", "limit": 2}
+        )
+        descending_cursor = descending_page.get("last_id")
+        if not descending_cursor:
+            raise RuntimeError("first descending item page has no cursor")
+        _item_request(
+            client,
+            proxy_url,
+            "GET",
+            items_path,
+            params={"order": "desc", "limit": 2, "after": descending_cursor},
+        )
+        _item_request(
+            client,
+            proxy_url,
+            "GET",
+            items_path,
+            params={"order": "asc", "include[]": "message.output_text.logprobs"},
+        )
+        return
+    if scenario == "deletion":
+        _item_request(client, proxy_url, "DELETE", f"{items_path}/{item_id}")
+    elif scenario == "branch":
+        _item_response(
+            client,
+            proxy_url,
+            model,
+            "What is the most recent secret word? Reply with only that word.",
+            previous_response_id=first["id"],
+            stream=stream,
+        )
+        _item_request(
+            client,
+            proxy_url,
+            "POST",
+            items_path,
+            body={"items": [{"role": "user", "content": "The branch marker is VIOLET."}]},
+        )
+    else:
+        _item_response(
+            client,
+            proxy_url,
+            model,
+            "What is the most recent secret word? Reply with only that word.",
+            conversation=conv_id,
+            stream=stream,
+        )
+
+    _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
 
 
 def _send_nonstreaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | None:
@@ -1272,10 +1487,16 @@ def run_responses(
 )
 @click.option(
     "--mode",
-    type=click.Choice(["conv", "isolation", "mixed", "responses", "messages", "store_true_then_store_false"]),
+    type=click.Choice(["conv", "isolation", "mixed", "responses", "messages", "store_true_then_store_false", "items"]),
     default="conv",
     show_default=True,
     help="Recording mode.",
+)
+@click.option(
+    "--items-scenario",
+    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases"]),
+    default="continuation",
+    help="Conversation item recording scenario (for --mode items).",
 )
 @click.option(
     "--branch-from",
@@ -1438,6 +1659,7 @@ def main(
     output: str,
     mode: str,
     branch_from: tuple[int, ...],
+    items_scenario: str,
     branch_turn_number: tuple[int, ...],
     stream: bool,
     transport: str,
@@ -1461,6 +1683,18 @@ def main(
     append: bool,
 ) -> None:
     """Interactive multi-turn cassette recorder (proxy embedded)."""
+    if mode == "items":
+        expected_turns = (10 if items_scenario == "pagination" else
+                          6 if items_scenario == "branch" else
+                          19 if items_scenario == "edge-cases" else 5)
+        if turns != expected_turns:
+            raise click.UsageError(
+                f"--mode items --items-scenario {items_scenario} requires --turns {expected_turns}."
+            )
+        if append:
+            raise click.UsageError("--mode items does not support --append.")
+    if mode == "items" and branch_from:
+        raise click.UsageError("--mode items has scripted branches; omit --branch-from.")
     if branch_turn_number and not branch_from:
         raise click.UsageError("--branch-turn-number requires --branch-from.")
     if len(branch_turn_number) > len(branch_from):
@@ -1697,7 +1931,9 @@ def main(
 
         try:
             with httpx.Client(headers=headers) as client:
-                if mode == "conv":
+                if mode == "items":
+                    run_items(client, proxy_url, model, items_scenario, stream)
+                elif mode == "conv":
                     run_conv(client, turns, model, stream, store, branches, proxy_url)
                 elif mode == "isolation":
                     run_isolation(client, turns, model, stream, store, proxy_url)

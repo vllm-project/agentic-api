@@ -44,3 +44,13 @@ fn batch_requests_and_empty_pages_match_wire_contract() {
         json!({"object":"list", "data":[], "has_more":false, "first_id":null, "last_id":null})
     );
 }
+
+#[test]
+fn manually_added_assistant_shorthand_remains_input_text() {
+    let item: ConversationItem =
+        serde_json::from_value(json!({"type":"message", "role":"assistant", "content":"9"})).unwrap();
+    let resource = ItemResponse::new("msg_manual".into(), item);
+    let actual = serde_json::to_value(resource).unwrap();
+    assert_eq!(actual["role"], "assistant");
+    assert_eq!(actual["content"], json!([{"type":"input_text", "text":"9"}]));
+}

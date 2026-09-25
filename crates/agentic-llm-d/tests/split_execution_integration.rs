@@ -210,7 +210,7 @@ async fn assert_relayed_call_id_rejected(
     );
     assert!(!message.contains(marker), "{case}: leaked call_id: {message}");
 
-    let retry = function_call("fc_retry", "call_retry", "completed");
+    let retry = function_call(&format!("fc_retry_{response_id}"), "call_retry", "completed");
     let corrected = Box::pin(persist(
         retry_context,
         UpstreamBody::Json(&upstream_call_json(&retry, "completed")),
@@ -387,7 +387,7 @@ async fn assert_relayed_tool_call_ids_are_validated(stream: bool) {
         // the reserved response ID with a usable upstream response.
         let valid = json!({
             "id": "resp_retry", "status": "completed", "output": [{
-                "type": "custom_tool_call", "id": "ctc_retry", "call_id": "call_retry",
+                "type": "custom_tool_call", "id": format!("ctc_retry_{response_id}"), "call_id": "call_retry",
                 "name": "raw_echo", "input": "retry succeeded", "status": "completed"
             }]
         })
