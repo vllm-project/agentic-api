@@ -522,29 +522,14 @@ pub fn make_request(
     conversation_id: Option<String>,
 ) -> RequestPayload {
     RequestPayload {
-        model: "test-model".to_string(),
+        model: "test-model".into(),
         input: serde_json::from_value(serde_json::to_value(input).expect("serialize Responses input"))
             .expect("request should contain valid Responses input"),
-        instructions: None,
         previous_response_id,
         conversation_id,
-        tools: None,
-        tool_choice: None,
         stream,
         store,
-        include: None,
-        reasoning: None,
-        text: None,
-        temperature: None,
-        top_p: None,
-        max_output_tokens: None,
-        ignore_eos: None,
-        truncation: None,
-        metadata: None,
-        parallel_tool_calls: None,
-        prompt_cache_key: None,
-        cache_salt: None,
-        context_management: None,
+        ..Default::default()
     }
 }
 

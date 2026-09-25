@@ -263,6 +263,7 @@ fn aggregate_budget_charges_canonical_durable_fallback_before_inference() {
         conversation_id: None,
         history: Vec::from(&ResponsesInput::Text("durable history".to_owned())),
         metadata: ResponseMetadata {
+            multi_agent_tree: None,
             effective_instructions: Some("metadata".repeat(10)),
             ..ResponseMetadata::default()
         },

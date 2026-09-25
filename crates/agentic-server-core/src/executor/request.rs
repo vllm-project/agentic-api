@@ -5,6 +5,7 @@ use crate::config::{Config, ResponsesConfig, default_database_url};
 use crate::error::Error;
 use crate::executor::gateway::GatewaySchedulerPolicy;
 use crate::executor::modes::{ConversationHandler, ResponseHandler};
+use crate::executor::multi_agent::ValidatedTreeCheckpoint;
 use crate::storage::backend::redact_database_urls;
 use crate::storage::{
     ConversationStore, ConversationVersion, DatabaseBackend, ResponseStore, create_pool_with_schema_and_configs,
@@ -22,6 +23,8 @@ const GATEWAY_TOOL_ALIASES_ENV: &str = "MESSAGES_GATEWAY_TOOL_ALIASES";
 /// Context built by `rehydrate_conversation`, threaded through the execute pipeline.
 #[derive(Debug)]
 pub struct RequestContext {
+    /// Private canonical tree; committed atomically with response metadata.
+    pub multi_agent_tree: Option<ValidatedTreeCheckpoint>,
     /// Untouched original request from the client.
     pub original_request: RequestPayload,
     /// Enriched request with rehydrated conversation history injected into `.input`.

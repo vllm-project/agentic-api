@@ -88,16 +88,15 @@ pub enum CollaborationResult {
 #[serde(rename_all = "snake_case")]
 pub enum AgentListingStatus {
     Running,
-    Completed,
+    Completed(String),
     Interrupted,
     Failed,
 }
 
 #[derive(Debug, Serialize)]
 pub struct AgentListing {
-    pub task_name: String,
-    pub status: AgentListingStatus,
-    pub last_task_message: String,
+    pub agent_name: String,
+    pub agent_status: AgentListingStatus,
 }
 
 impl MultiAgentAction {

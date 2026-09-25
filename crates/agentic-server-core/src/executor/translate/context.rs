@@ -35,6 +35,11 @@ impl std::fmt::Debug for TranslationContext {
 }
 
 impl TranslationContext {
+    pub(in crate::executor) fn with_collaboration(mut self, enabled: bool) -> Self {
+        self.collaboration_enabled = enabled;
+        self
+    }
+
     pub(super) fn is_collaboration(&self, name: &str) -> bool {
         self.collaboration_enabled && MultiAgentAction::from_tool_name(name).is_some()
     }

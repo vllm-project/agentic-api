@@ -37,15 +37,15 @@ async fn recorded_two_round_stream_has_exact_stage_tree_and_upstream_parent() {
         {"type":"web_search_preview"},
         {"type":"namespace","name":"mcp__shell","tools":[{"type":"function","name":"run","parameters":{"type":"object"}}]}
     ])).unwrap());
-    let Either::Right(stream) = traces
-        .run(
+    let Either::Right(stream) = Box::pin(
+        traces.run(
             ExecuteRequest::new(payload, fixture.exec_ctx)
                 .with_auth(Some("private-auth".into()))
                 .run(),
-        )
-        .await
-        .unwrap()
-    else {
+        ),
+    )
+    .await
+    .unwrap() else {
         panic!("expected stream");
     };
     // Poll outside the initiating future: the executor must carry its own context.
@@ -144,8 +144,7 @@ async fn http_failure_records_status_without_error_body() {
     let fixture =
         TestFixture::new_with_responses(vec![MockResponse::Status(503, "private upstream error".into())]).await;
     assert!(
-        traces
-            .run(ExecuteRequest::new(request(false), fixture.exec_ctx).run())
+        Box::pin(traces.run(ExecuteRequest::new(request(false), fixture.exec_ctx).run()))
             .await
             .is_err()
     );

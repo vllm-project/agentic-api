@@ -17,6 +17,15 @@ pub(crate) async fn prepare_request_tools(
     conv_handler: &ConversationHandler,
     resp_handler: &ResponseHandler,
 ) -> ExecutorResult<(RequestContext, Option<ToolSearchState>)> {
+    if ctx
+        .enriched_request
+        .multi_agent
+        .as_ref()
+        .is_some_and(|config| config.enabled)
+    {
+        // Each agent prepares its own search view from its canonical checkpoint.
+        return Ok((ctx, None));
+    }
     let restored_loaded_tools = restored_loaded_tools(&mut ctx, conv_handler, resp_handler).await?;
     let restore_only_declared = ctx.original_request.tools.is_some();
     let state =
@@ -77,6 +86,7 @@ mod tests {
         }))
         .unwrap();
         let metadata = ResponseMetadata {
+            multi_agent_tree: None,
             tool_search_loaded_tools: Some(vec![loaded.clone()]),
             ..ResponseMetadata::default()
         };
@@ -91,6 +101,7 @@ mod tests {
         }))
         .unwrap();
         let mut ctx = RequestContext {
+            multi_agent_tree: None,
             original_request: request.clone(),
             enriched_request: request,
             new_input_items: Vec::new(),

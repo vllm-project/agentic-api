@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::super::models::Response as StorageDbResponse;
 use super::errors::StorageError;
+use crate::types::agent_tree::StoredTreeSnapshot;
 use crate::types::io::ToolChoice;
 use crate::types::tools::ResponsesTool;
 use crate::utils::common::serialize_to_string;
@@ -13,6 +14,8 @@ use crate::utils::common::serialize_to_string;
 /// Response metadata with effective configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ResponseMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multi_agent_tree: Option<StoredTreeSnapshot>,
     pub model: String,
     pub previous_response_id: Option<String>,
     pub effective_tools: Option<Vec<ResponsesTool>>,
@@ -124,6 +127,7 @@ mod tests {
     #[test]
     fn test_response_metadata_serialization() {
         let metadata = ResponseMetadata {
+            multi_agent_tree: None,
             model: "gpt-4".to_string(),
             previous_response_id: Some("resp_1".to_string()),
             effective_tools: None,
@@ -165,6 +169,7 @@ mod tests {
                 .expect("discovered MCP tool"),
             });
         let metadata = ResponseMetadata {
+            multi_agent_tree: None,
             effective_tools: Some(vec![tool]),
             tool_search_loaded_tools: None,
             ..ResponseMetadata::default()

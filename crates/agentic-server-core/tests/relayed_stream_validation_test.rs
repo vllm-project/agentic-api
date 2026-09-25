@@ -17,6 +17,7 @@ fn request_context() -> RequestContext {
     }))
     .expect("valid request");
     RequestContext {
+        multi_agent_tree: None,
         original_request: request.clone(),
         enriched_request: request,
         new_input_items: Vec::new(),

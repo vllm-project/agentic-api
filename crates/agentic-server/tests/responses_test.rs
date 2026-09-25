@@ -254,6 +254,7 @@ async fn persist_competing_turn(pool: &Arc<DbPool>, conversation_id: &str) {
             None,
             competing_turn_items(),
             &ResponseMetadata {
+                multi_agent_tree: None,
                 model: "competing-model".to_owned(),
                 ..ResponseMetadata::default()
             },

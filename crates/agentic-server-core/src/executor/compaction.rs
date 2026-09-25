@@ -1,5 +1,5 @@
 mod estimate;
-pub(crate) use estimate::estimate_input_tokens;
+pub(crate) use estimate::{estimate_history_tokens, estimate_input_tokens};
 
 mod context;
 mod summary;
@@ -9,6 +9,7 @@ use context::item_has_meaningful_context;
 use summary::completed_summary_text;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
+use crate::executor::pending_calls::resolved_prefix_len;
 use crate::executor::persist::persist_prepared_turn;
 use crate::executor::prepare::prepare_request_tools;
 use crate::executor::rehydrate::rehydrate_conversation;
@@ -81,6 +82,7 @@ fn request_payload(model: String, input: ResponsesInput, instructions: Option<St
         parallel_tool_calls: None,
         prompt_cache_key: None,
         cache_salt: None,
+        multi_agent: None,
         context_management: None,
     }
 }
@@ -140,6 +142,7 @@ async fn compact_items_with_trigger(
     );
     enriched_request.prompt_cache_key.clone_from(&request.prompt_cache_key);
     let ctx = RequestContext {
+        multi_agent_tree: None,
         original_request,
         enriched_request,
         new_input_items: Vec::new(),
@@ -188,9 +191,28 @@ pub(crate) async fn maybe_compact_context(
         return Ok(None);
     }
 
-    tracing::debug!(estimated_tokens, threshold, "compacting response input");
-    let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
-    let (compacted, usage) = compact_items_with_trigger(
+    tracing::debug!(
+        estimated_tokens,
+        threshold,
+        "automatically compacting resolved response input"
+    );
+    // Commit the replacement only after a usable summary is available.
+    let items = Vec::from(&ctx.enriched_request.input);
+    let multi_agent = ctx
+        .enriched_request
+        .multi_agent
+        .as_ref()
+        .is_some_and(|config| config.enabled);
+    let prefix = if multi_agent {
+        resolved_prefix_len(&items)?
+    } else {
+        items.len()
+    };
+    if !items[..prefix].iter().any(item_has_meaningful_context) {
+        return Ok(None);
+    }
+    let input = ResponsesInput::Items(items[..prefix].to_vec());
+    let (mut compacted, usage) = compact_items_with_trigger(
         &ctx.enriched_request,
         input,
         exec_ctx,
@@ -198,6 +220,15 @@ pub(crate) async fn maybe_compact_context(
         CompactionTrigger::ContextManagement,
     )
     .await?;
+    if multi_agent {
+        compacted.extend(
+            items[..prefix]
+                .iter()
+                .filter(|item| matches!(item, InputItem::McpListTools(_)))
+                .cloned(),
+        );
+        compacted.extend_from_slice(&items[prefix..]);
+    }
     ctx.enriched_request.input = ResponsesInput::Items(compacted.clone());
     ctx.new_input_items = compacted;
     if let Some(continuation) = &mut ctx.continuation {
@@ -337,6 +368,7 @@ mod tests {
             compact_threshold: Some(threshold),
         }]);
         RequestContext {
+            multi_agent_tree: None,
             original_request,
             enriched_request,
             new_input_items: Vec::new(),
@@ -1051,6 +1083,7 @@ mod tests {
                 None,
                 vec![InOutItem::Input(user_message("remember banana"))],
                 &ResponseMetadata {
+                    multi_agent_tree: None,
                     model: "test-model".to_owned(),
                     previous_response_id: None,
                     effective_tools: None,

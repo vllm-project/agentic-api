@@ -1,0 +1,927 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: 'Complete these independent jobs for a proposal decision: (1) retrieve
+        proposal alpha using get_proposal and assess its delivery time and risk; (2)
+        retrieve proposal beta using get_proposal and assess its delivery time and
+        risk. Use subagents to work on the jobs in parallel. Once their assessments
+        are available, compare the tradeoffs and recommend a proposal using the returned
+        data. Identify any assumptions or missing information instead of inventing
+        proposal details.'
+      max_output_tokens: 16384
+      model: gpt-5.6-sol
+      multi_agent:
+        enabled: true
+        max_concurrent_subagents: 3
+      store: true
+      stream: false
+      tools:
+      - description: Return details for a proposal that the agents should compare.
+        name: get_proposal
+        parameters:
+          additionalProperties: false
+          properties:
+            proposal:
+              enum:
+              - alpha
+              - beta
+              type: string
+          required:
+          - proposal
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      openai-beta: responses_multi_agent=v1
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1789643524
+      created_at: 1789643344
+      error: null
+      frequency_penalty: 0.0
+      id: resp_03e601653a75066e006aabca50bc1887d09217dfa7e5432e3c
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 16384
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABqq8sELjO7Wy6v7Rjk_8Sjup8kyglWwRmZIIGTkssrcckX-woNb1Iitu9aGIwE2q4g_7ysuogk7-cuaiFK6pqvQag4JQ9Nh__gwzMF4rczAhJBBtx9QurGwF_byXXJt3JPWbQhjgQ-YQOT7OH8FBrsvBTYUEn9EysQZd_Ok86bViTjUqxIzng6JOy-uVtZVL86fd-3OtXlNY66FmofGLbAGBwPf1jOyU2eXKkCIKjhVsUeh0zctE9MEaD2K5v_WRDQcatUzEtRZICd-YNYi55TeMGbJ1aCKjORuJdT-ylg_Ig8-6r81BW71SCefo-HYStGOuYzLjSoGpQfWYLnvgVpQuyxnobzFAOo_KGcE_ygmdNpFQs7l4yVpucwlFZnEdIU8ZpoaLQm-Mol1S-QfwsGOrU2eZslPrWvQihKIQNLuEHAI6TZ5zB57yfnhuyqrwjNlyR4orFxQmZpY6Z1xIG8XxWAu6BHyXzCG0kcBR-7fytnVjmPO5z9NMSgAZTvZLZ6kcT--9nV_-2Zi2-LUqeis8ak5hCwbh7hspy92Ow4kiNckn-INOVcf-s-8W-ldhJ1YMI2Ds1TGCBN95YgGtdBWQ2Rp3t2pcnoxGCfFA5CJSJoHSoABmyOBFot-ye7FKfj7ii2P7m-VtxjjnljmJwViKcIk0o7hU8tCaE0vdIY88zb5ygBMXWadnGPxU02TUj_ExEXvNMzrjxqoxZGFFC3M3oRnE6ExfsFmcX7Me3R-Jb3r056MshqUcDw12HPE_7mPVNoiKGuiJ1EpoejqMLGSIsLOheoGI4DurE-T6cZnaExeSvlcgo2yRV-rR-0CpHHoQwQwn4zOVZIdRtguWwkmBLAzCJAVvgc83T82krmrMzwY_5sA51Zs5pu7snjLM3LWkZj4CIMEUZWLv8_AO7YmJxkcnflbSUzyqltBrhu98_SyT7e1bG42Vo-98UkHVX8kFroK7n8f67bAl2GAbo7vy99-Wu4TwurzKEKWpbKB1WhH4i_Ur4r1cbC3T_-fhkm989N_WQ9my1D8REvsnpKhupFNn5o5793PZITNSgPiwlkDGJF1jwOcZf0Y4j1A_jMbbX4wLcWOwgvUZWJ87_r7TsMA0Ka7S0auQbojED5V9EzziK0UGsoFSTE-qXQ0LjJtGq9akubijis6m6HTWkoT3eSZo1XopNm_n7f8ebv4goXzkNKsWeI08SUdgWmnFPm2t288dWxgUJ-qDoQ_EyqWRa2JXIvVJBAc2c1gChPDWlW8SDZ3AbGdgBDRay6P3E5b1PF
+        id: rs_03e601653a75066e006aabca51af3c87d092a7fd6e6aeab4f4
+        summary: []
+        type: reasoning
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        arguments: '{"task_name":"assess_alpha","fork_turns":"all","message":"gAAAAABqq8pSmzpB4E0Cgs4IYgARheMBZBvo7skOrQy6x45DYfLjBlW1TBnRNhJ-jBcBlyJLCpCz3zPMhnfKMAxpC_kv6jE1_BOAzSGTzJJtBSxikesn_o1UqNY_pZqfIm8WBiwbpLy2EUhtd20gN8nRi2sb5WdVK63l5zvPHIL3qC6_Zsb24k21y-8yy2B9zBYlMt6abqcdp0o9P12gs04KLE8r7iwsiZ0q6-xXs_4Rr-jxFSZod-divLRBIQRkJaWGjQHt2RAT-6Jn9WnBy4DCo33qxpJEacVF2x_SJD0kZepsY4MJuGzG-Us0B6oQB6EUSpxvfYSG5UiM_Aku6sXAMh7QmrH5v6QVDaPKOeiEA_RwpgacQao="}'
+        call_id: call_cOecNpGFi1YtgVtsZAbkdOF7
+        id: mac_03e601653a75066e006aabca52304487d086b02330a20cb650
+        type: multi_agent_call
+      - agent:
+          agent_name: /root/assess_alpha
+        content:
+        - text: 'Complete these independent jobs for a proposal decision: (1) retrieve
+            proposal alpha using get_proposal and assess its delivery time and risk;
+            (2) retrieve proposal beta using get_proposal and assess its delivery
+            time and risk. Use subagents to work on the jobs in parallel. Once their
+            assessments are available, compare the tradeoffs and recommend a proposal
+            using the returned data. Identify any assumptions or missing information
+            instead of inventing proposal details.'
+          type: input_text
+        id: msg_03e601653a75066e006aabca52b94487d0b89c7072f7491f51
+        role: user
+        status: completed
+        type: message
+      - agent:
+          agent_name: /root/assess_alpha
+        author: /root
+        content:
+        - encrypted_content: gAAAAABqq8pSEigiC3nEj90g3KYkBcxvzML-7J05rlaTu5AfAsV2E7o8RYKWioQdvBzu9w47zubbf_nBgp70HA9vSc74B4g5VbjE-9IPA5iV_pssro50tY-o-CE0PFmLct-99QYyWDgfnimTO0HXV6ojXayyrAbHdOAp5bgeFCYN0kCZno8zX4zLCqoR45b4dpmb-kOVolj3tDmncx4Nj9MPaz3rlBr6qflcx5_msRvTa6ZpSXQ0OWufpbBv8UXAabIjnXtNaO8s0hW41DLQVOKryS2PYNPLyRPE3spZtCEL6BRPbpugGJJktfbQo9JPsP8n1RRXBkZwP-qt1QWl3PQwd6FS9G1nJdXyX_DiR-RMA_wb0zvvfFsTp_xGoeN1JQqeLlg2pFBDlKWgNOTuoAr6Tq5oTBnZEc348OHtK2xAvTNt1F1p7Pf6ZU0dncosWFuoGjt9qG2NGKfVPl8Gg4i_BwwQvHZcQg==
+          type: encrypted_content
+        id: amsg_03e601653a75066e006aabca52b9b087d08f0c77007bde615d
+        recipient: /root/assess_alpha
+        type: agent_message
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        call_id: call_cOecNpGFi1YtgVtsZAbkdOF7
+        id: maco_03e601653a75066e006aabca52cc9087d0afb97cd2e1d7689c
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"task_name": "/root/assess_alpha"}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root/assess_alpha
+        content: []
+        encrypted_content: gAAAAABqq8sEm6HYkPzxsQ6Sk4Fwb9KKE8hxDTaQPIKOp7biggKBW6CEPjmV73ea7J6EnEUr0UaZOweo9pt4LK6UhcsvtYuWNpeTJ6Cyo3l5-ULBuuke7Be_iru2TlHlvwjVFqDbyc2HEHa6HT6YwPpsxiN_VFVbgwhM9XrEL4CezAHMiwYrNUXc2BAe04piotR0fl5nDf54sebLpzYSam1UirSlv8PsdlYiJwNsRH22T9hRDhjq5uM8mVp4II7b99yalvCFb7hiRv_1KzOAM8JkUAPndHtmit9Gkew2SseRpC8bCC-LRA-Z0bs7eoT2H35DEU-JqFj18w8jH-A1LoJpnDKU-ptzitxkOLuVxD8Z2Wd2qJgy_fl1T8L3bgAiWQ5LP_e05YjcXY_2rFC2enp2uVday-EtZ42jy5P1LrRbmnAoCKaD0e6E5cNuvAsjh_u-GsPa0Gq7F9O6nD1yODOBNmZwss8FEjdn06jpUYtmKrz4ol-alWRUAItdHn8kHdAF_NOAnrsDdqkEXwG7YR0i1_MdaWzM3QdayU0-rouQENjWEIWKuSmWmmKcvXm1SzFvn82eNhFFhUzCGyH70SOJV80kb92BT6VPBoAS2Ce09loANA-f2l3qd3B8hQuWf2-UxOEym48rg-A0P9PMwsHL0Y7fDefeuhfqGzdgHjZidT3Z6wUwyMf0hedsWIydmVIcrhne2maUANxQt0kJJZJGK2o97Y2oadLFptX7hSHyxt8SSTZNkJvqi-Xnoy6th8H9tUtYv-10sdUb7EtpvYnVAQFave5Ql2zSnakC4B01lJOqe6nkYRRwx3mZq4rUGVf7e-00VseBmEXWr2_vPSq8rCnxmalO6D5nCZy84L1WdkTKjM8ewGUp_Vx9e7G_-TZ0Z2qXkf8Cbm2NgwTQfQfZyf1HpKPp1nm03Ls6TGFtOdQ1lY2-_5xXoP3Sr1-e2OdTPAfCCtqocPJEPhPZN-rlTQrnyO4yUpnW8478m0b2GJnntWM55pFr1rCX-mlijhw8srdGcL6khg0j2bkYzD8OtoTJ1owVACdH3FD6mMVvGiK_OypTT7zn-CL5CKUgLqrOWuuPvKEdgbEvr2f4tUHPpvWQi_gY8otX2z_YNnecnRguiJgX-LUMYhtMNo1plXvUGRzfaeor1z2fTgtrzFXr7WnA9Yr3qMYWwH78OHFIJuxjtV1VjdXNpv1Dx_Rff8jlYr776ASg
+        id: rs_03e601653a75066e006aabca53652887d09bfb12245ca6e1d0
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root/assess_alpha
+        arguments: '{"proposal":"alpha"}'
+        call_id: call_uoNp8PeL29xhoVahYxAkTarT
+        id: fc_03e601653a75066e006aabca5390a087d0a8ce2e64401ddf69
+        name: get_proposal
+        status: completed
+        type: function_call
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        arguments: '{"task_name":"assess_beta","fork_turns":"all","message":"gAAAAABqq8pUBKSqMPlmG7knNEtIvKt4vrFMWCpmdUKSsTpDJEW9dcE5XJ00laKHTqm4Jd4LUU6BCs_TDawckZ-wx5qdGHXoecgzW5OMgSTKNhlcpUr_TDn7tjQ60kxQ1We95tc0GJ9T8wlz-4rQyqFbxXWVR2H93l7X4hz4N3zl28K0Ifk1yXpNhigTs56bZMHDD9cAX0Ok_VMz-yVPotu5_LtIo6J_5wsZlLvfQbtdwBR2P-lufjRc6nylwYzMB_RzlH_LrcRiHJHuu676GYhkwxUCEtHKDUJYyfa9_ZozqCX8jI7TS7TEBksJwRmXXD_L5JQhvYyr5dwb96bOPzdxt83ZdAdxsg=="}'
+        call_id: call_yZswmrRvDy9pNvW93KouTwW7
+        id: mac_03e601653a75066e006aabca53dc3c87d09ffcd6de5345bc86
+        type: multi_agent_call
+      - agent:
+          agent_name: /root/assess_beta
+        content:
+        - text: 'Complete these independent jobs for a proposal decision: (1) retrieve
+            proposal alpha using get_proposal and assess its delivery time and risk;
+            (2) retrieve proposal beta using get_proposal and assess its delivery
+            time and risk. Use subagents to work on the jobs in parallel. Once their
+            assessments are available, compare the tradeoffs and recommend a proposal
+            using the returned data. Identify any assumptions or missing information
+            instead of inventing proposal details.'
+          type: input_text
+        id: msg_03e601653a75066e006aabca54351087d08b0202181f58831c
+        role: user
+        status: completed
+        type: message
+      - agent:
+          agent_name: /root/assess_beta
+        author: /root
+        content:
+        - encrypted_content: gAAAAABqq8pUJHGHhKAHlPxZBmEVp8YIOJS4FFVw3XHGI_l2jOUy0KEpo655kYWBk6-CITB4oSn1fEx2a5ULfDI0TlW2YNSQJBt2kihWkU-_7L_fZWERRVCrmbceJXK9VubG6wh3bl6q8mX4nhqZfJ1Fhuea2Rfy7-HbRMCoLpaHnrv7C7lmCiBrX7rsMJMvE_-pyP7Pe7yn3bFmonn9pebjqHnVdPZCJ5UnYLZG64eUSPRCdqgw2ekGiDqVUtfm_QuxI2tZHHNUxnomtoRwiRZVfTfrG6_SuDZcxnz6aRTJkFYCqnMUL72t5Vdvs9oo0Tz6RB2_IigSh2LDqSowJZ-Z3ghys6oswgdH5qWuxD8j3FYo0TiOqcW42RN7VyC8tm1OwMuAxL9FU7NukhEBOiGT9xAAgCCM826MTXw-ONrDLl3xPdf6Prd0IRHxC2b-dQxIjCtuFQep
+          type: encrypted_content
+        id: amsg_03e601653a75066e006aabca54357c87d0ad15df7225a791c7
+        recipient: /root/assess_beta
+        type: agent_message
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        call_id: call_yZswmrRvDy9pNvW93KouTwW7
+        id: maco_03e601653a75066e006aabca5443fc87d084e89f2bc4b06e35
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"task_name": "/root/assess_beta"}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root/assess_beta
+        arguments: '{"proposal":"beta"}'
+        call_id: call_R01TW6PX61bnU2UQyTyegPmi
+        id: fc_03e601653a75066e006aabca54e0e087d0be919e56e39e4218
+        name: get_proposal
+        status: completed
+        type: function_call
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABqq8sEFRFnW2RH0GE1OgkAkrhUFXyDE5cQocZUTYWO7cuNduVIwApabfmpNhS-fY1LDxaQfq5tlp8AQlz9gRzh5nCpebFC_VgopNC_aDDeX3W9prAAxSWo6UJ3HUQuHD_yQVrw6tyiHlCmYuGuyFipr1aB43ibiwg4JNPxTcVKpWqiStP2woVpel31_4WuyXN88s8Iuiw9NQoGMCe77vgML3FTlPqUiN3NV5RNjBvq6wvMaazkiP2pyeUiPH1ZLmIpaF99dTA5Uu1NWk3DKQb2GfAen9jIvFyiLW8z2TMZJVanH1SWrD0AkLFQBqncTuKvIE1vcuL0Q_JazQGxkzf8Oq3Mhm2pV-yxEuZc4SklDLHQcZ4KigNb5F_kaAN0k1vAV22x-lO3DnDxA5eeY5mj3eYz46VN9mCxRmRY-LzbegHNMrew55mZkwKtXRDF7wDzZWHKjtil9nRkSQjJDMLOOI04cwGgl9k3EWgiB2FhJWc9ZVy1yG0Ys9JLBtLpvdSqz2QY_Et4p7phDNv69QShSOkqwSu_Sdt84J8NjX4Ilay8X112pZiHDHbFswuS1BHQgwmiUuwPhi54FOGtkEeNgZ5Fm2RAia9IKEUerg73n-jF-zRjZfwRXOUvbpVCzj2cPfZYsxc5uYStzZhU-hWAqpDlz8b8lKex67ZsSNoZctPoOJRuGBzywZMesuEmihGM-t0gJ1TT0tQrZKRshvsoJqnkHF9XKVPQ4b4PSZ4qKL8SmCxbMye-MKT8SAsCTXgKOT4qUq_oEC5o90yAVtFWRWlq9UvG1b_wrwIQWo-f-16DcBgp6DdqEkN-aJxhKxbYwVuMlaphm5dQWQw5oJ2_PUtEEzoLVTVyTwoVX3FHjmrATu1bPBR_q-J99AXfdOxtEH5RoB9SWtfIdacmYSpNcb9B2AMuA_TBXhNMFMygFdNbUWFt3-KPEjBwAJ-xWvN0q-8O6oJAMvsl5gPn9i9ZCPzkuyaTqGf1o6N3HM_fUzffhvUgP2R8F7lGQPcNUOlP8FTOnP6dtZgACypvgsQgvtyrAz_HN9b1zlzG1QgMx_AeVfzM8S4kN2PyEpOC6_x5DhIHLpTS7lty-NtglyXJVa4BUZDGgO70xJxucL7cDRWdA1sOBNZPrqzMk697tP9QHsnPPMU0upoZQBPVDjOoV_ChUpDrFlzb5JBkiSJAd1357tE=
+        id: rs_03e601653a75066e006aabca55aba087d0adf4f8f64a54914a
+        summary: []
+        type: reasoning
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        arguments: '{"timeout_ms":30000}'
+        call_id: call_EtFQ0iaWQbDGsRqUjvF04rmX
+        id: mac_03e601653a75066e006aabca55d07087d0a8a94c6554f787d1
+        type: multi_agent_call
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        call_id: call_EtFQ0iaWQbDGsRqUjvF04rmX
+        id: maco_03e601653a75066e006aabca73f12087d09667d01d22a1eb05
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"message": "Wait timed out.", "timed_out": true}'
+          type: output_text
+        type: multi_agent_call_output
+      - action: list_agents
+        agent:
+          agent_name: /root
+        arguments: '{}'
+        call_id: call_Tibqgpkp7O8yteZsZUC8D3sz
+        id: mac_03e601653a75066e006aabca7538f887d0a92e211f3f579654
+        type: multi_agent_call
+      - action: list_agents
+        agent:
+          agent_name: /root
+        call_id: call_Tibqgpkp7O8yteZsZUC8D3sz
+        id: maco_03e601653a75066e006aabca7551b887d08349e9ba146fa70e
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"agents": [{"agent_name": "/root", "agent_status": "running"}, {"agent_name":
+            "/root/assess_alpha", "agent_status": "running"}, {"agent_name": "/root/assess_beta",
+            "agent_status": "running"}]}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABqq8sEIrLp1gwSEaU16808p77jLpI17sEXF2KNHdIjuBPwbvpj1FHNbzrvei4c4JyQDnYK2zWIjsFq1moElxZtcpS93TJEktTzi35PfDokdJCQXkhsehGmXv_CsWvwXmzw4p3xz98We8ERQ32ZRRy_L5S6yXWnGbXi_Y7PYzqZdh5LCrhuWrAjnZ2rpPAXfKQ5BTj1LIXjJQ8fNmiCyPZkcoDFcEWZJVG4qh4p1_F_8a3-c8-8dFNXwpdBIbpkKEOtrvfz59BYaQKeiL5AlfiZN2vcxAfBfvp6cd9pYgx8ASNcdQ3EJu_GBF_gvHnMSO3HvN7VGFQr0PdlNohdcIAAv6_7MFZ81RXBXqt_kJfAcO8rzuWCRau_1qHl3LYB__75DLAWBrlJjhNIMiK7hrVmnVnbstZI5ZNnYebhkI52wTbh7fgcGjtBqoo_AXCl5BLvAxppEBhYqZaq-f1tH6gdg-W80K7NoT3GyQfy1zg4HKNom3YRBIne79ClmHYhDq06MKyGdgMsgOaWawlp9kZmqRSrhNa01iBLICT6grwZ4l5LPCOna6UAXu4weyvrj3SfmNtNeXxyXc3H3rcJOwfDoCDQANvkL_XoZI6jnfcr9_jnmRx08vb6DF4MDOcaaY78x3xWqN3XQISR0c6L29OOH8Fu-eBx0ann-8Hrao8d-p9FWrvJ4yhi5rEYCtKbIY0rHe3Fxsx4jGKVYk17ETTB4egoEJojFJd4blvl88bkTC2AtCgp2txzgH1uDDkBNM8AVcduHNla1dLvrLe0-4vFQLcL6MHsvkCr_v9WYdd6-ECEl3Y6s9RVXGVER4Kpr2NKsipRgImHjI11obs2fOKQjUnB2JLRY5uOOZn7rxMlXcSOVOHofQAdXKfUBnFsnZqt_NwhmGqjDrp6lybfWndJ7p196gkHHGe9P8-OysN7-mjZAi7WTKpoNQUnJUypdKASU5zCW_OrOfvGWCVX3nj308Bj8gDUAHjG_gUc0KQPjV_Y4ss5MAxM967xTm7ijvyON8GWWXuBi_AJYjkp4uRZR_BwaFgHXoqePvUJBwu1vv2oW3H1eqnq67o1zH296gJujJotxCnxodKF6EPU4B-lkfk3hJoa9zAegX1I7e7Wl-gEWdDwN-CFNahbZyyP_32bEcnVwYqUZBcd8Wo1KCknMRj1yU_MBkhZnYL3Uz0vD9fAP0IUYQJjA44SYyPS9W_DeOLSYuSZQHY_VYHMzqXaY3dslDqK0Sx_fRbedRxyBogExc4=
+        id: rs_03e601653a75066e006aabca7700d887d0a4aae86687cbd47d
+        summary: []
+        type: reasoning
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        arguments: '{"timeout_ms":30000}'
+        call_id: call_HN86mRfyp6dfh0tvOG1cXtrn
+        id: mac_03e601653a75066e006aabca77456c87d08f62fa5be3e53204
+        type: multi_agent_call
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        call_id: call_HN86mRfyp6dfh0tvOG1cXtrn
+        id: maco_03e601653a75066e006aabca9624a087d08574cd14c8e41188
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"message": "Wait timed out.", "timed_out": true}'
+          type: output_text
+        type: multi_agent_call_output
+      - action: list_agents
+        agent:
+          agent_name: /root
+        arguments: '{}'
+        call_id: call_5h7iLo6cysnhAg1zWVEsYi7n
+        id: mac_03e601653a75066e006aabca9746d487d0a21006d18360a053
+        type: multi_agent_call
+      - action: list_agents
+        agent:
+          agent_name: /root
+        call_id: call_5h7iLo6cysnhAg1zWVEsYi7n
+        id: maco_03e601653a75066e006aabca9767f487d0bd9ec273c28554c8
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"agents": [{"agent_name": "/root", "agent_status": "running"}, {"agent_name":
+            "/root/assess_alpha", "agent_status": "running"}, {"agent_name": "/root/assess_beta",
+            "agent_status": "running"}]}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABqq8sEksR588u4CbwKh7Ws5ffdUetMlYfoymFLA9Z3dx6MX-udOJKqVQDbuI2V0KzAGEGOl0ta0o_u_klrTbItvXOdLKvwKSiYfPWC_SKLPCC0T3zZ35-kp_xR1kkL_97HcnS21yM0oFZNA0CfEQ8msbO1QmH6vrGOQYNYS9TgoximCCmjeLgApAcJZbSVVLuA3AgFvxtHzU2blkAv9oLEzfw3pSF0ar2E2mJ8XQzkNHxq41Rp3Q4Nh4qiEm__qg0mwh82bttuQBigZg9MSa70VIzb6g0G3wHcFU4fBjyVVo__v4-NJtU9BeVHns5EVCHgPJbe3ci3dcwhqjNusyKXUza3BKE_Szc2jV4OR69ITw89PRmdN1UaBpDQnOmxgNHYaHvma0aMj-VANLlMxCSD_rjURTBdNb6URTC3fyDNG0DeSWd_YNmjxv6zlFmAB7Iy66tRK12Uyw-lYar76JJfm76jKxXygO5yQKri3t0aBlB2CRiihnNIgQawtLOABsd4ivUW7yde8-eZpdU3t0EmtL1k-NHUjyGIEpwLVLRra6VxXgvYubaAMgFionNAnMWCTuFMyTFIF_HeE8llR4DJkEDZ85I3BCXxek-o1p6BwOTKor6W3yuN-03yylw7iRimBny5A4C8soI5ojD5cB0d_-TQaSa50t3qDeSIhsdxsTv4cAKdUOq44PF5rKLSOm7DpePn93xGIyMBga-rO-bVQNNkjJ_2yYFLWE5Q5VNpINe7Fhvl-hS7nccGlrbxjyMWcjq0YQZYLdH3pAR9JnmpG0Sq3lTfuesJZk4yC3bAXSPQ4berETprCoQKw7D7iTJme3pJbdFlnULfzmyRpliyiSbWKA26i1eT6kBJwEXEDJeQmtbfJOjPNreRcAFuVzAphN5H-hwdmWhlIDwRJLHvEVo-M_nE0o3PeS4whs0fG94KYO6bCj5VPm_BjSMzJSfGW1sChXH3Y8zZ3c7EqiOMYNXOBhGHCw2XFoRCrk-3JwvDuIw24uVTLY0-iKjBYYESdZLwhUPGI6nxEf3_cj5SANYolZDtRRnfc-LURIyoliBLXORgzxRrleZt2ZQFu81cJWyAN-Qx1dHzLjLvw-iiUOe5YUOT9-WK09B2p2XLPTzmKSSdlPfm3Y_w_nXacMheoRFqsLAtJayERYD6-WaZLqhGMemZUcDubiCU3N0V8xW2nMiPCNvI96WIAU2sE2EQYIc_eXVTTq_i0kosei_sIauAmwiMXbFqUN_wmVixWgkxrHM13VmqqpNiZbfBLSife5NY
+        id: rs_03e601653a75066e006aabca98759887d09ec297f1bf15eb0a
+        summary: []
+        type: reasoning
+      - action: send_message
+        agent:
+          agent_name: /root
+        arguments: '{"target":"assess_alpha","message":"gAAAAABqq8qZaPZ4UwUsMvXBKJyGHumpH-QBwYDF-21is4C6O46xjFxRw--H1_es8lv2KU2u6vaxJjdT9uzQ2-g8GICxdZl9i9p-r0GTS__NfOonGYkObFi1W4zBtAl1QDAAPqEZWZ6oaCsRRzxr0twWauxZhJOErbGcOgnec3ebaLieTy3mv8Zy-mORr5cCoVmtPCRywnH_"}'
+        call_id: call_0IhC4fY6Kf0k8l3C7xOeEkzt
+        id: mac_03e601653a75066e006aabca98b10c87d0a382ead8346d8caa
+        type: multi_agent_call
+      - action: send_message
+        agent:
+          agent_name: /root
+        call_id: call_0IhC4fY6Kf0k8l3C7xOeEkzt
+        id: maco_03e601653a75066e006aabca9937d487d0b86eccd6eb258b07
+        output:
+        - annotations: []
+          logprobs: []
+          text: ''
+          type: output_text
+        type: multi_agent_call_output
+      - action: send_message
+        agent:
+          agent_name: /root
+        arguments: '{"target":"assess_beta","message":"gAAAAABqq8qa_Lsohr261ajw1qPLe7grvkwTMVMnJ_OlaVT3xs4s4gKtf4lsBNENpeWsghmcX6JwrBp9J1_C8CCd8xZdtbsqli0iVk_v4rdjId9n5YYrFOxqzLuYpiPqEYJf2ynuDR2n4rU_OhtDdlvcyBW1m2ZEAXO1zrUHWqAy6TqkMAx0wQesQiLvdgI2bXx325x2cLH_"}'
+        call_id: call_NPKCzAQ4QmVquerLbfkS4KdH
+        id: mac_03e601653a75066e006aabca9a5b1c87d0b25304858aaca2de
+        type: multi_agent_call
+      - action: send_message
+        agent:
+          agent_name: /root
+        call_id: call_NPKCzAQ4QmVquerLbfkS4KdH
+        id: maco_03e601653a75066e006aabca9a9e1c87d0a7a4f48f6dd2e75f
+        output:
+        - annotations: []
+          logprobs: []
+          text: ''
+          type: output_text
+        type: multi_agent_call_output
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        arguments: '{"timeout_ms":60000}'
+        call_id: call_hTJ41qa1B0fGDQzzulVBPp94
+        id: mac_03e601653a75066e006aabca9db8e487d08a17a0e97279ff67
+        type: multi_agent_call
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        call_id: call_hTJ41qa1B0fGDQzzulVBPp94
+        id: maco_03e601653a75066e006aabcad9db2087d08119bb5f36232daa
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"message": "Wait timed out.", "timed_out": true}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABqq8sEwFn1Lv9OO-TMCDcHLzU9hy48CvpILCjOEW27po7CrO226JD_rYtoJYBS3LRlBjQ4_Unu20X6YyrLQYahbO8rmBNEfHzsPFc4htKfs5YMZ06VJBx9EenXHottDzgpT1R6BPz6pwd3R6FZPWLgaErKc4lyH6hBDl1UJ86hC6LxRUL3brNqUqlAk7bMnq3vRHRHqA2T56og-uBNm7yXLbJtrVH2sg2WgdhoZz3V42Vv4Ysuxp9TZJ1BG9Ev5C5lMBPZEw-8doBoBVfLeLvQjcCVfBtu6J456R6natiM368YJjlDQV36VrrK_Hctnc8Mc7tpO2MUIlXv0er5_TaydkCFqui3x3sZec7-dOHdazEL1tyJupZUEY6xPIaBhJXC_zyi--AOQM3PZfpnLklSkwdu8q1jy1w0ZYkxVwEm8WketAQxV0rDPMxb9zlEZDt1jSRi--ogsG5ciOm_2mJiv3rEFNhO0c6EBhOI5sH9v67zfC97CxCjTH3pwBsHXRmD-5HIYHckGchUfPawq6Nxu8unYJL-DY3ot7dA-8dhZ3Ty2CclEn1WwasSkLZHqWN0vXAgW3_VcbthcVZJNv1l6M0bzHw-lHNjjxp3sPy2XVtbLgrWdUujUKOOCIUKAzbRVySh7Hn_FGODH12OMUKfYtfOMmpcFEYhqzy6Tbb49Wc0fqygfTlgejjdioPYJDsIJN1aMeV7mm5WUpeq1hoGLsnVtc5UjRKBQoaF1DtXu3xDnvNziDb4PmLQvWZ265BLyS_x1dG97Fc_eftr04s6xak1MwracTVgoKoc830DNa1-4gTQ4hE61xeDOMdLn_yE6fEsu8Uc1t8ogQ0VU1bnc8IKv37BK7fcSFzdfN7HpJxS8IbqYGiMdUoK_igfy-DcI6_DN6On_EH-RhRB0mteGfgCXO_PS2DO98Lf8gTfoUJhhh7l5JB-RE_f5UkC-p3R64IfiIYyZ8RMonAm_ycuwUo71WFNdP2TNgoG9kpFfmMgd0sjDX-8qy9yWxS00dM4fsY1b-lwmQxNAr9YWrweV-QHvYsdihHr9YmPmhbeXh-tp6y9Y82o0hrRx84fJ4Sg0J7CCjmRt3zgUmVe3CqYxaZrghR9Ly2SnxFmKDPeiAhHZDqBHsBLWUzrrF3IJAOvS1gqOcADkkqa1duc3hIyZQye_bXmG2_K3hcZ-HuBGOE2A74t9hOS7H-awQNQTJiOO60ndlkdiLUVUDPnt69HJOyr20dOnIrJiSSMZq3kplNyQEZkF61ScbpSYJXNYMag6xHuQe3ERL-8jUZFhf0GI1o_sfZHFp4-a-iyZ9wCxwXv9xA=
+        id: rs_03e601653a75066e006aabcadb0c0c87d0aed41e7f6fbf7f00
+        summary: []
+        type: reasoning
+      - action: interrupt_agent
+        agent:
+          agent_name: /root
+        arguments: '{"target":"assess_alpha"}'
+        call_id: call_kltYSK57vf18o6Gze7zjEQar
+        id: mac_03e601653a75066e006aabcadb870c87d08f5bea0c59bbe209
+        type: multi_agent_call
+      - action: interrupt_agent
+        agent:
+          agent_name: /root
+        call_id: call_kltYSK57vf18o6Gze7zjEQar
+        id: maco_03e601653a75066e006aabcadbb70087d095b98e8f662e2687
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"previous_status": "running"}'
+          type: output_text
+        type: multi_agent_call_output
+      - action: interrupt_agent
+        agent:
+          agent_name: /root
+        arguments: '{"target":"assess_beta"}'
+        call_id: call_FLE84Y3rDns3c4dfDtwNcdJv
+        id: mac_03e601653a75066e006aabcadceddc87d0a3377c9ae28ef5a7
+        type: multi_agent_call
+      - action: interrupt_agent
+        agent:
+          agent_name: /root
+        call_id: call_FLE84Y3rDns3c4dfDtwNcdJv
+        id: maco_03e601653a75066e006aabcadd252487d0bece197a65c04685
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"previous_status": "running"}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABqq8sEcS6yGLQSC8ANKC3sgW2pYQtsEACQW_tXp-Bxhx-wZqB39HBsKGeR25Ah7iwAZw1mMSoZz5PSRLIDu__Ln99h5BbqNrqlnwlaiG_Ya9Q3bCA4yu4uNWPP1MvY2aHGs7cG1rsHDSxr5i6XnqYbvOaH989L_zEtgEzBueW254v53NP9ZpNgVT6b6X9XlkW7e-RHYGFTtH63Xj5OFf-pLfJxrXnyNxOhB7vRXKYOiEduw7KGbfdYKQRqbYkRNQ25Y52RUOVb94SbkSC83me6h45NnnhQW1BKwrdCC0b2irbjNHo1wu5c1yZrwCUJIcjfAvo5nP9ZexPLond4jSEZS2V0T9M8UTGfDarELJTXSKDWXEOUO6imoTjmH2U0KK-ph9F1XujOZ6zHtXi7fmXryxkONUHuGBP3sfMzKOaN124PBT9qNoCeh7EqZixKoTgeKTPktJDnDvC7Q0PqNgio4R5f_TTueqKNO0pQCg8DAX8Euw2ickhP0bgDZJVkSQOrl6X48jwCyO9t9NRw9qmHXIqN6CdAqXcfZ5N5IsdneBpiktMe8RVNA20gQTpoKbMO-M81qibJehYgx8i3XJVPaEVQNHefPBE7O7wdz3VH8dnsSyCVO5bv3-tEpn7wVT43wsQ9Pps94imtvMdVJCYIjK_d4mp9pkoBTWY58cwe85GxjqkxIISZoNvjCDtos1U0dI1Mc-yAMwrHl7Cf_sP-ZWfjrUMTXTp8fTzNzETlLGQl8-fZxRaTzDkXb4S-k8LDxDzhCdhiHLLzo3j4hFR6gt5Fprvy0NsV_NtgVRrbdCWXXgHW9utLijxODavMeI7dNIJ1w5B9wQ9ZXaQ3DXcKBlTAGc8QnCCPmilBVIXP_bz5cL2rlxF80E1NrdZ_eWeAFTsm1m3mJxUDMma16BkfnH8UBl-5fRaTlBrKfMCgh7QPK2CsA3nL6a0hYW6MYIfKw532Yt3mklyohq_GkSNMq21hszJmmw6F9pDAfxeQbddVTem1Rdb5U8AdzagCDPbxAPfYx65uvRnNJ_vn6MkIgAkPgBI2hs1uCg8Z7tyH6MPQZCursCCmCnmr4kvTj8oJ6hP6P2CUZxsBEXbL0SmAmaB8szOVTRpG5NJ0ofsrjfGBlkGf31wcnJLwqqZVaJM-tqmWGI5CTkrcHmV_fV-QXmmvO75_E0a93x_Rb-Bv1qYiHMVwgoswE_QZJlYpX17N_U731rHTBiRsr3tABdSYCp1BUg==
+        id: rs_03e601653a75066e006aabcade24f487d09d56655dce507d66
+        summary: []
+        type: reasoning
+      - action: followup_task
+        agent:
+          agent_name: /root
+        arguments: '{"target":"assess_alpha","message":"gAAAAABqq8reZvF3KdQsfTrS9v3apAHYJCSpx0Ao9pH3QxOaTs-hgOIVDs_mVuIFkBWNU0ADH4hIJlTSGIqbnmxw09CHVEFKt-tmafaPjbD31uH4EB5Z0udWQUATT93YpWj84P3hVHgSU3i6VR4Q20Q6n1CQhjY4O-zFBTfSNXYBG76gWkE_R3eqdmCq5Fax1WcS2XGpFbylc-1MrUUOBN4allUS2CV1RaWY5qwzw1cX2XuKNXI54XGqiB1mYdSL3m93cWoKLS75xwRV2GalBhH2l0R7VAEyPQ=="}'
+        call_id: call_35lfVmJR0W6Bp0a7OFkMK1Xs
+        id: mac_03e601653a75066e006aabcade53f487d0ac93f2f9990a6e45
+        type: multi_agent_call
+      - agent:
+          agent_name: /root/assess_alpha
+        author: /root
+        content:
+        - encrypted_content: gAAAAABqq8reedU7l7fQ_d5-QG4AUs9qVjxoJlBS-WKkGSZKJTn5-XpvVvTrRVnQKvWiasBSuhan95AkRx0xUhIngD5faQO1puXT2X8lk4V9pUGAg3e7LRBDsID6OA0y1jeBxvzWPYEn7D4wbxOOmYF3tuxaDYq0cdSIIKfYYXNmt5-5M1-UqQTLmcCmMleeRYUaN9Vlk896OrDlmIK0tEaD76aTIUoR6qahUjrcyymFsB9MAyGCMNjw6TjjYTlHD4y6QvXQiy21tXZ0vuVjDbQpeQMkcVcj7TnvEDKke-teVjrC7cki8Lc=
+          type: encrypted_content
+        id: amsg_03e601653a75066e006aabcadec25887d08953719ebaee7315
+        recipient: /root/assess_alpha
+        type: agent_message
+      - action: followup_task
+        agent:
+          agent_name: /root
+        call_id: call_35lfVmJR0W6Bp0a7OFkMK1Xs
+        id: maco_03e601653a75066e006aabcadedc3c87d08c361dc155148bfd
+        output:
+        - annotations: []
+          logprobs: []
+          text: ''
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root/assess_alpha
+        content: []
+        encrypted_content: gAAAAABqq8sEuQ9MWewYUVL7i0Qx4Jn7thAoINCPbaJMDKJjclBWGfXoY7F1r9bYbcMExx0kkGbBXE2Or8QE8oFOyMlJQH6IWiyPHittIZq4lY-F0XZuM_DSRgoZ9lt1jdnKVopD45e712cmBGy9zs7Dkkv_uP_fc0g0TweC6-OAxDN7snFw-0g_nXJYfYyxEKvIK7xcP_QLRipBnx0kEHLhho4P_FRDBaGGqK0fzKcbsziyZnx80cgybCqwq-uKmcakE3nMz7fEf--wuyjJb1SSNZRgZs0BVRMSNYe8IyMZcNS-5PDKoTiCsvMro2Yf9YIcKN8EcQQF7HJezLEqmTE-TtiA1G1y8Yye0iyFUQVrZlE5C-ctw4DQKmqmcXqlYChBEHrRPoLD89WmK2JEtMvshY5WoHHaOHrRJXibpJz1SnvU1ss1BRm8OiZkboBdC3aPt8xv-NSP7vpyWXaSC8gvw9jIORKaN9b6739op4n9y2BVo7-7WDvUOc5_eUUAiTm5-kyxw3htk8am184Jpdcau-J9yUHdKbJkduB5E6n9vZlQNbhIn6CKg7TgACARir5qzcJ1TbNsVm-VOFC2NafB6FHHgi5-bkwutBKRNsyakIVtan2jWMi4QjYcsCj16lKHzeEjsHah4UOJGEChfVvffFrj-wG5IdZOSZODB6FDsqfH4OysD8SC7OoS5UJyiq7NXIXocZ3ylEgOh7ab8G7jXYfH5CmgEYMiUvf1IS-jn_P2hsjhmVZbD8ngm7QmQTFhk1LpgLwmJxkhHWVPxHOWonEhjt7WamjNyo8SpPYW5lDPQKi7dkK2thH5iNa35rw_eABFFOktpmPgE2w5_h-aYU-Tpjp5886d6Lbns1Jtu5UbtBH5JEyFs8fhZ4U7a7eKCH9eCg36dyqpI7eP-RLAlT6DKfM1eNlTjTJPwyGfEf3nflEirH8VUZDLAADXgt6MEXc8pimA60z4klfRf0VGHr_bUXRNRMaoHo1kB97RbFfdSd4Y5wA3bCO3wuPru-gAlfnggDxHVuNjdLynonQ4tbJhWHi1cSTuNOQuYpWtxYd0x-QeCGLL87C24IsRfbPrcTHMsR1D78zM0XlZ6zi9km4eSEjxPz05lZapYCyUr6LRnIdoOW4w15GCxpG6Zq7sXn11oUR8tH9--ic-9e78Pc1fQNJiXLTFgfWrMw6sFzV_Mus27AE=
+        id: rs_03e601653a75066e006aabcadf659087d0ba68a4a5a240b8dd
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root/assess_alpha
+        arguments: '{"proposal":"alpha"}'
+        call_id: call_qOgo6ChD8Kikl2hmetSrDTF4
+        id: fc_03e601653a75066e006aabcadf81cc87d0ab6c4fb0c0149272
+        name: get_proposal
+        status: completed
+        type: function_call
+      - action: followup_task
+        agent:
+          agent_name: /root
+        arguments: '{"target":"assess_beta","message":"gAAAAABqq8ri8v7eBRLL1U6rh6H2fhHt1iI96x9sEF9pvZM843tm_hu6PU_DyL6S-llkam09Cd0rVy-Pe_iJ0Zy6E7EVdZpo0D_XArRvFOr5snXo27kh7mq1qc4zpukxEZmbCHNfVzhOIQ45vV3-xrpYBUvlL5tRQBO-ZIObX2nw3STj8MTwxWooS9tFXq83dxgK4SxgpZ-vqy7vsFGT6Wi1XRNGVzgrCQlBudB7v1geHb3WorPnBMcbg1wzlvkBo_hs_pMCJHd10A6-U0_dI8BajqQtR2rSvQ=="}'
+        call_id: call_IksM56UAba6NUf62sZ6bVwVp
+        id: mac_03e601653a75066e006aabcae1d26487d0b22253a9e871ebe9
+        type: multi_agent_call
+      - agent:
+          agent_name: /root/assess_beta
+        author: /root
+        content:
+        - encrypted_content: gAAAAABqq8rirA21VeZ0ZGdmAx9S5t4Lyq-UArKlJAZzYaOhbu8VKSh23Ur3nzngid1s4n9xsbibHX3Ww_KnY-AKr4gctcqa7DqFAb2CAPkxfoX2mtL05Q9a4OikOLpMfXdXmplRM1yqdLZDjZSf84BpfkpnKC6F7jrAcHUsb0jsGLK3AK-UvjKVwRh2vXDuAg_uJux-fUJwGZHhqZHZOO7MN1kvh6KbxEmbdsOFr4fdRgxlhHxN8pn9_UbZ41QXFBWS67o4RAeAF7_PUr7sotkR9eCYStQQq-gyCVJGwG-l_f-bW1B7q1c=
+          type: encrypted_content
+        id: amsg_03e601653a75066e006aabcae21e3487d0b5990ba19b9a9fae
+        recipient: /root/assess_beta
+        type: agent_message
+      - action: followup_task
+        agent:
+          agent_name: /root
+        call_id: call_IksM56UAba6NUf62sZ6bVwVp
+        id: maco_03e601653a75066e006aabcae233d487d0941b82f0741cba73
+        output:
+        - annotations: []
+          logprobs: []
+          text: ''
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root/assess_beta
+        arguments: '{"proposal":"beta"}'
+        call_id: call_cYZFHzvlz2xXIfLAeZIhz8lD
+        id: fc_03e601653a75066e006aabcae2cd1487d0b95b1630efd05ec1
+        name: get_proposal
+        status: completed
+        type: function_call
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        arguments: '{"timeout_ms":30000}'
+        call_id: call_KmyUcelb6k97REyUSyAQG21b
+        id: mac_03e601653a75066e006aabcae38cec87d09fe51d9a4d5acd4f
+        type: multi_agent_call
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        call_id: call_KmyUcelb6k97REyUSyAQG21b
+        id: maco_03e601653a75066e006aabcb01c2d887d0b7d746edfe2cddc2
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"message": "Wait timed out.", "timed_out": true}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABqq8sEkf52KtC6-T-ogHehN9uufbRcr0dio0Ql7grCKC3FpNEniOWj-PoIf7SeOSsNHswAtSS2I_A48yDBYuvduvufn2uy4h2FwZvoU9lvQmZuVsrJvSZejNGzEFtbpB8pUNUo3B66T8hz0G59rfoYQNYAl2f4EtWM9jGDx7qmWK44Ftv1id2zNIk9D4qnb2T0LDzquijerf93ZZ2r3NqbO1MJ_aOrX5jtXXQezu1RjxCOD_9-DGAH6Q16HWBlVYtejPAZ_H3MQKNH5RExi1n0mUcc3R33VkjYN-wJ_hJ_K1WfzHsC9eGbxy72NuuqUNVWulQNtq097V7AMT7JloTjIvFTQc62S-p_J48Oh9cNEz8LzHH-IIulqbzP21n2bjaF6T7M1iqOW9CzosZAmeWWSCrhk5Ed98yDztQ31CRJpMFTfdDeg34cBtfuxpjdnL9IdLL747lK9WUtITC_2MnM9w8P4eouNqT0OgglVzjhDdT828hmnos0SYOucINPLjOf2BjVSASaKJWyVY044EqiqVGBQJ9i6kwOjCth_uC1IWQEOsArpnUYfDwFOZ2U_aoKcfVtH-Ih_DEn96K1zPBf4UcLzzCIz30BK4Em3YHIHD62GTQIHcIrH6WyEFRZvD0DW9Mk8wdotch-OOY8e_nlkvVdV1NGxvPe3xTxMfJRJIp_QQWyc-lBhplWUAd3i_YlO7fptfErmtN76p8yexfvQTbi44Msg5kpycZJg6Ii9fY0uPzEceIiidzuGubHLRmvucu6RyawcBT6HWZqUlbcRB5aUlgM95K5KakopCAsHJQEsqYRR4mSJGKRqW4AxYVUJP51SdL-cElV-QagxYBBTZCjx85zSsZKX6WegAyQKVVYLaZGc304Ow1dM3-ybdUz8AKp5k-OK00xgpqVTMsqPCKi9XPKGPWyPIN1sD1qKoLnAcG4XYlMKoGpot61rmpXkZJKZ8THt6Acy2j3Xq2EUHfDtoLqaTGiJ6o8j2KwFwuo9fbyBgJ7GArtIP39PElnlbmT3h2LAv21D96Xh1eRXT5mg0UKFaZqMFmYj04IGjXixLPqeXe7DkNuVKZ_6ksnoJZeu6wvnCox30KTxWCEaGmzVV5rSIkNeuTXkRtW_M2ruvXD6Uu1CDp1FvEI-trbyXujrjXHdFWZ71jiWuMgycZikxlDcCs8piOiKL3RTtA5r8Ayv8vmZNIG2-3MPnqyJrvLCixHuF6ZMKXU6TII_f3q4pgdpT0znmYCPc6nvmFYn2CUsV4Pn3MYMDSK2ZUWPTjhjn2t31WA8yQaNAbYEb46VZX5qt2UkQpncchXbUqiEbVQjS8CjyltK1biBdUFyt3Aik19r6lAM_EIoqrvNGm8g7wgHPCiq4SHq31PZgf-TatNG_JOKP9sZXsLOmnDvgpj68eJcHsmoe9AsAXQJVo4upu2aKLwx_AMlndf4yCcfnS8Igr6T5X6KRLQ_YLUWLx6YvUy-_BdAxeSRM36Z3PrPyHujC0Gz_HBZamaW1eYFaoN1A7MwXai9oewSEyx2NMLKI_irI4xS1DwpadZBMLp5XTX4_UrHbby6Pvtw_yE6RA=
+        id: rs_03e601653a75066e006aabcb031cd487d09a6a470bfe97fcc6
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root
+        arguments: '{"proposal":"alpha"}'
+        call_id: call_wWiFs55k22LNZfOMU10or04a
+        id: fc_03e601653a75066e006aabcb04010487d0a1089138eb7d8c30
+        name: get_proposal
+        status: completed
+        type: function_call
+      - agent:
+          agent_name: /root
+        arguments: '{"proposal":"beta"}'
+        call_id: call_HRcKvnE3EkJBkeVACjjSSmqE
+        id: fc_03e601653a75066e006aabcb04011487d0ac98464df658de92
+        name: get_proposal
+        status: completed
+        type: function_call
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Return details for a proposal that the agents should compare.
+        name: get_proposal
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            proposal:
+              enum:
+              - alpha
+              - beta
+              type: string
+          required:
+          - proposal
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 5013
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 1231
+        output_tokens: 767
+        output_tokens_details:
+          reasoning_tokens: 77
+        total_tokens: 5780
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: call_uoNp8PeL29xhoVahYxAkTarT
+        output: '{"estimated_weeks": 6, "risk": "medium"}'
+        type: function_call_output
+      - call_id: call_R01TW6PX61bnU2UQyTyegPmi
+        output: '{"estimated_weeks": 8, "risk": "low"}'
+        type: function_call_output
+      - call_id: call_qOgo6ChD8Kikl2hmetSrDTF4
+        output: '{"estimated_weeks": 6, "risk": "medium"}'
+        type: function_call_output
+      - call_id: call_cYZFHzvlz2xXIfLAeZIhz8lD
+        output: '{"estimated_weeks": 8, "risk": "low"}'
+        type: function_call_output
+      - call_id: call_wWiFs55k22LNZfOMU10or04a
+        output: '{"estimated_weeks": 6, "risk": "medium"}'
+        type: function_call_output
+      - call_id: call_HRcKvnE3EkJBkeVACjjSSmqE
+        output: '{"estimated_weeks": 8, "risk": "low"}'
+        type: function_call_output
+      max_output_tokens: 16384
+      model: gpt-5.6-sol
+      multi_agent:
+        enabled: true
+        max_concurrent_subagents: 3
+      previous_response_id: resp_03e601653a75066e006aabca50bc1887d09217dfa7e5432e3c
+      store: true
+      stream: false
+      tools:
+      - description: Return details for a proposal that the agents should compare.
+        name: get_proposal
+        parameters:
+          additionalProperties: false
+          properties:
+            proposal:
+              enum:
+              - alpha
+              - beta
+              type: string
+          required:
+          - proposal
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      openai-beta: responses_multi_agent=v1
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1789643535
+      created_at: 1789643526
+      error: null
+      frequency_penalty: 0.0
+      id: resp_03e601653a75066e006aabcb05eb7887d0bebe8db5d7ca5e89
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 16384
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - agent:
+          agent_name: /root/assess_alpha
+        content: []
+        encrypted_content: gAAAAABqq8sPPht7NP1DlLh2OD5lvcOi6g7YnaLZh4YqCnryE8ZCUR9CioMBKMqsBdGhW0gAOTKF-N81mM0jCcuhN2Z1TQoex4VDqqkjszuvdE2FllrcUvRtBpEHCQ2l32eqSbJj0MuNiH1iK1PHtXSl-0FzbKYQmK74mEIP-niXSi4gsG9R1l16bmL0RJGw0ehs6pnnJYBzXUqGq7GksCve20BUlWAtm63VUBznntFl06JwIa4RwfZbOovCweGS57NBah45NaN-Fs4ORm1tsIgBHQlaPYAjwYY3hCesxkV6TN5OvLbAqbTvckAT2MxDOp1Mv_qIjmXpm7hcC98VfLj7DEWjSEFAIUvjQ_moNXTRn_WNtXfwMrscuK8pKOFpkbWUmLA89U6C4RHzlTjrX16YpPtJVOqD4gidKtoMorsmzSIgIztwQWOMxq_f7dmqD4F_C4TuZl5z2icofQ1lmLCgSXK0UJdLnzHKOFBD4Pc_oZC2pMtuyCyjQjxwf9FFquCIpJladQ2unoogj5_AMcvuQy8G67VeRXpOl1CvatC89DRtZIfuZx4s-bxMKweIx3wiGbYwNECDu-0RTL34AZ8Si8RmVS6Z2cnmDSGmBpBjj9iuc9xB8mlCFUE65wlblk2nEfDgTAVgb1OJPGVuqrY9LKBkd-UoOkLzd1Sg6_6XnRjKXVsp80yYHdm_TLQ0PaevMfPhdw_EspwSfhQ_ga1Otui9_vUVE1IHfRihlMf0-aZf3CTdltHsLTh9T2VZlCsY15oIsq_JCRpV1ZkgtuGPtqthSAprBNU_3EGsnEOej7Fd7vodZCatj4nQkI4vU0z05WOxuwy6zJlSp8QGkosGO0A6FoRvhG5k3O4kJcetqoT8x_SYW_LEB5POc2ki9Fuggsjpi-e_N9VgbFpQAmA9sVUw3VZAeoA6XDXk9kA9eYqmDB6UNGajsh8CjIgSR40lSZExT6CYwzmf9gE2DXPUjjAaN25zy7FU0Hp8Yv0LcQcVUB7AvhN8Z0n9LsyjdKdbfCJbXjnuA3whhZsuXaap77LIcxZVUK2dn84wg4LSsNhKwXeRnqWMRFyn5f7EPUSR8OBaFLvTfveb8NFSD225LueN9C-iks2VaGOW77opbN0VlY5ASE1v6UTufxLkxdaJKLv1-dItWiqH2SFSPTBcIOGRRrPSKACMM1T6V8nQoRvi_2XzuVhrBqkjMAdyOyRinBdtFG9vIq1q6ZsLUsD33AQXx-ijtaRXOHoQpHFcOLAilsNNSiZSlbQhk5goi0ZO6Z2o2KQxJA5L6Yq5XYtLFqqatjfFxK0G0AVVoGZeVAsrmOznP_M=
+        id: rs_03e601653a75066e006aabcb06caf087d0b37ac6f914eccfee
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root/assess_beta
+        content: []
+        encrypted_content: gAAAAABqq8sP2lpb3NBu4W4bKyaHprjapyJH6PO38a_FHJeabqmzjHfoVfgqMdMS1F6nWoqeOB-7_CVH5tDt__RQie81y-C384SZ-KGz82wwLwmQYtTYribh4TwOX66UVObSZRne2qNF5h9C1heDtk7aXl2z7-M_34uWWne7am4yTzH_Y23dmtV3OjGxnVxCnBp2x6KTnUMahapciEpH1pHsFgTgKgSIUht2DUfAVC0SEPgVVJaDTW2pgRvwCGDj8gcYrmGjyi-9ZjaRbGkwxZkYAFuGuQUlSVgRb_bmMdPI67V1OGPKwnlBBfRSpJMvc_fK2kk-kvjqlEs60p__AL9odjsXNWmKReqkCqVwiR6XM5tSMxd4cj93gU5HnCJtWE4oduxyIdAsm8-8hzorPTZ2B5YE-LGIr5D-688xGwrzMWXpFN4wX2fSHj_4hByviz-C_UAc93mHpzoYZCNLepGnHaq-NksL11JSW5_LYyL2nW8JjSwEUhCueJFmIRErU4aEmXzzsG-0Hak8mwz-kFC1TANmX2sVwHn77LNkjBJ-kPn1M-yP35maLr-oWmfYte8KEBsAvNwTtnM_d0hR2xKXNRyzpSdz3_ZbaCXRrXD9_gJ9KwYj44n8aOx-bVHma65xW-76BvuRytq7gUiNYBRa9GdvF7-_ZYw6L3wbEG1x4eSNAsb4u3qfMmDpLDezYPbzEy3VqNQcFfyAg0wVKcravhWavdTmLSgOfWuKYq65LznaOFB-zizz4xshWuTTQhjZySo__jOJxdkvSygaA5qdb0AlC2RDNTYu2E-CWSOsKOz2gXNFIzq5gd4bY90-pJ9ziSF5QQJcPiAtVqT5gugRtES7CtGPLkn3FcXNwcD1p9VDBFeFqqxlz9p1Di2b6XXu2Iarp_e9s65K85oNpK_FJnUeeS2HDspX7EklDVrcQ8_FMxqiQMHj5Avc3oaaMDLVWLSuFaQUIZX8IV1x1US5O10RBhbC23Yc-lkim0TCUx2uSeUtHuWSuL_-5RgQAwBR3ZHr4PQ0M1d7RuszYa0sB_u8txYDwCC4zNtdWlm-xwtjyuLrV4MANJSxGAbDNJiWJ5-A8DiCwqEY5MqSUbBiIZQqcGGNb5SUnD86K8EClIz9yjouwgnolonGh5yxHwegRCR_dO9Tb_3XjQP3zUyJ2wUCU5M-Ud-LnAaLiff9lTKGOQpR15iVDp-pSoWmtmY_L45lFAnf0zAJShp5qqUmr_9RPTQvR39l7cKIUU1vGSOi5cn1Mpw8Sfo0iT7PYtB07wJT8RhEqAF4Vcxeu6byLyifgGQ_DlK8s6fEr3GwNmkObbrBML3eQr_r2f9nZBNC5EkUCymRv6-IsDzcGd1ME7k47_ALyw==
+        id: rs_03e601653a75066e006aabcb06d9bc87d0bf133f61054d2cdd
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABqq8sPRds8-Vo0aziG8ixQWCBJPW5Vaast1s0mP3Vv4mdZbofugYYFSJkftp_uB4u-Y3I4NBhrgbGX6FKAXYi5iUyZ8swTvqkhQehDf4T4BzhZiXIjzemO4Woce_zPyrmE1T79opkbXq5fn31g95qLfKR1ODA_do0BZgEYVmegqmeUxDGNKwPunxezSx8BMJKOV9WjqdydT8m_1Iwv9Ca-7I7_M5ohCKWMzMOnrnH-mP7Fyvmczf-mXFITlXmQ40ui38QB72mJ4_y1N99Gw7IUUswF0jqG6393dBac3Ja7U0khi4e4DRvfau2goqFbyN9qhY0OjkXc7ZlolVvFV3NzXetSrV7IueKNRHoBbMRIu5_rKPfZeNauufHZSqCSnwr_gcOFoqtFZvJPG6gT7scxHa5opScea7l-2uw0Wb8NQBI5hT5_Ofbu36MGxDdAgIHbmJmp7H1diDtui6WeL4tSJ9uTs-yFas830oezwsnc88VIrsw-8Ki0uoxnkLtdDvNfgxaZjJ9cSt_okTBeApkMY9ie_VbIX_kmv6NpeNpn2igExGfnOql0bGtHsM1UoaNbuk38x3OZ--L45a3gcOe2BrHH1WzlV90vaP4flLhXgX5hshwGPpqpan8f8E6y8ZYbmQzLdmm4XFLqUqLcFDbc9PjCwKUp1pWOJ0scjmraQF00IcnkQid6aiE4tagIo5Mq7Lw75nNHVZKY7vZKWxumRUxogAU1rl6dwqCnS9XDI1lIOqVAR9eWvwVy7FZp5BQNWGWJAvBz6Ko6Ne9_0LaT1BeRQrwacKCyc1cgbELnaP7nctrhp7kUfX-GAnsTLNU8fC8wE0bY66miKrLzjSPdcJhXni4DFgvya748-so-C4amcjAX1rk2-u9zOtbhymoKGJzu7Vm9E49dzSzIbKbGRHpfQNXRyRh6Kl-0Zwhi7HcZBcfdIVatwmIVxF9_C0Z2Dfc457r9zgTC96O95oxMiWZhMm8gafImZDUKtYrRrKPxxaVZIvgbivTJf1EQKYno8XDhdx84ovFih1B18ukRjpheCtQKr2ks-t6IlJT-pL4Aihu4uVSro1Jy9MI11a7NvNPuFLMVGgOt1iJHG3N66dWbMvnV74aw_faHvUbqrYL0O2JiAlS9SwIk4xvnHr7I2jtyS8lekIvit1c-7Qw7DhoDqpVnkJA9sdhczGUMJvjAK-KZNCcb_nFEJbvD_5dRWneUQpUgq-_C75F3LTVOaMRJpwC_8R9ZNxeV4qp3Qb0uDvZjCfNYYFVjqUYNzI8BH2VZZdrbE6CsP7hl4ghVBaONSzCiMDSOtfXtGl3H05BcjHI=
+        id: rs_03e601653a75066e006aabcb06e3a487d09e0e0c1604f3ae0c
+        summary: []
+        type: reasoning
+      - action: send_message
+        agent:
+          agent_name: /root
+        arguments: '{"target":"assess_alpha","message":"gAAAAABqq8sHnerG5t7ttlVNX4ldSdMP1RqBx_3R4pKgMnQ61sF5aWrV02tQ48j2FNSb-TAHYAl3NJVsJlRvfNvOvjR2kKVj5wzYzJkEm6FkeU-oRnUucD1N5FB3jXwcKf8lfoMNPvCfak7ZgMiviWdjCpi8NL6zcTV5FQeCDInBXEkMypfJ2DzzxY0uDFGG_NowXAC0obQhtZL2VA9pmjfjXNI-8IXDNr0jJmUN5HHijTJy-lbngVSwQCrA4NJNK0M_3T3SuK6jlJAeqrxj2WYxSZTzFGlBvw=="}'
+        call_id: call_VPEU0Z9uG8sTOwIfosnOt1GC
+        id: mac_03e601653a75066e006aabcb07148887d0b61ef33efb5674f5
+        type: multi_agent_call
+      - action: send_message
+        agent:
+          agent_name: /root/assess_alpha
+        arguments: '{"target":"/root","message":"gAAAAABqq8sIeLwNhxR5frON6gyKIqCqbAXR0ZkZ02agc-bBVJajvNseiFL-SihCVm8E7JXr9DhSGSVEjMGu6RdPwmb34msxoqcTd7Z6_WA-DgQNsJSZm1RAuLRilRkpwTtizbcoK7fWPCfK_8XJMUTRwxMYcYzCH66GiwVaf01bgvqhvrdBiK-LPilFzcJBMj0lYcOpsbivluHeF9RFbooYS7GH-tSZXu20ukIysZO6FvaSI0SYDRcTsv8s8YXGO5mCNDpAm2YHHUQ1FAMgm4FyeLoYdeUQS1TxiR3xJ5fewVkqAUEuwud9fcuFkEflAXiEveUXf6RV1wqGXKpiBeGkMEw4DDYTra4SaJnQE4UNRKd7A9mIZCcifxsyIOnAIrAyb5t-ef4oUPjoXMjhI7ptcldinHeydmKoc58GdHr8xAVC4iEPMt_iyTWVTHOP9iu8zxihjX3to1XWuVwV9AWYxxea0hqbaGYgQCT2ttbX9rbtWE6XB-Cu0N8Un79dbiljkWbj1eXvk7OPyGO7J9bsYYjOefXepBuPZuDVioqO6Qw4HCNgT_gm4xG5MVAdDslDP1C8wQ9mvDPZwSlzzs3lZjHwv-p5QY3SQ2j3ftWNRjqaVbOqe7tD_6IggTHwg_gVw0vBksPn_ggzT3CLubJVZFLBUFMVoQ_XWwfa3ZhZYRpmulBncgs="}'
+        call_id: call_RVx3zNRyX2lbFNpvn1wKAAk5
+        id: mac_03e601653a75066e006aabcb073d9087d0a3b81b626466a69c
+        type: multi_agent_call
+      - agent:
+          agent_name: /root/assess_beta
+        content:
+        - annotations: []
+          logprobs: []
+          text: '**Proposal beta**
+
+            - **Estimated delivery:** 8 weeks.
+
+            - **Risk:** Low.
+
+            - **Assessment:** Beta offers an 8-week delivery timeline with a favorable
+            low-risk rating, based strictly on the returned data.
+
+            - **Assumptions/missing information:** The data does not define the delivery
+            start point, scope/milestones, dependencies, resources, risk methodology,
+            confidence range, or specific residual risks. No cost or quality information
+            was provided.'
+          type: output_text
+        id: msg_03e601653a75066e006aabcb075aa887d08006a91ced28d5ef
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      - action: send_message
+        agent:
+          agent_name: /root
+        call_id: call_VPEU0Z9uG8sTOwIfosnOt1GC
+        id: maco_03e601653a75066e006aabcb07917887d0a16f36144d24b5fc
+        output:
+        - annotations: []
+          logprobs: []
+          text: ''
+          type: output_text
+        type: multi_agent_call_output
+      - action: send_message
+        agent:
+          agent_name: /root/assess_alpha
+        call_id: call_RVx3zNRyX2lbFNpvn1wKAAk5
+        id: maco_03e601653a75066e006aabcb08e98487d0acf2f45f64a7dffa
+        output:
+        - annotations: []
+          logprobs: []
+          text: ''
+          type: output_text
+        type: multi_agent_call_output
+      - action: send_message
+        agent:
+          agent_name: /root
+        arguments: '{"target":"assess_beta","message":"gAAAAABqq8sJqWD99XQxnGLIMeImbXL0y8nXdIlPoZUl50tGPoJQQBji1NHUW9_C2k_zy-qvudXFTSn2I-opxBMlvjIieikhUELSSiVmwY2YNwDrkJU90fDdvSZYntnTBIsxK9kgIOhJecDhcL9U-sx3LGSj-M4InqOinb3MHh-3N34z4MJmMi2rm0Snt3slv0QM1oUJ7tIEet5ri4jPVYNsB__q9JiHWfxcmowXBcdk5bfdBtzHDl-hFeE3nV0X1PFDWGQ9irNr9bAXrwVEY1VkLwHAwJ4YCQ=="}'
+        call_id: call_pSSnnxjGXnxCTuzbT0xL69kL
+        id: mac_03e601653a75066e006aabcb08f43487d09da77fb547afb843
+        type: multi_agent_call
+      - action: send_message
+        agent:
+          agent_name: /root
+        call_id: call_pSSnnxjGXnxCTuzbT0xL69kL
+        id: maco_03e601653a75066e006aabcb09809487d09ae70cdbfb98cee9
+        output:
+        - annotations: []
+          logprobs: []
+          text: ''
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root/assess_alpha
+        author: /root
+        content:
+        - encrypted_content: gAAAAABqq8sK4EOEsQ5Agr_oehrf9k4ZZ47ypK-VwSxm6y9nOW-gYaLlK1uws1QWCtiABpbpbeEaYtulDsITbNQ9SC0WXocK_NLIiyrNyUC_Ns8cIykCCGepvrx4hGU4J4z5cbMdhi38wTkAl4CgXdqIg7z6a696YaACNOtRGmDJuZkB9VeFsDdJEULoEtw0Gv7cjG1t11BDVLzmHp_yss3akuszr7AHmo40PIksGXrs6GLvSVvTwBccXtqX3rJ7gno5CzbJYEWmr068NFVkAdy-kDfq_12w3HkuLcL_jfwF_JrLq5tG5ApIXL_13M5mvErSjXc2qdcZDV1M5V2OA4muwXNEb5Se1XsCJqO0V64sQWYkmEXeKcsmNzpNPK1mocAxc27LfvDN
+          type: encrypted_content
+        id: amsg_03e601653a75066e006aabcb09949487d0abd9bcd3790d3533
+        recipient: /root/assess_alpha
+        type: agent_message
+      - agent:
+          agent_name: /root
+        author: /root/assess_beta
+        content:
+        - encrypted_content: gAAAAABqq8sK2jGP2SOljvD9of1jztyXni7pLVZO0hVwy0XtqYK21dIvl0akT0QZ6z6W9VhOwYCcguJ5Njz6rVVTmEPfeaCfNpR2PeFAmQm-MK1XtwGnMnvjeos7WHH-VYFxuEVy8uBO32qsunDZUxqzmN-4IdS7J-iHLfmcrDwcENnveeShsnuOMQC4vlfr8zhyLSJjZsb7L6xPKsV6Xy4NcOJVAFMRQQzoHEcuzPF674Kje6t7aqP-RfeYpZkWNsZZUCioDOXWCGWVy9_FjpdwmOHO3n7UDeE8pQoVqUAZcXTpWIw4dZQfRQ5qd-KDH-Izg6eSSocjQ0cLjoC8uYrN3omg_6mfxfX2YTPvsBaNRqIYnJgZneMOAjeWc1NKLisrXmwn_g1jTERQ3eSFUsSmFZ3aZOOUmdvq8E9DGFYNWOr_3o4NG1hE3nRTVZuDnyn3ZdbQpnSzgECMppddEndY_2rrsxv6lggE6rqQ5JGXzXkIppgungxYgv5ucdhRLyWoi96riQO75OhFk4zG7osOXLa7qII60kB4t2mvX4e8Bb3SnFJSHnuuUuS0YRy9pnQdgzNy-8QPGcTi9zt-428TLSikczWZm1-idJbY36DKOeRCNgSNsMp_5rV-qFFwYC3pq2g2J9mFeJqPGBZfHRFUSfXlSMzep5ag4Dsleu4rqDLoGaiqVXi93j5d9D0LjJdBl-ZDBd7oM6soOhPzfsbCc4il8sox5guXIydMwgTUKdcdNt7Mq-9UtvUFZhexUQRxYg0fxmfiER65iXNQui2m58I8kjsdPc8xJnwZ1jGJvLoIMB_zvCk=
+          type: encrypted_content
+        id: amsg_03e601653a75066e006aabcb0a02e087d0bf1bdbb4de6dfbe6
+        recipient: /root
+        type: agent_message
+      - agent:
+          agent_name: /root
+        author: /root/assess_alpha
+        content:
+        - encrypted_content: gAAAAABqq8sKlAjbajeyi8JtGZl1-V6AqyBje-2UOGvu3sAUamn2NXwcG5jfzGoigdURdCLjq8YvdXWazx_qRdC6ImclGSoI1BmBMkMbcOyW2L-w9weVyrCPhOiCt5k_5Czk1tf4oFx1827OVQya9fCAsnggQjM-bhkcj07NdXbYr2QlsshqbyUxDm8mxFpbaeQAvVBc7yIlSHyc9OmiBh24sP92C_oVxtfvNvc3UCbcuNoGOzLY5tCL9B3EzDVPNFZT3LmyktEYnuScUVp4Iglns5uPExf_CJQNm9a2AhQHBylXDYSxB_JhlWPIkGQOVN6n9l-r0IJu0S66IFvRcZAKmvnvo_0CGjsI3UT1h3DjadycuDzGcQq7pI4eiifqh-yIvFAqsYWOrCpT2Jz8CAQrxnsp8uyugmkekFleB4Hw94_o_x5H1zJMcpaSKB1Eoi0oLyAtF-Br0Migpb2ZAeCYbFI0Vo4lrOKH7WnycULOS0LXAx2IDK1m-3liBgeoqWfhZR0NOn-5GzIS7BcIrYp5k1ZJl4d3-v1Wv-7t2SMrLMjeF6wXli9z9UZrkOAvGWiB5Pi15sohWYO0YFrkaDu4H0e8dRHYCKCeuLd_CGvvh2x14Mu0a7gxw3prmFSebEc_V0jCa2SwZH1MTd9BghpyuE0f1iwDZog8Av04k1e7fjZ46KZmZcSvuiRC1Yj5vtd0yuCSChjT0MqVS6g0B2UIAycePuIhjJKjHzZFcUc5KuRsTf1SD8bhAq4x01XVNH_6I8xVwsxt0V3SUvaBrODRqgF8hiXqyw==
+          type: encrypted_content
+        id: amsg_03e601653a75066e006aabcb0a1fa887d0a9ea0ffda7565722
+        recipient: /root
+        type: agent_message
+      - agent:
+          agent_name: /root/assess_alpha
+        content:
+        - annotations: []
+          logprobs: []
+          text: '**Proposal alpha**
+
+            - **Estimated delivery:** 6 weeks
+
+            - **Risk:** Medium
+
+
+            **Assessment:** Alpha offers a stated six-week delivery timeline with
+            a medium risk rating.
+
+
+            **Missing information:** The data does not define scope, schedule confidence
+            or range, dependencies, delivery milestones, the criteria behind “medium”
+            risk, specific risk drivers, likely impacts, or mitigations. No additional
+            details should be inferred.'
+          type: output_text
+        id: msg_03e601653a75066e006aabcb0a547887d0a9ad70943b374a3a
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABqq8sPOTaZ2oWeZhSXh9welPhASxUX1KwORnlVT6lN2Uspu4qyoWWs7kAtLxuLJV5zFUcvMUACESLn8D9eEee9VLjqTiH3nBNNSWFSkibnWTdQBtGFJMHBAqt6dtg2MV7-a9dYAe0tOXJk5lHlMoXqvNaePJZ5-1gfBQxoCGJzlIn5cDc2KbK07eOAuru5B2sYbf0axBpdq_BxDmwb9luvkEjWFMdLBtbgDfic5fVRc8l2M_Cr6ZsYSV92pYYW6D3cuZs66OzMM0YgrbkoJpyTzaBqV7iKqUvAj69VuyvsQc86dhuXsbNPTKpy7GQgT4aa8kr6Z2w4U1y7U7tKCZKol3iehXY65VzA6lhAlNpmoZn5KRrUOILgk1ZeyNWF2UH_wVI61Y7CeEYYTmvmFiYwB6HoF1n5u5Yu_hRo8baIP0YmgBfcsN1Xs8CQMuO_lxB8W2GN1_sBPGKkQuotSKW-_UnCN8bU7QSj7LMeeWTDGYuzuzOnh1SPvc7xelsO59yKc3uBwsj8Jf6KQaZR_oqgiUcIbJ0ULQHcQJKK5glRoLytC452eJzb0nrIEJcDPX4cpvP8RA1BXLKl3RoJkPeKQpnU6q0X8Jn-6Lo8RyKx7hviynM08u5fWYZrr8qReaDldsYQiohRVXYEQ7DEstgQ9v4l20W5R72hSBjFzk1vzsawcXm-ukX6ZhlsTBCkdqFKjV0u1D5VZNtavNPDpWQmG6MljZNRs7vz64pHpkxKX3D6wKYuh2GXwBEnSS0RVy6bktcvlAjmrpPbXwsJkv7o8o6rJgsPu9Xs-MveLT6YCiQ8pTcWSvrhixK3sbV3YpTO5ADaTDy7YSrfDsUGrO8CahRH2-YHTIIdFSGuIwvcYV4483Ic7Crotlu1ylsWV384JJoCIyBo9PzmRKI7ifTFo_eVFGNdSGqAP0I5RHAgXOGvDES6XqIo5LXDzS7dvMY-YVB-oCQCzUyriUiEZLeMbLcg1sHxTz5KEvt26tdqQugJF_cbslXIyoMzLKc4CdwePXJsxkE9OFIy33pZI2KEu8OVZvjbPtWu3A15Dvm58xMrVI6WYgyQNRHPBQ60-WywI5f9G71_FDQe-T1FjIbRX3s2y70FO7_nzHGFvrNA2uxgBT9VWti488JbkPW4cbDo82qrJmSMnoJ64Qf-iOoWm_u_R-hkdHJQox_Rl9KilAM_vrzl14oNQa8fKE7evrCkc11_6D7bIXYjw00rGe8iU0nEf871ZyI4YRCiPRL9vmeUI8VP0buMI-b9DZEZDOg6heF18mCjXAHodML9pjYyNHzs4eEOteUTblx2t1udg1rq_8_uhIsP4eQHalZ5W4NJ2MV38KceDGz5d8Ed7kLE-D87Gnx_zLSeW9w0dTxngMXAps-G4cTWzZf4d8XiZBYbf-h2_2bOBrUw6gY3-dlAJfnkZ_7lNByhYG4rOikoYo1B7WYCi_TFSfbBQVhVdgrtZ3U-OZchqdBCkFNN6DF32k2sDa6GkThp4kol7VvfVfH4RUgeo87x8cVzVweVJC3oL4TJMC7LYG5186BmL6s7jNwsyDTP2nXjrIcOxtiuxoGqGSW9SDAtfXKhW0avwjUeZaHWL79BvUSytCEdH1uIKsHv0CQSPMZcPjNbMGXFpVai0bU=
+        id: rs_03e601653a75066e006aabcb0ac34c87d089f785fcea4d7e39
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root
+        content:
+        - annotations: []
+          logprobs: []
+          text: '## Comparison
+
+
+            | Proposal | Estimated delivery | Risk | Tradeoff |
+
+            |---|---:|---|---|
+
+            | **Alpha** | 6 weeks | Medium | Delivers 2 weeks sooner, but carries
+            higher stated risk |
+
+            | **Beta** | 8 weeks | Low | Takes 2 weeks longer, but has lower stated
+            risk |
+
+
+            ## Recommendation
+
+
+            **Recommend proposal Beta**, provided the additional two weeks are acceptable.
+            With no stated deadline or other decision criteria, its lower risk is
+            the stronger default tradeoff.
+
+
+            Choose **Alpha** instead if delivery within six weeks is a firm priority
+            and stakeholders are willing to accept medium risk.
+
+
+            ## Assumptions and missing information
+
+
+            This recommendation assumes the risk ratings were produced using the same
+            methodology and that both proposals cover comparable scope and quality.
+            The returned data does not specify:
+
+
+            - Delivery start points, milestones, or confidence ranges
+
+            - Scope, dependencies, staffing, or resource constraints
+
+            - Definitions, likelihood/impact, or mitigations behind the risk ratings
+
+            - Costs, quality, expected benefits, or consequences of delay
+
+            - Whether an eight-week timeline is acceptable
+
+
+            Without these details, the recommendation is provisional rather than a
+            complete business-case decision.'
+          type: output_text
+        id: msg_03e601653a75066e006aabcb0bd9bc87d099cda002ddd99ef3
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      - agent:
+          agent_name: /root
+        author: /root/assess_alpha
+        content:
+        - encrypted_content: gAAAAABqq8sL8Yx3GdNn6tu2Lhq3kJ8aFfbyAt4pL188fuL1YhWPnzZM02rXqO6MwERwHNEoDAliTqm_7rjvTtS8UuPSodUgyDOlo2J7Ixc8GBdBCuX78rh24LIIOo8roHbyFKRy8l91A2jM77Ac5QVPGSOaPkVYXJ5MJsRDw5zvymmotTTaixtOzLdLa1WGuZXRWFjrkAkvXJwDfBz2iGlTlGX9nYNtqJGCNMj06Bpy5uMKs1zJ3NItb1skKmmIPZR6zirclrRZofy_3aLzCa-WZF7scUa7tHVJSdrT3pp3IfUypto6B2Eyx-9UhGpHf9dZcE8ZKriPi0niPRbfUx5BqJYpY4OuZgUi1bNkGHa0Ql29OyCHJEPk1r3nDXDE6Xcdl4nT4Y53gkq4HER3tPKWoglEQMAOSRNb9DRhohOMFqCkyO-A2rqNiAFRVXnHLWN813zEm2XrTPS7-BSdOKWiNul66maSIcQ2EDz2MU8Ss1zg1W8UFxxiUT9_LeFCCwIwa8KBMP9DDHT2Yw1F_DpVEAaWRsdJu8B9znp5Wkv-pKpjc7JgEygqUUP9k9RiIELk4QEiPJ6k37APTqsGdCye1GzoKf5SZmPclu-gg51SIURPpiyI0xGAPYNGznlmjUXWwO_Y_afNM76w3HI9rH-Ozm8y8FT5oRLBesBaKe7ZOPgp0ZlPlDddIJZLMaK8Cj566JY_tX-dMiaCLBaobWlyRSbUzhQewdxt9vv47d-c_5RjrNn3mkYLQvtStlxy-I3q6t7BSYV8Y6UJ2ovei-UxaQRgptpxcw==
+          type: encrypted_content
+        id: amsg_03e601653a75066e006aabcb0bf08887d0aca6ea56c1f4822d
+        recipient: /root
+        type: agent_message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_03e601653a75066e006aabca50bc1887d09217dfa7e5432e3c
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Return details for a proposal that the agents should compare.
+        name: get_proposal
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            proposal:
+              enum:
+              - alpha
+              - beta
+              type: string
+          required:
+          - proposal
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 5935
+        input_tokens_details:
+          cache_write_tokens: 1098
+          cached_tokens: 1231
+        output_tokens: 806
+        output_tokens_details:
+          reasoning_tokens: 105
+        total_tokens: 6741
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

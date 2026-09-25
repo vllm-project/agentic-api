@@ -1,0 +1,14 @@
+[
+  {
+    "type": "function",
+    "name": "get_proposal",
+    "description": "Return details for a proposal that the agents should compare.",
+    "parameters": {
+      "type": "object",
+      "properties": {"proposal": {"type": "string", "enum": ["alpha", "beta"]}},
+      "required": ["proposal"],
+      "additionalProperties": false
+    },
+    "strict": true
+  }
+]

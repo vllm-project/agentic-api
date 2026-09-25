@@ -13,7 +13,7 @@ use super::{ExecutorError, ExecutorResult};
 use crate::types::io::InputItem;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CallKind {
+pub(super) enum CallKind {
     Function,
     Custom,
     Shell,
@@ -42,6 +42,7 @@ impl CallKind {
 #[derive(Debug)]
 pub(super) struct PendingCall {
     pub(super) call_id: String,
+    pub(super) kind: CallKind,
 }
 
 /// Scans `items` in order and returns every call left unresolved, in emission
@@ -49,9 +50,19 @@ pub(super) struct PendingCall {
 /// same-kind relationship. Namespace member calls are represented as
 /// `InputItem::FunctionCall`, so they're covered by the plain function check.
 pub(super) fn pending_calls(items: &[InputItem]) -> ExecutorResult<Vec<PendingCall>> {
+    scan_calls(items).map(|(pending, _)| pending)
+}
+
+/// Largest prefix whose tool calls all have matching outputs inside it.
+pub(super) fn resolved_prefix_len(items: &[InputItem]) -> ExecutorResult<usize> {
+    scan_calls(items).map(|(_, prefix)| prefix)
+}
+
+fn scan_calls(items: &[InputItem]) -> ExecutorResult<(Vec<PendingCall>, usize)> {
     let mut seen_call_ids = HashSet::new();
     let mut pending = IndexMap::new();
-    for item in items {
+    let mut resolved_prefix = 0;
+    for (index, item) in items.iter().enumerate() {
         match item {
             InputItem::FunctionCall(call) => {
                 add_call(&call.call_id, CallKind::Function, &mut seen_call_ids, &mut pending)?;
@@ -83,8 +94,17 @@ pub(super) fn pending_calls(items: &[InputItem]) -> ExecutorResult<Vec<PendingCa
             | InputItem::AgentMessage(_)
             | InputItem::Unknown => {}
         }
+        if pending.is_empty() {
+            resolved_prefix = index + 1;
+        }
     }
-    Ok(pending.into_keys().map(|call_id| PendingCall { call_id }).collect())
+    Ok((
+        pending
+            .into_iter()
+            .map(|(call_id, kind)| PendingCall { call_id, kind })
+            .collect(),
+        resolved_prefix,
+    ))
 }
 
 fn add_call(
@@ -135,6 +155,21 @@ fn resolve_call(call_id: &str, output_kind: CallKind, pending: &mut IndexMap<Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compaction_prefix_never_splits_interleaved_calls_and_outputs() {
+        let items = vec![
+            InputItem::Unknown,
+            function_call("a"),
+            function_call("b"),
+            function_call_output("a"),
+            InputItem::Unknown,
+        ];
+        assert_eq!(resolved_prefix_len(&items).unwrap(), 1);
+        let mut resolved = items;
+        resolved.push(function_call_output("b"));
+        assert_eq!(resolved_prefix_len(&resolved).unwrap(), resolved.len());
+    }
     use crate::types::io::{
         CustomToolCall, CustomToolCallOutputMessage, FunctionToolResultMessage, InputFunctionToolCall, ShellCall,
         ShellCallAction, ShellCallOutputMessage, ToolCallOutput,

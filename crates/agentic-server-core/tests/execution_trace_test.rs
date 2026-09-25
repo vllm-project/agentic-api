@@ -210,26 +210,10 @@ fn request(stream: bool) -> RequestPayload {
     RequestPayload {
         model: "test-model".to_owned(),
         input: ResponsesInput::Text(PROMPT.to_owned()),
-        instructions: None,
-        previous_response_id: None,
-        conversation_id: None,
-        tools: None,
-        tool_choice: None,
         stream,
         store: true,
-        include: None,
-        reasoning: None,
-        text: None,
-        temperature: None,
-        top_p: None,
         max_output_tokens: Some(64),
-        ignore_eos: None,
-        truncation: None,
-        metadata: None,
-        parallel_tool_calls: None,
-        prompt_cache_key: None,
-        cache_salt: None,
-        context_management: None,
+        ..Default::default()
     }
 }
 

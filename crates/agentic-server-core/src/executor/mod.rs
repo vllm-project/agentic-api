@@ -11,6 +11,7 @@ mod messages_request;
 pub mod messages_stream;
 mod messages_usage;
 pub mod modes;
+pub mod multi_agent;
 pub mod persist;
 mod prepare;
 pub mod rehydrate;

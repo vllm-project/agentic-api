@@ -500,16 +500,37 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   both response body formats. `RoundIngestion` owns the synchronous per-round semantic
   core; `StreamDelivery` owns awaited, ordered client delivery across rounds.
 - **`engine.rs`** — the top-level orchestrator: `ExecuteRequest`/`execute()`,
-  `create_conversation()`, and `EngineOrchestration`, which owns the request-scoped
-  `ToolRegistry`, response budget, and mutable `AgentPipeline` while running the
-  multi-round loop. Its local `classify_round`/`LoopDecision` decides whether to loop
-  again, finish, hand back to the client, or return an incomplete response (capped at
-  `MAX_GATEWAY_TOOL_ROUNDS = 10`). It accumulates output and token usage across rounds,
-  changes continuation `tool_choice` to `auto`, and persists gateway calls plus their
-  outputs as model-facing `InputItem`s. Also home to `run_compaction_trigger`,
+  `create_conversation()`, and `EngineOrchestration`, which owns the response byte
+  budget, accumulated output/usage, and root `AgentTurn`. It advances the turn and
+  applies response completion policy to its typed `RoundResult`/`RoundDecision`.
+  The current single-agent path supplies `MAX_GATEWAY_TOOL_ROUNDS = 10` as a per-turn
+  limit, not a future tree-wide collaboration limit. Also home to `run_compaction_trigger`,
   `run_blocking`, and `run_stream` (spawns the loop, forwards events as SSE, persists
   before yielding the terminal event). `engine/streaming.rs` owns the streaming task's
   cancellation, failure delivery, and terminal validation before persistence.
+- **`engine/agent_turn.rs`** — execution for one agent: `AgentTurn` owns the tool
+  registry and round counter and exclusively borrows its `AgentPipeline`. The response
+  adapter retains the pipeline so error handling can recover its context and delivery
+  state. `run_round` performs compaction, inference and built-in tool execution using
+  the engine's shared budget, records canonical call/output history, and reports a
+  typed outcome. It does not spawn agents or finalize/persist a public response.
+- **`multi_agent.rs`** — scoped task ownership for engine-owned tree coordination.
+  `RunOwner` bounds root/descendant tasks, supports interruption, and joins teardown.
+  `multi_agent/registry.rs` holds parentage, current turn identity, logical phases and
+  bounded canonical mailboxes. It reserves bytes through the shared response budget
+  before mutation and settles turns with exactly one parent notification. Registry
+  operations are synchronous; the coordinator must reconcile/join work before settlement.
+  `multi_agent/pending_calls.rs` retains each client call's originating agent, turn and
+  kind. It validates output batches before mutation, retains accepted outputs until
+  transfer to canonical context, and keeps resolved IDs for duplicate detection.
+  Acceptance does not resume an agent or decide visibility for superseded turns.
+  This table complements the existing single-history rehydration validator; neither
+  public error mapping nor transport-specific batch policy is defined by it.
+  `engine/multi_agent.rs` coordinates these components for stored HTTP responses.
+  Canonical histories and pending calls remain owned by the coordinator; the pipeline never
+  spawns subagents. Compaction commits compare context generations, and persistence accepts
+  only validated tree checkpoints. Interruption takes effect at the current round boundary.
+  WebSocket multi-agent support is separate work; gateway cassette parity remains to be verified.
 - **`persist.rs`** — `persist_response`/`persist_turn`, which route to
   `ConversationHandler` or `ResponseHandler` in `modes/` depending on whether the turn
   is conversation-scoped or response-scoped.
@@ -572,13 +593,20 @@ inference rounds → gateway execution → terminal policy → persistence
 | Request pipeline (`pipeline.rs`) | Hold one request context, tool-search state, cross-round delivery state, and the JSON/SSE body entry points. |
 | Round ingestion (`pipeline/ingest.rs`) | Process one body with one `ResponseAccumulator`, one `TranslationDispatcher`, and final response normalization. |
 | Stream delivery (`pipeline/delivery.rs`) | Provide awaited sender delivery, gateway-event deferral and release, response IDs, and cross-round stream accumulation. |
-| Orchestration (`engine.rs`) | Own the request-scoped registry and response budget, round decisions, gateway execution, terminal policy, and persistence. |
+| Agent execution (`engine/agent_turn.rs`) | Own the per-agent registry and round progress; perform inference/tool work and return typed round outcomes. |
+| Orchestration (`engine.rs`) | Own agent execution, the shared response budget, response assembly, terminal policy, and persistence coordination. |
 
-`AgentPipeline` lives for the complete public response. `EngineOrchestration` creates
-one registry and one response budget around it, then asks `upstream.rs` to run each
+`AgentPipeline` currently lives for the complete public response. `EngineOrchestration`
+creates the shared response budget and an `AgentTurn` that retains its own registry
+and exclusively borrows the pipeline. Each turn step asks `upstream.rs` to run the
 inference body through `run_with_json_body` or live `run_with_stream_body`. A new
 `RoundIngestion` is created for every body and consumed by finalization, while
 `StreamDelivery` and `GatewayStreamAccumulator` survive across inference rounds.
+
+For multi-agent execution, the engine owns tree coordination and schedules separate
+agent execution contexts. Per-agent ingestion feeds typed frames through a bounded,
+acknowledged channel into one response-wide `StreamDelivery`. Its source-scoped index
+mapping is shared with the engine's final response assembly; delivery does not assemble items.
 
 The live runner polls one framed line, performs synchronous ingestion and translation,
 then awaits delivery before polling the next line. This propagates bounded sender

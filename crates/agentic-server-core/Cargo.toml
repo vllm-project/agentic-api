@@ -23,6 +23,8 @@ utoipa = { workspace = true, optional = true }
 
 async-stream.workspace = true
 bytes.workspace = true
+base64 = "0.22"
+ring = "0.17"
 dirs.workspace = true
 either.workspace = true
 futures.workspace = true
@@ -53,6 +55,7 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v7", "serde"] }
 
 [dev-dependencies]
+flate2 = "1.1"
 axum.workspace = true
 criterion = { workspace = true }
 # Span capture for execution-trace tests only; the library itself never

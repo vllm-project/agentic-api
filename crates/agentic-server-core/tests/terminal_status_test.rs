@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 fn context() -> RequestContext {
     let request: RequestPayload = serde_json::from_value(json!({"model":"test", "input":"hi"})).unwrap();
     RequestContext {
+        multi_agent_tree: None,
         original_request: request.clone(),
         enriched_request: request,
         new_input_items: Vec::new(),

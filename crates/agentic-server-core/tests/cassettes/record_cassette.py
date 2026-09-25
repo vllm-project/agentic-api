@@ -58,7 +58,7 @@ import click
 import httpx
 import uvicorn
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from httpx import AsyncClient
 from yaml import dump as yaml_dump
 from yaml import safe_load as yaml_load
@@ -70,6 +70,7 @@ MODEL = "gpt-4o"
 PROXY_HOST = "127.0.0.1"
 PROXY_PORT = 7070
 TIMEOUT = 60 * 5
+HTTP_READ_TIMEOUT = TIMEOUT
 
 EXCLUDED_RESPONSE_HEADERS = {
     "content-encoding",
@@ -84,6 +85,7 @@ RECORDED_HEADERS = {
     "user-agent",
     "accept",
     "x-run-id",
+    "openai-beta",
 }
 
 
@@ -137,12 +139,39 @@ def _append_turn(output_file: Path, turn: dict[str, Any]) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.http_client = AsyncClient(timeout=TIMEOUT)
+    app.state.http_client = AsyncClient(timeout=_http_timeout())
     yield
     await app.state.http_client.aclose()
 
 
 proxy_app = FastAPI(lifespan=lifespan)
+
+
+def _http_timeout(*, proxy_client: bool = False) -> httpx.Timeout:
+    # Give the proxy time to capture and report an upstream read timeout
+    # before the client waiting on the proxy reaches its own read timeout.
+    return httpx.Timeout(TIMEOUT, read=HTTP_READ_TIMEOUT + (10 if proxy_client else 0))
+
+
+def _record_transport_error(
+    output_file: Path, turn: dict[str, Any], error: httpx.RequestError
+) -> Response:
+    """Capture a failed upstream exchange without inventing an upstream response."""
+    detail = {"type": type(error).__name__, "message": str(error)}
+    turn["response"]["transport_error"] = detail
+    _append_turn(output_file, turn)
+    message = (
+        f"Recorder proxy could not obtain a complete upstream response: {type(error).__name__}. "
+        f"Transport failure recorded in {output_file}; no upstream HTTP status or body was captured."
+    )
+    print(f"  [{message}]")
+    # This status belongs only to the local proxy. The cassette contains the
+    # transport failure above, not a fabricated OpenAI 502/504 response.
+    return Response(
+        content=json.dumps({"error": {"type": "cassette_proxy_transport_error", "message": message}}),
+        status_code=504 if isinstance(error, httpx.TimeoutException) else 502,
+        media_type="application/json",
+    )
 
 
 @proxy_app.api_route(
@@ -186,7 +215,7 @@ async def proxy_request(request: Request, path: str) -> Response:
                 url=target_url,
                 headers=forward_headers,
                 content=raw_body,
-                timeout=TIMEOUT,
+                timeout=_http_timeout(),
             ) as response:
                 yield response  # type: ignore[misc]
                 if response.status_code != 200:
@@ -219,7 +248,10 @@ async def proxy_request(request: Request, path: str) -> Response:
                 print(f"  [recorded turn {turn_num} -> {output_file.name}]")
 
         agen = _stream()
-        upstream = await anext(agen)
+        try:
+            upstream = await anext(agen)
+        except httpx.RequestError as error:
+            return _record_transport_error(output_file, turn, error)
         return StreamingResponse(
             agen,
             status_code=upstream.status_code,
@@ -228,27 +260,28 @@ async def proxy_request(request: Request, path: str) -> Response:
         )
 
     else:
-        response = await http_client.request(
-            method=request.method,
-            url=target_url,
-            headers=forward_headers,
-            content=raw_body,
-            timeout=TIMEOUT,
-        )
+        try:
+            response = await http_client.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                content=raw_body,
+                timeout=_http_timeout(),
+            )
+        except httpx.RequestError as error:
+            return _record_transport_error(output_file, turn, error)
         media_type = response.headers.get("content-type", "application/json")
-        body: Any = response.json() if response.status_code == 200 else response.text
-        if response.status_code != 200 and "application/json" in media_type:
-            try:
-                body = json.loads(body)
-            except Exception:
-                pass
+        try:
+            body: Any = response.json()
+        except ValueError:
+            body = response.text
         turn["response"]["body"] = body
         turn["response"]["status_code"] = response.status_code
         turn["response"]["headers"] = {"content-type": media_type}
         _append_turn(output_file, turn)
         print(f"  [recorded turn {turn_num} -> {output_file.name}]")
-        return JSONResponse(
-            content=body,
+        return Response(
+            content=response.content,
             status_code=response.status_code,
             headers=_filter_response_headers(response.headers),
             media_type=media_type,
@@ -294,6 +327,16 @@ def _create_conversation(client: httpx.Client, proxy_url: str) -> str:
     print(f"[conversation created: {conv_id}]")
     return conv_id
 
+
+def _raise_recording_http_error(response: httpx.Response) -> None:
+    """Show the received error body instead of an opaque localhost traceback."""
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as error:
+        detail = response.text[:2000]
+        raise click.ClickException(
+            f"Recording request returned HTTP {response.status_code}.\n{detail}"
+        ) from error
 
 
 def _item_request(
@@ -509,8 +552,29 @@ def run_items(
 
 
 def _send_nonstreaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | None:
-    resp = client.post(f"{proxy_url}/v1/responses", json=body, timeout=300)
-    resp.raise_for_status()
+    finished = threading.Event()
+    started = time.monotonic()
+
+    def report_wait() -> None:
+        while not finished.wait(15):
+            click.echo(f"  [waiting for non-streaming response: {time.monotonic() - started:.0f}s elapsed]")
+
+    click.echo(f"  [sending HTTP Responses request; waiting for response (upstream read timeout: {HTTP_READ_TIMEOUT}s)]")
+    reporter = threading.Thread(target=report_wait, daemon=True)
+    reporter.start()
+    try:
+        # Let the proxy record and report an upstream timeout before this
+        # client times out waiting for the proxy itself.
+        resp = client.post(f"{proxy_url}/v1/responses", json=body, timeout=_http_timeout(proxy_client=True))
+    except httpx.TimeoutException as error:
+        raise click.ClickException(
+            "Timed out waiting for the non-streaming HTTP response. "
+            "No complete response was received; inspect the cassette before retrying."
+        ) from error
+    finally:
+        finished.set()
+        reporter.join()
+    _raise_recording_http_error(resp)
     data = resp.json()
     print(f"\n[Response]\n{json.dumps(data, indent=2)}\n")
     return data
@@ -520,7 +584,7 @@ def _send_streaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | 
     response_data = None
     print("\n[Streaming response]")
     with client.stream(
-        "POST", f"{proxy_url}/v1/responses", json=body, timeout=300
+        "POST", f"{proxy_url}/v1/responses", json=body, timeout=_http_timeout(proxy_client=True)
     ) as resp:
         if resp.status_code != 200:
             # Drain the body fully before raising: the recording proxy is an
@@ -530,7 +594,7 @@ def _send_streaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | 
             # before it appends the turn, silently losing this turn's error
             # response from the cassette entirely.
             resp.read()
-        resp.raise_for_status()
+        _raise_recording_http_error(resp)
         for line in resp.iter_lines():
             if not line:
                 continue
@@ -867,6 +931,12 @@ def _send(
 
 
 def _prompt(label: str) -> str:
+    if not sys.stdin.isatty():
+        line = sys.stdin.readline()
+        if line == "":
+            raise click.ClickException(f"Missing scripted prompt for {label.rstrip()}")
+        click.echo(f"{label.rstrip()} [read from stdin]")
+        return line.strip()
     try:
         return input(label).strip()
     except (EOFError, KeyboardInterrupt):
@@ -895,6 +965,19 @@ def _parse_reasoning(raw: str | None) -> dict | None:
         raise click.UsageError(f"--reasoning is not valid JSON: {error}") from error
     if not isinstance(value, dict):
         raise click.UsageError("--reasoning must contain a JSON object.")
+    return value
+
+
+def _parse_multi_agent(raw: str | None) -> dict | None:
+    """Preserve supplied settings so the API, not the recorder, validates them."""
+    if raw is None:
+        return None
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise click.UsageError(f"--multi-agent is not valid JSON: {error}") from error
+    if not isinstance(value, dict):
+        raise click.UsageError("--multi-agent must contain a JSON object.")
     return value
 
 
@@ -1082,6 +1165,24 @@ def _build_tool_output_input(
             {"type": "message", "role": "user", "content": user_prompt}
         )
     return input_items
+
+
+def _report_tool_output_injection(tool_calls: list[dict], input_items: list[dict]) -> None:
+    submitted_ids = {
+        item["call_id"]
+        for item in input_items
+        if isinstance(item, dict) and isinstance(item.get("call_id"), str)
+    }
+    click.echo(
+        f"  [injecting {len(submitted_ids)}/{len(tool_calls)} client-tool output(s) before user message]"
+    )
+    for call in tool_calls:
+        if call.get("call_id") not in submitted_ids:
+            click.echo(
+                f"  [no scripted output for {call.get('type')} {call.get('name', '')!r} "
+                f"(call_id={call.get('call_id')})]",
+                err=True,
+            )
 
 
 def run_conv(
@@ -1310,6 +1411,9 @@ def run_responses(
     preset_input: str | list | None = None,
     manual_item_replay: bool = False,
     parallel_tool_calls: bool | None = None,
+    multi_agent: dict | None = None,
+    request_overrides: dict | None = None,
+    auto_tool_continuations: int = 0,
 ) -> None:
     response_ids: dict[int, str] = {}
     responses: dict[int, dict] = {}
@@ -1325,7 +1429,10 @@ def run_responses(
     last_response: dict | None = None
     search_tools_loaded = False
     manual_history: list[dict] = []
-    for turn in range(1, turns + 1):
+    for turn in range(1, turns + auto_tool_continuations + 1):
+        automatic = turn > turns
+        if automatic and not _extract_tool_calls(last_response):
+            break
         if turn in branch_map:
             branch_from = branch_map[turn]
             if branch_from not in response_ids:
@@ -1344,7 +1451,9 @@ def run_responses(
             # input_image item array) can still be continued by previous_response_id.
             input_value: Any = preset_input
         else:
-            prompt = _prompt(f"Turn {turn}/{turns} — enter prompt: ")
+            prompt = "" if automatic else _prompt(f"Turn {turn}/{turns} — enter prompt: ")
+            if automatic:
+                click.echo(f"  [automatic client-tool continuation {turn - turns}/{auto_tool_continuations}]")
 
             # Inject matching client-tool outputs before the user message.
             has_output_fixtures = (
@@ -1368,9 +1477,7 @@ def run_responses(
                     prompt if prompt else None,
                     tool_search_output_tools,
                 )
-                click.echo(
-                    f"  [injecting {len(pending_calls)} tool output(s) before user message]"
-                )
+                _report_tool_output_injection(pending_calls, input_value)
             else:
                 input_value = prompt
 
@@ -1391,6 +1498,8 @@ def run_responses(
             input_value = copy.deepcopy(manual_history)
 
         body: dict = {"model": model, "input": input_value, "stream": stream, "store": store}
+        if multi_agent is not None:
+            body["multi_agent"] = multi_agent
         if max_output_tokens is not None:
             body["max_output_tokens"] = max_output_tokens
         if reasoning is not None:
@@ -1401,6 +1510,9 @@ def run_responses(
         turn_tool_choice = tool_choice_sequence[turn - 1] if tool_choice_sequence is not None else tool_choice
         effective_parallel_tool_calls = False if tool_search_output_tools is not None else parallel_tool_calls
         _inject_tools(body, effective_tools, turn_tool_choice, effective_parallel_tool_calls)
+        if request_overrides is not None:
+            # Characterization must send invalid/null values without repairing them.
+            body.update(request_overrides)
         response_data = _send(
             client,
             body,
@@ -1425,6 +1537,12 @@ def run_responses(
             response_ids[turn] = response_id
             responses[turn] = response_data
 
+    if auto_tool_continuations and _extract_tool_calls(last_response):
+        raise click.ClickException(
+            f"Client-tool continuation limit ({auto_tool_continuations}) reached; "
+            "pending calls remain. Captured responses are retained; the task is unfinished."
+        )
+
     for b_idx, branch_from in enumerate(extra_branches, start=1):
         if branch_from not in response_ids:
             raise click.UsageError(
@@ -1443,7 +1561,7 @@ def run_responses(
         pending_calls = _extract_tool_calls(branch_response) if tool_outputs else []
         if pending_calls and tool_outputs:
             input_value = _build_tool_output_input(pending_calls, tool_outputs, prompt if prompt else None)
-            click.echo(f"  [injecting {len(pending_calls)} tool output(s) before user message]")
+            _report_tool_output_injection(pending_calls, input_value)
         else:
             input_value = prompt
 
@@ -1454,6 +1572,8 @@ def run_responses(
             "store": store,
             "previous_response_id": branch_resp_id,
         }
+        if multi_agent is not None:
+            body["multi_agent"] = multi_agent
         if max_output_tokens is not None:
             body["max_output_tokens"] = max_output_tokens
         if reasoning is not None:
@@ -1475,6 +1595,8 @@ def run_responses(
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
+@click.option("--auto-tool-continuations", type=click.IntRange(0, 100), default=0,
+              help="Maximum additional tool-output-only Responses requests after scripted turns.")
 @click.option(
     "--turns", "-n", required=True, type=int, help="Number of turns to record."
 )
@@ -1640,6 +1762,36 @@ def run_responses(
     help='Responses reasoning settings as a JSON object, e.g. \'{"effort":"high","summary":"detailed"}\'.',
 )
 @click.option(
+    "--multi-agent",
+    "multi_agent_raw",
+    metavar="JSON",
+    default=None,
+    help='Multi-agent settings as a JSON object, e.g. \'{"enabled":true,"max_concurrent_subagents":3}\'. '
+    "HTTP Responses only. Does not add the beta header; use --openai-beta responses_multi_agent=v1.",
+)
+@click.option(
+    "--openai-beta",
+    multiple=True,
+    metavar="VALUE",
+    help="OpenAI-Beta header value (repeatable, comma-separated on the wire). HTTP Responses only. "
+    "Independent of --multi-agent so missing or incorrect beta headers can be characterized.",
+)
+@click.option(
+    "--request-overrides",
+    "request_overrides_raw",
+    metavar="JSON",
+    default=None,
+    help="Override request body fields verbatim for HTTP Responses characterization. "
+    "Requires --turns 1 without branches; accepts invalid API values for negative recordings.",
+)
+@click.option(
+    "--http-read-timeout",
+    type=click.IntRange(min=1),
+    default=TIMEOUT,
+    show_default=True,
+    help="Upstream read inactivity timeout in seconds for HTTP Responses recording; not a total duration limit.",
+)
+@click.option(
     "--max-output-tokens",
     type=int,
     default=1024,
@@ -1656,6 +1808,7 @@ def run_responses(
 )
 def main(
     turns: int,
+    auto_tool_continuations: int,
     output: str,
     mode: str,
     branch_from: tuple[int, ...],
@@ -1679,10 +1832,45 @@ def main(
     manual_item_replay: bool,
     input_file: str | None,
     reasoning_raw: str | None,
+    multi_agent_raw: str | None,
+    openai_beta: tuple[str, ...],
+    request_overrides_raw: str | None,
+    http_read_timeout: int,
     max_output_tokens: int,
     append: bool,
 ) -> None:
     """Interactive multi-turn cassette recorder (proxy embedded)."""
+    global HTTP_READ_TIMEOUT
+    if auto_tool_continuations and (
+        mode != "responses" or transport != "http" or no_store or not tool_outputs_file
+        or branch_from or branch_turn_number or tool_choice_sequence_file or request_overrides_raw
+    ):
+        raise click.UsageError(
+            "--auto-tool-continuations requires stored HTTP Responses with --tool-outputs, "
+            "without branches, tool-choice sequences, or request overrides."
+        )
+    if http_read_timeout != TIMEOUT and (mode != "responses" or transport != "http"):
+        raise click.UsageError("--http-read-timeout requires HTTP --mode responses.")
+    HTTP_READ_TIMEOUT = http_read_timeout
+    if (multi_agent_raw is not None or openai_beta) and (mode != "responses" or transport != "http"):
+        raise click.UsageError("--multi-agent and --openai-beta require HTTP --mode responses.")
+    for beta in openai_beta:
+        if not beta.strip() or any(ord(char) < 32 or ord(char) >= 127 for char in beta):
+            raise click.UsageError("--openai-beta must be a nonempty printable ASCII header value.")
+    multi_agent = _parse_multi_agent(multi_agent_raw)
+    request_overrides = None
+    if request_overrides_raw is not None:
+        if mode != "responses" or transport != "http" or turns != 1 or branch_from or branch_turn_number:
+            raise click.UsageError("--request-overrides requires HTTP --mode responses --turns 1 without branches.")
+        try:
+            request_overrides = json.loads(request_overrides_raw)
+        except json.JSONDecodeError as error:
+            raise click.UsageError(f"--request-overrides is not valid JSON: {error}") from error
+        if not isinstance(request_overrides, dict):
+            raise click.UsageError("--request-overrides must contain a JSON object.")
+        if "stream" in request_overrides:
+            raise click.UsageError("Use --stream/--no-stream instead of overriding stream.")
+
     if mode == "items":
         expected_turns = (10 if items_scenario == "pagination" else
                           6 if items_scenario == "branch" else
@@ -1881,6 +2069,9 @@ def main(
         headers = {"Authorization": f"Bearer {api_key}"}
         backend_label = f"OpenAI: {target}"
 
+    if openai_beta:
+        headers["OpenAI-Beta"] = ", ".join(openai_beta)
+
     output_file = Path(output).resolve()
     proxy_url = f"http://{PROXY_HOST}:{proxy_port}"
     store = not no_store
@@ -1963,6 +2154,9 @@ def main(
                         preset_input=preset_input,
                         manual_item_replay=manual_item_replay,
                         parallel_tool_calls=parallel_tool_calls,
+                        multi_agent=multi_agent,
+                        request_overrides=request_overrides,
+                        auto_tool_continuations=auto_tool_continuations,
                     )
                 elif mode == "messages":
                     run_messages(

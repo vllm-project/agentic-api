@@ -418,6 +418,7 @@ async fn persist_competing_turn(pool: &Arc<DbPool>, conversation_id: &str) {
             None,
             competing_turn_items(),
             &ResponseMetadata {
+                multi_agent_tree: None,
                 model: "competing-model".to_owned(),
                 ..ResponseMetadata::default()
             },
@@ -1069,6 +1070,7 @@ async fn test_websocket_generate_false_prewarm_redacts_mcp_runtime_credentials()
     }))
     .expect("lookup request");
     let lookup_ctx = RequestContext {
+        multi_agent_tree: None,
         original_request: request.clone(),
         enriched_request: request,
         new_input_items: vec![],

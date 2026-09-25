@@ -45,8 +45,7 @@ async fn compaction_traces_distinguish_triggers_and_state_sources_without_conten
                 .unwrap();
                 ("previous_response", "response")
             };
-            traces
-                .run(ExecuteRequest::new(payload, Arc::clone(&fixture.exec_ctx)).run())
+            Box::pin(traces.run(ExecuteRequest::new(payload, Arc::clone(&fixture.exec_ctx)).run()))
                 .await
                 .unwrap();
             labels

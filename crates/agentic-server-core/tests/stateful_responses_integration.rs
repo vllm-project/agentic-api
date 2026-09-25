@@ -885,6 +885,7 @@ async fn tool_search_store_false_manual_replay_completes_without_reusable_respon
     assert_eq!(output_text(&final_response), "manual replay complete");
 
     let lookup_ctx = RequestContext {
+        multi_agent_tree: None,
         original_request: make_request("lookup", true, false, Some(final_response.id.clone()), None),
         enriched_request: make_request("lookup", true, false, Some(final_response.id), None),
         new_input_items: Vec::new(),
@@ -944,6 +945,7 @@ async fn test_previous_response_id_persists_inherited_tools_and_choice() {
     assert_eq!(output_text(&p2), "follow up answer");
 
     let lookup_ctx = RequestContext {
+        multi_agent_tree: None,
         original_request: RequestPayload {
             previous_response_id: Some(p2.id.clone()),
             ..second_request
@@ -1387,6 +1389,7 @@ async fn run_response(
 fn lookup_context(previous_response_id: Option<String>, conversation_id: Option<String>) -> RequestContext {
     let request = make_request("lookup", true, false, previous_response_id, conversation_id);
     RequestContext {
+        multi_agent_tree: None,
         enriched_request: request.clone(),
         original_request: request,
         new_input_items: Vec::new(),

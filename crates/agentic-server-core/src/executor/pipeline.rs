@@ -1,7 +1,11 @@
 //! Request-owned pipeline with a synchronous ingestion core and awaited stream delivery.
+mod agent_delivery;
 mod delivery;
 mod ingest;
+mod projection;
+pub(super) use projection::AgentRoundId;
 
+pub(super) use agent_delivery::{AgentFrame, AgentFrameSink};
 pub(super) use delivery::{emit_deferred_stream_events, emit_gateway_event};
 pub(super) use ingest::RoundIngestion;
 
@@ -13,10 +17,13 @@ use crate::executor::request::RequestContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::translate::{Translation, TranslationContext};
 use crate::tool::{ToolRegistry, ToolSearchMetadata, ToolSearchState};
+use crate::types::agent::AgentIdentity;
+use crate::types::io::{InputMessage, OutputItem};
 use crate::types::request_response::ResponsePayload;
 use delivery::StreamDelivery;
 use futures::{Stream, StreamExt};
 use tokio::sync::mpsc::Sender;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Debug)]
 pub(super) struct StreamPayload {
@@ -30,9 +37,42 @@ pub(super) struct AgentPipeline {
     tool_search_state: Option<ToolSearchState>,
     delivery: StreamDelivery,
     round: Option<RoundIngestion>,
+    cancellation: CancellationToken,
+    agent_guidance: Option<InputMessage>,
 }
 
 impl AgentPipeline {
+    pub(super) fn set_agent_guidance(&mut self, guidance: InputMessage) {
+        self.agent_guidance = Some(guidance);
+    }
+
+    pub(super) fn agent_guidance(&self) -> Option<&InputMessage> {
+        self.agent_guidance.as_ref()
+    }
+
+    pub(super) fn has_live_agent_items(&self, agent: &AgentIdentity) -> bool {
+        self.delivery.has_live_agent_items(agent)
+    }
+    pub(super) async fn accept_agent_frame(&mut self, source: &AgentRoundId, frame: EventFrame) -> ExecutorResult<()> {
+        self.delivery.accept_agent_frame(source, frame).await
+    }
+
+    pub(super) async fn emit_agent_item(&mut self, item: &OutputItem) -> ExecutorResult<usize> {
+        self.delivery.emit_agent_item(item).await
+    }
+
+    pub(super) fn finish_agent_source(&mut self, source: &AgentRoundId) {
+        self.delivery.finish_agent_source(source);
+    }
+    pub(super) fn set_agent_frame_sink(&mut self, sink: AgentFrameSink) {
+        self.delivery.accumulator.agent_sink = Some(sink);
+    }
+    pub(super) fn stream_sender(&self) -> Option<Sender<StreamEvent>> {
+        self.delivery.sender.clone()
+    }
+    pub(super) fn cancellation_token(&self) -> CancellationToken {
+        self.cancellation.clone()
+    }
     pub(super) fn new(
         request: RequestContext,
         tool_search_state: Option<ToolSearchState>,
@@ -43,6 +83,8 @@ impl AgentPipeline {
             tool_search_state,
             delivery: StreamDelivery::new(sender),
             round: None,
+            cancellation: CancellationToken::new(),
+            agent_guidance: None,
         }
     }
 
@@ -57,6 +99,8 @@ impl AgentPipeline {
             tool_search_state,
             delivery: StreamDelivery::with_max_stream_event_bytes(sender, max_stream_event_bytes),
             round: None,
+            cancellation: CancellationToken::new(),
+            agent_guidance: None,
         }
     }
 

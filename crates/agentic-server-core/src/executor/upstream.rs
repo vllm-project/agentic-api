@@ -1,14 +1,18 @@
 use crate::executor::accumulator::Validation;
 use crate::executor::error::{ExecutorError, ExecutorResult};
+use crate::executor::gateway::history::append_input_item;
 use crate::executor::gateway_accumulator::StreamEvent;
 use crate::executor::inference::{call_inference_limited, fetch_response_json_limited};
+use crate::executor::multi_agent::collaboration;
 use crate::executor::pipeline::{AgentPipeline, StreamPayload};
 use crate::executor::rehydrate::validate_message_content;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::translate::TranslationContext;
 use crate::tool::{ToolRegistry, ToolSearchState};
-use crate::types::request_response::ResponsePayload;
+use crate::types::io::{InputItem, InputMessage, MultiAgentAction};
+use crate::types::request_response::{ResponsePayload, UpstreamTool};
+use crate::types::tools::ResponsesTool;
 use crate::utils::common::serialize_to_string;
 use std::sync::Arc;
 
@@ -25,6 +29,14 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
             .unwrap_or_default(),
         state.is_some_and(ToolSearchState::is_active),
     )
+    .with_collaboration(
+        agent
+            .request
+            .enriched_request
+            .multi_agent
+            .as_ref()
+            .is_some_and(|config| config.enabled),
+    )
     .with_gateway_owned_names(
         registry
             .tool_classifications()
@@ -37,18 +49,14 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
         registry.custom_tool_map().cloned(),
         state
             .filter(|state| state.is_active())
-            .map(crate::tool::ToolSearchState::public_response_tools)
+            .map(ToolSearchState::public_response_tools)
             .or_else(|| {
                 agent
                     .request
                     .enriched_request
                     .tools
                     .as_ref()
-                    .filter(|tools| {
-                        tools
-                            .iter()
-                            .any(|tool| matches!(tool, crate::types::tools::ResponsesTool::Shell(_)))
-                    })
+                    .filter(|tools| tools.iter().any(|tool| matches!(tool, ResponsesTool::Shell(_))))
                     .cloned()
             }),
         agent.request.enriched_request.tool_choice.clone(),
@@ -61,9 +69,38 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
 /// # Errors
 /// Unsupported message content, a tool-configuration error, or a serialization failure.
 pub fn upstream_request(ctx: &RequestContext, stream: bool) -> ExecutorResult<String> {
+    upstream_request_with_guidance(ctx, stream, None)
+}
+
+fn upstream_request_with_guidance(
+    ctx: &RequestContext,
+    stream: bool,
+    guidance: Option<&InputMessage>,
+) -> ExecutorResult<String> {
     // Composable callers may supply RequestContext without the rehydration step.
     validate_message_content(&ctx.enriched_request.input)?;
-    let request = ctx.enriched_request.to_upstream_request(stream)?;
+    let mut request = ctx.enriched_request.to_upstream_request(stream)?;
+    if ctx
+        .enriched_request
+        .multi_agent
+        .as_ref()
+        .is_some_and(|config| config.enabled)
+    {
+        let tools = request.tools.get_or_insert_with(Vec::new);
+        for tool in tools.iter() {
+            let UpstreamTool::Function(function) = tool;
+            if MultiAgentAction::from_tool_name(&function.name).is_some() {
+                return Err(ExecutorError::InvalidRequest(format!(
+                    "tool name '{}' is reserved for multi-agent collaboration",
+                    function.name
+                )));
+            }
+        }
+        tools.extend(collaboration::tools());
+    }
+    if let Some(guidance) = guidance {
+        append_input_item(request.input.to_mut(), InputItem::Message(guidance.clone()));
+    }
     serialize_to_string(&request).map_err(ExecutorError::JsonError)
 }
 
@@ -93,7 +130,7 @@ pub(super) async fn fetch_blocking_payload(
     response_budget: Option<&ExecutorResponseBudget>,
 ) -> ExecutorResult<ResponsePayload> {
     agent.ensure_request_prepared()?;
-    let upstream_json = upstream_request(&agent.request, false)?;
+    let upstream_json = upstream_request_with_guidance(&agent.request, false, agent.agent_guidance())?;
     let body = fetch_response_json_limited(
         upstream_json,
         &exec_ctx.responses_url(),
@@ -159,7 +196,7 @@ pub(super) async fn fetch_stream_payload(
     response_budget: &ExecutorResponseBudget,
 ) -> ExecutorResult<StreamPayload> {
     agent.ensure_request_prepared()?;
-    let upstream_json = upstream_request(&agent.request, true)?;
+    let upstream_json = upstream_request_with_guidance(&agent.request, true, agent.agent_guidance())?;
     let lines = call_inference_limited(
         upstream_json,
         exec_ctx.responses_url(),
@@ -191,6 +228,36 @@ pub(super) mod tests {
     use crate::types::io::ResponsesInput;
     use crate::types::request_response::RequestPayload;
     use serde_json::Value;
+
+    #[test]
+    fn agent_guidance_is_last_and_never_mutates_canonical_history() {
+        let mut ctx = request_context();
+        ctx.enriched_request.instructions = Some("caller instructions".into());
+        ctx.enriched_request.input = serde_json::from_value(serde_json::json!([
+            {"role":"developer","content":"caller developer message"},
+            {"role":"user","content":"review"},
+            {"role":"assistant","content":"parent delegation history"}
+        ]))
+        .unwrap();
+        let guidance: InputMessage = serde_json::from_value(serde_json::json!({
+            "role":"developer","content":"current child ownership"
+        }))
+        .unwrap();
+        let baseline: Value = serde_json::from_str(&upstream_request(&ctx, false).unwrap()).unwrap();
+        for stream in [false, true] {
+            let body: Value =
+                serde_json::from_str(&upstream_request_with_guidance(&ctx, stream, Some(&guidance)).unwrap()).unwrap();
+            assert_eq!(body["instructions"], "caller instructions");
+            let items = body["input"].as_array().unwrap();
+            assert_eq!(&items[..3], baseline["input"].as_array().unwrap());
+            assert_eq!(items.len(), 4);
+            assert_eq!(items[3]["role"], "developer");
+            assert_eq!(items[3]["content"], "current child ownership");
+        }
+        let after: Value = serde_json::from_str(&upstream_request(&ctx, false).unwrap()).unwrap();
+        assert_eq!(after, baseline);
+        assert!(ctx.new_input_items.is_empty());
+    }
 
     #[test]
     fn translation_snapshot_owns_prepared_availability_after_registry_is_dropped() {
@@ -305,30 +372,14 @@ pub(super) mod tests {
 
     pub(in crate::executor) fn request_context() -> RequestContext {
         let request = RequestPayload {
-            model: "test".to_owned(),
+            model: "test".into(),
             input: ResponsesInput::Text("hi".to_owned()),
-            instructions: None,
-            previous_response_id: None,
-            conversation_id: None,
-            tools: None,
-            tool_choice: None,
             stream: true,
             store: false,
-            include: None,
-            reasoning: None,
-            text: None,
-            temperature: None,
-            top_p: None,
-            max_output_tokens: None,
-            ignore_eos: None,
-            truncation: None,
-            metadata: None,
-            parallel_tool_calls: None,
-            prompt_cache_key: None,
-            cache_salt: None,
-            context_management: None,
+            ..Default::default()
         };
         RequestContext {
+            multi_agent_tree: None,
             original_request: request.clone(),
             enriched_request: request,
             new_input_items: Vec::new(),

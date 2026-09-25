@@ -5,99 +5,56 @@
 //! primary entry point; [`execute`] is a convenience shim for callers that don't
 //! need per-request configuration.
 
+mod agent_turn;
 mod execute;
+mod multi_agent;
 mod streaming;
 mod usage;
-
-use usage::accumulate_usage;
 
 pub use execute::{ExecuteRequest, execute};
 #[cfg(test)]
 use streaming::panicked_stream_chunks;
+use usage::accumulate_usage;
+
+use std::num::NonZeroUsize;
 
 #[cfg(test)]
 use either::Either;
 #[cfg(test)]
 use tokio::sync::mpsc;
-use tracing::Instrument as _;
-use tracing::debug;
 
-use super::compaction::{compact_items, maybe_compact_context};
+use super::compaction::compact_items;
 use super::gateway::{
-    GatewayCallResult, GatewayScheduler, append_gateway_calls_to_new_input, append_output_items_to_input,
-    append_tool_outputs, compaction_event_plans, emit_gateway_completed_events, emit_gateway_start_events,
-    emit_response_start_events, execute_and_emit_output_calls, has_client_owned_calls, public_output_items,
+    compaction_event_plans, emit_gateway_completed_events, emit_gateway_start_events, emit_response_start_events,
 };
 #[cfg(test)]
 use super::gateway_accumulator::{GatewayStreamAccumulator, STREAM_EVENT_BUFFER, StreamEvent};
-use crate::events::EventFrame;
 use crate::executor::error::ExecutorResult;
 #[cfg(test)]
 use crate::executor::inference::DONE_MARKER;
 use crate::executor::persist::persist_if_needed;
-use crate::executor::pipeline::{AgentPipeline, emit_deferred_stream_events};
-use crate::executor::rehydrate::prepare_reasoning_for_vllm;
+use crate::executor::pipeline::AgentPipeline;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::response_budget::ExecutorResponseBudget;
 #[cfg(test)]
 use crate::executor::response_budget::MAX_EXECUTOR_RESPONSE_BYTES;
 #[cfg(test)]
 use crate::executor::upstream::agent_pipeline;
-use crate::executor::upstream::{agent_pipeline_with_limits, fetch_blocking_payload, fetch_stream_payload};
-use crate::tool::{ToolRegistry, ToolSearchMetadata, ToolSearchState, mcp};
-use crate::types::io::{InputItem, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
+use crate::executor::upstream::agent_pipeline_with_limits;
+use crate::tool::{ToolSearchMetadata, ToolSearchState};
+use crate::types::io::{InputItem, OutputItem, ResponseUsage, ResponsesInput};
 #[cfg(test)]
 use crate::types::request_response::RequestPayload;
 use crate::types::request_response::{IncompleteDetails, ResponsePayload};
 use crate::utils::common::utcnow_str;
+#[cfg(test)]
+use agent_turn::build_tool_registry;
+use agent_turn::{AgentTurn, RoundDecision, RoundResult};
+use multi_agent::MultiAgentRun;
 
 pub use crate::executor::inference::BoxStream;
 
-const MAX_GATEWAY_TOOL_ROUNDS: usize = 10;
-
-/// Outcome of inspecting one inference round's output, deciding whether the
-/// gateway tool loop should run another round, stop, or surface a partial result.
-#[derive(Debug)]
-#[non_exhaustive]
-enum LoopDecision {
-    /// Gateway-owned calls were resolved this round; loop again with their
-    /// outputs appended to the conversation.
-    Continue,
-    /// No gateway work remains — the turn is final and the loop terminates.
-    Done,
-    /// One or more calls are client-owned (`function`, `custom`, or Codex
-    /// `namespace` tools); hand the turn back to the caller to execute.
-    RequiresClientAction,
-    /// The round cap was hit before the model stopped requesting tools. The
-    /// response is returned with `status: "incomplete"` rather than as an error.
-    Incomplete(String),
-}
-
-/// Classify one turn's output into a [`LoopDecision`].
-///
-/// Order matters: client-owned calls take precedence (they must be handed back
-/// even when gateway calls are also present in the same turn), then a
-/// no-gateway-work turn is `Done`. Otherwise gateway tools ran — the loop would
-/// continue, unless this was the last permitted round, in which case the budget
-/// is exhausted and the turn is `Incomplete`.
-///
-/// `round` is zero-based; `max_rounds` is the total budget.
-fn classify_round(
-    has_client_owned_calls: bool,
-    gateway_results: &[GatewayCallResult],
-    round: usize,
-    max_rounds: usize,
-) -> LoopDecision {
-    if has_client_owned_calls {
-        LoopDecision::RequiresClientAction
-    } else if gateway_results.is_empty() {
-        LoopDecision::Done
-    } else if round + 1 >= max_rounds {
-        LoopDecision::Incomplete(format!("gateway tool execution exceeded {max_rounds} rounds"))
-    } else {
-        LoopDecision::Continue
-    }
-}
+const MAX_GATEWAY_TOOL_ROUNDS: NonZeroUsize = NonZeroUsize::new(10).unwrap();
 
 async fn run_until_gateway_tools_complete(
     agent: &mut AgentPipeline,
@@ -122,124 +79,75 @@ async fn run_until_gateway_tools_complete(
         .await
 }
 
-async fn build_tool_registry(
-    agent: &mut AgentPipeline,
-    exec_ctx: &ExecutionContext,
-    response_budget: &ExecutorResponseBudget,
-) -> ExecutorResult<ToolRegistry> {
-    let mut executors = exec_ctx.gateway_executors.request_scoped();
-    let mut registry: ToolRegistry = match agent.request.enriched_request.tools.as_mut() {
-        Some(tools) => {
-            let policy = exec_ctx.gateway_scheduler_policy.clone();
-            ToolRegistry::build_with_handlers_guarded(
-                tools,
-                &mut executors,
-                |bytes| response_budget.consume(bytes),
-                move || policy.acquire_materialization_permit(),
-            )
-            .await?
-        }
-        None => ToolRegistry::default(),
-    };
-    if let Some(state) = agent.tool_search_state().filter(|state| state.is_active()) {
-        registry
-            .validate_tool_availability(state.withheld_function_names(), state.synthetic_tool_search().is_some())?;
-    }
-    registry.cache_listed_mcp_tools(&agent.request.enriched_request.input);
-    Ok(registry)
-}
-
-fn prepare_initial_reasoning_for_vllm(input: &mut ResponsesInput, round: usize, compacted: bool) -> ExecutorResult<()> {
-    if round == 0 && !compacted {
-        return prepare_reasoning_for_vllm(input);
-    }
-    Ok(())
-}
-
-fn record_round_history(
-    ctx: &mut RequestContext,
-    output_items: &[OutputItem],
-    registry: &ToolRegistry,
-    public_output_count: usize,
-) {
-    // Explicit conversations append public output through their durable handler;
-    // the session lease still serializes execution but must not record it twice.
-    if let Some(continuation) = ctx
-        .continuation
-        .as_mut()
-        .filter(|_| ctx.original_request.conversation_id.is_none())
-    {
-        // The canonical sequence includes reasoning and intermediate messages in
-        // their original positions, followed by this round's tool call outputs.
-        // Discovery records are appended separately from the public response.
-        ctx.new_input_items.extend(
-            output_items
-                .iter()
-                .filter(|item| !matches!(item, OutputItem::McpListTools(_)))
-                .filter_map(OutputItem::to_input_item),
-        );
-        continuation.mark_outputs_recorded(public_output_count);
-    } else {
-        append_gateway_calls_to_new_input(ctx, output_items, registry);
-    }
-}
-
-/// Request-scoped owner of registry-backed tool orchestration and its shared byte budget.
-struct EngineOrchestration<'a> {
-    agent: &'a mut AgentPipeline,
-    registry: ToolRegistry,
-    response_budget: ExecutorResponseBudget,
-    exec_ctx: &'a ExecutionContext,
+/// Response-level orchestration. Owns the shared retained-byte budget and
+/// response assembly, and advances per-agent execution through typed outcomes.
+/// Owns either one agent turn or the tree coordinator. Both use the same
+/// pipeline ingestion, delivery, and outer persistence boundary.
+enum EngineOrchestration<'a> {
+    Single(Box<SingleAgentRun<'a>>),
+    Multi {
+        coordinator: Box<MultiAgentRun>,
+        pipeline: &'a mut AgentPipeline,
+        exec_ctx: &'a ExecutionContext,
+    },
 }
 
 impl<'a> EngineOrchestration<'a> {
-    async fn fetch_round(
-        &mut self,
-        auth: Option<&str>,
-        stream_upstream: bool,
-        round: usize,
-        output_offset: usize,
-    ) -> ExecutorResult<(ResponsePayload, Vec<EventFrame>)> {
-        let round_span = super::telemetry::stages::inference_round(round);
-        Ok(if stream_upstream {
-            let stream_payload = fetch_stream_payload(
-                self.agent,
-                self.exec_ctx,
-                auth,
-                &self.registry,
-                output_offset,
-                &self.response_budget,
-            )
-            .instrument(round_span)
-            .await?;
-            if round == 0 {
-                self.registry.clear_mcp_list_tool_items();
-            }
-            (stream_payload.payload, stream_payload.deferred_events)
+    async fn new(agent: &'a mut AgentPipeline, exec_ctx: &'a ExecutionContext) -> ExecutorResult<Self> {
+        if agent
+            .request
+            .enriched_request
+            .multi_agent
+            .as_ref()
+            .is_some_and(|config| config.enabled)
+        {
+            let coordinator = Box::new(MultiAgentRun::new(agent, exec_ctx).await?);
+            Ok(Self::Multi {
+                coordinator,
+                pipeline: agent,
+                exec_ctx,
+            })
         } else {
-            (
-                fetch_blocking_payload(
-                    self.agent,
-                    self.exec_ctx,
-                    auth,
-                    &self.registry,
-                    Some(&self.response_budget),
-                )
-                .instrument(round_span)
-                .await?,
-                Vec::new(),
-            )
-        })
+            Ok(Self::Single(Box::new(SingleAgentRun::new(agent, exec_ctx).await?)))
+        }
     }
 
+    async fn run(
+        self,
+        auth: Option<&str>,
+        stream_upstream: bool,
+    ) -> ExecutorResult<(ResponsePayload, Option<ToolSearchMetadata>)> {
+        match self {
+            Self::Single(run) => run.run(auth, stream_upstream).await,
+            Self::Multi {
+                coordinator,
+                pipeline,
+                exec_ctx,
+            } => coordinator
+                .run(pipeline, exec_ctx, auth)
+                .await
+                .map(|payload| (payload, None)),
+        }
+    }
+}
+
+struct SingleAgentRun<'a> {
+    root: AgentTurn<'a>,
+    response_budget: ExecutorResponseBudget,
+    output: Vec<OutputItem>,
+    usage: Option<ResponseUsage>,
+}
+
+impl<'a> SingleAgentRun<'a> {
     async fn new(agent: &'a mut AgentPipeline, exec_ctx: &'a ExecutionContext) -> ExecutorResult<Self> {
         let response_budget = ExecutorResponseBudget::with_limit(exec_ctx.responses_config.max_retained_bytes);
-        let registry = build_tool_registry(agent, exec_ctx, &response_budget).await?;
+        let root = AgentTurn::new(agent, exec_ctx, &response_budget, MAX_GATEWAY_TOOL_ROUNDS).await?;
+        let output = root.discovery_output();
         Ok(Self {
-            agent,
-            registry,
+            root,
             response_budget,
-            exec_ctx,
+            output,
+            usage: None,
         })
     }
 
@@ -248,205 +156,23 @@ impl<'a> EngineOrchestration<'a> {
         auth: Option<&str>,
         stream_upstream: bool,
     ) -> ExecutorResult<(ResponsePayload, Option<ToolSearchMetadata>)> {
-        let mut combined_output: Vec<OutputItem> = self
-            .registry
-            .mcp_list_tool_items()
-            .map(mcp::handler::list_tools_output_item)
-            .collect();
-        let mut combined_usage = None;
-
-        for round in 0..MAX_GATEWAY_TOOL_ROUNDS {
-            let compaction_usage = maybe_compact_context(&mut self.agent.request, self.exec_ctx, auth).await?;
-            prepare_initial_reasoning_for_vllm(
-                &mut self.agent.request.enriched_request.input,
-                round,
-                compaction_usage.is_some(),
-            )?;
-            accumulate_usage(&mut combined_usage, compaction_usage);
-            let output_offset = combined_output.len();
-            let (mut payload, deferred_stream_events) =
-                self.fetch_round(auth, stream_upstream, round, output_offset).await?;
-            accumulate_usage(&mut combined_usage, payload.usage.take());
-            let current_output = std::mem::take(&mut payload.output);
-            if matches!(payload.status.as_str(), "error" | "failed") {
-                self.emit_failed_round_events(deferred_stream_events, output_offset)
-                    .await?;
-                combined_output.extend(current_output);
-                finalize_loop(&mut payload, combined_output, combined_usage, &self.agent.request);
-                return Ok((payload, self.agent.take_tool_search_metadata()));
-            }
-            log_custom_tool_calls(&current_output, &self.agent.request.response_id);
-            let has_client_owned = has_client_owned_calls(&current_output, &self.registry);
-            let gateway_results = self
-                .execute_round_output(&current_output, output_offset, deferred_stream_events)
+        loop {
+            let RoundResult { mut payload, decision } = self
+                .root
+                .run_round(self.output.len(), auth, stream_upstream, &self.response_budget)
                 .await?;
-            let public_output = public_output_items(&current_output, &self.registry, &gateway_results)?;
-            combined_output.extend(public_output);
-            record_round_history(
-                &mut self.agent.request,
-                &current_output,
-                &self.registry,
-                combined_output.len(),
-            );
-
-            // A terminal incomplete response may still contain completed gateway
-            // calls. Record those results, but never start another inference round.
-            if payload.status == "incomplete" {
-                self.record_gateway_results(gateway_results);
-                finalize_loop(&mut payload, combined_output, combined_usage, &self.agent.request);
-                let tool_search_metadata = self.agent.take_tool_search_metadata();
-                return Ok((payload, tool_search_metadata));
-            }
-
-            match classify_round(has_client_owned, &gateway_results, round, MAX_GATEWAY_TOOL_ROUNDS) {
-                // Client-owned calls (function, custom, or Codex namespace tools)
-                // are handed back to the caller. Gateway calls in the same round are
-                // still recorded so the returned conversation is complete.
-                LoopDecision::RequiresClientAction => {
-                    self.record_gateway_results(gateway_results);
-                    finalize_loop(&mut payload, combined_output, combined_usage, &self.agent.request);
-                    let tool_search_metadata = self.agent.take_tool_search_metadata();
-                    return Ok((payload, tool_search_metadata));
-                }
-                // No gateway work remains — this turn is the final response.
-                LoopDecision::Done => {
-                    finalize_loop(&mut payload, combined_output, combined_usage, &self.agent.request);
-                    let tool_search_metadata = self.agent.take_tool_search_metadata();
-                    return Ok((payload, tool_search_metadata));
-                }
-                // Budget exhausted while the model was still requesting gateway
-                // tools: surface the accumulated work as a partial
-                // `status: "incomplete"` response instead of failing the request.
-                // The final round's gateway calls and outputs are recorded so a
-                // continuation is not fed a dangling tool call.
-                LoopDecision::Incomplete(reason) => {
-                    self.record_gateway_results(gateway_results);
-                    finalize_loop(&mut payload, combined_output, combined_usage, &self.agent.request);
+            accumulate_usage(&mut self.usage, payload.usage.take());
+            self.output.append(&mut payload.output);
+            match decision {
+                RoundDecision::Continue => continue,
+                RoundDecision::Incomplete(reason) => {
                     "incomplete".clone_into(&mut payload.status);
                     payload.incomplete_details = Some(IncompleteDetails { reason: Some(reason) });
-                    let tool_search_metadata = self.agent.take_tool_search_metadata();
-                    return Ok((payload, tool_search_metadata));
                 }
-                // Gateway tools ran and rounds remain; feed outputs back and loop.
-                LoopDecision::Continue => {
-                    self.agent.request.enriched_request.tool_choice = Some(ToolChoice::Auto);
-                    append_output_items_to_input(&mut self.agent.request.enriched_request.input, &current_output);
-                    self.record_gateway_results(gateway_results);
-                }
+                RoundDecision::Done | RoundDecision::RequiresClientAction | RoundDecision::UpstreamTerminal => {}
             }
-        }
-
-        unreachable!("the final round returns Done, RequiresClientAction, or Incomplete");
-    }
-
-    async fn emit_failed_round_events(
-        &mut self,
-        deferred_events: Vec<EventFrame>,
-        output_offset: usize,
-    ) -> ExecutorResult<()> {
-        // A failed round skips tool execution, but its deferred public events
-        // (including upstream diagnostics) still precede the terminal event.
-        let (ctx, stream) = self.agent.parts_mut();
-        if let Some((accumulator, sender)) = stream {
-            emit_deferred_stream_events(deferred_events, ctx, accumulator, sender, output_offset).await?;
-        }
-        Ok(())
-    }
-
-    fn record_gateway_results(&mut self, results: Vec<GatewayCallResult>) {
-        append_tool_outputs(
-            &mut self.agent.request,
-            results.into_iter().map(|result| result.input_item).collect(),
-        );
-    }
-
-    async fn execute_round_output(
-        &mut self,
-        output_items: &[OutputItem],
-        output_offset: usize,
-        deferred_events: Vec<EventFrame>,
-    ) -> ExecutorResult<Vec<GatewayCallResult>> {
-        let (ctx, stream) = self.agent.parts_mut();
-        let (stream_accumulator, stream_sender) = match (deferred_events.is_empty(), stream) {
-            (false, Some(stream)) => stream,
-            (_, stream) => {
-                return execute_and_emit_output_calls(
-                    output_items,
-                    &self.registry,
-                    output_offset,
-                    self.exec_ctx.gateway_scheduler_policy.clone(),
-                    &self.response_budget,
-                    stream,
-                )
-                .await;
-            }
-        };
-        let mut events_by_output = Vec::with_capacity(output_items.len());
-        events_by_output.resize_with(output_items.len(), Vec::new);
-        let mut remaining_events = Vec::new();
-        for frame in deferred_events {
-            let Some(output_index) = frame
-                .wire
-                .output_index
-                .and_then(|index| usize::try_from(index).ok())
-                .filter(|index| *index < events_by_output.len())
-            else {
-                remaining_events.push(frame);
-                continue;
-            };
-            events_by_output[output_index].push(frame);
-        }
-
-        let mut scheduler = GatewayScheduler::plan(
-            output_items,
-            &self.registry,
-            output_offset,
-            self.exec_ctx.gateway_scheduler_policy.clone(),
-        );
-        let initial_event_run_len = scheduler.initial_event_run_len(output_items, &self.registry);
-        emit_gateway_start_events(
-            scheduler.event_plans().take(initial_event_run_len),
-            stream_accumulator,
-            stream_sender,
-        )
-        .await?;
-
-        let gateway_results = scheduler.execute_with_budget(&self.response_budget).await?;
-        for (index, output_events) in events_by_output.iter_mut().enumerate() {
-            if let Some(call_index) = scheduler.call_index_for_item(index) {
-                let plan = scheduler
-                    .event_plan(call_index)
-                    .expect("scheduled call index always has an event plan");
-                let result = std::slice::from_ref(&gateway_results[call_index]);
-                if call_index >= initial_event_run_len {
-                    emit_gateway_start_events(std::iter::once(plan), stream_accumulator, stream_sender).await?;
-                }
-                emit_gateway_completed_events(result, std::iter::once(plan), stream_accumulator, stream_sender).await?;
-            }
-            emit_deferred_stream_events(
-                std::mem::take(output_events),
-                ctx,
-                stream_accumulator,
-                stream_sender,
-                output_offset,
-            )
-            .await?;
-        }
-        emit_deferred_stream_events(remaining_events, ctx, stream_accumulator, stream_sender, output_offset).await?;
-        Ok(gateway_results)
-    }
-}
-
-fn log_custom_tool_calls(output: &[OutputItem], response_id: &str) {
-    for item in output {
-        if let OutputItem::CustomToolCall(call) = item {
-            debug!(
-                response_id,
-                call_id = %call.call_id,
-                name = %call.name,
-                input_bytes = call.input.len(),
-                "custom tool call requires client execution"
-            );
+            finalize_loop(&mut payload, self.output, self.usage, &self.root.pipeline.request);
+            return Ok((payload, self.root.pipeline.take_tool_search_metadata()));
         }
     }
 }
@@ -506,7 +232,7 @@ fn finalize_loop(
     ctx.inject_ids(payload);
 }
 
-pub(super) async fn run_blocking(
+async fn run_blocking(
     ctx: RequestContext,
     tool_search_state: Option<ToolSearchState>,
     exec_ctx: &ExecutionContext,
@@ -514,7 +240,8 @@ pub(super) async fn run_blocking(
     max_stream_event_bytes: usize,
 ) -> ExecutorResult<ResponsePayload> {
     let mut agent = agent_pipeline_with_limits(ctx, tool_search_state, None, max_stream_event_bytes);
-    let (payload, tool_search_metadata) = run_until_gateway_tools_complete(&mut agent, exec_ctx, auth, false).await?;
+    let (payload, tool_search_metadata) =
+        Box::pin(run_until_gateway_tools_complete(&mut agent, exec_ctx, auth, false)).await?;
     let (ctx, _) = agent.into_parts();
 
     let ch = exec_ctx.conv_handler.clone();
@@ -546,6 +273,41 @@ mod tests {
     use futures::StreamExt;
     use std::sync::Arc;
     use tokio::sync::Mutex;
+
+    #[test]
+    fn usage_accumulation_preserves_missing_and_explicit_zero_usage() {
+        let mut total = None;
+        accumulate_usage(&mut total, None);
+        assert!(total.is_none());
+
+        accumulate_usage(&mut total, Some(ResponseUsage::default()));
+        assert_eq!(total.as_ref().map(|usage| usage.total_tokens), Some(0));
+
+        let first = ResponseUsage {
+            input_tokens: 10,
+            output_tokens: 4,
+            total_tokens: 14,
+            ..Default::default()
+        };
+        accumulate_usage(&mut total, Some(first));
+        accumulate_usage(&mut total, None);
+        assert_eq!(
+            serde_json::to_value(total).unwrap(),
+            serde_json::to_value(first).unwrap()
+        );
+
+        let second = ResponseUsage {
+            input_tokens: 6,
+            output_tokens: 3,
+            total_tokens: 9,
+            ..Default::default()
+        };
+        accumulate_usage(&mut total, Some(second));
+        let total = total.unwrap();
+        assert_eq!(total.input_tokens, 16);
+        assert_eq!(total.output_tokens, 7);
+        assert_eq!(total.total_tokens, 23);
+    }
 
     fn summary_upstream_response() -> serde_json::Value {
         serde_json::json!({
@@ -652,6 +414,7 @@ mod tests {
         }))
         .expect("valid request");
         let request = RequestContext {
+            multi_agent_tree: None,
             original_request: payload.clone(),
             enriched_request: payload,
             new_input_items: Vec::new(),
@@ -715,6 +478,7 @@ mod tests {
         }))
         .expect("valid MCP request");
         let mcp_request = RequestContext {
+            multi_agent_tree: None,
             original_request: mcp_payload.clone(),
             enriched_request: mcp_payload,
             new_input_items: Vec::new(),
@@ -730,6 +494,7 @@ mod tests {
         }))
         .expect("valid request without tools");
         let plain_request = RequestContext {
+            multi_agent_tree: None,
             original_request: plain_payload.clone(),
             enriched_request: plain_payload,
             new_input_items: Vec::new(),

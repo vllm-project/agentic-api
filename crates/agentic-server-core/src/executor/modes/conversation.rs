@@ -7,7 +7,9 @@ use crate::storage::{
 use crate::types::conversations::{ConversationItem, ConversationMetadata, ItemResponse, ListItemsResponse};
 use crate::types::io::OutputItem;
 
+use super::CommittedResponse;
 use crate::executor::error::{ExecutorError, ExecutorResult};
+use crate::executor::multi_agent::ValidatedTreeCheckpoint;
 use crate::executor::request::RequestContext;
 
 /// Handles all conversation store operations: creation, rehydration, and persistence.
@@ -17,6 +19,18 @@ pub struct ConversationHandler {
 }
 
 impl ConversationHandler {
+    pub(crate) async fn commit_tree(
+        &self,
+        ctx: RequestContext,
+        output_items: Vec<OutputItem>,
+        mut metadata: ResponseMetadata,
+        tree: ValidatedTreeCheckpoint,
+    ) -> ExecutorResult<CommittedResponse> {
+        let response_id = ctx.response_id.clone();
+        metadata.multi_agent_tree = Some(tree.into_snapshot());
+        self.execute_turn_with_metadata(ctx, output_items, metadata).await?;
+        Ok(CommittedResponse { response_id })
+    }
     #[must_use]
     pub fn new(store: ConversationStore) -> Self {
         Self { store }
@@ -301,6 +315,7 @@ impl ConversationHandler {
     /// the store is disabled, or the database operation fails.
     pub async fn execute_turn(&self, mut ctx: RequestContext, output_items: Vec<OutputItem>) -> ExecutorResult<()> {
         let metadata = ResponseMetadata {
+            multi_agent_tree: ctx.multi_agent_tree.take().map(ValidatedTreeCheckpoint::into_snapshot),
             model: std::mem::take(&mut ctx.enriched_request.model),
             previous_response_id: ctx.original_request.previous_response_id.take(),
             effective_tools: ctx.enriched_request.tools.take(),
@@ -384,28 +399,12 @@ mod tests {
         let req = RequestPayload {
             model: "test".into(),
             input: ResponsesInput::Text("hi".into()),
-            instructions: None,
-            previous_response_id: None,
-            conversation_id: conversation_id.map(str::to_string),
-            tools: None,
-            tool_choice: None,
-            stream: false,
             store: true,
-            include: None,
-            reasoning: None,
-            text: None,
-            temperature: None,
-            top_p: None,
-            max_output_tokens: None,
-            ignore_eos: None,
-            truncation: None,
-            metadata: None,
-            parallel_tool_calls: None,
-            prompt_cache_key: None,
-            cache_salt: None,
-            context_management: None,
+            conversation_id: conversation_id.map(str::to_string),
+            ..Default::default()
         };
         RequestContext {
+            multi_agent_tree: None,
             enriched_request: req.clone(),
             original_request: req,
             new_input_items: vec![],

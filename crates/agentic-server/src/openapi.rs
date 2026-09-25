@@ -55,6 +55,7 @@ use utoipa::OpenApi;
         agentic_core::types::io::CompactionItem,
         agentic_core::types::io::CustomToolCallOutputMessage,
         agentic_core::types::io::OutputItem,
+        agentic_core::types::io::MultiAgentConfig,
         agentic_core::types::io::AgentAttribution,
         agentic_core::types::io::MultiAgentAction,
         agentic_core::types::io::MultiAgentCall,
