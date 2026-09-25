@@ -9,9 +9,14 @@
                          (cassette written here)
 ```
 
-The proxy intercepts each turn, records the request body and response, then appends a `t<N>` entry to the output YAML.
+The proxy intercepts requests and records their request bodies and responses.
+Each `t<N>` in a Conversation Items API cassette is one HTTP request in execution order,
+including conversation creation, Responses calls, and item operations. These cassettes
+use a single flat `turns` list.
 
-The recorder is interactive. For each turn it prompts you to type the input message and waits for you to press Enter before sending the request. You can run it directly in your terminal and type the prompts by hand, or pipe them in from a script using `printf` or `echo` to feed all turns non-interactively:
+For the interactive recorder modes, the script prompts for each input message. You can type
+prompts in a terminal or pipe them in with `printf` or `echo`. The `items` mode runs fixed
+scenarios without prompting:
 
 ```bash
 # interactive -- type each prompt when asked
@@ -71,6 +76,7 @@ single-image SSE recording unchanged; they validate client/catalog propagation, 
 | `responses` | Chains turns via `previous_response_id`. Supported with `--vllm`. Common mode for gateway-backed built-in tool cassettes. |
 | `messages` | Anthropic Messages API (`/v1/messages`). Stateless: resends the full `messages` history each turn. With `--tool-outputs`, a turn following a `tool_use` feeds back matching `tool_result` blocks (keyed by tool name) instead of prompting. Supported with `--vllm`. |
 | `conv` | Creates a conversation object, passes `conversation` id each turn. |
+| `items` | Scripted Conversation Items API continuation, deletion, response-branch, and pagination scenarios. `--turns` is 5, 6 for `branch`, 10 for `pagination`, or 19 for `edge-cases`; each numbered step is one HTTP request. |
 | `isolation` | Two independent conversations (A and B) recorded into one cassette. |
 | `mixed` | Turn 1 uses `conversation` id, turns 2+ switch to `previous_response_id`. |
 | `store_true_then_store_false` | Turn 1: `store=true` with conversation id. Remaining turns: `store=false`, still pass conversation id. |
@@ -80,7 +86,7 @@ single-image SSE recording unchanged; they validate client/catalog propagation, 
 ```
 --turns N              Number of turns
 --output PATH          Output YAML path
---mode MODE            responses | messages | conv | isolation | mixed | store_true_then_store_false  (default: conv)
+--mode MODE            responses | messages | conv | items | isolation | mixed | store_true_then_store_false  (default: conv)
 --stream / --no-stream Streaming or non-streaming (default: streaming)
 --transport TRANSPORT  http | websocket  (default: http; WebSocket requires responses mode)
 --model NAME           Model name sent in requests
@@ -210,6 +216,7 @@ turns:
 | Script | Cassettes | Backend |
 |--------|-----------|---------|
 | `record_text_only_cassettes.sh` | 10 text-only cassettes (responses + conv modes, streaming + non-streaming) | OpenAI (`OPENAI_API_KEY`) |
+| `record_conversations_api_cassettes.sh` | 18 Conversation Items API cassettes: four history scenarios in both transports and one non-streaming edge-case sequence, each for both providers | OpenAI and gateway |
 | `record_reasoning_cassettes.sh` | Matching explicit-reasoning cassettes (streaming + non-streaming) | gateway and OpenAI reference; optional direct vLLM |
 | `record_tool_call_cassettes.sh` | 8 tool-call cassettes (4 tool_choice modes x streaming + non-streaming) | vLLM |
 | `record_codex_cli_tool_call_cassettes.sh` | Codex function/namespace/custom-tool matrix | gateway, vLLM, and OpenAI |
@@ -514,6 +521,88 @@ OPENAI_API_KEY=sk-... \
 OPENAI_CUSTOM_MODEL=gpt-5.6 \
 bash tests/cassettes/record_codex_cli_tool_call_cassettes.sh openai-custom
 ```
+
+### Conversation Items API (OpenAI and gateway)
+
+`record_conversations_api_cassettes.sh` uses the shared `record_cassette.py` proxy to record
+four history scenarios against each provider, with streaming and non-streaming Responses calls,
+plus one non-streaming item API edge-case sequence. Each
+`filename: tN` is one HTTP request in a flat `turns` list; there is no `setup` or
+`after_turn` section. The recorder writes the captured YAML directly.
+
+The four history scenarios start with t1 `POST /v1/conversations`, t2 `POST /v1/responses`
+using the conversation ID to remember SAPPHIRE, and t3
+`POST /v1/conversations/{conversation_id}/items` to add ORCHID.
+
+| Scenario | Remaining requests and expected history |
+|----------|-----------------------------------------|
+| `continuation` | t4 continues through the conversation ID and answers ORCHID; t5 lists the conversation items, including that response. |
+| `deletion` | t4 deletes the ORCHID item; t5 lists the conversation items without it. |
+| `branch` | t4 branches through `previous_response_id` alone and answers SAPPHIRE; t5 adds VIOLET through the conversation items path; t6 lists the conversation items. The branch response does not appear in that list. The Responses call never combines `conversation` with `previous_response_id`. |
+| `pagination` | t4 lists all items ascending; t5–t6 list ascending pages of size two, with t6 using t5's `last_id` as `after`. t7 lists all items descending; t8–t9 repeat the cursor check in descending order. t10 lists ascending with `include[]=message.output_text.logprobs`. |
+| `edge-cases` | One YAML: t1–t3 try a message with client-supplied `item_wrongprefix_…` and list; t4–t6 try a function call with `msg_wrongprefix_…` and valid `call_id`, then list; t7–t11 add three valid messages, list two, delete the page cursor, and list with the deleted ID as `after`. t12–t14 copy one surviving generated ID into a fresh conversation as a control; t15–t17 submit that ID twice with different content into another fresh conversation; t18–t19 reuse it in its original conversation. Each insertion probe is followed by a list to capture actual state. Probe responses are recorded without assuming a status. |
+
+Run from the repository root with `OPENAI_API_KEY` set and the gateway, its database,
+and vLLM running. Set `GATEWAY_MODEL` if the gateway model differs from
+`OPENAI_MODEL` (default `gpt-4.1`); `PYTHON_BIN` selects the Python environment
+with the packages in `recorder-requirements.txt`.
+
+```bash
+bash crates/agentic-server-core/tests/cassettes/record_conversations_api_cassettes.sh
+
+# Re-record only the pagination pair, for both providers and both transports.
+CONVERSATIONS_SCENARIO=pagination bash crates/agentic-server-core/tests/cassettes/record_conversations_api_cassettes.sh
+CONVERSATIONS_SCENARIO=pagination-stream bash crates/agentic-server-core/tests/cassettes/record_conversations_api_cassettes.sh
+
+# Record all gateway scenarios, including the combined edge-case YAML.
+CONVERSATIONS_RECORD_SET=gateway bash crates/agentic-server-core/tests/cassettes/record_conversations_api_cassettes.sh
+```
+
+`CONVERSATIONS_RECORD_SET=openai` or `gateway` selects one provider;
+`CONVERSATIONS_SCENARIO=edge-cases` records the complete nineteen-request edge-case sequence into one YAML per provider.
+Only the four history scenarios
+have `-stream` variants. The prefix probes send explicit wrong-prefix IDs, whereas
+normal item creation lets the provider assign IDs. The edge-case status codes
+are learned from the OpenAI recording, then compared with the gateway recording.
+The existing Rust history comparison requires both recordings for its four history scenarios.
+The edge-case assertions cover the nineteen-step recordings from both providers. The new OpenAI recording establishes that:
+
+- Reusing a generated item ID in another conversation returns 200 and retains the original item's content, ignoring the submitted replacement content.
+- Supplying that ID twice in one request to a fresh conversation returns 200 and lists two occurrences with the same public ID and original content.
+- Reusing it in its original conversation returns 400 with `type: invalid_request_error`, `code: item_already_in_conversation`, `param: items`, and message `Item already in conversation`; the original history stays unchanged.
+
+The latest gateway recording matches all nineteen OpenAI steps: status codes, full response bodies,
+item ordering, and ID relationships, with dynamic IDs and timestamps normalized. Deleted-cursor
+pagination returns 404 with `type: invalid_request_error`, `param: after`, null `code`, and
+`No item found with id '<deleted_id>'`. The message and function-call prefix probes return 400
+with `code: invalid_value`, `param: items[0].id`, and the recorded expected-prefix message.
+
+The tests compare every recorded edge-case response without skipping the previously failing
+steps. They also replay all nineteen OpenAI requests against gateway handlers backed by a fresh
+SQLite database. Storage regressions separately exercise repeated references across SQL batches,
+rejection in later requests, rollback, tenant isolation, and preserved response snapshots.
+The storage model keeps each history occurrence's internal primary key separate from the reused
+public item ID; uniqueness of `(conversation_id, public_item_id)` would reject the accepted t16 case.
+
+These probes concern existing generated IDs. They do not establish OpenAI behavior for duplicate
+invented IDs, pagination/deletion among repeated occurrences, or every item type's prefix.
+Those cases require additional recordings before claiming parity.
+
+Run the recording assertions with:
+
+```bash
+REQUIRE_CONVERSATIONS_CASSETTES=1 cargo test -p agentic-server-core --test conversations_api_cassette_test
+```
+
+The assertions check successful statuses, request routes and ID relationships,
+secret-word answers, conversation history visibility, and the SSE event lifecycle.
+They compare each provider's ascending and descending pages with its own full
+ordered item list, including cursor, `first_id`, `last_id`, and `has_more`.
+Gateway reasoning items can add raw items and shift page boundaries, so the
+test does not require OpenAI and gateway pages to contain the same raw items.
+The `include` request is checked for success and unchanged item order and
+message shape; this text-only scenario does not exercise other `include`
+expansions or every Conversation Items API format.
 
 ### Compaction replay (OpenAI)
 

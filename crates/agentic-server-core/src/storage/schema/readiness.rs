@@ -21,7 +21,11 @@ pub(crate) async fn verify_persistence_writable(pool: &DbPool) -> DbResult<()> {
             vec![(item_id.clone(), "{}".to_owned())],
             Some(&conversation_id),
         )
-        .await?;
+        .await
+        .map_err(|error| match error {
+            crate::storage::StorageError::Database(error) => error,
+            other => sqlx::Error::Configuration(Box::new(other)),
+        })?;
         crate::storage::models::response::create_in_tx(
             &mut transaction,
             &response_id,

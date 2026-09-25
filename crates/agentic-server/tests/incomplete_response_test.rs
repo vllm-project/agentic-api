@@ -29,7 +29,7 @@ impl Drop for AbortOnDrop {
     }
 }
 
-fn response_body(status: &str, tool: bool, empty: bool) -> Value {
+fn response_body(status: &str, tool: bool, empty: bool, message_id: &str) -> Value {
     let output = if tool {
         vec![json!({"id":"fc_search", "type":"function_call", "status":"completed",
             "call_id":"call_search", "name":"web_search", "arguments":"{\"query\":\"weather\"}"})]
@@ -37,7 +37,7 @@ fn response_body(status: &str, tool: bool, empty: bool) -> Value {
         Vec::new()
     } else {
         vec![
-            json!({"id":"msg_answer", "type":"message", "role":"assistant", "status":"completed",
+            json!({"id":message_id, "type":"message", "role":"assistant", "status":"completed",
             "content":[{"type":"output_text", "text":ANSWER}]}),
         ]
     };
@@ -162,7 +162,11 @@ async fn check_delivery_and_restart(
             };
             // A mistaken extra inference round returns a completed response, making
             // status loss observable instead of hanging or exhausting the round cap.
-            let response = if first {response_body(status, tool, empty)} else {response_body("completed", false, false)};
+            let response = if first {
+                response_body(status, tool, empty, "msg_answer")
+            } else {
+                response_body("completed", false, false, "msg_followup")
+            };
             if streaming {
                 let event_type = if first {terminal_type} else {"response.completed"};
                 Response::builder().header("content-type", "text/event-stream")
@@ -207,7 +211,7 @@ async fn check_delivery_and_restart(
     assert_eq!(response["status"], status);
     assert_eq!(
         response["incomplete_details"],
-        response_body(status, tool, empty)["incomplete_details"]
+        response_body(status, tool, empty, "msg_answer")["incomplete_details"]
     );
     assert_eq!(response["usage"]["output_tokens"], 5);
     assert_eq!(response["usage"]["input_tokens"], 3);

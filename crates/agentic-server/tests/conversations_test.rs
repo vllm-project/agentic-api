@@ -52,6 +52,41 @@ async fn test_state_with_storage(llm_url: &str) -> AppState {
 }
 
 #[tokio::test]
+async fn test_create_conversation_preserves_store_true_contract() {
+    let (llm_url, _llm) = spawn_mock_llm().await;
+    let state = test_state_with_storage(&llm_url).await;
+    let (gateway_url, _gateway) = spawn_gateway(state).await;
+    let client = reqwest::Client::new();
+
+    let created = client
+        .post(format!("{gateway_url}/v1/conversations"))
+        .json(&json!({"store": true}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::OK);
+    let body: serde_json::Value = created.json().await.unwrap();
+    let id = body["id"].as_str().unwrap();
+    assert_eq!(body["object"], "conversation");
+    assert_eq!(body["metadata"], json!({}));
+
+    let items = client
+        .get(format!("{gateway_url}/v1/conversations/{id}/items"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(items.status(), StatusCode::OK);
+
+    let rejected = client
+        .post(format!("{gateway_url}/v1/conversations"))
+        .json(&json!({"store": false}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn test_create_conversation_with_metadata() {
     let (llm_url, _h1) = spawn_mock_llm().await;
     let state = test_state_with_storage(&llm_url).await;
@@ -289,7 +324,7 @@ async fn test_create_item_in_conversation() {
     let item_body: serde_json::Value = item_resp.json().await.unwrap();
     assert_eq!(item_body["object"], "list");
     assert_eq!(item_body["data"].as_array().unwrap().len(), 1);
-    assert!(item_body["data"][0]["id"].as_str().unwrap().starts_with("item_"));
+    assert!(item_body["data"][0]["id"].as_str().unwrap().starts_with("msg_"));
     assert_eq!(item_body["data"][0]["type"], "message");
     assert_eq!(item_body["data"][0]["role"], "user");
     assert_eq!(item_body["data"][0]["content"][0]["text"], "Hello!");
@@ -356,6 +391,24 @@ async fn test_list_items_in_conversation() {
     assert_eq!(list_body["data"][0]["content"][0]["text"], "Third");
     assert_eq!(list_body["data"][1]["content"][0]["text"], "Second");
     assert_eq!(list_body["data"][2]["content"][0]["text"], "First");
+
+    let included = client
+        .get(format!("{gw_url}/v1/conversations/{conv_id}/items"))
+        .query(&[("order", "desc"), ("include[]", "message.output_text.logprobs")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(included.status(), StatusCode::OK);
+    let included_body: serde_json::Value = included.json().await.unwrap();
+    assert_eq!(included_body["data"], list_body["data"]);
+
+    let unsupported = client
+        .get(format!("{gw_url}/v1/conversations/{conv_id}/items"))
+        .query(&[("include[]", "file_search_call.results")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(unsupported.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -622,6 +675,107 @@ async fn test_item_belongs_to_conversation_validation() {
         .unwrap();
 
     assert_eq!(wrong_conv_resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_create_items_rejects_empty_id() {
+    let (llm_url, _llm) = spawn_mock_llm().await;
+    let state = test_state_with_storage(&llm_url).await;
+    let (gw_url, _gateway) = spawn_gateway(state).await;
+    let client = reqwest::Client::new();
+
+    // Create conversation
+    let conv_resp = client
+        .post(format!("{gw_url}/v1/conversations"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    let conv_body: serde_json::Value = conv_resp.json().await.unwrap();
+    let conv_id = conv_body["id"].as_str().unwrap();
+
+    // Try to create item with empty ID
+    let create_resp = client
+        .post(format!("{gw_url}/v1/conversations/{conv_id}/items"))
+        .json(&json!({
+            "items": [{
+                "type": "message",
+                "id": "",
+                "role": "user",
+                "content": "test"
+            }]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(create_resp.status(), StatusCode::BAD_REQUEST);
+    let error_body: serde_json::Value = create_resp.json().await.unwrap();
+    assert_eq!(error_body["error"]["type"], "invalid_request_error");
+    assert_eq!(error_body["error"]["code"], "invalid_value");
+    assert_eq!(error_body["error"]["param"], "items[0].id");
+    assert_eq!(
+        error_body["error"]["message"],
+        "Invalid 'items[0].id': ''. Expected an ID that begins with 'msg'."
+    );
+}
+
+#[tokio::test]
+async fn test_create_items_rejects_item_already_in_conversation() {
+    let (llm_url, _llm) = spawn_mock_llm().await;
+    let state = test_state_with_storage(&llm_url).await;
+    let (gw_url, _gateway) = spawn_gateway(state).await;
+    let client = reqwest::Client::new();
+
+    // Create conversation
+    let conv_resp = client
+        .post(format!("{gw_url}/v1/conversations"))
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    let conv_body: serde_json::Value = conv_resp.json().await.unwrap();
+    let conv_id = conv_body["id"].as_str().unwrap();
+
+    let items_url = format!("{gw_url}/v1/conversations/{conv_id}/items");
+    let original = client
+        .post(&items_url)
+        .json(&json!({"items": [{"role":"user", "content":"original"}]}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json::<serde_json::Value>()
+        .await
+        .unwrap();
+    let create_resp = client
+        .post(&items_url)
+        .json(&json!({"items": [
+            {"role":"user", "content":"must not be inserted"},
+            {"type":"message", "id":original["data"][0]["id"], "role":"user", "content":"replacement"}
+        ]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(create_resp.status(), StatusCode::BAD_REQUEST);
+    let error_body: serde_json::Value = create_resp.json().await.unwrap();
+    assert_eq!(
+        error_body,
+        json!({"error": {
+            "type":"invalid_request_error", "code":"item_already_in_conversation",
+            "param":"items", "message":"Item already in conversation"
+        }})
+    );
+    let listed = client
+        .get(&items_url)
+        .send()
+        .await
+        .unwrap()
+        .json::<serde_json::Value>()
+        .await
+        .unwrap();
+    assert_eq!(listed["data"], original["data"]);
 }
 
 #[path = "conversations/regressions.rs"]
