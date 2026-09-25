@@ -316,11 +316,11 @@ pub(crate) async fn pin_postgres_persistence_schema(connection: &mut sqlx::AnyCo
 async fn run_embedded_migrations(pool: &DbPool, postgres_migration_timeout: Duration) -> DbResult<()> {
     let mut connection = pool.acquire().await?;
     let is_postgres = DatabaseBackend::from_connection(&connection) == DatabaseBackend::Postgres;
-    if is_postgres {
-        if let Err(error) = configure_postgres_migration_timeout(&mut connection, postgres_migration_timeout).await {
-            let _ = connection.close().await;
-            return Err(error);
-        }
+    if is_postgres
+        && let Err(error) = configure_postgres_migration_timeout(&mut connection, postgres_migration_timeout).await
+    {
+        let _ = connection.close().await;
+        return Err(error);
     }
 
     let migration_result = sqlx::migrate!("./migrations")

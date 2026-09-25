@@ -5,7 +5,7 @@ The production image contains only the Rust gateway and its runtime libraries. I
 ## Install from crates.io instead
 
 Since 0.4.0 the gateway is also published to crates.io, so a container is not required on a host with a Rust
-toolchain (MSRV 1.85):
+toolchain (MSRV 1.88):
 
 ```console
 cargo install agentic-server --version 0.4.0 --locked

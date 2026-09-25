@@ -133,10 +133,10 @@ impl StreamableHttpClient for BoundedMcpHttpClient {
 
         if !status.is_success() {
             let body = response_body_limited(response).await?;
-            if is_content_type(content_type.as_deref(), JSON_MIME_TYPE) {
-                if let Ok(message @ JsonRpcMessage::Error(_)) = serde_json::from_slice(&body) {
-                    return Ok(StreamableHttpPostResponse::Json(message, response_session_id));
-                }
+            if is_content_type(content_type.as_deref(), JSON_MIME_TYPE)
+                && let Ok(message @ JsonRpcMessage::Error(_)) = serde_json::from_slice(&body)
+            {
+                return Ok(StreamableHttpPostResponse::Json(message, response_session_id));
             }
             return Err(StreamableHttpError::UnexpectedServerResponse(Cow::Owned(format!(
                 "HTTP {status}: {}",

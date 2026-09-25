@@ -286,16 +286,14 @@ impl MessagesRequestContext {
             serde_json::to_value(tool_results).map_err(ExecutorError::JsonError)?,
         );
         messages.push(Value::Object(user));
-        if fulfilled_choice {
-            if let Some(choice) = &mut self.tool_choice {
-                match choice {
-                    MessagesToolChoice::Any(options) | MessagesToolChoice::Tool { options, .. } => {
-                        *choice = MessagesToolChoice::Auto(std::mem::take(options));
-                    }
-                    MessagesToolChoice::Auto(_) | MessagesToolChoice::None { .. } => {}
+        if fulfilled_choice && let Some(choice) = &mut self.tool_choice {
+            match choice {
+                MessagesToolChoice::Any(options) | MessagesToolChoice::Tool { options, .. } => {
+                    *choice = MessagesToolChoice::Auto(std::mem::take(options));
                 }
-                self.raw["tool_choice"] = serde_json::to_value(choice).map_err(ExecutorError::JsonError)?;
+                MessagesToolChoice::Auto(_) | MessagesToolChoice::None { .. } => {}
             }
+            self.raw["tool_choice"] = serde_json::to_value(choice).map_err(ExecutorError::JsonError)?;
         }
         Ok(())
     }

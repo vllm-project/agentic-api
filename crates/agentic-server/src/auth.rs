@@ -249,10 +249,10 @@ impl OidcAuthenticator {
     async fn verification_key(&self, kid: &str) -> Result<Arc<CachedKey>, OidcAuthError> {
         {
             let keys = self.keys.read().await;
-            if Instant::now() < keys.expires_at {
-                if let Some(key) = keys.keys.get(kid) {
-                    return Ok(Arc::clone(key));
-                }
+            if Instant::now() < keys.expires_at
+                && let Some(key) = keys.keys.get(kid)
+            {
+                return Ok(Arc::clone(key));
             }
         }
 
@@ -671,15 +671,15 @@ fn jwks_ttl(headers: &HeaderMap) -> Duration {
             if directive.eq_ignore_ascii_case("no-cache") || directive.eq_ignore_ascii_case("no-store") {
                 return Duration::ZERO;
             }
-            if let Some((name, seconds)) = directive.split_once('=') {
-                if name.trim().eq_ignore_ascii_case("max-age") {
-                    let parsed = seconds.trim().trim_matches('"').parse::<u64>().ok();
-                    max_age = match (max_age, parsed) {
-                        (Some(existing), Some(parsed)) => Some(existing.min(parsed)),
-                        (None, parsed) => parsed,
-                        (existing, None) => existing,
-                    };
-                }
+            if let Some((name, seconds)) = directive.split_once('=')
+                && name.trim().eq_ignore_ascii_case("max-age")
+            {
+                let parsed = seconds.trim().trim_matches('"').parse::<u64>().ok();
+                max_age = match (max_age, parsed) {
+                    (Some(existing), Some(parsed)) => Some(existing.min(parsed)),
+                    (None, parsed) => parsed,
+                    (existing, None) => existing,
+                };
             }
         }
     }

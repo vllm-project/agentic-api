@@ -272,9 +272,10 @@ async fn replay(kind: &str, stream: bool) {
     {
         let actual = upstream.requests.lock().await;
         assert_eq!(actual.len(), 4);
-        for rounds in actual.chunks_exact(2) {
+        for rounds in actual.as_chunks::<2>().0 {
             assert_eq!(
-                rounds, expected_requests,
+                rounds.as_slice(),
+                expected_requests,
                 "complete provider requests must match the recording"
             );
         }

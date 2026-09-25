@@ -59,16 +59,16 @@ async fn drain_sse(
             if line == "data: [DONE]" {
                 return Ok((response_id, reply));
             }
-            if let Some(data) = line.strip_prefix("data: ") {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
-                    // Gateway returns the accumulated complete response as one event.
-                    if json["object"].as_str() == Some("response") {
-                        json["id"].as_str().unwrap_or_default().clone_into(&mut response_id);
-                        json["output"][0]["content"][0]["text"]
-                            .as_str()
-                            .unwrap_or_default()
-                            .clone_into(&mut reply);
-                    }
+            if let Some(data) = line.strip_prefix("data: ")
+                && let Ok(json) = serde_json::from_str::<serde_json::Value>(data)
+            {
+                // Gateway returns the accumulated complete response as one event.
+                if json["object"].as_str() == Some("response") {
+                    json["id"].as_str().unwrap_or_default().clone_into(&mut response_id);
+                    json["output"][0]["content"][0]["text"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .clone_into(&mut reply);
                 }
             }
         }

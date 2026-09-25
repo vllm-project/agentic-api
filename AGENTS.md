@@ -106,7 +106,8 @@ uv run mkdocs serve
 - Maximum line length: 120 characters (configured in `rustfmt.toml`).
 - `unsafe` code is forbidden (`unsafe_code = "forbid"` in `Cargo.toml`).
 - Clippy `all` lints are denied; `pedantic` lints are warnings.
-- Minimum supported Rust version (MSRV): 1.85.
+- Minimum supported Rust version (MSRV): 1.88, declared as `rust-version` in `Cargo.toml` and checked by the
+  `msrv` CI job. Keep `msrv` in `clippy.toml` equal to it.
 
 ### The agentic-server and core design architecture
 

@@ -5,6 +5,8 @@ resolver = "3"
 [workspace.package]
 version = "0.8.0"
 edition = "2024"
+# Minimum supported Rust version, checked in CI; keep clippy.toml `msrv` equal.
+rust-version = "1.88"
 license = "Apache-2.0"
 repository = "https://github.com/vllm-project/agentic-api"
 
@@ -44,7 +46,7 @@ tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["cors"] }
 opentelemetry = { version = "0.32", default-features = false, features = ["trace", "metrics"] }
 opentelemetry_sdk = { version = "0.32", default-features = false, features = ["trace", "metrics", "internal-logs"] }
-# OTLP over HTTP/protobuf only: gRPC needs tonic 0.14 (rust-version 1.88), above the MSRV.
+# OTLP over HTTP/protobuf only; the gRPC exporter (tonic) is not built.
 # `reqwest-rustls` pins the exporter's TLS backend explicitly instead of relying on
 # feature unification with `rmcp-reqwest`. `gzip-http` backs
 # `OTEL_EXPORTER_OTLP_COMPRESSION=gzip` (pure-Rust `flate2`, already in the tree).

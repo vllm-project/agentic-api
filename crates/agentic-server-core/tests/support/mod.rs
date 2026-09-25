@@ -117,14 +117,12 @@ pub fn expected_text(turn: &Turn) -> String {
         let mut out = String::new();
         for raw in sse {
             for line in raw.lines() {
-                if let Some(data) = line.strip_prefix("data: ") {
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
-                        if json["type"].as_str() == Some("response.output_text.delta") {
-                            if let Some(delta) = json["delta"].as_str() {
-                                out.push_str(delta);
-                            }
-                        }
-                    }
+                if let Some(data) = line.strip_prefix("data: ")
+                    && let Ok(json) = serde_json::from_str::<serde_json::Value>(data)
+                    && json["type"].as_str() == Some("response.output_text.delta")
+                    && let Some(delta) = json["delta"].as_str()
+                {
+                    out.push_str(delta);
                 }
             }
         }
@@ -563,14 +561,13 @@ pub async fn collect_stream(result: Either<ResponsePayload, BoxStream>) -> Respo
     };
     let mut stream = Box::pin(stream);
     while let Some(chunk) = stream.next().await {
-        if let Some(mut event) = streamed_sse_event(&chunk) {
-            if event.get("type").and_then(Value::as_str) == Some("response.completed")
-                && let Some(response) = event.get_mut("response")
-                && let Ok(payload) = serde_json::from_value::<ResponsePayload>(response.take())
-            {
-                while stream.next().await.is_some() {}
-                return payload;
-            }
+        if let Some(mut event) = streamed_sse_event(&chunk)
+            && event.get("type").and_then(Value::as_str) == Some("response.completed")
+            && let Some(response) = event.get_mut("response")
+            && let Ok(payload) = serde_json::from_value::<ResponsePayload>(response.take())
+        {
+            while stream.next().await.is_some() {}
+            return payload;
         }
     }
     panic!("stream ended without a ResponsePayload chunk");

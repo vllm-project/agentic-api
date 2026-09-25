@@ -85,6 +85,40 @@ jobs:
       - name: Test agentic CLI end to end
         run: python3 scripts/tests/agentic-cli-e2e-test.py
 
+  msrv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Read the declared MSRV
+        id: msrv
+        run: |
+          version=$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)
+          clippy=$(sed -n 's/^msrv = "\(.*\)"$/\1/p' clippy.toml)
+          if [ -z "$version" ] || [ "$version" != "$clippy" ]; then
+            echo "Cargo.toml rust-version ($version) and clippy.toml msrv ($clippy) must match" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install the MSRV toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-bin: false
+
+      - name: Check every crate, target, and feature on the MSRV
+        run: cargo +${{ steps.msrv.outputs.version }} check --workspace --all-targets --all-features --locked
+
   postgres:
     runs-on: ubuntu-latest
     services:

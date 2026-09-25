@@ -131,29 +131,30 @@ pub fn upstream_request_headers(headers: &HeaderMap, config: &Config, auth: Prox
         if is_request_drop(name.as_str()) || connection_options.contains(name) {
             continue;
         }
-        if let Ok(n) = reqwest::header::HeaderName::from_bytes(name.as_str().as_bytes()) {
-            if let Ok(v) = reqwest::header::HeaderValue::from_bytes(value.as_bytes()) {
-                out.append(n, v);
-            }
+        if let Ok(n) = reqwest::header::HeaderName::from_bytes(name.as_str().as_bytes())
+            && let Ok(v) = reqwest::header::HeaderValue::from_bytes(value.as_bytes())
+        {
+            out.append(n, v);
         }
     }
 
     let has_auth = out.contains_key(reqwest::header::AUTHORIZATION);
     let has_api_key = out.contains_key("x-api-key");
-    if !has_auth && !has_api_key {
-        if let Some(key) = config.openai_api_key.as_deref() {
-            let trimmed = key.trim();
-            if !trimmed.is_empty() {
-                let (name, value) = match auth {
-                    ProxyAuth::OpenAiBearer => (reqwest::header::AUTHORIZATION, format!("Bearer {trimmed}")),
-                    ProxyAuth::Anthropic => (
-                        reqwest::header::HeaderName::from_static("x-api-key"),
-                        trimmed.to_owned(),
-                    ),
-                };
-                if let Ok(v) = reqwest::header::HeaderValue::from_str(&value) {
-                    out.insert(name, v);
-                }
+    if !has_auth
+        && !has_api_key
+        && let Some(key) = config.openai_api_key.as_deref()
+    {
+        let trimmed = key.trim();
+        if !trimmed.is_empty() {
+            let (name, value) = match auth {
+                ProxyAuth::OpenAiBearer => (reqwest::header::AUTHORIZATION, format!("Bearer {trimmed}")),
+                ProxyAuth::Anthropic => (
+                    reqwest::header::HeaderName::from_static("x-api-key"),
+                    trimmed.to_owned(),
+                ),
+            };
+            if let Ok(v) = reqwest::header::HeaderValue::from_str(&value) {
+                out.insert(name, v);
             }
         }
     }
@@ -169,10 +170,10 @@ fn filter_response_headers(headers: &reqwest::header::HeaderMap) -> HeaderMap {
         if is_hop_by_hop(name.as_str()) || connection_options.contains(name) {
             continue;
         }
-        if let Ok(n) = HeaderName::from_bytes(name.as_str().as_bytes()) {
-            if let Ok(v) = HeaderValue::from_bytes(value.as_bytes()) {
-                out.append(n, v);
-            }
+        if let Ok(n) = HeaderName::from_bytes(name.as_str().as_bytes())
+            && let Ok(v) = HeaderValue::from_bytes(value.as_bytes())
+        {
+            out.append(n, v);
         }
     }
     out

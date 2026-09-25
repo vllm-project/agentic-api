@@ -11,7 +11,7 @@
 *Run OpenAI-grade agentic workloads (Responses API, server-side tools, Codex) on your own GPUs.*
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/Rust-1.85%2B-orange.svg?logo=rust)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.88%2B-orange.svg?logo=rust)](Cargo.toml)
 [![CI](https://github.com/vllm-project/agentic-api/actions/workflows/rust.yml/badge.svg)](https://github.com/vllm-project/agentic-api/actions/workflows/rust.yml)
 [![pre-commit](https://github.com/vllm-project/agentic-api/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/vllm-project/agentic-api/actions/workflows/pre-commit.yml)
 

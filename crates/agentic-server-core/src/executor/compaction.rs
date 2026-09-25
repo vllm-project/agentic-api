@@ -79,8 +79,8 @@ impl InputTokenEstimate {
     }
 
     fn total_tokens(self) -> u64 {
-        let text_tokens =
-            self.text_bytes / ESTIMATED_BYTES_PER_TOKEN + u64::from(self.text_bytes % ESTIMATED_BYTES_PER_TOKEN != 0);
+        let text_tokens = self.text_bytes / ESTIMATED_BYTES_PER_TOKEN
+            + u64::from(!self.text_bytes.is_multiple_of(ESTIMATED_BYTES_PER_TOKEN));
         self.fixed_tokens.saturating_add(text_tokens)
     }
 }

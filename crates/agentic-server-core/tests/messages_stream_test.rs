@@ -281,12 +281,11 @@ async fn assert_messages_stream_presents_one_message(streams: Vec<String>) {
     // content_block_start index and assert 0..N with no dup.
     let mut indices: Vec<u64> = Vec::new();
     for line in sse.lines() {
-        if let Some(d) = line.strip_prefix("data: ") {
-            if let Ok(ev) = serde_json::from_str::<Value>(d) {
-                if ev["type"] == "content_block_start" {
-                    indices.push(ev["index"].as_u64().expect("index"));
-                }
-            }
+        if let Some(d) = line.strip_prefix("data: ")
+            && let Ok(ev) = serde_json::from_str::<Value>(d)
+            && ev["type"] == "content_block_start"
+        {
+            indices.push(ev["index"].as_u64().expect("index"));
         }
     }
     assert!(!indices.is_empty(), "some blocks surfaced");
@@ -481,12 +480,11 @@ async fn messages_stream_multiround_single_lifecycle() {
     // Contiguous surfaced indices across rounds.
     let mut idx = Vec::new();
     for line in sse.lines() {
-        if let Some(d) = line.strip_prefix("data: ") {
-            if let Ok(ev) = serde_json::from_str::<Value>(d) {
-                if ev["type"] == "content_block_start" {
-                    idx.push(ev["index"].as_u64().expect("index"));
-                }
-            }
+        if let Some(d) = line.strip_prefix("data: ")
+            && let Ok(ev) = serde_json::from_str::<Value>(d)
+            && ev["type"] == "content_block_start"
+        {
+            idx.push(ev["index"].as_u64().expect("index"));
         }
     }
     assert_eq!(

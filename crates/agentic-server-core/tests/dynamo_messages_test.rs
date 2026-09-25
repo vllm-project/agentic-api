@@ -226,13 +226,12 @@ fn expected_requests(turns: &[Value], legacy_streaming: bool) -> Vec<Value> {
             .iter()
             .flat_map(|s| s.as_str().unwrap().lines())
         {
-            if let Some(data) = line.strip_prefix("data:") {
-                if let Ok(event) = serde_json::from_str::<Value>(data.trim()) {
-                    if event["delta"]["type"] == "signature_delta" {
-                        let index = usize::try_from(event["index"].as_u64().unwrap()).unwrap();
-                        expected[1]["messages"][1]["content"][index]["signature"] = event["delta"]["signature"].clone();
-                    }
-                }
+            if let Some(data) = line.strip_prefix("data:")
+                && let Ok(event) = serde_json::from_str::<Value>(data.trim())
+                && event["delta"]["type"] == "signature_delta"
+            {
+                let index = usize::try_from(event["index"].as_u64().unwrap()).unwrap();
+                expected[1]["messages"][1]["content"][index]["signature"] = event["delta"]["signature"].clone();
             }
         }
     }

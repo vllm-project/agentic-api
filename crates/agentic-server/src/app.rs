@@ -163,10 +163,10 @@ impl WebSocketTracker {
             .lock()
             .expect("local completion test barrier mutex poisoned")
             .take();
-        if let Some(barrier) = barrier {
-            if barrier.rehydrated.send(()).is_ok() {
-                let _ = barrier.release.await;
-            }
+        if let Some(barrier) = barrier
+            && barrier.rehydrated.send(()).is_ok()
+        {
+            let _ = barrier.release.await;
         }
     }
 }

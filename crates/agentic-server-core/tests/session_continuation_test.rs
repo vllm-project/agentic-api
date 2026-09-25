@@ -1337,7 +1337,7 @@ async fn session_round_limit_retains_the_final_call_output_in_order() {
     let history = serde_json::to_value(&next.enriched_request.input).unwrap();
     let items = history.as_array().unwrap();
     assert_eq!(items.len(), 32);
-    for (round, items) in items[1..31].chunks_exact(3).enumerate() {
+    for (round, items) in items[1..31].as_chunks::<3>().0.iter().enumerate() {
         assert_eq!(items[0]["type"], "message");
         assert_eq!(items[1]["type"], "function_call");
         assert_eq!(items[2]["type"], "function_call_output");

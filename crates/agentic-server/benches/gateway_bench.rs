@@ -70,14 +70,12 @@ async fn bench_model(llm_url: &str) -> String {
         return m;
     }
     // Only auto-detect when pointing at a real server
-    if std::env::var("LLM_BASE_URL").is_ok() {
-        if let Ok(resp) = reqwest::get(format!("{llm_url}/v1/models")).await {
-            if let Ok(json) = resp.json::<serde_json::Value>().await {
-                if let Some(id) = json["data"][0]["id"].as_str() {
-                    return id.to_string();
-                }
-            }
-        }
+    if std::env::var("LLM_BASE_URL").is_ok()
+        && let Ok(resp) = reqwest::get(format!("{llm_url}/v1/models")).await
+        && let Ok(json) = resp.json::<serde_json::Value>().await
+        && let Some(id) = json["data"][0]["id"].as_str()
+    {
+        return id.to_string();
     }
     "mock".to_string()
 }

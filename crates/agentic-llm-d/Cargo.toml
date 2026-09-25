@@ -3,6 +3,7 @@ name = "agentic-llm-d"
 description = "Backend mode for agentic-api: split-execution endpoints for the llm-d coordinator"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false

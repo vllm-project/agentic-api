@@ -513,10 +513,10 @@ fn test_event_distribution() {
 fn test_text_accumulation() {
     let mut text = String::new();
     for line in SIMULATED_SSE {
-        if let Some(frame) = normalize_sse_line(line) {
-            if let EventPayload::TextDelta { delta, .. } = &frame.payload {
-                text.push_str(delta);
-            }
+        if let Some(frame) = normalize_sse_line(line)
+            && let EventPayload::TextDelta { delta, .. } = &frame.payload
+        {
+            text.push_str(delta);
         }
     }
     assert_eq!(text, "GLOBE");
@@ -548,13 +548,13 @@ fn sentinel_sequence_stream_preserves_terminal_usage_and_text() {
 fn test_sequence_numbers_increasing() {
     let mut last_seq: Option<u64> = None;
     for line in SIMULATED_SSE {
-        if let Some(frame) = normalize_sse_line(line) {
-            if let Some(seq) = frame.sequence_number() {
-                if let Some(prev) = last_seq {
-                    assert!(seq > prev, "sequence {seq} should be > {prev}");
-                }
-                last_seq = Some(seq);
+        if let Some(frame) = normalize_sse_line(line)
+            && let Some(seq) = frame.sequence_number()
+        {
+            if let Some(prev) = last_seq {
+                assert!(seq > prev, "sequence {seq} should be > {prev}");
             }
+            last_seq = Some(seq);
         }
     }
     assert!(last_seq.is_some());
