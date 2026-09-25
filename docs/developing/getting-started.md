@@ -20,6 +20,31 @@ cargo build
 cargo test
 ```
 
+### Messages disconnect qualification
+
+Run the deterministic HTTP qualification checks with:
+
+```console
+cargo test -p agentic-server --test messages_stop_test --test messages_tool_disconnect_test
+```
+
+These tests bind the real gateway router to a local TCP port. The tool-loop disconnect cases use a temporary SQLite
+database and local inference/search fixtures. They disconnect during an incomplete tool-use inference round,
+a pending search, or the inference round after a completed search. Each case requires the pending outbound response
+body to be released within five seconds. The body
+must stay open while the client is connected. They check that only the expected inference rounds run, no search runs
+before its inference round completes, a started or completed search is not replayed, and no Messages state is persisted.
+
+This is a focused part of [Enterprise Readiness qualification #110](https://github.com/vllm-project/agentic-api/issues/110):
+
+| Scenario | Evidence | Coverage limit |
+| --- | --- | --- |
+| Client disconnect during inference | `messages_stop_test`, `messages_tool_disconnect_test` | Local HTTP, deterministic upstream, no premature tool dispatch, SQLite |
+| Client disconnect during built-in search | `messages_tool_disconnect_test` | Local HTTP, deterministic search, SQLite |
+| Disconnect during inference after completed search | `messages_tool_disconnect_test` | Two inference requests, one search, no replay or persisted state |
+| Remote tool side effects after disconnect | Not established | Cancelling the HTTP request does not undo a remote action |
+| Hosted ingress, PostgreSQL, live engines, OIDC and WebSocket cancellation | Not exercised by these tests | Require their own qualification evidence |
+
 ## Running a harness session
 
 Build both binaries, then let the CLI start Agentic API and configure the harness in an isolated temporary home:
