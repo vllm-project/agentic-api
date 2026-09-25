@@ -61,10 +61,9 @@ fn next_id() -> String {
 
 fn make_items() -> Vec<InOutItem> {
     let input = InputItem::Message(InputMessage {
-        id: None,
         role: "user".to_string(),
-        status: None,
         content: InputMessageContent::Text("Test message".to_string()),
+        ..Default::default()
     });
     vec![
         InOutItem::Input(input.clone()),

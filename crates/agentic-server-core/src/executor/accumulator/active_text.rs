@@ -2,24 +2,38 @@
 
 use super::active::Budget;
 use crate::events::EventPayload;
-use crate::executor::error::ExecutorResult;
+use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::response_budget::{RETAINED_CONTAINER_OVERHEAD_BYTES, RetainedAccount, RetainedSize};
 use crate::types::event::MessageStatus;
-use crate::types::io::{ApplyDone, OutputItem, OutputMessage, OutputTextContent, ReasoningOutput};
+use crate::types::io::{
+    ApplyDone, OutputItem, OutputMessage, OutputMessageContent, OutputTextContent, ReasoningOutput,
+};
 use indexmap::IndexMap;
 use std::collections::HashMap;
 
-/// Text streamed for one message content part, and whether deltas carried it.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(super) struct StreamedPart {
-    pub(super) text: String,
-    pub(super) streamed: bool,
+/// A part either accepts output-text updates or retains its completed typed
+/// snapshot. Input text uses the completed-only path.
+#[derive(Clone, Debug)]
+pub(super) enum MessagePart {
+    Streaming { text: String, streamed: bool },
+    Completed(OutputMessageContent),
 }
 
-/// Bytes retained by a streamed part: its container plus its text.
-impl RetainedSize for StreamedPart {
+impl Default for MessagePart {
+    fn default() -> Self {
+        Self::Streaming {
+            text: String::new(),
+            streamed: false,
+        }
+    }
+}
+
+impl RetainedSize for MessagePart {
     fn retained_bytes(&self) -> usize {
-        RETAINED_CONTAINER_OVERHEAD_BYTES + "output_text".len() + self.text.len()
+        match self {
+            Self::Streaming { text, .. } => RETAINED_CONTAINER_OVERHEAD_BYTES + "output_text".len() + text.len(),
+            Self::Completed(part) => part.retained_bytes(),
+        }
     }
 }
 
@@ -41,13 +55,13 @@ fn streamed_part_bytes(counters: &HashMap<u32, usize>, index: u32) -> usize {
 /// Return the streamed part for `index`, charging its container before a new
 /// entry exists so an empty part cannot grow the map for free.
 fn part_mut<'a>(
-    parts: &'a mut IndexMap<u32, StreamedPart>,
+    parts: &'a mut IndexMap<u32, MessagePart>,
     index: u32,
     account: &mut RetainedAccount,
     budget: Budget<'_>,
-) -> ExecutorResult<&'a mut StreamedPart> {
+) -> ExecutorResult<&'a mut MessagePart> {
     if !parts.contains_key(&index) {
-        account.charge(budget, StreamedPart::default().retained_bytes())?;
+        account.charge(budget, MessagePart::default().retained_bytes())?;
     }
     Ok(parts.entry(index).or_default())
 }
@@ -71,10 +85,19 @@ fn count_streamed(
 #[derive(Clone)]
 pub(super) struct MessageState {
     pub(super) item: OutputMessage,
-    pub(super) parts: IndexMap<u32, StreamedPart>,
+    pub(super) parts: IndexMap<u32, MessagePart>,
 }
 
 impl MessageState {
+    pub(super) fn new(mut item: OutputMessage) -> Self {
+        let parts = std::mem::take(&mut item.content)
+            .into_iter()
+            .zip(0u32..)
+            .map(|(part, index)| (index, MessagePart::Completed(part)))
+            .collect();
+        Self { item, parts }
+    }
+
     pub(super) fn apply(
         &mut self,
         payload: &EventPayload,
@@ -86,9 +109,12 @@ impl MessageState {
                 delta, content_index, ..
             } => {
                 let part = part_mut(&mut self.parts, *content_index, account, budget)?;
+                let MessagePart::Streaming { text, streamed } = part else {
+                    return Err(invalid_message("output text follows a completed message part"));
+                };
                 account.charge(budget, delta.len())?;
-                part.streamed = true;
-                part.text.push_str(delta);
+                *streamed = true;
+                text.push_str(delta);
             }
             EventPayload::TextDone {
                 text, content_index, ..
@@ -96,11 +122,62 @@ impl MessageState {
                 let part = part_mut(&mut self.parts, *content_index, account, budget)?;
                 // A done-only part adopts the completed text; a delta-streamed
                 // part already holds it and the snapshot is not charged twice.
-                if !part.streamed {
-                    account.grow(budget, part, |part| part.text.len(), |part| part.text.clone_from(text))?;
+                let MessagePart::Streaming {
+                    text: retained,
+                    streamed,
+                } = part
+                else {
+                    return Err(invalid_message("output text follows a completed message part"));
+                };
+                if !*streamed {
+                    account.charge(budget, text.len().saturating_sub(retained.len()))?;
+                    retained.clone_from(text);
                 }
             }
+            EventPayload::MessageContentDone {
+                content_index, part, ..
+            } => {
+                let previous = self.parts.get(content_index);
+                match previous {
+                    Some(MessagePart::Completed(_)) => {
+                        return Err(invalid_message("message repeats a completed content part"));
+                    }
+                    Some(MessagePart::Streaming { text, .. }) if !matches!(part, OutputMessageContent::OutputText(done) if done.text == *text) =>
+                    {
+                        return Err(invalid_message("completed message part contradicts output text"));
+                    }
+                    _ => {}
+                }
+                let previous_bytes = previous.map_or(0, RetainedSize::retained_bytes);
+                account.charge(budget, part.retained_bytes().saturating_sub(previous_bytes))?;
+                self.parts.insert(*content_index, MessagePart::Completed(part.clone()));
+            }
             _ => {}
+        }
+        Ok(())
+    }
+
+    pub(super) fn validate_completion(&self, done: &OutputMessage) -> ExecutorResult<()> {
+        if self.item.role != done.role
+            || (self.item.agent.is_some() && self.item.agent != done.agent)
+            || (self.item.phase.is_some() && self.item.phase != done.phase)
+        {
+            return Err(invalid_message(
+                "message completion changes role, phase, or attribution",
+            ));
+        }
+        // Some providers number the first content part from one. The terminal
+        // snapshot contains parts in index order, without their stream indexes.
+        let mut ordered_parts: Vec<_> = self.parts.iter().collect();
+        ordered_parts.sort_unstable_by_key(|(index, _)| *index);
+        for (position, (_, part)) in ordered_parts.into_iter().enumerate() {
+            if let MessagePart::Completed(part) = part
+                && done.content.get(position) != Some(part)
+            {
+                return Err(invalid_message(
+                    "message completion contradicts a completed content part",
+                ));
+            }
         }
         Ok(())
     }
@@ -108,13 +185,21 @@ impl MessageState {
     pub(super) fn finalize(mut self) -> OutputItem {
         self.parts.sort_keys();
         for (_, part) in self.parts {
-            if !part.text.is_empty() {
-                self.item.content.push(OutputTextContent::new(part.text));
+            match part {
+                MessagePart::Completed(part) => self.item.content.push(part),
+                MessagePart::Streaming { text, .. } if !text.is_empty() => {
+                    self.item.content.push(OutputTextContent::new(text).into());
+                }
+                MessagePart::Streaming { .. } => {}
             }
         }
         self.item.status = MessageStatus::Completed;
         OutputItem::Message(self.item)
     }
+}
+
+fn invalid_message(message: &str) -> ExecutorError {
+    ExecutorError::InvalidRequest(message.to_owned())
 }
 
 impl RetainedSize for MessageState {

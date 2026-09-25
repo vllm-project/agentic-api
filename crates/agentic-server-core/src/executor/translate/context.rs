@@ -3,6 +3,7 @@ use crate::executor::error::ExecutorResult;
 use crate::tool::custom::CustomToolMap;
 use crate::tool::{NamespaceMap, ToolType};
 use crate::types::event::ResponseStatus;
+use crate::types::io::MultiAgentAction;
 use crate::types::io::OutputItem;
 use crate::types::io::ToolChoice;
 use crate::types::request_response::ResponsePayload;
@@ -16,6 +17,7 @@ pub(in crate::executor) struct TranslationContext {
     gateway_owned_names: HashSet<String>,
     withheld_function_names: HashSet<String>,
     tool_search_active: bool,
+    collaboration_enabled: bool,
     namespace_map: Option<NamespaceMap>,
     custom_tool_map: Option<CustomToolMap>,
     response_tools: Option<Vec<ResponsesTool>>,
@@ -33,6 +35,9 @@ impl std::fmt::Debug for TranslationContext {
 }
 
 impl TranslationContext {
+    pub(super) fn is_collaboration(&self, name: &str) -> bool {
+        self.collaboration_enabled && MultiAgentAction::from_tool_name(name).is_some()
+    }
     pub(in crate::executor) fn new(
         tool_types: HashMap<String, ToolType>,
         withheld_function_names: HashSet<String>,

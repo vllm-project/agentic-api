@@ -343,10 +343,45 @@ fn a_delta_is_rejected_before_the_retained_state_grows() {
     let SlotState::Active(ActiveItem::Message(state)) = &slot.state else {
         panic!("message still active");
     };
-    assert_eq!(
-        state.parts[&0].text, "short",
+    assert!(
+        matches!(&state.parts[&0], super::active::MessagePart::Streaming { text, .. } if text == "short"),
         "the rejected delta never entered the buffer"
     );
+}
+
+#[test]
+fn message_part_and_event_attribution_are_charged_before_retention() {
+    let in_progress = json!({"type": "response.in_progress", "response": {"id": "resp_1", "status": "in_progress"}});
+    for validation in [Validation::Strict, Validation::Lenient] {
+        for part in [
+            json!({"type": "input_text", "text": "x".repeat(1000)}),
+            json!({"type": "output_text", "text": "", "logprobs": [{"token": "x".repeat(1000),
+                "bytes": [], "logprob": -0.1, "top_logprobs": []}]}),
+        ] {
+            let (mut acc, budget) = budgeted(400, validation);
+            feed(&mut acc, &[created(), in_progress.clone(), message_added("msg_1")]).unwrap();
+            let used = budget.used();
+            let error = feed(
+                &mut acc,
+                &[json!({"type": "response.content_part.done", "output_index": 0,
+                "item_id": "msg_1", "content_index": 0, "part": part})],
+            )
+            .unwrap_err();
+            assert_budget_exceeded(&error);
+            assert_eq!(budget.used(), used);
+            let SlotState::Active(ActiveItem::Message(state)) = &acc.slots.get(OutputIndex::new(0)).unwrap().state
+            else {
+                panic!("message still active");
+            };
+            assert!(state.parts.is_empty());
+        }
+        let (mut acc, _) = budgeted(400, validation);
+        let mut opening = message_added("msg_1");
+        opening["agent"] = json!({"agent_name": "x".repeat(1000)});
+        let error = feed(&mut acc, &[created(), in_progress.clone(), opening]).unwrap_err();
+        assert_budget_exceeded(&error);
+        assert_eq!(acc.slots.len(), 0);
+    }
 }
 
 #[test]
@@ -457,7 +492,10 @@ fn unrestricted_retained_strings_exhaust_budget_on_both_paths() {
     for item in [
         json!({"id":"msg_1","type":"message","role":huge,"status":"completed","content":[]}),
         json!({"id":"msg_1","type":"message","role":"assistant","status":"completed",
-            "content":[{"type":huge,"text":"","annotations":[]}]}),
+            "content":[{"type":"output_text","text":"","annotations":[],
+                "logprobs":[{"token":huge,"bytes":[],"logprob":-0.5,"top_logprobs":[]}]}]}),
+        json!({"id":"msg_1","type":"message","role":"assistant","status":"completed",
+            "agent":{"agent_name":huge},"content":[]}),
         json!({"id":"rs_1","type":"reasoning","status":huge,"content":[],"summary":[]}),
         json!({"id":"rs_1","type":"reasoning","content":[{"type":huge,"text":""}],"summary":[]}),
         json!({"id":"mcp_1","type":"mcp_call","server_label":"s","name":"tool","arguments":"{}",
@@ -703,4 +741,68 @@ fn pending_identity_is_not_charged_again_at_completion() {
         budget.used(),
         RETAINED_CONTAINER_OVERHEAD_BYTES + "resp_1".len() + output[0].retained_bytes()
     );
+}
+
+#[test]
+fn collaboration_snapshots_and_encrypted_parts_respect_the_response_budget() {
+    let huge = "x".repeat(100_000);
+    for item in [
+        json!({"type":"multi_agent_call","id":"mac_1","call_id":"call_1","action":"spawn_agent","arguments":huge}),
+        json!({"type":"multi_agent_call_output","id":"maco_1","call_id":"call_1","action":"spawn_agent",
+            "output":[{"type":"output_text","text":huge}]}),
+        json!({"type":"agent_message","id":"amsg_1","author":"/root","recipient":"/root/review",
+            "content":[{"type":"encrypted_content","encrypted_content":huge}]}),
+    ] {
+        // A large opening snapshot is charged before its slot is inserted.
+        let (mut acc, _) = budgeted(4096, Validation::Lenient);
+        let error = acc
+            .process_line(line(
+                &json!({"type":"response.output_item.added","output_index":0,"item":item}),
+            ))
+            .unwrap_err();
+        assert_budget_exceeded(&error);
+        assert_eq!(acc.slots.len(), 0);
+
+        // A small opening snapshot cannot conceal oversized completion content.
+        let mut opening = item.clone();
+        match item["type"].as_str().unwrap() {
+            "multi_agent_call" => opening["arguments"] = json!(""),
+            "multi_agent_call_output" => opening["output"] = json!([]),
+            "agent_message" => opening["content"] = json!([]),
+            _ => unreachable!(),
+        }
+        let (mut acc, _) = budgeted(4096, Validation::Lenient);
+        acc.process_line(line(
+            &json!({"type":"response.output_item.added","output_index":0,"item":opening}),
+        ))
+        .unwrap();
+        let error = acc.process_line(line(&output_item_done(&item))).unwrap_err();
+        assert_budget_exceeded(&error);
+        assert!(acc.slots.has_active());
+
+        let (mut json_acc, _) = budgeted(4096, Validation::Strict);
+        let error = json_acc
+            .load_json_body(&json!({"id":"resp_1","status":"completed","output":[item]}).to_string())
+            .unwrap_err();
+        assert_budget_exceeded(&error);
+    }
+    let (mut acc, budget) = budgeted(4096, Validation::Lenient);
+    let opening =
+        json!({"type":"agent_message","id":"amsg_1","author":"/root","recipient":"/root/review","content":[]});
+    acc.process_line(line(
+        &json!({"type":"response.output_item.added","output_index":0,"item":opening}),
+    ))
+    .unwrap();
+    let used = budget.used();
+    let error = acc
+        .process_line(line(
+            &json!({"type":"response.content_part.done","output_index":0,"item_id":"amsg_1","content_index":0,
+        "part":{"type":"encrypted_content","encrypted_content":huge}}),
+        ))
+        .unwrap_err();
+    assert_budget_exceeded(&error);
+    assert_eq!(budget.used(), used);
+    // Rejection did not retain the oversized part or poison completion.
+    acc.process_line(line(&output_item_done(&opening))).unwrap();
+    assert!(!acc.slots.has_active());
 }

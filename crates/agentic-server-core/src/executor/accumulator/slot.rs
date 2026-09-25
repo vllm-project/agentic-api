@@ -16,7 +16,7 @@ use indexmap::IndexMap;
 use crate::events::{EventPayload, SSEItemType};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::response_budget::{ExecutorResponseBudget, RetainedAccount, RetainedSize};
-use crate::types::io::{OutputItem, ReasoningOutput};
+use crate::types::io::{AgentAttribution, OutputItem, ReasoningOutput};
 use crate::utils::common::deserialize_from_value_opt;
 use crate::utils::uuid7_str;
 
@@ -38,6 +38,7 @@ pub(super) struct ItemIdentity<'a> {
     pub(super) index: Option<OutputIndex>,
     pub(super) item_id: Option<&'a str>,
     pub(super) item_type: SSEItemType,
+    pub(super) event_agent: Option<&'a AgentAttribution>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -73,6 +74,15 @@ impl SlotMap {
         &mut self,
         budget: Option<&ExecutorResponseBudget>,
     ) -> ExecutorResult<Vec<OutputItem>> {
+        // Collaboration items have no public incomplete status. Do not fabricate
+        // completion from an opening snapshot on truncated lenient streams.
+        if self
+            .slots
+            .values()
+            .any(|slot| matches!(&slot.state, SlotState::Active(item) if item.item_type().is_collaboration()))
+        {
+            return Err(invalid("upstream stream ended with unfinished collaboration items"));
+        }
         self.slots.sort_keys();
         self.indexes_by_id.clear();
         let mut items = Vec::new();
@@ -142,6 +152,11 @@ impl SlotMap {
         {
             return Err(identity_mismatch());
         }
+        if let (Some(bound), Some(supplied)) = (&slot.event_agent, identity.event_agent)
+            && bound != supplied
+        {
+            return Err(invalid("upstream stream changes an output item's event attribution"));
+        }
         if slot.state.item_type() != Some(identity.item_type) {
             return if action == SlotAction::Mutate && validation == Validation::Lenient {
                 Ok(None)
@@ -171,11 +186,15 @@ impl SlotMap {
     fn insert(
         &mut self,
         index: OutputIndex,
-        item_id: Option<&str>,
+        identity: ItemIdentity<'_>,
         state: SlotState,
         mut account: RetainedAccount,
         budget: Option<&ExecutorResponseBudget>,
     ) -> ExecutorResult<()> {
+        let item_id = identity.item_id;
+        if let Some(agent) = identity.event_agent {
+            account.charge(budget, agent.retained_bytes())?;
+        }
         if let Some(id) = item_id {
             // Identity indexes share the logical item ID charge. A pending kind
             // without its typed item must still pay before the indexes grow.
@@ -188,6 +207,7 @@ impl SlotMap {
             index,
             Slot {
                 item_id: item_id.map(str::to_owned),
+                event_agent: identity.event_agent.cloned(),
                 state,
                 account,
             },
@@ -195,13 +215,20 @@ impl SlotMap {
         Ok(())
     }
 
-    fn bind_id(
+    fn bind_identity(
         &mut self,
         index: OutputIndex,
-        item_id: Option<&str>,
+        identity: ItemIdentity<'_>,
         budget: Option<&ExecutorResponseBudget>,
     ) -> ExecutorResult<()> {
-        if let Some(id) = item_id
+        if let Some(agent) = identity.event_agent
+            && let Some(slot) = self.slots.get_mut(&index)
+            && slot.event_agent.is_none()
+        {
+            slot.account.charge(budget, agent.retained_bytes())?;
+            slot.event_agent = Some(agent.clone());
+        }
+        if let Some(id) = identity.item_id
             && let Some(slot) = self.slots.get_mut(&index)
             && slot.item_id.is_none()
         {
@@ -229,8 +256,11 @@ impl SlotMap {
             // completed item, and charged before the slot retains it.
             let mut account = RetainedAccount::default();
             account.charge(budget, item.retained_bytes())?;
-            self.insert(index, identity.item_id, SlotState::Active(item), account, budget)?;
+            self.insert(index, identity, SlotState::Active(item), account, budget)?;
             return Ok(Some(index));
+        }
+        if identity.item_type.is_collaboration() {
+            return Err(invalid("collaboration item has an invalid opening snapshot"));
         }
         Ok(None)
     }
@@ -251,7 +281,7 @@ impl SlotMap {
         if let SlotState::Active(item) = &mut slot.state {
             item.apply_event(payload, &mut slot.account, budget)?;
         }
-        self.bind_id(index, identity.item_id, budget)?;
+        self.bind_identity(index, identity, budget)?;
         Ok(Some(index))
     }
 
@@ -277,6 +307,9 @@ impl SlotMap {
             })
         });
         if let Some(slot) = self.slots.get(&index) {
+            if let SlotState::Active(active) = &slot.state {
+                active.validate_completion(parsed.as_ref())?;
+            }
             if let SlotState::Active(active) = &slot.state
                 && let Some(shell) = active.shell_call().filter(|shell| shell.tracks_commands())
                 && (shell.has_unfinished_commands()
@@ -290,7 +323,7 @@ impl SlotMap {
                     .as_ref()
                     .is_some_and(|candidate| semantically_equal(previous, candidate))
             {
-                self.bind_id(index, identity.item_id, budget)?;
+                self.bind_identity(index, identity, budget)?;
                 return Ok(None);
             }
             let candidate = slot.state.completion_candidate(
@@ -303,7 +336,7 @@ impl SlotMap {
                     .as_ref()
                     .is_some_and(|candidate| semantically_equal(previous, candidate))
                 {
-                    self.bind_id(index, identity.item_id, budget)?;
+                    self.bind_identity(index, identity, budget)?;
                     return Ok(None);
                 }
                 return Err(invalid(format!(
@@ -316,12 +349,15 @@ impl SlotMap {
                 // what streaming could not account for (metadata supplied at
                 // completion, containers of done-only parts) is charged here.
                 let mut account = slot.account;
-                account.reconcile(budget, item.retained_bytes())?;
+                account.reconcile(
+                    budget,
+                    item.retained_bytes() + slot.event_agent.as_ref().map_or(0, RetainedSize::retained_bytes),
+                )?;
                 if let Some(slot) = self.slots.get_mut(&index) {
                     slot.state = SlotState::Done(item);
                     slot.account = account;
                 }
-                self.bind_id(index, identity.item_id, budget)?;
+                self.bind_identity(index, identity, budget)?;
                 return Ok(Some(index));
             }
             return Ok(None);
@@ -335,7 +371,10 @@ impl SlotMap {
             | OutputItem::WebSearchCall(_)
             | OutputItem::McpCall(_)
             | OutputItem::McpListTools(_)
-            | OutputItem::Compaction(_)),
+            | OutputItem::Compaction(_)
+            | OutputItem::MultiAgentCall(_)
+            | OutputItem::MultiAgentCallOutput(_)
+            | OutputItem::AgentMessage(_)),
         ) = parsed
         {
             if let OutputItem::WebSearchCall(call) = &mut item
@@ -345,7 +384,7 @@ impl SlotMap {
             }
             let mut account = RetainedAccount::default();
             account.charge(budget, item.retained_bytes())?;
-            self.insert(index, identity.item_id, SlotState::Done(item), account, budget)?;
+            self.insert(index, identity, SlotState::Done(item), account, budget)?;
             return Ok(Some(index));
         }
         Ok(None)
@@ -374,6 +413,9 @@ fn semantically_equal(left: &OutputItem, right: &OutputItem) -> bool {
 #[derive(Debug)]
 pub(super) struct Slot {
     pub(super) item_id: Option<String>,
+    /// Observed event attribution, independent of embedded-item attribution.
+    /// An omitted agent is unspecified and must never become an implicit root.
+    event_agent: Option<AgentAttribution>,
     pub(super) state: SlotState,
     /// Retained bytes charged for this slot so far.
     pub(super) account: RetainedAccount,

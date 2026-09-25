@@ -13,7 +13,7 @@ fn response_output_text(output: &[OutputItem]) -> Option<String> {
             _ => None,
         })
         .flat_map(|message| message.content.iter())
-        .map(|content| content.text.trim())
+        .map(|content| content.text().trim())
         .filter(|text| !text.is_empty())
         .collect::<Vec<_>>()
         .join("\n");

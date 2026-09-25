@@ -1410,6 +1410,7 @@ async fn websocket_empty_prewarm_replaces_compacted_conversation_tool_search_sta
             "resp_before_prewarm",
             None,
             vec![InOutItem::Input(InputItem::Compaction(CompactionItem {
+                agent: None,
                 id: Some("cmp_before_prewarm".to_owned()),
                 encrypted_content: "Existing compacted conversation state".to_owned(),
             }))],

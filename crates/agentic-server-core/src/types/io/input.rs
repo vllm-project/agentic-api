@@ -1,4 +1,5 @@
 mod content;
+mod conversions;
 
 pub use content::{InputContent, InputFileContent, InputImageContent, InputTextContent, RefusalContent};
 
@@ -11,15 +12,20 @@ use crate::types::event::MessageStatus;
 use crate::types::tools::{ResponsesTool, ToolSearchExecution, ToolSearchStatus};
 use crate::utils::common::deserialize_from_value;
 
-use super::output::{CustomToolCall, FunctionToolCall, McpListTools, ReasoningOutput, ToolSearchCall};
+use super::multi_agent::{AgentAttribution, AgentMessage, MultiAgentCall, MultiAgentCallOutput};
+use super::output::{CustomToolCall, FunctionToolCall, McpListTools, MessagePhase, ReasoningOutput, ToolSearchCall};
 use super::shell::{ShellCall, ShellCallOutputMessage, ShellCallStatus};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct InputMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttribution>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     pub role: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<MessagePhase>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<MessageStatus>,
     pub content: InputMessageContent,
@@ -30,6 +36,12 @@ pub struct InputMessage {
 pub enum InputMessageContent {
     Text(String),
     Parts(Vec<InputContent>),
+}
+
+impl Default for InputMessageContent {
+    fn default() -> Self {
+        Self::Parts(Vec::new())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,175 +74,7 @@ pub enum ToolOutputContent {
 }
 
 #[cfg(feature = "openapi")]
-mod openapi_schemas {
-    use super::{InputContent, InputItem, InputMessageContent, ResponsesInput, ToolCallOutput};
-    use utoipa::openapi::schema::{ArrayBuilder, OneOfBuilder, Schema, SchemaType, Type};
-    use utoipa::openapi::{ObjectBuilder, Ref, RefOr};
-
-    fn string_schema() -> RefOr<Schema> {
-        ObjectBuilder::new().schema_type(SchemaType::new(Type::String)).into()
-    }
-
-    impl utoipa::PartialSchema for InputMessageContent {
-        fn schema() -> RefOr<Schema> {
-            OneOfBuilder::new()
-                .item(string_schema())
-                .item(ArrayBuilder::new().items(Ref::from_schema_name("InputContent")))
-                .into()
-        }
-    }
-    impl utoipa::ToSchema for InputMessageContent {
-        fn name() -> std::borrow::Cow<'static, str> {
-            std::borrow::Cow::Borrowed("InputMessageContent")
-        }
-    }
-
-    impl utoipa::PartialSchema for ToolCallOutput {
-        fn schema() -> RefOr<Schema> {
-            OneOfBuilder::new()
-                .item(string_schema())
-                .item(ArrayBuilder::new().items(Ref::from_schema_name("ToolOutputContent")))
-                .into()
-        }
-    }
-    impl utoipa::ToSchema for ToolCallOutput {
-        fn name() -> std::borrow::Cow<'static, str> {
-            std::borrow::Cow::Borrowed("ToolCallOutput")
-        }
-    }
-
-    impl utoipa::PartialSchema for ResponsesInput {
-        fn schema() -> RefOr<Schema> {
-            OneOfBuilder::new()
-                .item(string_schema())
-                .item(ArrayBuilder::new().items(Ref::from_schema_name("InputItem")))
-                .into()
-        }
-    }
-    impl utoipa::ToSchema for ResponsesInput {
-        fn name() -> std::borrow::Cow<'static, str> {
-            std::borrow::Cow::Borrowed("ResponsesInput")
-        }
-    }
-
-    fn tagged_text_variant(type_value: &str) -> RefOr<Schema> {
-        ObjectBuilder::new()
-            .property(
-                "type",
-                ObjectBuilder::new()
-                    .schema_type(SchemaType::new(Type::String))
-                    .enum_values(Some([type_value])),
-            )
-            .required("type")
-            .property("text", ObjectBuilder::new().schema_type(SchemaType::new(Type::String)))
-            .required("text")
-            .into()
-    }
-
-    impl utoipa::PartialSchema for InputContent {
-        fn schema() -> RefOr<Schema> {
-            OneOfBuilder::new()
-                .discriminator(Some(utoipa::openapi::schema::Discriminator::new("type")))
-                .item(tagged_text_variant("input_text"))
-                .item(
-                    ObjectBuilder::new()
-                        .property(
-                            "type",
-                            ObjectBuilder::new()
-                                .schema_type(SchemaType::new(Type::String))
-                                .enum_values(Some(["input_image"])),
-                        )
-                        .required("type")
-                        .property(
-                            "file_id",
-                            ObjectBuilder::new().schema_type(SchemaType::new(Type::String)),
-                        )
-                        .property(
-                            "image_url",
-                            ObjectBuilder::new().schema_type(SchemaType::new(Type::String)),
-                        )
-                        .property(
-                            "detail",
-                            ObjectBuilder::new().schema_type(SchemaType::new(Type::String)),
-                        ),
-                )
-                .item(tagged_ref("input_file", "InputFileContent"))
-                .item(tagged_text_variant("output_text"))
-                .item(tagged_ref("refusal", "RefusalContent"))
-                .item(tagged_text_variant("reasoning_text"))
-                .into()
-        }
-    }
-    impl utoipa::ToSchema for InputContent {
-        fn name() -> std::borrow::Cow<'static, str> {
-            std::borrow::Cow::Borrowed("InputContent")
-        }
-    }
-
-    fn tagged_ref(type_value: &str, schema_name: &str) -> RefOr<Schema> {
-        use utoipa::openapi::schema::AllOfBuilder;
-        AllOfBuilder::new()
-            .item(
-                ObjectBuilder::new()
-                    .property(
-                        "type",
-                        ObjectBuilder::new()
-                            .schema_type(SchemaType::new(Type::String))
-                            .enum_values(Some([type_value])),
-                    )
-                    .required("type"),
-            )
-            .item(Ref::from_schema_name(schema_name))
-            .into()
-    }
-
-    impl utoipa::PartialSchema for InputItem {
-        fn schema() -> RefOr<Schema> {
-            use utoipa::openapi::schema::AllOfBuilder;
-            let message_branch: RefOr<Schema> = AllOfBuilder::new()
-                .item(
-                    ObjectBuilder::new().property(
-                        "type",
-                        ObjectBuilder::new()
-                            .schema_type(SchemaType::new(Type::String))
-                            .enum_values(Some(["message"])),
-                    ),
-                )
-                .item(Ref::from_schema_name("InputMessage"))
-                .into();
-            OneOfBuilder::new()
-                .discriminator(Some(utoipa::openapi::schema::Discriminator::new("type")))
-                .item(message_branch)
-                .item(tagged_ref("function_call", "InputFunctionToolCall"))
-                .item(tagged_ref("function_call_output", "FunctionToolResultMessage"))
-                .item(tagged_ref("tool_search_call", "InputToolSearchCall"))
-                .item(tagged_ref("tool_search_output", "ToolSearchOutputMessage"))
-                .item(tagged_ref("custom_tool_call", "CustomToolCall"))
-                .item(tagged_ref("custom_tool_call_output", "CustomToolCallOutputMessage"))
-                .item(tagged_ref("shell_call", "ShellCall"))
-                .item(tagged_ref("shell_call_output", "ShellCallOutputMessage"))
-                .item(tagged_ref("reasoning", "ReasoningOutput"))
-                .item(tagged_ref("mcp_list_tools", "McpListTools"))
-                .item(tagged_ref("compaction", "CompactionItem"))
-                .item(
-                    ObjectBuilder::new()
-                        .property(
-                            "type",
-                            ObjectBuilder::new()
-                                .schema_type(SchemaType::new(Type::String))
-                                .enum_values(Some(["compaction_trigger"])),
-                        )
-                        .required("type"),
-                )
-                .into()
-        }
-    }
-    impl utoipa::ToSchema for InputItem {
-        fn name() -> std::borrow::Cow<'static, str> {
-            std::borrow::Cow::Borrowed("InputItem")
-        }
-    }
-}
+mod openapi_schemas;
 
 impl ToolCallOutput {
     #[must_use]
@@ -263,6 +107,8 @@ impl From<&str> for ToolCallOutput {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct InputFunctionToolCall {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttribution>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     pub call_id: String,
     pub name: String,
@@ -276,6 +122,7 @@ pub struct InputFunctionToolCall {
 impl From<FunctionToolCall> for InputFunctionToolCall {
     fn from(call: FunctionToolCall) -> Self {
         Self {
+            agent: call.agent,
             id: Some(call.id),
             call_id: call.call_id,
             name: call.name,
@@ -289,6 +136,7 @@ impl From<FunctionToolCall> for InputFunctionToolCall {
 impl From<CustomToolCall> for InputFunctionToolCall {
     fn from(call: CustomToolCall) -> Self {
         Self {
+            agent: call.agent,
             id: function_call_item_id(&call.id),
             call_id: call.call_id,
             name: call.name,
@@ -302,6 +150,7 @@ impl From<CustomToolCall> for InputFunctionToolCall {
 impl From<ShellCall> for InputFunctionToolCall {
     fn from(call: ShellCall) -> Self {
         Self {
+            agent: call.agent,
             id: call.id.as_deref().and_then(function_call_item_id),
             call_id: call.call_id,
             name: "shell".to_owned(),
@@ -344,6 +193,8 @@ where
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct InputToolSearchCall {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttribution>,
     #[serde(deserialize_with = "deserialize_non_blank_string")]
     pub id: String,
     #[serde(deserialize_with = "deserialize_non_blank_string")]
@@ -363,6 +214,7 @@ impl TryFrom<&ToolSearchCall> for InputToolSearchCall {
             return Err(call.status);
         }
         Ok(Self {
+            agent: call.agent.clone(),
             id: call.id.clone(),
             call_id: call.call_id.clone(),
             execution: call.execution,
@@ -390,6 +242,8 @@ pub struct ToolSearchOutputMessage {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CompactionItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttribution>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     pub encrypted_content: String,
 }
@@ -416,6 +270,12 @@ impl From<CustomToolCallOutputMessage> for FunctionToolResultMessage {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type")]
 pub enum InputItem {
+    #[serde(rename = "multi_agent_call")]
+    MultiAgentCall(MultiAgentCall),
+    #[serde(rename = "multi_agent_call_output")]
+    MultiAgentCallOutput(MultiAgentCallOutput),
+    #[serde(rename = "agent_message")]
+    AgentMessage(AgentMessage),
     #[serde(rename = "message")]
     Message(InputMessage),
     /// The model's tool invocation — appears in rehydrated history so vLLM sees
@@ -475,6 +335,9 @@ impl<'de> Deserialize<'de> for InputItem {
             Some("reasoning") => deserialize_from_value(value).map(Self::Reasoning),
             Some("mcp_list_tools") => deserialize_from_value(value).map(Self::McpListTools),
             Some("compaction") => deserialize_from_value(value).map(Self::Compaction),
+            Some("multi_agent_call") => deserialize_from_value(value).map(Self::MultiAgentCall),
+            Some("multi_agent_call_output") => deserialize_from_value(value).map(Self::MultiAgentCallOutput),
+            Some("agent_message") => deserialize_from_value(value).map(Self::AgentMessage),
             Some("compaction_trigger") => Ok(Self::CompactionTrigger),
             Some(_) => return Ok(Self::Unknown),
         };
@@ -495,7 +358,16 @@ impl InputItem {
 
     #[must_use]
     pub(crate) fn is_model_visible(&self) -> bool {
-        !matches!(self, Self::McpListTools(_) | Self::CompactionTrigger)
+        // Public collaboration data is opaque. The coordinator owns the separate
+        // canonical plaintext context; never forward these items as model commands.
+        !matches!(
+            self,
+            Self::McpListTools(_)
+                | Self::CompactionTrigger
+                | Self::MultiAgentCall(_)
+                | Self::MultiAgentCallOutput(_)
+                | Self::AgentMessage(_)
+        )
     }
 }
 
@@ -504,6 +376,14 @@ impl InputItem {
 pub enum ResponsesInput {
     Text(String),
     Items(Vec<InputItem>),
+}
+
+impl Default for ResponsesInput {
+    /// An empty item list for programmatic request construction. This does not change
+    /// whether the containing request requires an `input` field during deserialization.
+    fn default() -> Self {
+        Self::Items(Vec::new())
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -544,6 +424,18 @@ pub(crate) fn latest_compaction_window(items: &[InputItem]) -> Option<Compaction
     })
 }
 
+pub(crate) fn model_items(items: &[InputItem]) -> impl Iterator<Item = &InputItem> {
+    let window = latest_compaction_window(items);
+    items
+        .iter()
+        .enumerate()
+        .filter(move |(index, item)| {
+            item.is_model_visible()
+                && window.is_none_or(|window| *index >= window.latest_index() || window.retains_user_item(*index, item))
+        })
+        .map(|(_, item)| item)
+}
+
 impl ResponsesInput {
     /// Iterate over the items in the canonical context sent to vLLM without cloning them.
     pub(crate) fn model_items(&self) -> impl Iterator<Item = &InputItem> {
@@ -551,17 +443,7 @@ impl ResponsesInput {
             Self::Text(_) => &[][..],
             Self::Items(items) => items.as_slice(),
         };
-        let window = latest_compaction_window(items);
-
-        items
-            .iter()
-            .enumerate()
-            .filter(move |(index, item)| {
-                item.is_model_visible()
-                    && window
-                        .is_none_or(|window| *index >= window.latest_index() || window.retains_user_item(*index, item))
-            })
-            .map(|(_, item)| item)
+        model_items(items)
     }
 
     #[must_use]
@@ -599,12 +481,11 @@ impl ResponsesInput {
             .model_items()
             .map(|item| match item {
                 InputItem::Compaction(compaction) => InputItem::Message(InputMessage {
-                    id: None,
                     role: "assistant".to_owned(),
-                    status: None,
                     content: InputMessageContent::Parts(vec![InputContent::OutputText(InputTextContent::new(
                         compaction.encrypted_content.clone(),
                     ))]),
+                    ..Default::default()
                 }),
                 other => other.clone(),
             })
@@ -630,6 +511,36 @@ fn function_call_item_id(item_id: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn assistant_phase_survives_input_parsing_and_model_projection() {
+        for (phase, expected) in [
+            (None, None),
+            (Some("commentary"), Some(MessagePhase::Commentary)),
+            (Some("final_answer"), Some(MessagePhase::FinalAnswer)),
+        ] {
+            let mut wire = serde_json::json!({
+                "type": "message",
+                "id": "msg_history",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": "Review result."}]
+            });
+            if let Some(phase) = phase {
+                wire["phase"] = serde_json::json!(phase);
+            }
+            let item: InputItem = serde_json::from_value(wire.clone()).unwrap();
+            let InputItem::Message(message) = &item else {
+                panic!("expected a message item");
+            };
+            assert_eq!(message.phase, expected);
+            let input = ResponsesInput::Items(vec![item]);
+            assert_eq!(
+                serde_json::to_value(input.model_input()).unwrap(),
+                serde_json::json!([wire])
+            );
+        }
+    }
 
     #[test]
     fn structured_input_without_message_type() {
@@ -1074,10 +985,9 @@ mod tests {
         let input = ResponsesInput::Items(vec![
             InputItem::McpListTools(McpListTools::new("mcpl_1", "counter", Vec::new())),
             InputItem::Message(InputMessage {
-                id: None,
                 role: "user".to_owned(),
-                status: None,
                 content: InputMessageContent::Text("continue".to_owned()),
+                ..Default::default()
             }),
         ]);
 

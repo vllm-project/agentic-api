@@ -11,6 +11,447 @@ fn from_sse_lines(lines: impl IntoIterator<Item = String>, conversation_id: Opti
     ResponseAccumulator::from_sse_lines(lines, conversation_id).expect("valid SSE stream")
 }
 
+#[test]
+fn keepalive_passes_through_without_advancing_response_or_item_state() {
+    use serde_json::json;
+
+    let mut acc = ResponseAccumulator::with_validation("resp_test".to_owned(), None, Validation::Strict);
+    let mut translator = TranslationDispatcher::new(TranslationContext::default());
+    for event in [
+        json!({"type": "response.created", "response": {"id": "resp_test", "status": "in_progress"}}),
+        json!({"type": "response.in_progress", "response": {"id": "resp_test", "status": "in_progress"}}),
+    ] {
+        acc.process_line(SseLine::parse(&format!("data: {event}"))).unwrap();
+    }
+    let wire = json!({"type": "keepalive", "sequence_number": 2});
+    let translated =
+        RoundIngestion::translate_line(&mut acc, SseLine::parse(&format!("data: {wire}")), &mut translator)
+            .unwrap()
+            .unwrap();
+    assert_eq!(translated.frames.len(), 1);
+    assert_eq!(translated.frames[0].event_type, SSEEventType::Keepalive);
+    assert_eq!(serde_json::to_value(&translated.frames[0].wire).unwrap(), wire);
+    assert_eq!(acc.stream_lifecycle, StreamLifecycle::InProgress);
+    assert_eq!(acc.slots.len(), 0);
+    assert!(acc.output.is_empty());
+    assert!(acc.usage.is_none());
+
+    let terminal = json!({"type": "response.completed", "response": {
+        "id": "resp_test", "status": "completed", "output": []
+    }});
+    acc.process_line(SseLine::parse(&format!("data: {terminal}"))).unwrap();
+    assert!(acc.process_line(SseLine::parse(&format!("data: {wire}"))).is_err());
+}
+
+// Synthetic protocol examples; reference cassettes belong to integration tests.
+fn collaboration_items() -> [serde_json::Value; 3] {
+    use serde_json::json;
+    [
+        json!({"type": "multi_agent_call", "id": "mac_test", "call_id": "call_test", "action": "spawn_agent",
+            "arguments": "{ \"task_name\": \"review\", \"message\": \"opaque\" }", "agent": {"agent_name": "/root"}}),
+        json!({"type": "multi_agent_call_output", "id": "maco_test", "call_id": "call_test", "action": "spawn_agent",
+            "output": [{"type": "output_text", "text": "{\"task_name\":\"/root/review\"}", "annotations": [], "logprobs": []}],
+            "agent": {"agent_name": "/root"}}),
+        json!({"type": "agent_message", "id": "amsg_test", "author": "/root", "recipient": "/root/review",
+            "content": [{"type": "encrypted_content", "encrypted_content": "opaque"}],
+            "agent": {"agent_name": "/root/review"}}),
+    ]
+}
+
+fn collaboration_opening(mut item: serde_json::Value) -> serde_json::Value {
+    match item["type"].as_str().unwrap() {
+        "multi_agent_call" => item["arguments"] = serde_json::json!(""),
+        "multi_agent_call_output" => item["output"] = serde_json::json!([]),
+        "agent_message" => item["content"] = serde_json::json!([]),
+        _ => panic!("expected collaboration item"),
+    }
+    item
+}
+
+fn feed_collaboration_event(
+    acc: &mut ResponseAccumulator,
+    event: &serde_json::Value,
+) -> ExecutorResult<Option<EventFrame>> {
+    acc.process_line(SseLine::parse(&format!("data: {event}")))
+}
+
+fn collaboration_accumulator(validation: Validation) -> ResponseAccumulator {
+    use serde_json::json;
+    let mut acc = ResponseAccumulator::with_validation("resp_test".to_owned(), None, validation);
+    for kind in ["response.created", "response.in_progress"] {
+        feed_collaboration_event(
+            &mut acc,
+            &json!({"type": kind, "response": {"id": "resp_test", "status": "in_progress"}}),
+        )
+        .unwrap();
+    }
+    acc
+}
+
+#[test]
+fn forked_message_parts_preserve_role_metadata_and_public_order() {
+    use serde_json::json;
+
+    let items = [
+        json!({"type": "message", "id": "msg_child", "role": "user", "status": "completed",
+            "agent": {"agent_name": "/root/reviewer"}, "content": [{"type": "input_text", "text": "Review the change."}]}),
+        json!({"type": "message", "id": "msg_root", "role": "assistant", "phase": "final_answer", "status": "completed",
+            "agent": {"agent_name": "/root"}, "content": [{"type": "output_text", "text": "OK", "annotations": [],
+                "logprobs": [{"token": "OK", "bytes": [79, 75], "logprob": -0.1, "top_logprobs": []}]}]}),
+    ];
+    for validation in [Validation::Strict, Validation::Lenient] {
+        let mut acc = collaboration_accumulator(validation);
+        let mut translator = TranslationDispatcher::new(TranslationContext::default());
+        let mut events = Vec::new();
+        for (index, item) in items.iter().enumerate() {
+            let mut opening = item.clone();
+            opening["status"] = json!("in_progress");
+            opening["content"] = json!([]);
+            events.push(json!({"type": "response.output_item.added", "output_index": index,
+                "agent": item["agent"], "item": opening}));
+        }
+        events.push(
+            json!({"type": "response.output_text.delta", "output_index": 1, "item_id": "msg_root",
+            "content_index": 0, "delta": "OK", "agent": items[1]["agent"]}),
+        );
+        // User input is completed-only; the assistant completes first even though
+        // the user message has the earlier public index.
+        for index in [1, 0] {
+            events.push(json!({"type": "response.content_part.done", "output_index": index,
+                "item_id": items[index]["id"], "content_index": 0, "agent": items[index]["agent"], "part": items[index]["content"][0]}));
+            events.push(json!({"type": "response.output_item.done", "output_index": index,
+                "agent": items[index]["agent"], "item": items[index]}));
+        }
+        events.push(json!({"type": "response.completed", "response": {"id": "resp_test", "status": "completed", "output": items}}));
+        for event in events {
+            let result =
+                RoundIngestion::translate_line(&mut acc, SseLine::parse(&format!("data: {event}")), &mut translator)
+                    .unwrap()
+                    .unwrap();
+            assert_eq!(serde_json::to_value(&result.frames[0].wire).unwrap(), event);
+        }
+        assert_eq!(
+            serde_json::to_value(acc.finish("model", None, None).unwrap().output).unwrap(),
+            json!(items)
+        );
+    }
+}
+
+#[test]
+fn message_completed_parts_survive_lenient_finalization_without_item_done() {
+    use serde_json::json;
+    let mut acc = collaboration_accumulator(Validation::Lenient);
+    let mut item = json!({"type": "message", "id": "msg_child", "role": "user", "status": "in_progress",
+        "agent": {"agent_name": "/root/reviewer"}, "content": []});
+    feed_collaboration_event(
+        &mut acc,
+        &json!({"type": "response.output_item.added", "output_index": 0, "item": item}),
+    )
+    .unwrap();
+    let part = json!({"type": "input_text", "text": ""});
+    feed_collaboration_event(
+        &mut acc,
+        &json!({"type": "response.content_part.done", "output_index": 0,
+        "item_id": "msg_child", "content_index": 0, "part": part}),
+    )
+    .unwrap();
+    item["status"] = json!("completed");
+    item["content"] = json!([part]);
+    assert_eq!(
+        serde_json::to_value(acc.finish("model", None, None).unwrap().output).unwrap(),
+        json!([item])
+    );
+}
+
+#[test]
+fn message_completion_accepts_one_based_content_index_without_ignoring_conflicts() {
+    use serde_json::json;
+    let opening = json!({"type": "message", "id": "msg_1", "role": "assistant",
+        "status": "in_progress", "content": []});
+    let part = json!({"type": "output_text", "text": "HELLO", "annotations": [], "logprobs": null});
+    for validation in [Validation::Strict, Validation::Lenient] {
+        let mut acc = collaboration_accumulator(validation);
+        feed_collaboration_event(
+            &mut acc,
+            &json!({"type": "response.output_item.added", "output_index": 0, "item": opening}),
+        )
+        .unwrap();
+        feed_collaboration_event(
+            &mut acc,
+            &json!({"type": "response.content_part.done", "output_index": 0,
+                "item_id": "msg_1", "content_index": 1, "part": part}),
+        )
+        .unwrap();
+        let mut done = opening.clone();
+        done["status"] = json!("completed");
+        done["content"] = json!([part]);
+        feed_collaboration_event(
+            &mut acc,
+            &json!({"type": "response.output_item.done", "output_index": 0, "item": done}),
+        )
+        .unwrap();
+
+        let mut conflicting = collaboration_accumulator(validation);
+        feed_collaboration_event(
+            &mut conflicting,
+            &json!({"type": "response.output_item.added", "output_index": 0, "item": opening}),
+        )
+        .unwrap();
+        feed_collaboration_event(
+            &mut conflicting,
+            &json!({"type": "response.content_part.done", "output_index": 0,
+                "item_id": "msg_1", "content_index": 1, "part": part}),
+        )
+        .unwrap();
+        done["content"] = json!([{"type": "output_text", "text": "OTHER"}]);
+        assert!(
+            feed_collaboration_event(
+                &mut conflicting,
+                &json!({"type": "response.output_item.done", "output_index": 0, "item": done}),
+            )
+            .is_err()
+        );
+    }
+}
+
+#[test]
+fn message_completion_cannot_reassign_identity_or_rewrite_completed_parts() {
+    use serde_json::json;
+    let opening = json!({"type": "message", "id": "msg_child", "role": "assistant", "phase": "final_answer",
+        "status": "in_progress", "agent": {"agent_name": "/root/reviewer"}, "content": []});
+    let part = json!({"type": "output_text", "text": "OK", "annotations": [], "logprobs": []});
+    for validation in [Validation::Strict, Validation::Lenient] {
+        for (field, value) in [
+            ("role", json!("user")),
+            ("phase", json!("commentary")),
+            ("agent", json!({"agent_name": "/root/other"})),
+            ("agent", json!(null)),
+            ("content", json!([])),
+            ("content", json!([{"type": "input_text", "text": "OK"}])),
+            (
+                "content",
+                json!([{"type": "output_text", "text": "OK", "annotations": []}]),
+            ),
+        ] {
+            let mut acc = collaboration_accumulator(validation);
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type": "response.output_item.added", "output_index": 0, "item": opening}),
+            )
+            .unwrap();
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type": "response.content_part.done", "output_index": 0,
+                "item_id": "msg_child", "content_index": 0, "part": part}),
+            )
+            .unwrap();
+            let mut done = opening.clone();
+            done["status"] = json!("completed");
+            done["content"] = json!([part]);
+            done[field] = value;
+            assert!(
+                feed_collaboration_event(
+                    &mut acc,
+                    &json!({"type": "response.output_item.done", "output_index": 0, "item": done})
+                )
+                .is_err(),
+                "{field}"
+            );
+        }
+        for kind in [
+            "response.content_part.done",
+            "response.output_text.delta",
+            "response.output_text.done",
+        ] {
+            let mut acc = collaboration_accumulator(validation);
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type": "response.output_item.added", "output_index": 0, "item": opening}),
+            )
+            .unwrap();
+            let mut event = json!({"type": "response.content_part.done", "output_index": 0, "item_id": "msg_child",
+                "content_index": 0, "part": part, "delta": "OK", "text": "OK"});
+            feed_collaboration_event(&mut acc, &event).unwrap();
+            event["type"] = json!(kind);
+            assert!(feed_collaboration_event(&mut acc, &event).is_err(), "{kind}");
+        }
+    }
+}
+
+#[test]
+fn event_attribution_is_stable_and_independent_of_discovery_item_attribution() {
+    use serde_json::json;
+    for validation in [Validation::Strict, Validation::Lenient] {
+        for change_agent in [false, true] {
+            let mut acc = collaboration_accumulator(validation);
+            let item = json!({"type": "mcp_list_tools", "id": "mcpl_test", "server_label": "docs", "tools": []});
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type": "response.output_item.added", "output_index": 0,
+                "agent": {"agent_name": "/root"}, "item": item}),
+            )
+            .unwrap();
+            let event = json!({"type": "response.output_item.done", "output_index": 0,
+                "agent": {"agent_name": if change_agent { "/root/child" } else { "/root" }}, "item": item});
+            let result = feed_collaboration_event(&mut acc, &event);
+            if change_agent {
+                assert!(result.is_err());
+            } else {
+                result.unwrap();
+                let done = acc.slots.get(OutputIndex::new(0)).unwrap().state.done_item().unwrap();
+                assert!(serde_json::to_value(done).unwrap().get("agent").is_none());
+            }
+        }
+    }
+}
+
+#[test]
+fn collaboration_snapshots_and_encrypted_parts_use_the_shared_ingestion_path() {
+    use serde_json::json;
+    for validation in [Validation::Strict, Validation::Lenient] {
+        let mut acc = collaboration_accumulator(validation);
+        let mut translator = TranslationDispatcher::new(TranslationContext::default());
+        let items = collaboration_items();
+        let mut events = Vec::new();
+        for (index, item) in items.iter().enumerate() {
+            events.push(json!({"type": "response.output_item.added", "output_index": index,
+                "agent": item["agent"], "item": collaboration_opening(item.clone())}));
+        }
+        // The encrypted part is complete without a corresponding part-added event.
+        events.push(
+            json!({"type": "response.content_part.done", "output_index": 2, "content_index": 0,
+            "item_id": "amsg_test", "agent": items[2]["agent"], "part": items[2]["content"][0]}),
+        );
+        for index in [0, 2, 1] {
+            events.push(json!({"type": "response.output_item.done", "output_index": index,
+                "agent": items[index]["agent"], "item": items[index]}));
+        }
+        events.push(json!({"type": "response.completed", "response": {"id": "resp_test", "status": "completed", "output": items}}));
+        for event in events {
+            let translated =
+                RoundIngestion::translate_line(&mut acc, SseLine::parse(&format!("data: {event}")), &mut translator)
+                    .unwrap()
+                    .unwrap();
+            assert_eq!(translated.frames.len(), 1);
+            assert_eq!(serde_json::to_value(&translated.frames[0].wire).unwrap(), event);
+        }
+        let response = acc.finish("model", None, None).unwrap();
+        assert_eq!(serde_json::to_value(&response.output).unwrap(), json!(items));
+        assert_eq!(items[0]["call_id"], items[1]["call_id"]);
+        assert!(
+            response
+                .output
+                .iter()
+                .all(|item| !item.requires_client_action(&crate::tool::ToolRegistry::default()))
+        );
+        let mut json_acc = ResponseAccumulator::with_validation("resp_test".into(), None, validation);
+        json_acc
+            .load_json_body(&json!({"id": "resp_test", "status": "completed", "output": items}).to_string())
+            .unwrap();
+        assert_eq!(serde_json::to_value(json_acc.output).unwrap(), json!(items));
+    }
+}
+
+#[test]
+fn collaboration_identity_and_completion_order_are_validated() {
+    use serde_json::json;
+    for validation in [Validation::Strict, Validation::Lenient] {
+        for item in collaboration_items() {
+            let opening = json!({"type": "response.output_item.added", "output_index": 0,
+                "item": collaboration_opening(item.clone())});
+            let done = json!({"type": "response.output_item.done", "output_index": 0, "item": item});
+            let mut acc = collaboration_accumulator(validation);
+            feed_collaboration_event(&mut acc, &opening).unwrap();
+            assert!(feed_collaboration_event(&mut acc, &opening).is_err());
+            feed_collaboration_event(&mut acc, &done).unwrap();
+            let repeated = feed_collaboration_event(&mut acc, &done);
+            match validation {
+                Validation::Strict => assert!(repeated.is_err()),
+                Validation::Lenient => assert!(repeated.unwrap().is_none()),
+            }
+            let mut conflicting = done.clone();
+            conflicting["item"]["agent"]["agent_name"] = json!("/root/other");
+            assert!(feed_collaboration_event(&mut acc, &conflicting).is_err());
+            for field in if item["type"] == "agent_message" {
+                &["id", "author", "recipient"][..]
+            } else {
+                &["id", "call_id", "action"][..]
+            } {
+                let mut acc = collaboration_accumulator(validation);
+                feed_collaboration_event(&mut acc, &opening).unwrap();
+                let mut changed = done.clone();
+                changed["item"][field] = json!(if *field == "action" { "list_agents" } else { "other" });
+                assert!(feed_collaboration_event(&mut acc, &changed).is_err(), "changed {field}");
+            }
+            let mut acc = collaboration_accumulator(validation);
+            feed_collaboration_event(&mut acc, &opening).unwrap();
+            let mut wrong_index = done.clone();
+            wrong_index["output_index"] = json!(1);
+            assert!(feed_collaboration_event(&mut acc, &wrong_index).is_err());
+            let mut wrong_kind = done.clone();
+            wrong_kind["item"]["type"] = json!("message");
+            assert!(feed_collaboration_event(&mut acc, &wrong_kind).is_err());
+            // Opening metadata alone cannot become a completed hosted operation at EOF.
+            assert!(acc.finish("model", None, None).is_err());
+            let mut acc = collaboration_accumulator(validation);
+            let orphan_done = feed_collaboration_event(&mut acc, &done);
+            match validation {
+                Validation::Strict => assert!(orphan_done.is_err()),
+                Validation::Lenient => {
+                    orphan_done.unwrap();
+                    assert_eq!(
+                        serde_json::to_value(acc.finish("model", None, None).unwrap().output).unwrap(),
+                        json!([item])
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn agent_message_completed_parts_reject_duplicates_and_conflicting_snapshots() {
+    use serde_json::json;
+    for validation in [Validation::Strict, Validation::Lenient] {
+        let item = collaboration_items()[2].clone();
+        let mut acc = collaboration_accumulator(validation);
+        feed_collaboration_event(
+            &mut acc,
+            &json!({"type": "response.output_item.added", "output_index": 0,
+            "item": collaboration_opening(item.clone())}),
+        )
+        .unwrap();
+        let part = json!({"type": "response.content_part.done", "output_index": 0, "content_index": 0,
+            "item_id": "amsg_test", "part": item["content"][0]});
+        for (field, value) in [("item_id", json!("other")), ("output_index", json!(1))] {
+            let mut changed = part.clone();
+            changed[field] = value;
+            assert!(feed_collaboration_event(&mut acc, &changed).is_err());
+        }
+        feed_collaboration_event(&mut acc, &part).unwrap();
+        assert!(feed_collaboration_event(&mut acc, &part).is_err());
+        let mut changed = item.clone();
+        changed["content"][0]["encrypted_content"] = json!("changed");
+        assert!(
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type": "response.output_item.done", "output_index": 0, "item": changed})
+            )
+            .is_err()
+        );
+        feed_collaboration_event(
+            &mut acc,
+            &json!({"type": "response.output_item.done", "output_index": 0, "item": item}),
+        )
+        .unwrap();
+        let late = feed_collaboration_event(&mut acc, &part);
+        match validation {
+            Validation::Strict => assert!(late.is_err()),
+            Validation::Lenient => assert!(late.unwrap().is_none()),
+        }
+    }
+}
+
 fn completed_item_late_event_cases() -> Vec<(serde_json::Value, Vec<serde_json::Value>)> {
     use serde_json::json;
 
@@ -355,7 +796,7 @@ fn test_accumulator_text_delta_assigned_to_message() {
 
     if let OutputItem::Message(msg) = &acc.output[0] {
         assert_eq!(msg.content.len(), 1);
-        assert_eq!(msg.content[0].text, "Hello world");
+        assert_eq!(msg.content[0].text(), "Hello world");
     } else {
         panic!("expected OutputItem::Message");
     }
@@ -440,7 +881,7 @@ fn test_process_event_text_delta_accumulates() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "msg_1".into(),
             item_type: "message".into(),
             output_index: Some(0),
@@ -485,7 +926,7 @@ fn test_process_event_text_delta_accumulates() {
     assert_eq!(acc.status, ResponseStatus::Completed);
     assert_eq!(acc.output.len(), 1);
     if let OutputItem::Message(msg) = &acc.output[0] {
-        assert_eq!(msg.content[0].text, "Hello world");
+        assert_eq!(msg.content[0].text(), "Hello world");
     } else {
         panic!("expected Message");
     }
@@ -725,7 +1166,7 @@ fn test_accumulator_uses_authoritative_done_item_with_item_id_fallback() {
     };
     assert_eq!(message.id, "msg_1");
     assert_eq!(message.content.len(), 1);
-    assert_eq!(message.content[0].text, "authoritative");
+    assert_eq!(message.content[0].text(), "authoritative");
 }
 
 #[test]
@@ -996,7 +1437,7 @@ fn test_accumulator_reasoning_and_message_from_sse() {
 
     if let OutputItem::Message(msg) = &acc.output[1] {
         assert_eq!(msg.id, "msg_1");
-        assert_eq!(msg.content[0].text, "Hello");
+        assert_eq!(msg.content[0].text(), "Hello");
     } else {
         panic!("expected OutputItem::Message");
     }
@@ -1287,7 +1728,7 @@ fn test_function_call_accumulation_basic() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(0),
@@ -1363,7 +1804,7 @@ fn test_function_call_done_uses_deltas_when_arguments_empty() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(0),
@@ -1413,7 +1854,7 @@ fn test_function_call_multiple_parallel() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(0),
@@ -1438,7 +1879,7 @@ fn test_function_call_multiple_parallel() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "fc_2".into(),
             item_type: "function_call".into(),
             output_index: Some(1),
@@ -1482,7 +1923,7 @@ fn test_function_call_interleaved_with_message() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "msg_1".into(),
             item_type: "message".into(),
             output_index: Some(0),
@@ -1506,7 +1947,7 @@ fn test_function_call_interleaved_with_message() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(1),
@@ -1539,7 +1980,7 @@ fn test_function_call_interleaved_with_message() {
     });
 
     assert_eq!(acc.output.len(), 2);
-    assert!(matches!(&acc.output[0], OutputItem::Message(m) if m.content[0].text == "Let me check"));
+    assert!(matches!(&acc.output[0], OutputItem::Message(m) if m.content[0].text() == "Let me check"));
     assert!(matches!(&acc.output[1], OutputItem::FunctionCall(fc) if fc.name == "lookup"));
 }
 
@@ -1550,7 +1991,7 @@ fn test_function_call_done_updates_metadata() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(0),
@@ -1646,7 +2087,7 @@ fn test_function_call_empty_item_id_generates_uuid() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: String::new(),
             item_type: "function_call".into(),
             output_index: Some(0),
@@ -1704,7 +2145,7 @@ fn test_function_call_finalized_on_response_completed() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::OutputItemAdded,
         payload: EventPayload::OutputItemAdded {
-            shell_call: None,
+            initial_item: None,
             item_id: "fc_1".into(),
             item_type: "function_call".into(),
             output_index: Some(0),

@@ -933,8 +933,8 @@ pub(super) mod tests {
         assert_eq!(result.payload.output.len(), 1);
         if let OutputItem::Message(msg) = &result.payload.output[0] {
             assert_eq!(msg.content.len(), 2);
-            assert_eq!(msg.content[0].text, "part 0 text ");
-            assert_eq!(msg.content[1].text, "part 1 text");
+            assert_eq!(msg.content[0].text(), "part 0 text ");
+            assert_eq!(msg.content[1].text(), "part 1 text");
         } else {
             panic!("expected OutputItem::Message");
         }

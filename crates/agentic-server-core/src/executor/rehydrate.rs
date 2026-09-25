@@ -427,6 +427,7 @@ mod tests {
 
     fn reasoning_item(content: &[&str], encrypted_content: Option<serde_json::Value>) -> InputItem {
         InputItem::Reasoning(ReasoningOutput {
+            agent: None,
             id: "rs_prior".to_owned(),
             content: content.iter().map(|text| ReasoningTextContent::new(*text)).collect(),
             summary: vec![serde_json::json!({"type": "summary_text", "text": "public summary"})],

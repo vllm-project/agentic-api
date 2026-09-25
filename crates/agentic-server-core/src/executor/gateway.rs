@@ -1,8 +1,11 @@
+pub(super) mod history;
 mod policy;
 
+pub(super) use history::{append_gateway_calls_to_new_input, append_output_items_to_input, append_tool_outputs};
 pub(crate) use policy::GatewaySchedulerPolicy;
 #[cfg(test)]
 pub(super) use policy::MAX_CONCURRENT_MATERIALIZATIONS;
+
 use std::time::Duration;
 
 use futures::future::join_all;
@@ -12,12 +15,11 @@ use crate::events::SSEEventType;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent, synthetic_event};
 use crate::executor::pipeline::emit_gateway_event;
-use crate::executor::request::RequestContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::tool::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
 use crate::tool::{GatewayBinding, ToolError, ToolOutput, ToolOwnership, ToolRegistry};
 use crate::types::io::output::{FunctionToolCall, GatewayCallStatus, McpCallStatus};
-use crate::types::io::{InputItem, OutputItem, ResponsesInput};
+use crate::types::io::{InputItem, OutputItem};
 use crate::types::request_response::ResponsePayload;
 use crate::utils::common::{serialize_to_string, serialize_to_value};
 
@@ -499,6 +501,9 @@ pub(super) async fn emit_gateway_start_events<'a>(
             | OutputItem::ShellCall(_)
             | OutputItem::Reasoning(_)
             | OutputItem::Compaction(_)
+            | OutputItem::MultiAgentCall(_)
+            | OutputItem::MultiAgentCallOutput(_)
+            | OutputItem::AgentMessage(_)
             | OutputItem::Unknown => {}
         }
     }
@@ -546,6 +551,9 @@ pub(super) async fn emit_gateway_completed_events<'a, T: GatewayPublicOutputSour
             | OutputItem::ToolSearchCall(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::Reasoning(_)
+            | OutputItem::MultiAgentCall(_)
+            | OutputItem::MultiAgentCallOutput(_)
+            | OutputItem::AgentMessage(_)
             | OutputItem::Unknown => continue,
         };
         let item = output_item_value(public_output)?;
@@ -595,46 +603,6 @@ pub(super) async fn execute_and_emit_output_calls(
         .await?;
     }
     Ok(gateway_results)
-}
-
-pub(super) fn append_input_item(input: &mut ResponsesInput, item: InputItem) {
-    match input {
-        ResponsesInput::Items(items) => items.push(item),
-        ResponsesInput::Text(text) => {
-            let text_input = ResponsesInput::Text(std::mem::take(text));
-            let mut items = Vec::<InputItem>::from(&text_input);
-            items.push(item);
-            *input = ResponsesInput::Items(items);
-        }
-    }
-}
-
-pub(super) fn append_output_items_to_input(input: &mut ResponsesInput, output_items: &[OutputItem]) {
-    for input_item in output_items.iter().filter_map(OutputItem::to_input_item) {
-        append_input_item(input, input_item);
-    }
-}
-
-pub(super) fn append_tool_outputs(ctx: &mut RequestContext, tool_outputs: Vec<InputItem>) {
-    for output in tool_outputs {
-        ctx.new_input_items.push(output.clone());
-        append_input_item(&mut ctx.enriched_request.input, output);
-    }
-}
-
-pub(super) fn append_gateway_calls_to_new_input(
-    ctx: &mut RequestContext,
-    output_items: &[OutputItem],
-    registry: &ToolRegistry,
-) {
-    ctx.new_input_items.extend(output_items.iter().filter_map(|item| {
-        let OutputItem::FunctionCall(call) = item else {
-            return None;
-        };
-        registry
-            .is_gateway_owned_name(&call.name)
-            .then(|| InputItem::FunctionCall(call.clone().into()))
-    }));
 }
 
 #[cfg(test)]
@@ -941,6 +909,7 @@ mod tests {
 
     fn web_search_call(call_id: &str) -> FunctionToolCall {
         FunctionToolCall {
+            agent: None,
             id: format!("fc_{call_id}"),
             call_id: call_id.to_owned(),
             name: "web_search".to_owned(),
@@ -1590,6 +1559,7 @@ mod tests {
     #[tokio::test]
     async fn compaction_uses_shared_gateway_event_lifecycle_without_intermediate_event() {
         let public_output = [OutputItem::Compaction(CompactionItem {
+            agent: None,
             id: Some("cmp_1".to_owned()),
             encrypted_content: "durable summary".to_owned(),
         })];
@@ -1634,6 +1604,7 @@ mod tests {
     #[tokio::test]
     async fn mcp_gateway_events_follow_openai_lifecycle() {
         let call = FunctionToolCall {
+            agent: None,
             id: "fc_1".to_owned(),
             call_id: "call_1".to_owned(),
             name: "mcp__counter__increment".to_owned(),
@@ -1734,6 +1705,7 @@ mod tests {
     #[tokio::test]
     async fn failed_mcp_gateway_events_keep_contiguous_sequence_numbers() {
         let call = FunctionToolCall {
+            agent: None,
             id: "fc_1".to_owned(),
             call_id: "call_1".to_owned(),
             name: "mcp__counter__increment".to_owned(),

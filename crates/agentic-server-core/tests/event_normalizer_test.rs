@@ -1,4 +1,5 @@
 use agentic_core::events::{EventPayload, SSEEventType, normalize_sse_line};
+use agentic_core::types::io::OutputItem;
 use serde::Deserialize;
 
 // --- Unit tests (per-event-type parsing) ---
@@ -238,10 +239,10 @@ fn test_output_item_added_function_call() {
         name,
         namespace,
         call_id,
-        shell_call,
+        initial_item,
     } = &frame.payload
     {
-        assert!(shell_call.is_none());
+        assert!(matches!(initial_item.as_deref(), Some(OutputItem::FunctionCall(call)) if call.call_id == "call_1"));
         assert_eq!(item_id, "fc_1");
         assert_eq!(item_type, "function_call");
         assert_eq!(*output_index, Some(1));

@@ -1032,7 +1032,7 @@ fn test_custom_tool_cassettes_accumulate_public_streaming_shape() {
             matches!(
                 item,
                 OutputItem::Message(message)
-                    if message.content.iter().any(|content| content.text.contains("CUSTOM_CASSETTE_OUTPUT_OK"))
+                    if message.content.iter().any(|content| content.text().contains("CUSTOM_CASSETTE_OUTPUT_OK"))
             )
         }));
     }
@@ -1074,7 +1074,7 @@ fn test_custom_tool_cassettes_accumulate_public_nonstreaming_shape() {
             matches!(
                 item,
                 OutputItem::Message(message)
-                    if message.content.iter().any(|content| content.text.contains("CUSTOM_CASSETTE_OUTPUT_OK"))
+                    if message.content.iter().any(|content| content.text().contains("CUSTOM_CASSETTE_OUTPUT_OK"))
             )
         }));
     }

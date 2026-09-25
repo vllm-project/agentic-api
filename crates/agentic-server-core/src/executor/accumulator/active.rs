@@ -9,10 +9,12 @@
 //!
 //! [`SlotMap`](super::slot::SlotMap) owns identity and lifecycle and dispatches
 //! here; nothing in this module resolves indexes or IDs.
+mod agent_message;
+use agent_message::AgentMessageState;
 
 use indexmap::IndexMap;
 
-pub(super) use super::active_text::StreamedPart;
+pub(super) use super::active_text::MessagePart;
 use super::active_text::{MessageState, ReasoningState};
 use super::completion::MergeDone;
 use crate::events::types::ShellCommandUpdate;
@@ -24,8 +26,8 @@ use crate::executor::response_budget::{
 use crate::types::event::MessageStatus;
 use crate::types::io::output::McpListTools;
 use crate::types::io::{
-    ApplyDone, CompactionItem, CustomToolCall, FunctionToolCall, McpCall, OutputItem, OutputMessage, ReasoningOutput,
-    ShellCall, ToolSearchCall, WebSearchCall,
+    ApplyDone, CompactionItem, CustomToolCall, FunctionToolCall, McpCall, MultiAgentCall, MultiAgentCallOutput,
+    OutputItem, OutputMessage, ReasoningOutput, ShellCall, ToolSearchCall, WebSearchCall,
 };
 
 pub(super) type Budget<'a> = Option<&'a ExecutorResponseBudget>;
@@ -208,6 +210,9 @@ impl RetainedSize for ShellCallState {
 /// Tracks a single output item currently being streamed.
 #[derive(Clone)]
 pub(super) enum ActiveItem {
+    MultiAgentCall { item: MultiAgentCall },
+    MultiAgentCallOutput { item: MultiAgentCallOutput },
+    AgentMessage(AgentMessageState),
     Message(MessageState),
     Reasoning(ReasoningState),
     FunctionCall(FunctionCallState),
@@ -228,10 +233,33 @@ impl std::fmt::Debug for ActiveItem {
 
 impl ActiveItem {
     pub(super) fn from_added(payload: &EventPayload) -> Option<Self> {
-        let EventPayload::OutputItemAdded { item_type, .. } = payload else {
+        let EventPayload::OutputItemAdded {
+            item_type,
+            initial_item,
+            ..
+        } = payload
+        else {
             return None;
         };
         Some(match item_type {
+            SSEItemType::MultiAgentCall => {
+                let Some(OutputItem::MultiAgentCall(item)) = initial_item.as_deref() else {
+                    return None;
+                };
+                Self::MultiAgentCall { item: item.clone() }
+            }
+            SSEItemType::MultiAgentCallOutput => {
+                let Some(OutputItem::MultiAgentCallOutput(item)) = initial_item.as_deref() else {
+                    return None;
+                };
+                Self::MultiAgentCallOutput { item: item.clone() }
+            }
+            SSEItemType::AgentMessage => {
+                let Some(OutputItem::AgentMessage(item)) = initial_item.as_deref() else {
+                    return None;
+                };
+                Self::AgentMessage(AgentMessageState::new(item.clone()))
+            }
             SSEItemType::ShellCall => Self::ShellCall(ShellCallState::new(ShellCall::try_from(payload).ok()?)),
             SSEItemType::Reasoning => Self::Reasoning(ReasoningState::new(ReasoningOutput::try_from(payload).ok()?)),
             SSEItemType::FunctionCall => Self::FunctionCall(FunctionCallState {
@@ -245,10 +273,7 @@ impl ActiveItem {
                 item: CustomToolCall::try_from(payload).ok()?,
                 input: String::with_capacity(256),
             }),
-            SSEItemType::Message => Self::Message(MessageState {
-                item: OutputMessage::try_from(payload).ok()?,
-                parts: IndexMap::new(),
-            }),
+            SSEItemType::Message => Self::Message(MessageState::new(OutputMessage::try_from(payload).ok()?)),
             SSEItemType::WebSearchCall => Self::WebSearchCall { item: None },
             SSEItemType::Compaction => Self::Compaction {
                 item: CompactionItem::try_from(payload).ok()?,
@@ -285,6 +310,9 @@ impl ActiveItem {
             OutputItem::McpCall(item) => Self::McpCall { item },
             OutputItem::McpListTools(item) => Self::McpListTools { item },
             OutputItem::Compaction(item) => Self::Compaction { item },
+            OutputItem::MultiAgentCall(item) => Self::MultiAgentCall { item },
+            OutputItem::MultiAgentCallOutput(item) => Self::MultiAgentCallOutput { item },
+            OutputItem::AgentMessage(item) => Self::AgentMessage(AgentMessageState::new(item)),
             OutputItem::Unknown => return None,
         })
     }
@@ -302,6 +330,9 @@ impl ActiveItem {
             Self::McpCall { item } => Some(&item.id),
             Self::McpListTools { item } => Some(&item.id),
             Self::Compaction { item } => item.id.as_deref(),
+            Self::MultiAgentCall { item } => Some(&item.id),
+            Self::MultiAgentCallOutput { item } => Some(&item.id),
+            Self::AgentMessage(state) => Some(&state.item.id),
         }
     }
 
@@ -317,6 +348,9 @@ impl ActiveItem {
             Self::McpCall { .. } => SSEItemType::McpCall,
             Self::McpListTools { .. } => SSEItemType::McpListTools,
             Self::Compaction { .. } => SSEItemType::Compaction,
+            Self::MultiAgentCall { .. } => SSEItemType::MultiAgentCall,
+            Self::MultiAgentCallOutput { .. } => SSEItemType::MultiAgentCallOutput,
+            Self::AgentMessage(_) => SSEItemType::AgentMessage,
         }
     }
 
@@ -336,12 +370,15 @@ impl ActiveItem {
         budget: Budget<'_>,
     ) -> ExecutorResult<()> {
         match self {
+            Self::AgentMessage(state) => state.apply(payload, account, budget),
             Self::Message(state) => state.apply(payload, account, budget),
             Self::Reasoning(state) => state.apply(payload, account, budget),
             Self::FunctionCall(state) => state.apply(payload, account, budget),
             Self::CustomToolCall(state) => state.apply(payload, account, budget),
             Self::ShellCall(state) => state.apply(payload, account, budget),
-            Self::ToolSearchCall { .. }
+            Self::MultiAgentCall { .. }
+            | Self::MultiAgentCallOutput { .. }
+            | Self::ToolSearchCall { .. }
             | Self::WebSearchCall { .. }
             | Self::McpCall { .. }
             | Self::McpListTools { .. }
@@ -349,10 +386,46 @@ impl ActiveItem {
         }
     }
 
+    /// Completion snapshots may fill in results, but cannot reassign identity
+    /// or contradict completed content parts.
+    pub(super) fn validate_completion(&self, done: Option<&OutputItem>) -> ExecutorResult<()> {
+        match (self, done) {
+            (Self::Message(state), Some(OutputItem::Message(done))) => state.validate_completion(done)?,
+            (Self::MultiAgentCall { item }, Some(OutputItem::MultiAgentCall(done))) => {
+                if item.call_id != done.call_id || item.action != done.action || item.agent != done.agent {
+                    return Err(invalid(
+                        "collaboration call completion changes call_id, action, or attribution",
+                    ));
+                }
+            }
+            (Self::MultiAgentCallOutput { item }, Some(OutputItem::MultiAgentCallOutput(done))) => {
+                if item.call_id != done.call_id || item.action != done.action || item.agent != done.agent {
+                    return Err(invalid(
+                        "collaboration output completion changes call_id, action, or attribution",
+                    ));
+                }
+            }
+            (Self::AgentMessage(state), Some(OutputItem::AgentMessage(done))) => state.validate_completion(done)?,
+            (Self::MultiAgentCall { .. } | Self::MultiAgentCallOutput { .. } | Self::AgentMessage(_), _) => {
+                return Err(invalid("collaboration item requires a valid completion snapshot"));
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     /// Merge an `output_item.done` payload with the same per-kind policy for a
     /// typed completed item (`MergeDone`) or a raw payload (`ApplyDone`).
     pub(super) fn merge_completion(&mut self, payload: &EventPayload, done_item: Option<&OutputItem>, item_id: &str) {
         match (self, done_item) {
+            (Self::MultiAgentCall { item }, Some(OutputItem::MultiAgentCall(done))) => item.clone_from(done),
+            (Self::MultiAgentCallOutput { item }, Some(OutputItem::MultiAgentCallOutput(done))) => {
+                item.clone_from(done);
+            }
+            (Self::AgentMessage(state), Some(OutputItem::AgentMessage(done))) => {
+                state.item.clone_from(done);
+                state.parts.clear();
+            }
             (Self::ShellCall(state), Some(OutputItem::ShellCall(done))) => state.item.merge_done(done, ()),
             (Self::Message(state), Some(OutputItem::Message(done))) => {
                 state.item.merge_done(done, &mut state.parts);
@@ -393,6 +466,9 @@ impl ActiveItem {
             Self::McpCall { item } => OutputItem::McpCall(item),
             Self::McpListTools { item } => OutputItem::McpListTools(item),
             Self::Compaction { item } => OutputItem::Compaction(item),
+            Self::MultiAgentCall { item } => OutputItem::MultiAgentCall(item),
+            Self::MultiAgentCallOutput { item } => OutputItem::MultiAgentCallOutput(item),
+            Self::AgentMessage(state) => OutputItem::AgentMessage(state.item),
         })
     }
 }
@@ -415,6 +491,9 @@ impl RetainedSize for ActiveItem {
             Self::McpCall { item } => item.retained_bytes(),
             Self::McpListTools { item } => item.retained_bytes(),
             Self::Compaction { item } => item.retained_bytes(),
+            Self::MultiAgentCall { item } => item.retained_bytes(),
+            Self::MultiAgentCallOutput { item } => item.retained_bytes(),
+            Self::AgentMessage(state) => state.retained_bytes(),
         }
     }
 }

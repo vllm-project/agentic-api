@@ -22,7 +22,7 @@ use tokio::task::JoinHandle;
 
 use agentic_core::executor::{BoxStream, ConversationHandler, ExecutionContext, ResponseHandler};
 use agentic_core::storage::{ConversationStore, DbPool, ResponseStore, create_pool_with_schema};
-use agentic_core::types::io::OutputItem;
+use agentic_core::types::io::{OutputItem, OutputMessageContent};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 
 #[derive(Debug, Deserialize)]
@@ -582,7 +582,7 @@ pub fn output_text(payload: &ResponsePayload) -> String {
         .output
         .iter()
         .filter_map(|item| match item {
-            OutputItem::Message(msg) => Some(msg.content.iter().map(|c| c.text.as_str()).collect::<String>()),
+            OutputItem::Message(msg) => Some(msg.content.iter().map(OutputMessageContent::text).collect::<String>()),
             OutputItem::FunctionCall(_)
             | OutputItem::ToolSearchCall(_)
             | OutputItem::CustomToolCall(_)
@@ -592,6 +592,9 @@ pub fn output_text(payload: &ResponsePayload) -> String {
             | OutputItem::McpListTools(_)
             | OutputItem::Reasoning(_)
             | OutputItem::Compaction(_)
+            | OutputItem::MultiAgentCall(_)
+            | OutputItem::MultiAgentCallOutput(_)
+            | OutputItem::AgentMessage(_)
             | OutputItem::Unknown => None,
         })
         .collect::<String>()

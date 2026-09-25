@@ -1,104 +1,10 @@
+mod item;
+pub use item::SSEItemType;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::types::io::{OutputItem, ResponseUsage, ShellCall};
-
-/// The type of an output item received during streaming.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SSEItemType {
-    Reasoning,
-    FunctionCall,
-    ToolSearchCall,
-    CustomToolCall,
-    WebSearchCall,
-    McpCall,
-    McpListTools,
-    ShellCall,
-    Compaction,
-    Message,
-}
-
-impl SSEItemType {
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Reasoning => "reasoning",
-            Self::FunctionCall => "function_call",
-            Self::ToolSearchCall => "tool_search_call",
-            Self::CustomToolCall => "custom_tool_call",
-            Self::WebSearchCall => "web_search_call",
-            Self::McpCall => "mcp_call",
-            Self::McpListTools => "mcp_list_tools",
-            Self::ShellCall => "shell_call",
-            Self::Compaction => "compaction",
-            Self::Message => "message",
-        }
-    }
-}
-
-impl From<&str> for SSEItemType {
-    fn from(s: &str) -> Self {
-        s.parse().unwrap_or(Self::Message)
-    }
-}
-
-impl std::str::FromStr for SSEItemType {
-    type Err = ();
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
-            "reasoning" => Ok(Self::Reasoning),
-            "function_call" => Ok(Self::FunctionCall),
-            "tool_search_call" => Ok(Self::ToolSearchCall),
-            "custom_tool_call" => Ok(Self::CustomToolCall),
-            "web_search_call" => Ok(Self::WebSearchCall),
-            "mcp_call" => Ok(Self::McpCall),
-            "mcp_list_tools" => Ok(Self::McpListTools),
-            "shell_call" => Ok(Self::ShellCall),
-            "compaction" => Ok(Self::Compaction),
-            "message" => Ok(Self::Message),
-            _ => Err(()),
-        }
-    }
-}
-
-impl TryFrom<&OutputItem> for SSEItemType {
-    type Error = ();
-
-    fn try_from(item: &OutputItem) -> Result<Self, Self::Error> {
-        match item {
-            OutputItem::Message(_) => Ok(Self::Message),
-            OutputItem::FunctionCall(_) => Ok(Self::FunctionCall),
-            OutputItem::ToolSearchCall(_) => Ok(Self::ToolSearchCall),
-            OutputItem::CustomToolCall(_) => Ok(Self::CustomToolCall),
-            OutputItem::WebSearchCall(_) => Ok(Self::WebSearchCall),
-            OutputItem::McpCall(_) => Ok(Self::McpCall),
-            OutputItem::McpListTools(_) => Ok(Self::McpListTools),
-            OutputItem::ShellCall(_) => Ok(Self::ShellCall),
-            OutputItem::Reasoning(_) => Ok(Self::Reasoning),
-            OutputItem::Compaction(_) => Ok(Self::Compaction),
-            OutputItem::Unknown => Err(()),
-        }
-    }
-}
-
-impl From<String> for SSEItemType {
-    fn from(s: String) -> Self {
-        Self::from(s.as_str())
-    }
-}
-
-impl PartialEq<str> for SSEItemType {
-    fn eq(&self, other: &str) -> bool {
-        self.as_str() == other
-    }
-}
-
-impl PartialEq<&str> for SSEItemType {
-    fn eq(&self, other: &&str) -> bool {
-        self.as_str() == *other
-    }
-}
+use crate::types::io::{AgentAttribution, AgentMessageContent, OutputItem, OutputMessageContent, ResponseUsage};
 
 /// Classification of SSE event types from the Responses API.
 ///
@@ -113,6 +19,8 @@ pub enum SSEEventType {
     ResponseCompleted,
     ResponseFailed,
     ResponseIncomplete,
+    /// Response-level liveness, with no output-item or agent lifecycle transition.
+    Keepalive,
 
     // Output item lifecycle
     OutputItemAdded,
@@ -168,6 +76,7 @@ impl From<&str> for SSEEventType {
             "response.completed" | "response.done" => Self::ResponseCompleted,
             "response.failed" => Self::ResponseFailed,
             "response.incomplete" => Self::ResponseIncomplete,
+            "keepalive" => Self::Keepalive,
             "response.output_item.added" => Self::OutputItemAdded,
             "response.output_item.done" => Self::OutputItemDone,
             "response.output_text.delta" => Self::OutputTextDelta,
@@ -215,6 +124,7 @@ impl TryFrom<SSEEventType> for &'static str {
             SSEEventType::ResponseCompleted => Ok("response.completed"),
             SSEEventType::ResponseFailed => Ok("response.failed"),
             SSEEventType::ResponseIncomplete => Ok("response.incomplete"),
+            SSEEventType::Keepalive => Ok("keepalive"),
             SSEEventType::OutputItemAdded => Ok("response.output_item.added"),
             SSEEventType::OutputItemDone => Ok("response.output_item.done"),
             SSEEventType::OutputTextDelta => Ok("response.output_text.delta"),
@@ -264,6 +174,10 @@ pub struct WireEvent {
     pub sequence_number: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_index: Option<u64>,
+    /// Event attribution is independent of attribution on an embedded output item.
+    /// Omission never implies `/root` and must not fill in missing item attribution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<AgentAttribution>,
     #[serde(flatten)]
     pub rest: Map<String, Value>,
 }
@@ -284,6 +198,7 @@ impl WireEvent {
             event_type: Some(event_type.into()),
             sequence_number: None,
             output_index: None,
+            agent: None,
             rest: Map::new(),
         }
     }
@@ -317,8 +232,9 @@ pub enum EventPayload {
         name: Option<String>,
         namespace: Option<String>,
         call_id: Option<String>,
-        /// Preserve the typed initial shell item before command events arrive.
-        shell_call: Option<Box<ShellCall>>,
+        /// Initial snapshot for message, shell, and collaboration items, whose fields are
+        /// needed before their incremental or completion events arrive.
+        initial_item: Option<Box<OutputItem>>,
     },
 
     /// `response.output_item.done`
@@ -327,6 +243,24 @@ pub enum EventPayload {
         item_type: SSEItemType,
         output_index: Option<u32>,
         item: Value,
+    },
+
+    /// A completed encrypted part of an agent message. This protocol permits
+    /// completion without a corresponding content-part-added event.
+    AgentMessageContentDone {
+        item_id: String,
+        output_index: Option<u32>,
+        content_index: u32,
+        part: AgentMessageContent,
+    },
+
+    /// A completed message part, including forked user input without a prior
+    /// part-added event. Retains the part kind and its metadata.
+    MessageContentDone {
+        item_id: String,
+        output_index: Option<u32>,
+        content_index: u32,
+        part: OutputMessageContent,
     },
 
     /// `response.output_text.delta`
@@ -437,6 +371,8 @@ impl EventFrame {
         match &self.payload {
             EventPayload::OutputItemAdded { output_index, .. }
             | EventPayload::OutputItemDone { output_index, .. }
+            | EventPayload::AgentMessageContentDone { output_index, .. }
+            | EventPayload::MessageContentDone { output_index, .. }
             | EventPayload::TextDelta { output_index, .. }
             | EventPayload::TextDone { output_index, .. }
             | EventPayload::FunctionCallArgsDelta { output_index, .. }
@@ -457,6 +393,8 @@ impl EventFrame {
         match &mut self.payload {
             EventPayload::OutputItemAdded { output_index, .. }
             | EventPayload::OutputItemDone { output_index, .. }
+            | EventPayload::AgentMessageContentDone { output_index, .. }
+            | EventPayload::MessageContentDone { output_index, .. }
             | EventPayload::TextDelta { output_index, .. }
             | EventPayload::TextDone { output_index, .. }
             | EventPayload::FunctionCallArgsDelta { output_index, .. }
@@ -477,15 +415,26 @@ impl EventFrame {
     }
 
     #[must_use]
-    pub fn synthetic(event_type: SSEEventType, rest: Map<String, Value>) -> Option<Self> {
+    pub fn synthetic(event_type: SSEEventType, mut rest: Map<String, Value>) -> Option<Self> {
         let event_type_name = <&str>::try_from(event_type).ok()?;
+        // Keep one representation of attribution even when a synthetic caller supplies
+        // it with the other wire fields. Invalid attribution cannot become an unowned event.
+        let agent: Option<AgentAttribution> = match rest.remove("agent") {
+            None | Some(Value::Null) => None,
+            Some(value) => Some(serde_json::from_value(value).ok()?),
+        };
+        let output_index = match rest.remove("output_index") {
+            None | Some(Value::Null) => None,
+            Some(value) => Some(value.as_u64()?),
+        };
         Some(Self {
             event_type,
             payload: EventPayload::None,
             wire: WireEvent {
                 event_type: Some(event_type_name.to_owned()),
                 sequence_number: None,
-                output_index: None,
+                output_index,
+                agent,
                 rest,
             },
         })
@@ -512,6 +461,7 @@ mod tests {
     #[test]
     fn sse_item_type_is_derived_from_typed_output_items() {
         let item = OutputItem::FunctionCall(FunctionToolCall {
+            agent: None,
             id: "fc_1".to_owned(),
             call_id: "call_1".to_owned(),
             name: "lookup".to_owned(),
@@ -532,6 +482,7 @@ mod tests {
             SSEEventType::ResponseCompleted,
             SSEEventType::ResponseFailed,
             SSEEventType::ResponseIncomplete,
+            SSEEventType::Keepalive,
             SSEEventType::OutputItemAdded,
             SSEEventType::OutputItemDone,
             SSEEventType::OutputTextDelta,

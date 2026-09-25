@@ -108,6 +108,39 @@ fn first_message_id(payload: &ResponsePayload) -> &str {
         .expect("turn 1 output contains an assistant message")
 }
 
+/// Recorded clients can omit empty output-text metadata when replaying a
+/// response item. Treat those empty fields as equivalent to omission while
+/// still comparing the full ordered history and all non-empty metadata.
+fn omit_empty_output_text_metadata(history: &mut Value) {
+    let Some(items) = history.as_array_mut() else {
+        return;
+    };
+    for item in items {
+        if item["type"] != "message" || item["role"] != "assistant" {
+            continue;
+        }
+        let Some(parts) = item.get_mut("content").and_then(Value::as_array_mut) else {
+            continue;
+        };
+        for part in parts {
+            if part["type"] != "output_text" {
+                continue;
+            }
+            let Some(fields) = part.as_object_mut() else {
+                continue;
+            };
+            for key in ["annotations", "logprobs"] {
+                if fields
+                    .get(key)
+                    .is_some_and(|value| value.as_array().is_some_and(Vec::is_empty))
+                {
+                    fields.remove(key);
+                }
+            }
+        }
+    }
+}
+
 /// The upstream request for the second turn must carry the rehydrated item
 /// history instead of forwarding gateway-managed response IDs upstream.
 /// The history is compared structurally with the recorded turn-2 request; only
@@ -130,8 +163,11 @@ fn assert_upstream_requests_are_stateless(requests: &[Value], t2: &Turn, p1: &Re
         .find(|item| item["type"] == "message" && item["role"] == "assistant")
         .expect("recorded turn 2 replays the assistant item");
     recorded_assistant["id"] = Value::String(first_message_id(p1).to_owned());
+    let mut actual_history = requests[1]["input"].clone();
+    omit_empty_output_text_metadata(&mut actual_history);
+    omit_empty_output_text_metadata(&mut expected_history);
     assert_eq!(
-        requests[1]["input"], expected_history,
+        actual_history, expected_history,
         "turn 2 must replay the full item history to the stateless upstream"
     );
 }

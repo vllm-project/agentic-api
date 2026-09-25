@@ -1,3 +1,5 @@
+pub mod agent;
+pub mod client_calls;
 pub mod conversations;
 pub mod event;
 pub mod io;
@@ -30,3 +32,6 @@ pub use tools::{
     ShellEnvironment, ShellToolParam, ToolSearchExecution, ToolSearchStatus, ToolSearchToolParam, WebSearchContextSize,
     WebSearchFilters, WebSearchToolParam, WebSearchUserLocation,
 };
+
+pub mod agent_commands;
+pub mod agent_tree;

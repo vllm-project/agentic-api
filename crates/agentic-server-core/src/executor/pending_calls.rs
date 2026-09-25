@@ -78,6 +78,9 @@ pub(super) fn pending_calls(items: &[InputItem]) -> ExecutorResult<Vec<PendingCa
             | InputItem::McpListTools(_)
             | InputItem::Compaction(_)
             | InputItem::CompactionTrigger
+            | InputItem::MultiAgentCall(_)
+            | InputItem::MultiAgentCallOutput(_)
+            | InputItem::AgentMessage(_)
             | InputItem::Unknown => {}
         }
     }
@@ -139,6 +142,7 @@ mod tests {
 
     fn function_call(call_id: &str) -> InputItem {
         InputItem::FunctionCall(InputFunctionToolCall {
+            agent: None,
             id: None,
             call_id: call_id.to_owned(),
             name: "get_weather".to_owned(),
@@ -157,6 +161,7 @@ mod tests {
 
     fn custom_tool_call(call_id: &str) -> InputItem {
         InputItem::CustomToolCall(CustomToolCall {
+            agent: None,
             id: String::new(),
             status: None,
             call_id: call_id.to_owned(),
@@ -175,6 +180,7 @@ mod tests {
 
     fn shell_call(call_id: &str) -> InputItem {
         InputItem::ShellCall(ShellCall {
+            agent: None,
             id: None,
             call_id: call_id.to_owned(),
             action: ShellCallAction {

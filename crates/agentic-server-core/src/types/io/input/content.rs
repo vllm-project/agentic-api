@@ -5,7 +5,7 @@ use serde_json::{Map, Value};
 
 use crate::utils::common::deserialize_from_value;
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct InputTextContent {
     pub text: String,

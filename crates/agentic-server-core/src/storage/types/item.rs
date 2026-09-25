@@ -124,7 +124,7 @@ impl InOutItem {
 mod tests {
     use super::*;
     use crate::types::event::MessageStatus;
-    use crate::types::io::output::McpListTools;
+    use crate::types::io::output::{McpListTools, MessagePhase};
     use crate::types::io::{
         FunctionToolCall, InputContent, InputMessage, InputMessageContent, OutputMessage, OutputTextContent,
         ReasoningOutput, ReasoningTextContent, ResponsesInput, ShellCall, ShellCallAction, ShellCallStatus,
@@ -133,10 +133,9 @@ mod tests {
     #[test]
     fn test_inout_item_from_input() {
         let input = InputItem::Message(InputMessage {
-            id: None,
             role: "user".to_string(),
-            status: None,
             content: InputMessageContent::Text("hello".to_string()),
+            ..Default::default()
         });
         let item: InOutItem = input.into();
         assert!(matches!(item, InOutItem::Input(_)));
@@ -152,10 +151,9 @@ mod tests {
     #[test]
     fn test_inout_item_to_string() {
         let input = InputItem::Message(InputMessage {
-            id: None,
             role: "user".to_string(),
-            status: None,
             content: InputMessageContent::Text("test".to_string()),
+            ..Default::default()
         });
         let item = InOutItem::Input(input);
         let json = String::try_from(&item).expect("serialization failed");
@@ -168,20 +166,19 @@ mod tests {
     #[test]
     fn test_into_input_items_converts_output_messages() {
         let mut output = OutputMessage::new("out1", MessageStatus::Completed);
-        output.content.push(OutputTextContent::new("answer"));
+        output.phase = Some(MessagePhase::FinalAnswer);
+        output.content.push(OutputTextContent::new("answer").into());
         let items = vec![
             InOutItem::Input(InputItem::Message(InputMessage {
-                id: None,
                 role: "user".to_string(),
-                status: None,
                 content: InputMessageContent::Text("msg1".to_string()),
+                ..Default::default()
             })),
             InOutItem::Output(OutputItem::Message(output)),
             InOutItem::Input(InputItem::Message(InputMessage {
-                id: None,
                 role: "user".to_string(),
-                status: None,
                 content: InputMessageContent::Text("msg2".to_string()),
+                ..Default::default()
             })),
         ];
 
@@ -190,6 +187,7 @@ mod tests {
         match &inputs[1] {
             InputItem::Message(message) => {
                 assert_eq!(message.role, "assistant");
+                assert_eq!(message.phase, Some(MessagePhase::FinalAnswer));
                 match &message.content {
                     InputMessageContent::Parts(parts) => {
                         assert_eq!(parts.len(), 1);
@@ -232,6 +230,7 @@ mod tests {
     fn test_into_input_items_preserves_function_calls() {
         use crate::types::event::MessageStatus;
         let fc = FunctionToolCall {
+            agent: None,
             id: "fc_1".to_string(),
             call_id: "call_abc".to_string(),
             name: "my_tool".to_string(),
@@ -251,12 +250,13 @@ mod tests {
     #[test]
     fn test_into_input_items_preserves_shell_calls() {
         let call = ShellCall {
+            agent: None,
             id: Some("sh_1".to_owned()),
             call_id: "call_shell".to_owned(),
             action: ShellCallAction {
                 commands: vec!["pwd".to_owned()],
-                timeout_ms: Some(1_000),
-                max_output_length: Some(4_096),
+                timeout_ms: Some(crate::types::io::ShellCallLimit::Value(1_000)),
+                max_output_length: Some(crate::types::io::ShellCallLimit::Value(4_096)),
                 extra: std::collections::HashMap::new(),
             },
             status: Some(ShellCallStatus::Completed),

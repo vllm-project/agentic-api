@@ -174,6 +174,7 @@ mod tests {
     use crate::types::tools::{CodexNamespaceMember, NonEmptyToolName, ResponsesTool};
     fn completed_call(name: &str, arguments: &str) -> OutputItem {
         OutputItem::FunctionCall(FunctionToolCall {
+            agent: None,
             id: "fc_1".to_string(),
             call_id: "call_1".to_string(),
             name: name.to_string(),

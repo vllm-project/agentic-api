@@ -1545,3 +1545,111 @@ fn malformed_shell_arguments_fail_closed() {
         .expect_err("invalid shell action must fail");
     assert!(error.to_string().contains("invalid action arguments"));
 }
+
+fn attributed_call_events(name: &str, arguments: &str) -> [Value; 4] {
+    [
+        serde_json::json!({
+            "type": "response.output_item.added", "output_index": 0,
+            "item": {"id": "fc_attributed", "type": "function_call", "call_id": "call_attributed",
+                "name": name, "arguments": "", "status": "in_progress"}
+        }),
+        serde_json::json!({
+            "type": "response.function_call_arguments.delta", "output_index": 0,
+            "item_id": "fc_attributed", "delta": arguments
+        }),
+        serde_json::json!({
+            "type": "response.function_call_arguments.done", "output_index": 0,
+            "item_id": "fc_attributed", "call_id": "call_attributed", "name": name,
+            "arguments": arguments
+        }),
+        serde_json::json!({
+            "type": "response.output_item.done", "output_index": 0,
+            "item": {"id": "fc_attributed", "type": "function_call", "call_id": "call_attributed",
+                "name": name, "arguments": arguments, "status": "completed"}
+        }),
+    ]
+}
+
+#[test]
+fn translators_preserve_event_and_item_attribution_independently() {
+    let attribution = serde_json::json!({"agent_name": "/root/worker"});
+    let event_attribution = serde_json::json!({"agent_name": "/root"});
+    for (name, kind, arguments, public_type) in [
+        ("lookup", ToolType::Function, "{}", "function_call"),
+        ("lookup", ToolType::CodexNamespace, "{}", "function_call"),
+        ("raw_echo", ToolType::Custom, r#"{"input":"hello"}"#, "custom_tool_call"),
+        ("shell", ToolType::Shell, r#"{"commands":["pwd"]}"#, "shell_call"),
+        (
+            "tool_search",
+            ToolType::ToolSearch,
+            r#"{"query":"weather"}"#,
+            "tool_search_call",
+        ),
+    ] {
+        for (event_agent, item_agent) in [(false, false), (false, true), (true, false), (true, true)] {
+            let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
+            let mut translator = TranslationDispatcher::new(test_context(HashMap::from([(name.to_owned(), kind)])));
+            let mut lifecycle_count = 0;
+            for (index, mut event) in attributed_call_events(name, arguments).into_iter().enumerate() {
+                // An unattributed delta after an attributed opening must stay unattributed.
+                if event_agent && index != 1 {
+                    event["agent"] = event_attribution.clone();
+                }
+                if item_agent && let Some(item) = event.get_mut("item") {
+                    item["agent"] = attribution.clone();
+                }
+                for frame in translate(&mut accumulator, &mut translator, &event).frames {
+                    let wire = serde_json::to_value(&frame.wire).unwrap();
+                    assert_eq!(wire.get("agent"), event.get("agent"), "{name}: event attribution");
+                    if let Some(item) = wire.get("item") {
+                        lifecycle_count += 1;
+                        assert_eq!(item["type"], public_type);
+                        assert_eq!(
+                            item.get("agent"),
+                            item_agent.then_some(&attribution),
+                            "{name}: item attribution"
+                        );
+                    }
+                }
+            }
+            assert_eq!(lifecycle_count, 2, "{name}: added and done snapshots");
+        }
+    }
+}
+
+#[test]
+fn buffered_translation_preserves_each_source_events_attribution() {
+    let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
+    let mut translator =
+        TranslationDispatcher::new(test_context(HashMap::from([("raw_echo".to_owned(), ToolType::Custom)])));
+    let mut events = attributed_call_events("raw_echo", r#"{"input":"hello"}"#);
+    events[0]["item"].as_object_mut().unwrap().remove("name");
+    events[0]["agent"] = serde_json::json!({"agent_name": "/root"});
+    events[0]["item"]["agent"] = serde_json::json!({"agent_name": "/root/worker"});
+    assert!(
+        translate(&mut accumulator, &mut translator, &events[0])
+            .frames
+            .is_empty()
+    );
+    assert!(
+        translate(&mut accumulator, &mut translator, &events[1])
+            .frames
+            .is_empty()
+    );
+    // The resolving event omits attribution. It must not overwrite the buffered opening.
+    let frames = translate(&mut accumulator, &mut translator, &events[2]).frames;
+    let added = serde_json::to_value(&frames[0].wire).unwrap();
+    assert_eq!(added["agent"], events[0]["agent"]);
+    assert_eq!(added["item"]["agent"], events[0]["item"]["agent"]);
+    assert!(frames.iter().skip(1).all(|frame| frame.wire.agent.is_none()));
+    assert!(
+        frames
+            .iter()
+            .any(|frame| frame.event_type == SSEEventType::CustomToolCallInputDelta)
+    );
+    // An authoritative completion can omit item attribution; do not fill it from earlier events.
+    let frames = translate(&mut accumulator, &mut translator, &events[3]).frames;
+    let done = serde_json::to_value(&frames.last().unwrap().wire).unwrap();
+    assert!(done.get("agent").is_none());
+    assert!(done["item"].get("agent").is_none());
+}

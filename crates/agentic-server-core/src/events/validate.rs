@@ -2,7 +2,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value};
 use thiserror::Error;
 
-use super::{EventFrame, SSEEventType, SSEItemType};
+use super::{EventFrame, EventPayload, SSEEventType, SSEItemType};
 use crate::types::io::OutputItem;
 
 #[derive(Debug, Error)]
@@ -46,12 +46,30 @@ pub(crate) fn validate_frame(frame: &EventFrame) -> Result<ValidatedFrame<'_>, E
         SSEEventType::OutputItemDone => {
             validate_output_item(frame, event_name, true).map(|item| ValidatedFrame { item: Some(item) })
         }
-        SSEEventType::Other => Ok(ValidatedFrame { item: None }),
+        SSEEventType::Keepalive | SSEEventType::Other => Ok(ValidatedFrame { item: None }),
         event_type => {
             let output_index = required_output_index(frame, event_name)?;
             let item_id = validate_event_item_id(frame, event_name)?;
             validate_event_fields(&frame.wire.rest, event_type, event_name)?;
-            let item_type = expected_item_type(event_type).ok_or_else(|| {
+            if event_type == SSEEventType::ContentPartDone {
+                let kind = frame
+                    .wire
+                    .rest
+                    .get("part")
+                    .and_then(|part| part.get("type"))
+                    .and_then(Value::as_str);
+                let valid = match kind {
+                    Some("encrypted_content") => matches!(frame.payload, EventPayload::AgentMessageContentDone { .. }),
+                    Some("input_text" | "output_text") => {
+                        matches!(frame.payload, EventPayload::MessageContentDone { .. })
+                    }
+                    _ => true,
+                };
+                if !valid {
+                    return Err(invalid("invalid completed content part"));
+                }
+            }
+            let item_type = expected_item_type(frame).ok_or_else(|| {
                 invalid(format!(
                     "upstream output item type for event '{event_name}' is unsupported"
                 ))
@@ -68,8 +86,11 @@ pub(crate) fn validate_frame(frame: &EventFrame) -> Result<ValidatedFrame<'_>, E
     }
 }
 
-pub(crate) fn expected_item_type(event_type: SSEEventType) -> Option<SSEItemType> {
-    match event_type {
+pub(crate) fn expected_item_type(frame: &EventFrame) -> Option<SSEItemType> {
+    if matches!(frame.payload, EventPayload::AgentMessageContentDone { .. }) {
+        return Some(SSEItemType::AgentMessage);
+    }
+    match frame.event_type {
         SSEEventType::OutputTextDelta
         | SSEEventType::OutputTextDone
         | SSEEventType::ContentPartAdded
@@ -109,6 +130,7 @@ pub(crate) fn expected_item_type(event_type: SSEEventType) -> Option<SSEItemType
         | SSEEventType::OutputItemDone
         | SSEEventType::FileSearchCallSearching
         | SSEEventType::FileSearchCallCompleted
+        | SSEEventType::Keepalive
         | SSEEventType::Other => None,
     }
 }
@@ -167,6 +189,17 @@ fn validate_output_item<'a>(
     let item = required_object(&frame.wire.rest, "item", event_name)?;
     let (item_id, item_type) = output_item_identity(item, "output item")?;
     if !complete {
+        if item_type.is_collaboration()
+            && !matches!(
+                &frame.payload,
+                EventPayload::OutputItemAdded {
+                    initial_item: Some(_),
+                    ..
+                }
+            )
+        {
+            return Err(invalid("collaboration item has an invalid opening snapshot"));
+        }
         return Ok(ValidatedItem {
             item_id,
             output_index,
@@ -274,6 +307,7 @@ fn validate_event_fields(
         | SSEEventType::McpListToolsInProgress
         | SSEEventType::McpListToolsCompleted
         | SSEEventType::McpListToolsFailed
+        | SSEEventType::Keepalive
         | SSEEventType::Other => None,
     };
     if let Some(field) = required {

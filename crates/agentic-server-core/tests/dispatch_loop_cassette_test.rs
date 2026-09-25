@@ -112,28 +112,12 @@ async fn build_exec_ctx_with_web_search(llm_url: &str, you_url: &str) -> Arc<Exe
 
 fn request(text: &str, tools: Option<Vec<ResponsesTool>>) -> RequestPayload {
     RequestPayload {
-        model: "test-model".to_owned(),
+        model: "test-model".into(),
         input: ResponsesInput::Text(text.to_owned()),
-        instructions: None,
-        previous_response_id: None,
-        conversation_id: None,
-        tools,
-        tool_choice: None,
-        stream: false,
         store: true,
-        include: None,
-        reasoning: None,
-        text: None,
-        temperature: None,
-        top_p: None,
+        tools,
         max_output_tokens: Some(1024),
-        ignore_eos: None,
-        truncation: None,
-        metadata: None,
-        parallel_tool_calls: None,
-        prompt_cache_key: None,
-        cache_salt: None,
-        context_management: None,
+        ..Default::default()
     }
 }
 

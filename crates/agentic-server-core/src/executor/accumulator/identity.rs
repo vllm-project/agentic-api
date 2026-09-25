@@ -11,6 +11,8 @@ pub(super) fn output_item_call_id(item: &OutputItem) -> Option<&str> {
         OutputItem::ToolSearchCall(call) => Some(&call.call_id),
         OutputItem::CustomToolCall(call) => Some(&call.call_id),
         OutputItem::ShellCall(call) => Some(&call.call_id),
+        OutputItem::MultiAgentCall(call) => Some(&call.call_id),
+        OutputItem::MultiAgentCallOutput(output) => Some(&output.call_id),
         _ => None,
     }
 }
@@ -40,15 +42,18 @@ pub(super) fn item_identity<'a>(
             index: Some(OutputIndex::new(item.output_index)),
             item_id: (!item.item_id.is_empty()).then_some(item.item_id),
             item_type: item.item_type,
+            event_agent: frame.wire.agent.as_ref(),
         });
     }
     let (item_id, item_type) = match &frame.payload {
         EventPayload::OutputItemAdded { item_id, item_type, .. }
         | EventPayload::OutputItemDone { item_id, item_type, .. } => (item_id.as_str(), *item_type),
         payload => {
-            let item_type = expected_item_type(frame.event_type)?;
+            let item_type = expected_item_type(frame)?;
             let item_id = match payload {
-                EventPayload::TextDelta { item_id, .. }
+                EventPayload::AgentMessageContentDone { item_id, .. }
+                | EventPayload::MessageContentDone { item_id, .. }
+                | EventPayload::TextDelta { item_id, .. }
                 | EventPayload::TextDone { item_id, .. }
                 | EventPayload::FunctionCallArgsDelta { item_id, .. }
                 | EventPayload::FunctionCallArgsDone { item_id, .. }
@@ -72,5 +77,6 @@ pub(super) fn item_identity<'a>(
         index: frame.output_index().map(OutputIndex::new),
         item_id: (!item_id.is_empty()).then_some(item_id),
         item_type,
+        event_agent: frame.wire.agent.as_ref(),
     })
 }

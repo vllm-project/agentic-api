@@ -2,13 +2,13 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use super::io::{FunctionTool, InputItem, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
 use super::tools::ResponsesTool;
 use crate::tool::{CodexNamespaceHandler, CustomHandler, ToolError};
-use crate::utils::common::serialize_to_string;
 
+mod response_stream;
 mod serde_helpers;
 use serde_helpers::{default_true, is_absent_or_default_tool_choice, serialize_upstream_tool_choice};
 
@@ -29,7 +29,7 @@ pub struct ReasoningConfig {
 }
 
 /// Responses text-generation settings forwarded to the upstream service.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ResponseTextConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -184,7 +184,10 @@ impl utoipa::ToSchema for RequestPayload {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// A Responses request. Rust's derived default uses `store: false`; JSON deserialization
+/// uses `store: true` when storage is not specified. Set `store` explicitly when constructing
+/// a stored request with struct update syntax.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(bound(serialize = "Box<T>: Serialize", deserialize = "Box<T>: Deserialize<'de>"))]
 pub struct RequestPayload<T: ?Sized = ResponseTextConfig> {
     pub model: String,
@@ -386,7 +389,7 @@ impl RequestPayload {
         });
         let tools = tools.filter(|tools| !tools.is_empty());
         let namespace_map = CodexNamespaceHandler.build_namespace_map(self.tools.as_deref())?;
-        let input = CodexNamespaceHandler.resolve_input(namespace_map.as_ref(), self.input.model_input());
+        let input = CodexNamespaceHandler.resolve_input(namespace_map.as_ref(), self.input.normalized_model_input());
         let tool_choice = CodexNamespaceHandler.resolve_tool_choice(namespace_map.as_ref(), self.tool_choice.as_ref());
         CustomHandler::validate_tool_choice(self.tools.as_deref(), &tool_choice)?;
         Ok(UpstreamRequest {
@@ -477,48 +480,41 @@ pub struct ResponsePayload {
     pub tool_choice: Option<ToolChoice>,
 }
 
-impl ResponsePayload {
-    #[must_use]
-    pub fn as_created_response_chunk(&self) -> String {
-        let mut response = self.clone();
-        "in_progress".clone_into(&mut response.status);
-        let event = json!({
-            "type": "response.created",
-            "response": response,
-        });
-        let json_str = serialize_to_string(&event).unwrap_or_else(|_| String::new());
-        format!("data: {json_str}\n\n")
-    }
-
-    #[must_use]
-    pub fn as_responses_chunk(&self) -> String {
-        let json_str = serialize_to_string(self).unwrap_or_else(|_| String::new());
-        format!("data: {json_str}\n\n")
-    }
-
-    #[must_use]
-    pub fn as_terminal_response_chunk(&self) -> String {
-        let event = json!({
-            "type": self.terminal_event_type(),
-            "response": self,
-        });
-        let json_str = serialize_to_string(&event).unwrap_or_else(|_| String::new());
-        format!("data: {json_str}\n\n")
-    }
-
-    pub(crate) fn terminal_event_type(&self) -> &'static str {
-        match self.status.as_str() {
-            "incomplete" => "response.incomplete",
-            "failed" | "error" => "response.failed",
-            "in_progress" => "response.in_progress",
-            _ => "response.completed",
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stored_struct_defaults_match_minimal_wire_request() {
+        let wire: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test-model", "input": "hello"
+        }))
+        .unwrap();
+        let fixture: RequestPayload = RequestPayload {
+            model: "test-model".into(),
+            input: ResponsesInput::Text("hello".into()),
+            store: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            serde_json::to_value(fixture).unwrap(),
+            serde_json::to_value(wire).unwrap()
+        );
+    }
+
+    #[test]
+    fn rust_defaults_do_not_make_required_wire_fields_optional() {
+        let default: RequestPayload = RequestPayload::default();
+        assert!(!default.store);
+        assert!(matches!(default.input, ResponsesInput::Items(items) if items.is_empty()));
+
+        for wire in [
+            serde_json::json!({"model": "test-model"}),
+            serde_json::json!({"input": "hello"}),
+        ] {
+            assert!(serde_json::from_value::<RequestPayload>(wire).is_err());
+        }
+    }
 
     #[test]
     fn request_payload_accepts_openai_conversation_field() {
