@@ -19,6 +19,7 @@ default = []
 openapi = ["dep:utoipa"]
 
 [dependencies]
+vllm-responses.workspace = true
 utoipa = { workspace = true, optional = true }
 
 async-stream.workspace = true

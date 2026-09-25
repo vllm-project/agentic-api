@@ -124,6 +124,7 @@ nav:
     - Codex Integration: design/codex-integration.md
     - llm-d Backend Mode: design/agentic-llm-d.md
     - Core Public API: design/core-public-api.md
+    - Shared Responses Library: design/shared-responses-library.md
     - MCP Gateway Integration: design/mcp-gateway-integration.md
     - Messages Gateway Tool Classification: design/messages-gateway-tool-classification.md
     - OIDC Bearer Authentication: design/oidc-bearer-authentication.md
