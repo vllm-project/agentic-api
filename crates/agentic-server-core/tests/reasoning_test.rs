@@ -297,7 +297,7 @@ async fn replay_through_gateway(turn: &support::Turn) -> ResponsePayload {
     response
 }
 
-fn assert_replayed_output(response: &ResponsePayload) {
+fn assert_replayed_output(response: &ResponsePayload, turn: &support::Turn) {
     assert_eq!(response.status, "completed");
     assert!(
         response
@@ -307,6 +307,40 @@ fn assert_replayed_output(response: &ResponsePayload) {
         "gateway replay should retain the reasoning item"
     );
     assert_eq!(support::output_text(response).trim(), "VALID");
+    // A provider may issue a different opaque string in its terminal snapshot.
+    // The existing ingestion path treats output_item.done as authoritative for
+    // SSE items; compare that exact state, not another valid encrypted snapshot.
+    let recorded_items = if let Some(body) = &turn.response.body {
+        body["output"].as_array().unwrap().clone()
+    } else {
+        support::recorded_named_sse_events(turn)
+            .into_iter()
+            .filter(|event| event["type"] == "response.output_item.done")
+            .map(|event| event["item"].clone())
+            .collect()
+    };
+    for item in recorded_items.iter().filter(|item| item["type"] == "reasoning") {
+        let OutputItem::Reasoning(expected) = serde_json::from_value::<OutputItem>(item.clone()).unwrap() else {
+            panic!("recorded reasoning item")
+        };
+        let actual = response
+            .output
+            .iter()
+            .find_map(|item| match item {
+                OutputItem::Reasoning(reasoning) if reasoning.id == expected.id => Some(reasoning),
+                _ => None,
+            })
+            .expect("recorded reasoning identity must survive ingestion");
+        assert_eq!(actual.content, expected.content);
+        assert_eq!(actual.summary, expected.summary);
+        assert_eq!(actual.encrypted_content, expected.encrypted_content);
+        assert_eq!(actual.status, expected.status);
+        let input = OutputItem::Reasoning(actual.clone()).to_input_item().unwrap();
+        assert_eq!(
+            serde_json::to_value(input).unwrap(),
+            serde_json::to_value(OutputItem::Reasoning(expected)).unwrap()
+        );
+    }
 }
 
 #[tokio::test]
@@ -316,8 +350,8 @@ async fn recorded_nonstreaming_reasoning_matches_openai_contract() {
     assert_terminal_contract(&openai.turns[0]);
     assert_terminal_contract(&gateway.turns[0]);
 
-    assert_replayed_output(&replay_through_gateway(&openai.turns[0]).await);
-    assert_replayed_output(&replay_through_gateway(&gateway.turns[0]).await);
+    assert_replayed_output(&replay_through_gateway(&openai.turns[0]).await, &openai.turns[0]);
+    assert_replayed_output(&replay_through_gateway(&gateway.turns[0]).await, &gateway.turns[0]);
 }
 
 #[tokio::test]
@@ -330,6 +364,6 @@ async fn recorded_streaming_reasoning_matches_openai_contract() {
     let gateway_lifecycle = assert_streaming_contract(&gateway.turns[0]);
     assert_eq!(gateway_lifecycle, openai_lifecycle);
 
-    assert_replayed_output(&replay_through_gateway(&openai.turns[0]).await);
-    assert_replayed_output(&replay_through_gateway(&gateway.turns[0]).await);
+    assert_replayed_output(&replay_through_gateway(&openai.turns[0]).await, &openai.turns[0]);
+    assert_replayed_output(&replay_through_gateway(&gateway.turns[0]).await, &gateway.turns[0]);
 }

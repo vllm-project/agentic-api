@@ -1,5 +1,8 @@
 //! Conversation history item stored in the database.
 
+mod legacy_reasoning;
+
+use serde::Deserialize;
 use serde_json::Value;
 use std::convert::TryFrom;
 use std::fmt::Write;
@@ -61,16 +64,22 @@ impl Item {
         Some(value)
     }
 
-    /// Deserialize data column as `InputItem`.
+    /// Deserialize data column as `InputItem`, projecting pre-typed reasoning rows.
     #[must_use]
     pub fn as_input(&self) -> Option<InputItem> {
-        serde_json::from_value(self.data_without_storage_marker()?).ok()
+        let data = self.data_without_storage_marker()?;
+        InputItem::deserialize(&data)
+            .ok()
+            .or_else(|| self.legacy_reasoning(&data).map(InputItem::Reasoning))
     }
 
-    /// Deserialize data column as `OutputItem`.
+    /// Deserialize data column as `OutputItem`, projecting pre-typed reasoning rows.
     #[must_use]
     pub fn as_output(&self) -> Option<OutputItem> {
-        serde_json::from_value(self.data_without_storage_marker()?).ok()
+        let data = self.data_without_storage_marker()?;
+        OutputItem::deserialize(&data)
+            .ok()
+            .or_else(|| self.legacy_reasoning(&data).map(OutputItem::Reasoning))
     }
 
     /// Deserialize data column as either `InputItem` or `OutputItem`.
@@ -639,9 +648,9 @@ mod tests {
         ]);
         reasoning
             .summary
-            .push(serde_json::json!({"type": "summary_text", "text": "concise summary"}));
-        reasoning.encrypted_content = Some(serde_json::json!({"ciphertext": "opaque"}));
-        reasoning.status = Some("completed".to_owned());
+            .push(crate::types::ReasoningSummaryContent::new("concise summary"));
+        reasoning.encrypted_content = Some(crate::types::OpaqueReasoning::try_from("opaque".to_owned()).unwrap());
+        reasoning.status = Some(crate::types::ReasoningStatus::Completed);
         let stored = InOutItem::Output(OutputItem::Reasoning(reasoning));
         let stored_json = String::try_from(&stored).expect("serialization failed");
         assert!(stored_json.contains(STORED_ITEM_KIND_KEY));
@@ -660,12 +669,15 @@ mod tests {
         };
         assert_eq!(reasoning.id, "rs_1");
         assert_eq!(reasoning.content.len(), 2);
-        assert_eq!(reasoning.summary[0]["text"], "concise summary");
+        assert_eq!(reasoning.summary[0].text, "concise summary");
         assert_eq!(
-            reasoning.encrypted_content,
-            Some(serde_json::json!({"ciphertext": "opaque"}))
+            reasoning
+                .encrypted_content
+                .as_ref()
+                .map(crate::types::OpaqueReasoning::as_str),
+            Some("opaque")
         );
-        assert_eq!(reasoning.status.as_deref(), Some("completed"));
+        assert_eq!(reasoning.status, Some(crate::types::ReasoningStatus::Completed));
 
         let reconstructed = serde_json::to_value(OutputItem::Reasoning(reasoning)).expect("reasoning value");
         assert!(reconstructed.get(STORED_ITEM_KIND_KEY).is_none());

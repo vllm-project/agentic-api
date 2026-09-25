@@ -434,6 +434,35 @@ mod tests {
         assert!(ignore_eos.is_object(), "RequestPayload.ignore_eos is undocumented");
     }
 
+    #[test]
+    fn reasoning_schema_uses_typed_summary_state_and_status() {
+        let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec must serialize");
+        let wrapper = serde_json::json!({
+            "components": spec["components"], "$ref": "#/components/schemas/ReasoningOutput"
+        });
+        let validator = jsonschema::validator_for(&wrapper).expect("reasoning schema must resolve");
+        let valid = serde_json::json!({
+            "id": "rs_1", "content": [{"type":"reasoning_text","text":"thinking"}],
+            "summary": [{"type":"summary_text","text":"summary"}],
+            "encrypted_content": "opaque", "status": "completed"
+        });
+        assert!(validator.is_valid(&valid));
+        for (field, malformed) in [
+            ("encrypted_content", serde_json::json!({"ciphertext":"opaque"})),
+            ("summary", serde_json::json!(["untyped"])),
+            (
+                "content",
+                serde_json::json!([{"type":"summary_text","text":"wrong kind"}]),
+            ),
+            ("status", serde_json::json!("complete")),
+        ] {
+            let mut item = valid.clone();
+            item[field] = malformed;
+            assert!(!validator.is_valid(&item), "schema accepted malformed {field}");
+            assert!(serde_json::from_value::<agentic_core::ReasoningOutput>(item).is_err());
+        }
+    }
+
     /// Validates that JSON fixtures representing each tagged-enum variant
     /// pass the hand-written `OpenAPI` schema. Catches schema drift that
     /// structural tests (ref resolution, meta-schema) cannot.

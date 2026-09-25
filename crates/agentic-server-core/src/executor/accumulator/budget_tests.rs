@@ -276,7 +276,7 @@ fn reasoning_streamed_indexes_charge_containers_and_reconcile_with_done_text() {
     // Container already charged with the first delta; done grows the text by 3.
     assert_eq!(
         budget.used() - opening,
-        3 * RETAINED_CONTAINER_OVERHEAD_BYTES + "reasoning_text".len() + "abcdef".len()
+        3 * RETAINED_CONTAINER_OVERHEAD_BYTES + "abcdef".len()
     );
 }
 
@@ -452,14 +452,24 @@ fn nested_empty_json_values_exhaust_retained_budget_on_both_paths() {
 }
 
 #[test]
+fn typed_reasoning_parts_exhaust_retained_budget_even_without_text() {
+    for (field, kind) in [("content", "reasoning_text"), ("summary", "summary_text")] {
+        let mut item = json!({"id":"rs_1", "type":"reasoning", "content":[], "summary":[]});
+        item[field] = json!(vec![json!({"type":kind, "text":""}); 1024]);
+        reject_item_on_both_paths(&item);
+    }
+}
+
+#[test]
 fn unrestricted_retained_strings_exhaust_budget_on_both_paths() {
     let huge = "x".repeat(100_000);
     for item in [
         json!({"id":"msg_1","type":"message","role":huge,"status":"completed","content":[]}),
         json!({"id":"msg_1","type":"message","role":"assistant","status":"completed",
             "content":[{"type":huge,"text":"","annotations":[]}]}),
-        json!({"id":"rs_1","type":"reasoning","status":huge,"content":[],"summary":[]}),
-        json!({"id":"rs_1","type":"reasoning","content":[{"type":huge,"text":""}],"summary":[]}),
+        json!({"id":"rs_1","type":"reasoning","encrypted_content":huge,"content":[],"summary":[]}),
+        json!({"id":"rs_1","type":"reasoning","content":[{"type":"reasoning_text","text":huge}],"summary":[]}),
+        json!({"id":"rs_1","type":"reasoning","content":[],"summary":[{"type":"summary_text","text":huge}]}),
         json!({"id":"mcp_1","type":"mcp_call","server_label":"s","name":"tool","arguments":"{}",
             "error":{"type":huge,"content":[]}}),
         json!({"id":"mcp_1","type":"mcp_call","server_label":"s","name":"tool","arguments":"{}",

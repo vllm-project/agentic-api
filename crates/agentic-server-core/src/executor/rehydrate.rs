@@ -66,10 +66,7 @@ fn has_plaintext_reasoning(reasoning: &ReasoningOutput) -> bool {
 }
 
 fn has_opaque_reasoning_state(reasoning: &ReasoningOutput) -> bool {
-    reasoning
-        .encrypted_content
-        .as_ref()
-        .is_some_and(|encrypted| !encrypted.is_null())
+    reasoning.encrypted_content.is_some()
 }
 
 /// Reject opaque reasoning that vLLM cannot replay before any normal inference call.
@@ -425,13 +422,14 @@ mod tests {
         assert_eq!(pending[0].call_id, "live");
     }
 
-    fn reasoning_item(content: &[&str], encrypted_content: Option<serde_json::Value>) -> InputItem {
+    fn reasoning_item(content: &[&str], encrypted_content: Option<&str>) -> InputItem {
         InputItem::Reasoning(ReasoningOutput {
             id: "rs_prior".to_owned(),
             content: content.iter().map(|text| ReasoningTextContent::new(*text)).collect(),
-            summary: vec![serde_json::json!({"type": "summary_text", "text": "public summary"})],
-            encrypted_content,
-            status: Some("completed".to_owned()),
+            summary: vec![crate::types::ReasoningSummaryContent::new("public summary")],
+            encrypted_content: encrypted_content
+                .map(|text| crate::types::OpaqueReasoning::try_from(text.to_owned()).unwrap()),
+            status: Some(crate::types::ReasoningStatus::Completed),
         })
     }
 
@@ -439,7 +437,7 @@ mod tests {
     fn plaintext_reasoning_is_normalized_for_both_vllm_paths() {
         let mut input = ResponsesInput::Items(vec![reasoning_item(
             &["first continuation part", "second continuation part"],
-            Some(serde_json::json!({"ciphertext": "opaque-provider-state"})),
+            Some("opaque-provider-state"),
         )]);
 
         prepare_reasoning_for_vllm(&mut input).expect("plaintext reasoning is replayable");
@@ -457,17 +455,14 @@ mod tests {
             "first continuation part\nsecond continuation part"
         );
         assert!(reasoning.summary.is_empty());
-        assert_eq!(reasoning.status.as_deref(), Some("completed"));
+        assert_eq!(reasoning.status, Some(crate::types::ReasoningStatus::Completed));
         assert_eq!(reasoning.encrypted_content, None);
     }
 
     #[test]
     fn encrypted_reasoning_requires_nonempty_plaintext_content() {
         for content in [Vec::new(), vec![""], vec!["", ""]] {
-            let mut input = ResponsesInput::Items(vec![reasoning_item(
-                &content,
-                Some(serde_json::json!("opaque-provider-state")),
-            )]);
+            let mut input = ResponsesInput::Items(vec![reasoning_item(&content, Some("opaque-provider-state"))]);
 
             let error =
                 prepare_reasoning_for_vllm(&mut input).expect_err("encrypted-only reasoning must not reach vLLM");
@@ -484,11 +479,7 @@ mod tests {
 
     #[test]
     fn plaintext_reasoning_with_null_encrypted_state_is_normalized_without_summary() {
-        let mut item = reasoning_item(&["plaintext continuation"], Some(serde_json::Value::Null));
-        let InputItem::Reasoning(reasoning) = &mut item else {
-            panic!("expected reasoning item");
-        };
-        reasoning.content[0].type_ = "unexpected_provider_type".to_owned();
+        let item = reasoning_item(&["plaintext continuation"], None);
         let mut input = ResponsesInput::Items(vec![item]);
 
         prepare_reasoning_for_vllm(&mut input).expect("null encrypted state is valid");
@@ -499,7 +490,10 @@ mod tests {
         let InputItem::Reasoning(reasoning) = &items[0] else {
             panic!("expected reasoning item");
         };
-        assert_eq!(reasoning.content[0].type_, "reasoning_text");
+        assert_eq!(
+            reasoning.content[0].type_,
+            crate::types::ReasoningTextKind::ReasoningText
+        );
         assert_eq!(reasoning.content[0].text, "plaintext continuation");
         assert!(reasoning.summary.is_empty());
         assert_eq!(reasoning.encrypted_content, None);
@@ -507,8 +501,11 @@ mod tests {
 
     #[test]
     fn summary_only_reasoning_without_opaque_state_is_removed_from_vllm_copy() {
-        for encrypted_content in [None, Some(serde_json::Value::Null)] {
-            let mut input = ResponsesInput::Items(vec![reasoning_item(&[], encrypted_content)]);
+        for input in [
+            r#"[{"type":"reasoning","summary":[{"type":"summary_text","text":"public summary"}]}]"#,
+            r#"[{"type":"reasoning","summary":[{"type":"summary_text","text":"public summary"}],"encrypted_content":null}]"#,
+        ] {
+            let mut input: ResponsesInput = serde_json::from_str(input).unwrap();
 
             prepare_reasoning_for_vllm(&mut input).expect("summary-only reasoning has no usable vLLM state");
 
@@ -524,11 +521,8 @@ mod tests {
 
     #[test]
     fn validation_failure_does_not_partially_mutate_input() {
-        let valid = reasoning_item(
-            &["plaintext continuation"],
-            Some(serde_json::json!("first-opaque-state")),
-        );
-        let invalid = reasoning_item(&[], Some(serde_json::json!("second-opaque-state")));
+        let valid = reasoning_item(&["plaintext continuation"], Some("first-opaque-state"));
+        let invalid = reasoning_item(&[], Some("second-opaque-state"));
         let mut input = ResponsesInput::Items(vec![valid.clone(), invalid]);
 
         prepare_reasoning_for_vllm(&mut input).expect_err("the complete input must validate before normalization");

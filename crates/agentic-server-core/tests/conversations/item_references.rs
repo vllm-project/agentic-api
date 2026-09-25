@@ -90,7 +90,7 @@ async fn reused_item_occurrences_preserve_content_order_and_response_snapshot() 
         .await
         .unwrap()
         .unwrap();
-    let ids = response.history_item_ids_vec();
+    let ids = response.history_item_ids_vec().unwrap();
     let snapshot = agentic_core::storage::models::item::get_items(store.pool().unwrap(), &ids)
         .await
         .unwrap();

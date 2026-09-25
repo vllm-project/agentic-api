@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::storage::StorageError;
+use crate::storage::models::Item as StorageDbItem;
 use crate::types::io::{InputItem, OutputItem, ResponsesInput};
 use crate::utils::common::serialize_to_value;
 
@@ -72,6 +73,20 @@ impl From<InputItem> for InOutItem {
 impl From<OutputItem> for InOutItem {
     fn from(item: OutputItem) -> Self {
         Self::Output(item)
+    }
+}
+
+/// Decode retained history without silently omitting invalid records.
+///
+/// Legacy unmarked items retain the existing input/output discrimination policy.
+/// A malformed known item is an error, not an absent item or a replayable placeholder.
+impl TryFrom<&StorageDbItem> for InOutItem {
+    type Error = StorageError;
+
+    fn try_from(row: &StorageDbItem) -> Result<Self, Self::Error> {
+        row.as_inout().ok_or_else(|| StorageError::InvalidHistoryItem {
+            item_id: row.id.clone(),
+        })
     }
 }
 

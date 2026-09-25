@@ -371,7 +371,8 @@ access happen — those live in `tool/`, `executor/`, and `storage/` respectivel
   `ResponsesInput`), `output.rs` (outbound output items: messages, function calls, web
   search/MCP calls, reasoning — plus the `ApplyDone` trait described below), `tools.rs`
   (the normalized `FunctionTool` and `ToolChoice`, distinct from tool *declarations*),
-  `usage.rs` (token accounting structs). `ResponsesInput::model_input()` is the final
+  `reasoning.rs` (typed reasoning content, summaries, item status, and bounded opaque
+  state), and `usage.rs` (token accounting structs). `ResponsesInput::model_input()` is the final
   model-visibility boundary used by `RequestPayload::to_upstream_request`: it removes
   orchestration-only `McpListTools` and `CompactionTrigger` input items. A persisted
   `Compaction` item is different: the latest checkpoint supersedes earlier model
@@ -631,8 +632,10 @@ Retained-byte accounting stays in synchronous ingestion. `response_budget.rs` de
 one comprehensive `RetainedSize` measurement and `RetainedAccount` for charging growth
 and reconciling completed items. Every unbounded collection entry has a structural
 charge, including empty JSON values and web-search queries; unrestricted string fields
-such as `role`, content `type`, and reasoning `status` count by length. Bounded enums
-need no variable charge. Delta text and new part containers are charged before growth.
+such as message `role` and message content `type` count by length. Bounded enums,
+including reasoning content kinds and item status, need no variable charge. Reasoning
+text and summary parts each charge a container plus text bytes; opaque state charges
+its decoded string bytes. Delta text and new part containers are charged before growth.
 Completion uses the existing `ApplyDone`/`MergeDone` policy and measures its effect;
 reasoning text/summary completion measures only the inserted part and its corresponding
 streamed counter; shell command completion measures only its command and current buffer.
@@ -873,7 +876,14 @@ round that omits `usage` still reports the hidden rounds' counters.
   `From`/`TryFrom` impls: `ConversationData`/`ConversationSnapshot`, `ResponseData`/
   `ResponseMetadata` (parses the JSON metadata column into a typed struct),
   `InOutItem` (parses an `Item.data` JSON blob back into a typed `InputItem` or
-  `OutputItem`), and `StorageError`. `InOutItem::into_input_items` turns a full
+  `OutputItem`), and `StorageError`. Store rehydration uses `TryFrom<&Item>` and fails
+  if a row cannot be decoded; response rehydration also rejects missing referenced rows.
+  It must not silently omit malformed reasoning from a continuation.
+  `TryFrom<Response>` rejects malformed history references and effective metadata;
+  only SQL NULL keeps the legacy empty/default behavior. Versioned conversation
+  metadata lookup also rejects a missing or foreign captured response. Storage
+  errors omit parser diagnostics that could echo sensitive persisted fields.
+  `InOutItem::into_input_items` turns a full
   history into the `Vec<InputItem>` used for continuation processing: stored
   `InputItem`s pass through, while stored `OutputItem`s go through
   `OutputItem::to_input_item()`. Messages, reasoning, function/custom calls,

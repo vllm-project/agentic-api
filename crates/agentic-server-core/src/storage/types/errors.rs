@@ -23,6 +23,22 @@ pub enum StorageError {
     #[error("invalid conversation sequence for conversation '{conversation_id}' item '{item_id}'")]
     InvalidConversationSequence { conversation_id: String, item_id: String },
 
+    /// A referenced history item is missing or cannot be decoded.
+    ///
+    /// Never include the stored payload in this error: it may contain opaque state.
+    #[error("stored history item '{item_id}' is missing or invalid")]
+    InvalidHistoryItem { item_id: String },
+
+    /// Stored response history references cannot be decoded without losing context.
+    #[error("stored response '{response_id}' has invalid history references")]
+    InvalidResponseHistory { response_id: String },
+
+    /// Stored response metadata is invalid, or its captured response is missing.
+    ///
+    /// Deliberately omit the JSON parser error: its message can contain stored secrets.
+    #[error("stored response '{response_id}' has missing or invalid metadata")]
+    InvalidResponseMetadata { response_id: String },
+
     /// A conversation changed after its version was read.
     #[error("conversation changed while the response was being generated")]
     ConversationConflict { conversation_id: String },

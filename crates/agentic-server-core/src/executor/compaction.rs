@@ -1,4 +1,5 @@
 mod context;
+mod reasoning;
 mod summary;
 
 use super::telemetry::stages::CompactionTrigger;
@@ -233,20 +234,7 @@ fn add_input_item(estimate: &mut InputTokenEstimate, item: &InputItem) {
                 Err(_) => estimate.add_tokens(u64::MAX),
             }
         }
-        InputItem::Reasoning(reasoning) => {
-            estimate.add_text(&reasoning.id);
-            estimate.add_optional_text(reasoning.status.as_deref());
-            for content in &reasoning.content {
-                estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
-                estimate.add_text(&content.text);
-            }
-            for summary in &reasoning.summary {
-                estimate.add_json_value(summary);
-            }
-            if let Some(encrypted_content) = &reasoning.encrypted_content {
-                estimate.add_json_value(encrypted_content);
-            }
-        }
+        InputItem::Reasoning(item) => reasoning::add_reasoning(estimate, item),
         InputItem::Compaction(compaction) => {
             // `model_input` presents the checkpoint as one assistant output-text message.
             estimate.add_text("assistant");
@@ -699,24 +687,17 @@ mod tests {
 
     #[test]
     fn token_estimate_counts_large_json_numbers() {
-        assert_text_growth([
-            (
-                "reasoning numbers",
-                serde_json::json!([{"type": "reasoning", "id": "rs_1", "summary": [vec![1_u64; 64]]}]),
-                serde_json::json!([{"type": "reasoning", "id": "rs_1", "summary": [vec![u64::MAX; 64]]}]),
-            ),
-            (
-                "tool-search argument numbers",
-                serde_json::json!([{
-                    "type": "tool_search_call", "id": "ts_1", "call_id": "call_1",
-                    "arguments": {"values": vec![1_u64; 64]}
-                }]),
-                serde_json::json!([{
-                    "type": "tool_search_call", "id": "ts_1", "call_id": "call_1",
-                    "arguments": {"values": vec![u64::MAX; 64]}
-                }]),
-            ),
-        ]);
+        assert_text_growth([(
+            "tool-search argument numbers",
+            serde_json::json!([{
+                "type": "tool_search_call", "id": "ts_1", "call_id": "call_1",
+                "arguments": {"values": vec![1_u64; 64]}
+            }]),
+            serde_json::json!([{
+                "type": "tool_search_call", "id": "ts_1", "call_id": "call_1",
+                "arguments": {"values": vec![u64::MAX; 64]}
+            }]),
+        )]);
     }
 
     #[test]
