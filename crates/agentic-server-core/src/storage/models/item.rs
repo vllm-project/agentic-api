@@ -1,7 +1,10 @@
 //! Conversation history item stored in the database.
 
+mod insert;
+pub(crate) use insert::InsertItem;
+mod legacy_reasoning;
+
 use serde_json::Value;
-use std::convert::TryFrom;
 use std::fmt::Write;
 use tracing::warn;
 
@@ -9,10 +12,11 @@ use super::super::pool::{DbPool, DbResult, DbTransaction};
 use super::super::types::item::{InOutItem, ItemKind, STORED_ITEM_KIND_KEY};
 use crate::storage::{StorageError, StoreResult};
 use crate::types::conversations::ItemOrder;
-use crate::types::io::{InputItem, OutputItem};
+use crate::types::io::{InputItem, OutputItem, ReasoningOutput};
+use crate::types::reasoning_replay::MAX_REASONING_PROVENANCE_BYTES;
 use crate::utils::common::{deserialize_from_str_opt, utcnow_str, uuid7_str};
 
-const ITEM_COLUMN_COUNT: usize = 5;
+const ITEM_COLUMN_COUNT: usize = 6;
 const SEQUENCE_COLUMN_INDEX: usize = 4;
 const MAX_BIND_PARAMETERS: usize = 999;
 const MAX_ITEMS_PER_INSERT: usize = (MAX_BIND_PARAMETERS - 2) / (ITEM_COLUMN_COUNT + 1);
@@ -41,6 +45,8 @@ pub struct Item {
 
     /// Optional sequence number within conversation.
     pub seq: Option<i64>,
+    /// Versioned server-owned provenance, separate from untrusted public JSON.
+    pub reasoning_provenance: Option<String>,
 
     /// Tenant identifier for multi-tenancy isolation.
     pub tenant_id: Option<String>,
@@ -64,13 +70,39 @@ impl Item {
     /// Deserialize data column as `InputItem`.
     #[must_use]
     pub fn as_input(&self) -> Option<InputItem> {
-        serde_json::from_value(self.data_without_storage_marker()?).ok()
+        let data = self.data_without_storage_marker()?;
+        let mut item = serde_json::from_value(data.clone())
+            .ok()
+            .or_else(|| self.legacy_reasoning(&data).map(InputItem::Reasoning))?;
+        self.restore_provenance(match &mut item {
+            InputItem::Reasoning(reasoning) => Some(reasoning),
+            _ => None,
+        })?;
+        Some(item)
     }
 
     /// Deserialize data column as `OutputItem`.
     #[must_use]
     pub fn as_output(&self) -> Option<OutputItem> {
-        serde_json::from_value(self.data_without_storage_marker()?).ok()
+        let data = self.data_without_storage_marker()?;
+        let mut item = serde_json::from_value(data.clone())
+            .ok()
+            .or_else(|| self.legacy_reasoning(&data).map(OutputItem::Reasoning))?;
+        self.restore_provenance(match &mut item {
+            OutputItem::Reasoning(reasoning) => Some(reasoning),
+            _ => None,
+        })?;
+        Some(item)
+    }
+
+    fn restore_provenance(&self, reasoning: Option<&mut ReasoningOutput>) -> Option<()> {
+        if let Some(json) = &self.reasoning_provenance {
+            if json.len() > MAX_REASONING_PROVENANCE_BYTES {
+                return None;
+            }
+            reasoning?.replay_provenance = Some(deserialize_from_str_opt(json)?);
+        }
+        Some(())
     }
 
     /// Deserialize data column as either `InputItem` or `OutputItem`.
@@ -155,7 +187,7 @@ pub(crate) enum ItemSource {
 ///
 /// # Errors
 /// Returns an error if serialization fails or a supplied ID is empty or has an invalid prefix.
-pub(crate) fn serialize_new_items(items: Vec<InOutItem>, source: ItemSource) -> StoreResult<Vec<(String, String)>> {
+pub(crate) fn serialize_new_items(items: Vec<InOutItem>, source: ItemSource) -> StoreResult<Vec<InsertItem>> {
     items
         .into_iter()
         .enumerate()
@@ -180,8 +212,7 @@ pub(crate) fn serialize_new_items(items: Vec<InOutItem>, source: ItemSource) -> 
                 return Err(StorageError::Validation("item id cannot be an empty string".to_owned()));
             }
             let id = existing_id.map_or_else(|| uuid7_str(prefix.unwrap_or("item_")), str::to_owned);
-            let data = String::try_from(&item)?;
-            Ok((id, data))
+            InsertItem::from_item(id, &item)
         })
         .collect()
 }
@@ -193,9 +224,9 @@ pub(crate) fn serialize_new_items(items: Vec<InOutItem>, source: ItemSource) -> 
 ///
 /// # Errors
 /// Returns an error if insertion fails or an item already belongs to the conversation.
-pub async fn create_in_tx(
+pub(crate) async fn create_in_tx(
     tx: &mut DbTransaction<'_>,
-    items: Vec<(String, String)>,
+    items: Vec<InsertItem>,
     conversation_id: Option<&str>,
 ) -> StoreResult<Vec<Item>> {
     if items.is_empty() {
@@ -225,21 +256,25 @@ pub async fn create_in_tx(
     Ok(created)
 }
 
-async fn create_in_tx_without_conversation(
-    tx: &mut DbTransaction<'_>,
-    items: &[(String, String)],
-) -> DbResult<Vec<Item>> {
+async fn create_in_tx_without_conversation(tx: &mut DbTransaction<'_>, items: &[InsertItem]) -> DbResult<Vec<Item>> {
     let now = utcnow_str();
     let values_clause = item_values_clause(items.len(), 1, false);
     let sql = format!(
-        "WITH incoming (id, data, created_at, conversation_id, seq) AS (VALUES {values_clause}) \
-                 INSERT INTO items (id, data, created_at, conversation_id, seq, tenant_id) \
-                 SELECT incoming.*, 'default_tenant' FROM incoming RETURNING *"
+        "WITH incoming (id, data, created_at, conversation_id, seq, reasoning_provenance) \
+             AS (VALUES {values_clause}) \
+         INSERT INTO items (id, data, created_at, conversation_id, seq, reasoning_provenance, tenant_id) \
+         SELECT incoming.*, 'default_tenant' FROM incoming RETURNING *"
     );
 
     let mut query = sqlx::query_as::<_, Item>(&sql);
-    for (id, data) in items {
-        query = query.bind(id).bind(data).bind(now).bind(None::<&str>).bind(None::<i64>);
+    for item in items {
+        query = query
+            .bind(&item.id)
+            .bind(&item.data)
+            .bind(now)
+            .bind(None::<&str>)
+            .bind(None::<i64>)
+            .bind(&item.reasoning_provenance);
     }
 
     query.fetch_all(&mut **tx).await
@@ -247,7 +282,7 @@ async fn create_in_tx_without_conversation(
 
 async fn create_in_tx_with_next_conversation_seq(
     tx: &mut DbTransaction<'_>,
-    items: &[(String, String)],
+    items: &[InsertItem],
     conversation_id: &str,
     first_inserted_sequence: Option<i64>,
 ) -> StoreResult<Vec<Item>> {
@@ -256,15 +291,18 @@ async fn create_in_tx_with_next_conversation_seq(
     let sql = format!(
         "WITH next_seq AS ( \
              SELECT COALESCE(MAX(seq), -1) + 1 AS start FROM items WHERE conversation_id = $1 \
-         ), incoming (id, data, created_at, conversation_id, seq, entry_id) AS ( \
+         ), incoming (id, data, created_at, conversation_id, seq, reasoning_provenance, entry_id) AS ( \
              VALUES {values_clause} \
          ), owner AS ( \
              SELECT COALESCE(tenant_id, 'default_tenant') AS tenant_id FROM conversations WHERE id = $1 \
          ) \
-         INSERT INTO items (id, data, created_at, conversation_id, seq, reference_id, tenant_id) \
+         INSERT INTO items \
+             (id, data, created_at, conversation_id, seq, reference_id, tenant_id, reasoning_provenance) \
          SELECT CASE WHEN source.id IS NULL THEN incoming.id ELSE incoming.entry_id END, \
                 COALESCE(source.data, incoming.data), COALESCE(source.created_at, incoming.created_at), \
-                incoming.conversation_id, incoming.seq, source.id, owner.tenant_id \
+                incoming.conversation_id, incoming.seq, source.id, owner.tenant_id, \
+                CASE WHEN source.id IS NULL THEN incoming.reasoning_provenance \
+                     ELSE source.reasoning_provenance END \
          FROM incoming CROSS JOIN owner \
          LEFT JOIN items source ON source.id = incoming.id AND source.tenant_id = owner.tenant_id \
              AND (CAST($2 AS BIGINT) IS NULL OR source.conversation_id IS NULL \
@@ -282,13 +320,15 @@ async fn create_in_tx_with_next_conversation_seq(
         .bind(conversation_id)
         .bind(first_inserted_sequence);
     #[allow(clippy::cast_possible_wrap)]
-    for (idx, (id, data)) in items.iter().enumerate() {
+    for (idx, item) in items.iter().enumerate() {
         query = query
-            .bind(id)
-            .bind(data)
+            .bind(&item.id)
+            .bind(&item.data)
             .bind(now)
             .bind(conversation_id)
             .bind(idx as i64)
+            // A referenced item keeps the stored source's data and provenance.
+            .bind(&item.reasoning_provenance)
             .bind(uuid7_str("item_"));
     }
 
@@ -489,10 +529,10 @@ mod tests {
             ItemSource::ConversationApi,
         )
         .unwrap();
-        assert_eq!(rows[0].0, "msg_supplied");
-        assert_eq!(rows[1].0, "msg_generated");
-        assert!(rows[2].0.starts_with("msg_"));
-        assert_eq!(rows[3].0, "fc_supplied");
+        assert_eq!(rows[0].id, "msg_supplied");
+        assert_eq!(rows[1].id, "msg_generated");
+        assert!(rows[2].id.starts_with("msg_"));
+        assert_eq!(rows[3].id, "fc_supplied");
     }
 
     #[test]
@@ -503,7 +543,7 @@ mod tests {
         .unwrap();
         let result = serialize_new_items(vec![InOutItem::Input(input)], ItemSource::ConversationApi);
         assert!(result.is_err());
-        let err = result.unwrap_err();
+        let err = result.err().unwrap();
         assert!(err.is_validation());
         assert!(matches!(err, StorageError::InvalidItemId { param, .. } if param == "items[0].id"));
     }
@@ -518,14 +558,14 @@ mod tests {
         assert!(result.is_ok());
         let rows = result.unwrap();
         assert_eq!(rows.len(), 1);
-        assert!(rows[0].0.starts_with("msg_"));
+        assert!(rows[0].id.starts_with("msg_"));
     }
 
     #[test]
     fn item_values_clause_numbers_plain_rows() {
         assert_eq!(
             item_values_clause(2, 1, false),
-            "($1, $2, $3, $4, $5), ($6, $7, $8, $9, $10)"
+            "($1, $2, $3, $4, $5, $6), ($7, $8, $9, $10, $11, $12)"
         );
     }
 
@@ -533,8 +573,8 @@ mod tests {
     fn item_values_clause_numbers_conversation_rows_after_cte_bind() {
         assert_eq!(
             item_values_clause(2, 2, true),
-            "($2, $3, $4, $5, (SELECT start + $6 FROM next_seq), $7), \
-             ($8, $9, $10, $11, (SELECT start + $12 FROM next_seq), $13)"
+            "($2, $3, $4, $5, (SELECT start + $6 FROM next_seq), $7, $8), \
+             ($9, $10, $11, $12, (SELECT start + $13 FROM next_seq), $14, $15)"
         );
     }
 
@@ -544,9 +584,9 @@ mod tests {
             .await
             .expect("create in-memory database");
         let items = (0..=MAX_BIND_PARAMETERS)
-            .map(|index| (format!("item_{index}"), "{}".to_owned()))
+            .map(|index| InsertItem::unmarked(format!("item_{index}"), "{}".to_owned()))
             .collect::<Vec<_>>();
-        let ids = items.iter().map(|(id, _)| id.clone()).collect::<Vec<_>>();
+        let ids = items.iter().map(|item| item.id.clone()).collect::<Vec<_>>();
         let mut transaction = pool.begin().await.expect("begin transaction");
         let created = create_in_tx(&mut transaction, items, None)
             .await
@@ -569,7 +609,7 @@ mod tests {
             .expect("create conversation");
         let item_count = MAX_ITEMS_PER_INSERT + 1;
         let items = (0..item_count)
-            .map(|index| (format!("conversation_item_{index}"), "{}".to_owned()))
+            .map(|index| InsertItem::unmarked(format!("conversation_item_{index}"), "{}".to_owned()))
             .collect::<Vec<_>>();
         let mut transaction = pool.begin().await.expect("begin transaction");
         let created = create_in_tx(&mut transaction, items, Some(conversation_id))
@@ -605,6 +645,7 @@ mod tests {
             created_at: 1_704_067_200,
             conversation_id: Some("conv_456".to_string()),
             seq: Some(1),
+            reasoning_provenance: None,
             tenant_id: None,
             reference_id: None,
         };
@@ -622,6 +663,7 @@ mod tests {
             created_at: 1_704_067_200,
             conversation_id: None,
             seq: None,
+            reasoning_provenance: None,
             tenant_id: None,
             reference_id: None,
         };
@@ -639,9 +681,9 @@ mod tests {
         ]);
         reasoning
             .summary
-            .push(serde_json::json!({"type": "summary_text", "text": "concise summary"}));
-        reasoning.encrypted_content = Some(serde_json::json!({"ciphertext": "opaque"}));
-        reasoning.status = Some("completed".to_owned());
+            .push(crate::types::ReasoningSummaryContent::new("concise summary"));
+        reasoning.encrypted_content = Some(crate::types::OpaqueReasoning::try_from("opaque".to_owned()).unwrap());
+        reasoning.status = Some(crate::types::ReasoningStatus::Completed);
         let stored = InOutItem::Output(OutputItem::Reasoning(reasoning));
         let stored_json = String::try_from(&stored).expect("serialization failed");
         assert!(stored_json.contains(STORED_ITEM_KIND_KEY));
@@ -651,6 +693,7 @@ mod tests {
             created_at: 1_704_067_200,
             conversation_id: None,
             seq: None,
+            reasoning_provenance: None,
             tenant_id: None,
             reference_id: None,
         };
@@ -660,12 +703,15 @@ mod tests {
         };
         assert_eq!(reasoning.id, "rs_1");
         assert_eq!(reasoning.content.len(), 2);
-        assert_eq!(reasoning.summary[0]["text"], "concise summary");
+        assert_eq!(reasoning.summary[0].text, "concise summary");
         assert_eq!(
-            reasoning.encrypted_content,
-            Some(serde_json::json!({"ciphertext": "opaque"}))
+            reasoning
+                .encrypted_content
+                .as_ref()
+                .map(crate::types::OpaqueReasoning::as_str),
+            Some("opaque")
         );
-        assert_eq!(reasoning.status.as_deref(), Some("completed"));
+        assert_eq!(reasoning.status, Some(crate::types::ReasoningStatus::Completed));
 
         let reconstructed = serde_json::to_value(OutputItem::Reasoning(reasoning)).expect("reasoning value");
         assert!(reconstructed.get(STORED_ITEM_KIND_KEY).is_none());
@@ -686,6 +732,7 @@ mod tests {
             created_at: 1_704_067_200,
             conversation_id: None,
             seq: None,
+            reasoning_provenance: None,
             tenant_id: None,
             reference_id: None,
         };
@@ -713,6 +760,7 @@ mod tests {
             created_at: 1_704_067_200,
             conversation_id: None,
             seq: None,
+            reasoning_provenance: None,
             tenant_id: None,
             reference_id: None,
         };
@@ -750,6 +798,7 @@ mod tests {
             created_at: 1_704_067_200,
             conversation_id: None,
             seq: None,
+            reasoning_provenance: None,
             tenant_id: None,
             reference_id: None,
         };
@@ -794,6 +843,7 @@ mod tests {
                 created_at: 1_704_067_200,
                 conversation_id: None,
                 seq: Some(idx.try_into().expect("seq")),
+                reasoning_provenance: None,
                 tenant_id: None,
                 reference_id: None,
             })
@@ -829,6 +879,7 @@ mod tests {
             created_at: 1_704_067_200,
             conversation_id: None,
             seq: None,
+            reasoning_provenance: None,
             tenant_id: None,
             reference_id: None,
         };
@@ -871,7 +922,9 @@ mod item_id_tests {
             serialize_new_items(vec![item], ItemSource::ConversationApi).expect("matching public ID prefix");
             value["id"] = json!("wrong_1");
             let item = stored(value);
-            let error = serialize_new_items(vec![item], ItemSource::ConversationApi).unwrap_err();
+            let error = serialize_new_items(vec![item], ItemSource::ConversationApi)
+                .err()
+                .unwrap();
             assert!(error.is_validation());
             assert!(matches!(error, StorageError::InvalidItemId { param, .. } if param == "items[0].id"));
         }
@@ -896,7 +949,7 @@ mod item_id_tests {
                 stored(json!({"type":"message", "role":"user", "content":"valid"})),
                 stored(json!({"type":"message", "id":id, "role":"user", "content":"invalid"})),
             ];
-            let error = serialize_new_items(items, ItemSource::ConversationApi).unwrap_err();
+            let error = serialize_new_items(items, ItemSource::ConversationApi).err().unwrap();
             assert!(matches!(&error, StorageError::InvalidItemId { param, .. } if param == "items[1].id"));
             assert_eq!(
                 error.to_string(),

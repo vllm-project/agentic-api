@@ -12,7 +12,6 @@ use super::streaming::run_stream;
 use crate::executor::error::ExecutorResult;
 use crate::executor::inference::BoxStream;
 use crate::executor::prepare::prepare_request_tools;
-use crate::executor::rehydrate::validate_reasoning_for_vllm;
 use crate::executor::request::ExecutionContext;
 use crate::executor::telemetry::{Api, ExecutionSpan, Route};
 use crate::types::request_response::{RequestPayload, ResponsePayload};
@@ -133,9 +132,11 @@ impl ExecuteRequest {
                 self.continuation,
             )
             .await?;
-            if !ctx.enriched_request.input.has_compaction_trigger() {
-                validate_reasoning_for_vllm(&ctx.enriched_request.input)?;
-            }
+            crate::executor::replay::validate_initial_input(
+                &self.exec_ctx,
+                &ctx.enriched_request,
+                self.client_auth.as_deref(),
+            )?;
             prepare_request_tools(ctx, &self.exec_ctx.conv_handler, &self.exec_ctx.resp_handler).await
         }
         .await;

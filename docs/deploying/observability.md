@@ -119,7 +119,7 @@ inference rounds, persistence after the last round) is attributed to it.
 | `agentic.queue.wait` | WebSocket only: seconds between admission and dispatch, or discard while queued |
 | `agentic.execution.outcome` | `completed` \| `incomplete` \| `failed` \| `cancelled` |
 | `agentic.delivery.outcome` | `delivered` \| `disconnected` \| `not_started` |
-| `error.type` | On `failed` only, a bounded category derived from the error's *kind*, never its message: `storage`, `persistence`, `conversation_locked`, `upstream_status`, `upstream_transport`, `upstream_error`, `network`, `parse`, `stream`, `not_found`, `invalid_request`, `payload_too_large`, `resource_limit`, `round_budget`, `conflict`, `compaction`, `tool`, or `panic` |
+| `error.type` | On `failed` only, a bounded category derived from the error's *kind*, never its message: `storage`, `persistence`, `conversation_locked`, `upstream_status`, `upstream_transport`, `upstream_error`, `network`, `parse`, `stream`, `not_found`, `invalid_request`, `payload_too_large`, `resource_limit`, `round_budget`, `conflict`, `compaction`, `tool`, `panic`, or `reasoning_replay` |
 
 Execution and delivery are recorded separately because they answer different
 questions:

@@ -17,6 +17,7 @@ use agentic_core::types::request_response::{CompactRequest, RequestPayload, Resp
 use super::super::common::{
     convert_response, executor_error_response, extract_bearer, read_bytes, read_json, sse_response,
 };
+use super::super::opaque_request::{OpaqueRequestTransport, validate_opaque_request_fields};
 use crate::app::AppState;
 
 type RoutingPayload = RequestPayload<RawValue>;
@@ -72,9 +73,15 @@ pub async fn responses(State(state): State<AppState>, req: Request) -> Response 
         Ok(payload) => payload,
         Err(error) => return executor_error_response(error.into()),
     };
+    if state.exec_ctx.responses_config.reasoning_replay_profile.is_some() {
+        if let Err(error) = validate_opaque_request_fields(&bytes, OpaqueRequestTransport::Http) {
+            return executor_error_response(error.into());
+        }
+    }
 
     let has_tool_search_state = ToolSearchHandler::request_has_state(&routing_payload);
-    let should_execute = routing_payload.store
+    let should_execute = state.exec_ctx.responses_config.reasoning_replay_profile.is_some()
+        || routing_payload.store
         || routing_payload.previous_response_id.is_some()
         || has_tool_search_state
         || routing_payload.in_process_feature().is_some();

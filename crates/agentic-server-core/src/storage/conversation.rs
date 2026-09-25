@@ -79,7 +79,8 @@ impl ConversationStore {
     ///
     /// # Errors
     ///
-    /// Returns an error if a stored item is missing its sequence number or if the database query fails.
+    /// Returns an error if a stored item is invalid or missing its sequence number,
+    /// or if the database query fails.
     pub async fn rehydrate(&self, conversation_id: &str) -> StoreResult<Vec<InOutItem>> {
         Ok(self.rehydrate_snapshot(conversation_id).await?.items)
     }
@@ -88,7 +89,8 @@ impl ConversationStore {
     ///
     /// # Errors
     ///
-    /// Returns an error if a stored item is missing its sequence number or if the database query fails.
+    /// Returns an error if a stored item is invalid or missing its sequence number,
+    /// or if the database query fails.
     pub async fn rehydrate_snapshot(&self, conversation_id: &str) -> StoreResult<ConversationSnapshot> {
         let pool = self.pool()?;
         let snapshot_rows = conversation::get_snapshot(pool, conversation_id).await?;
@@ -105,8 +107,8 @@ impl ConversationStore {
             items: snapshot_rows
                 .items
                 .into_iter()
-                .filter_map(|row| row.as_inout())
-                .collect(),
+                .map(|row| InOutItem::try_from(&row))
+                .collect::<StoreResult<_>>()?,
             version: ConversationVersion {
                 last_sequence,
                 response_id: snapshot_rows.latest_response_id,
@@ -119,7 +121,8 @@ impl ConversationStore {
     ///
     /// # Errors
     ///
-    /// Returns an error if either targeted database lookup fails.
+    /// Returns an error if the captured response is missing, its metadata is invalid,
+    /// or the database lookup fails. Legacy versions without a response return `None`.
     pub async fn response_metadata_at_version(
         &self,
         conversation_id: &str,
@@ -129,8 +132,13 @@ impl ConversationStore {
             return Ok(None);
         };
         let pool = self.pool()?;
-        let response = response::get_conversation_turn(pool, conversation_id, response_id).await?;
-        Ok(response.and_then(|row| row.metadata_as()))
+        let invalid_metadata = || StorageError::InvalidResponseMetadata {
+            response_id: response_id.clone(),
+        };
+        let response = response::get_conversation_turn(pool, conversation_id, response_id)
+            .await?
+            .ok_or_else(invalid_metadata)?;
+        response.metadata_as().map_err(|_| invalid_metadata())
     }
 
     /// Persists conversation turn with new items and response metadata.

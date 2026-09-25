@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 
 use agentic_core::executor::accumulator::ResponseAccumulator;
 use agentic_core::executor::request::RequestContext;
-use agentic_core::executor::{UpstreamBody, decode_upstream};
+use agentic_core::executor::{ExecutorError, UpstreamBody, decode_upstream};
 use agentic_core::types::io::OutputItem;
 use agentic_core::types::request_response::RequestPayload;
+use agentic_core::types::upstream_identity::UpstreamModelError;
 use serde_json::json;
 
 fn request_context() -> RequestContext {
@@ -23,6 +24,7 @@ fn request_context() -> RequestContext {
         response_id: "resp_reserved".to_owned(),
         conversation_id: None,
         conversation_version: None,
+        recorded_output_prefix: agentic_core::types::turn_history::RecordedOutputPrefix::default(),
         continuation: None,
     }
 }
@@ -305,6 +307,7 @@ async fn strict_relay_decoder_accepts_compatible_recorded_responses_streams() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cassettes");
     let mut decoded = 0;
     let mut rejected = Vec::new();
+    let mut known_model_conflicts = 0;
 
     for path in yaml_files(&root) {
         for (turn_index, chunks) in response_streams(&path).into_iter().enumerate() {
@@ -317,6 +320,15 @@ async fn strict_relay_decoder_accepts_compatible_recorded_responses_streams() {
                 .map(|(payload, _)| payload)
             {
                 Ok(_) => decoded += 1,
+                // This capture forwards the resolved model early but echoes the
+                // request alias at completion. Strict model evidence rejects it;
+                // upstream_model_provenance_test verifies lenient compatibility.
+                Err(ExecutorError::UpstreamModel(UpstreamModelError::Changed))
+                    if turn_index == 0
+                        && path.ends_with("reasoning/responses/reasoning-gateway-gpt-5.6-streaming.yaml") =>
+                {
+                    known_model_conflicts += 1;
+                }
                 Err(error) => rejected.push(format!(
                     "{} turn {}: {error}",
                     path.strip_prefix(&root).expect("cassette below root").display(),
@@ -345,5 +357,6 @@ async fn strict_relay_decoder_accepts_compatible_recorded_responses_streams() {
         "the recorded call-ID incompatibility baseline changed:\n{}",
         rejected.join("\n")
     );
+    assert_eq!(known_model_conflicts, 1, "the recorded model-conflict baseline changed");
     assert!(decoded >= 50, "decoded only {decoded} recorded Responses SSE streams");
 }

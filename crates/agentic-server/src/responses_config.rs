@@ -32,6 +32,8 @@ pub(crate) fn resolve_responses_config(file: &ResponsesFileConfig) -> Result<Res
     let max_stream_event_bytes =
         parse_env_nonzero_usize(MAX_STREAM_EVENT_BYTES_ENV, max_stream_event_bytes_default)?.get();
     let responses_config = ResponsesConfig {
+        reasoning_replay_policy: file.reasoning_replay_policy.unwrap_or_default(),
+        reasoning_replay_profile: file.reasoning_replay_profile,
         max_retained_bytes,
         max_upstream_json_bytes,
         max_upstream_sse_line_bytes,
@@ -43,6 +45,8 @@ pub(crate) fn resolve_responses_config(file: &ResponsesFileConfig) -> Result<Res
 
 pub(crate) fn generated_responses_file_config() -> ResponsesFileConfig {
     ResponsesFileConfig {
+        reasoning_replay_policy: None,
+        reasoning_replay_profile: None,
         max_retained_bytes: environment_value(MAX_RETAINED_RESPONSE_BYTES_ENV)
             .and_then(|value| value.parse::<NonZeroUsize>().ok()),
         max_upstream_json_bytes: environment_value(MAX_UPSTREAM_JSON_BYTES_ENV)

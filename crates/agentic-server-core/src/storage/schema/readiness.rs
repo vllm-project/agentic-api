@@ -1,4 +1,4 @@
-//! Persistence availability probes.
+//! Persistence probes use the same item insert path as ordinary writes.
 
 use super::{DatabaseBackend, DbPool, DbResult};
 
@@ -18,7 +18,10 @@ pub(crate) async fn verify_persistence_writable(pool: &DbPool) -> DbResult<()> {
         crate::storage::models::conversation::lock_in_tx(&mut transaction, &conversation_id).await?;
         crate::storage::models::item::create_in_tx(
             &mut transaction,
-            vec![(item_id.clone(), "{}".to_owned())],
+            vec![crate::storage::models::item::InsertItem::unmarked(
+                item_id.clone(),
+                "{}".to_owned(),
+            )],
             Some(&conversation_id),
         )
         .await
@@ -86,6 +89,9 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                     "PostgreSQL persistence tables are unavailable, read-only, or missing required privileges".into(),
                 ));
             }
+            sqlx::query("SELECT reasoning_provenance FROM items LIMIT 0")
+                .execute(&mut *connection)
+                .await?;
         }
         DatabaseBackend::Sqlite => {
             let query_only: i64 = sqlx::query_scalar("PRAGMA query_only")
@@ -96,7 +102,7 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
             }
             for statement in [
                 "SELECT id FROM conversations LIMIT 0",
-                "SELECT id FROM items LIMIT 0",
+                "SELECT id, reasoning_provenance FROM items LIMIT 0",
                 "SELECT id FROM responses LIMIT 0",
             ] {
                 sqlx::query(statement).execute(&mut *connection).await?;
@@ -107,4 +113,36 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn readiness_requires_provenance_column_without_backfilling_legacy_state() {
+        let pool = crate::storage::create_pool(Some("sqlite://?mode=memory"))
+            .await
+            .unwrap();
+        let mut migrations = sqlx::migrate!("./migrations");
+        migrations.migrations = migrations
+            .iter()
+            .filter(|migration| migration.version < 7)
+            .cloned()
+            .collect::<Vec<_>>()
+            .into();
+        migrations.run(pool.as_ref()).await.unwrap();
+        assert!(verify_persistence_ready(pool.as_ref()).await.is_err());
+        crate::storage::SchemaManager::new(pool.as_ref())
+            .run_migrations()
+            .await
+            .unwrap();
+        verify_persistence_ready(pool.as_ref()).await.unwrap();
+        verify_persistence_writable(pool.as_ref()).await.unwrap();
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM items")
+            .fetch_one(pool.as_ref())
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "the write probe rolls back");
+    }
 }

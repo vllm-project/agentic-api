@@ -112,6 +112,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "serde_yml",
+ "sha2 0.10.9",
  "sqlx",
  "sse-stream",
  "thiserror",

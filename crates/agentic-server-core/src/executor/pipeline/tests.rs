@@ -66,7 +66,7 @@ fn ignored_lines_keep_pending_and_gateway_deferral_boundaries() {
             assert_eq!(result.defer_from_output_index, Some(2));
         }
     }
-    assert_eq!(pipeline.finish("model", None, None).unwrap().output.len(), 1);
+    assert_eq!(pipeline.finish("model", None, None).unwrap().payload.output.len(), 1);
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn finish_applies_strict_and_lenient_eof_policy_and_folds_unfinished_items() {
         match validation {
             Validation::Strict => assert!(result.unwrap_err().to_string().contains("without a terminal event")),
             Validation::Lenient => {
-                let payload = result.unwrap();
+                let payload = result.unwrap().payload;
                 assert_eq!(payload.status, "completed");
                 assert_eq!(payload.model, "model");
                 assert_eq!(payload.previous_response_id.as_deref(), Some("resp_previous"));
@@ -122,7 +122,7 @@ fn finish_preserves_terminal_metadata_under_both_policies() {
                     "usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}
                 }}),
             );
-            let payload = pipeline.finish("model", None, None).unwrap();
+            let payload = pipeline.finish("model", None, None).unwrap().payload;
             assert_eq!(payload.status, if status == "failed" { "error" } else { status });
             assert_eq!(payload.id, "resp_1");
             assert_eq!(payload.conversation_id.as_deref(), Some("conv_1"));
@@ -165,9 +165,9 @@ fn unfinished_native_and_synthetic_search_require_an_aborted_response() {
             let result = pipeline.finish("model", None, None);
             match terminal {
                 None => assert!(result.unwrap_err().to_string().contains("invalid tool-search call")),
-                Some("response.failed") => assert!(result.unwrap().output.is_empty()),
+                Some("response.failed") => assert!(result.unwrap().payload.output.is_empty()),
                 Some(_) => {
-                    let payload = result.unwrap();
+                    let payload = result.unwrap().payload;
                     let [OutputItem::ToolSearchCall(call)] = payload.output.as_slice() else {
                         panic!("public incomplete search");
                     };

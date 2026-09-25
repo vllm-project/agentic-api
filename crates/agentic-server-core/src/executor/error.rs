@@ -3,7 +3,11 @@ use thiserror::Error;
 
 use crate::StorageError;
 use crate::tool::ToolError;
+use crate::types::reasoning_replay::ReasoningReplayError;
 use crate::utils::common::serialize_to_vec_or_default;
+
+mod opaque;
+pub use opaque::OpaqueUpstreamError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResourceLimit {
@@ -27,6 +31,18 @@ impl std::fmt::Display for ResourceLimit {
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum ExecutorError {
+    /// Request-owned streaming orchestration panicked. Never forward panic data.
+    #[error("stream producer panicked")]
+    StreamProducerPanicked,
+    /// Invalid provider data with redacted diagnostics and a retained typed cause.
+    #[error(transparent)]
+    OpaqueUpstream(#[from] OpaqueUpstreamError),
+    /// Upstream model evidence is malformed or contradictory.
+    #[error(transparent)]
+    UpstreamModel(#[from] crate::types::upstream_identity::UpstreamModelError),
+    /// A server-selected reasoning replay policy cannot safely execute.
+    #[error(transparent)]
+    ReasoningReplay(#[from] crate::types::reasoning_replay::ReasoningReplayError),
     /// A storage layer operation failed.
     #[error("storage error: {0}")]
     Storage(#[from] StorageError),
@@ -150,6 +166,22 @@ impl ExecutorError {
     #[must_use]
     pub fn http_status(&self) -> StatusCode {
         match self.client_visible_error() {
+            Self::ReasoningReplay(error) => match error {
+                ReasoningReplayError::ModelMismatch
+                | ReasoningReplayError::MissingCredential
+                | ReasoningReplayError::UnsupportedCompaction
+                | ReasoningReplayError::UnsupportedParameter(_)
+                | ReasoningReplayError::UnsupportedWireField
+                | ReasoningReplayError::UnknownProvenance
+                | ReasoningReplayError::IncompatibleProvenance
+                | ReasoningReplayError::MissingOpaqueState
+                | ReasoningReplayError::UnfinishedReasoning => StatusCode::BAD_REQUEST,
+                ReasoningReplayError::ReportedModelMismatch => StatusCode::BAD_GATEWAY,
+                ReasoningReplayError::OpaqueNotEnabled
+                | ReasoningReplayError::UnexpectedProfile
+                | ReasoningReplayError::MissingProfile
+                | ReasoningReplayError::EndpointMismatch => StatusCode::INTERNAL_SERVER_ERROR,
+            },
             Self::Storage(e) if e.is_not_found() => StatusCode::NOT_FOUND,
             Self::Storage(e) if e.is_validation() => StatusCode::BAD_REQUEST,
             Self::LLMRequest { status, .. } | Self::LLMTransport { status, .. } => *status,
@@ -163,7 +195,9 @@ impl ExecutorError {
                 | ToolError::InvalidUpstreamToolSearch
                 | ToolError::UpstreamWithheldFunctionCall,
             )
-            | Self::CompactionFailed { .. } => StatusCode::BAD_GATEWAY,
+            | Self::CompactionFailed { .. }
+            | Self::UpstreamModel(_)
+            | Self::OpaqueUpstream(_) => StatusCode::BAD_GATEWAY,
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
             Self::ParseError(_) => StatusCode::UNPROCESSABLE_ENTITY,
@@ -179,6 +213,11 @@ impl ExecutorError {
     #[must_use]
     pub fn error_type(&self) -> &'static str {
         match self.client_visible_error() {
+            Self::ReasoningReplay(_) => match self.http_status() {
+                StatusCode::BAD_REQUEST => "invalid_request_error",
+                StatusCode::BAD_GATEWAY => "upstream_error",
+                _ => "server_error",
+            },
             Self::ConversationLocked { .. }
             | Self::Tool(ToolError::Config(_) | ToolError::MissingOutput { .. })
             | Self::InvalidRequest(_)
@@ -190,7 +229,11 @@ impl ExecutorError {
             Self::Storage(e) if e.is_not_found() => "not_found",
             Self::Storage(e) if e.is_validation() => "invalid_request_error",
             Self::Conflict(_) => "conflict_error",
-            Self::LLMRequest { .. } | Self::LLMTransport { .. } | Self::CompactionFailed { .. } => "upstream_error",
+            Self::LLMRequest { .. }
+            | Self::LLMTransport { .. }
+            | Self::CompactionFailed { .. }
+            | Self::UpstreamModel(_)
+            | Self::OpaqueUpstream(_) => "upstream_error",
             Self::ResourceLimitExceeded { limit, .. } => match limit {
                 ResourceLimit::UpstreamSseLine | ResourceLimit::UpstreamJsonBody => "upstream_error",
                 ResourceLimit::ResponseBudget | ResourceLimit::StreamEvent => "server_error",
@@ -208,6 +251,8 @@ impl ExecutorError {
     #[must_use]
     pub fn error_code(&self) -> &'static str {
         match self.client_visible_error() {
+            Self::OpaqueUpstream(_) => "invalid_upstream_response",
+            Self::ReasoningReplay(_) => "reasoning_replay_incompatible",
             Self::ConversationLocked { .. } => "conversation_locked",
             Self::PreviousResponseNotFound { .. } => "previous_response_not_found",
             Self::Conflict(_) => "response_already_stored",
@@ -223,12 +268,20 @@ impl ExecutorError {
     #[must_use]
     pub fn error_param(&self) -> Option<&str> {
         match self.client_visible_error() {
+            Self::ReasoningReplay(ReasoningReplayError::ModelMismatch) => Some("model"),
+            Self::ReasoningReplay(ReasoningReplayError::UnsupportedParameter(field)) => Some(field.as_str()),
+            Self::ReasoningReplay(
+                ReasoningReplayError::UnknownProvenance
+                | ReasoningReplayError::IncompatibleProvenance
+                | ReasoningReplayError::MissingOpaqueState
+                | ReasoningReplayError::UnfinishedReasoning,
+            )
+            | Self::Tool(ToolError::MissingOutput { .. }) => Some("input"),
             Self::Storage(StorageError::InvalidItemId { param, .. }) => Some(param),
             Self::Storage(StorageError::ItemAlreadyInConversation) => Some("items"),
             Self::Storage(StorageError::ItemCursorNotFound { .. }) => Some("after"),
             Self::ConversationLocked { .. } => Some("conversation"),
             Self::PreviousResponseNotFound { .. } => Some("previous_response_id"),
-            Self::Tool(ToolError::MissingOutput { .. }) => Some("input"),
             _ => None,
         }
     }

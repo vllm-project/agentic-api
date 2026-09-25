@@ -54,11 +54,13 @@ pub(crate) async fn persist_if_needed(
 /// # Errors
 /// Returns [`ExecutorError`] if the storage operation fails.
 pub async fn persist_response(
-    payload: ResponsePayload,
-    ctx: RequestContext,
+    mut payload: ResponsePayload,
+    mut ctx: RequestContext,
     conv_handler: ConversationHandler,
     resp_handler: ResponseHandler,
 ) -> ExecutorResult<()> {
+    super::replay::mark_client_items(&mut ctx.new_input_items);
+    super::replay::mark_external_output(&mut payload.output);
     // Use typed enum — no hardcoded status strings.
     if !matches!(
         payload.status.parse::<ResponseStatus>().unwrap_or_default(),
@@ -96,11 +98,13 @@ async fn persist_prepared_response(
 /// # Errors
 /// Returns [`ExecutorError`] if the selected storage operation fails.
 pub async fn persist_turn(
-    ctx: RequestContext,
-    output_items: Vec<OutputItem>,
+    mut ctx: RequestContext,
+    mut output_items: Vec<OutputItem>,
     conv_handler: &ConversationHandler,
     resp_handler: &ResponseHandler,
 ) -> ExecutorResult<()> {
+    super::replay::mark_client_items(&mut ctx.new_input_items);
+    super::replay::mark_external_output(&mut output_items);
     let (ctx, tool_search_state) = prepare_request_tools(ctx, conv_handler, resp_handler).await?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
     persist_prepared_turn(ctx, tool_search_metadata, output_items, conv_handler, resp_handler).await
@@ -146,10 +150,13 @@ pub(crate) async fn persist_prepared_turn(
 /// [`ExecutorError::InvalidRequest`] for unusable IDs or an unfinished response,
 /// [`ExecutorError::Conflict`] for an id already stored, or a storage error.
 pub async fn commit(
-    ctx: RequestContext,
-    payload: ResponsePayload,
+    mut ctx: RequestContext,
+    mut payload: ResponsePayload,
     exec_ctx: &ExecutionContext,
 ) -> ExecutorResult<ResponsePayload> {
+    exec_ctx.responses_config.validate_reasoning_replay()?;
+    super::replay::mark_client_items(&mut ctx.new_input_items);
+    super::replay::mark_external_output(&mut payload.output);
     if ctx.response_id.is_empty() {
         return Err(ExecutorError::InvalidRequest(
             "context has no reserved response id".to_owned(),

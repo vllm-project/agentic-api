@@ -1,4 +1,5 @@
 pub mod normalize;
+mod shell;
 mod sse;
 pub mod types;
 mod validate;

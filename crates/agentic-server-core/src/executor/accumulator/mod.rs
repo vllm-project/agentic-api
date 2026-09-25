@@ -19,24 +19,24 @@ use crate::events::{
     normalize_sse_data_checked, output_item_identity, validate_frame,
 };
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::response_budget::{
-    ExecutorResponseBudget, RETAINED_CONTAINER_OVERHEAD_BYTES, RetainedAccount, RetainedSize,
-    retained_response_parts_bytes,
-};
+use crate::executor::response_budget::{ExecutorResponseBudget, RETAINED_CONTAINER_OVERHEAD_BYTES, RetainedAccount};
 use crate::types::event::ResponseStatus;
 use crate::types::io::{FunctionToolCall, OutputItem, ResponseUsage};
 use crate::types::request_response::{IncompleteDetails, ResponsePayload};
-use crate::utils::common::{deserialize_from_str, deserialize_from_value_opt};
+use crate::types::upstream_identity::UpstreamModelId;
 use crate::utils::uuid7_str;
 
 mod active;
 mod active_text;
 mod identity;
-use identity::{invalid_lifecycle, invalid_lifecycle_or_id, invalid_stream, item_identity, output_item_call_id};
+use identity::{
+    CallIdObservation, invalid_lifecycle, invalid_lifecycle_or_id, invalid_stream, item_identity, output_item_call_id,
+};
 mod completion;
 mod details;
 mod json;
 mod slot;
+mod upstream_identity;
 
 use active::ActiveItem;
 use slot::{OutputIndex, SlotMap, SlotState};
@@ -46,25 +46,6 @@ use slot::{OutputIndex, SlotMap, SlotState};
 pub(super) enum Validation {
     Strict,
     Lenient,
-}
-
-#[derive(Debug, Default)]
-struct CallIdObservation {
-    first: Option<String>,
-    changed: bool,
-}
-
-impl CallIdObservation {
-    fn observe(&mut self, call_id: Option<&str>) {
-        let Some(call_id) = call_id.filter(|call_id| !call_id.is_empty()) else {
-            return;
-        };
-        match self.first.as_deref() {
-            Some(first) if first != call_id => self.changed = true,
-            None => self.first = Some(call_id.to_owned()),
-            Some(_) => {}
-        }
-    }
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -135,6 +116,9 @@ pub struct ResponseAccumulator {
     slots: SlotMap,
     strict_call_ids: HashMap<u32, CallIdObservation>,
     stream_lifecycle: StreamLifecycle,
+    upstream_model: Option<UpstreamModelId>,
+    terminal_model_reported: bool,
+    model_evidence_invalidated: bool,
     pub(super) budget: Option<ExecutorResponseBudget>,
 }
 
@@ -163,6 +147,9 @@ impl ResponseAccumulator {
             slots: SlotMap::default(),
             strict_call_ids: HashMap::new(),
             stream_lifecycle: StreamLifecycle::AwaitingCreated,
+            upstream_model: None,
+            terminal_model_reported: false,
+            model_evidence_invalidated: false,
             budget: None,
         }
     }
@@ -184,64 +171,6 @@ impl ResponseAccumulator {
     /// Returns `ExecutorError::ParseError` if JSON parsing fails or required fields are missing.
     pub fn from_json(body: &str, conversation_id: Option<&str>) -> ExecutorResult<Self> {
         Self::read_json(body, conversation_id.map(str::to_owned), Validation::Lenient)
-    }
-
-    pub(super) fn load_json_body(&mut self, body: &str) -> ExecutorResult<()> {
-        let acc = Self::read_json(body, self.conversation_id.clone(), self.validation)?;
-        let retained = retained_response_parts_bytes(&acc.response_id, &acc.output)
-            + acc.incomplete_details.retained_bytes()
-            + acc.error.retained_bytes();
-        if let Some(budget) = &self.budget {
-            budget.consume(retained)?;
-        }
-        let budget = self.budget.clone();
-        *self = acc;
-        self.budget = budget;
-        Ok(())
-    }
-
-    fn read_json(body: &str, conversation_id: Option<String>, validation: Validation) -> ExecutorResult<Self> {
-        let mut json: serde_json::Value = deserialize_from_str(body).map_err(ExecutorError::JsonError)?;
-        if validation == Validation::Strict {
-            json::ensure_strict_response(&json)?;
-        }
-
-        let response_id = json["id"]
-            .as_str()
-            .ok_or_else(|| ExecutorError::ParseError("missing 'id' field in response".into()))?
-            .to_string();
-
-        let output = deserialize_from_value_opt::<Vec<serde_json::Value>>(json["output"].take())
-            .map(|items| {
-                let mut out = Vec::with_capacity(items.len());
-                out.extend(items.into_iter().filter_map(deserialize_from_value_opt::<OutputItem>));
-                out
-            })
-            .unwrap_or_default();
-
-        let status = json["status"]
-            .as_str()
-            .map_or(ResponseStatus::Completed, |s| s.parse().unwrap_or_default());
-
-        let usage = deserialize_from_value_opt::<ResponseUsage>(json["usage"].take());
-        let incomplete_details = deserialize_from_value_opt::<IncompleteDetails>(json["incomplete_details"].take());
-        let error = (!json["error"].is_null()).then(|| json["error"].take());
-
-        Ok(Self {
-            validation,
-            response_id,
-            conversation_id,
-            output,
-            usage,
-            status,
-            incomplete_details,
-            error,
-            terminal_details_account: RetainedAccount::default(),
-            slots: SlotMap::default(),
-            strict_call_ids: HashMap::new(),
-            stream_lifecycle: StreamLifecycle::Terminal,
-            budget: None,
-        })
     }
 
     /// Accumulates an async stream of raw SSE lines with parallel processing.
@@ -329,7 +258,12 @@ impl ResponseAccumulator {
         let ClassifiedSseLine::Data(data) = line else {
             return Ok(None);
         };
-        let Some(frame) = normalize_sse_data_checked(&data).map_err(|error| invalid_stream(error.to_string()))? else {
+        let Some(frame) = normalize_sse_data_checked(&data).map_err(|error| match error {
+            error @ crate::events::normalize::NormalizationError::InvalidOutputIndex => {
+                invalid_stream(error.to_string())
+            }
+        })?
+        else {
             if self.validation == Validation::Strict {
                 return Err(invalid_stream("upstream stream contains a malformed data frame"));
             }
@@ -340,6 +274,11 @@ impl ResponseAccumulator {
     }
 
     fn process_normalized_event(&mut self, frame: &EventFrame) -> ExecutorResult<EventDisposition> {
+        // Lenient ingestion may accept repeated snapshots, but they cannot attest
+        // one unambiguous terminal model. Strict policy rejects them below.
+        if self.stream_lifecycle == StreamLifecycle::Terminal {
+            self.model_evidence_invalidated = true;
+        }
         let validated = match self.validation {
             Validation::Strict => {
                 let validated = validate_frame(frame).map_err(|error| invalid_stream(error.to_string()))?;
@@ -348,6 +287,19 @@ impl ResponseAccumulator {
             }
             Validation::Lenient => None,
         };
+        if let EventPayload::Response {
+            model, model_invalid, ..
+        } = &frame.payload
+        {
+            self.observe_response_model(
+                model.as_ref(),
+                *model_invalid,
+                matches!(
+                    frame.event_type,
+                    SSEEventType::ResponseCompleted | SSEEventType::ResponseFailed | SSEEventType::ResponseIncomplete
+                ),
+            )?;
+        }
         self.capture_terminal_details_if_needed(frame)?;
         self.process_event_checked(frame, validated.as_ref())
     }
@@ -359,7 +311,6 @@ impl ResponseAccumulator {
                 "upstream stream contains an event after its terminal event",
             ));
         }
-
         match (&frame.event_type, &frame.payload) {
             (SSEEventType::ResponseCreated, EventPayload::Response { .. }) => {
                 if self.stream_lifecycle != StreamLifecycle::AwaitingCreated {

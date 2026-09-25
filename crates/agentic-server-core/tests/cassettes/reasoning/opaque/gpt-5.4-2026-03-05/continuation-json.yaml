@@ -1,0 +1,373 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content: Remember the number 47. Check that its digits sum to 11 and its reversal
+          is 27 larger. Reply VALID or INVALID.
+        role: user
+        type: message
+      max_output_tokens: 1024
+      model: gpt-5.4-2026-03-05
+      reasoning:
+        effort: low
+        summary: concise
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790111852
+      created_at: 1790111851
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0deaf2719718f5b5016ab2f06b4fc087d297286241b7f44870
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 1024
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.4-2026-03-05
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABqsvBs1z3HI6zvXT0jgsPZABSUbXnCPx6g-TfOzPz8H1BdhCLQv3_IJ5LezejFRT4t9P8u09HnSDGf8rBZHd0vAwr-2VJHAh8fl8myw7HMDHxE59FD5f-mHbgjCuT3Y5On0HDG3HDnRPYqYSq7Acv2YqSW-vGtJ5CTksBT0ubIMeulCwSsQN0VLph8LzYpZbUXGtW8S8INBLb6ZMxSBbbQYWGG3y6F5XqBVd_LxUnBJkKxbshz9BLf4yhE3_JEzkFprA21adrbzUgduQB_CPhY_m6Jq1mWq-Jb46WEbyYNajEDA8uwH7rX7q2nbxndIiWABVb99ByLvK4rw7JsVc22jjtnZVcZAdJKZo8zaVs33FJTN_S81DFYwx_4wRj3n43rAK7jDZJAqV-jLJHS68oQcIK1gArReSSZuEru5UHkFNUpXZayqmvyNx7PS-u1vOa13pxrDwY1aP598XTplRtpqJq_SgpzS60RY64o53bQTp7BW5VlJmueMyxQx_8YQAOJL9UYP8Attw6occlCqgR86BubYf1cgpufd2wXH5lB1GxdMxDReJMdk0ZwDGHJgn57AClFfO_fyI9Xm0xrmlpHH5TrirxCcD6wg88B4psAwLP9qrGIHWsLMSPSKwgbR1ag_P3vwvFJ97VlNOTGvrniKeo4ytoN7MXzo8Waq3m1EWddsoA8-625X9odRPWDwUDIFZzqkf1DpY6sOWes0dtyHg9StQsc5w_0krqbS7UP9IWTTcXN8W-42bYMs7F2LSt7Td7-z01yT_JUOWRCIlLEfa77CpnQnldkdKj42WOMX7IsZgxLnwiExmd5cF8X7gk03JmBMTG8_7W7qU5XdZa9UVPLxLG0ZomT9IrPtLZCiCTPzQCfI9S9bV3G_tSQ06oAK3PONyZ0IE-_GpENyZeG2azA5Kp0q-5qcf_MA8TneNXGPRIoVAjvD2_ozvlVcsh6qrtLgpDjoEjUby2j-hNUM6UfxzeM43lplX8uw6IrPYNFa7O8bSexDGQNWmuq0fFM08LdPcaVaMzKCz26zuMK2SnG53YZNG0NCt1j_NXyoPHAowLi1PM1eTwFCQvXfUL-fjanjdOs7uqEoUTesFBeaaW65jkL8ML_lg-KEDaGyL4O4lZG-5Kebjry32s5zZXTIlv3ou2g2lfDHBpGfr9udBW42MFI8O3OXhBeIka5nqWprrG5rDx1DBPUUPlMwQS9aKEKUOc41HFir5lNG0mVtLtcA23MrmDxSBc4q25XLyDrU4G81bySJdx-DZDH1KhnNYiLIj09UNqZ73--HyyjffhkwYXzzkFdbwNCMmf525uMCHnZ7TGtFVuc0n4fPWJyGEF3y3tGOhzTACFwGwAV2AzrTGEL87JAktuituKtwbC415k7Kv-BvaqkjBRwq48Ur_bn
+        id: rs_0deaf2719718f5b5016ab2f06bd0f887d299c611b5c9926686
+        summary:
+        - text: '**Verifying digit sum and reversal condition**'
+          type: summary_text
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: VALID
+          type: output_text
+        id: msg_0deaf2719718f5b5016ab2f06c684887d28b5272b2624f5f2c
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: current_turn
+        effort: low
+        mode: standard
+        summary: concise
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 33
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 55
+        output_tokens_details:
+          reasoning_tokens: 48
+        total_tokens: 88
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - content: Remember the number 47. Check that its digits sum to 11 and its reversal
+          is 27 larger. Reply VALID or INVALID.
+        role: user
+        type: message
+      - content: []
+        encrypted_content: gAAAAABqsvBs1z3HI6zvXT0jgsPZABSUbXnCPx6g-TfOzPz8H1BdhCLQv3_IJ5LezejFRT4t9P8u09HnSDGf8rBZHd0vAwr-2VJHAh8fl8myw7HMDHxE59FD5f-mHbgjCuT3Y5On0HDG3HDnRPYqYSq7Acv2YqSW-vGtJ5CTksBT0ubIMeulCwSsQN0VLph8LzYpZbUXGtW8S8INBLb6ZMxSBbbQYWGG3y6F5XqBVd_LxUnBJkKxbshz9BLf4yhE3_JEzkFprA21adrbzUgduQB_CPhY_m6Jq1mWq-Jb46WEbyYNajEDA8uwH7rX7q2nbxndIiWABVb99ByLvK4rw7JsVc22jjtnZVcZAdJKZo8zaVs33FJTN_S81DFYwx_4wRj3n43rAK7jDZJAqV-jLJHS68oQcIK1gArReSSZuEru5UHkFNUpXZayqmvyNx7PS-u1vOa13pxrDwY1aP598XTplRtpqJq_SgpzS60RY64o53bQTp7BW5VlJmueMyxQx_8YQAOJL9UYP8Attw6occlCqgR86BubYf1cgpufd2wXH5lB1GxdMxDReJMdk0ZwDGHJgn57AClFfO_fyI9Xm0xrmlpHH5TrirxCcD6wg88B4psAwLP9qrGIHWsLMSPSKwgbR1ag_P3vwvFJ97VlNOTGvrniKeo4ytoN7MXzo8Waq3m1EWddsoA8-625X9odRPWDwUDIFZzqkf1DpY6sOWes0dtyHg9StQsc5w_0krqbS7UP9IWTTcXN8W-42bYMs7F2LSt7Td7-z01yT_JUOWRCIlLEfa77CpnQnldkdKj42WOMX7IsZgxLnwiExmd5cF8X7gk03JmBMTG8_7W7qU5XdZa9UVPLxLG0ZomT9IrPtLZCiCTPzQCfI9S9bV3G_tSQ06oAK3PONyZ0IE-_GpENyZeG2azA5Kp0q-5qcf_MA8TneNXGPRIoVAjvD2_ozvlVcsh6qrtLgpDjoEjUby2j-hNUM6UfxzeM43lplX8uw6IrPYNFa7O8bSexDGQNWmuq0fFM08LdPcaVaMzKCz26zuMK2SnG53YZNG0NCt1j_NXyoPHAowLi1PM1eTwFCQvXfUL-fjanjdOs7uqEoUTesFBeaaW65jkL8ML_lg-KEDaGyL4O4lZG-5Kebjry32s5zZXTIlv3ou2g2lfDHBpGfr9udBW42MFI8O3OXhBeIka5nqWprrG5rDx1DBPUUPlMwQS9aKEKUOc41HFir5lNG0mVtLtcA23MrmDxSBc4q25XLyDrU4G81bySJdx-DZDH1KhnNYiLIj09UNqZ73--HyyjffhkwYXzzkFdbwNCMmf525uMCHnZ7TGtFVuc0n4fPWJyGEF3y3tGOhzTACFwGwAV2AzrTGEL87JAktuituKtwbC415k7Kv-BvaqkjBRwq48Ur_bn
+        id: rs_0deaf2719718f5b5016ab2f06bd0f887d299c611b5c9926686
+        summary:
+        - text: '**Verifying digit sum and reversal condition**'
+          type: summary_text
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: VALID
+          type: output_text
+        id: msg_0deaf2719718f5b5016ab2f06c684887d28b5272b2624f5f2c
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      - content: Add 5 to the number I asked you to remember. Reply with the resulting
+          integer only.
+        role: user
+        type: message
+      max_output_tokens: 1024
+      model: gpt-5.4-2026-03-05
+      reasoning:
+        effort: low
+        summary: concise
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790111854
+      created_at: 1790111852
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0deaf2719718f5b5016ab2f06cdd3887d2b7ad7178e64d01f3
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 1024
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.4-2026-03-05
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABqsvBuKlaeDeqPCgN7GfaMQzyDjljm9tAOFTu4AZ1CQf4p_i8G-_zPlQ7UpkHXwxOPDq5oQ3H2YjQSJqIQRSxOuBdu8ysdL0tfSemup2W47S6aZEkwfOx65872P6br5RmDV5lID3liQR1XB4ldMlTUpb8ytT4G-sggn0pqvS5wSsT4aSo--Ar_-dXOKmpj77kHn1ktDG7E96eHEMTOnTaJNEWn-xMf6DEhUDlYTPO6_2-WGg9kiCMutWPcYhX1371nWMYFdCDH6LhA3hhfKMX-fQNnit6W3DOWT7r-Ch7uW_2jWGzIqBzL16BJlhPQVp7v2sk7nV_FXIByZq4I13cysXF1bL5bwVK_ByDkfzMbNCQQC4lcmdcU_QGxcMS_3TyjKiapDhG6EAtvZPqLHyvGai27leM_p8vOt6FEcBRBzVgz5jaTTANN-RT8AN2cjPv1xFbL4lwNz0q6wl2Gd1Wt73keFXIP9HJVqSwow7P0tA3rNafrgUtdDBAPLoTXGlL62UCXAfq6KjAHoud79GzlhFKx23aVHUcjFYRG1As7ld_MMtFKfn9-TTXM9CKXo42KREoStwTJkw-l0rkl9qnasN0fXlaAsKwTy-eYaK_4QfTSKktdb78j1zJlxcAbOJmCZh9k0nsMtvapiDvTLEGtRJ85S4aimlC3746i-D0HjIsqI-YGhJ7hHxXhBcb8XywlJpiNXU4OCvGHrEOmeO7E2eIBHwS9sb4-ZWxH0koqcHJLcw2srRe3z1KWnEsnjtJRjyTo-0BPS-4hFqp0qRHAdbdlfKy7Pq7KlnTpjIIXJoUubJVStM31fDjg6bI6Xj27w6pVypoKyzFY21YR9hOxGg2fim60Qa3zm5Qs-TrNv1CDERxHm1n7I06DOdrKV4mYcKeUm017vdA05YfdxvaoVP6IHvZ6Bx2XFPggHG-DbvJXhawn_lSTBJKI4oDb8Kyv9SOXXSVMAJP560M3S_KSwP4VZP3u7H2RehLk3wfoY0k0ioq5XPwRB9nZL2Ew9e7V_3_XkaNJp7Jmyhwb1NIAX1i9b0lVNfGABo24oY76_xCHWUsth6SnWDMSlUGKIlZwEMBsMR4baM5hhE35rMji1dUXj4BK22uEi_ZdXqxoQKYXAaL8IBRaOxxQpnTs2TdaNHypgIMfrm2sFWSefg6bqSjKrPZXA9Ar4ghH9Zy_jTJ0bm-beaNdo8jy_Gr2hXnWCph4T7l1fRqcgn_W5zt3qLVUt_uDM_7Tn-Fcew4k8BmpnORa60-vlZRVsnWV4OJZa8QIMrrcyEZxsa25QkbbF0XStw==
+        id: rs_0deaf2719718f5b5016ab2f06e153087d29f0a7d447b5e7bef
+        summary:
+        - text: '**Tracking conversation context**'
+          type: summary_text
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '52'
+          type: output_text
+        id: msg_0deaf2719718f5b5016ab2f06e987487d28f16d4936745e517
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: current_turn
+        effort: low
+        mode: standard
+        summary: concise
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 63
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 32
+        output_tokens_details:
+          reasoning_tokens: 25
+        total_tokens: 95
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - content: Remember the number 47. Check that its digits sum to 11 and its reversal
+          is 27 larger. Reply VALID or INVALID.
+        role: user
+        type: message
+      - content: []
+        encrypted_content: gAAAAABqsvBs1z3HI6zvXT0jgsPZABSUbXnCPx6g-TfOzPz8H1BdhCLQv3_IJ5LezejFRT4t9P8u09HnSDGf8rBZHd0vAwr-2VJHAh8fl8myw7HMDHxE59FD5f-mHbgjCuT3Y5On0HDG3HDnRPYqYSq7Acv2YqSW-vGtJ5CTksBT0ubIMeulCwSsQN0VLph8LzYpZbUXGtW8S8INBLb6ZMxSBbbQYWGG3y6F5XqBVd_LxUnBJkKxbshz9BLf4yhE3_JEzkFprA21adrbzUgduQB_CPhY_m6Jq1mWq-Jb46WEbyYNajEDA8uwH7rX7q2nbxndIiWABVb99ByLvK4rw7JsVc22jjtnZVcZAdJKZo8zaVs33FJTN_S81DFYwx_4wRj3n43rAK7jDZJAqV-jLJHS68oQcIK1gArReSSZuEru5UHkFNUpXZayqmvyNx7PS-u1vOa13pxrDwY1aP598XTplRtpqJq_SgpzS60RY64o53bQTp7BW5VlJmueMyxQx_8YQAOJL9UYP8Attw6occlCqgR86BubYf1cgpufd2wXH5lB1GxdMxDReJMdk0ZwDGHJgn57AClFfO_fyI9Xm0xrmlpHH5TrirxCcD6wg88B4psAwLP9qrGIHWsLMSPSKwgbR1ag_P3vwvFJ97VlNOTGvrniKeo4ytoN7MXzo8Waq3m1EWddsoA8-625X9odRPWDwUDIFZzqkf1DpY6sOWes0dtyHg9StQsc5w_0krqbS7UP9IWTTcXN8W-42bYMs7F2LSt7Td7-z01yT_JUOWRCIlLEfa77CpnQnldkdKj42WOMX7IsZgxLnwiExmd5cF8X7gk03JmBMTG8_7W7qU5XdZa9UVPLxLG0ZomT9IrPtLZCiCTPzQCfI9S9bV3G_tSQ06oAK3PONyZ0IE-_GpENyZeG2azA5Kp0q-5qcf_MA8TneNXGPRIoVAjvD2_ozvlVcsh6qrtLgpDjoEjUby2j-hNUM6UfxzeM43lplX8uw6IrPYNFa7O8bSexDGQNWmuq0fFM08LdPcaVaMzKCz26zuMK2SnG53YZNG0NCt1j_NXyoPHAowLi1PM1eTwFCQvXfUL-fjanjdOs7uqEoUTesFBeaaW65jkL8ML_lg-KEDaGyL4O4lZG-5Kebjry32s5zZXTIlv3ou2g2lfDHBpGfr9udBW42MFI8O3OXhBeIka5nqWprrG5rDx1DBPUUPlMwQS9aKEKUOc41HFir5lNG0mVtLtcA23MrmDxSBc4q25XLyDrU4G81bySJdx-DZDH1KhnNYiLIj09UNqZ73--HyyjffhkwYXzzkFdbwNCMmf525uMCHnZ7TGtFVuc0n4fPWJyGEF3y3tGOhzTACFwGwAV2AzrTGEL87JAktuituKtwbC415k7Kv-BvaqkjBRwq48Ur_bn
+        id: rs_0deaf2719718f5b5016ab2f06bd0f887d299c611b5c9926686
+        summary:
+        - text: '**Verifying digit sum and reversal condition**'
+          type: summary_text
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: VALID
+          type: output_text
+        id: msg_0deaf2719718f5b5016ab2f06c684887d28b5272b2624f5f2c
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      - content: Subtract 5 from the number I asked you to remember. Reply with the
+          resulting integer only.
+        role: user
+        type: message
+      max_output_tokens: 1024
+      model: gpt-5.4-2026-03-05
+      reasoning:
+        effort: low
+        summary: concise
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790111856
+      created_at: 1790111855
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0deaf2719718f5b5016ab2f06efb5087d29188b9c3313c5472
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 1024
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.4-2026-03-05
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABqsvBwxih7CmljXinNiH2frzg5-ApQLKTVNwhmgHO2xCB44Hwn5wRNU6iTed4R1vTahZ1RrAf0l4erBxSLY3_RJy4NZ4QNVjPN-alKSTBLdvnjOE-eFfk-8ivBF_Kz2S7BylVd-FD3zZgjEzKm6XK6Ysrf1Vn1XS97IitPFstW_-Edi0Jafd8uhi4vU_ISzxFLV8B5tDO6QeTYw0SprfSs9ejTZKohafw_HPOlnq_3gbDZk9-va6OGm7piUtVERgYGhgftZuB4-fGe8pWA-wWvCfK8-9GR-L0I9pNkP1LzRqNsFVy5VArGKrSOwVJtTBqGeFcK5zSKPCOgu00jJMbqcgYDvH2SV9_OtfdpveA5KEjjo9Bbaw5S2FkGLVYQ9y5zqydQOJw-AeaIFJ751DPQcjW3EjvMLHxZLdRQrmHwMEDPqYFQimucbMrfyQSNkl0ubOUsPanUSLuL5p6mGPoy1AkkAPraeI3eRNh8oI3PQk2Uq8-yljpDHiDQqbowtgfFIMhhvAH7LncEwi91foKK1GjaHIyDgVsaohb5hAs7iRtkcArSWSwFuAnYUSCBR7xvvCacA5g3Ji919y_41puGs_SgCF09zj5jHGjcEqu1W2v5dPTZmUSl6cnucCammp0XiGIFLa6lAET7H07BPVKe4ATPgEyMIX4BuHVWpVAWbtXFZgtg2iPm4MpiZeYQJIDJ4ZbrvU700hKAXFrcWa_EVI9cx0SzK5qw83VmXfCuuFfErOM6TTBUhDTlR7jmQL4V3pCgiXQWRVc9fazKIi2k730eX7CbCY4FI67y_oXkDkF34i8KbrDr_uvuOTzIZMU5DROtLVjWsze5A4Tnnz-3gRz4KC3YdArXcnEhpD3QbFmVpQOJ_MyO-ul2kQKVvNaNeqXYiybXWtR1xGHAP-ReGyzg83Ug6o0vCxXx0kvqb_VwAGWXdRX9Wt_9B9ArJrf0S9YrE6BBSqDd7VRBSpsFDTQfhrGucU7FNZx3P1Lt-yjms6EE1-rvY54Nf51sLv385EiPqavBBesOCmQJeZO9js-wHKR6MCjeY5FOmg39c3uNkbqN8Jtf9a7VzFgk0e1EznyaaTERIn_PSLmr4Y6K4OB3nw3YKGWPBbi_rxtU795JMPE_wnGMubBTvn2mu7Fk3-AAPqYl-2v429QlVG7t5JRXGGVVdDpWMNdS1czPy-gg9a3wGIw8LPtInbyUGWmkXc3HU8321EIJ1L2NDV7SUxKWGGmnlbGEXmZBgFPHZKaGDfGoFYN2A1pWr-mhuCUWZM4zqPeUBBJ7eYXHZXFOZOpbwA==
+        id: rs_0deaf2719718f5b5016ab2f0701ea887d2a1b032dab681283e
+        summary:
+        - text: '**Calculating memory offset**'
+          type: summary_text
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '42'
+          type: output_text
+        id: msg_0deaf2719718f5b5016ab2f0708f8487d2ab781cc5379d6d25
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: current_turn
+        effort: low
+        mode: standard
+        summary: concise
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 63
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 32
+        output_tokens_details:
+          reasoning_tokens: 25
+        total_tokens: 95
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

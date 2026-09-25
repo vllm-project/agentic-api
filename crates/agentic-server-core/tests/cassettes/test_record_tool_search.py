@@ -471,7 +471,7 @@ class RecordToolSearchTests(unittest.TestCase):
 
         def fake_send(_client: object, body: dict, *_args: object, **_kwargs: object) -> dict:
             sent_bodies.append(body)
-            return responses[len(sent_bodies) - 1]
+            return {"status": "completed", **responses[len(sent_bodies) - 1]}
 
         with (
             mock.patch.object(
@@ -602,7 +602,7 @@ class RecordToolSearchTests(unittest.TestCase):
 
         def fake_send(_client: object, body: dict, *_args: object, **_kwargs: object) -> dict:
             sent_bodies.append(body)
-            return responses[len(sent_bodies) - 1]
+            return {"status": "completed", **responses[len(sent_bodies) - 1]}
 
         with (
             mock.patch.object(
@@ -692,7 +692,7 @@ class RecordToolSearchTests(unittest.TestCase):
 
         def fake_send(_client: object, body: dict, *_args: object, **_kwargs: object) -> dict:
             sent_bodies.append(body)
-            return responses[len(sent_bodies) - 1]
+            return {"status": "completed", **responses[len(sent_bodies) - 1]}
 
         with (
             mock.patch.object(

@@ -1,5 +1,6 @@
 mod common;
 pub mod http;
+mod opaque_request;
 pub mod websocket;
 
 pub use common::{convert_response, executor_error_response};

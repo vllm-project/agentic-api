@@ -4,6 +4,7 @@ use std::time::Duration;
 use crate::config::{Config, ResponsesConfig, default_database_url};
 use crate::error::Error;
 use crate::executor::gateway::GatewaySchedulerPolicy;
+use crate::executor::inference::transport::ResponsesTransport;
 use crate::executor::modes::{ConversationHandler, ResponseHandler};
 use crate::storage::backend::redact_database_urls;
 use crate::storage::{
@@ -38,6 +39,8 @@ pub struct RequestContext {
     /// Conversation version captured with rehydrated history.
     /// `None` for non-conversation and `previous_response_id` execution.
     pub conversation_version: Option<ConversationVersion>,
+    /// Engine-owned deduplication of canonical round history; split callers use `Default`.
+    pub recorded_output_prefix: crate::types::turn_history::RecordedOutputPrefix,
     /// Optional transient-session lease and canonical parent snapshot. Never serialized.
     pub continuation: Option<super::session::ResponseContinuation>,
 }
@@ -79,9 +82,35 @@ pub struct ExecutionContext {
     pub(crate) gateway_scheduler_policy: GatewaySchedulerPolicy,
     pub responses_config: ResponsesConfig,
     storage_pool: Option<Arc<crate::storage::DbPool>>,
+    opaque_transport: Arc<tokio::sync::OnceCell<ResponsesTransport>>,
+    /// Unit-test-only loopback routing; absent from library and server builds.
+    #[cfg(test)]
+    pub(super) opaque_replay_fixture: Option<ResponsesTransport>,
 }
 
 impl ExecutionContext {
+    /// Called only after profile/provenance/availability preflight succeeds.
+    pub(super) async fn responses_transport(&self) -> super::error::ExecutorResult<ResponsesTransport> {
+        #[cfg(test)]
+        if let Some(transport) = self
+            .opaque_replay_fixture
+            .as_ref()
+            .filter(|transport| transport.is_replay_fixture())
+        {
+            return Ok(transport.clone());
+        }
+        match self.responses_config.reasoning_replay_policy {
+            crate::types::reasoning_replay::ReasoningReplayPolicy::VllmPlaintext => {
+                Ok(ResponsesTransport::shared(Arc::clone(&self.client)))
+            }
+            crate::types::reasoning_replay::ReasoningReplayPolicy::OpaqueResponses => self
+                .opaque_transport
+                .get_or_try_init(|| async { ResponsesTransport::opaque() })
+                .await
+                .cloned(),
+        }
+    }
+
     /// Returns the full URL for the `/v1/responses` endpoint.
     #[must_use]
     pub fn responses_url(&self) -> String {
@@ -113,6 +142,9 @@ impl ExecutionContext {
             gateway_scheduler_policy: GatewaySchedulerPolicy::default(),
             responses_config: ResponsesConfig::default(),
             storage_pool: None,
+            opaque_transport: Arc::new(tokio::sync::OnceCell::new()),
+            #[cfg(test)]
+            opaque_replay_fixture: None,
         }
     }
 
@@ -155,6 +187,9 @@ impl ExecutionContext {
     /// Returns an error if the database pool cannot be opened or the schema
     /// migration fails.
     pub async fn from_config(cfg: &Config) -> Result<Self, Error> {
+        cfg.responses
+            .validate_reasoning_replay()
+            .map_err(|error| Error::Config(error.to_string()))?;
         let default_db_url = cfg.db_url.is_none().then(default_database_url).transpose()?;
         let db_url = cfg
             .db_url
@@ -191,6 +226,9 @@ impl ExecutionContext {
             gateway_scheduler_policy: GatewaySchedulerPolicy::new(cfg.tools.max_concurrent_gateway_calls),
             responses_config: cfg.responses,
             storage_pool: Some(pool),
+            opaque_transport: Arc::new(tokio::sync::OnceCell::new()),
+            #[cfg(test)]
+            opaque_replay_fixture: None,
         })
     }
 }
@@ -269,6 +307,38 @@ mod tests {
         assert_eq!(parse_streaming_timeout(Some("0")), Duration::ZERO);
         // A valid value is honored.
         assert_eq!(parse_streaming_timeout(Some("30")), Duration::from_secs(30));
+    }
+
+    #[tokio::test]
+    async fn disabled_reasoning_policy_is_rejected_before_opening_storage() {
+        use crate::config::{Config, ResponsesConfig};
+        use crate::error::Error;
+
+        let cfg = Config {
+            llm_api_base: "http://127.0.0.1:1".to_owned(),
+            openai_api_key: None,
+            llm_ready_timeout_s: 1.0,
+            llm_ready_interval_s: 1.0,
+            skip_llm_ready_check: true,
+            db_url: Some("unsupported://must-not-be-opened".to_owned()),
+            postgres: crate::config::PostgresConfig::default(),
+            sqlite: crate::config::SqliteConfig::default(),
+            tools: crate::config::ToolRuntimeConfig::default(),
+            responses: ResponsesConfig {
+                reasoning_replay_policy: crate::types::reasoning_replay::ReasoningReplayPolicy::OpaqueResponses,
+                reasoning_replay_profile: Some(
+                    crate::types::reasoning_profile::OpaqueReasoningProfile::OpenAiGpt54_20260305V1,
+                ),
+                ..ResponsesConfig::default()
+            },
+        };
+        let error = ExecutionContext::from_config(&cfg).await.unwrap_err();
+        assert!(matches!(error, Error::Config(_)));
+        assert_eq!(
+            error.to_string(),
+            Error::Config(crate::types::reasoning_replay::ReasoningReplayError::OpaqueNotEnabled.to_string())
+                .to_string()
+        );
     }
 
     #[test]

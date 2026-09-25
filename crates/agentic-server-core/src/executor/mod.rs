@@ -14,6 +14,7 @@ pub mod modes;
 pub mod persist;
 mod prepare;
 pub mod rehydrate;
+mod replay;
 pub mod request;
 pub mod session;
 pub mod telemetry;
@@ -25,6 +26,11 @@ mod pending_calls;
 mod pipeline;
 mod response_budget;
 mod upstream;
+
+#[cfg(test)]
+mod log_capture;
+#[cfg(test)]
+mod qualification;
 
 pub use compaction::compact_response;
 pub use engine::{BoxStream, ExecuteRequest, create_conversation, execute};

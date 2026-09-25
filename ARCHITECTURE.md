@@ -257,6 +257,14 @@ preserving MCP discovery records needed for orchestration. Durable restoration
 and replayed compaction input select the effective compacted window before validating current calls;
 obsolete stored rows are not deleted or charged to that retained window.
 
+The candidate opaque policy uses that canonical round ordering for durable responses
+and explicit conversations too. `engine/history.rs` records output through the single
+`OutputItem::to_input_item` conversion before tool outputs are appended. The fixed-size,
+non-wire `RequestContext.recorded_output_prefix` tracks which public outputs are already
+represented; both persistence handlers consult it to avoid duplication, while retaining
+MCP discovery records. This bookkeeping belongs to the turn, not the session lease.
+Default vLLM non-session persistence remains unchanged.
+
 For response-scoped session execution, `store: false` has no durable writes or
 database fallback. A stored child of a transient parent persists the complete
 canonical window without creating a row or dangling database reference for that
@@ -371,7 +379,9 @@ access happen — those live in `tool/`, `executor/`, and `storage/` respectivel
   `ResponsesInput`), `output.rs` (outbound output items: messages, function calls, web
   search/MCP calls, reasoning — plus the `ApplyDone` trait described below), `tools.rs`
   (the normalized `FunctionTool` and `ToolChoice`, distinct from tool *declarations*),
-  `usage.rs` (token accounting structs). `ResponsesInput::model_input()` is the final
+  `message.rs` (input/output messages and optional assistant phase),
+  `reasoning.rs` (typed reasoning content, summaries, item status, and bounded opaque
+  state), and `usage.rs` (token accounting structs). `ResponsesInput::model_input()` is the final
   model-visibility boundary used by `RequestPayload::to_upstream_request`: it removes
   orchestration-only `McpListTools` and `CompactionTrigger` input items. A persisted
   `Compaction` item is different: the latest checkpoint supersedes earlier model
@@ -507,9 +517,11 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   `MAX_GATEWAY_TOOL_ROUNDS = 10`). It accumulates output and token usage across rounds,
   changes continuation `tool_choice` to `auto`, and persists gateway calls plus their
   outputs as model-facing `InputItem`s. Also home to `run_compaction_trigger`,
-  `run_blocking`, and `run_stream` (spawns the loop, forwards events as SSE, persists
-  before yielding the terminal event). `engine/streaming.rs` owns the streaming task's
-  cancellation, failure delivery, and terminal validation before persistence.
+  `run_blocking`, and `run_stream` (owns and polls the loop alongside its bounded event
+  receiver, forwards events as SSE, and persists before yielding the terminal event).
+  `engine/streaming.rs` owns cancellation, failure delivery, and terminal validation;
+  `engine/streaming/producer.rs` drives the stream-owned orchestration future without
+  spawning a nested producer task.
 - **`persist.rs`** — `persist_response`/`persist_turn`, which route to
   `ConversationHandler` or `ResponseHandler` in `modes/` depending on whether the turn
   is conversation-scoped or response-scoped.
@@ -580,6 +592,55 @@ inference body through `run_with_json_body` or live `run_with_stream_body`. A ne
 `RoundIngestion` is created for every body and consumed by finalization, while
 `StreamDelivery` and `GatewayStreamAccumulator` survive across inference rounds.
 
+Each round returns an internal `IngestedResponse` with its public payload and a
+separate, bounded upstream-reported model observation. Event normalization extracts
+typed SSE model metadata; ingestion validates consistency, charges retained bytes,
+and requires explicit terminal metadata for evidence. Missing/null metadata and
+lenient EOF completion remain unknown. The engine binds the observation into reasoning
+provenance; it never treats the request-derived public `ResponsePayload.model` as
+provider evidence. The observation does not enable opaque reasoning replay.
+
+`executor/replay.rs` owns server-selected replay preflight, not ingestion or transport.
+The closed candidate profile in `types/reasoning_profile.rs` pins endpoint, model, and
+opaque wire contract. Preflight checks canonical provenance before inference can
+project it; the engine binds successful round observations to that profile. Candidate
+configuration still fails the qualification gate, so only the default vLLM policy
+executes. The reserved adapter has a typed stateless projection, isolated HTTPS client,
+and strict ingestion selection; see [provider-aware reasoning](docs/design/provider-aware-reasoning.md)
+for pinned-provider reference evidence and remaining gateway acceptance work.
+`executor/replay/profile/parameters.rs` checks the candidate's request surface before
+history lookup and tool discovery. It returns typed, parameter-specific errors for
+settings outside that surface and rechecks effective settings before each round.
+It does not change default vLLM request handling, normalization, or delivery.
+The server's profile-only HTTP/WebSocket wire guard rejects unknown or duplicate
+top-level fields and unknown reasoning settings before the normal typed request
+decode can discard them. The HTTP handler always routes a selected opaque profile
+through the executor, including `store: false`; the ordinary vLLM proxy path is
+unchanged. Closed, bounded nested wire sentinels reject unknown or duplicate fields
+inside the candidate's admitted item, content, tool, and tool-choice shapes; open
+JSON Schema and MCP-header documents reject duplicate keys without constraining
+their vocabularies. Core preflight independently enforces the typed input surface
+for programmatic callers and rehydrated history. Other wire shapes remain
+unqualified and the profile gate stays closed. The WebSocket guard runs before
+extracting stream or previous-response IDs; rejected wire shapes cannot select
+a lane or evict a cached checkpoint through ambiguous metadata.
+
+Assistant `MessagePhase` is a bounded optional enum in the message types, retained by
+the existing authoritative typed completion and output-to-input conversion. Storage
+preserves it in item JSON without a migration. Input validation rejects a supplied
+phase on non-assistant messages; legacy messages and newly constructed user messages
+do not acquire one. In streamed provider references the reasoning bytes in
+`output_item.done` differ from the terminal envelope; ingestion keeps completed items
+as before, and qualification replays those exact item-completion bytes.
+
+Core `cfg(test)` builds additionally provide a per-context loopback fixture to run
+recordings through `ExecuteRequest`, inference framing, ingestion, the tool loop,
+storage and sessions. Only that fixture skips availability; routing, credentials,
+provenance and exact terminal-model checks still run. The fixture accepts a loopback
+socket address, never an arbitrary upstream URL, and is absent from library/server
+builds. No runtime flag enables the candidate. These offline tests do not qualify
+live gateway execution or WebSocket transport routing.
+
 The live runner polls one framed line, performs synchronous ingestion and translation,
 then awaits delivery before polling the next line. This propagates bounded sender
 backpressure to the upstream body. Ingestion remains inline; moving it to a worker is
@@ -631,8 +692,10 @@ Retained-byte accounting stays in synchronous ingestion. `response_budget.rs` de
 one comprehensive `RetainedSize` measurement and `RetainedAccount` for charging growth
 and reconciling completed items. Every unbounded collection entry has a structural
 charge, including empty JSON values and web-search queries; unrestricted string fields
-such as `role`, content `type`, and reasoning `status` count by length. Bounded enums
-need no variable charge. Delta text and new part containers are charged before growth.
+such as message `role` and message content `type` count by length. Bounded enums,
+including reasoning content kinds and item status, need no variable charge. Reasoning
+text and summary parts each charge a container plus text bytes; opaque state charges
+its decoded string bytes. Delta text and new part containers are charged before growth.
 Completion uses the existing `ApplyDone`/`MergeDone` policy and measures its effect;
 reasoning text/summary completion measures only the inserted part and its corresponding
 streamed counter; shell command completion measures only its command and current buffer.
@@ -712,7 +775,24 @@ cancelled or disconnected flush cannot silently discard the remainder.
 When an upstream round fails, the engine releases its deferred public events through
 the same delivery path before the terminal event, without executing gateway tools.
 
-Its `GatewayStreamAccumulator` carries only cross-round presentation state: monotonic
+The Responses `BoxStream` owns its orchestration future directly. It polls that future
+and the existing bounded event receiver on the consumer's task; there is no detached
+producer, asynchronous abort reaper, or producer `JoinHandle`. When the consumer stops
+polling, the producer cannot continue in the background. Dropping an unpolled or active
+stream synchronously drops its producer, active per-request tool futures, and continuation
+lease. Remote services and shared HTTP/MCP connection drivers still have their own
+lifetimes; dropping a local future does not undo external side effects.
+
+Producer completion and panic both dispose of the producer future before draining
+accepted events in order and exposing one outcome. Panic isolation uses `catch_unwind`
+and a typed, static client error; it does not alter the process panic hook. On success,
+the engine still validates terminal size and persists/publishes the checkpoint before
+yielding completion. Cancellation during storage waits drops the pending persistence
+future through the same owner. WebSocket request tasks still need explicit abort/join;
+joining one now also finishes disposal of its nested stream-owned producer. Their
+`wait_until_idle` lease fences remain in place.
+
+`GatewayStreamAccumulator` carries only cross-round presentation state: monotonic
 `sequence_number`s, public `output_index` rebasing, and deduplication of response start
 events. It holds no `OutputItem` assembly state. Sending is awaited before ingestion
 continues, so sender closure or delivery failure propagates through the live pipeline.
@@ -873,7 +953,14 @@ round that omits `usage` still reports the hidden rounds' counters.
   `From`/`TryFrom` impls: `ConversationData`/`ConversationSnapshot`, `ResponseData`/
   `ResponseMetadata` (parses the JSON metadata column into a typed struct),
   `InOutItem` (parses an `Item.data` JSON blob back into a typed `InputItem` or
-  `OutputItem`), and `StorageError`. `InOutItem::into_input_items` turns a full
+  `OutputItem`), and `StorageError`. Store rehydration uses `TryFrom<&Item>` and fails
+  if a row cannot be decoded; response rehydration also rejects missing referenced rows.
+  It must not silently omit malformed reasoning from a continuation.
+  `TryFrom<Response>` rejects malformed history references and effective metadata;
+  only SQL NULL keeps the legacy empty/default behavior. Versioned conversation
+  metadata lookup also rejects a missing or foreign captured response. Storage
+  errors omit parser diagnostics that could echo sensitive persisted fields.
+  `InOutItem::into_input_items` turns a full
   history into the `Vec<InputItem>` used for continuation processing: stored
   `InputItem`s pass through, while stored `OutputItem`s go through
   `OutputItem::to_input_item()`. Messages, reasoning, function/custom calls,

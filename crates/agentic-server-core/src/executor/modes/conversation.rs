@@ -299,7 +299,9 @@ impl ConversationHandler {
     /// # Errors
     /// Returns `ExecutorError` if `conversation_id` is absent on the context,
     /// the store is disabled, or the database operation fails.
-    pub async fn execute_turn(&self, mut ctx: RequestContext, output_items: Vec<OutputItem>) -> ExecutorResult<()> {
+    pub async fn execute_turn(&self, mut ctx: RequestContext, mut output_items: Vec<OutputItem>) -> ExecutorResult<()> {
+        crate::executor::replay::mark_client_items(&mut ctx.new_input_items);
+        crate::executor::replay::mark_external_output(&mut output_items);
         let metadata = ResponseMetadata {
             model: std::mem::take(&mut ctx.enriched_request.model),
             previous_response_id: ctx.original_request.previous_response_id.take(),
@@ -328,7 +330,13 @@ impl ConversationHandler {
 
         let mut new_items = Vec::with_capacity(ctx.new_input_items.len() + output_items.len());
         new_items.extend(ctx.new_input_items.into_iter().map(InOutItem::Input));
-        new_items.extend(output_items.into_iter().map(InOutItem::Output));
+        new_items.extend(
+            output_items
+                .into_iter()
+                .enumerate()
+                .filter(|(index, item)| ctx.recorded_output_prefix.retains_output(*index, item))
+                .map(|(_, item)| InOutItem::Output(item)),
+        );
 
         self.store
             .persist_if_version(
@@ -412,6 +420,7 @@ mod tests {
             response_id: "resp_test".into(),
             conversation_id: conversation_id.map(str::to_string),
             conversation_version: None,
+            recorded_output_prefix: crate::types::turn_history::RecordedOutputPrefix::default(),
             continuation: None,
         }
     }

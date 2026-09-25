@@ -1,7 +1,7 @@
 //! LLM API response stored in the database.
 
 use super::super::pool::{DbPool, DbResult, DbTransaction};
-use crate::utils::common::{deserialize_from_string_opt, deserialize_from_string_opt_or_default, utcnow_str};
+use crate::utils::common::utcnow_str;
 
 /// LLM API response stored in the database.
 ///
@@ -87,16 +87,24 @@ pub async fn get_conversation_turn(
 }
 
 impl Response {
-    /// Deserialize `history_item_ids` from JSON string to Vec<String>.
-    #[must_use]
-    pub fn history_item_ids_vec(&self) -> Vec<String> {
-        deserialize_from_string_opt_or_default(&self.history_item_ids)
+    /// Deserialize history references, treating only SQL NULL as legacy empty history.
+    ///
+    /// # Errors
+    /// Returns an error for malformed JSON or a value other than an array of strings.
+    pub fn history_item_ids_vec(&self) -> Result<Vec<String>, serde_json::Error> {
+        self.history_item_ids
+            .as_deref()
+            .map(serde_json::from_str)
+            .transpose()
+            .map(Option::unwrap_or_default)
     }
 
     /// Deserialize metadata from JSON string to the given type.
-    #[must_use]
-    pub fn metadata_as<T: serde::de::DeserializeOwned>(&self) -> Option<T> {
-        deserialize_from_string_opt(&self.metadata)
+    ///
+    /// # Errors
+    /// Returns an error if present metadata does not match the requested schema.
+    pub fn metadata_as<T: serde::de::DeserializeOwned>(&self) -> Result<Option<T>, serde_json::Error> {
+        self.metadata.as_deref().map(serde_json::from_str).transpose()
     }
 }
 
@@ -115,7 +123,7 @@ mod tests {
             created_at: 1_704_067_200,
         };
 
-        let ids: Vec<String> = response.history_item_ids_vec();
+        let ids = response.history_item_ids_vec().expect("legacy empty history");
         assert!(ids.is_empty());
     }
 
@@ -130,7 +138,7 @@ mod tests {
             created_at: 1_704_067_200,
         };
 
-        let ids = response.history_item_ids_vec();
+        let ids = response.history_item_ids_vec().expect("valid history references");
         assert_eq!(ids.len(), 2);
         assert_eq!(ids[0], "item_1");
     }
@@ -151,7 +159,7 @@ mod tests {
             created_at: 1_704_067_200,
         };
 
-        let meta: Option<TestMeta> = response.metadata_as();
+        let meta: Option<TestMeta> = response.metadata_as().expect("valid metadata");
         assert!(meta.is_some());
     }
 }

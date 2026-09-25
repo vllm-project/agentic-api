@@ -66,10 +66,10 @@ impl WsOutboundEvent {
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq)]
 #[serde(try_from = "String")]
-pub(super) struct StreamId(String);
+pub(in crate::handler::websocket) struct StreamId(String);
 
 impl StreamId {
-    pub(super) fn as_str(&self) -> &str {
+    pub(in crate::handler::websocket) fn as_str(&self) -> &str {
         &self.0
     }
 }

@@ -9,7 +9,6 @@ use axum::response::Response;
 use either::Either;
 use futures::stream::SplitSink;
 use futures::{Sink, SinkExt, Stream, StreamExt};
-use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
@@ -17,17 +16,17 @@ use tokio_util::sync::CancellationToken;
 use tracing::{Instrument as _, debug, warn};
 
 use agentic_core::executor::{BoxStream, ExecuteRequest, ExecutorError, ResponseSession, ResponseSessionGroup};
-use agentic_core::types::request_response::RequestPayload;
 
 use super::super::common::extract_bearer;
 use super::error::WsError;
+use super::request::{WsRequest, WsRequestParseError, parse_ws_request, stream_id_from_text};
 use crate::app::AppState;
 use crate::auth::AuthenticatedPrincipal;
 
-mod event;
+pub(super) mod event;
 mod local;
 use local::complete_without_inference;
-mod telemetry;
+pub(super) mod telemetry;
 use event::{StreamId, WsEventLimit, WsOutboundEvent};
 #[cfg(test)]
 use event::{WS_MAX_STREAM_ID_CHARS, WS_ROUTING_SLACK_BYTES, attach_stream_id, ws_routing_overhead};
@@ -46,20 +45,6 @@ const WS_MAX_SESSION_LANES: usize = 128;
 const WS_MAX_CHECKPOINT_ITEMS: usize = 32_768;
 const WS_MAX_CHECKPOINT_BYTES: usize = 16 * 1024 * 1024;
 const WS_MAX_RETAINED_BYTES: usize = 32 * 1024 * 1024;
-
-struct WsRequest {
-    payload: RequestPayload,
-    stream_id: Option<StreamId>,
-    generate: Option<bool>,
-    execution: Option<telemetry::QueuedExecution>,
-}
-
-#[derive(Debug)]
-struct WsRequestParseError {
-    previous_response_id: Option<String>,
-    error: WsError,
-    stream_id: Option<StreamId>,
-}
 
 enum WsWorkItem {
     Execute {
@@ -307,8 +292,8 @@ impl WsMultiplexer {
                     }
                 }
             };
-            // Dropping a failed executor stream aborts its worker asynchronously.
-            // Do not dispatch the next turn until its lease has been released.
+            // Executor stream drop disposes its producer inline. Keep the lease
+            // fence before dispatching another turn in this serial session.
             let result = match session.wait_until_idle().await {
                 Ok(()) => result,
                 Err(error) => Err(WsError::from(error)),
@@ -454,8 +439,8 @@ async fn responses_ws_loop(
     if client_disconnected {
         multiplexer.request_tasks.abort_all();
         while multiplexer.request_tasks.join_next().await.is_some() {}
-        // Executor stream disposal aborts its nested inference worker. Wait for
-        // every lease to release its pinned state before ending this connection.
+        // Joining request tasks also disposes their stream-owned producers.
+        // Verify every lease released pinned state before ending this connection.
         for session in multiplexer.sessions.values() {
             if let Err(error) = session.wait_until_idle().await {
                 warn!(%error, "failed to await websocket continuation disposal");
@@ -507,7 +492,15 @@ async fn handle_ws_client_message(
                 let limit = multiplexer.event_limit();
                 return handle_ws_error(sender, WsError::TooManyRequests, stream_id.as_ref(), limit).await;
             }
-            let work = match parse_ws_request(&text) {
+            let work = match parse_ws_request(
+                &text,
+                multiplexer
+                    .state
+                    .exec_ctx
+                    .responses_config
+                    .reasoning_replay_profile
+                    .is_some(),
+            ) {
                 Ok(request) => WsWorkItem::Execute {
                     request: Box::new(request),
                     input_bytes,
@@ -531,15 +524,6 @@ async fn handle_ws_client_message(
         Message::Ping(payload) => sender.send(Message::Pong(payload)).await.is_ok(),
         Message::Pong(_) => true,
     }
-}
-
-fn stream_id_from_text(text: &str) -> Option<StreamId> {
-    #[derive(Deserialize)]
-    struct StreamIdEnvelope {
-        stream_id: Option<StreamId>,
-    }
-
-    serde_json::from_str::<StreamIdEnvelope>(text).ok()?.stream_id
 }
 
 fn websocket_identity_error_event(principal: Option<&AuthenticatedPrincipal>) -> Option<Value> {
@@ -580,69 +564,6 @@ where
             }
         }
     }
-}
-
-fn parse_ws_request(text: &str) -> Result<WsRequest, WsRequestParseError> {
-    let value = serde_json::from_str::<Value>(text).map_err(|error| WsRequestParseError {
-        error: WsError::InvalidJson(error),
-        previous_response_id: None,
-        stream_id: None,
-    })?;
-    let stream_id = value
-        .get("stream_id")
-        .map(|value| {
-            value
-                .as_str()
-                .ok_or_else(|| "stream_id must be a string".to_owned())
-                .and_then(StreamId::try_from)
-        })
-        .transpose()
-        .map_err(|error| WsRequestParseError {
-            error: WsError::from(ExecutorError::InvalidRequest(error)),
-            previous_response_id: None,
-            stream_id: None,
-        })?;
-
-    if value.get("type").and_then(Value::as_str) != Some("response.create") {
-        return Err(WsRequestParseError {
-            error: WsError::UnexpectedType,
-            previous_response_id: None,
-            stream_id,
-        });
-    }
-
-    // Only valid routing plus response.create may identify a checkpoint for eviction.
-    // In particular, an explicit null/invalid stream_id must not target the default lane.
-    let previous_response_id = value
-        .get("previous_response_id")
-        .and_then(Value::as_str)
-        .map(str::to_owned);
-    let generate = value.get("generate").and_then(Value::as_bool);
-    let mut payload = serde_json::from_value::<RequestPayload>(value).map_err(|error| WsRequestParseError {
-        error: WsError::from(ExecutorError::from(error)),
-        previous_response_id,
-        stream_id: stream_id.clone(),
-    })?;
-    let requested_stream = payload.stream;
-    payload.stream = true;
-    debug!(
-        requested_stream,
-        forced_stream = payload.stream,
-        store = payload.store,
-        has_previous_response_id = payload.previous_response_id.is_some(),
-        has_conversation_id = payload.conversation_id.is_some(),
-        stream_id = stream_id.as_ref().map(StreamId::as_str),
-        ?generate,
-        tools = payload.tools.as_ref().map_or(0, Vec::len),
-        "accepted websocket response.create"
-    );
-
-    Ok(WsRequest {
-        execution: None,
-        payload,
-        stream_id,
-        generate,
-    })
 }
 
 async fn handle_ws_request(
@@ -881,7 +802,7 @@ mod tests {
                 "model": "test-model",
                 "input": "hello"
             });
-            assert!(parse_ws_request(&request.to_string()).is_err());
+            assert!(parse_ws_request(&request.to_string(), false).is_err());
         }
         let null_request = json!({
             "type": "response.create",
@@ -889,7 +810,7 @@ mod tests {
             "model": "test-model",
             "input": "hello"
         });
-        assert!(parse_ws_request(&null_request.to_string()).is_err());
+        assert!(parse_ws_request(&null_request.to_string(), false).is_err());
 
         let maximum = "🦀".repeat(WS_MAX_STREAM_ID_CHARS);
         let request = json!({
@@ -898,8 +819,32 @@ mod tests {
             "model": "test-model",
             "input": "hello"
         });
-        let parsed = parse_ws_request(&request.to_string()).expect("256-character stream_id should be valid");
+        let parsed = parse_ws_request(&request.to_string(), false).expect("256-character stream_id should be valid");
         assert_eq!(parsed.stream_id.expect("stream_id").as_str(), maximum);
+    }
+
+    #[test]
+    fn opaque_profile_rejects_fields_lost_by_websocket_value_decode() {
+        for request in [
+            r#"{"type":"response.create","model":"m","input":"hi","unqualified":true}"#,
+            r#"{"type":"response.create","model":"m","model":"n","input":"hi"}"#,
+            r#"{"type":"response.create","model":"m","input":"hi","reasoning":{"effort":"low","extra":1}}"#,
+        ] {
+            let error = parse_ws_request(request, true)
+                .err()
+                .expect("opaque profile must reject request");
+            assert_eq!(error.error.status(), http::StatusCode::BAD_REQUEST);
+            assert!(parse_ws_request(request, false).is_ok());
+        }
+        let valid = r#"{"type":"response.create","stream_id":"lane","generate":false,"model":"m","input":"hi"}"#;
+        assert!(parse_ws_request(valid, true).is_ok());
+
+        let duplicate_routing = r#"{"type":"response.create","stream_id":"lane-a","stream_id":"lane-b","previous_response_id":"resp_a","previous_response_id":"resp_b","model":"m","input":"hi"}"#;
+        let error = parse_ws_request(duplicate_routing, true)
+            .err()
+            .expect("ambiguous opaque request must fail");
+        assert!(error.stream_id.is_none());
+        assert!(error.previous_response_id.is_none());
     }
 
     #[test]

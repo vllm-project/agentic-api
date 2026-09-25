@@ -105,9 +105,11 @@ single-image SSE recording unchanged; they validate client/catalog propagation, 
                        JSON array returned for a client tool-search call
 --tools-after-search FILE
                        Effective tools after normalized direct-vLLM search
---manual-item-replay   Replay accumulated items with store=false for direct-vLLM or gateway tool search
+--manual-item-replay   Replay bounded complete item history with --no-store; supports OpenAI, vLLM, gateway, and branches
+--replay-output-source terminal | item-done
+                       Select the streamed replay source (default terminal; item-done requires manual replay)
 --reasoning JSON       JSON object containing Responses reasoning settings
---input-file FILE       JSON string or item array for turn 1 of an HTTP Responses recording; later turns are prompted
+--input-file FILE       JSON string or item array for Responses turn 1; WebSocket/branches require manual replay
 --max-output-tokens N  max_output_tokens for Responses requests (default 1024; use 0 to omit)
 --proxy-port PORT      Local proxy port (default 7070)
 --branch-from TURN     Branch from this turn's response id (repeatable)
@@ -218,6 +220,7 @@ turns:
 | `record_text_only_cassettes.sh` | 10 text-only cassettes (responses + conv modes, streaming + non-streaming) | OpenAI (`OPENAI_API_KEY`) |
 | `record_conversations_api_cassettes.sh` | 18 Conversation Items API cassettes: four history scenarios in both transports and one non-streaming edge-case sequence, each for both providers | OpenAI and gateway |
 | `record_reasoning_cassettes.sh` | Matching explicit-reasoning cassettes (streaming + non-streaming) | gateway and OpenAI reference; optional direct vLLM |
+| `record_opaque_reasoning.py` | Pinned stateless reasoning and function continuations, including branches (JSON, SSE, WebSocket) | OpenAI reference |
 | `record_tool_call_cassettes.sh` | 8 tool-call cassettes (4 tool_choice modes x streaming + non-streaming) | vLLM |
 | `record_codex_cli_tool_call_cassettes.sh` | Codex function/namespace/custom-tool matrix | gateway, vLLM, and OpenAI |
 | `record_custom_tool_cassettes.sh` | Matching two-turn custom-tool flows (streaming + non-streaming) | gateway and OpenAI reference |
@@ -332,6 +335,64 @@ REASONING_RECORD_SET=vllm \
 VLLM_URL=http://0.0.0.0:5050 \
 MODEL=Qwen/Qwen3-30B-A3B-FP8 \
 bash crates/agentic-server-core/tests/cassettes/record_reasoning_cassettes.sh
+```
+
+### Pinned stateless reasoning qualification (#335)
+
+`record_opaque_reasoning.py` targets only `https://api.openai.com/v1/responses` and
+`gpt-5.4-2026-03-05`. It drives the existing recorder, then validates six captures:
+text continuation and a reasoning-dependent function call, each over JSON, SSE and
+WebSocket. Each capture has an initial request, a continuation and an independent
+branch from the first response. All requests use `store: false`; no conversation or
+`previous_response_id` is sent. WebSocket capture opens a new connection per request,
+so it tests complete manual replay, not connection-local continuation caching.
+
+Configure an API key locally; never paste a credential into a command
+recorded in chat. From the repository root, with a private, Git-ignored `.env`:
+
+```bash
+capture_dir="$(mktemp -d /tmp/agentic-opaque-recordings.XXXXXX)"
+uv run --no-project --python 3.12 --env-file .env \
+  --with-requirements crates/agentic-server-core/tests/cassettes/recorder-requirements.txt \
+  python crates/agentic-server-core/tests/cassettes/record_opaque_reasoning.py \
+  --output-dir "$capture_dir"
+
+AGENTIC_OPAQUE_CASSETTE_DIR="$capture_dir" \
+  cargo test -p agentic-server-core --lib pinned_reference
+```
+
+Only promote the six recorder-generated YAML files to
+`reasoning/opaque/gpt-5.4-2026-03-05/` after validation and Rust replay pass. Existing
+captures are not overwritten by the script; failures leave staging evidence intact.
+`--validate-only` makes no provider calls. `--scenario` and `--transport` select a
+subset. Each full run makes 18 model requests, with at most 1024 output tokens per
+request; there are no automatic retries. This is provider characterization, not
+permission to enable the gateway's closed candidate profile.
+
+The captured provider emits distinct opaque byte strings on `output_item.done` and
+`response.completed`. Their equivalence is not assumed. The scenario explicitly
+uses `--replay-output-source item-done` for SSE/WebSocket to exercise the exact
+completed items retained by gateway ingestion. Raw terminal envelopes remain in the
+cassette unchanged. The recorder does not reconstruct output from deltas; Rust replay
+still performs the authoritative semantic lifecycle validation. JSON uses the output
+array from its one response body.
+
+General manual replay supports structured opening input, function outputs, linear
+continuation, explicit branch turn numbers and extra branches. A tool-choice sequence
+has one entry per recorded request, including extra branches. Checkpoints are immutable
+and bounded to 64 turns, 4096 items / 4 MiB per history, and 32 MiB aggregate serialized
+checkpoint data. Incomplete or failed responses never become replay checkpoints.
+Payload printing is suppressed during manual replay; authorization is masked in captures.
+Opaque state remains in the captured wire data, never in progress logs. WebSocket capture
+also enforces 8 MiB per message, 64 MiB / 16384 events per turn and a 64 KiB handshake
+ceiling. These are recorder limits, separate from gateway execution limits.
+
+Run the offline recorder checks without credentials:
+
+```bash
+uv run --no-project --python 3.12 \
+  --with-requirements crates/agentic-server-core/tests/cassettes/recorder-requirements.txt \
+  python -m unittest discover -s crates/agentic-server-core/tests/cassettes -p 'test_record*.py'
 ```
 
 ### Tool calls (vLLM)

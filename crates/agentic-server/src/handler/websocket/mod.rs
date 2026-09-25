@@ -1,4 +1,5 @@
 mod error;
+mod request;
 mod responses;
 
 pub use responses::responses_ws;

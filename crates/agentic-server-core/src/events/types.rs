@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+pub use super::shell::ShellCommandUpdate;
 use crate::types::io::{OutputItem, ResponseUsage, ShellCall};
 
 /// The type of an output item received during streaming.
@@ -289,14 +290,6 @@ impl WireEvent {
     }
 }
 
-/// One command's incremental lifecycle within a shell output item.
-#[derive(Debug, Clone)]
-pub enum ShellCommandUpdate {
-    Added(String),
-    Delta(String),
-    Done(String),
-}
-
 /// Typed payload extracted from an SSE event's JSON data.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -307,6 +300,9 @@ pub enum EventPayload {
         id: String,
         status: String,
         usage: Option<ResponseUsage>,
+        model: Option<crate::types::upstream_identity::UpstreamModelId>,
+        /// Invalid upstream metadata; strict ingestion rejects, lenient invalidates evidence.
+        model_invalid: bool,
     },
 
     /// `response.output_item.added`

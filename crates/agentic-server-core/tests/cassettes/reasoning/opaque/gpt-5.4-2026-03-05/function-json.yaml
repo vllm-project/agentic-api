@@ -1,0 +1,453 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content: Find the two-digit number whose digits sum to 11 and whose reversal
+          is 27 larger. Then call lookup_code with label ALPHA followed by that number;
+          do not answer without the lookup. After receiving the code, reply with the
+          code only.
+        role: user
+        type: message
+      max_output_tokens: 1024
+      model: gpt-5.4-2026-03-05
+      parallel_tool_calls: false
+      reasoning:
+        effort: low
+        summary: concise
+      store: false
+      stream: false
+      tool_choice: auto
+      tools:
+      - description: Look up the code for a label.
+        name: lookup_code
+        parameters:
+          additionalProperties: false
+          properties:
+            label:
+              type: string
+          required:
+          - label
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790111924
+      created_at: 1790111921
+      error: null
+      frequency_penalty: 0.0
+      id: resp_06f16770ad9e7716016ab2f0b1d48c87d2a4bcd1797aef65f1
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 1024
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.4-2026-03-05
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABqsvC0XYUH_rR4DYfTpT-l7pHpGTgd0u6dM8VO3L58vS1WNBkT262PMeZmQMPnidf9doRUNnsXpIcuK3N1ZZIrObN7sClNhqzO6iC3QdJvWDZIIfFGqcwrZ8P97_qLe_yyV2D97NlpIRGWbpu30yH7am9IJxDIczY56yHox_nsePEpeXRjD_8_zkxbjRuVfNn3mdC0A9ddh29JpNrt48GD5YoD_BnjipiuL0MemHGtEDo3uz5-_Msyp0uD9TnetcR6h4ixtWiJF6Wege3RS3YtFStXrKiz4_hM2JD9sPbgHWAxkZ7h5g56gaHlKw2Kot0HJT8kXLq7Q7YMJZ0NyTQA2r0UYDiEh5lydJwzqV5bAQIXHRQ3m5-73k5nZgiiKXWqlKnVN8NWJFkLO_NV9V9xx0ZmBo7PPULj_qq1qOPGa14a91JDSrMzuZJ_OKO-K9tknLfK-pG2Mx9hv_tIkJm691JXfhd6YJy54IITJHhHBs07f9hBJ5rKD5mgUSi3X6bl-H0K4uK7P8ulgv6Q-Fbp6Q1lJTW_sVQGeOCMMiawbK6t6QJsAMMr1YfFOtYOlL6XsDyOBjPhD1AVveqf0sljlZLqETzOWlG9OXHa4wr7E2Aq_7AgSL3lcLzmgv7aJLkcoS6rFsFWiI2uztKaCXbp7Om-B0VJ4eVzd2WkoWZTP0VkWgfrAZFG0tzLs9BdhPctHw5q_5gyKw_VNoYvuZapow30ICy6s84FHxzD6G_lpbDbfWtRLzTZuJH3eWcR5QOzGTX_fBdeTg6Z35BFXdHdENbRyIRcVwLN_VVR9VPjBa5DXB4CCo92k1pWIt2anmtHayUhP6uZVUsIQ7E1aF7EZBWSeShZ7jwcx8tEhjb2IEv2l6V5pZzjmLWsvLH_VyoHH-qBBYTB7GfLRAKt2C2UOPuIYBzysn2diDX9m_5Ps4vBPvhnWNUttjZmjE1g3npF657ExYwq4gilpCrzXzgZhAPw8nLz_ZdcoAcoDZHnw-PrdLNO-Os-WfSNTMWLAGrxB13q6bM_sqO2Rb0TIjAGZWuv9f-yPwReSDQI7J1EZb0Q4Dge79AcGvjPwERkyi9m8cbjcqrKInzsLFqzeqqjbkJ-Uosb76nfnKGR2hMUXF5AluOFkylF_QyZhBNxntC2CkAv6LE9AVDt4mqzlKDKjbzCEXnqF5Vd7sY42JRqBdG7OkiXX6dnq8siZ1iFcnffiZ95SFhnx3s7YErlfO1Yit0yEotuTnlynMaU4Dyzo_HiOxw88rTv5fwDubeuqXi9vkfsD6bvG7Qz_8sJSIVlYoa_cvX67yhuS8u7nIeo26e3vMptlr6R2fmeeqEvJGMzel4IPd0ZxxQrA0Vb1daGEyQRtWdDdJhs94avYiKWPWgnGMg=
+        id: rs_06f16770ad9e7716016ab2f0b3281887d29c79deb286be2916
+        summary:
+        - text: '**Solving digit puzzle**'
+          type: summary_text
+        type: reasoning
+      - arguments: '{"label":"ALPHA47"}'
+        call_id: call_beZETrSwif1Bb3bhz0JJU0yX
+        id: fc_06f16770ad9e7716016ab2f0b437bc87d289079aff068b987d
+        name: lookup_code
+        status: completed
+        type: function_call
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: current_turn
+        effort: low
+        mode: standard
+        summary: concise
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Look up the code for a label.
+        name: lookup_code
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            label:
+              type: string
+          required:
+          - label
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 172
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 89
+        output_tokens_details:
+          reasoning_tokens: 67
+        total_tokens: 261
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - content: Find the two-digit number whose digits sum to 11 and whose reversal
+          is 27 larger. Then call lookup_code with label ALPHA followed by that number;
+          do not answer without the lookup. After receiving the code, reply with the
+          code only.
+        role: user
+        type: message
+      - content: []
+        encrypted_content: gAAAAABqsvC0XYUH_rR4DYfTpT-l7pHpGTgd0u6dM8VO3L58vS1WNBkT262PMeZmQMPnidf9doRUNnsXpIcuK3N1ZZIrObN7sClNhqzO6iC3QdJvWDZIIfFGqcwrZ8P97_qLe_yyV2D97NlpIRGWbpu30yH7am9IJxDIczY56yHox_nsePEpeXRjD_8_zkxbjRuVfNn3mdC0A9ddh29JpNrt48GD5YoD_BnjipiuL0MemHGtEDo3uz5-_Msyp0uD9TnetcR6h4ixtWiJF6Wege3RS3YtFStXrKiz4_hM2JD9sPbgHWAxkZ7h5g56gaHlKw2Kot0HJT8kXLq7Q7YMJZ0NyTQA2r0UYDiEh5lydJwzqV5bAQIXHRQ3m5-73k5nZgiiKXWqlKnVN8NWJFkLO_NV9V9xx0ZmBo7PPULj_qq1qOPGa14a91JDSrMzuZJ_OKO-K9tknLfK-pG2Mx9hv_tIkJm691JXfhd6YJy54IITJHhHBs07f9hBJ5rKD5mgUSi3X6bl-H0K4uK7P8ulgv6Q-Fbp6Q1lJTW_sVQGeOCMMiawbK6t6QJsAMMr1YfFOtYOlL6XsDyOBjPhD1AVveqf0sljlZLqETzOWlG9OXHa4wr7E2Aq_7AgSL3lcLzmgv7aJLkcoS6rFsFWiI2uztKaCXbp7Om-B0VJ4eVzd2WkoWZTP0VkWgfrAZFG0tzLs9BdhPctHw5q_5gyKw_VNoYvuZapow30ICy6s84FHxzD6G_lpbDbfWtRLzTZuJH3eWcR5QOzGTX_fBdeTg6Z35BFXdHdENbRyIRcVwLN_VVR9VPjBa5DXB4CCo92k1pWIt2anmtHayUhP6uZVUsIQ7E1aF7EZBWSeShZ7jwcx8tEhjb2IEv2l6V5pZzjmLWsvLH_VyoHH-qBBYTB7GfLRAKt2C2UOPuIYBzysn2diDX9m_5Ps4vBPvhnWNUttjZmjE1g3npF657ExYwq4gilpCrzXzgZhAPw8nLz_ZdcoAcoDZHnw-PrdLNO-Os-WfSNTMWLAGrxB13q6bM_sqO2Rb0TIjAGZWuv9f-yPwReSDQI7J1EZb0Q4Dge79AcGvjPwERkyi9m8cbjcqrKInzsLFqzeqqjbkJ-Uosb76nfnKGR2hMUXF5AluOFkylF_QyZhBNxntC2CkAv6LE9AVDt4mqzlKDKjbzCEXnqF5Vd7sY42JRqBdG7OkiXX6dnq8siZ1iFcnffiZ95SFhnx3s7YErlfO1Yit0yEotuTnlynMaU4Dyzo_HiOxw88rTv5fwDubeuqXi9vkfsD6bvG7Qz_8sJSIVlYoa_cvX67yhuS8u7nIeo26e3vMptlr6R2fmeeqEvJGMzel4IPd0ZxxQrA0Vb1daGEyQRtWdDdJhs94avYiKWPWgnGMg=
+        id: rs_06f16770ad9e7716016ab2f0b3281887d29c79deb286be2916
+        summary:
+        - text: '**Solving digit puzzle**'
+          type: summary_text
+        type: reasoning
+      - arguments: '{"label":"ALPHA47"}'
+        call_id: call_beZETrSwif1Bb3bhz0JJU0yX
+        id: fc_06f16770ad9e7716016ab2f0b437bc87d289079aff068b987d
+        name: lookup_code
+        status: completed
+        type: function_call
+      - call_id: call_beZETrSwif1Bb3bhz0JJU0yX
+        output: ORCHID-47
+        type: function_call_output
+      max_output_tokens: 1024
+      model: gpt-5.4-2026-03-05
+      parallel_tool_calls: false
+      reasoning:
+        effort: low
+        summary: concise
+      store: false
+      stream: false
+      tool_choice: none
+      tools:
+      - description: Look up the code for a label.
+        name: lookup_code
+        parameters:
+          additionalProperties: false
+          properties:
+            label:
+              type: string
+          required:
+          - label
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790111925
+      created_at: 1790111924
+      error: null
+      frequency_penalty: 0.0
+      id: resp_06f16770ad9e7716016ab2f0b493f887d29c8d1c7eab0388dc
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 1024
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.4-2026-03-05
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABqsvC1ua9lh3K_o_DJTznVQplGXQ5FWFVy7n16V2zsa1xwonu16RFnsW5hRtlm3YT0PdKQ9RUcw1JWDzvNEz_e8LlOV5hXtXtry2So4GevhHa5xfE4FP6j8C7AEac38FnIaOd29HvdsS3775doWKysgkemkfa3YXgp3W8oGUgaLdqNsAHKhgOZzS_31u1LsuHoDlnpsvk1JzMzmfI1YdFS6nJoeFTpf8LAWHPtjKWajTEf1swvtLyxCZ6lssxVfV5gtupA8Cwj1A1G0KO1GQFg3v820cuE54scSXcoleYGdN5XiwCcYo-Dcq7kXYIXypKOQ7RLWjcSk381-bP381KAJj7Xs1Vw_nUytYBBnWrI9VkiwqmBmo_751xX10OhqKPBMwYbnzU-hc1sIfmaDf40ynAyNxSTLtJrkZKEhEK8Ef5RCxzlo_yYeS8ZlCdB-fmfW2Pym9YA6K1oFcZLqydOOGpWybcjC0WM8CT9-d5XkxRrl6SR34-dzh7VArt5DXFXNJ4YYpCsMO3PVdbFtAQlFFG5jidmPslBhyeh121oRsTkEnuTwxZBFHHx0nG9eGaT4ihwe4YENzotb896mBntbuEJ6HCmjwn922TO80D-94pWiMNc_2HP2H1zWWO3KALFUdL9ZA52UaxiryEkCbxvxZRuUR7WYpkpeAVu5I-VTBVWbvNK_-rLPR4-St1uY2R7iWp07oLLgrY10GTqeRZNPT9tGyseHoyLwXI0hzdpHsaCQs3NhAgMuKxeEqBN50GJXEspznDh8VUJ3OfGTjWz_GhsF7CRYfV7SCBkg8kYNzquW3mMQiDv6ynxTXgrIypw82Sce3eW5sMZHYPHA-90k40UtpCnznpJSKhBJdfliHGqkiPhP4rhEcj_bRwHCFB8-aNm17C5DeILaToZaS-OGBKa9tkKpRDzZOZfQKGo4C2i9riXZTxBQxCzJSIGaD3VIUHG6R1W6XjkbyY88ku_q0-sjNt_O5YNHD5WnPstx3woOrNltUQjuuc5AAdEEBysN83Hs_5qOHNpgwJ396hbJ3WiNN8hpjCmOJ1jF0sRW6NaXyqyKsn7c_vciZsfnjNK4P5wEjetMum4vASTFovrJntQtMt590vksZyDp-Iz678xujqS4vm1yt4oOrZZWM1U8Fmb8Jr5rfVG19wRjhWbxlqOigexgw1733n0Kzh8aFCPWcwfKJJLJUrzSFEQi2D4ICxEg2NHAPHCgTZwbxA7t87ub4vBbcyUIPoVeXqPEnb0JTKkGovnnlZAluTo0ZE6RnQYlPX-brCTzGAn5Di2v_9bFg==
+        id: rs_06f16770ad9e7716016ab2f0b51fe887d293431daed0534de7
+        summary:
+        - text: '**Preparing final answer code**'
+          type: summary_text
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: ORCHID-47
+          type: output_text
+        id: msg_06f16770ad9e7716016ab2f0b5853087d2a5052f535098072f
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: current_turn
+        effort: low
+        mode: standard
+        summary: concise
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: none
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Look up the code for a label.
+        name: lookup_code
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            label:
+              type: string
+          required:
+          - label
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 277
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 31
+        output_tokens_details:
+          reasoning_tokens: 20
+        total_tokens: 308
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - content: Find the two-digit number whose digits sum to 11 and whose reversal
+          is 27 larger. Then call lookup_code with label ALPHA followed by that number;
+          do not answer without the lookup. After receiving the code, reply with the
+          code only.
+        role: user
+        type: message
+      - content: []
+        encrypted_content: gAAAAABqsvC0XYUH_rR4DYfTpT-l7pHpGTgd0u6dM8VO3L58vS1WNBkT262PMeZmQMPnidf9doRUNnsXpIcuK3N1ZZIrObN7sClNhqzO6iC3QdJvWDZIIfFGqcwrZ8P97_qLe_yyV2D97NlpIRGWbpu30yH7am9IJxDIczY56yHox_nsePEpeXRjD_8_zkxbjRuVfNn3mdC0A9ddh29JpNrt48GD5YoD_BnjipiuL0MemHGtEDo3uz5-_Msyp0uD9TnetcR6h4ixtWiJF6Wege3RS3YtFStXrKiz4_hM2JD9sPbgHWAxkZ7h5g56gaHlKw2Kot0HJT8kXLq7Q7YMJZ0NyTQA2r0UYDiEh5lydJwzqV5bAQIXHRQ3m5-73k5nZgiiKXWqlKnVN8NWJFkLO_NV9V9xx0ZmBo7PPULj_qq1qOPGa14a91JDSrMzuZJ_OKO-K9tknLfK-pG2Mx9hv_tIkJm691JXfhd6YJy54IITJHhHBs07f9hBJ5rKD5mgUSi3X6bl-H0K4uK7P8ulgv6Q-Fbp6Q1lJTW_sVQGeOCMMiawbK6t6QJsAMMr1YfFOtYOlL6XsDyOBjPhD1AVveqf0sljlZLqETzOWlG9OXHa4wr7E2Aq_7AgSL3lcLzmgv7aJLkcoS6rFsFWiI2uztKaCXbp7Om-B0VJ4eVzd2WkoWZTP0VkWgfrAZFG0tzLs9BdhPctHw5q_5gyKw_VNoYvuZapow30ICy6s84FHxzD6G_lpbDbfWtRLzTZuJH3eWcR5QOzGTX_fBdeTg6Z35BFXdHdENbRyIRcVwLN_VVR9VPjBa5DXB4CCo92k1pWIt2anmtHayUhP6uZVUsIQ7E1aF7EZBWSeShZ7jwcx8tEhjb2IEv2l6V5pZzjmLWsvLH_VyoHH-qBBYTB7GfLRAKt2C2UOPuIYBzysn2diDX9m_5Ps4vBPvhnWNUttjZmjE1g3npF657ExYwq4gilpCrzXzgZhAPw8nLz_ZdcoAcoDZHnw-PrdLNO-Os-WfSNTMWLAGrxB13q6bM_sqO2Rb0TIjAGZWuv9f-yPwReSDQI7J1EZb0Q4Dge79AcGvjPwERkyi9m8cbjcqrKInzsLFqzeqqjbkJ-Uosb76nfnKGR2hMUXF5AluOFkylF_QyZhBNxntC2CkAv6LE9AVDt4mqzlKDKjbzCEXnqF5Vd7sY42JRqBdG7OkiXX6dnq8siZ1iFcnffiZ95SFhnx3s7YErlfO1Yit0yEotuTnlynMaU4Dyzo_HiOxw88rTv5fwDubeuqXi9vkfsD6bvG7Qz_8sJSIVlYoa_cvX67yhuS8u7nIeo26e3vMptlr6R2fmeeqEvJGMzel4IPd0ZxxQrA0Vb1daGEyQRtWdDdJhs94avYiKWPWgnGMg=
+        id: rs_06f16770ad9e7716016ab2f0b3281887d29c79deb286be2916
+        summary:
+        - text: '**Solving digit puzzle**'
+          type: summary_text
+        type: reasoning
+      - arguments: '{"label":"ALPHA47"}'
+        call_id: call_beZETrSwif1Bb3bhz0JJU0yX
+        id: fc_06f16770ad9e7716016ab2f0b437bc87d289079aff068b987d
+        name: lookup_code
+        status: completed
+        type: function_call
+      - call_id: call_beZETrSwif1Bb3bhz0JJU0yX
+        output: ORCHID-47
+        type: function_call_output
+      - content: This is a separate continuation from the call. Reply with the returned
+          code followed by BRANCH.
+        role: user
+        type: message
+      max_output_tokens: 1024
+      model: gpt-5.4-2026-03-05
+      parallel_tool_calls: false
+      reasoning:
+        effort: low
+        summary: concise
+      store: false
+      stream: false
+      tool_choice: none
+      tools:
+      - description: Look up the code for a label.
+        name: lookup_code
+        parameters:
+          additionalProperties: false
+          properties:
+            label:
+              type: string
+          required:
+          - label
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790111927
+      created_at: 1790111925
+      error: null
+      frequency_penalty: 0.0
+      id: resp_06f16770ad9e7716016ab2f0b5e2d487d2b0ff0eb8b915a691
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 1024
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.4-2026-03-05
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABqsvC3EmYe9H9YoqC3C_dedTZy1Rqje0_QfhElJZQdhgO0OI95j0yjiLfboQMET5rwl9Spy_t6HNDA334n0oEz4t0m1t33sUWCwFhvkl5Lqh-f3accJbdg8CNIPSRHgJVNoVJzQSDXl5EMamdrliS-fY3aqp-E3LerEQ47YJ7eBQC7KaWanasnjzQus6UASr614PlZWQ61TRtHxRRq4rNAq1NZg4zIIaor9ZvpkCOJ5TxPYPY7iy6Rr5j4PiE9Ruvdhhbp8mQw74i0ruX2iv7ietFbUE7LWGPS2mAJiOICBFMqdHtq2_lj2EABZBwWp7x7Nnus7ngUFc5z9eGziCd9dQKlLzdUqmAjKEG4XxFNbxaQG9fJ0vKK_EGGZDNSFZ72Dxh3DRMHHGaKlsN8tinzga5QZbqfFg1MWhAVGYMdVk3mtLx9mZuUMvwKfzWYeeVUwrPK47QQ1rBRq-KAT2TSAcUyaoE6MGTSTzxaeU7b1p5T005Z4ip-oXVe5DG4BcifnKCMb4cDEDDxL5_Vt4e986BBcl-BDUDcchk1dNvi8qtbQ_vXBZ7YaHPTPEurruf7uEF9gn7BiPkqy0C4Wzix3EDpKtN2L5QNhno3VQpyU8KDmi7heFT6ACTbTAgaH6xgHNcy9yyOF5Es05E3I5KUzzpbvevdZCRxmijCnNoy39TNv4HId6eC4XOlH68GikBoqh4ZOFOaYyl9vNloU64ARoifdL1D2_88TPYozCCttIcKdzHcsR6ut-5nCTpMDsQqOKTfim-8VG78Z7th49RfcL6bRu_EGnjged0p84CZG7b_craCPTpxirLNYdUUQhAKQ35nON8tTxkUUzQJjYNutGk7UVWkziGWrglULINHSkcewpU22Idej_TZW6z-15d4qCbA_J1FKeDWrNyuqbpxusf86lIpUbgA66lwLEcdqIiA2TIzAbWRYheNa8RBfyahaOSDSogG3EMbfP8u_PV_aUO4bttOxq8RjSFiv6-m5ffN8TNeQTGjNenoackugGIBi1LRdrOwdBkdOqmjAkQSkzLFo9NVCNbMdpHg83eCt6eKgscwF0qn48dN3pJfaeMv6NkkhR1MX-Dcrz9NtIg42WQDdvm6nK9BSHPep6Gon0dGlPs-_4IpiIxAWuQ0d1QxWn493u9ZnAiM6jee4rLlF9_AYyiJ9DjB0TpfVEQ-6gBVx2XEYFhuDb1dQc6HVm6vo9vC0YovDvULIX_SK3bbM5a-uvdsyedGhQcXZ6aVzMmzTFuISEtHpCPyWWR1fQ391kL--pxE4t9b5NyqpWbQq_pW18qF3xDgpoR9FK53JGyP6XYdRnmuQWgMehw2f_bG9ZPVu-UnbdniblVFk51HldHVppru-34cEZ-yt2sDFyoj26dJ_THWpr9E5Dut47bGepZci5GRx1xYaPWViOiBYl1S2KUmklWulvyB63JTL8QhivHLbJsIWLgrZ7HOB5pATvMrHdHDFBFM0jXYxNNMPlQYDw==
+        id: rs_06f16770ad9e7716016ab2f0b6a58087d29d2722812841ad42
+        summary:
+        - text: '**Responding with branch code**'
+          type: summary_text
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: ORCHID-47 BRANCH
+          type: output_text
+        id: msg_06f16770ad9e7716016ab2f0b7611887d281386b6b16b78306
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: current_turn
+        effort: low
+        mode: standard
+        summary: concise
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: none
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Look up the code for a label.
+        name: lookup_code
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            label:
+              type: string
+          required:
+          - label
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 231
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 66
+        output_tokens_details:
+          reasoning_tokens: 53
+        total_tokens: 297
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

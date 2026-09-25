@@ -1,15 +1,17 @@
 use crate::executor::accumulator::Validation;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::StreamEvent;
-use crate::executor::inference::{call_inference_limited, fetch_response_json_limited};
-use crate::executor::pipeline::{AgentPipeline, StreamPayload};
+use crate::executor::inference::call_inference_with_transport;
+use crate::executor::pipeline::{AgentPipeline, StreamPayload, UpstreamFailureLog};
 use crate::executor::rehydrate::validate_message_content;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::translate::TranslationContext;
 use crate::tool::{ToolRegistry, ToolSearchState};
+use crate::types::reasoning_replay::ReasoningReplayPolicy;
 use crate::types::request_response::ResponsePayload;
 use crate::utils::common::serialize_to_string;
+#[cfg(test)]
 use std::sync::Arc;
 
 /// Snapshot tool facts at the orchestration boundary, excluding all execution bindings.
@@ -61,10 +63,40 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
 /// # Errors
 /// Unsupported message content, a tool-configuration error, or a serialization failure.
 pub fn upstream_request(ctx: &RequestContext, stream: bool) -> ExecutorResult<String> {
+    request_for_policy(ctx, stream, ReasoningReplayPolicy::VllmPlaintext)
+}
+
+/// Pure wire projection; execution requires the separate preflight/availability gate.
+fn request_for_policy(ctx: &RequestContext, stream: bool, policy: ReasoningReplayPolicy) -> ExecutorResult<String> {
     // Composable callers may supply RequestContext without the rehydration step.
     validate_message_content(&ctx.enriched_request.input)?;
     let request = ctx.enriched_request.to_upstream_request(stream)?;
+    let request = match policy {
+        ReasoningReplayPolicy::VllmPlaintext => request,
+        ReasoningReplayPolicy::OpaqueResponses => request.with_opaque_replay(),
+    };
     serialize_to_string(&request).map_err(ExecutorError::JsonError)
+}
+
+fn validation_for_policy(policy: ReasoningReplayPolicy) -> Validation {
+    match policy {
+        ReasoningReplayPolicy::VllmPlaintext => Validation::Lenient,
+        ReasoningReplayPolicy::OpaqueResponses => Validation::Strict,
+    }
+}
+
+fn failure_log_for_policy(policy: ReasoningReplayPolicy) -> UpstreamFailureLog {
+    match policy {
+        ReasoningReplayPolicy::VllmPlaintext => UpstreamFailureLog::Detailed,
+        ReasoningReplayPolicy::OpaqueResponses => UpstreamFailureLog::CodeOnly,
+    }
+}
+
+fn provider_result<T>(policy: ReasoningReplayPolicy, result: ExecutorResult<T>) -> ExecutorResult<T> {
+    match policy {
+        ReasoningReplayPolicy::VllmPlaintext => result,
+        ReasoningReplayPolicy::OpaqueResponses => result.map_err(super::error::OpaqueUpstreamError::redact),
+    }
 }
 
 /// One pipeline per response sender; collect-only and JSON requests have no sender.
@@ -91,22 +123,31 @@ pub(super) async fn fetch_blocking_payload(
     auth: Option<&str>,
     registry: &ToolRegistry,
     response_budget: Option<&ExecutorResponseBudget>,
-) -> ExecutorResult<ResponsePayload> {
+) -> ExecutorResult<crate::types::upstream_identity::IngestedResponse> {
+    super::replay::preflight_inference(exec_ctx, &agent.request.enriched_request, auth)?;
     agent.ensure_request_prepared()?;
-    let upstream_json = upstream_request(&agent.request, false)?;
-    let body = fetch_response_json_limited(
-        upstream_json,
-        &exec_ctx.responses_url(),
-        &exec_ctx.client,
-        auth,
-        exec_ctx.responses_config.max_upstream_json_bytes,
-    )
-    .await?;
-    agent.run_with_json_body(
-        &body,
-        Validation::Lenient,
-        translation_context(registry, agent),
-        response_budget.cloned(),
+    let policy = exec_ctx.responses_config.reasoning_replay_policy;
+    let upstream_json = request_for_policy(&agent.request, false, policy)?;
+    let transport = exec_ctx.responses_transport().await?;
+    let body = provider_result(
+        policy,
+        transport
+            .fetch_json(
+                &exec_ctx.responses_url(),
+                upstream_json,
+                auth,
+                exec_ctx.responses_config.max_upstream_json_bytes,
+            )
+            .await,
+    )?;
+    provider_result(
+        policy,
+        agent.run_with_json_body(
+            &body,
+            validation_for_policy(policy),
+            translation_context(registry, agent),
+            response_budget.cloned(),
+        ),
     )
 }
 
@@ -129,7 +170,9 @@ pub async fn decode_upstream(
     let mut agent = agent_pipeline(ctx, None, None);
     let payload = match body {
         UpstreamBody::Json(body) => {
-            agent.run_with_json_body(body, Validation::Strict, TranslationContext::default(), None)?
+            agent
+                .run_with_json_body(body, Validation::Strict, TranslationContext::default(), None)?
+                .payload
         }
         UpstreamBody::Sse(body) => {
             let lines = futures::stream::iter(body.lines().map(|line| Ok(line.to_owned())));
@@ -158,27 +201,36 @@ pub(super) async fn fetch_stream_payload(
     output_offset: usize,
     response_budget: &ExecutorResponseBudget,
 ) -> ExecutorResult<StreamPayload> {
+    super::replay::preflight_inference(exec_ctx, &agent.request.enriched_request, auth)?;
     agent.ensure_request_prepared()?;
-    let upstream_json = upstream_request(&agent.request, true)?;
-    let lines = call_inference_limited(
+    let policy = exec_ctx.responses_config.reasoning_replay_policy;
+    let upstream_json = request_for_policy(&agent.request, true, policy)?;
+    let lines = call_inference_with_transport(
         upstream_json,
         exec_ctx.responses_url(),
-        Arc::clone(&exec_ctx.client),
+        exec_ctx.responses_transport().await?,
         auth.map(str::to_owned),
         exec_ctx.streaming_timeout,
         exec_ctx.responses_config.max_upstream_sse_line_bytes,
     );
-    agent
-        .run_with_stream_body(
-            lines,
-            Validation::Lenient,
-            translation_context(registry, agent),
-            registry,
-            output_offset,
-            Some(response_budget.clone()),
-        )
-        .await
+    agent.set_upstream_failure_log(failure_log_for_policy(policy));
+    provider_result(
+        policy,
+        agent
+            .run_with_stream_body(
+                lines,
+                validation_for_policy(policy),
+                translation_context(registry, agent),
+                registry,
+                output_offset,
+                Some(response_budget.clone()),
+            )
+            .await,
+    )
 }
+
+#[cfg(test)]
+mod opaque_tests;
 
 #[cfg(test)]
 pub(super) mod tests {
@@ -282,11 +334,12 @@ pub(super) mod tests {
         let translated = ingestion.push(SseLine::parse(&format!("data: {done}"))).unwrap();
         assert_eq!(translated.frames[0].wire.rest["item"]["namespace"], "travel");
         assert_eq!(translated.frames[0].wire.rest["item"]["name"], "timezone");
-        let stream_payload = ingestion.finish("test", None, None).unwrap();
+        let stream_payload = ingestion.finish("test", None, None).unwrap().payload;
         let body = serde_json::json!({"id":"upstream","status":"completed","output":[item]}).to_string();
         let json_payload = agent
             .run_with_json_body(&body, Validation::Lenient, json_context, None)
-            .unwrap();
+            .unwrap()
+            .payload;
         assert_eq!(
             serde_json::to_value(&stream_payload.output).unwrap(),
             serde_json::to_value(&json_payload.output).unwrap()
@@ -335,6 +388,7 @@ pub(super) mod tests {
             response_id: "resp_test".to_owned(),
             conversation_id: None,
             conversation_version: None,
+            recorded_output_prefix: crate::types::turn_history::RecordedOutputPrefix::default(),
             continuation: None,
         }
     }
@@ -714,7 +768,7 @@ pub(super) mod tests {
         );
         assert_eq!(
             serde_json::to_value(&result_1byte.payload.output).unwrap(),
-            serde_json::to_value(&result_json.output).unwrap()
+            serde_json::to_value(&result_json.payload.output).unwrap()
         );
     }
 

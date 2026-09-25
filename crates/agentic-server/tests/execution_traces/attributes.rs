@@ -101,6 +101,7 @@ fn enum_values(key: &str) -> Option<&'static [&'static str]> {
             "compaction",
             "tool",
             "panic",
+            "reasoning_replay",
             "timeout",
             "transport",
             "handler_panic",

@@ -97,6 +97,7 @@ mod tests {
             response_id: "resp_child".to_owned(),
             conversation_id: None,
             conversation_version: None,
+            recorded_output_prefix: crate::types::turn_history::RecordedOutputPrefix::default(),
             continuation: Some(session.begin(Some("resp_parent")).unwrap()),
         };
         let restored = restored_loaded_tools(

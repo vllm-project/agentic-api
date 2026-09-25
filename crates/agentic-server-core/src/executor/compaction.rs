@@ -1,4 +1,5 @@
 mod context;
+mod reasoning;
 mod summary;
 
 use super::telemetry::stages::CompactionTrigger;
@@ -233,20 +234,7 @@ fn add_input_item(estimate: &mut InputTokenEstimate, item: &InputItem) {
                 Err(_) => estimate.add_tokens(u64::MAX),
             }
         }
-        InputItem::Reasoning(reasoning) => {
-            estimate.add_text(&reasoning.id);
-            estimate.add_optional_text(reasoning.status.as_deref());
-            for content in &reasoning.content {
-                estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
-                estimate.add_text(&content.text);
-            }
-            for summary in &reasoning.summary {
-                estimate.add_json_value(summary);
-            }
-            if let Some(encrypted_content) = &reasoning.encrypted_content {
-                estimate.add_json_value(encrypted_content);
-            }
-        }
+        InputItem::Reasoning(item) => reasoning::add_reasoning(estimate, item),
         InputItem::Compaction(compaction) => {
             // `model_input` presents the checkpoint as one assistant output-text message.
             estimate.add_text("assistant");
@@ -329,6 +317,7 @@ async fn compact_items_with_trigger(
     auth: Option<&str>,
     trigger: CompactionTrigger,
 ) -> ExecutorResult<(Vec<InputItem>, ResponseUsage)> {
+    exec_ctx.responses_config.validate_reasoning_replay()?;
     let original_items = Vec::from(input);
     if !original_items.iter().any(item_has_meaningful_context) {
         return Err(ExecutorError::InvalidRequest(
@@ -341,12 +330,10 @@ async fn compact_items_with_trigger(
         .into_iter()
         .filter(|item| !item.is_compaction_trigger())
         .collect();
-    summary_items.push(InputItem::Message(InputMessage {
-        id: None,
-        role: "user".to_owned(),
-        status: None,
-        content: InputMessageContent::Text(COMPACTION_PROMPT.to_owned()),
-    }));
+    summary_items.push(InputItem::Message(InputMessage::new(
+        "user",
+        InputMessageContent::Text(COMPACTION_PROMPT.to_owned()),
+    )));
     let instructions = request.instructions.clone();
     let original_request = request_payload(
         request.model.clone(),
@@ -366,16 +353,17 @@ async fn compact_items_with_trigger(
         response_id: uuid7_str("resp_"),
         conversation_id: None,
         conversation_version: None,
+        recorded_output_prefix: crate::types::turn_history::RecordedOutputPrefix::default(),
         continuation: None,
     };
     let mut agent = agent_pipeline(ctx, None, None);
     let response =
         fetch_blocking_payload(&mut agent, exec_ctx, auth, &crate::tool::ToolRegistry::default(), None).await?;
-    let summary = completed_summary_text(&response)?;
+    let summary = completed_summary_text(&response.payload)?;
 
     Ok((
         finish_compacted_window(compacted, summary),
-        response.usage.unwrap_or_default(),
+        response.payload.usage.unwrap_or_default(),
     ))
 }
 
@@ -511,6 +499,7 @@ mod tests {
 
     fn user_message(text: &str) -> InputItem {
         InputItem::Message(InputMessage {
+            phase: None,
             id: None,
             role: "user".to_owned(),
             status: None,
@@ -528,6 +517,7 @@ mod tests {
 
     fn image_message(encoded_bytes: usize) -> InputItem {
         InputItem::Message(InputMessage {
+            phase: None,
             id: None,
             role: "user".to_owned(),
             status: None,
@@ -564,6 +554,7 @@ mod tests {
             response_id: "resp_test".to_owned(),
             conversation_id: None,
             conversation_version: None,
+            recorded_output_prefix: crate::types::turn_history::RecordedOutputPrefix::default(),
             continuation: None,
         }
     }
@@ -699,24 +690,17 @@ mod tests {
 
     #[test]
     fn token_estimate_counts_large_json_numbers() {
-        assert_text_growth([
-            (
-                "reasoning numbers",
-                serde_json::json!([{"type": "reasoning", "id": "rs_1", "summary": [vec![1_u64; 64]]}]),
-                serde_json::json!([{"type": "reasoning", "id": "rs_1", "summary": [vec![u64::MAX; 64]]}]),
-            ),
-            (
-                "tool-search argument numbers",
-                serde_json::json!([{
-                    "type": "tool_search_call", "id": "ts_1", "call_id": "call_1",
-                    "arguments": {"values": vec![1_u64; 64]}
-                }]),
-                serde_json::json!([{
-                    "type": "tool_search_call", "id": "ts_1", "call_id": "call_1",
-                    "arguments": {"values": vec![u64::MAX; 64]}
-                }]),
-            ),
-        ]);
+        assert_text_growth([(
+            "tool-search argument numbers",
+            serde_json::json!([{
+                "type": "tool_search_call", "id": "ts_1", "call_id": "call_1",
+                "arguments": {"values": vec![1_u64; 64]}
+            }]),
+            serde_json::json!([{
+                "type": "tool_search_call", "id": "ts_1", "call_id": "call_1",
+                "arguments": {"values": vec![u64::MAX; 64]}
+            }]),
+        )]);
     }
 
     #[test]
@@ -820,6 +804,7 @@ mod tests {
     fn an_image_referenced_by_file_id_is_meaningful_context() {
         let image_by = |content: InputImageContent| {
             InputItem::Message(InputMessage {
+                phase: None,
                 id: None,
                 role: "user".to_owned(),
                 status: None,
@@ -844,6 +829,7 @@ mod tests {
         let estimate_with_images = |count| {
             let parts = (0..count).map(|_| InputContent::InputImage(inline_image(1))).collect();
             estimate_input_tokens(&ResponsesInput::Items(vec![InputItem::Message(InputMessage {
+                phase: None,
                 id: None,
                 role: "user".to_owned(),
                 status: None,
@@ -1058,6 +1044,7 @@ mod tests {
         let expected_url = retained_image.image_url.clone().expect("inline image URL");
         let text_input = ResponsesInput::Items(vec![
             InputItem::Message(InputMessage {
+                phase: None,
                 id: None,
                 role: "user".to_owned(),
                 status: None,

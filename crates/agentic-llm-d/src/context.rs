@@ -65,6 +65,7 @@ impl From<SplitContext> for RequestContext {
             conversation_id: wire.conversation_id,
             // Conversation mode is rejected, so there is no version to resume.
             conversation_version: None,
+            recorded_output_prefix: agentic_core::types::turn_history::RecordedOutputPrefix::default(),
             continuation: None,
         }
     }

@@ -57,6 +57,7 @@ use utoipa::OpenApi;
         agentic_core::types::io::OutputItem,
         agentic_core::types::io::OutputTextContent,
         agentic_core::types::io::OutputMessage,
+        agentic_core::types::io::MessagePhase,
         agentic_core::types::io::FunctionToolCall,
         agentic_core::types::io::ToolSearchCall,
         agentic_core::types::io::CustomToolCall,
@@ -432,6 +433,60 @@ mod tests {
         let ignore_eos = &spec["components"]["schemas"]["RequestPayload"]["properties"]["ignore_eos"];
 
         assert!(ignore_eos.is_object(), "RequestPayload.ignore_eos is undocumented");
+    }
+
+    #[test]
+    fn assistant_phase_schema_is_closed_optional_and_nullable() {
+        let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec must serialize");
+        for name in ["InputMessage", "OutputMessage"] {
+            let wrapper = serde_json::json!({
+                "components": spec["components"], "$ref": format!("#/components/schemas/{name}")
+            });
+            let validator = jsonschema::validator_for(&wrapper).expect("message schema must resolve");
+            let mut message = serde_json::json!({
+                "id":"msg_1", "role":"assistant", "status":"completed", "content":[]
+            });
+            assert!(validator.is_valid(&message), "legacy absent phase");
+            for phase in [
+                serde_json::Value::Null,
+                serde_json::json!("commentary"),
+                serde_json::json!("final_answer"),
+            ] {
+                message["phase"] = phase;
+                assert!(validator.is_valid(&message));
+            }
+            message["phase"] = serde_json::json!("unknown");
+            assert!(!validator.is_valid(&message));
+        }
+    }
+
+    #[test]
+    fn reasoning_schema_uses_typed_summary_state_and_status() {
+        let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec must serialize");
+        let wrapper = serde_json::json!({
+            "components": spec["components"], "$ref": "#/components/schemas/ReasoningOutput"
+        });
+        let validator = jsonschema::validator_for(&wrapper).expect("reasoning schema must resolve");
+        let valid = serde_json::json!({
+            "id": "rs_1", "content": [{"type":"reasoning_text","text":"thinking"}],
+            "summary": [{"type":"summary_text","text":"summary"}],
+            "encrypted_content": "opaque", "status": "completed"
+        });
+        assert!(validator.is_valid(&valid));
+        for (field, malformed) in [
+            ("encrypted_content", serde_json::json!({"ciphertext":"opaque"})),
+            ("summary", serde_json::json!(["untyped"])),
+            (
+                "content",
+                serde_json::json!([{"type":"summary_text","text":"wrong kind"}]),
+            ),
+            ("status", serde_json::json!("complete")),
+        ] {
+            let mut item = valid.clone();
+            item[field] = malformed;
+            assert!(!validator.is_valid(&item), "schema accepted malformed {field}");
+            assert!(serde_json::from_value::<agentic_core::ReasoningOutput>(item).is_err());
+        }
     }
 
     /// Validates that JSON fixtures representing each tagged-enum variant

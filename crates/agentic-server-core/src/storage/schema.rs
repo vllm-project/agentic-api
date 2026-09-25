@@ -18,7 +18,7 @@ use crate::config::DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS;
 type DbResult<T> = Result<T, sqlx::Error>;
 
 const POSTGRES_SCHEMA_ADVISORY_LOCK: i64 = 7_194_963_546_799_751;
-const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 21;
+const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 22;
 const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 7;
 const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 5;
 const POSTGRES_INTEGER_WIDENING_SQL: &str = "
@@ -83,6 +83,7 @@ where
                  ('items', 'seq', 'integer', 'YES'), \
                  ('items', 'tenant_id', 'text', 'YES'), \
                  ('items', 'raw_tokens', 'text', 'YES'), \
+                 ('items', 'reasoning_provenance', 'text', 'YES'), \
                  ('responses', 'id', 'text', 'NO'), \
                  ('responses', 'conversation_id', 'text', 'YES'), \
                  ('responses', 'previous_response_id', 'text', 'YES'), \
@@ -601,6 +602,7 @@ mod tests {
             include_str!("../../migrations/0004_link_conversation_latest_response.sql"),
             include_str!("../../migrations/0005_conversation_revision.sql"),
             include_str!("../../migrations/0006_item_references.sql"),
+            include_str!("../../migrations/0007_reasoning_provenance.sql"),
         ] {
             sqlx::raw_sql(migration)
                 .execute(&mut *connection)

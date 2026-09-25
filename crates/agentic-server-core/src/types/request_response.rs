@@ -1,16 +1,19 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
-use super::io::{FunctionTool, InputItem, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
+#[cfg(test)]
+use super::io::FunctionTool;
+use super::io::{InputItem, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
 use super::tools::ResponsesTool;
+pub use super::upstream_request::{UpstreamRequest, UpstreamTool};
 use crate::tool::{CodexNamespaceHandler, CustomHandler, ToolError};
 use crate::utils::common::serialize_to_string;
 
-mod serde_helpers;
-use serde_helpers::{default_true, is_absent_or_default_tool_choice, serialize_upstream_tool_choice};
+const fn default_true() -> bool {
+    true
+}
 
 /// Standard Responses API reasoning generation settings.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -222,58 +225,32 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig> {
     pub context_management: Option<Vec<ContextManagement>>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct UpstreamRequest<'a> {
-    pub model: &'a str,
-    pub input: Cow<'a, ResponsesInput>,
-    pub stream: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub instructions: Option<&'a str>,
-    /// Tools forwarded to vLLM. Function-like declarations are normalized to ordinary function
-    /// tools.
-    /// Skipped when empty so vLLM does not receive an empty array.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Vec<UpstreamTool>>,
-    #[serde(
-        skip_serializing_if = "is_absent_or_default_tool_choice",
-        serialize_with = "serialize_upstream_tool_choice"
-    )]
-    pub tool_choice: Option<ToolChoice>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub include: Option<&'a Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reasoning: Option<&'a ReasoningConfig>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub text: Option<&'a ResponseTextConfig>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub temperature: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub top_p: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_output_tokens: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ignore_eos: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub truncation: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<&'a Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub parallel_tool_calls: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub prompt_cache_key: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cache_salt: Option<&'a str>,
-}
-
-/// A normalized tool declaration supported by the upstream Responses endpoint.
-///
-/// Gateway and client tool declarations are converted to function tools before
-/// entering this upstream-only payload.
-#[derive(Debug, Clone, Serialize)]
-#[serde(untagged)]
-pub enum UpstreamTool {
-    Function(FunctionTool),
-}
+/// Typed request keys accepted by the closed opaque-profile wire guard.
+/// Keep this list in sync with the exhaustive profile preflight destructure.
+pub const REQUEST_PAYLOAD_FIELDS: &[&str] = &[
+    "model",
+    "input",
+    "instructions",
+    "previous_response_id",
+    "conversation_id",
+    "tools",
+    "tool_choice",
+    "stream",
+    "store",
+    "include",
+    "reasoning",
+    "text",
+    "temperature",
+    "top_p",
+    "max_output_tokens",
+    "ignore_eos",
+    "truncation",
+    "metadata",
+    "parallel_tool_calls",
+    "prompt_cache_key",
+    "cache_salt",
+    "context_management",
+];
 
 impl<T: ?Sized> RequestPayload<T> {
     /// Names the feature in this request that only the in-process executor
@@ -391,8 +368,9 @@ impl RequestPayload {
         CustomHandler::validate_tool_choice(self.tools.as_deref(), &tool_choice)?;
         Ok(UpstreamRequest {
             model: &self.model,
-            input,
+            input: input.into(),
             stream,
+            store: None,
             instructions: self.instructions.as_deref(),
             tools,
             tool_choice: Some(tool_choice),

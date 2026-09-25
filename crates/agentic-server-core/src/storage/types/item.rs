@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::storage::StorageError;
+use crate::storage::models::Item as StorageDbItem;
 use crate::types::io::{InputItem, OutputItem, ResponsesInput};
 use crate::utils::common::serialize_to_value;
 
@@ -55,6 +56,9 @@ fn serialized_values_equal<T: Serialize>(left: &T, right: &T) -> bool {
 
 impl PartialEq for InOutItem {
     fn eq(&self, other: &Self) -> bool {
+        if self.reasoning_provenance() != other.reasoning_provenance() {
+            return false;
+        }
         match (self, other) {
             (Self::Input(left), Self::Input(right)) => serialized_values_equal(left, right),
             (Self::Output(left), Self::Output(right)) => serialized_values_equal(left, right),
@@ -72,6 +76,20 @@ impl From<InputItem> for InOutItem {
 impl From<OutputItem> for InOutItem {
     fn from(item: OutputItem) -> Self {
         Self::Output(item)
+    }
+}
+
+/// Decode retained history without silently omitting invalid records.
+///
+/// Legacy unmarked items retain the existing input/output discrimination policy.
+/// A malformed known item is an error, not an absent item or a replayable placeholder.
+impl TryFrom<&StorageDbItem> for InOutItem {
+    type Error = StorageError;
+
+    fn try_from(row: &StorageDbItem) -> Result<Self, Self::Error> {
+        row.as_inout().ok_or_else(|| StorageError::InvalidHistoryItem {
+            item_id: row.id.clone(),
+        })
     }
 }
 
@@ -102,6 +120,17 @@ impl TryFrom<&InOutItem> for String {
 }
 
 impl InOutItem {
+    /// Borrow internal provenance without serializing a public item or changing its kind.
+    #[must_use]
+    pub fn reasoning_provenance(&self) -> Option<&crate::types::reasoning_replay::ReasoningProvenance> {
+        match self {
+            Self::Input(InputItem::Reasoning(item)) | Self::Output(OutputItem::Reasoning(item)) => {
+                item.replay_provenance.as_ref()
+            }
+            _ => None,
+        }
+    }
+
     /// Converts stored history into input items for continuation processing.
     /// Internal items are removed later by `ResponsesInput::model_input`.
     #[must_use]
@@ -133,6 +162,7 @@ mod tests {
     #[test]
     fn test_inout_item_from_input() {
         let input = InputItem::Message(InputMessage {
+            phase: None,
             id: None,
             role: "user".to_string(),
             status: None,
@@ -152,6 +182,7 @@ mod tests {
     #[test]
     fn test_inout_item_to_string() {
         let input = InputItem::Message(InputMessage {
+            phase: None,
             id: None,
             role: "user".to_string(),
             status: None,
@@ -171,6 +202,7 @@ mod tests {
         output.content.push(OutputTextContent::new("answer"));
         let items = vec![
             InOutItem::Input(InputItem::Message(InputMessage {
+                phase: None,
                 id: None,
                 role: "user".to_string(),
                 status: None,
@@ -178,6 +210,7 @@ mod tests {
             })),
             InOutItem::Output(OutputItem::Message(output)),
             InOutItem::Input(InputItem::Message(InputMessage {
+                phase: None,
                 id: None,
                 role: "user".to_string(),
                 status: None,

@@ -290,7 +290,7 @@ expand/contract compatible with the previously deployed gateway.
 
 For a supervisor-managed schema:
 
-1. apply the repository migrations in a release job before updating the Deployment;
+1. apply the repository migrations, including `0007_reasoning_provenance.sql`, in a release job before updating the Deployment;
 2. verify the target schema and any required compatibility upgrades;
 3. set `AGENTIC_API_SCHEMA_READY=1` in the gateway ConfigMap; and
 4. roll out the gateway only after the release job succeeds.

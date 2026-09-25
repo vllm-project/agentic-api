@@ -102,6 +102,7 @@ fn upstream_request_value(payload: RequestPayload, stream: bool) -> Value {
         response_id: "resp_test".to_string(),
         conversation_id: None,
         conversation_version: None,
+        recorded_output_prefix: agentic_core::types::turn_history::RecordedOutputPrefix::default(),
         continuation: None,
     };
     let upstream_request = ctx

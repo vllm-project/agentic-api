@@ -1,5 +1,6 @@
 mod content;
 
+pub use super::message::InputMessage;
 pub use content::{InputContent, InputFileContent, InputImageContent, InputTextContent, RefusalContent};
 
 use std::borrow::Cow;
@@ -13,17 +14,6 @@ use crate::utils::common::deserialize_from_value;
 
 use super::output::{CustomToolCall, FunctionToolCall, McpListTools, ReasoningOutput, ToolSearchCall};
 use super::shell::{ShellCall, ShellCallOutputMessage, ShellCallStatus};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct InputMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
-    pub role: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub status: Option<MessageStatus>,
-    pub content: InputMessageContent,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -599,6 +589,7 @@ impl ResponsesInput {
             .model_items()
             .map(|item| match item {
                 InputItem::Compaction(compaction) => InputItem::Message(InputMessage {
+                    phase: None,
                     id: None,
                     role: "assistant".to_owned(),
                     status: None,
@@ -1074,6 +1065,7 @@ mod tests {
         let input = ResponsesInput::Items(vec![
             InputItem::McpListTools(McpListTools::new("mcpl_1", "counter", Vec::new())),
             InputItem::Message(InputMessage {
+                phase: None,
                 id: None,
                 role: "user".to_owned(),
                 status: None,

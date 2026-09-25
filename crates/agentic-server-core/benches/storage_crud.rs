@@ -13,6 +13,7 @@ fn next_id() -> String {
 
 fn create_test_items() -> Vec<InOutItem> {
     let input_item = InputItem::Message(InputMessage {
+        phase: None,
         id: None,
         role: "user".to_string(),
         status: None,

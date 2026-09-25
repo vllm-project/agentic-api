@@ -63,6 +63,8 @@ from httpx import AsyncClient
 from yaml import dump as yaml_dump
 from yaml import safe_load as yaml_load
 
+from recorder_history import MAX_TURNS, CompletedOutput, ReplayHistory
+
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger("cassette_proxy")
 
@@ -70,6 +72,9 @@ MODEL = "gpt-4o"
 PROXY_HOST = "127.0.0.1"
 PROXY_PORT = 7070
 TIMEOUT = 60 * 5
+MAX_WEBSOCKET_MESSAGE_BYTES = 8 * 1024 * 1024
+MAX_WEBSOCKET_TURN_BYTES = 64 * 1024 * 1024
+MAX_WEBSOCKET_EVENTS = 16384
 
 EXCLUDED_RESPONSE_HEADERS = {
     "content-encoding",
@@ -508,16 +513,23 @@ def run_items(
     _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
 
 
-def _send_nonstreaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | None:
+def _send_nonstreaming(
+    client: httpx.Client, body: dict, proxy_url: str, display_payloads: bool = True
+) -> dict | None:
     resp = client.post(f"{proxy_url}/v1/responses", json=body, timeout=300)
     resp.raise_for_status()
     data = resp.json()
-    print(f"\n[Response]\n{json.dumps(data, indent=2)}\n")
+    if display_payloads:
+        print(f"\n[Response]\n{json.dumps(data, indent=2)}\n")
     return data
 
 
-def _send_streaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | None:
+def _send_streaming(
+    client: httpx.Client, body: dict, proxy_url: str, display_payloads: bool = True,
+    replay_output_items: bool = False,
+) -> dict | None:
     response_data = None
+    completed_output = CompletedOutput()
     print("\n[Streaming response]")
     with client.stream(
         "POST", f"{proxy_url}/v1/responses", json=body, timeout=300
@@ -534,18 +546,22 @@ def _send_streaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | 
         for line in resp.iter_lines():
             if not line:
                 continue
-            print(line)
+            if display_payloads:
+                print(line)
             if line.startswith("data:") and line != "data: [DONE]":
                 try:
                     payload = json.loads(line[5:].strip())
-                    if payload.get("type") == "response.completed":
+                except json.JSONDecodeError:
+                    continue
+                if replay_output_items:
+                    completed_output.observe(payload)
+                if isinstance(payload, dict):
+                    if payload.get("type") in {"response.completed", "response.incomplete", "response.failed"}:
                         response_data = payload.get("response")
                     elif payload.get("object") == "response" and payload.get("status") == "completed":
                         response_data = payload
-                except Exception:
-                    pass
     print()
-    return response_data
+    return completed_output.replay(response_data) if replay_output_items else response_data
 
 
 def _send_messages_nonstreaming(client: httpx.Client, body: dict, proxy_url: str) -> dict | None:
@@ -656,12 +672,14 @@ class WebSocketClient:
         response = self._read_http_response()
         status_line, _, header_text = response.partition("\r\n")
         if " 101 " not in status_line:
-            raise RuntimeError(f"websocket upgrade failed: {status_line}\n{header_text}")
+            self.sock.close()
+            raise RuntimeError("websocket upgrade failed (provider headers omitted)")
         accept = _headers_from_text(header_text).get("sec-websocket-accept")
         expected = base64.b64encode(
             hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()
         ).decode("ascii")
         if accept != expected:
+            self.sock.close()
             raise RuntimeError("websocket upgrade failed: invalid Sec-WebSocket-Accept")
         return self
 
@@ -694,6 +712,9 @@ class WebSocketClient:
             if not chunk:
                 raise EOFError("websocket closed during handshake")
             data.extend(chunk)
+            if len(data) > 65536:
+                self.sock.close()
+                raise ValueError("websocket handshake exceeds the header limit")
         header_end = data.index(b"\r\n\r\n") + 4
         self._receive_buffer.extend(data[header_end:])
         return data[:header_end].decode("iso-8859-1")
@@ -737,6 +758,8 @@ class WebSocketClient:
                 length = struct.unpack("!H", self._read_exact(2))[0]
             elif length == 127:
                 length = struct.unpack("!Q", self._read_exact(8))[0]
+            if length > MAX_WEBSOCKET_MESSAGE_BYTES - len(message):
+                raise ValueError("websocket message exceeds the byte limit")
             mask = self._read_exact(4) if masked else b""
             payload = self._read_exact(length)
             if masked:
@@ -783,6 +806,8 @@ def _send_websocket(
     target_base_url: str,
     headers: dict[str, str],
     output_file: Path,
+    display_payloads: bool = True,
+    replay_output_items: bool = False,
 ) -> dict | None:
     turn_num = _turn_number(output_file)
     wire_body = dict(body)
@@ -790,7 +815,7 @@ def _send_websocket(
     # WebSocket mode streams by transport; OpenAI's Responses WebSocket API
     # does not use HTTP-only fields such as `stream`.
     wire_body.pop("stream", None)
-    wire_body["store"] = True
+    wire_body.setdefault("store", True)
     websocket_url = _websocket_url(target_base_url)
 
     turn: dict[str, Any] = {
@@ -812,6 +837,8 @@ def _send_websocket(
     }
 
     response_data = None
+    received_bytes = 0
+    completed_output = CompletedOutput()
     print("\n[WebSocket response]")
     with WebSocketClient(websocket_url, headers) as ws:
         ws.send_text(json.dumps(wire_body, separators=(",", ":")))
@@ -819,12 +846,18 @@ def _send_websocket(
             message = ws.receive_text()
             if message is None:
                 break
-            print(message)
+            received_bytes += len(message.encode("utf-8"))
+            if received_bytes > MAX_WEBSOCKET_TURN_BYTES or len(turn["response"]["websocket"]) >= MAX_WEBSOCKET_EVENTS:
+                raise ValueError("websocket recording exceeds the turn budget")
+            if display_payloads:
+                print(message)
             turn["response"]["websocket"].append(message)
             try:
                 event = json.loads(message)
             except json.JSONDecodeError:
                 continue
+            if replay_output_items:
+                completed_output.observe(event)
             turn["response"]["sse"].append(
                 f"event: {event.get('type', '')}\n"
                 f"data: {json.dumps(event, separators=(',', ':'))}\n"
@@ -833,7 +866,7 @@ def _send_websocket(
             if event_type == "response.completed":
                 response_data = event.get("response")
                 break
-            if event_type == "response.failed":
+            if event_type in {"response.failed", "response.incomplete"}:
                 response_data = event.get("response")
                 break
             if event_type == "error":
@@ -842,7 +875,7 @@ def _send_websocket(
     turn["response"]["sse"].append("data: [DONE]\n")
     _append_turn(output_file, turn)
     print(f"  [recorded turn {turn_num} -> {output_file.name}]")
-    return response_data
+    return completed_output.replay(response_data) if replay_output_items else response_data
 
 
 def _send(
@@ -854,15 +887,17 @@ def _send(
     target_base_url: str = "",
     headers: dict[str, str] | None = None,
     output_file: Path | None = None,
+    display_payloads: bool = True,
+    replay_output_items: bool = False,
 ) -> dict | None:
     if transport == "websocket":
         if output_file is None:
             raise ValueError("output_file is required for websocket recording")
-        return _send_websocket(body, target_base_url, headers or {}, output_file)
+        return _send_websocket(body, target_base_url, headers or {}, output_file, display_payloads, replay_output_items)
     return (
-        _send_streaming(client, body, proxy_url)
+        _send_streaming(client, body, proxy_url, display_payloads, replay_output_items)
         if stream
-        else _send_nonstreaming(client, body, proxy_url)
+        else _send_nonstreaming(client, body, proxy_url, display_payloads)
     )
 
 
@@ -1310,6 +1345,7 @@ def run_responses(
     preset_input: str | list | None = None,
     manual_item_replay: bool = False,
     parallel_tool_calls: bool | None = None,
+    replay_output_items: bool = False,
 ) -> None:
     response_ids: dict[int, str] = {}
     responses: dict[int, dict] = {}
@@ -1324,7 +1360,10 @@ def run_responses(
     previous_response_id: str | None = None
     last_response: dict | None = None
     search_tools_loaded = False
-    manual_history: list[dict] = []
+    manual_history = ReplayHistory()
+    parent_turn: int | None = None
+    if manual_item_replay and (store or not 1 <= turns + len(extra_branches) <= MAX_TURNS):
+        raise click.UsageError("manual replay requires store=false and at most 64 total turns")
     for turn in range(1, turns + 1):
         if turn in branch_map:
             branch_from = branch_map[turn]
@@ -1335,6 +1374,7 @@ def run_responses(
                 )
             previous_response_id = response_ids[branch_from]
             last_response = responses.get(branch_from)
+            parent_turn = branch_from
             click.echo(
                 f"\n[Branch] turn {turn} chains from turn {branch_from} (response_id={previous_response_id})"
             )
@@ -1375,20 +1415,7 @@ def run_responses(
                 input_value = prompt
 
         if manual_item_replay:
-            if isinstance(input_value, str):
-                new_input_items = [
-                    {
-                        "type": "message",
-                        "role": "user",
-                        "content": input_value,
-                    }
-                ]
-            elif isinstance(input_value, list):
-                new_input_items = copy.deepcopy(input_value)
-            else:
-                raise ValueError("manual item replay input must be a string or item array")
-            manual_history.extend(new_input_items)
-            input_value = copy.deepcopy(manual_history)
+            input_value = manual_history.request_input(parent_turn, input_value)
 
         body: dict = {"model": model, "input": input_value, "stream": stream, "store": store}
         if max_output_tokens is not None:
@@ -1410,15 +1437,13 @@ def run_responses(
             target_base_url,
             headers,
             output_file,
+            display_payloads=not manual_item_replay,
+            replay_output_items=replay_output_items,
         )
         response_id = response_data.get("id") if response_data else None
         if manual_item_replay:
-            response_output = response_data.get("output") if response_data else None
-            if not isinstance(response_output, list):
-                raise ValueError(
-                    "manual item replay requires every response to contain an output array"
-                )
-            manual_history.extend(copy.deepcopy(response_output))
+            manual_history.record(turn, input_value, response_data)
+            parent_turn = turn
         previous_response_id = response_id if store else None
         last_response = response_data
         if response_id:
@@ -1447,19 +1472,23 @@ def run_responses(
         else:
             input_value = prompt
 
+        if manual_item_replay:
+            input_value = manual_history.request_input(branch_from, input_value)
         body = {
             "model": model,
             "input": input_value,
             "stream": stream,
             "store": store,
-            "previous_response_id": branch_resp_id,
         }
+        if store:
+            body["previous_response_id"] = branch_resp_id
         if max_output_tokens is not None:
             body["max_output_tokens"] = max_output_tokens
         if reasoning is not None:
             body["reasoning"] = reasoning
-        _inject_tools(body, tools, tool_choice, parallel_tool_calls)
-        _send(
+        turn_tool_choice = tool_choice_sequence[turns + b_idx - 1] if tool_choice_sequence is not None else tool_choice
+        _inject_tools(body, tools, turn_tool_choice, parallel_tool_calls)
+        response_data = _send(
             client,
             body,
             stream,
@@ -1468,7 +1497,11 @@ def run_responses(
             target_base_url,
             headers,
             output_file,
+            display_payloads=not manual_item_replay,
+            replay_output_items=replay_output_items,
         )
+        if manual_item_replay:
+            manual_history.record(turns + b_idx, input_value, response_data)
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -1580,7 +1613,7 @@ def run_responses(
     metavar="FILE",
     default=None,
     type=click.Path(exists=True, dir_okay=False),
-    help="JSON array containing one tool_choice value per linear Responses turn.",
+    help="JSON array containing one tool_choice per Responses request, including manual-replay extra branches.",
 )
 @click.option(
     "--parallel-tool-calls",
@@ -1622,14 +1655,18 @@ def run_responses(
     "--manual-item-replay",
     is_flag=True,
     default=False,
-    help="Replay full accumulated item history with store=false (direct-vLLM or gateway tool-search).",
+    help="Replay complete bounded item history with store=false; supports OpenAI, vLLM, gateway, and branches.",
+)
+@click.option(
+    "--replay-output-source", type=click.Choice(["terminal", "item-done"]), default="terminal",
+    help="Manual replay source for SSE/WebSocket: terminal output or verbatim output_item.done items.",
 )
 @click.option(
     "--input-file",
     type=click.Path(exists=True, dir_okay=False),
     help=(
         "JSON file containing the Responses input value for turn 1; later turns are prompted. "
-        "Requires HTTP --mode responses without branches."
+        "Requires --mode responses; WebSocket and branches additionally require --manual-item-replay."
     ),
 )
 @click.option(
@@ -1677,6 +1714,7 @@ def main(
     tool_search_output_tools_file: str | None,
     tools_after_search_file: str | None,
     manual_item_replay: bool,
+    replay_output_source: str,
     input_file: str | None,
     reasoning_raw: str | None,
     max_output_tokens: int,
@@ -1714,10 +1752,21 @@ def main(
         raise click.UsageError(
             "--tools-after-search requires --tool-search-output-tools."
         )
-    if manual_item_replay and not tool_search_recording:
-        raise click.UsageError(
-            "--manual-item-replay requires --tool-search-output-tools."
-        )
+    if manual_item_replay:
+        if mode != "responses" or not no_store:
+            raise click.UsageError("--manual-item-replay requires --mode responses --no-store.")
+        total_turns = turns + sum(start is None for _, start in branches)
+        if not 1 <= turns <= total_turns <= MAX_TURNS:
+            raise click.UsageError("--manual-item-replay requires 1 to 64 total turns including extra branches.")
+        starts = [start for _, start in branches if start is not None]
+        if len(set(starts)) != len(starts) or any(
+            not 1 <= parent < (start if start is not None else turns + 1)
+            or (start is not None and start > turns)
+            for parent, start in branches
+        ):
+            raise click.UsageError("manual replay branches require distinct valid starts after their parent turn.")
+    if replay_output_source != "terminal" and not manual_item_replay:
+        raise click.UsageError("--replay-output-source item-done requires --manual-item-replay.")
     if tool_search_recording:
         if mode != "responses":
             raise click.UsageError(
@@ -1755,9 +1804,9 @@ def main(
         raise click.UsageError(
             "--tool-choice and --tool-choice-sequence are mutually exclusive."
         )
-    if tool_choice_sequence_file and (mode != "responses" or branches):
+    if tool_choice_sequence_file and (mode != "responses" or (branches and not manual_item_replay)):
         raise click.UsageError(
-            "--tool-choice-sequence requires linear --mode responses without branches."
+            "--tool-choice-sequence requires --mode responses; branches additionally require --manual-item-replay."
         )
     backend_count = sum(bool(url) for url in (openai_url, vllm_url, gateway_url))
     if backend_count > 1:
@@ -1772,9 +1821,9 @@ def main(
         )
     if max_output_tokens < 0:
         raise click.UsageError("--max-output-tokens must be >= 0.")
-    if input_file and (mode != "responses" or branches or transport != "http"):
+    if input_file and (mode != "responses" or (not manual_item_replay and (branches or transport != "http"))):
         raise click.UsageError(
-            "--input-file requires HTTP --mode responses without branches."
+            "--input-file requires --mode responses; WebSocket and branches additionally require --manual-item-replay."
         )
     if reasoning_raw is not None and mode != "responses":
         raise click.UsageError("--reasoning is only supported with --mode responses.")
@@ -1800,7 +1849,8 @@ def main(
     if tool_choice_sequence_file:
         with open(tool_choice_sequence_file, encoding="utf-8") as f:
             tool_choice_sequence = json.load(f)
-        if not isinstance(tool_choice_sequence, list) or len(tool_choice_sequence) != turns:
+        choice_count = turns + sum(start is None for _, start in branches)
+        if not isinstance(tool_choice_sequence, list) or len(tool_choice_sequence) != choice_count:
             raise click.UsageError(
                 "--tool-choice-sequence must contain one JSON value per turn."
             )
@@ -1858,11 +1908,6 @@ def main(
         raise click.UsageError(
             "direct vLLM tool-search characterization requires --manual-item-replay."
         )
-    if tool_search_recording and not (vllm_url or gateway_url) and manual_item_replay:
-        raise click.UsageError(
-            "--manual-item-replay is reserved for direct vLLM or gateway tool-search recording."
-        )
-
     if gateway_url:
         target = gateway_url.rstrip("/")
         headers = {}
@@ -1886,7 +1931,6 @@ def main(
     store = not no_store
     if transport == "websocket":
         stream = True
-        store = True
     response_max_output_tokens = max_output_tokens or None
 
     click.echo(
@@ -1923,6 +1967,7 @@ def main(
                 preset_input=preset_input,
                 manual_item_replay=manual_item_replay,
                 parallel_tool_calls=parallel_tool_calls,
+                replay_output_items=replay_output_source == "item-done",
             )
     else:
         click.echo(f"Proxy:   {proxy_url}  (requests go through here for recording)")
@@ -1963,6 +2008,7 @@ def main(
                         preset_input=preset_input,
                         manual_item_replay=manual_item_replay,
                         parallel_tool_calls=parallel_tool_calls,
+                        replay_output_items=replay_output_source == "item-done",
                     )
                 elif mode == "messages":
                     run_messages(

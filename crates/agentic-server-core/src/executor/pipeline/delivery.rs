@@ -21,9 +21,20 @@ struct StreamEmitContext<'a> {
     output_offset: usize,
 }
 
+/// How much of a provider's `response.failed` details may enter gateway logs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::executor) enum UpstreamFailureLog {
+    /// Default adapters log the provider's error code and message.
+    Detailed,
+    /// Provider text can reflect request data, including opaque state: log only
+    /// an identifier-shaped error code and the gateway response ID.
+    CodeOnly,
+}
+
 pub(super) struct StreamDelivery {
     pub(super) accumulator: GatewayStreamAccumulator,
     pub(super) sender: Option<Sender<StreamEvent>>,
+    pub(super) failure_log: UpstreamFailureLog,
     defer_from_output_index: Option<u64>,
     deferred_events: Vec<EventFrame>,
     deferred_bytes: usize,
@@ -33,6 +44,7 @@ impl StreamDelivery {
         Self {
             accumulator: GatewayStreamAccumulator::new(),
             sender,
+            failure_log: UpstreamFailureLog::Detailed,
             defer_from_output_index: None,
             deferred_events: Vec::new(),
             deferred_bytes: 0,
@@ -45,6 +57,7 @@ impl StreamDelivery {
         Self {
             accumulator: GatewayStreamAccumulator::with_max_stream_event_bytes(max_stream_event_bytes),
             sender,
+            failure_log: UpstreamFailureLog::Detailed,
             defer_from_output_index: None,
             deferred_events: Vec::new(),
             deferred_bytes: 0,
@@ -65,7 +78,7 @@ impl StreamDelivery {
         let previous_defer_from_output_index = self.defer_from_output_index;
         self.defer_from_output_index = translation.defer_from_output_index.map(u64::from);
         for frame in &translation.frames {
-            log_upstream_failure(frame, &ctx.response_id);
+            log_upstream_failure(frame, &ctx.response_id, self.failure_log);
         }
         if let Some(sender) = self.sender.as_ref() {
             let mut emit_ctx = StreamEmitContext {
@@ -104,7 +117,7 @@ impl StreamDelivery {
     }
 }
 
-fn log_upstream_failure(frame: &EventFrame, gateway_response_id: &str) {
+fn log_upstream_failure(frame: &EventFrame, gateway_response_id: &str, detail: UpstreamFailureLog) {
     if frame.event_type != SSEEventType::ResponseFailed {
         return;
     }
@@ -112,6 +125,14 @@ fn log_upstream_failure(frame: &EventFrame, gateway_response_id: &str) {
     let response = frame.wire.rest.get("response").unwrap_or(&Value::Null);
     let error = &response["error"];
     let error_code = error.get("code").and_then(Value::as_str).unwrap_or_default();
+    if detail == UpstreamFailureLog::CodeOnly {
+        tracing::warn!(
+            response_id = %gateway_response_id,
+            error_code = identifier_or_withheld(error_code),
+            "upstream response failed; provider error details withheld"
+        );
+        return;
+    }
     let error_message = error
         .get("message")
         .and_then(Value::as_str)
@@ -130,6 +151,15 @@ fn log_upstream_failure(frame: &EventFrame, gateway_response_id: &str) {
         incomplete_reason,
         "upstream response failed"
     );
+}
+
+/// Provider error codes are short identifiers; any other text could be reflected input.
+fn identifier_or_withheld(code: &str) -> &str {
+    let identifier = code.len() <= 64
+        && code
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'.' | b'-'));
+    if identifier { code } else { "<withheld>" }
 }
 
 pub(in crate::executor) async fn emit_deferred_stream_events(
@@ -561,6 +591,37 @@ mod tests {
         assert_eq!(last.sequence_number(), Some(2));
         assert!(deferred.is_empty());
         assert_eq!(bytes, 0);
+    }
+
+    #[test]
+    fn opaque_failure_logs_withhold_provider_text_while_default_logs_are_unchanged() {
+        let failed = |code: &str| {
+            crate::events::normalize_sse_line(&format!(
+                r#"data: {{"type":"response.failed","response":{{"id":"resp_upstream","status":"failed","error":{{"code":"{code}","message":"reflected-sentinel-state"}},"incomplete_details":{{"reason":"reflected-sentinel-reason"}}}}}}"#
+            ))
+            .unwrap()
+        };
+        let logs = |detail: UpstreamFailureLog, code: &str| {
+            let capture = crate::executor::log_capture::LogCapture::default();
+            let guard = capture.install();
+            log_upstream_failure(&failed(code), "resp_gateway", detail);
+            drop(guard);
+            capture.text()
+        };
+
+        let detailed = logs(UpstreamFailureLog::Detailed, "invalid_encrypted_content");
+        assert!(detailed.contains("reflected-sentinel-state"), "{detailed}");
+        assert!(detailed.contains("resp_upstream"), "{detailed}");
+
+        let code_only = logs(UpstreamFailureLog::CodeOnly, "invalid_encrypted_content");
+        assert!(code_only.contains("resp_gateway"), "{code_only}");
+        assert!(code_only.contains("invalid_encrypted_content"), "{code_only}");
+        assert!(!code_only.contains("reflected-sentinel"), "{code_only}");
+        assert!(!code_only.contains("resp_upstream"), "{code_only}");
+
+        let reflected_code = logs(UpstreamFailureLog::CodeOnly, "Reflected Sentinel");
+        assert!(reflected_code.contains("<withheld>"), "{reflected_code}");
+        assert!(!reflected_code.contains("Reflected"), "{reflected_code}");
     }
 
     #[tokio::test]

@@ -5,7 +5,7 @@ use crate::executor::accumulator::{ResponseAccumulator, Validation};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::translate::{Translation, TranslationContext, TranslationDispatcher};
-use crate::types::request_response::ResponsePayload;
+use crate::types::upstream_identity::IngestedResponse;
 #[derive(PartialEq, Eq)]
 enum BodyKind {
     Empty,
@@ -78,18 +78,22 @@ impl RoundIngestion {
 
     /// Consumes the round, applying terminal policy and public tool-search projection once.
     pub(in crate::executor) fn finish(
-        self,
+        mut self,
         model: &str,
         previous_response_id: Option<&str>,
         instructions: Option<&str>,
-    ) -> ExecutorResult<ResponsePayload> {
+    ) -> ExecutorResult<IngestedResponse> {
+        let upstream_model = self.accumulator.take_upstream_model();
         let mut payload = match self.body_kind {
             BodyKind::Json => self.accumulator.finalize(model, previous_response_id, instructions),
             BodyKind::Empty | BodyKind::Stream => self.accumulator.finish(model, previous_response_id, instructions)?,
         };
         let outcome = self.translator.finish()?;
         outcome.normalize_response_payload(&mut payload)?;
-        Ok(payload)
+        Ok(IngestedResponse {
+            payload,
+            upstream_model,
+        })
     }
 }
 

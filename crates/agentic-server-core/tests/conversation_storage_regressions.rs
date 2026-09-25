@@ -185,7 +185,25 @@ async fn insert_with_ids(
 ) -> agentic_core::storage::StoreResult<()> {
     let mut tx = pool.begin().await?;
     agentic_core::storage::models::conversation::lock_in_tx(&mut tx, id).await?;
-    item_model::create_in_tx(&mut tx, items, Some(id)).await?;
+    // Typed stores own item insertion; raw rows keep legacy NULL provenance.
+    for (item_id, data) in items {
+        let sequence: i64 =
+            sqlx::query_scalar("SELECT COALESCE(MAX(seq), -1) + 1 FROM items WHERE conversation_id = $1")
+                .bind(id)
+                .fetch_one(&mut *tx)
+                .await?;
+        sqlx::query(
+            "INSERT INTO items (id, data, created_at, conversation_id, seq, tenant_id) \
+             SELECT $1, $2, $3, $4, $5, COALESCE(tenant_id, 'default_tenant') FROM conversations WHERE id = $4",
+        )
+        .bind(item_id)
+        .bind(data)
+        .bind(0_i64)
+        .bind(id)
+        .bind(sequence)
+        .execute(&mut *tx)
+        .await?;
+    }
     tx.commit().await?;
     Ok(())
 }

@@ -40,6 +40,7 @@ struct ConversationSnapshotRow {
     item_created_at: Option<i64>,
     item_conversation_id: Option<String>,
     item_sequence: Option<i64>,
+    item_reasoning_provenance: Option<String>,
 }
 
 /// Item rows and the latest persisted response captured by one database statement.
@@ -101,7 +102,8 @@ pub async fn get_snapshot(pool: &DbPool, id: &str) -> DbResult<ConversationSnaps
                 items.data AS item_data, \
                 items.created_at AS item_created_at, \
                 items.conversation_id AS item_conversation_id, \
-                items.seq AS item_sequence \
+                items.seq AS item_sequence, \
+                items.reasoning_provenance AS item_reasoning_provenance \
          FROM conversations \
          LEFT JOIN items ON items.conversation_id = conversations.id \
          WHERE conversations.id = $1 \
@@ -127,6 +129,7 @@ pub async fn get_snapshot(pool: &DbPool, id: &str) -> DbResult<ConversationSnaps
                 created_at,
                 conversation_id: Some(conversation_id),
                 seq: row.item_sequence,
+                reasoning_provenance: row.item_reasoning_provenance,
                 tenant_id: None,
                 reference_id: row.item_reference_id,
             }),

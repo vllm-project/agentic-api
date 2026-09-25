@@ -1,5 +1,7 @@
 //! Transient continuation state owned by one serial response session.
 
+mod checkpoint_size;
+
 #[cfg(test)]
 #[path = "session_budget_tests.rs"]
 mod budget_tests;
@@ -15,8 +17,9 @@ use tokio::sync::Notify;
 
 use super::{ExecutorError, ExecutorResult};
 use crate::storage::{InOutItem, ResponseMetadata};
+use crate::types::io::InputItem;
 use crate::types::io::input::latest_compaction_window;
-use crate::types::io::{InputItem, OutputItem};
+#[cfg(test)]
 use crate::utils::common::serialized_size_up_to;
 
 /// One latest response checkpoint with a lifetime independent of durable storage.
@@ -24,7 +27,8 @@ use crate::utils::common::serialized_size_up_to;
 /// A session admits one active turn. The owner must outlive execution; dropping it
 /// clears cached state and prevents a late completion from publishing another
 /// checkpoint. Active turns must still be cancelled/joined by their caller.
-/// Budgets constrain retained item count and serialized size, not total heap use.
+/// Budgets constrain item count, serialized size and fixed non-wire provenance
+/// charges, not total heap use.
 #[derive(Debug)]
 pub struct ResponseSession {
     state: Arc<Mutex<SessionState>>,
@@ -47,8 +51,8 @@ struct SessionState {
 /// The caller owns routing and scheduling. Create one member per logical session
 /// and keep it while idle; queue disposal must not discard its retained state.
 /// The group caps sessions created over its entire lifetime, not only active
-/// sessions. Every member inherits the same item and serialized-byte budgets.
-/// An aggregate serialized-byte budget covers cached checkpoints, pinned parents
+/// sessions. Every member inherits the same item and retained-byte budgets.
+/// Wire bytes plus fixed provenance charges cover cached checkpoints, pinned parents
 /// and prepared replacements (including those awaiting durable persistence).
 /// Sharing the same immutable parent counts it once. Replacement needs headroom
 /// for old and new state until publication succeeds; no credit is granted for a
@@ -156,8 +160,8 @@ impl ResponseSession {
     /// Wait until the active turn has published or dropped its continuation.
     ///
     /// This is not cancellation: callers must first drop the execution stream
-    /// or otherwise stop its worker. It prevents a subsequent serial request
-    /// racing the asynchronous disposal triggered by dropping that stream.
+    /// or cancel and join its owning task. Stream-owned producers are disposed
+    /// synchronously on drop; this also fences independently scheduled callers.
     /// The ending lease releases its parent reference before becoming idle;
     /// other sessions may still keep that shared checkpoint alive and charged.
     ///
@@ -221,7 +225,6 @@ impl ResponseSession {
             parent,
             budget: self.budget.clone(),
             history_replaced: false,
-            recorded_output_count: 0,
             finished: false,
         };
         drop(state);
@@ -272,7 +275,6 @@ pub struct ResponseContinuation {
     pub(crate) parent: Option<Arc<RetainedCheckpoint>>,
     budget: Option<Arc<CheckpointBudget>>,
     history_replaced: bool,
-    recorded_output_count: usize,
     finished: bool,
 }
 
@@ -377,16 +379,6 @@ impl ResponseContinuation {
         self.history_replaced = true;
     }
 
-    /// The loop has recorded these outputs in canonical inference-round order.
-    /// Public output remains complete, but persistence must not append it again.
-    pub(crate) fn mark_outputs_recorded(&mut self, output_count: usize) {
-        self.recorded_output_count = output_count;
-    }
-
-    pub(crate) fn retains_output(&self, index: usize, item: &OutputItem) -> bool {
-        index >= self.recorded_output_count || matches!(item, OutputItem::McpListTools(_))
-    }
-
     /// Retain orchestration records across compaction without restoring the old
     /// model context. MCP discovery still needs to know which servers were listed.
     pub(crate) fn parent_items(&self) -> impl Iterator<Item = &InputItem> {
@@ -424,7 +416,7 @@ impl ResponseContinuation {
             (state.max_items.get(), state.max_bytes.get())
         };
         let bytes = if checkpoint.history.len() <= max_items {
-            serialized_size_up_to(&checkpoint, max_bytes)?
+            checkpoint.retained_size_up_to(max_bytes)?
         } else {
             None
         };
@@ -433,17 +425,6 @@ impl ResponseContinuation {
                 "response continuation exceeds the session checkpoint budget; replay a compacted input window"
                     .to_owned(),
             ));
-        };
-        self.retain(checkpoint, bytes)
-    }
-
-    /// A durable fallback becomes a live pinned parent before inference. It must
-    /// share the aggregate budget instead of bypassing it through storage.
-    pub(crate) fn retain_parent(&self, checkpoint: ResponseCheckpoint) -> ExecutorResult<RetainedCheckpoint> {
-        let bytes = if let Some(budget) = &self.budget {
-            serialized_size_up_to(&checkpoint, budget.limit.get())?.ok_or_else(aggregate_budget_error)?
-        } else {
-            0 // Standalone sessions retain their existing per-completion policy.
         };
         self.retain(checkpoint, bytes)
     }
@@ -846,28 +827,5 @@ mod tests {
                 .unwrap()
                 .contains("private prompt")
         );
-    }
-
-    #[test]
-    fn recorded_rounds_are_not_duplicated_and_mcp_discovery_is_retained() {
-        let session = session(10, 10_000);
-        let mut lease = session.begin(None).unwrap();
-        let message: OutputItem = serde_json::from_value(json!({
-            "type":"message", "id":"msg_1", "role":"assistant", "status":"completed", "content":[]
-        }))
-        .unwrap();
-        let discovery: OutputItem = serde_json::from_value(json!({
-            "type":"mcp_list_tools", "id":"mcp_1", "server_label":"counter", "tools":[]
-        }))
-        .unwrap();
-        assert!(lease.retains_output(0, &message));
-        lease.mark_outputs_recorded(2);
-        assert!(!lease.retains_output(1, &message));
-        assert!(lease.retains_output(2, &message));
-        lease.mark_history_replaced();
-        lease.mark_outputs_recorded(4);
-        assert!(!lease.retains_output(2, &message));
-        assert!(lease.retains_output(4, &message));
-        assert!(lease.retains_output(0, &discovery));
     }
 }

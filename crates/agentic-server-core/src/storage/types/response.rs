@@ -42,19 +42,31 @@ pub struct ResponseData {
     pub metadata: ResponseMetadata,
 }
 
-impl From<StorageDbResponse> for ResponseData {
-    fn from(row: StorageDbResponse) -> Self {
-        let history_item_ids = row.history_item_ids_vec();
-        let metadata = row.metadata_as::<ResponseMetadata>().unwrap_or_default();
+impl TryFrom<StorageDbResponse> for ResponseData {
+    type Error = StorageError;
 
-        Self {
+    fn try_from(row: StorageDbResponse) -> Result<Self, Self::Error> {
+        // Do not propagate parser diagnostics: enum errors may echo stored secrets.
+        let history_item_ids = row
+            .history_item_ids_vec()
+            .map_err(|_| StorageError::InvalidResponseHistory {
+                response_id: row.id.clone(),
+            })?;
+        let metadata = row
+            .metadata_as::<ResponseMetadata>()
+            .map_err(|_| StorageError::InvalidResponseMetadata {
+                response_id: row.id.clone(),
+            })?
+            .unwrap_or_default();
+
+        Ok(Self {
             response_id: row.id,
             conversation_id: row.conversation_id,
             previous_response_id: row.previous_response_id,
             created_at: row.created_at,
             history_item_ids,
             metadata,
-        }
+        })
     }
 }
 
@@ -95,7 +107,7 @@ mod tests {
             created_at: 1_704_067_200,
         };
 
-        let response: ResponseData = db_row.into();
+        let response = ResponseData::try_from(db_row).expect("valid stored response");
         assert_eq!(response.response_id, "resp_123");
         assert_eq!(response.conversation_id, Some("conv_456".to_string()));
         assert_eq!(response.created_at, 1_704_067_200);
@@ -114,7 +126,7 @@ mod tests {
             created_at: 1_704_067_200,
         };
 
-        let response: ResponseData = db_row.into();
+        let response = ResponseData::try_from(db_row).expect("legacy optional fields");
         assert_eq!(response.response_id, "resp_789");
         assert!(response.conversation_id.is_none());
         assert!(response.history_item_ids.is_empty());
@@ -206,11 +218,11 @@ mod tests {
             conversation_id: Some("conv_1".to_string()),
             previous_response_id: Some("resp_prev".to_string()),
             history_item_ids: Some(r#"["item_1","item_2","item_3"]"#.to_string()),
-            metadata: Some(r#"{"model":"gpt-3.5"}"#.to_string()),
+            metadata: Some(r#"{"model":"gpt-3.5","effective_tool_choice":"auto"}"#.to_string()),
             created_at: 1_704_067_200,
         };
 
-        let response: ResponseData = db_row.into();
+        let response = ResponseData::try_from(db_row).expect("valid stored response");
         assert_eq!(response.history_item_ids.len(), 3);
         assert_eq!(response.history_item_ids[0], "item_1");
         assert_eq!(response.history_item_ids[2], "item_3");

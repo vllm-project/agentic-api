@@ -5,12 +5,10 @@ use super::{InputItem, InputMessage, InputMessageContent, ResponsesInput};
 impl From<&ResponsesInput> for Vec<InputItem> {
     fn from(input: &ResponsesInput) -> Self {
         match input {
-            ResponsesInput::Text(text) => vec![InputItem::Message(InputMessage {
-                id: None,
-                role: "user".into(),
-                status: None,
-                content: InputMessageContent::Text(text.clone()),
-            })],
+            ResponsesInput::Text(text) => vec![InputItem::Message(InputMessage::new(
+                "user",
+                InputMessageContent::Text(text.clone()),
+            ))],
             ResponsesInput::Items(items) => items
                 .iter()
                 .filter_map(|item| match item {
@@ -31,12 +29,10 @@ impl From<&ResponsesInput> for Vec<InputItem> {
 impl From<ResponsesInput> for Vec<InputItem> {
     fn from(input: ResponsesInput) -> Self {
         match input {
-            ResponsesInput::Text(text) => vec![InputItem::Message(InputMessage {
-                id: None,
-                role: "user".into(),
-                status: None,
-                content: InputMessageContent::Text(text),
-            })],
+            ResponsesInput::Text(text) => vec![InputItem::Message(InputMessage::new(
+                "user",
+                InputMessageContent::Text(text),
+            ))],
             ResponsesInput::Items(items) => items
                 .into_iter()
                 .filter_map(|item| match item {

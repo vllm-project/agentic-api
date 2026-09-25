@@ -145,6 +145,35 @@ fn lifecycle_accumulator(strict: bool) -> ResponseAccumulator {
 }
 
 #[test]
+fn invalid_reported_model_respects_json_validation_policy() {
+    use serde_json::json;
+
+    for invalid in [json!(42), json!("  "), json!("x".repeat(1025))] {
+        let body = json!({"id":"resp_1","status":"completed","output":[],"model":invalid}).to_string();
+        let mut lenient = ResponseAccumulator::read_json(&body, None, Validation::Lenient).unwrap();
+        assert!(lenient.take_upstream_model().is_none());
+        assert!(ResponseAccumulator::read_json(&body, None, Validation::Strict).is_err());
+    }
+}
+
+#[test]
+fn invalid_reported_model_respects_sse_validation_policy_without_losing_terminal_event() {
+    use serde_json::json;
+
+    let created =
+        json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress","model":"snapshot"}});
+    let terminal = json!({"type":"response.completed","response":{"id":"resp_1","status":"completed","model":42}});
+    let mut lenient = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Lenient);
+    push_lifecycle_event(&mut lenient, &created, false).unwrap();
+    assert!(push_lifecycle_event(&mut lenient, &terminal, false).unwrap().is_some());
+    assert!(lenient.take_upstream_model().is_none());
+
+    let mut strict = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+    push_lifecycle_event(&mut strict, &created, true).unwrap();
+    assert!(push_lifecycle_event(&mut strict, &terminal, true).is_err());
+}
+
+#[test]
 fn completed_slots_cannot_be_reopened_by_id_or_index() {
     use serde_json::json;
 
@@ -377,6 +406,8 @@ fn test_process_event_response_created_sets_id() {
     let frame = EventFrame {
         event_type: SSEEventType::ResponseCreated,
         payload: EventPayload::Response {
+            model: None,
+            model_invalid: false,
             id: "resp_new".into(),
             status: "in_progress".into(),
             usage: None,
@@ -393,6 +424,8 @@ fn test_process_event_response_created_empty_id_no_overwrite() {
     let frame = EventFrame {
         event_type: SSEEventType::ResponseCreated,
         payload: EventPayload::Response {
+            model: None,
+            model_invalid: false,
             id: String::new(),
             status: "in_progress".into(),
             usage: None,
@@ -409,6 +442,8 @@ fn test_empty_id_response_created_allows_subsequent_created() {
     let empty_frame = EventFrame {
         event_type: SSEEventType::ResponseCreated,
         payload: EventPayload::Response {
+            model: None,
+            model_invalid: false,
             id: String::new(),
             status: "in_progress".into(),
             usage: None,
@@ -422,6 +457,8 @@ fn test_empty_id_response_created_allows_subsequent_created() {
     let real_frame = EventFrame {
         event_type: SSEEventType::ResponseCreated,
         payload: EventPayload::Response {
+            model: None,
+            model_invalid: false,
             id: "resp_real".into(),
             status: "in_progress".into(),
             usage: None,
@@ -475,6 +512,8 @@ fn test_process_event_text_delta_accumulates() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::ResponseCompleted,
         payload: EventPayload::Response {
+            model: None,
+            model_invalid: false,
             id: "resp_1".into(),
             status: "completed".into(),
             usage: None,
@@ -908,6 +947,8 @@ fn test_process_event_completed_with_usage() {
     let frame = EventFrame {
         event_type: SSEEventType::ResponseCompleted,
         payload: EventPayload::Response {
+            model: None,
+            model_invalid: false,
             id: "resp_1".into(),
             status: "completed".into(),
             usage: Some(ResponseUsage {
@@ -931,6 +972,8 @@ fn test_process_event_failed_sets_error_status() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::ResponseFailed,
         payload: EventPayload::Response {
+            model: None,
+            model_invalid: false,
             id: "resp_1".into(),
             status: "failed".into(),
             usage: None,
@@ -946,6 +989,8 @@ fn test_process_event_incomplete_sets_incomplete_status() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::ResponseIncomplete,
         payload: EventPayload::Response {
+            model: None,
+            model_invalid: false,
             id: "resp_1".into(),
             status: "incomplete".into(),
             usage: None,
@@ -1058,8 +1103,8 @@ fn reasoning_done_events_keep_part_index_order() {
     assert_eq!(
         reasoning.summary,
         [
-            serde_json::json!({"type": "summary_text", "text": "first summary"}),
-            serde_json::json!({"type": "summary_text", "text": "second summary"}),
+            crate::types::ReasoningSummaryContent::new("first summary"),
+            crate::types::ReasoningSummaryContent::new("second summary"),
         ]
     );
 }
@@ -1070,7 +1115,7 @@ fn completed_reasoning_preserves_done_fields_when_omitted() {
         r#"data: {"type":"response.output_item.added","output_index":0,"item":{"id":"rs_1","type":"reasoning"}}"#.to_owned(),
         r#"data: {"type":"response.reasoning_text.done","item_id":"rs_1","output_index":0,"content_index":0,"text":"completed content"}"#.to_owned(),
         r#"data: {"type":"response.reasoning_summary_text.done","item_id":"rs_1","output_index":0,"summary_index":0,"text":"completed summary"}"#.to_owned(),
-        r#"data: {"type":"response.output_item.done","output_index":0,"item":{"id":"rs_1","type":"reasoning","encrypted_content":{"token":"opaque"},"status":"completed"}}"#.to_owned(),
+        r#"data: {"type":"response.output_item.done","output_index":0,"item":{"id":"rs_1","type":"reasoning","encrypted_content":"opaque","status":"completed"}}"#.to_owned(),
         r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}"#.to_owned(),
     ];
 
@@ -1082,13 +1127,16 @@ fn completed_reasoning_preserves_done_fields_when_omitted() {
     assert_eq!(reasoning.content[0].text, "completed content");
     assert_eq!(
         reasoning.summary,
-        [serde_json::json!({"type": "summary_text", "text": "completed summary"})]
+        [crate::types::ReasoningSummaryContent::new("completed summary")]
     );
     assert_eq!(
-        reasoning.encrypted_content,
-        Some(serde_json::json!({"token": "opaque"}))
+        reasoning
+            .encrypted_content
+            .as_ref()
+            .map(crate::types::OpaqueReasoning::as_str),
+        Some("opaque")
     );
-    assert_eq!(reasoning.status.as_deref(), Some("completed"));
+    assert_eq!(reasoning.status, Some(crate::types::ReasoningStatus::Completed));
 }
 
 #[test]
@@ -1111,7 +1159,7 @@ fn completed_reasoning_null_and_empty_fields_are_authoritative_independently() {
         panic!("expected reasoning output");
     };
     assert!(content_null.content.is_empty());
-    assert_eq!(content_null.summary[0]["text"], "kept summary");
+    assert_eq!(content_null.summary[0].text, "kept summary");
 
     let summary_empty = from_sse_lines(summary_empty, None);
     let OutputItem::Reasoning(summary_empty) = &summary_empty.output[0] else {
@@ -1137,6 +1185,39 @@ fn streaming_and_nonstreaming_nullable_reasoning_fields_are_equivalent() {
         serde_json::to_value(&streaming.output).unwrap(),
         serde_json::to_value(&nonstreaming.output).unwrap()
     );
+}
+
+#[test]
+fn strict_ingestion_rejects_malformed_typed_reasoning_on_both_paths() {
+    for fields in [
+        serde_json::json!({"encrypted_content":{"ciphertext":"sensitive-state"}}),
+        serde_json::json!({"summary":[{"type":"reasoning_text","text":"not a summary"}]}),
+        serde_json::json!({"content":[{"type":"summary_text","text":"not plaintext reasoning"}]}),
+        serde_json::json!({"status":"complete"}),
+    ] {
+        let mut item = serde_json::json!({"id":"rs_1","type":"reasoning"});
+        item.as_object_mut()
+            .unwrap()
+            .extend(fields.as_object().unwrap().clone());
+        let mut stream = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+        for event in [
+            serde_json::json!({"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}),
+            serde_json::json!({"type":"response.in_progress","response":{"id":"resp_1","status":"in_progress"}}),
+            serde_json::json!({"type":"response.output_item.added","output_index":0,"item":{"id":"rs_1","type":"reasoning"}}),
+        ] {
+            stream.process_line(SseLine::parse(&format!("data: {event}"))).unwrap();
+        }
+        let done = serde_json::json!({"type":"response.output_item.done","output_index":0,"item":item});
+        let error = stream
+            .process_line(SseLine::parse(&format!("data: {done}")))
+            .unwrap_err();
+        assert!(!error.to_string().contains("sensitive-state"));
+
+        let mut json = ResponseAccumulator::with_validation("resp_1".to_owned(), None, Validation::Strict);
+        let body = serde_json::json!({"id":"resp_1","status":"completed","output":[item]});
+        let error = json.load_json_body(&body.to_string()).unwrap_err();
+        assert!(!error.to_string().contains("sensitive-state"));
+    }
 }
 
 #[test]
@@ -1171,7 +1252,7 @@ fn malformed_completed_reasoning_retains_done_fields() {
     };
 
     assert_eq!(reasoning.content[0].text, "completed content");
-    assert_eq!(reasoning.summary[0]["text"], "completed summary");
+    assert_eq!(reasoning.summary[0].text, "completed summary");
     assert!(reasoning.encrypted_content.is_none());
 }
 
@@ -1335,6 +1416,8 @@ fn test_function_call_accumulation_basic() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::ResponseCompleted,
         payload: EventPayload::Response {
+            model: None,
+            model_invalid: false,
             id: "resp_1".into(),
             status: "completed".into(),
             usage: None,
@@ -1463,6 +1546,8 @@ fn test_function_call_multiple_parallel() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::ResponseCompleted,
         payload: EventPayload::Response {
+            model: None,
+            model_invalid: false,
             id: "resp_1".into(),
             status: "completed".into(),
             usage: None,
@@ -1531,6 +1616,8 @@ fn test_function_call_interleaved_with_message() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::ResponseCompleted,
         payload: EventPayload::Response {
+            model: None,
+            model_invalid: false,
             id: "resp_1".into(),
             status: "completed".into(),
             usage: None,
@@ -1728,6 +1815,8 @@ fn test_function_call_finalized_on_response_completed() {
     acc.process_event(&EventFrame {
         event_type: SSEEventType::ResponseCompleted,
         payload: EventPayload::Response {
+            model: None,
+            model_invalid: false,
             id: "resp_1".into(),
             status: "completed".into(),
             usage: None,

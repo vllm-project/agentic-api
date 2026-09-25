@@ -3,6 +3,7 @@ use serde_json::Value;
 use super::types::{EventFrame, EventPayload, SSEEventType, SSEItemType, ShellCommandUpdate, WireEvent};
 use super::{ClassifiedSseLine, SseLine};
 use crate::types::io::OutputItem;
+use crate::types::upstream_identity::UpstreamResponseIdentity;
 use crate::utils::common::{deserialize_from_str_opt, deserialize_from_value_opt};
 
 /// Normalize a raw SSE data line into a typed [`EventFrame`].
@@ -20,12 +21,14 @@ pub fn normalize_sse_line(line: &str) -> Option<EventFrame> {
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("upstream stream has an invalid 'output_index': expected an unsigned 32-bit integer")]
-pub(crate) struct InvalidOutputIndex;
+pub(crate) enum NormalizationError {
+    #[error("upstream stream has an invalid 'output_index': expected an unsigned 32-bit integer")]
+    InvalidOutputIndex,
+}
 
 /// Shares normalization with the public adapter while preserving invalid-index
-/// errors for ingestion. Malformed JSON remains a policy decision downstream.
-pub(crate) fn normalize_sse_data_checked(data: &SseLine) -> Result<Option<EventFrame>, InvalidOutputIndex> {
+/// and model-metadata errors. Malformed JSON remains an ingestion policy decision.
+pub(crate) fn normalize_sse_data_checked(data: &SseLine) -> Result<Option<EventFrame>, NormalizationError> {
     let Some(json) = deserialize_from_str_opt::<Value>(data.as_str()) else {
         return Ok(None);
     };
@@ -33,12 +36,12 @@ pub(crate) fn normalize_sse_data_checked(data: &SseLine) -> Result<Option<EventF
 }
 
 /// Normalizes an already parsed SSE payload.
-fn normalize_sse_value(mut json: Value) -> Result<Option<EventFrame>, InvalidOutputIndex> {
+fn normalize_sse_value(mut json: Value) -> Result<Option<EventFrame>, NormalizationError> {
     if let Some(index) = json.get("output_index") {
         index
             .as_u64()
             .and_then(|index| u32::try_from(index).ok())
-            .ok_or(InvalidOutputIndex)?;
+            .ok_or(NormalizationError::InvalidOutputIndex)?;
     }
     let mut event_type = json
         .get("type")
@@ -53,7 +56,7 @@ fn normalize_sse_value(mut json: Value) -> Result<Option<EventFrame>, InvalidOut
         json["type"] = Value::String("response.incomplete".to_owned());
     }
 
-    let payload = extract_payload(event_type, &json);
+    let payload = extract_payload(event_type, &json)?;
     let Some(wire) = deserialize_from_value_opt::<WireEvent>(json) else {
         return Ok(None);
     };
@@ -65,13 +68,13 @@ fn normalize_sse_value(mut json: Value) -> Result<Option<EventFrame>, InvalidOut
 }
 
 /// Extract a typed payload from the JSON body based on the classified event type.
-fn extract_payload(event_type: SSEEventType, json: &Value) -> EventPayload {
-    match event_type {
+fn extract_payload(event_type: SSEEventType, json: &Value) -> Result<EventPayload, NormalizationError> {
+    Ok(match event_type {
         SSEEventType::ResponseCreated
         | SSEEventType::ResponseInProgress
         | SSEEventType::ResponseCompleted
         | SSEEventType::ResponseFailed
-        | SSEEventType::ResponseIncomplete => extract_response_payload(json),
+        | SSEEventType::ResponseIncomplete => return Ok(extract_response_payload(json)),
 
         SSEEventType::OutputItemAdded => extract_output_item_added(json),
         SSEEventType::OutputItemDone => extract_output_item_done(json),
@@ -110,7 +113,7 @@ fn extract_payload(event_type: SSEEventType, json: &Value) -> EventPayload {
         | SSEEventType::McpListToolsCompleted
         | SSEEventType::McpListToolsFailed
         | SSEEventType::Other => EventPayload::Raw(json.clone()),
-    }
+    })
 }
 
 fn json_str(json: &Value, key: &str) -> String {
@@ -142,6 +145,12 @@ fn json_u32(json: &Value, key: &str) -> u32 {
 
 fn extract_response_payload(json: &Value) -> EventPayload {
     let response = &json["response"];
+    // A missing response object remains the existing lifecycle validator's concern.
+    let identity = if response.is_object() {
+        UpstreamResponseIdentity::observe(response)
+    } else {
+        UpstreamResponseIdentity::observe(&Value::Null)
+    };
     EventPayload::Response {
         id: json_str(response, "id"),
         status: json_str(response, "status"),
@@ -149,6 +158,8 @@ fn extract_response_payload(json: &Value) -> EventPayload {
             .get("usage")
             .filter(|v| !v.is_null())
             .and_then(|v| deserialize_from_value_opt(v.clone())),
+        model: identity.model,
+        model_invalid: identity.invalid_model,
     }
 }
 

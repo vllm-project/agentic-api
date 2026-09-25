@@ -8,7 +8,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 
 use super::WsError;
 
-pub(super) struct QueuedExecution {
+pub(in crate::handler::websocket) struct QueuedExecution {
     execution: ExecutionSpan,
     _wait: QueueWait,
 }

@@ -40,8 +40,13 @@ pub(super) fn item_has_meaningful_context(item: &InputItem) -> bool {
         InputItem::ShellCallOutput(output) => !output.output.is_empty(),
         InputItem::Reasoning(reasoning) => {
             reasoning.content.iter().any(|content| !content.text.trim().is_empty())
-                || reasoning.summary.iter().any(value_has_content)
-                || reasoning.encrypted_content.as_ref().is_some_and(value_has_content)
+                // Preserve the previous JSON policy: even an empty summary part
+                // carried its nonempty `summary_text` discriminator.
+                || !reasoning.summary.is_empty()
+                || reasoning
+                    .encrypted_content
+                    .as_ref()
+                    .is_some_and(|state| !state.as_str().trim().is_empty())
         }
         InputItem::Compaction(compaction) => !compaction.encrypted_content.trim().is_empty(),
         InputItem::McpListTools(_) | InputItem::CompactionTrigger | InputItem::Unknown => false,

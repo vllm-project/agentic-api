@@ -130,6 +130,7 @@ async fn postgres_conversation_create_with_initial_items() {
     let store = ConversationStore::new(pool);
 
     let initial_items = vec![InOutItem::Input(InputItem::Message(InputMessage {
+        phase: None,
         id: None,
         role: "user".to_string(),
         status: None,
@@ -228,6 +229,7 @@ async fn postgres_item_crud_uses_turn_locking_and_preserves_history() {
         .unwrap();
     let make_item = || {
         InOutItem::Input(InputItem::Message(InputMessage {
+            phase: None,
             id: None,
             role: "user".into(),
             status: None,

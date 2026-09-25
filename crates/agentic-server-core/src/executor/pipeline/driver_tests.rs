@@ -24,10 +24,10 @@ async fn live_delivery_applies_backpressure_and_disconnect_stops_input() {
     let polled = AtomicUsize::new(0);
     let body = futures::stream::iter([
         Ok(line(
-            &json!({"type":"response.created","response":{"id":"upstream","status":"in_progress"}}),
+            &json!({"type":"response.created","response":{"id":"upstream","status":"in_progress","model":"snapshot"}}),
         )),
         Ok(line(
-            &json!({"type":"response.in_progress","response":{"id":"upstream","status":"in_progress"}}),
+            &json!({"type":"response.in_progress","response":{"id":"upstream","status":"in_progress","model":"snapshot"}}),
         )),
         Err(ExecutorError::StreamError("must not read ahead".to_owned())),
     ])
@@ -120,7 +120,8 @@ async fn json_and_sse_preserve_the_same_terminal_metadata_and_request_ids() {
                     TranslationContext::default(),
                     None,
                 )
-                .unwrap(),
+                .unwrap()
+                .payload,
         )
         .unwrap();
         let events = [
@@ -155,6 +156,7 @@ fn json_preserves_nonterminal_status_and_strict_validation_rejects_it() {
         agent
             .run_with_json_body(body, Validation::Lenient, TranslationContext::default(), None)
             .unwrap()
+            .payload
             .status,
         "in_progress"
     );
@@ -196,7 +198,7 @@ fn json_search_projection_handles_completed_and_aborted_calls() {
         let payload = agent
             .run_with_json_body(&body, Validation::Lenient, search_context(), None)
             .unwrap();
-        let output = serde_json::to_value(payload.output).unwrap();
+        let output = serde_json::to_value(payload.payload.output).unwrap();
         if status == "failed" {
             assert_eq!(output, json!([]));
         } else {

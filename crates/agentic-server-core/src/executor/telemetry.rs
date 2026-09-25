@@ -151,6 +151,8 @@ pub enum FailureCategory {
     RoundBudget,
     /// The executor task panicked.
     Panic,
+    /// The server-selected reasoning replay policy or profile rejected the request.
+    ReasoningReplay,
 }
 
 impl FailureCategory {
@@ -175,6 +177,7 @@ impl FailureCategory {
             Self::UpstreamError => "upstream_error",
             Self::RoundBudget => "round_budget",
             Self::Panic => "panic",
+            Self::ReasoningReplay => "reasoning_replay",
         }
     }
 }
@@ -191,7 +194,7 @@ impl From<&ExecutorError> for FailureCategory {
             ExecutorError::LLMRequest { .. } => Self::UpstreamStatus,
             ExecutorError::LLMTransport { .. } => Self::UpstreamTransport,
             ExecutorError::NetworkError(_) => Self::Network,
-            ExecutorError::JsonError(_) | ExecutorError::ParseError(_) => Self::Parse,
+            ExecutorError::JsonError(_) | ExecutorError::ParseError(_) | ExecutorError::UpstreamModel(_) => Self::Parse,
             ExecutorError::StreamError(_) => Self::Stream,
             ExecutorError::NotFound { .. } | ExecutorError::PreviousResponseNotFound { .. } => Self::NotFound,
             ExecutorError::InvalidRequest(_) => Self::InvalidRequest,
@@ -200,6 +203,10 @@ impl From<&ExecutorError> for FailureCategory {
             ExecutorError::Conflict(_) => Self::Conflict,
             ExecutorError::CompactionFailed { .. } => Self::Compaction,
             ExecutorError::Tool(_) => Self::Tool,
+            ExecutorError::StreamProducerPanicked => Self::Panic,
+            // A bounded category reveals no provider text from the redacted cause.
+            ExecutorError::OpaqueUpstream(error) => Self::from(error.cause()),
+            ExecutorError::ReasoningReplay(_) => Self::ReasoningReplay,
         }
     }
 }
@@ -462,6 +469,21 @@ mod tests {
             (
                 ExecutorError::Persistence(Box::new(ExecutorError::Conflict("inner".to_owned()))),
                 FailureCategory::Persistence,
+            ),
+            (ExecutorError::StreamProducerPanicked, FailureCategory::Panic),
+            (
+                super::super::error::OpaqueUpstreamError::redact(ExecutorError::StreamError(
+                    "reflected secret".to_owned(),
+                )),
+                FailureCategory::Stream,
+            ),
+            (
+                ExecutorError::UpstreamModel(crate::types::upstream_identity::UpstreamModelError::Invalid),
+                FailureCategory::Parse,
+            ),
+            (
+                ExecutorError::ReasoningReplay(crate::types::reasoning_replay::ReasoningReplayError::OpaqueNotEnabled),
+                FailureCategory::ReasoningReplay,
             ),
         ];
         for (error, expected) in cases {
