@@ -46,6 +46,20 @@ identity-provider dependency failure from rejected credentials. See
 For a complete GitHub-backed deployment example, see
 [GitHub authentication with Dex](../deploying/github-oidc.md).
 
+## Chat Completions
+
+### `POST /v1/chat/completions` · `POST /v1/completions`
+
+Agentic API owns the stateful agentic APIs; it does not own the Chat Completions contract. Both paths are
+forwarded to `{LLM_API_BASE}` verbatim, so clients on those endpoints keep working when the gateway is deployed
+as the entry point in front of an inference stack. Request and response bodies are relayed unchanged, including
+`tools` and returned `tool_calls`; streaming responses are relayed as they arrive, and the upstream status code
+and headers are preserved.
+
+There is no state, no continuation, and no gateway tool loop on these routes: server-side tool execution is a
+Responses and Messages capability. Inbound authentication, the request-body ceiling, and CORS apply as they do
+to every other `/v1/*` route; the configured upstream credential is injected only when the caller supplies none.
+
 ## Responses
 
 ### `POST /v1/responses`

@@ -68,6 +68,7 @@ flowchart LR
 | `GET /v1/responses` | WebSocket transport for the Responses API | ✅ |
 | `POST /v1/conversations` | Conversation management | ✅ |
 | `GET /v1/models` | Model listing proxied from vLLM | ✅ |
+| `POST /v1/chat/completions` · `POST /v1/completions` | Forwarded to the upstream verbatim, so clients on those endpoints keep working when the gateway is the entry point | ✅ |
 | `GET /health` · `GET /ready` | Liveness and readiness probes | ✅ |
 | Messages API | Anthropic-style stateful messages on shared primitives | 🚧 Planned |
 | Interactions API | Higher-level agentic workflow surface | ⏳ Planned |
