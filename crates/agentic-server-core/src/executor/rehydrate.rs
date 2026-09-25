@@ -34,6 +34,11 @@ pub(super) fn validate_message_content(input: &ResponsesInput) -> ExecutorResult
         let InputItem::Message(message) = item else {
             continue;
         };
+        if message.phase.is_some() && message.role != "assistant" {
+            return Err(ExecutorError::InvalidRequest(format!(
+                "input[{item_index}].phase is supported only on assistant messages"
+            )));
+        }
         let InputMessageContent::Parts(parts) = &message.content else {
             continue;
         };

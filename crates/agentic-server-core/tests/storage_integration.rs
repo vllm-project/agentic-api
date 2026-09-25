@@ -14,6 +14,7 @@ use support::setup_pool;
 
 fn create_input_item(text: &str) -> InOutItem {
     InOutItem::Input(InputItem::Message(InputMessage {
+        phase: None,
         id: None,
         role: "user".to_string(),
         status: None,

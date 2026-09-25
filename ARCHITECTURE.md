@@ -371,7 +371,9 @@ access happen — those live in `tool/`, `executor/`, and `storage/` respectivel
   `ResponsesInput`), `output.rs` (outbound output items: messages, function calls, web
   search/MCP calls, reasoning — plus the `ApplyDone` trait described below), `tools.rs`
   (the normalized `FunctionTool` and `ToolChoice`, distinct from tool *declarations*),
-  `usage.rs` (token accounting structs). `ResponsesInput::model_input()` is the final
+  `message.rs` (input/output messages and their optional assistant `phase`, which
+  input validation rejects on non-assistant roles), and `usage.rs` (token accounting
+  structs). `ResponsesInput::model_input()` is the final
   model-visibility boundary used by `RequestPayload::to_upstream_request`: it removes
   orchestration-only `McpListTools` and `CompactionTrigger` input items. A persisted
   `Compaction` item is different: the latest checkpoint supersedes earlier model

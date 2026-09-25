@@ -133,6 +133,7 @@ mod tests {
     #[test]
     fn test_inout_item_from_input() {
         let input = InputItem::Message(InputMessage {
+            phase: None,
             id: None,
             role: "user".to_string(),
             status: None,
@@ -152,6 +153,7 @@ mod tests {
     #[test]
     fn test_inout_item_to_string() {
         let input = InputItem::Message(InputMessage {
+            phase: None,
             id: None,
             role: "user".to_string(),
             status: None,
@@ -171,6 +173,7 @@ mod tests {
         output.content.push(OutputTextContent::new("answer"));
         let items = vec![
             InOutItem::Input(InputItem::Message(InputMessage {
+                phase: None,
                 id: None,
                 role: "user".to_string(),
                 status: None,
@@ -178,6 +181,7 @@ mod tests {
             })),
             InOutItem::Output(OutputItem::Message(output)),
             InOutItem::Input(InputItem::Message(InputMessage {
+                phase: None,
                 id: None,
                 role: "user".to_string(),
                 status: None,

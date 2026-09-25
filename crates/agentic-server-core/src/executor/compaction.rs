@@ -342,6 +342,7 @@ async fn compact_items_with_trigger(
         .filter(|item| !item.is_compaction_trigger())
         .collect();
     summary_items.push(InputItem::Message(InputMessage {
+        phase: None,
         id: None,
         role: "user".to_owned(),
         status: None,
@@ -511,6 +512,7 @@ mod tests {
 
     fn user_message(text: &str) -> InputItem {
         InputItem::Message(InputMessage {
+            phase: None,
             id: None,
             role: "user".to_owned(),
             status: None,
@@ -528,6 +530,7 @@ mod tests {
 
     fn image_message(encoded_bytes: usize) -> InputItem {
         InputItem::Message(InputMessage {
+            phase: None,
             id: None,
             role: "user".to_owned(),
             status: None,
@@ -820,6 +823,7 @@ mod tests {
     fn an_image_referenced_by_file_id_is_meaningful_context() {
         let image_by = |content: InputImageContent| {
             InputItem::Message(InputMessage {
+                phase: None,
                 id: None,
                 role: "user".to_owned(),
                 status: None,
@@ -844,6 +848,7 @@ mod tests {
         let estimate_with_images = |count| {
             let parts = (0..count).map(|_| InputContent::InputImage(inline_image(1))).collect();
             estimate_input_tokens(&ResponsesInput::Items(vec![InputItem::Message(InputMessage {
+                phase: None,
                 id: None,
                 role: "user".to_owned(),
                 status: None,
@@ -1058,6 +1063,7 @@ mod tests {
         let expected_url = retained_image.image_url.clone().expect("inline image URL");
         let text_input = ResponsesInput::Items(vec![
             InputItem::Message(InputMessage {
+                phase: None,
                 id: None,
                 role: "user".to_owned(),
                 status: None,

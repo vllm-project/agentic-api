@@ -122,6 +122,7 @@ async fn test_conversation_create_with_initial_items() {
     let store = ConversationStore::new(pool);
 
     let initial_items = vec![InOutItem::Input(InputItem::Message(InputMessage {
+        phase: None,
         id: None,
         role: "user".to_string(),
         status: None,

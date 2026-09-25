@@ -61,6 +61,7 @@ fn next_id() -> String {
 
 fn make_items() -> Vec<InOutItem> {
     let input = InputItem::Message(InputMessage {
+        phase: None,
         id: None,
         role: "user".to_string(),
         status: None,
