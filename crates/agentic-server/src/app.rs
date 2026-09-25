@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
@@ -5,7 +6,9 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use axum::Router;
 use axum::middleware;
 use axum::routing::{get, post};
+use axum::serve::{Listener, ListenerExt as _};
 use http::HeaderValue;
+use tokio::net::{TcpListener, TcpStream};
 #[cfg(debug_assertions)]
 use tokio::sync::oneshot;
 use tokio::sync::{Notify, Semaphore, SemaphorePermit};
@@ -266,6 +269,23 @@ pub struct AppState {
     /// it; `/v1/conversations` bodies are small enough that a raised ceiling has
     /// no effect on them.
     pub max_request_body_size: NonZeroUsize,
+}
+
+/// The gateway's listener: `listener` with Nagle's algorithm disabled on
+/// every accepted connection.
+///
+/// Streamed responses and WebSocket turns are written as several small
+/// frames. With Nagle's algorithm on, each frame after the first waits until
+/// the client acknowledges the previous one, and clients delay that
+/// acknowledgement (about 40 ms on Linux), which stalled every streamed
+/// response and WebSocket turn. A connection whose option cannot be set is
+/// still served.
+pub fn gateway_listener(listener: TcpListener) -> impl Listener<Io = TcpStream, Addr = SocketAddr> {
+    listener.tap_io(|stream: &mut TcpStream| {
+        if let Err(error) = stream.set_nodelay(true) {
+            tracing::warn!(%error, "failed to disable Nagle's algorithm on an accepted connection");
+        }
+    })
 }
 
 pub fn build_router(state: AppState, server_config: &ServerConfig) -> Router {

@@ -9,7 +9,9 @@ use agentic_core::error::Error as CoreError;
 use agentic_core::executor::ExecutionContext;
 use agentic_core::proxy::ProxyState;
 use agentic_core::readiness::{llm_readiness_client, wait_llm_ready};
-use agentic_server::app::{AppState, ReadinessTracker, ServerConfig, WebSocketTracker, build_router_with_auth};
+use agentic_server::app::{
+    AppState, ReadinessTracker, ServerConfig, WebSocketTracker, build_router_with_auth, gateway_listener,
+};
 use agentic_server::auth::{OidcAuthError, OidcAuthenticator, OidcConfig};
 use agentic_server::model_capabilities::ModelCapabilities;
 use agentic_server::telemetry::TelemetryError;
@@ -88,7 +90,7 @@ async fn serve_gateway(
     let router = build_router_with_auth(state, &server_config, authenticator);
     let listener = TcpListener::bind(&addr).await?;
     info!("gateway listening on {addr}");
-    axum::serve(listener, router)
+    axum::serve(gateway_listener(listener), router)
         .with_graceful_shutdown(async move {
             shutdown_token.cancelled().await;
         })
