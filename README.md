@@ -54,7 +54,7 @@ flowchart LR
 ## ✨ Key Features
 
 - 🔄 **Stateful conversations**: the server manages history via `previous_response_id`. No client-side message tracking, no replaying full transcripts.
-- 🛠️ **Server-side tool execution**: an explicit tool-ownership model (gateway / client / provider) decides exactly what runs where. Web search ships today via [You.com](https://you.com) or [Brave Search](https://brave.com/search/api/), and the model executes multi-step tool chains automatically.
+- 🛠️ **Server-side tool execution**: an explicit tool-ownership model (gateway / client / provider) decides exactly what runs where. Web search ships today via [You.com](https://you.com), [Brave Search](https://brave.com/search/api/), or [Tavily](https://tavily.com), and the model executes multi-step tool chains automatically.
 - 📡 **Every transport**: non-streaming HTTP, server-sent events for token streaming, and full **WebSocket** support for interactive clients.
 - 🧰 **Codex-ready**: accepts Codex-shaped Responses traffic out of the box, preserving the tool declarations and response item shapes Codex depends on.
 - 🏃 **Background execution**: fire-and-forget requests that keep processing server-side.
@@ -201,6 +201,13 @@ AGENTIC_WEB_SEARCH_PROVIDER=brave BRAVE_API_KEY=<your-brave-api-key> \
   cargo run -p agentic-server -- --llm-api-base http://0.0.0.0:5050
 ```
 
+Or [Tavily](https://tavily.com), a search API built for LLM agents with native domain filtering:
+
+```bash
+AGENTIC_WEB_SEARCH_PROVIDER=tavily TAVILY_API_KEY=<your-tavily-api-key> \
+  cargo run -p agentic-server -- --llm-api-base http://0.0.0.0:5050
+```
+
 The default database is `~/.agentic-api/agentic_api.db`, so running an installed binary does not create state in the
 current directory. Set `AGENTIC_API_HOME` to an absolute directory to move both the default database and user
 configuration, or set `DATABASE_URL`/`--db-url` to select a different database.
@@ -234,12 +241,12 @@ llm_api_base = "http://127.0.0.1:5050"
 # database_url = "postgresql://agentic-api@localhost/agentic_api"
 
 [web_search]
-# Search backend for the gateway-owned web_search tool: "you" (default) or "brave".
+# Search backend for the gateway-owned web_search tool: "you" (default), "brave", or "tavily".
 provider = "you"
 base_url = "https://api.ydc-index.io"
 api_key_env = "YOU_API_KEY"
 # Concurrent provider requests inside one batched web-search call; unset uses
-# the provider default (Brave: 1, You.com: max_concurrent_gateway_calls).
+# the provider default (Brave: 1; You.com and Tavily: max_concurrent_gateway_calls).
 # max_concurrent_queries = 1
 
 [mcp]
@@ -348,9 +355,9 @@ every provider.
 | Setting | Environment variable | `config.toml` key | Default |
 | :--- | :--- | :--- | :--- |
 | Provider | `AGENTIC_WEB_SEARCH_PROVIDER` | `[web_search] provider` | `you` |
-| API key | variable named by `api_key_env` | `[web_search] api_key_env` | `YOU_API_KEY` / `BRAVE_API_KEY` |
-| Endpoint | `AGENTIC_WEB_SEARCH_BASE_URL` (or `YOU_API_BASE_URL` for You.com) | `[web_search] base_url` | none for You.com; `https://api.search.brave.com` for Brave |
-| Concurrent queries | `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES` | `[web_search] max_concurrent_queries` | You.com inherits `max_concurrent_gateway_calls`; Brave `1` |
+| API key | variable named by `api_key_env` | `[web_search] api_key_env` | `YOU_API_KEY` / `BRAVE_API_KEY` / `TAVILY_API_KEY` |
+| Endpoint | `AGENTIC_WEB_SEARCH_BASE_URL` (or `YOU_API_BASE_URL` for You.com) | `[web_search] base_url` | none for You.com; `https://api.search.brave.com` for Brave; `https://api.tavily.com` for Tavily |
+| Concurrent queries | `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES` | `[web_search] max_concurrent_queries` | You.com and Tavily inherit `max_concurrent_gateway_calls`; Brave `1` |
 
 **You.com** (`provider = "you"`) is the default and behaves exactly as before: domain filters are applied by the
 provider, `count` accepts 1–100, and the You.com-specific `livecrawl`, `livecrawl_formats`, `crawl_timeout`, and
@@ -372,14 +379,39 @@ the shared tool contract to Brave:
   automatic retry and reports the upstream `Retry-After` value; a cap lowers, but cannot eliminate, 429s on a
   per-second quota.
 
-If you switch an existing deployment to Brave, update `api_key_env` if an older `config.toml` pins it (or
+**Tavily** (`provider = "tavily"`) needs only `TAVILY_API_KEY`; its [plans](https://tavily.com) are metered in
+credits, and each query costs one credit. Requests are `POST` bodies against `https://api.tavily.com/search` with the
+key sent as a bearer token. The gateway adapts the shared tool contract to Tavily:
+
+- `allowed_domains` / `blocked_domains` (and the model's `include_domains` / `exclude_domains`) are forwarded to
+  Tavily's native `include_domains` / `exclude_domains` and re-checked by the gateway on the response as defense in
+  depth, so a filtered search can return fewer than `count` results.
+- `count` is clamped to Tavily's maximum of 20 (`max_results`); `freshness` maps to `time_range` (`day`, `week`,
+  `month`, `year`) or to a `start_date` / `end_date` pair widened by one day on each side, since Tavily's bounds are
+  exclusive and the gateway's range is inclusive; `language` keeps Tavily's documented compound tags (`zh-CN` →
+  `zh-cn`) and otherwise reduces to its primary subtag (`en-GB` → `en`); `safesearch` becomes Tavily's boolean
+  `safe_search` (anything but `off` enables it).
+- A `freshness` filter is a hard contract: the date window is sent with `filter_by_published_date`, so Tavily drops
+  results published outside it *and* results with no detectable publication date rather than letting them through.
+  Like an allowlist, this can return fewer than `count` results.
+- Every query is one `topic: "general"` search, so all hits land in `results.web` and `results.news` is always empty;
+  a second news search per query would double the credits spent. `page_age` carries Tavily's `published_date`.
+- `country` is ignored (Tavily expects full country names rather than ISO codes), as are the You.com-specific
+  arguments above (all logged at debug level).
+- Each per-query `metadata[]` entry carries `"provider": "tavily"` plus Tavily's `request_id` as `search_uuid` and
+  its `response_time` as `latency`.
+- Batched queries inherit the gateway concurrency limit. A rate-limited request (HTTP 429) fails that
+  `web_search_call` without an automatic retry and reports the upstream `Retry-After` value; Tavily's plan-limit
+  statuses (432, 433) fail the same way without a retry.
+
+If you switch an existing deployment to Brave or Tavily, update `api_key_env` if an older `config.toml` pins it (or
 remove it) and drop a You.com `base_url`; a mismatched key variable is reported in the failed `web_search_call`
 message. Example:
 
 ```toml
 [web_search]
-provider = "brave"
-api_key_env = "BRAVE_API_KEY"
+provider = "tavily"
+api_key_env = "TAVILY_API_KEY"
 ```
 
 Restrict the file to the service account (for example, `chmod 600 ~/.agentic-api/config.toml`), especially if you add
@@ -481,7 +513,8 @@ Claude Code's own tools (Bash, Edit, Read, …) stay **client-owned** — Claude
 
 Current Claude Code versions declare Anthropic's native `web_search_20250305` server tool. Agentic API translates that
 declaration for the upstream model and executes the resulting search server-side against the configured search backend
-(You.com or Brave Search, see [Web search providers](#web-search-providers)); no MCP server or tool alias is required:
+(You.com, Brave Search, or Tavily, see [Web search providers](#web-search-providers)); no MCP server or tool alias is
+required:
 
 ```bash
 YOU_API_KEY=<you.com-key> YOU_API_BASE_URL=<you.com-base-url> \

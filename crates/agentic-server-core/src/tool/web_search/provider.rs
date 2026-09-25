@@ -1,16 +1,17 @@
-//! Shared search-provider contract and normalized result types.
+//! Shared search-provider contract, normalized result types, and the
+//! response helpers every provider module reads through.
 
 use std::fmt;
 use std::future::Future;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 
-use serde::{Deserialize, Serialize};
+use futures::StreamExt;
+use serde::{Deserialize, Deserializer, Serialize};
 
 use super::args::WebSearchArguments;
-use super::null_as_default;
 use crate::config::WebSearchProviderKind;
-use crate::tool::handler::ToolError;
+use crate::tool::handler::{MAX_GATEWAY_TOOL_OUTPUT_BYTES, ToolError};
 use crate::types::tools::WebSearchToolParam;
 
 /// Provider credential whose `Debug` output never contains the secret.
@@ -108,4 +109,36 @@ pub(crate) struct WebSearchProviderResponse {
     pub web: Vec<WebSearchResult>,
     pub news: Vec<WebSearchResult>,
     pub metadata: WebSearchProviderMetadata,
+}
+
+/// Deserializes an explicit JSON `null` as the field's default instead of
+/// failing, so a degenerate provider response cannot fail the whole search.
+pub(crate) fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Option::unwrap_or_default)
+}
+
+/// Reads a provider HTTP response body, failing as soon as it exceeds
+/// [`MAX_GATEWAY_TOOL_OUTPUT_BYTES`] so an oversized provider reply is never
+/// buffered in full. Every provider module reads its responses through here.
+pub(super) async fn read_response_limited(
+    resp: reqwest::Response,
+    provider: WebSearchProviderKind,
+) -> Result<String, ToolError> {
+    let mut stream = resp.bytes_stream();
+    let mut body = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk
+            .map_err(|error| ToolError::Execution(format!("failed to read {provider} search response: {error}")))?;
+        if chunk.len() > MAX_GATEWAY_TOOL_OUTPUT_BYTES.saturating_sub(body.len()) {
+            return Err(ToolError::Execution(format!(
+                "{provider} search response exceeded {MAX_GATEWAY_TOOL_OUTPUT_BYTES} bytes"
+            )));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    String::from_utf8(body).map_err(|_| ToolError::Execution(format!("{provider} search response was not valid UTF-8")))
 }

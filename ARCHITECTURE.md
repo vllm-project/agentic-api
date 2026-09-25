@@ -1001,8 +1001,8 @@ declaration until they have a complete handler and execution path.
     (`CodexNamespaceHandler`), and `tool_search.rs` (`ToolSearchHandler`). Their calls
     are returned for the client to resolve; the gateway does not execute them.
   - **Gateway-owned / built-in** tools implement both traits: see `web_search/mod.rs`
-    (`WebSearchHandler`, backed by the configured `WebSearchProvider` in `web_search/you.rs`
-    or `web_search/brave.rs`) and `mcp/handler.rs` (`McpHandler`, backed
+    (`WebSearchHandler`, backed by the configured `WebSearchProvider` in `web_search/you.rs`,
+    `web_search/brave.rs`, or `web_search/tavily.rs`) and `mcp/handler.rs` (`McpHandler`, backed
     by `mcp/client.rs`'s MCP protocol client and `mcp/pool.rs`'s connection pool). They
     have no client translator association because the gateway owns their execution and
     public lifecycle.
