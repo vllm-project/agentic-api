@@ -3,6 +3,7 @@
 mod common;
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use agentic_core::executor::ExecutionContext;
 use agentic_core::storage::{ResponseMetadata, ResponseStore};
@@ -31,14 +32,21 @@ async fn assert_retrieval_requires_valid_key(client: &reqwest::Client, url: &str
 
 #[tokio::test]
 async fn retrieval_preserves_each_turn_and_rejects_unstored_or_legacy_ids() {
+    let next_message_id = Arc::new(AtomicUsize::new(0));
     let upstream = Router::new().route(
         "/v1/responses",
-        post(|| async {
-            Json(json!({"id":"resp_upstream", "object":"response", "created_at":123,
-            "model":"test-model", "status":"completed", "output":[{
-                "type":"message", "id":"msg_answer", "role":"assistant", "status":"completed",
-                "content":[{"type":"output_text", "text":"answer"}]}],
-            "usage":{"input_tokens":3,"output_tokens":1,"total_tokens":4}}))
+        post({
+            let next_message_id = Arc::clone(&next_message_id);
+            move || {
+                let message_id = next_message_id.fetch_add(1, Ordering::Relaxed);
+                async move {
+                    Json(json!({"id":"resp_upstream", "object":"response", "created_at":123,
+                    "model":"test-model", "status":"completed", "output":[{
+                        "type":"message", "id":format!("msg_answer_{message_id}"), "role":"assistant", "status":"completed",
+                        "content":[{"type":"output_text", "text":"answer"}]}],
+                    "usage":{"input_tokens":3,"output_tokens":1,"total_tokens":4}}))
+                }
+            }
         }),
     );
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
