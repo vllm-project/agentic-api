@@ -63,7 +63,10 @@ async fn gateway_requests_reach_the_collector_with_service_identity() {
         .flat_map(|scope| scope.spans.iter().map(|span| span.name.clone()))
         .collect();
     span_names.sort();
-    assert_eq!(span_names, ["GET", "GET /health", "POST /v1/responses"]);
+    assert_eq!(
+        span_names,
+        ["GET", "GET /health", "POST /v1/responses", "agentic.execute"]
+    );
 
     let metrics = stub.metric_exports().await;
     let latest = metrics.last().expect("metrics exported on shutdown");

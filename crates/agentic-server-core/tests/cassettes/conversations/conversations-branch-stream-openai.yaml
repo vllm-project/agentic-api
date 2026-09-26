@@ -1,0 +1,396 @@
+turns:
+- filename: t1
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1790239028
+      id: conv_6ab4e134cfb08190a53790c91b79ea760cf1abffffce21b7
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      conversation: conv_6ab4e134cfb08190a53790c91b79ea760cf1abffffce21b7
+      input:
+      - content: Remember the secret word SAPPHIRE. Reply with only SAPPHIRE.
+        role: user
+      model: gpt-4.1
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_0cf1abffffce21b7006ab4e1351cd48190a2ed28741d98c3fb","object":"response","created_at":1790239029,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"conversation":{"id":"conv_6ab4e134cfb08190a53790c91b79ea760cf1abffffce21b7"},"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0cf1abffffce21b7006ab4e1351cd48190a2ed28741d98c3fb","object":"response","created_at":1790239029,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"conversation":{"id":"conv_6ab4e134cfb08190a53790c91b79ea760cf1abffffce21b7"},"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_0cf1abffffce21b7006ab4e13589fc819082f7142a2078ce5c","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0cf1abffffce21b7006ab4e13589fc819082f7142a2078ce5c","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"S","item_id":"msg_0cf1abffffce21b7006ab4e13589fc819082f7142a2078ce5c","logprobs":[],"obfuscation":"yMnekJUjgLvkkt9","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"APP","item_id":"msg_0cf1abffffce21b7006ab4e13589fc819082f7142a2078ce5c","logprobs":[],"obfuscation":"hCWzgLH8yVITp","output_index":0,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"H","item_id":"msg_0cf1abffffce21b7006ab4e13589fc819082f7142a2078ce5c","logprobs":[],"obfuscation":"S98Mw0r2UW8MPGy","output_index":0,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"IRE","item_id":"msg_0cf1abffffce21b7006ab4e13589fc819082f7142a2078ce5c","logprobs":[],"obfuscation":"TF6eh4IyNxb5i","output_index":0,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0cf1abffffce21b7006ab4e13589fc819082f7142a2078ce5c","logprobs":[],"output_index":0,"sequence_number":8,"text":"SAPPHIRE"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0cf1abffffce21b7006ab4e13589fc819082f7142a2078ce5c","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"SAPPHIRE"},"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_0cf1abffffce21b7006ab4e13589fc819082f7142a2078ce5c","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"SAPPHIRE"}],"role":"assistant"},"output_index":0,"sequence_number":10}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_0cf1abffffce21b7006ab4e1351cd48190a2ed28741d98c3fb","object":"response","created_at":1790239029,"status":"completed","access_programs":null,"background":false,"completed_at":1790239029,"conversation":{"id":"conv_6ab4e134cfb08190a53790c91b79ea760cf1abffffce21b7"},"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[{"id":"msg_0cf1abffffce21b7006ab4e13589fc819082f7142a2078ce5c","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"SAPPHIRE"}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":24,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":5,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":29},"user":null,"metadata":{}},"sequence_number":11}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      items:
+      - content: The new secret word is ORCHID.
+        role: user
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_6ab4e134cfb08190a53790c91b79ea760cf1abffffce21b7/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: The new secret word is ORCHID.
+          type: input_text
+        id: msg_6ab4e1363b948190bb8e6ae5b7ed1ec40cf1abffffce21b7
+        role: user
+        status: completed
+        type: message
+      first_id: msg_6ab4e1363b948190bb8e6ae5b7ed1ec40cf1abffffce21b7
+      has_more: false
+      last_id: msg_6ab4e1363b948190bb8e6ae5b7ed1ec40cf1abffffce21b7
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input:
+      - content: What is the most recent secret word? Reply with only that word.
+        role: user
+      model: gpt-4.1
+      previous_response_id: resp_0cf1abffffce21b7006ab4e1351cd48190a2ed28741d98c3fb
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_0cf1abffffce21b7006ab4e137144081908579c6597e9c0191","object":"response","created_at":1790239031,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0cf1abffffce21b7006ab4e1351cd48190a2ed28741d98c3fb","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0cf1abffffce21b7006ab4e137144081908579c6597e9c0191","object":"response","created_at":1790239031,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0cf1abffffce21b7006ab4e1351cd48190a2ed28741d98c3fb","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_0cf1abffffce21b7006ab4e137a2588190ae302ac5665676d6","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0cf1abffffce21b7006ab4e137a2588190ae302ac5665676d6","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"S","item_id":"msg_0cf1abffffce21b7006ab4e137a2588190ae302ac5665676d6","logprobs":[],"obfuscation":"5YksoN1g3nJSCvi","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"APP","item_id":"msg_0cf1abffffce21b7006ab4e137a2588190ae302ac5665676d6","logprobs":[],"obfuscation":"eFhymjn2iqV2l","output_index":0,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"H","item_id":"msg_0cf1abffffce21b7006ab4e137a2588190ae302ac5665676d6","logprobs":[],"obfuscation":"yuVYf575vM5PZ9L","output_index":0,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"IRE","item_id":"msg_0cf1abffffce21b7006ab4e137a2588190ae302ac5665676d6","logprobs":[],"obfuscation":"naILsrpl0RZxK","output_index":0,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0cf1abffffce21b7006ab4e137a2588190ae302ac5665676d6","logprobs":[],"output_index":0,"sequence_number":8,"text":"SAPPHIRE"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0cf1abffffce21b7006ab4e137a2588190ae302ac5665676d6","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"SAPPHIRE"},"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_0cf1abffffce21b7006ab4e137a2588190ae302ac5665676d6","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"SAPPHIRE"}],"role":"assistant"},"output_index":0,"sequence_number":10}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_0cf1abffffce21b7006ab4e137144081908579c6597e9c0191","object":"response","created_at":1790239031,"status":"completed","access_programs":null,"background":false,"completed_at":1790239031,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[{"id":"msg_0cf1abffffce21b7006ab4e137a2588190ae302ac5665676d6","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"SAPPHIRE"}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0cf1abffffce21b7006ab4e1351cd48190a2ed28741d98c3fb","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":50,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":5,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":55},"user":null,"metadata":{}},"sequence_number":11}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      items:
+      - content: The branch marker is VIOLET.
+        role: user
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_6ab4e134cfb08190a53790c91b79ea760cf1abffffce21b7/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: The branch marker is VIOLET.
+          type: input_text
+        id: msg_6ab4e13841c48190b9e7e06c76d37cd00cf1abffffce21b7
+        role: user
+        status: completed
+        type: message
+      first_id: msg_6ab4e13841c48190b9e7e06c76d37cd00cf1abffffce21b7
+      has_more: false
+      last_id: msg_6ab4e13841c48190b9e7e06c76d37cd00cf1abffffce21b7
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_6ab4e134cfb08190a53790c91b79ea760cf1abffffce21b7/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember the secret word SAPPHIRE. Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_0cf1abffffce21b7006ab4e135353c8190945235210f2fa553
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE
+          type: output_text
+        id: msg_0cf1abffffce21b7006ab4e13589fc819082f7142a2078ce5c
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: The new secret word is ORCHID.
+          type: input_text
+        id: msg_6ab4e1363b948190bb8e6ae5b7ed1ec40cf1abffffce21b7
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: The branch marker is VIOLET.
+          type: input_text
+        id: msg_6ab4e13841c48190b9e7e06c76d37cd00cf1abffffce21b7
+        role: user
+        status: completed
+        type: message
+      first_id: msg_0cf1abffffce21b7006ab4e135353c8190945235210f2fa553
+      has_more: false
+      last_id: msg_6ab4e13841c48190b9e7e06c76d37cd00cf1abffffce21b7
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200

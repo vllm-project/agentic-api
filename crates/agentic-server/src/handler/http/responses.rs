@@ -8,8 +8,9 @@ use tracing::debug;
 
 use std::sync::Arc;
 
+use agentic_core::executor::telemetry::Api;
 use agentic_core::executor::{ExecuteRequest, compact_response as execute_compaction};
-use agentic_core::proxy::{ProxyRequest, proxy_request};
+use agentic_core::proxy::ProxyRequest;
 use agentic_core::tool::ToolSearchHandler;
 use agentic_core::types::request_response::{CompactRequest, RequestPayload, ResponseTextConfig};
 
@@ -26,7 +27,10 @@ async fn proxy_responses(state: &AppState, parts: Parts, body: Bytes) -> Respons
         body,
         query: parts.uri.query().map(str::to_string),
     };
-    convert_response(proxy_request(proxy_req, &state.proxy_state).await)
+    convert_response(
+        crate::telemetry::proxy::trace_proxy_request(Api::Responses, proxy_req, "/v1/responses", &state.proxy_state)
+            .await,
+    )
 }
 
 async fn execute_responses(state: &AppState, parts: Parts, payload: RequestPayload) -> Response {

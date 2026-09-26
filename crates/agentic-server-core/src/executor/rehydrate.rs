@@ -162,6 +162,9 @@ pub async fn rehydrate_in_session(
     rehydrate_with_continuation(request, exec_ctx, Some(continuation)).await
 }
 
+#[tracing::instrument(name = "agentic.rehydrate", skip_all, fields(
+    agentic.rehydrate.source = super::telemetry::stages::StateSource::from_request(&request).as_str()
+))]
 pub(crate) async fn rehydrate_with_continuation(
     request: RequestPayload,
     exec_ctx: &ExecutionContext,
@@ -571,6 +574,7 @@ mod tests {
             truncation: None,
             metadata: None,
             parallel_tool_calls: None,
+            prompt_cache_key: None,
             cache_salt: None,
             context_management: None,
         }

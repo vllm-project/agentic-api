@@ -600,6 +600,7 @@ mod tests {
             include_str!("../../migrations/0003_index_conversation_sequence.sql"),
             include_str!("../../migrations/0004_link_conversation_latest_response.sql"),
             include_str!("../../migrations/0005_conversation_revision.sql"),
+            include_str!("../../migrations/0006_item_references.sql"),
         ] {
             sqlx::raw_sql(migration)
                 .execute(&mut *connection)

@@ -71,9 +71,9 @@ fn stalled_response(dropped: Arc<AtomicUsize>) -> Response {
         .unwrap()
 }
 
-fn successful_response() -> Value {
+fn successful_response(message_id: &str) -> Value {
     json!({"id":"resp_upstream", "object":"response", "model":"test-model", "status":"completed",
-        "output":[{"id":"msg_success", "type":"message", "role":"assistant", "status":"completed",
+        "output":[{"id":message_id, "type":"message", "role":"assistant", "status":"completed",
             "content":[{"type":"output_text", "text":"recovered 雪"}]}]})
 }
 
@@ -141,15 +141,20 @@ async fn response_recovery(transport: Transport) {
             let requests = Arc::clone(&route_requests);
             let dropped = Arc::clone(&route_dropped);
             async move {
-                let first = {
+                let request_number = {
                     let mut requests = requests.lock().await;
                     requests.push(request);
-                    requests.len() == 1
+                    requests.len()
                 };
-                if first {
+                if request_number == 1 {
                     stalled_response(dropped)
                 } else {
-                    Json(successful_response()).into_response()
+                    let message_id = if request_number == 2 {
+                        "msg_success"
+                    } else {
+                        "msg_followup"
+                    };
+                    Json(successful_response(message_id)).into_response()
                 }
             }
         }),

@@ -16,6 +16,7 @@ mod prepare;
 pub mod rehydrate;
 pub mod request;
 pub mod session;
+pub mod telemetry;
 pub mod translate;
 
 mod gateway;

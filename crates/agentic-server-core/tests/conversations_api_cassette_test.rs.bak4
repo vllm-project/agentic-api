@@ -1,0 +1,350 @@
+// Conversations API cassette replay tests.
+//
+// These tests replay recorded OpenAI and gateway Conversations API cassettes,
+// comparing behavior across:
+// - Conversation CRUD operations
+// - Item CRUD operations
+// - Pagination with order and cursors
+// - Stateful context (manual items affecting model responses)
+// - Deletion and continuation behavior
+// - Branching before/after manual item additions
+// - Error cases and validation
+
+use serde_json::{Value, json};
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+#[derive(Debug, serde::Deserialize)]
+struct Cassette {
+    turns: Vec<Turn>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct Turn {
+    filename: String,
+    request: Request,
+    response: Response,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct Request {
+    method: String,
+    path: String,
+    #[serde(default)]
+    body: Option<Value>,
+    #[serde(default)]
+    query_params: HashMap<String, String>,
+    #[serde(default)]
+    headers: HashMap<String, String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct Response {
+    status_code: u16,
+    #[serde(default)]
+    body: Option<Value>,
+    #[serde(default)]
+    headers: HashMap<String, String>,
+}
+
+fn load_cassette(name: &str) -> Result<Cassette> {
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests/cassettes/conversations");
+    path.push(format!("{name}.yaml"));
+
+    let content =
+        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read cassette {}: {e}", path.display()))?;
+
+    serde_yaml::from_str(&content).map_err(|e| format!("Failed to parse cassette {}: {e}", path.display()).into())
+}
+
+fn normalize_dynamic_fields(value: &mut Value) {
+    // Recursively normalize IDs, timestamps, and other dynamic fields
+    match value {
+        Value::Object(map) => {
+            // Normalize conversation IDs
+            if let Some(id) = map.get_mut("id") {
+                if let Some(id_str) = id.as_str() {
+                    if id_str.starts_with("conv_") {
+                        *id = json!("conv_normalized");
+                    } else if id_str.starts_with("item_") {
+                        *id = json!("item_normalized");
+                    } else if id_str.starts_with("resp_") {
+                        *id = json!("resp_normalized");
+                    }
+                }
+            }
+
+            // Normalize timestamps
+            if map.contains_key("created_at") {
+                map.insert("created_at".to_string(), json!(1_234_567_890));
+            }
+
+            // Recurse into nested objects
+            for (_, v) in map.iter_mut() {
+                normalize_dynamic_fields(v);
+            }
+        }
+        Value::Array(arr) => {
+            for item in arr {
+                normalize_dynamic_fields(item);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn compare_responses(scenario: &str, turn_num: usize, openai_resp: &Response, gateway_resp: &Response) {
+    // Compare status codes
+    assert_eq!(
+        openai_resp.status_code, gateway_resp.status_code,
+        "{scenario} turn {turn_num}: Status code mismatch"
+    );
+
+    // Compare response structure
+    if let (Some(mut openai_body), Some(mut gateway_body)) = (openai_resp.body.clone(), gateway_resp.body.clone()) {
+        // Normalize dynamic fields
+        normalize_dynamic_fields(&mut openai_body);
+        normalize_dynamic_fields(&mut gateway_body);
+
+        // Compare normalized responses
+        compare_json_structure(&openai_body, &gateway_body, &format!("{scenario} turn {turn_num}"));
+    }
+}
+
+fn compare_json_structure(openai: &Value, gateway: &Value, path: &str) {
+    match (openai, gateway) {
+        (Value::Object(openai_map), Value::Object(gateway_map)) => {
+            // Check that gateway has all OpenAI keys
+            for key in openai_map.keys() {
+                assert!(gateway_map.contains_key(key), "{}: Gateway missing key '{}'", path, key);
+            }
+
+            // Compare values recursively
+            for (key, openai_val) in openai_map {
+                if let Some(gateway_val) = gateway_map.get(key) {
+                    compare_json_structure(openai_val, gateway_val, &format!("{path}.{key}"));
+                }
+            }
+        }
+        (Value::Array(openai_arr), Value::Array(gateway_arr)) => {
+            assert_eq!(
+                openai_arr.len(),
+                gateway_arr.len(),
+                "{path}: Array length mismatch (OpenAI: {}, Gateway: {})",
+                path,
+                openai_arr.len(),
+                gateway_arr.len()
+            );
+
+            for (i, (openai_item, gateway_item)) in openai_arr.iter().zip(gateway_arr.iter()).enumerate() {
+                compare_json_structure(openai_item, gateway_item, &format!("{}[{}]", path, i));
+            }
+        }
+        (Value::String(openai_str), Value::String(gateway_str)) => {
+            // Allow normalized values to differ
+            if !openai_str.ends_with("normalized") && !gateway_str.ends_with("normalized") {
+                assert_eq!(openai_str, gateway_str, "{}: String value mismatch", path);
+            }
+        }
+        (Value::Number(openai_num), Value::Number(gateway_num)) => {
+            // Allow normalized timestamps to differ
+            if openai_num.as_i64() != Some(1_234_567_890) && gateway_num.as_i64() != Some(1_234_567_890) {
+                assert_eq!(openai_num, gateway_num, "{}: Number value mismatch", path);
+            }
+        }
+        (Value::Bool(openai_bool), Value::Bool(gateway_bool)) => {
+            assert_eq!(openai_bool, gateway_bool, "{}: Boolean value mismatch", path);
+        }
+        (Value::Null, Value::Null) => {}
+        _ => {
+            panic!("{}: Type mismatch (OpenAI: {:?}, Gateway: {:?})", path, openai, gateway);
+        }
+    }
+}
+
+#[test]
+fn test_basic_crud_openai() -> Result<()> {
+    let cassette = load_cassette("conversations-basic-crud-openai")?;
+
+    // Verify conversation create/retrieve/update/delete
+    let mut has_create = false;
+    let mut has_retrieve = false;
+    let mut has_update = false;
+    let mut has_delete_conv = false;
+
+    // Verify item create/list/retrieve/delete
+    let mut has_create_items = false;
+    let mut has_list_items = false;
+    let mut has_retrieve_item = false;
+    let mut has_delete_item = false;
+
+    for turn in &cassette.turns {
+        let path = &turn.request.path;
+        let method = &turn.request.method;
+
+        if path == "/v1/conversations" && method == "POST" {
+            has_create = true;
+            assert_eq!(turn.response.status_code, 200);
+        } else if path.starts_with("/v1/conversations/") && !path.contains("/items") {
+            if method == "GET" {
+                has_retrieve = true;
+            } else if method == "PATCH" {
+                has_update = true;
+            } else if method == "DELETE" {
+                has_delete_conv = true;
+            }
+        } else if path.contains("/items") {
+            if method == "POST" {
+                has_create_items = true;
+            } else if method == "GET" && turn.request.query_params.contains_key("limit") {
+                has_list_items = true;
+            } else if method == "GET" {
+                has_retrieve_item = true;
+            } else if method == "DELETE" {
+                has_delete_item = true;
+            }
+        }
+    }
+
+    assert!(has_create, "Missing conversation create");
+    assert!(has_retrieve, "Missing conversation retrieve");
+    assert!(has_update, "Missing conversation update");
+    assert!(has_delete_conv, "Missing conversation delete");
+    assert!(has_create_items, "Missing items create");
+    assert!(has_list_items, "Missing items list");
+    assert!(has_retrieve_item, "Missing item retrieve");
+    assert!(has_delete_item, "Missing item delete");
+
+    Ok(())
+}
+
+#[test]
+fn test_basic_crud_comparison() -> Result<()> {
+    let openai = load_cassette("conversations-basic-crud-openai")?;
+    let gateway = load_cassette("conversations-basic-crud-gateway")?;
+
+    assert_eq!(openai.turns.len(), gateway.turns.len(), "Turn count mismatch");
+
+    for (i, (openai_turn, gateway_turn)) in openai.turns.iter().zip(gateway.turns.iter()).enumerate() {
+        // Compare request structure
+        assert_eq!(
+            openai_turn.request.method,
+            gateway_turn.request.method,
+            "Turn {} method mismatch",
+            i + 1
+        );
+
+        // Compare response
+        compare_responses("basic-crud", i + 1, &openai_turn.response, &gateway_turn.response);
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_pagination_comparison() -> Result<()> {
+    let openai = load_cassette("conversations-pagination-openai")?;
+    let gateway = load_cassette("conversations-pagination-gateway")?;
+
+    assert_eq!(openai.turns.len(), gateway.turns.len());
+
+    // Find list operations with different orders
+    let mut found_desc = false;
+    let mut found_asc = false;
+    let mut found_cursor = false;
+
+    for (openai_turn, gateway_turn) in openai.turns.iter().zip(gateway.turns.iter()) {
+        if openai_turn.request.path.contains("/items") && openai_turn.request.method == "GET" {
+            if let Some(order) = openai_turn.request.query_params.get("order") {
+                if order == "desc" {
+                    found_desc = true;
+                } else if order == "asc" {
+                    found_asc = true;
+                }
+            }
+
+            if openai_turn.request.query_params.contains_key("after") {
+                found_cursor = true;
+            }
+
+            // Verify has_more flag is consistent
+            if let (Some(openai_body), Some(gateway_body)) = (&openai_turn.response.body, &gateway_turn.response.body) {
+                if let (Some(openai_has_more), Some(gateway_has_more)) =
+                    (openai_body.get("has_more"), gateway_body.get("has_more"))
+                {
+                    assert_eq!(openai_has_more, gateway_has_more, "has_more flag mismatch");
+                }
+            }
+        }
+    }
+
+    assert!(found_desc, "No descending order pagination found");
+    assert!(found_asc, "No ascending order pagination found");
+    assert!(found_cursor, "No cursor-based pagination found");
+
+    Ok(())
+}
+
+#[test]
+fn test_stateful_context_comparison() -> Result<()> {
+    let _openai = load_cassette("conversations-stateful-context-openai")?;
+    let _gateway = load_cassette("conversations-stateful-context-gateway")?;
+
+    // Verify that manual items were added before the Responses call
+    let mut found_manual_items = false;
+    let mut found_responses_call = false;
+    let mut responses_after_items = false;
+
+    for turn in &openai.turns {
+        if turn.request.path.contains("/items") && turn.request.method == "POST" {
+            found_manual_items = true;
+        }
+
+        if turn.request.path == "/v1/responses" && turn.request.method == "POST" {
+            found_responses_call = true;
+            if found_manual_items {
+                responses_after_items = true;
+            }
+        }
+    }
+
+    assert!(found_manual_items, "No manual items added");
+    assert!(found_responses_call, "No Responses call made");
+    assert!(responses_after_items, "Responses call should come after manual items");
+
+    Ok(())
+}
+
+#[test]
+fn test_error_cases_comparison() -> Result<()> {
+    let _openai = load_cassette("conversations-error-cases-openai")?;
+    let _gateway = load_cassette("conversations-error-cases-gateway")?;
+
+    let mut found_404 = false;
+    let mut found_400 = false;
+
+    for (openai_turn, gateway_turn) in openai.turns.iter().zip(gateway.turns.iter()) {
+        let status = openai_turn.response.status_code;
+
+        if status == 404 {
+            found_404 = true;
+        } else if status == 400 {
+            found_400 = true;
+        }
+
+        // Verify error status codes match
+        assert_eq!(
+            openai_turn.response.status_code, gateway_turn.response.status_code,
+            "Error status code mismatch for {}",
+            openai_turn.request.path
+        );
+    }
+
+    assert!(found_404, "No 404 errors recorded");
+    assert!(found_400, "No 400 errors recorded");
+
+    Ok(())
+}
