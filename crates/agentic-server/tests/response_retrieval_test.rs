@@ -30,10 +30,9 @@ async fn assert_retrieval_requires_valid_key(client: &reqwest::Client, url: &str
     }
 }
 
-#[tokio::test]
-async fn retrieval_preserves_each_turn_and_rejects_unstored_or_legacy_ids() {
+fn response_retrieval_upstream() -> Router {
     let next_message_id = Arc::new(AtomicUsize::new(0));
-    let upstream = Router::new().route(
+    Router::new().route(
         "/v1/responses",
         post({
             let next_message_id = Arc::clone(&next_message_id);
@@ -48,7 +47,12 @@ async fn retrieval_preserves_each_turn_and_rejects_unstored_or_legacy_ids() {
                 }
             }
         }),
-    );
+    )
+}
+
+#[tokio::test]
+async fn retrieval_preserves_each_turn_and_rejects_unstored_or_legacy_ids() {
+    let upstream = response_retrieval_upstream();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let mut config = common::test_config(&format!("http://{}", listener.local_addr().unwrap()));
     let upstream = tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap() });
