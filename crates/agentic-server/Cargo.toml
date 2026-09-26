@@ -31,6 +31,7 @@ opentelemetry_sdk.workspace = true
 reqwest = { workspace = true, default-features = false, features = ["rustls-tls"] }
 serde.workspace = true
 serde_json.workspace = true
+subtle = "2.6"
 thiserror.workspace = true
 tempfile = "3"
 tokio.workspace = true

@@ -305,6 +305,7 @@ impl ConversationHandler {
             previous_response_id: ctx.original_request.previous_response_id.take(),
             effective_tools: ctx.enriched_request.tools.take(),
             tool_search_loaded_tools: None,
+            response_snapshot: None,
             effective_tool_choice: ctx.enriched_request.tool_choice.take().unwrap_or_default(),
             effective_instructions: ctx.enriched_request.instructions.take(),
         };

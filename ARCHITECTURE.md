@@ -871,7 +871,8 @@ round that omits `usage` still reports the hidden rounds' counters.
   here.
 - **`types/`** — the conversion layer from those raw rows into business types, via
   `From`/`TryFrom` impls: `ConversationData`/`ConversationSnapshot`, `ResponseData`/
-  `ResponseMetadata` (parses the JSON metadata column into a typed struct),
+  `ResponseMetadata` (parses the JSON metadata column into a typed struct, including an optional
+  terminal `ResponsePayload` snapshot for GET retrieval),
   `InOutItem` (parses an `Item.data` JSON blob back into a typed `InputItem` or
   `OutputItem`), and `StorageError`. `InOutItem::into_input_items` turns a full
   history into the `Vec<InputItem>` used for continuation processing: stored
@@ -900,6 +901,12 @@ round that omits `usage` still reports the hidden rounds' counters.
   `executor/modes/response.rs`, described above. (Integration tests and benches import
   them directly for fixtures — that's expected and fine; production code paths should
   not.)
+
+Stored Responses snapshots are written in the same transaction as response history. Retrieval goes through
+`ResponseHandler::retrieve`, independently of upstream availability. Continuation checkpoints omit the
+snapshot to avoid retaining a duplicate response; they continue to use canonical history and effective
+settings. Legacy history-only records remain usable for continuation, but GET retrieval reports a conflict
+rather than fabricating status, usage, or output.
 
 ### `tool/` — the tool framework
 

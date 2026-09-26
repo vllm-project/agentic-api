@@ -12,7 +12,7 @@
     "crates/agentic-server-core/src/types/request_response.rs": 518,
     "crates/agentic-server-core/src/types/tools/params.rs": 537,
     "crates/agentic-server/src/agentic_process.rs": 557,
-    "crates/agentic-server/src/auth.rs": 799,
+    "crates/agentic-server/src/auth.rs": 791,
     "crates/agentic-server/src/handler/websocket/responses.rs": 784
   },
   "exceptions": {},

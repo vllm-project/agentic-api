@@ -70,7 +70,7 @@ pub async fn persist_response(
 
     let (ctx, tool_search_state) = prepare_request_tools(ctx, &conv_handler, &resp_handler).await?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
-    persist_prepared_turn(ctx, tool_search_metadata, payload.output, &conv_handler, &resp_handler).await
+    persist_prepared_response(payload, ctx, tool_search_metadata, conv_handler, resp_handler).await
 }
 
 async fn persist_prepared_response(
@@ -88,7 +88,20 @@ async fn persist_prepared_response(
         return Ok(());
     }
 
-    persist_prepared_turn(ctx, tool_search_metadata, payload.output, &conv_handler, &resp_handler).await
+    let (output_items, snapshot) = if ctx.original_request.store {
+        (payload.output.clone(), Some(Box::new(payload)))
+    } else {
+        (payload.output, None)
+    };
+    persist_prepared_turn(
+        ctx,
+        tool_search_metadata,
+        output_items,
+        snapshot,
+        &conv_handler,
+        &resp_handler,
+    )
+    .await
 }
 
 /// Persists one completed turn with the handler selected by its explicit conversation discriminator.
@@ -103,7 +116,15 @@ pub async fn persist_turn(
 ) -> ExecutorResult<()> {
     let (ctx, tool_search_state) = prepare_request_tools(ctx, conv_handler, resp_handler).await?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
-    persist_prepared_turn(ctx, tool_search_metadata, output_items, conv_handler, resp_handler).await
+    persist_prepared_turn(
+        ctx,
+        tool_search_metadata,
+        output_items,
+        None,
+        conv_handler,
+        resp_handler,
+    )
+    .await
 }
 
 #[tracing::instrument(name = "agentic.persist", skip_all, fields(
@@ -113,6 +134,7 @@ pub(crate) async fn persist_prepared_turn(
     mut ctx: RequestContext,
     tool_search_metadata: Option<ToolSearchMetadata>,
     output_items: Vec<OutputItem>,
+    response_snapshot: Option<Box<ResponsePayload>>,
     conv_handler: &ConversationHandler,
     resp_handler: &ResponseHandler,
 ) -> ExecutorResult<()> {
@@ -121,6 +143,7 @@ pub(crate) async fn persist_prepared_turn(
         previous_response_id: ctx.original_request.previous_response_id.take(),
         effective_tools: ctx.enriched_request.tools.take(),
         tool_search_loaded_tools: None,
+        response_snapshot,
         effective_tool_choice: ctx.enriched_request.tool_choice.take().unwrap_or_default(),
         effective_instructions: ctx.enriched_request.instructions.take(),
     };

@@ -65,12 +65,23 @@ flowchart LR
 | Endpoint | Description | Status |
 | --- | --- | --- |
 | `POST /v1/responses` | OpenAI-compatible Responses API with state, tools, and streaming | ✅ |
+| `GET /v1/responses/{response_id}` | Retrieve a locally stored response | ✅ |
 | `GET /v1/responses` | WebSocket transport for the Responses API | ✅ |
 | `POST /v1/conversations` | Conversation management | ✅ |
 | `GET /v1/models` | Model listing proxied from vLLM | ✅ |
 | `GET /health` · `GET /ready` | Liveness and readiness probes | ✅ |
 | Messages API | Anthropic-style stateful messages on shared primitives | 🚧 Planned |
 | Interactions API | Higher-level agentic workflow surface | ⏳ Planned |
+
+Responses created with `store: true` retain a terminal snapshot for retrieval, including status, usage,
+and this turn's output. Retrieval does not call the upstream model. Unknown IDs return a JSON `404`;
+older records created before snapshot storage (or through history-only APIs) return `409` because their
+original response cannot be reconstructed faithfully. Request-scoped MCP credentials are stripped from
+stored tool definitions. Responses created with `store: false` do not have retrievable snapshots.
+
+Retrieval requires a valid OIDC bearer token when OIDC is enabled. Otherwise, when `OPENAI_API_KEY` is
+nonempty, callers must send that key in `Authorization: Bearer <key>`; missing or invalid credentials
+return `401` before storage is read. With neither configured, retrieval allows unauthenticated access.
 
 ## 🚀 Quickstart
 

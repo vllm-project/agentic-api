@@ -15,6 +15,7 @@ use utoipa::OpenApi;
         crate::handler::http::models::ready,
         crate::handler::http::models::models,
         crate::handler::http::responses::responses,
+        crate::handler::http::responses::retrieve_response,
         crate::handler::http::responses::compact_response,
         crate::handler::http::conversations::create_conversation,
         crate::handler::http::conversations::retrieve_conversation,
