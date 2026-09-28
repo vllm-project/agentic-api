@@ -36,7 +36,11 @@ use identity::{invalid_lifecycle, invalid_lifecycle_or_id, invalid_stream, item_
 mod completion;
 mod details;
 mod json;
+mod native;
+#[cfg(test)]
+mod native_tests;
 mod slot;
+mod source;
 
 use active::ActiveItem;
 use slot::{OutputIndex, SlotMap, SlotState};
@@ -296,27 +300,6 @@ impl ResponseAccumulator {
         Ok(acc)
     }
 
-    /// Processes pre-collected raw SSE lines synchronously.
-    ///
-    /// Useful when lines have already been buffered (e.g. replaying a recorded stream).
-    /// Prefer [`from_stream`](Self::from_stream) for live async streams.
-    /// Malformed data frames are skipped for compatibility.
-    ///
-    /// # Errors
-    /// Returns [`ExecutorError::InvalidRequest`] when repeated authoritative
-    /// output-item content conflicts with the previously accumulated value.
-    pub fn from_sse_lines(
-        lines: impl IntoIterator<Item = String>,
-        conversation_id: Option<&str>,
-    ) -> ExecutorResult<Self> {
-        let mut acc = Self::new(uuid7_str("resp_"), conversation_id.map(str::to_string));
-        for line in lines {
-            let _ = acc.process_line(SseLine::parse(&line))?;
-        }
-        acc.finalize_all()?;
-        Ok(acc)
-    }
-
     /// Finalizes all streaming items in upstream `output_index` order.
     pub(crate) fn finalize_all(&mut self) -> ExecutorResult<()> {
         self.output
@@ -335,8 +318,7 @@ impl ResponseAccumulator {
             }
             return Ok(None);
         };
-        let disposition = self.process_normalized_event(&frame)?;
-        Ok(disposition.into_frame(frame))
+        self.process_event_frame(frame)
     }
 
     fn process_normalized_event(&mut self, frame: &EventFrame) -> ExecutorResult<EventDisposition> {

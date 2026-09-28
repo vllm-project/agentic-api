@@ -82,8 +82,15 @@ jobs:
           if dependency_count != 1:
               raise SystemExit("Expected exactly one agentic-core workspace dependency version in Cargo.toml")
 
+          dependency_pattern = (
+              r'(?m)^(vllm-responses = \{ path = "crates/vllm-responses", version = ")[^"]+(" \})$'
+          )
+          text, dependency_count = re.subn(dependency_pattern, rf'\g<1>{version}\g<2>', text, count=1)
+          if dependency_count != 1:
+              raise SystemExit("Expected exactly one vllm-responses workspace dependency version in Cargo.toml")
+
           path.write_text(text)
-          print(f"Updated workspace and agentic-core versions to {version}")
+          print(f"Updated workspace, agentic-core, and vllm-responses versions to {version}")
           PY
 
       - name: Refresh lockfile

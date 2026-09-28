@@ -4,6 +4,11 @@ All notable changes to Agentic API are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Added the published `vllm-responses` crate: a transport-independent typed
+  inference-event contract for vLLM and Agentic API integrations (#359).
+
 ## [0.8.0] - 2026-09-19
 
 ### Added

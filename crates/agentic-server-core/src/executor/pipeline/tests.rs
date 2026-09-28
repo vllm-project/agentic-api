@@ -2,9 +2,11 @@ use std::collections::{HashMap, HashSet};
 
 use super::*;
 use crate::events::SseLine;
+use crate::executor::accumulator::ResponseAccumulator;
 use crate::tool::ToolType;
 use crate::types::io::OutputItem;
 use serde_json::{Value, json};
+use vllm_responses::{InferenceEvent, OutputIndex};
 
 fn pipeline(validation: Validation, tools: &[(&str, ToolType)]) -> RoundIngestion {
     RoundIngestion::new(
@@ -34,6 +36,73 @@ fn start(pipeline: &mut RoundIngestion) {
             &json!({"type":event,"response":{"id":"resp_1","status":"in_progress"}}),
         );
     }
+}
+
+#[test]
+fn typed_native_events_follow_the_existing_lifecycle() {
+    let accumulator = ResponseAccumulator::from_inference_events(
+        "resp_1".to_owned(),
+        [
+            InferenceEvent::Started,
+            InferenceEvent::InProgress,
+            InferenceEvent::FunctionCallStarted {
+                item_id: "fc_1".to_owned(),
+                output_index: OutputIndex(0),
+                call_id: "call_1".to_owned(),
+                name: "lookup".to_owned(),
+            },
+            InferenceEvent::FunctionCallArgumentsDelta {
+                item_id: "fc_1".to_owned(),
+                output_index: OutputIndex(0),
+                delta: "{\"city\":\"Paris\"}".to_owned(),
+            },
+            InferenceEvent::FunctionCallCompleted {
+                item_id: "fc_1".to_owned(),
+                output_index: OutputIndex(0),
+                call_id: "call_1".to_owned(),
+                name: "lookup".to_owned(),
+                arguments: "{\"city\":\"Paris\"}".to_owned(),
+            },
+            InferenceEvent::Completed { usage: None },
+        ],
+        Some("conv_1"),
+    )
+    .expect("typed native response");
+
+    let payload = accumulator.finalize("model", None, None);
+    assert_eq!(payload.id, "resp_1");
+    let [OutputItem::FunctionCall(call)] = payload.output.as_slice() else {
+        panic!("folded function call");
+    };
+    assert_eq!(call.arguments, "{\"city\":\"Paris\"}");
+}
+
+#[test]
+fn typed_native_events_reject_invalid_lifecycle_order() {
+    let error = ResponseAccumulator::from_inference_events(
+        "resp_1".to_owned(),
+        [InferenceEvent::TextDelta {
+            item_id: "msg_1".to_owned(),
+            output_index: OutputIndex(0),
+            delta: "orphan".to_owned(),
+        }],
+        None,
+    )
+    .expect_err("native events require response and item lifecycle events");
+
+    assert!(error.to_string().contains("lifecycle"));
+}
+
+#[test]
+fn typed_native_events_require_a_terminal_outcome() {
+    let error = ResponseAccumulator::from_inference_events(
+        "resp_1".to_owned(),
+        [InferenceEvent::Started, InferenceEvent::InProgress],
+        None,
+    )
+    .expect_err("native events require a terminal outcome");
+
+    assert!(error.to_string().contains("terminal"));
 }
 
 #[test]

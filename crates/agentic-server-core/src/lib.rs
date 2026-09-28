@@ -9,6 +9,9 @@ pub mod tool;
 pub mod types;
 pub mod utils;
 
+pub use vllm_responses;
+pub use vllm_responses::{InferenceEvent, InferenceFailure, InferenceUsage, OutputIndex};
+
 pub use storage::{
     ConversationData, ConversationStore, DatabaseBackend, DbPool, InOutItem, ItemKind, ResponseData, ResponseMetadata,
     ResponseStore, SchemaManager, StorageError, StoreResult, create_pool, create_pool_with_schema,
