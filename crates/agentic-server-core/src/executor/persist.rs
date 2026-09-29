@@ -206,13 +206,13 @@ pub async fn commit(
         validate_output_call_ids(&ctx, &payload.output, &exec_ctx.resp_handler).await?;
     }
 
-    persist_if_needed(
+    Box::pin(persist_if_needed(
         payload.clone(),
         ctx,
         None,
         exec_ctx.conv_handler.clone(),
         exec_ctx.resp_handler.clone(),
-    )
+    ))
     .await?;
     Ok(payload)
 }

@@ -299,6 +299,7 @@ fn request_payload(model: String, input: ResponsesInput, instructions: Option<St
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     }
@@ -315,7 +316,7 @@ pub(crate) async fn compact_items(
     input: ResponsesInput,
     exec_ctx: &ExecutionContext,
     auth: Option<&str>,
-) -> ExecutorResult<(Vec<InputItem>, ResponseUsage)> {
+) -> ExecutorResult<(Vec<InputItem>, ResponseUsage, Option<String>)> {
     compact_items_with_trigger(request, input, exec_ctx, auth, CompactionTrigger::InputItem).await
 }
 
@@ -328,7 +329,7 @@ async fn compact_items_with_trigger(
     exec_ctx: &ExecutionContext,
     auth: Option<&str>,
     trigger: CompactionTrigger,
-) -> ExecutorResult<(Vec<InputItem>, ResponseUsage)> {
+) -> ExecutorResult<(Vec<InputItem>, ResponseUsage, Option<String>)> {
     let original_items = Vec::from(input);
     if !original_items.iter().any(item_has_meaningful_context) {
         return Err(ExecutorError::InvalidRequest(
@@ -359,6 +360,7 @@ async fn compact_items_with_trigger(
         instructions,
     );
     enriched_request.prompt_cache_key.clone_from(&request.prompt_cache_key);
+    enriched_request.service_tier.clone_from(&request.service_tier);
     let ctx = RequestContext {
         original_request,
         enriched_request,
@@ -376,6 +378,7 @@ async fn compact_items_with_trigger(
     Ok((
         finish_compacted_window(compacted, summary),
         response.usage.unwrap_or_default(),
+        response.service_tier,
     ))
 }
 
@@ -410,7 +413,7 @@ pub(crate) async fn maybe_compact_context(
 
     tracing::debug!(estimated_tokens, threshold, "compacting response input");
     let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
-    let (compacted, usage) = compact_items_with_trigger(
+    let (compacted, usage, _) = compact_items_with_trigger(
         &ctx.enriched_request,
         input,
         exec_ctx,
@@ -454,7 +457,7 @@ pub async fn compact_response(
         prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler).await?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
     let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
-    let (output, usage) = compact_items_with_trigger(
+    let (output, usage, _) = compact_items_with_trigger(
         &ctx.enriched_request,
         input,
         exec_ctx,
@@ -1069,6 +1072,7 @@ mod tests {
         assert!(estimate_input_tokens(&text_input) > threshold);
         let mut text_context = context_with_threshold(text_input, threshold);
         text_context.enriched_request.prompt_cache_key = Some("workspace-a".to_owned());
+        text_context.enriched_request.service_tier = Some("priority".to_owned());
 
         assert!(
             maybe_compact_context(&mut text_context, &exec_ctx, None)
@@ -1095,6 +1099,7 @@ mod tests {
         let requests = requests.lock().expect("request capture lock");
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0]["prompt_cache_key"], "workspace-a");
+        assert_eq!(requests[0]["service_tier"], "priority");
         server.abort();
     }
 

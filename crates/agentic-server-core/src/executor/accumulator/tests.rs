@@ -380,6 +380,7 @@ fn test_process_event_response_created_sets_id() {
             id: "resp_new".into(),
             status: "in_progress".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     };
@@ -396,6 +397,7 @@ fn test_process_event_response_created_empty_id_no_overwrite() {
             id: String::new(),
             status: "in_progress".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     };
@@ -412,6 +414,7 @@ fn test_empty_id_response_created_allows_subsequent_created() {
             id: String::new(),
             status: "in_progress".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     };
@@ -425,6 +428,7 @@ fn test_empty_id_response_created_allows_subsequent_created() {
             id: "resp_real".into(),
             status: "in_progress".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     };
@@ -478,6 +482,7 @@ fn test_process_event_text_delta_accumulates() {
             id: "resp_1".into(),
             status: "completed".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     });
@@ -916,6 +921,7 @@ fn test_process_event_completed_with_usage() {
                 total_tokens: 15,
                 ..Default::default()
             }),
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     };
@@ -923,6 +929,41 @@ fn test_process_event_completed_with_usage() {
     assert_eq!(acc.status, ResponseStatus::Completed);
     assert!(acc.usage.is_some());
     assert_eq!(acc.usage.unwrap().total_tokens, 15);
+}
+
+#[test]
+fn terminal_service_tier_replaces_created_service_tier() {
+    let lines = vec![
+        r#"data: {"type":"response.created","response":{"id":"resp_1","status":"in_progress","service_tier":"auto"}}"#.to_owned(),
+        r#"data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","service_tier":"default","usage":null}}"#.to_owned(),
+    ];
+
+    let payload = from_sse_lines(lines, None).finalize("test", None, None);
+    assert_eq!(payload.service_tier.as_deref(), Some("default"));
+
+    let lines = vec![
+        r#"data: {"type":"response.created","response":{"id":"resp_2","status":"in_progress","service_tier":"auto"}}"#
+            .to_owned(),
+        r#"data: {"type":"response.completed","response":{"id":"resp_2","status":"completed","usage":null}}"#
+            .to_owned(),
+    ];
+    let payload = from_sse_lines(lines, None).finalize("test", None, None);
+    assert!(payload.service_tier.is_none());
+}
+
+#[test]
+fn json_response_preserves_actual_service_tier() {
+    let body = serde_json::json!({
+        "id": "resp_1",
+        "status": "completed",
+        "output": [],
+        "service_tier": "flex"
+    });
+
+    let payload = ResponseAccumulator::from_json(&body.to_string(), None)
+        .expect("valid response")
+        .finalize("test", None, None);
+    assert_eq!(payload.service_tier.as_deref(), Some("flex"));
 }
 
 #[test]
@@ -934,6 +975,7 @@ fn test_process_event_failed_sets_error_status() {
             id: "resp_1".into(),
             status: "failed".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("response.failed"),
     });
@@ -949,6 +991,7 @@ fn test_process_event_incomplete_sets_incomplete_status() {
             id: "resp_1".into(),
             status: "incomplete".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     });
@@ -1338,6 +1381,7 @@ fn test_function_call_accumulation_basic() {
             id: "resp_1".into(),
             status: "completed".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     });
@@ -1466,6 +1510,7 @@ fn test_function_call_multiple_parallel() {
             id: "resp_1".into(),
             status: "completed".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     });
@@ -1534,6 +1579,7 @@ fn test_function_call_interleaved_with_message() {
             id: "resp_1".into(),
             status: "completed".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     });
@@ -1731,6 +1777,7 @@ fn test_function_call_finalized_on_response_completed() {
             id: "resp_1".into(),
             status: "completed".into(),
             usage: None,
+            service_tier: None,
         },
         wire: WireEvent::new("test"),
     });

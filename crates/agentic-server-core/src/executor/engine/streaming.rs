@@ -243,6 +243,7 @@ impl StreamFailureContext {
             previous_response_id: self.previous_response_id.clone(),
             conversation_id: self.conversation_id.clone(),
             instructions: self.instructions.clone(),
+            service_tier: None,
             tools: None,
             tool_choice: None,
         }

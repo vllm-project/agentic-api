@@ -122,7 +122,7 @@ fn test_vllm_response_done_maps_to_completed() {
     let line = r#"data: {"type":"response.done","response":{"id":"resp_1","status":"completed","usage":{"total_tokens":10}},"sequence_number":9}"#;
     let frame = normalize_sse_line(line).unwrap();
     assert_eq!(frame.event_type, SSEEventType::ResponseCompleted);
-    if let EventPayload::Response { id, status, usage } = &frame.payload {
+    if let EventPayload::Response { id, status, usage, .. } = &frame.payload {
         assert_eq!(id, "resp_1");
         assert_eq!(status, "completed");
         assert!(usage.is_some());

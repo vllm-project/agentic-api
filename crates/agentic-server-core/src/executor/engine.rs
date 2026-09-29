@@ -462,9 +462,8 @@ async fn run_compaction_trigger(
     auth: Option<&str>,
 ) -> ExecutorResult<ResponsePayload> {
     let model = ctx.enriched_request.model.clone();
-    let instructions = ctx.enriched_request.instructions.clone();
     let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
-    let (mut compacted, usage) = compact_items(&ctx.enriched_request, input, exec_ctx, auth).await?;
+    let (mut compacted, usage, service_tier) = compact_items(&ctx.enriched_request, input, exec_ctx, auth).await?;
     let Some(InputItem::Compaction(compaction)) = compacted.pop() else {
         unreachable!("compact_items always appends a compaction item");
     };
@@ -484,7 +483,8 @@ async fn run_compaction_trigger(
         error: None,
         previous_response_id: ctx.original_request.previous_response_id.clone(),
         conversation_id: ctx.conversation_id.clone(),
-        instructions,
+        instructions: ctx.enriched_request.instructions.clone(),
+        service_tier,
         tools: None,
         tool_choice: None,
     };

@@ -1166,6 +1166,77 @@ async fn test_prompt_cache_key_matches_pass_through_and_typed_execution() {
 }
 
 #[tokio::test]
+async fn test_service_tier_matches_pass_through_and_typed_execution() {
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_body(serde_json::json!({
+        "id": "mock_id",
+        "object": "response",
+        "status": "completed",
+        "model": "test",
+        "output": [],
+        "created_at": 0,
+        "service_tier": "default"
+    }))
+    .await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let client = reqwest::Client::new();
+    let mut stored_response_id = None;
+
+    for store in [false, true] {
+        let response = client
+            .post(format!("{gateway_url}/v1/responses"))
+            .json(&serde_json::json!({
+                "model": "test",
+                "input": "hi",
+                "service_tier": "priority",
+                "store": store,
+                "stream": false
+            }))
+            .send()
+            .await
+            .expect("response request");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: serde_json::Value = response.json().await.expect("response body");
+        assert_eq!(body["service_tier"], "default");
+        if store {
+            stored_response_id = Some(body["id"].as_str().expect("stored response id").to_owned());
+        }
+    }
+
+    let stored_response_id = stored_response_id.expect("stateful request should return an id");
+    let retrieved: serde_json::Value = client
+        .get(format!("{gateway_url}/v1/responses/{stored_response_id}"))
+        .bearer_auth("test-key")
+        .send()
+        .await
+        .expect("retrieve stored response")
+        .json()
+        .await
+        .expect("retrieved response body");
+    assert_eq!(retrieved["service_tier"], "default");
+
+    let continuation = client
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "input": "continue",
+            "previous_response_id": stored_response_id,
+            "store": true,
+            "stream": false
+        }))
+        .send()
+        .await
+        .expect("continuation request");
+    assert_eq!(continuation.status(), StatusCode::OK);
+
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 3);
+    assert_eq!(requests[0]["service_tier"], "priority");
+    assert_eq!(requests[1]["service_tier"], "priority");
+    assert!(requests[2].get("service_tier").is_none());
+}
+
+#[tokio::test]
 async fn test_prompt_cache_key_matches_pass_through_and_typed_sse_execution() {
     let (llm_url, requests, llm) = spawn_tool_search_sse_sequence(vec![final_message_sse(); 2]).await;
     let fixture = storage_backed_state(&llm_url).await;
@@ -1203,6 +1274,46 @@ async fn test_prompt_cache_key_matches_pass_through_and_typed_sse_execution() {
         assert_eq!(request["prompt_cache_key"], "workspace-a");
         assert_eq!(request["stream"], true);
     }
+    gateway.abort();
+    llm.abort();
+}
+
+#[tokio::test]
+async fn test_service_tier_matches_pass_through_and_typed_sse_execution() {
+    let response = final_message_sse().replace(
+        "\"status\":\"completed\",\"usage\":null",
+        "\"status\":\"completed\",\"service_tier\":\"default\",\"usage\":null",
+    );
+    let (llm_url, requests, llm) = spawn_tool_search_sse_sequence(vec![response.clone(), response]).await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
+
+    for store in [false, true] {
+        let response = reqwest::Client::new()
+            .post(format!("{gateway_url}/v1/responses"))
+            .json(&serde_json::json!({
+                "model": "test", "input": "hi", "service_tier": "priority",
+                "store": store, "stream": true
+            }))
+            .send()
+            .await
+            .expect("streaming response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.text().await.expect("complete SSE body");
+        let terminal: serde_json::Value = body
+            .lines()
+            .filter_map(|line| line.strip_prefix("data:"))
+            .map(str::trim)
+            .filter(|data| *data != "[DONE]")
+            .map(|data| serde_json::from_str(data).expect("SSE JSON event"))
+            .find(|event: &serde_json::Value| event["type"] == "response.completed")
+            .expect("terminal event");
+        assert_eq!(terminal["response"]["service_tier"], "default");
+    }
+
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 2);
+    assert!(requests.iter().all(|request| request["service_tier"] == "priority"));
     gateway.abort();
     llm.abort();
 }

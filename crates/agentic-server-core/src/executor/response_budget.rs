@@ -371,13 +371,20 @@ pub(in crate::executor) fn retained_output_item_bytes(item: &OutputItem) -> usiz
     item.retained_bytes()
 }
 
-pub(in crate::executor) fn retained_response_parts_bytes(response_id: &str, output: &[OutputItem]) -> usize {
-    RETAINED_CONTAINER_OVERHEAD_BYTES + response_id.len() + sum_retained(output)
+pub(in crate::executor) fn retained_response_parts_bytes(
+    response_id: &str,
+    output: &[OutputItem],
+    service_tier: Option<&str>,
+) -> usize {
+    RETAINED_CONTAINER_OVERHEAD_BYTES
+        + response_id.len()
+        + sum_retained(output)
+        + service_tier.map_or(0, |tier| RETAINED_CONTAINER_OVERHEAD_BYTES + tier.len())
 }
 
 #[cfg(test)]
 pub(in crate::executor) fn retained_response_bytes(response: &ResponsePayload) -> usize {
-    retained_response_parts_bytes(&response.id, &response.output)
+    retained_response_parts_bytes(&response.id, &response.output, response.service_tier.as_deref())
         + response.incomplete_details.retained_bytes()
         + response.error.retained_bytes()
 }
@@ -393,7 +400,7 @@ mod tests {
 
     #[test]
     fn retained_response_bytes_accounts_for_id_and_items() {
-        let payload = ResponsePayload {
+        let mut payload = ResponsePayload {
             id: "resp_test".to_owned(),
             object: "response".to_owned(),
             created_at: 1000,
@@ -406,12 +413,20 @@ mod tests {
             previous_response_id: None,
             conversation_id: None,
             instructions: None,
+            service_tier: None,
             tools: None,
             tool_choice: None,
         };
         let expected = RETAINED_CONTAINER_OVERHEAD_BYTES + "resp_test".len() + RETAINED_CONTAINER_OVERHEAD_BYTES;
         assert_eq!(retained_response_bytes(&payload), expected);
-        assert_eq!(retained_response_parts_bytes(&payload.id, &payload.output), expected);
+        assert_eq!(
+            retained_response_parts_bytes(&payload.id, &payload.output, None),
+            expected
+        );
+
+        payload.service_tier = Some("priority".to_owned());
+        let expected_with_tier = expected + RETAINED_CONTAINER_OVERHEAD_BYTES + "priority".len();
+        assert_eq!(retained_response_bytes(&payload), expected_with_tier);
     }
 
     #[test]

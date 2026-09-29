@@ -228,6 +228,7 @@ fn request(stream: bool) -> RequestPayload {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     }

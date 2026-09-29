@@ -25,7 +25,7 @@ use crate::executor::response_budget::{
 };
 use crate::types::event::ResponseStatus;
 use crate::types::io::{FunctionToolCall, OutputItem, ResponseUsage};
-use crate::types::request_response::{IncompleteDetails, ResponsePayload};
+use crate::types::request_response::IncompleteDetails;
 use crate::utils::common::{deserialize_from_str, deserialize_from_value_opt};
 use crate::utils::uuid7_str;
 
@@ -37,6 +37,7 @@ mod completion;
 mod details;
 mod json;
 mod slot;
+mod terminal;
 
 use active::ActiveItem;
 use slot::{OutputIndex, SlotMap, SlotState};
@@ -127,6 +128,7 @@ pub struct ResponseAccumulator {
     conversation_id: Option<String>,
     output: Vec<OutputItem>,
     usage: Option<ResponseUsage>,
+    service_tier: Option<String>,
     status: ResponseStatus,
     incomplete_details: Option<IncompleteDetails>,
     error: Option<serde_json::Value>,
@@ -156,6 +158,7 @@ impl ResponseAccumulator {
             conversation_id,
             output: Vec::new(),
             usage: None,
+            service_tier: None,
             status: ResponseStatus::InProgress,
             incomplete_details: None,
             error: None,
@@ -188,7 +191,7 @@ impl ResponseAccumulator {
 
     pub(super) fn load_json_body(&mut self, body: &str) -> ExecutorResult<()> {
         let acc = Self::read_json(body, self.conversation_id.clone(), self.validation)?;
-        let retained = retained_response_parts_bytes(&acc.response_id, &acc.output)
+        let retained = retained_response_parts_bytes(&acc.response_id, &acc.output, acc.service_tier.as_deref())
             + acc.incomplete_details.retained_bytes()
             + acc.error.retained_bytes();
         if let Some(budget) = &self.budget {
@@ -224,6 +227,7 @@ impl ResponseAccumulator {
             .map_or(ResponseStatus::Completed, |s| s.parse().unwrap_or_default());
 
         let usage = deserialize_from_value_opt::<ResponseUsage>(json["usage"].take());
+        let service_tier = json["service_tier"].as_str().map(str::to_owned);
         let incomplete_details = deserialize_from_value_opt::<IncompleteDetails>(json["incomplete_details"].take());
         let error = (!json["error"].is_null()).then(|| json["error"].take());
 
@@ -233,6 +237,7 @@ impl ResponseAccumulator {
             conversation_id,
             output,
             usage,
+            service_tier,
             status,
             incomplete_details,
             error,
@@ -546,8 +551,10 @@ impl ResponseAccumulator {
                 event_type @ (SSEEventType::ResponseCompleted
                 | SSEEventType::ResponseFailed
                 | SSEEventType::ResponseIncomplete),
-                EventPayload::Response { usage, .. },
-            ) => self.finish_response_event(*event_type, *usage)?,
+                EventPayload::Response {
+                    usage, service_tier, ..
+                },
+            ) => self.finish_response_event(*event_type, *usage, service_tier.clone())?,
             _ => {
                 let Some(identity) = item_identity(frame, validated) else {
                     return Ok(EventDisposition::Emit(None));
@@ -594,75 +601,6 @@ impl ResponseAccumulator {
             }
         }
         Ok(EventDisposition::Emit(None))
-    }
-
-    fn finish_response_event(&mut self, event_type: SSEEventType, usage: Option<ResponseUsage>) -> ExecutorResult<()> {
-        let status = match event_type {
-            SSEEventType::ResponseCompleted => ResponseStatus::Completed,
-            SSEEventType::ResponseFailed => ResponseStatus::Error,
-            SSEEventType::ResponseIncomplete => ResponseStatus::Incomplete,
-            _ => return Ok(()),
-        };
-        self.finish_response(status, usage)
-    }
-
-    fn finish_response(&mut self, status: ResponseStatus, usage: Option<ResponseUsage>) -> ExecutorResult<()> {
-        self.finalize_all()?;
-        self.status = status;
-        self.usage = usage;
-        self.stream_lifecycle = StreamLifecycle::Terminal;
-        Ok(())
-    }
-
-    /// Marks the response as incomplete due to an error or interruption.
-    pub fn mark_incomplete(&mut self, reason: impl Into<String>) {
-        self.status = ResponseStatus::Incomplete;
-        self.incomplete_details = Some(IncompleteDetails {
-            reason: Some(reason.into()),
-        });
-    }
-
-    /// Applies the selected stream policy and consumes the assembled response.
-    pub(super) fn finish(
-        mut self,
-        model: &str,
-        previous_response_id: Option<&str>,
-        instructions: Option<&str>,
-    ) -> ExecutorResult<ResponsePayload> {
-        match self.validation {
-            Validation::Strict => self.finish_strict_stream()?,
-            Validation::Lenient => self.finish_stream()?,
-        }
-        Ok(self.finalize(model, previous_response_id, instructions))
-    }
-
-    /// Finalizes the accumulator into a `ResponsePayload`.
-    ///
-    /// The caller supplies fields that come from the original request, not from
-    /// the LLM response stream.
-    #[must_use]
-    pub fn finalize(
-        self,
-        model: &str,
-        previous_response_id: Option<&str>,
-        instructions: Option<&str>,
-    ) -> ResponsePayload {
-        ResponsePayload {
-            id: self.response_id,
-            object: "response".to_string(),
-            created_at: chrono::Utc::now().timestamp(),
-            model: model.to_string(),
-            status: self.status.as_str().to_string(),
-            output: self.output,
-            usage: self.usage,
-            incomplete_details: self.incomplete_details,
-            error: self.error,
-            previous_response_id: previous_response_id.map(str::to_string),
-            conversation_id: self.conversation_id,
-            instructions: instructions.map(str::to_string),
-            tools: None,
-            tool_choice: None,
-        }
     }
 }
 

@@ -107,7 +107,7 @@ impl ExecuteRequest {
             .take()
             .unwrap_or_else(|| ExecutionSpan::start(Api::Responses, Route::Executor, self.payload.stream));
         let span = execution.span().clone();
-        self.run_traced(execution).instrument(span).await
+        Box::pin(self.run_traced(execution)).instrument(span).await
     }
 
     /// The body of [`Self::run`], executed inside the `agentic.execute` span.

@@ -25,6 +25,12 @@ fn missing_field(owner: &str, field: &str) -> ExecutorError {
 /// # Errors
 /// [`ExecutorError::InvalidRequest`] naming the field that is missing or invalid.
 pub(super) fn ensure_strict_response(json: &Value) -> ExecutorResult<()> {
+    if json
+        .get("service_tier")
+        .is_some_and(|tier| !tier.is_null() && !tier.is_string())
+    {
+        return Err(missing_field("upstream response", "service_tier"));
+    }
     let Some(status) = json["status"].as_str() else {
         return Err(ExecutorError::InvalidRequest(
             "upstream response has no 'status'".to_owned(),

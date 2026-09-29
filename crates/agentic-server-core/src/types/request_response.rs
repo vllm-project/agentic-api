@@ -11,6 +11,8 @@ use crate::utils::common::serialize_to_string;
 
 mod serde_helpers;
 use serde_helpers::{default_true, is_absent_or_default_tool_choice, serialize_upstream_tool_choice};
+#[cfg(feature = "openapi")]
+mod schema;
 
 /// Standard Responses API reasoning generation settings.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,117 +75,6 @@ pub enum ResponseTextFormat {
     },
 }
 
-#[cfg(feature = "openapi")]
-impl utoipa::PartialSchema for ResponseTextFormat {
-    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
-        use utoipa::openapi::schema::{AllOfBuilder, ObjectBuilder, OneOfBuilder, SchemaType, Type};
-
-        let str_type = || ObjectBuilder::new().schema_type(SchemaType::new(Type::String));
-
-        OneOfBuilder::new()
-            .discriminator(Some(utoipa::openapi::schema::Discriminator::new("type")))
-            .item(
-                AllOfBuilder::new().item(
-                    ObjectBuilder::new()
-                        .property("type", str_type().enum_values(Some(["text"])))
-                        .required("type"),
-                ),
-            )
-            .item(
-                AllOfBuilder::new().item(
-                    ObjectBuilder::new()
-                        .property("type", str_type().enum_values(Some(["json_object"])))
-                        .required("type"),
-                ),
-            )
-            .item(
-                AllOfBuilder::new().item(
-                    ObjectBuilder::new()
-                        .property("type", str_type().enum_values(Some(["json_schema"])))
-                        .required("type")
-                        .property("name", str_type())
-                        .required("name")
-                        .property("schema", ObjectBuilder::new())
-                        .required("schema")
-                        .property("description", str_type())
-                        .property(
-                            "strict",
-                            ObjectBuilder::new().schema_type(SchemaType::new(Type::Boolean)),
-                        ),
-                ),
-            )
-            .into()
-    }
-}
-
-#[cfg(feature = "openapi")]
-impl utoipa::ToSchema for ResponseTextFormat {
-    fn name() -> std::borrow::Cow<'static, str> {
-        std::borrow::Cow::Borrowed("ResponseTextFormat")
-    }
-}
-
-#[cfg(feature = "openapi")]
-impl utoipa::PartialSchema for RequestPayload {
-    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
-        use utoipa::openapi::schema::{ArrayBuilder, ObjectBuilder, OneOfBuilder, SchemaType, Type};
-        use utoipa::openapi::{Ref, RefOr};
-        let str_type = || ObjectBuilder::new().schema_type(SchemaType::new(Type::String));
-        let bool_type = || ObjectBuilder::new().schema_type(SchemaType::new(Type::Boolean));
-        let null_type = || ObjectBuilder::new().schema_type(SchemaType::new(Type::Null));
-        let nullable_str = || ObjectBuilder::new().schema_type(SchemaType::from_iter([Type::String, Type::Null]));
-        let nullable_num = || ObjectBuilder::new().schema_type(SchemaType::from_iter([Type::Number, Type::Null]));
-        let nullable_int = || ObjectBuilder::new().schema_type(SchemaType::from_iter([Type::Integer, Type::Null]));
-        let nullable_bool = || ObjectBuilder::new().schema_type(SchemaType::from_iter([Type::Boolean, Type::Null]));
-        let nullable_ref = |name: &str| OneOfBuilder::new().item(Ref::from_schema_name(name)).item(null_type());
-        let nullable_array = |item: RefOr<utoipa::openapi::schema::Schema>| {
-            OneOfBuilder::new()
-                .item(ArrayBuilder::new().items(item))
-                .item(null_type())
-        };
-        let schema: RefOr<_> = ObjectBuilder::new()
-            .property("model", str_type())
-            .required("model")
-            .property("input", Ref::from_schema_name("ResponsesInput"))
-            .required("input")
-            .property("instructions", nullable_str())
-            .property("previous_response_id", nullable_str())
-            .property("conversation_id", nullable_str())
-            .property("tools", nullable_array(Ref::from_schema_name("ResponsesTool").into()))
-            .property("tool_choice", nullable_ref("ToolChoice"))
-            .property("stream", bool_type())
-            .property("store", bool_type())
-            .property("include", nullable_array(str_type().into()))
-            .property("reasoning", nullable_ref("ReasoningConfig"))
-            .property("text", nullable_ref("ResponseTextConfig"))
-            .property("temperature", nullable_num())
-            .property("top_p", nullable_num())
-            .property("max_output_tokens", nullable_int())
-            .property("ignore_eos", nullable_bool())
-            .property("truncation", nullable_str())
-            .property(
-                "metadata",
-                ObjectBuilder::new().schema_type(SchemaType::from_iter([Type::Object, Type::Null])),
-            )
-            .property("parallel_tool_calls", nullable_bool())
-            .property("prompt_cache_key", nullable_str())
-            .property("cache_salt", nullable_str())
-            .property(
-                "context_management",
-                nullable_array(Ref::from_schema_name("ContextManagement").into()),
-            )
-            .into();
-        schema
-    }
-}
-
-#[cfg(feature = "openapi")]
-impl utoipa::ToSchema for RequestPayload {
-    fn name() -> std::borrow::Cow<'static, str> {
-        std::borrow::Cow::Borrowed("RequestPayload")
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound(serialize = "Box<T>: Serialize", deserialize = "Box<T>: Deserialize<'de>"))]
 pub struct RequestPayload<T: ?Sized = ResponseTextConfig> {
@@ -216,6 +107,8 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig> {
     pub parallel_tool_calls: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_salt: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -261,6 +154,8 @@ pub struct UpstreamRequest<'a> {
     pub parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_salt: Option<&'a str>,
 }
@@ -337,6 +232,7 @@ impl<T: ?Sized> RequestPayload<T> {
             metadata: self.metadata,
             parallel_tool_calls: self.parallel_tool_calls,
             prompt_cache_key: self.prompt_cache_key,
+            service_tier: self.service_tier,
             cache_salt: self.cache_salt,
             context_management: self.context_management,
         })
@@ -407,6 +303,7 @@ impl RequestPayload {
             metadata: self.metadata.as_ref(),
             parallel_tool_calls,
             prompt_cache_key: self.prompt_cache_key.as_deref(),
+            service_tier: self.service_tier.as_deref(),
             cache_salt: self.cache_salt.as_deref(),
         })
     }
@@ -471,6 +368,8 @@ pub struct ResponsePayload {
     pub previous_response_id: Option<String>,
     pub conversation_id: Option<String>,
     pub instructions: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<ResponsesTool>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -657,6 +556,29 @@ mod tests {
             }));
             assert!(result.is_err(), "non-string prompt_cache_key must be rejected");
         }
+    }
+
+    #[test]
+    fn request_payload_omits_absent_and_forwards_present_service_tier_upstream() {
+        let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test-model",
+            "input": "hello",
+            "service_tier": "priority"
+        }))
+        .expect("request should deserialize");
+        let upstream = serde_json::to_value(payload.to_upstream_request(false).expect("request should normalize"))
+            .expect("upstream request should serialize");
+        assert_eq!(upstream["service_tier"], "priority");
+
+        let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test-model",
+            "input": "hello",
+            "service_tier": null
+        }))
+        .expect("null should deserialize as an absent tier");
+        let upstream = serde_json::to_value(payload.to_upstream_request(false).expect("request should normalize"))
+            .expect("upstream request should serialize");
+        assert!(upstream.get("service_tier").is_none());
     }
 
     #[test]
@@ -1247,6 +1169,7 @@ mod tests {
             previous_response_id: None,
             conversation_id: None,
             instructions: None,
+            service_tier: None,
             tools: None,
             tool_choice: None,
         };
@@ -1282,6 +1205,7 @@ mod tests {
             previous_response_id: None,
             conversation_id: None,
             instructions: None,
+            service_tier: None,
             tools: None,
             tool_choice: None,
         };

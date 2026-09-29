@@ -142,6 +142,12 @@ pub(crate) fn ensure_supported_output_item_type(item_type: &str) -> Result<(), E
 fn validate_response_event(frame: &EventFrame, event_name: &str) -> Result<(), EventError> {
     let response = required_object(&frame.wire.rest, "response", event_name)?;
     required_str(response, "id", "upstream response")?;
+    if response
+        .get("service_tier")
+        .is_some_and(|tier| !tier.is_null() && !tier.is_string())
+    {
+        return Err(invalid("upstream response has no valid 'service_tier'"));
+    }
     let status = required_str(response, "status", "upstream response")?;
     let expected_status = match frame.event_type {
         SSEEventType::ResponseCreated | SSEEventType::ResponseInProgress => "in_progress",

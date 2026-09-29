@@ -1243,6 +1243,7 @@ async fn execute_runs_web_search_and_sends_tool_output_back_to_model() {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: Some("workspace-a".to_owned()),
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     };
@@ -1348,6 +1349,7 @@ async fn execute_relaxes_forced_tool_choice_after_web_search_result() {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     };
@@ -1384,6 +1386,7 @@ fn base_payload(input: ResponsesInput) -> RequestPayload {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     }
@@ -1520,6 +1523,7 @@ async fn execute_accumulates_usage_across_web_search_model_rounds() {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     };
@@ -1569,6 +1573,7 @@ async fn stream_emits_web_search_lifecycle_events_before_final_payload() {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     };
@@ -1691,6 +1696,7 @@ async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence()
         ignore_eos: None,
         truncation: None,
         prompt_cache_key: Some("workspace-a".to_owned()),
+        service_tier: None,
         cache_salt: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -1780,6 +1786,7 @@ async fn stream_hides_web_search_function_events_when_name_arrives_on_done() {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     };
@@ -1848,6 +1855,7 @@ async fn stream_orders_gateway_lifecycle_before_later_client_function_events() {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     };
@@ -1935,6 +1943,7 @@ async fn execute_runs_multiple_web_search_calls_concurrently() {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     };
@@ -1989,6 +1998,7 @@ async fn execute_feeds_web_search_execution_errors_back_to_model() {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     };
@@ -2045,6 +2055,7 @@ async fn execute_returns_incomplete_after_max_gateway_tool_rounds() {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     };
@@ -2101,6 +2112,7 @@ async fn execute_feeds_invalid_web_search_arguments_back_to_model() {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     };
@@ -2164,6 +2176,7 @@ async fn execute_runs_large_gateway_fanout_without_hard_cap() {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     };
@@ -2317,6 +2330,7 @@ async fn stream_error_events_escape_error_messages() {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     };
@@ -2395,6 +2409,7 @@ async fn incomplete_turn_persists_a_consistent_conversation_for_continuation() {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     };
@@ -2427,6 +2442,7 @@ async fn incomplete_turn_persists_a_consistent_conversation_for_continuation() {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     };
@@ -2503,6 +2519,7 @@ async fn stream_returns_incomplete_after_max_gateway_tool_rounds() {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        service_tier: None,
         cache_salt: None,
         context_management: None,
     };

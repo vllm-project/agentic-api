@@ -587,6 +587,57 @@ fn sse_response(response_id: &str, message_id: &str, text: &str) -> String {
     format!("data: {created}\n\ndata: {added}\n\ndata: {delta}\n\ndata: {completed}\n\ndata: [DONE]\n\n")
 }
 
+fn sse_response_with_service_tier(response_id: &str, message_id: &str, text: &str, service_tier: &str) -> String {
+    sse_response(response_id, message_id, text).replace(
+        "\"status\":\"completed\",\"usage\":null",
+        &format!("\"status\":\"completed\",\"service_tier\":\"{service_tier}\",\"usage\":null"),
+    )
+}
+
+#[tokio::test]
+async fn websocket_preserves_actual_service_tier_without_inheriting_request_tier() {
+    let mock = MockResponsesServer::start(vec![
+        sse_response_with_service_tier("resp_upstream_1", "msg_upstream_1", "first", "default"),
+        sse_response_with_service_tier("resp_upstream_2", "msg_upstream_2", "second", "flex"),
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create", "model": "test-model", "input": "first",
+            "service_tier": "priority", "store": false, "stream": true
+        }),
+    )
+    .await;
+    let first = recv_until_completed(&mut ws).await;
+    let first_response = &first.last().expect("first terminal event")["response"];
+    assert_eq!(first_response["service_tier"], "default");
+    let first_response_id = first_response["id"].as_str().expect("first response id");
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create", "model": "test-model", "input": "second",
+            "previous_response_id": first_response_id, "store": false, "stream": true
+        }),
+    )
+    .await;
+    let second = recv_until_completed(&mut ws).await;
+    assert_eq!(
+        second.last().expect("second terminal event")["response"]["service_tier"],
+        "flex"
+    );
+
+    let requests = mock.request_bodies().await;
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0]["service_tier"], "priority");
+    assert!(requests[1].get("service_tier").is_none());
+}
+
 /// Two message items whose combined text is larger than any single delta, so
 /// the terminal `response.completed` snapshot is the largest event of the stream.
 fn two_message_sse_response(response_id: &str, text_bytes: usize) -> String {

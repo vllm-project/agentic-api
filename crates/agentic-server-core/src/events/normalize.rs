@@ -149,6 +149,7 @@ fn extract_response_payload(json: &Value) -> EventPayload {
             .get("usage")
             .filter(|v| !v.is_null())
             .and_then(|v| deserialize_from_value_opt(v.clone())),
+        service_tier: json_str_opt(response, "service_tier"),
     }
 }
 

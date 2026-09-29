@@ -307,6 +307,7 @@ pub enum EventPayload {
         id: String,
         status: String,
         usage: Option<ResponseUsage>,
+        service_tier: Option<String>,
     },
 
     /// `response.output_item.added`
