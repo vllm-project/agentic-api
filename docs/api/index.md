@@ -53,7 +53,9 @@ For a complete GitHub-backed deployment example, see
 HTTP Responses requests use the OpenAI-compatible Responses shape. Requests
 with `store=true`, `previous_response_id`, `conversation_id`, compaction input,
 or `context_management` run through the executor. Other stateless `store=false`
-requests are passed directly to the configured vLLM backend.
+requests are passed directly to the configured vLLM backend. A `store=false`
+request that continues a stored response is hydrated from that response but is
+not stored itself: its id can be neither retrieved nor used as `previous_response_id`.
 
 Executor-backed requests accept at most 64 MCP server declarations and 128
 discovered MCP tools. MCP discovery metadata shares the request's 1 MiB

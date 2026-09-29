@@ -168,11 +168,12 @@ pub enum WebSearchProviderKind {
     #[default]
     You,
     Brave,
+    Tavily,
 }
 
 impl WebSearchProviderKind {
     /// Every selectable provider, in the order operator-facing messages list them.
-    pub const ALL: [Self; 2] = [Self::You, Self::Brave];
+    pub const ALL: &'static [Self] = &[Self::You, Self::Brave, Self::Tavily];
 
     /// Environment variable that conventionally carries this provider's API key.
     #[must_use]
@@ -180,6 +181,7 @@ impl WebSearchProviderKind {
         match self {
             Self::You => "YOU_API_KEY",
             Self::Brave => "BRAVE_API_KEY",
+            Self::Tavily => "TAVILY_API_KEY",
         }
     }
 
@@ -191,16 +193,18 @@ impl WebSearchProviderKind {
         match self {
             Self::You => None,
             Self::Brave => Some("https://api.search.brave.com"),
+            Self::Tavily => Some("https://api.tavily.com"),
         }
     }
 
     /// Provider-imposed default ceiling on concurrent search requests. `None`
     /// inherits the gateway-wide limit. Brave's free plan allows roughly one
-    /// request per second, so it defaults to serial queries.
+    /// request per second, so it defaults to serial queries; Tavily's plans
+    /// are metered per minute, so it inherits the gateway limit.
     #[must_use]
     pub const fn default_max_concurrent_queries(self) -> Option<NonZeroUsize> {
         match self {
-            Self::You => None,
+            Self::You | Self::Tavily => None,
             Self::Brave => Some(DEFAULT_BRAVE_MAX_CONCURRENT_QUERIES),
         }
     }
@@ -211,15 +215,17 @@ impl WebSearchProviderKind {
         match self {
             Self::You => "You.com",
             Self::Brave => "Brave Search",
+            Self::Tavily => "Tavily",
         }
     }
 
-    /// Configuration label (`you`, `brave`) matching the serialized form.
+    /// Configuration label (`you`, `brave`, `tavily`) matching the serialized form.
     #[must_use]
     pub const fn config_name(self) -> &'static str {
         match self {
             Self::You => "you",
             Self::Brave => "brave",
+            Self::Tavily => "tavily",
         }
     }
 
@@ -238,7 +244,8 @@ impl std::str::FromStr for WebSearchProviderKind {
     fn from_str(value: &str) -> Result<Self, Error> {
         let trimmed = value.trim();
         Self::ALL
-            .into_iter()
+            .iter()
+            .copied()
             .find(|kind| kind.config_name().eq_ignore_ascii_case(trimmed))
             .ok_or_else(|| {
                 let expected = Self::ALL
@@ -518,6 +525,15 @@ mod tests {
             NonZeroUsize::new(1)
         );
         assert!(!WebSearchProviderKind::Brave.is_you());
+
+        assert_eq!(WebSearchProviderKind::Tavily.to_string(), "Tavily");
+        assert_eq!(WebSearchProviderKind::Tavily.default_api_key_env(), "TAVILY_API_KEY");
+        assert_eq!(
+            WebSearchProviderKind::Tavily.default_base_url(),
+            Some("https://api.tavily.com")
+        );
+        assert_eq!(WebSearchProviderKind::Tavily.default_max_concurrent_queries(), None);
+        assert!(!WebSearchProviderKind::Tavily.is_you());
     }
 
     #[test]
@@ -532,10 +548,14 @@ mod tests {
             "you".parse::<WebSearchProviderKind>().unwrap(),
             WebSearchProviderKind::You
         );
+        assert_eq!(
+            " Tavily ".parse::<WebSearchProviderKind>().unwrap(),
+            WebSearchProviderKind::Tavily
+        );
         let error = "bing".parse::<WebSearchProviderKind>().unwrap_err();
         assert_eq!(
             error.to_string(),
-            "unknown web_search provider \"bing\"; expected one of: you, brave"
+            "unknown web_search provider \"bing\"; expected one of: you, brave, tavily"
         );
 
         assert_eq!(
@@ -546,7 +566,7 @@ mod tests {
             serde_json::from_str::<WebSearchProviderKind>("\"you\"").unwrap(),
             WebSearchProviderKind::You
         );
-        for kind in WebSearchProviderKind::ALL {
+        for kind in WebSearchProviderKind::ALL.iter().copied() {
             assert_eq!(kind.config_name().parse::<WebSearchProviderKind>().unwrap(), kind);
         }
     }

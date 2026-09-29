@@ -1,3 +1,7 @@
+pub(crate) mod api_key;
+
+use api_key::bearer_token;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -382,18 +386,6 @@ pub async fn require_oidc(
             }
         }
     }
-}
-
-fn bearer_token(headers: &axum::http::HeaderMap) -> Option<&str> {
-    headers
-        .get(header::AUTHORIZATION)?
-        .to_str()
-        .ok()?
-        .split_once(' ')
-        .and_then(|(scheme, token)| {
-            let token = token.trim();
-            (scheme.eq_ignore_ascii_case("bearer") && !token.is_empty()).then_some(token)
-        })
 }
 
 #[derive(Clone, Copy)]

@@ -45,6 +45,7 @@ async fn openapi_json_returns_valid_spec() {
         "/v1/models",
         "/v1/responses",
         "/v1/responses/compact",
+        "/v1/responses/{response_id}",
         "/v1/conversations",
         "/v1/messages",
         "/v1/messages/count_tokens",

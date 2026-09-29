@@ -421,7 +421,9 @@ default You.com provider it is enabled when `YOU_API_KEY` and `YOU_API_BASE_URL`
 Secret and use the current You.com Search API base URL, `https://ydc-index.io`. To use Brave Search instead, set
 `AGENTIC_WEB_SEARCH_PROVIDER=brave` in the ConfigMap and store `BRAVE_API_KEY` in the Secret; no base URL is needed.
 The Brave free plan is rate limited to roughly one request per second, so the gateway runs batched queries serially by
-default; raise `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES` only on a paid plan.
+default; raise `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES` only on a paid plan. To use Tavily, set
+`AGENTIC_WEB_SEARCH_PROVIDER=tavily` and store `TAVILY_API_KEY` in the Secret; the endpoint defaults to
+`https://api.tavily.com` and batched queries inherit the gateway concurrency limit.
 
 Create the Secret from a protected environment file so the key does not enter shell history or process arguments:
 
@@ -434,9 +436,10 @@ kubectl --namespace agentic-api create secret generic agentic-api-web-search \
   kubectl apply --server-side --field-manager=agentic-api-operator --filename=-
 ```
 
-The file contains one line, `YOU_API_KEY=...` (or `BRAVE_API_KEY=...` for Brave Search). Remove it securely after
-creating the Secret. Patch the environment in the production overlay (for Brave, replace the `YOU_API_BASE_URL`
-operation with `path: /data/AGENTIC_WEB_SEARCH_PROVIDER`, `value: brave`):
+The file contains one line, `YOU_API_KEY=...` (or `BRAVE_API_KEY=...` for Brave Search, `TAVILY_API_KEY=...` for
+Tavily). Remove it securely after creating the Secret. Patch the environment in the production overlay (for Brave or
+Tavily, replace the `YOU_API_BASE_URL` operation with `path: /data/AGENTIC_WEB_SEARCH_PROVIDER` and `value: brave` or
+`value: tavily`):
 
 ```yaml
 patches:
@@ -493,5 +496,6 @@ Remove the `Authorization` header when inbound OIDC validation is disabled. A to
 `status: "completed"` even when an individual `web_search_call` failed, so inspect the output item status rather than
 only the response status. A `403 Forbidden` from You.com means the external search request was rejected; confirm the
 documented base URL and refresh the Secret, restart the Deployment, and test again without printing the key. A failed
-`web_search_call` naming `BRAVE_API_KEY` means Brave rejected the key; one reporting `429` means the Brave plan's rate
-limit was hit, and the gateway does not retry it.
+`web_search_call` naming `BRAVE_API_KEY` or `TAVILY_API_KEY` means that provider rejected the key; one reporting `429`
+means the plan's rate limit was hit, and one reporting `432` or `433` means the Tavily plan's credit limit was
+exceeded. The gateway does not retry any of these.

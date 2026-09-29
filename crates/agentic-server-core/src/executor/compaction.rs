@@ -249,6 +249,7 @@ pub async fn compact_response(
         ctx,
         tool_search_metadata,
         Vec::new(),
+        None,
         &exec_ctx.conv_handler,
         &exec_ctx.resp_handler,
     )
@@ -1055,6 +1056,7 @@ mod tests {
                     previous_response_id: None,
                     effective_tools: None,
                     tool_search_loaded_tools: None,
+                    response_snapshot: None,
                     effective_tool_choice: crate::ToolChoice::Auto,
                     effective_instructions: None,
                 },

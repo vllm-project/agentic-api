@@ -5,10 +5,12 @@
 
 mod support;
 
-use agentic_core::executor::execute;
 use agentic_core::executor::request::RequestContext;
+use agentic_core::executor::{
+    ExecutionContext, ExecutorError, execute, persist_response, persist_turn, rehydrate_conversation,
+};
 use agentic_core::storage::InOutItem;
-use agentic_core::types::request_response::RequestPayload;
+use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 use agentic_core::types::tools::{FunctionToolParam, NonEmptyToolName};
 use agentic_core::{
     FunctionToolResultMessage, InputItem, OutputItem, ReasoningOutput, ResponsesInput, ResponsesTool, ToolChoice,
@@ -598,8 +600,14 @@ async fn test_mcp_namespace_showcase_round_trip_rehydrates_calls_tools_and_outpu
 
 #[tokio::test]
 async fn test_store_false_with_previous_response_id_hydrates_but_does_not_persist() {
-    let fixture =
-        TestFixture::new_with_responses(vec![text_response("stored answer"), text_response("stateless answer")]).await;
+    // Arrange — a third reply is queued so that a refused continuation cannot be
+    // mistaken for an exhausted mock.
+    let fixture = TestFixture::new_with_responses(vec![
+        text_response("stored answer"),
+        text_response("stateless answer"),
+        text_response("stored parent answer"),
+    ])
+    .await;
 
     let p1 = unwrap_blocking(
         execute(
@@ -611,13 +619,14 @@ async fn test_store_false_with_previous_response_id_hydrates_but_does_not_persis
     );
     let p2 = unwrap_blocking(
         execute(
-            make_request("follow up", false, false, Some(p1.id), None),
+            make_request("follow up", false, false, Some(p1.id.clone()), None),
             Arc::clone(&fixture.exec_ctx),
         )
         .await
         .expect("store=false follow-up"),
     );
 
+    // Assert — the child was hydrated from the stored parent.
     assert_eq!(output_text(&p2), "stateless answer");
     let requests = fixture.request_bodies().await;
     assert_eq!(requests.len(), 2);
@@ -626,12 +635,103 @@ async fn test_store_false_with_previous_response_id_hydrates_but_does_not_persis
         vec!["seed", "stored answer", "follow up"]
     );
 
-    let result = execute(
+    // Assert — the child left no row: continuing from it fails before inference.
+    let Err(error) = execute(
         make_request("should not find stateless response", true, false, Some(p2.id), None),
         Arc::clone(&fixture.exec_ctx),
     )
-    .await;
-    assert!(result.is_err(), "store=false response should not be persisted");
+    .await
+    else {
+        panic!("store=false response must not be persisted");
+    };
+    assert!(
+        matches!(&error, ExecutorError::Storage(source) if source.is_not_found()),
+        "expected a missing previous response, got {error}"
+    );
+    assert_eq!(
+        fixture.request_bodies().await.len(),
+        2,
+        "no inference may run from an unstored previous response"
+    );
+
+    // Assert — the stored parent is still continuable.
+    let p3 = unwrap_blocking(
+        execute(
+            make_request("again", true, false, Some(p1.id), None),
+            Arc::clone(&fixture.exec_ctx),
+        )
+        .await
+        .expect("stored parent stays continuable"),
+    );
+    assert_eq!(output_text(&p3), "stored parent answer");
+    let requests = fixture.request_bodies().await;
+    assert_eq!(requests.len(), 3);
+    assert_eq!(
+        request_input_texts(&requests[2]),
+        vec!["seed", "stored answer", "again"]
+    );
+}
+
+/// The composable persist steps apply the same storage policy as `execute`.
+#[tokio::test]
+async fn test_public_persist_steps_honor_the_storage_policy() {
+    let fixture = TestFixture::new_with_responses(vec![text_response("stored answer")]).await;
+    let exec_ctx = Arc::clone(&fixture.exec_ctx);
+    let parent = unwrap_blocking(
+        execute(make_request("seed", true, false, None, None), Arc::clone(&exec_ctx))
+            .await
+            .expect("stored turn"),
+    );
+
+    for store in [false, true] {
+        let follow_up = || make_request("follow up", store, false, Some(parent.id.clone()), None);
+
+        let ctx = rehydrate_conversation(follow_up(), &exec_ctx)
+            .await
+            .expect("hydrates from the stored parent");
+        let id = ctx.response_id.clone();
+        let payload: ResponsePayload = serde_json::from_value(json!({
+            "id": id, "object": "response", "created_at": 0, "model": "test-model", "status": "completed",
+            "output": [{"type": "message", "id": format!("msg_public_{store}"), "role": "assistant",
+                "status": "completed", "content": [{"type": "output_text", "text": "public answer"}]}]
+        }))
+        .expect("completed payload");
+        persist_response(
+            payload,
+            ctx,
+            exec_ctx.conv_handler.clone(),
+            exec_ctx.resp_handler.clone(),
+        )
+        .await
+        .expect("persist_response");
+        assert_eq!(
+            is_continuable(&exec_ctx, &id).await,
+            store,
+            "persist_response with store={store}"
+        );
+
+        let ctx = rehydrate_conversation(follow_up(), &exec_ctx)
+            .await
+            .expect("hydrates from the stored parent");
+        let id = ctx.response_id.clone();
+        persist_turn(ctx, Vec::new(), &exec_ctx.conv_handler, &exec_ctx.resp_handler)
+            .await
+            .expect("persist_turn");
+        assert_eq!(
+            is_continuable(&exec_ctx, &id).await,
+            store,
+            "persist_turn with store={store}"
+        );
+    }
+}
+
+/// Whether `id` resolves as `previous_response_id`; a missing row is the only accepted failure.
+async fn is_continuable(exec_ctx: &ExecutionContext, id: &str) -> bool {
+    match rehydrate_conversation(make_request("next", true, false, Some(id.to_owned()), None), exec_ctx).await {
+        Ok(_) => true,
+        Err(ExecutorError::Storage(source)) if source.is_not_found() => false,
+        Err(error) => panic!("unexpected rehydration error for {id}: {error}"),
+    }
 }
 
 #[tokio::test]
