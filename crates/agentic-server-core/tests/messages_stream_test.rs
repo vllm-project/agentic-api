@@ -8,6 +8,7 @@
 //! block indices stay contiguous across rounds, and no raw per-round terminal
 //! leaks.
 
+use std::fmt::Write as _;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -620,4 +621,259 @@ async fn messages_stream_preserves_claude_code_cache_control_across_rounds() {
         serde_json::json!({"type": "ephemeral", "ttl": "1h"})
     );
     assert!(requests[1]["tools"][0].get("cache_control").is_none());
+}
+
+/// A terminal `stop_reason` or transport `[DONE]` cannot substitute for `message_stop`.
+#[tokio::test]
+async fn incomplete_rounds_never_dispatch_tools_or_report_success() {
+    for tool in [false, true] {
+        for terminal_delta in [false, true] {
+            for done_marker in [false, true] {
+                let block = if tool {
+                    serde_json::json!({"type":"tool_use", "id":"search", "name":"web_search", "input":{}})
+                } else {
+                    serde_json::json!({"type":"text", "text":""})
+                };
+                let mut events = vec![
+                    serde_json::json!({"type":"message_start", "message":{"id":"m"}}),
+                    serde_json::json!({"type":"content_block_start", "index":0, "content_block":block}),
+                ];
+                if tool {
+                    events.push(serde_json::json!({"type":"content_block_delta", "index":0,
+                        "delta":{"type":"input_json_delta", "partial_json":"{\"query\":\"rust\"}"}}));
+                }
+                events.push(serde_json::json!({"type":"content_block_stop", "index":0}));
+                if terminal_delta {
+                    events.push(serde_json::json!({"type":"message_delta", "delta":{
+                        "stop_reason":if tool { "tool_use" } else { "end_turn" }
+                    }}));
+                }
+                let mut body = String::new();
+                for event in events {
+                    write!(body, "data: {event}\n\n").unwrap();
+                }
+                if done_marker {
+                    body.push_str("data: [DONE]\n\n");
+                }
+                assert_failed_stream(vec![body], 0, "message_stop").await;
+            }
+        }
+    }
+    assert_failed_stream(vec![String::new()], 0, "message_stop").await;
+    // A completed tool round must not make an incomplete later round successful.
+    assert_failed_stream(
+        vec![cassette_turn_streams().remove(0), String::new()],
+        1,
+        "message_stop",
+    )
+    .await;
+}
+
+async fn assert_failed_stream(streams: Vec<String>, expected_searches: usize, expected_error: &str) {
+    let (vllm_url, upstream, vllm) = spawn_mock_vllm_stream(streams).await;
+    let searches = Arc::new(AtomicUsize::new(0));
+    let search_calls = Arc::clone(&searches);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let search_url = format!("http://{}", listener.local_addr().unwrap());
+    let app = Router::new().route(
+        "/v1/search",
+        get(move || {
+            search_calls.fetch_add(1, Ordering::SeqCst);
+            async { Json(serde_json::json!({"results":{"web":[],"news":[]}})) }
+        }),
+    );
+    let search = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
+    let request = serde_json::json!({
+        "model":"test", "max_tokens":64, "stream":true,
+        "messages":[{"role":"user", "content":"Search"}],
+        "tools":[{"name":"web_search", "input_schema":{"type":"object"}}]
+    });
+    let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
+    let mut params = registry_tools(Some(&tools), &GatewayToolMap::default());
+    let mut handlers = exec_ctx.gateway_executors.clone();
+    let registry = Arc::new(
+        ToolRegistry::build_with_handlers(&mut params, &mut handlers)
+            .await
+            .unwrap(),
+    );
+    let stream = run_test_messages_stream(request, registry, exec_ctx).await;
+    let sse = tokio::time::timeout(std::time::Duration::from_secs(5), stream.collect::<Vec<_>>())
+        .await
+        .expect("finite incomplete stream")
+        .join("");
+    vllm.abort();
+    search.abort();
+    let _ = tokio::join!(vllm, search);
+
+    assert_eq!(
+        searches.load(Ordering::SeqCst),
+        expected_searches,
+        "no tool execution from incomplete round"
+    );
+    assert_eq!(
+        upstream.calls.load(Ordering::SeqCst),
+        expected_searches + 1,
+        "no continuation after EOF"
+    );
+    assert!(!sse.contains("DO_NOT_ECHO"), "error must not expose upstream content");
+    assert_eq!(sse.matches("event: error").count(), 1, "one error: {sse}");
+    assert!(sse.contains(expected_error), "expected error missing: {sse}");
+    assert!(!sse.contains("event: message_stop"), "no successful completion: {sse}");
+    assert!(
+        !sse.contains("event: message_delta"),
+        "no successful terminal metadata: {sse}"
+    );
+}
+
+#[tokio::test]
+async fn messages_stream_rejects_malformed_json_before_tools_or_completion() {
+    let invalid = "data: {\"private\":\"DO_NOT_ECHO\",\n\n";
+    let streams = cassette_turn_streams();
+    for (index, body) in streams.iter().enumerate() {
+        let damaged = body.replacen("event: message_stop", &format!("{invalid}event: message_stop"), 1);
+        assert_ne!(&damaged, body, "fixture contains a terminal");
+        let mut rounds = streams[..index].to_vec();
+        rounds.push(damaged);
+        assert_failed_stream(rounds, index, "invalid JSON in upstream Messages stream").await;
+    }
+}
+
+#[tokio::test]
+async fn messages_stream_ignores_well_formed_unknown_events() {
+    let streams = cassette_turn_streams()
+        .into_iter()
+        .map(|body| format!("data: {{\"type\":\"future_event\",\"extension\":1}}\n\n: heartbeat\n\n{body}"))
+        .collect();
+    assert_messages_stream_presents_one_message(streams).await;
+}
+
+#[tokio::test]
+async fn messages_stream_rejects_terminal_with_open_content_blocks() {
+    let streams = cassette_turn_streams();
+    for (round, body) in streams.iter().enumerate() {
+        let frames: Vec<&str> = body.split_inclusive("\n\n").collect();
+        let stops: Vec<usize> = frames
+            .iter()
+            .enumerate()
+            .filter_map(|(index, frame)| {
+                frame
+                    .lines()
+                    .filter_map(|line| line.strip_prefix("data: "))
+                    .filter_map(|data| serde_json::from_str::<Value>(data).ok())
+                    .any(|event| event["type"] == "content_block_stop")
+                    .then_some(index)
+            })
+            .collect();
+        assert!(!stops.is_empty(), "fixture has completed blocks");
+        for stop in stops {
+            let damaged: String = frames
+                .iter()
+                .enumerate()
+                .filter_map(|(index, frame)| (index != stop).then_some(*frame))
+                .collect();
+            let mut rounds = streams[..round].to_vec();
+            rounds.push(damaged);
+            assert_failed_stream(rounds, round, "open content blocks").await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn messages_stream_rejects_invalid_block_transitions_before_dispatch() {
+    use serde_json::json;
+    let start = json!({"type":"content_block_start", "index":0, "content_block":{
+        "type":"tool_use", "id":"search", "name":"web_search", "input":{}}});
+    let delta = json!({"type":"content_block_delta", "index":0, "delta":{
+        "type":"input_json_delta", "partial_json":"{\"query\":\"rust\"}"}});
+    let stop = json!({"type":"content_block_stop", "index":0});
+    let mut cases = vec![
+        vec![start.clone(), start.clone(), delta.clone(), stop.clone()],
+        vec![delta.clone(), start.clone(), stop.clone()],
+        vec![stop.clone(), start.clone(), delta.clone(), stop.clone()],
+        vec![start.clone(), delta.clone(), stop.clone(), delta.clone()],
+        vec![start.clone(), delta.clone(), stop.clone(), stop.clone()],
+        vec![start.clone(), delta.clone(), stop.clone(), start.clone(), stop.clone()],
+    ];
+    for event in [&start, &delta, &stop] {
+        for invalid_index in [Value::Null, json!(-1), json!("0")] {
+            let mut bad = event.clone();
+            bad["index"] = invalid_index;
+            cases.push(vec![bad]);
+        }
+        let mut missing = event.clone();
+        missing.as_object_mut().unwrap().remove("index");
+        cases.push(vec![missing]);
+    }
+    for events in cases {
+        let mut body = format!("data: {}\n\n", json!({"type":"message_start", "message":{"id":"m"}}));
+        for event in events {
+            write!(body, "data: {event}\n\n").unwrap();
+        }
+        for event in [
+            json!({"type":"message_delta", "delta":{"stop_reason":"tool_use"}}),
+            json!({"type":"message_stop"}),
+        ] {
+            write!(body, "data: {event}\n\n").unwrap();
+        }
+        assert_failed_stream(vec![body], 0, "invalid content block").await;
+    }
+}
+
+#[tokio::test]
+async fn messages_stream_rejects_invalid_identifiers_before_dispatch() {
+    use serde_json::json;
+    for field in ["message_id", "tool_id", "tool_name"] {
+        for invalid in [None, Some(Value::Null), Some(json!(42)), Some(json!(""))] {
+            let mut start = json!({"type":"message_start", "message":{"id":"m"}});
+            let mut tool = json!({"type":"content_block_start", "index":0, "content_block":{
+                "type":"tool_use", "id":"search", "name":"web_search", "input":{}}});
+            let (object, key) = match field {
+                "message_id" => (&mut start["message"], "id"),
+                "tool_id" => (&mut tool["content_block"], "id"),
+                _ => (&mut tool["content_block"], "name"),
+            };
+            if let Some(value) = invalid {
+                object[key] = value;
+            } else {
+                object.as_object_mut().unwrap().remove(key);
+            }
+            let mut body = String::new();
+            for event in [
+                start,
+                tool,
+                json!({"type":"content_block_delta", "index":0, "delta":{
+                    "type":"input_json_delta", "partial_json":"{\"query\":\"rust\"}"}}),
+                json!({"type":"content_block_stop", "index":0}),
+                json!({"type":"message_delta", "delta":{"stop_reason":"tool_use"}}),
+                json!({"type":"message_stop"}),
+            ] {
+                write!(body, "data: {event}\n\n").unwrap();
+            }
+            assert_failed_stream(vec![body], 0, "invalid identifier").await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn messages_stream_rejects_duplicate_message_starts_in_each_round() {
+    let streams = cassette_turn_streams();
+    for (round, body) in streams.iter().enumerate() {
+        let start = body
+            .split_inclusive("\n\n")
+            .find(|frame| frame.contains("event: message_start"))
+            .expect("fixture has a message start");
+        for before_terminal in [false, true] {
+            let damaged = if before_terminal {
+                body.replacen("event: message_stop", &format!("{start}event: message_stop"), 1)
+            } else {
+                body.replacen(start, &format!("{start}{start}"), 1)
+            };
+            let mut rounds = streams[..round].to_vec();
+            rounds.push(damaged);
+            assert_failed_stream(rounds, round, "duplicate message_start").await;
+        }
+    }
 }

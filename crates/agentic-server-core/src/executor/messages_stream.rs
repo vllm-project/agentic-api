@@ -180,9 +180,8 @@ fn messages_stream_body(
                 for out in acc.push(&line) {
                     yield out;
                 }
-                if acc.has_upstream_error() {
-                    // The upstream `error` event was forwarded to the client.
-                    execution.failed_with(FailureCategory::UpstreamError);
+                if acc.has_error() {
+                    execution.failed_with(acc.failure_category());
                     execution.delivered();
                     return;
                 }
@@ -237,6 +236,7 @@ enum RoundState {
     #[default]
     Active,
     Completed,
+    Failed,
     UpstreamError,
 }
 
@@ -245,6 +245,8 @@ enum RoundState {
 #[derive(Default)]
 struct MessagesStreamAccumulator {
     message_started: bool,
+    /// Whether the current upstream round has supplied its `message_start`.
+    round_started: bool,
     /// Next client-visible block index (contiguous across rounds).
     next_index: u32,
     /// Map upstream (per-round) block index → client index, for the blocks we
@@ -279,6 +281,7 @@ impl MessagesStreamAccumulator {
         self.blocks.clear();
         self.has_client_tool_use = false;
         self.round_state = RoundState::Active;
+        self.round_started = false;
         // F6: clear the previous round's terminal so a clean-EOF round can't
         // re-emit a stale stop_reason.
         self.final_message_delta = None;
@@ -320,9 +323,7 @@ impl MessagesStreamAccumulator {
             .final_message_delta
             .as_ref()
             .and_then(|event| event["delta"]["stop_reason"].as_str());
-        // Preserve clean-EOF behavior for ordinary tool_use rounds. The named
-        // end_turn compatibility case requires an explicit message_stop.
-        (self.has_completed_round() || stop_reason == Some("tool_use"))
+        self.has_completed_round()
             && self.gateway_call_count() > 0
             && !self.has_client_tool_use
             && ctx.is_tool_call_stop(
@@ -334,8 +335,15 @@ impl MessagesStreamAccumulator {
             )
     }
 
-    fn has_upstream_error(&self) -> bool {
-        self.round_state == RoundState::UpstreamError
+    fn has_error(&self) -> bool {
+        matches!(self.round_state, RoundState::Failed | RoundState::UpstreamError)
+    }
+
+    fn failure_category(&self) -> FailureCategory {
+        match self.round_state {
+            RoundState::UpstreamError => FailureCategory::UpstreamError,
+            RoundState::Active | RoundState::Completed | RoundState::Failed => FailureCategory::Stream,
+        }
     }
 
     /// The round's terminal `stop_reason`, while the `message_delta` that
@@ -356,8 +364,16 @@ impl MessagesStreamAccumulator {
             return Vec::new();
         };
         let Ok(mut event) = deserialize_from_str::<Value>(data.as_str()) else {
-            return Vec::new();
+            self.round_state = RoundState::Failed;
+            return vec![error_sse("invalid JSON in upstream Messages stream")];
         };
+        if matches!(
+            event["type"].as_str(),
+            Some("content_block_start" | "content_block_delta" | "content_block_stop")
+        ) && event.get("index").and_then(Value::as_u64).is_none()
+        {
+            return self.fail("invalid content block index in upstream Messages stream");
+        }
         match event.get("type").and_then(Value::as_str) {
             Some("message_start") => self.on_message_start(&event),
             Some("content_block_start") => self.on_block_start(&mut event),
@@ -374,6 +390,10 @@ impl MessagesStreamAccumulator {
                 vec![sse("error", &event)]
             }
             Some("message_stop") => {
+                if self.blocks.values().any(|block| !block.closed) {
+                    self.round_state = RoundState::Failed;
+                    return vec![error_sse("upstream Messages stream ended with open content blocks")];
+                }
                 self.round_state = RoundState::Completed;
                 // `finish` emits the single client-visible terminal at loop end.
                 Vec::new()
@@ -383,7 +403,19 @@ impl MessagesStreamAccumulator {
         }
     }
 
+    fn fail(&mut self, message: &str) -> Vec<String> {
+        self.round_state = RoundState::Failed;
+        vec![error_sse(message)]
+    }
+
     fn on_message_start(&mut self, event: &Value) -> Vec<String> {
+        if self.round_started {
+            return self.fail("duplicate message_start in upstream Messages stream");
+        }
+        if event["message"]["id"].as_str().is_none_or(str::is_empty) {
+            return self.fail("invalid identifier in upstream Messages stream");
+        }
+        self.round_started = true;
         // Later rounds' message_start is suppressed, but its usage still counts.
         self.usage.observe(event["message"].get("usage"));
         if self.message_started {
@@ -395,14 +427,24 @@ impl MessagesStreamAccumulator {
 
     fn on_block_start(&mut self, event: &mut Value) -> Vec<String> {
         let up_index = event.get("index").and_then(Value::as_u64).unwrap_or(0);
+        if self.blocks.contains_key(&up_index) {
+            return self.fail("invalid content block transition in upstream Messages stream");
+        }
         let block_type = event["content_block"]["type"].as_str().unwrap_or_default();
         let name = event["content_block"]["name"].as_str().unwrap_or_default();
+
+        if block_type == "tool_use"
+            && (name.is_empty() || event["content_block"]["id"].as_str().is_none_or(str::is_empty))
+        {
+            return self.fail("invalid identifier in upstream Messages stream");
+        }
 
         // Buffer every block for history reconstruction (F3), preserving order.
         let is_gateway_tool = block_type == "tool_use" && self.gateway_map.is_gateway_owned(name);
         self.blocks.insert(
             up_index,
             BufferedBlock {
+                closed: false,
                 block: event["content_block"].clone(),
                 input_json: String::new(),
                 is_gateway_tool,
@@ -431,6 +473,9 @@ impl MessagesStreamAccumulator {
 
     fn on_block_delta(&mut self, event: &mut Value) -> Vec<String> {
         let up_index = event.get("index").and_then(Value::as_u64).unwrap_or(0);
+        if self.blocks.get(&up_index).is_none_or(|block| block.closed) {
+            return self.fail("invalid content block transition in upstream Messages stream");
+        }
         // Accumulate the delta into the buffered block (for history — F3),
         // regardless of whether it is forwarded to the client.
         if let Some(buffered) = self.blocks.get_mut(&up_index) {
@@ -450,6 +495,12 @@ impl MessagesStreamAccumulator {
 
     fn on_block_stop(&mut self, event: &mut Value) -> Vec<String> {
         let up_index = event.get("index").and_then(Value::as_u64).unwrap_or(0);
+        if self.blocks.get(&up_index).is_none_or(|block| block.closed) {
+            return self.fail("invalid content block transition in upstream Messages stream");
+        }
+        if let Some(block) = self.blocks.get_mut(&up_index) {
+            block.closed = true;
+        }
         if self.suppressed_indices.contains(&up_index) {
             return Vec::new();
         }
@@ -460,13 +511,15 @@ impl MessagesStreamAccumulator {
         vec![sse("content_block_stop", event)]
     }
 
-    /// Emit the terminal `message_delta` + `message_stop` once, at loop end.
+    /// Emit completion only for an explicitly completed upstream round.
     fn finish(&mut self) -> Vec<String> {
+        if !self.has_completed_round() {
+            return vec![error_sse("upstream Messages stream ended before message_stop")];
+        }
         let mut out = Vec::new();
         if let Some(mut delta) = self.final_message_delta.take() {
-            // A completed client call requires client action, even when vLLM
-            // labels a named call end_turn. Do not hide truncation or clean EOF.
-            if self.has_client_tool_use && self.has_completed_round() && delta["delta"]["stop_reason"] == "end_turn" {
+            // A completed client call requires client action even when vLLM labels it end_turn.
+            if self.has_client_tool_use && delta["delta"]["stop_reason"] == "end_turn" {
                 delta["delta"]["stop_reason"] = json!("tool_use");
             }
             self.usage.finish(&mut delta);
@@ -616,7 +669,14 @@ mod tests {
                     acc.push(&line(&json!({"type":"message_stop"})));
                 }
                 assert!(!acc.should_continue_loop(&context()));
-                if completed && reason == "end_turn" {
+                if !completed {
+                    assert_eq!(
+                        acc.finish(),
+                        vec![error_sse("upstream Messages stream ended before message_stop")]
+                    );
+                    continue;
+                }
+                if reason == "end_turn" {
                     terminal["delta"]["stop_reason"] = json!("tool_use");
                 }
                 assert_eq!(
@@ -855,6 +915,8 @@ mod tests {
         ));
         acc.push(&line(&json!({"type": "content_block_stop", "index": 0})));
         let out = acc.finish().join("");
+        assert!(out.contains("event: error"), "incomplete later round must fail: {out}");
+        assert!(!out.contains("event: message_stop"), "no synthetic completion: {out}");
         assert!(
             !out.contains(r#""stop_reason":"tool_use""#),
             "must not emit round 1's stale tool_use terminal: {out}"

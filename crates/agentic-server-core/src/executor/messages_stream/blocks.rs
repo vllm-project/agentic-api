@@ -20,6 +20,8 @@ pub(super) struct StreamedCall {
 /// the next round's history — F3. The client-facing SSE is still forwarded live;
 /// this is a parallel record for the fed-back conversation state.
 pub(super) struct BufferedBlock {
+    /// Whether this block received its upstream `content_block_stop`.
+    pub(super) closed: bool,
     /// The `content_block` skeleton from `content_block_start`, mutated by deltas.
     pub(super) block: Value,
     /// Accumulated `input_json_delta` fragments for a `tool_use` block.

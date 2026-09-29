@@ -13,6 +13,11 @@
     "crates/agentic-server/src/auth.rs": 791,
     "crates/agentic-server/src/handler/websocket/responses.rs": 784
   },
-  "exceptions": {},
+  "exceptions": {
+    "crates/agentic-server-core/src/executor/messages_stream.rs": {
+      "limit": 532,
+      "reason": "Streaming lifecycle validation must stay with the single accumulator transition path."
+    }
+  },
   "generated": {}
 }
