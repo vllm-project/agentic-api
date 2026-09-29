@@ -237,11 +237,6 @@ fn validate_multi_agent_request(request: &RequestPayload) -> ExecutorResult<()> 
             "reasoning.summary is not supported with multi_agent".into(),
         ));
     }
-    if request.input.has_compaction_trigger() {
-        return Err(ExecutorError::InvalidRequest(
-            "explicit compaction is not supported with multi_agent".into(),
-        ));
-    }
     Ok(())
 }
 
@@ -452,7 +447,6 @@ mod tests {
     use crate::storage::{
         ConversationStore, ConversationVersion, InOutItem, ResponseMetadata, ResponseStore, create_pool_with_schema,
     };
-    use crate::tool::ToolError;
     use crate::types::io::output::{McpListTools, OutputItem};
     use crate::types::request_response::RequestPayload;
 
@@ -671,6 +665,30 @@ mod tests {
         )
     }
 
+    #[test]
+    fn multi_agent_compaction_trigger_is_allowed() {
+        let mut request = request(None, None);
+        request.input = ResponsesInput::Items(vec![InputItem::CompactionTrigger]);
+        request.multi_agent = serde_json::from_value(serde_json::json!({"enabled":true})).unwrap();
+        validate_multi_agent_request(&request).unwrap();
+    }
+
+    #[test]
+    fn client_tools_are_supported_with_multi_agent() {
+        let mut request = request(None, None);
+        request.tools = Some(
+            serde_json::from_value(serde_json::json!([
+                {"type":"custom","name":"echo"}, {"type":"tool_search","execution":"client"}
+            ]))
+            .unwrap(),
+        );
+        validate_multi_agent_request(&request).unwrap();
+        request.multi_agent = serde_json::from_value(serde_json::json!({"enabled":false})).unwrap();
+        validate_multi_agent_request(&request).unwrap();
+        request.multi_agent = serde_json::from_value(serde_json::json!({"enabled":true})).unwrap();
+        validate_multi_agent_request(&request).unwrap();
+    }
+
     #[tokio::test]
     async fn nonstored_multi_agent_is_rejected_before_history_access() {
         let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
@@ -867,7 +885,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn execution_preparation_validates_tool_search_after_full_rehydration() {
+    async fn rehydration_rejects_orphan_tool_search_outputs() {
         let pool = create_pool_with_schema(Some("sqlite://?mode=memory"))
             .await
             .expect("create response store");
@@ -889,16 +907,11 @@ mod tests {
             .expect("seed prior response");
         let exec_ctx = execution_context(ConversationStore::disabled(), response_store);
 
-        let ctx = rehydrate_conversation(request(None, Some("resp_search")), &exec_ctx)
+        let error = rehydrate_conversation(request(None, Some("resp_search")), &exec_ctx)
             .await
-            .expect("orphan history remains a valid rehydrated public shape");
-        let error =
-            crate::executor::prepare::prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler)
-                .await
-                .expect_err("explicit preparation rejects orphan stored public history");
-
+            .expect_err("shared call validation rejects orphan stored search outputs");
         assert!(
-            matches!(error, ExecutorError::Tool(ToolError::Config(ref message)) if message.contains("orphan")),
+            matches!(&error, ExecutorError::InvalidRequest(message) if message.contains("without a pending call")),
             "unexpected error: {error}"
         );
         assert_eq!(error.http_status(), http::StatusCode::BAD_REQUEST);

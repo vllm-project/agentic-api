@@ -15,6 +15,8 @@ fn reference_cassettes_have_consistent_multi_agent_contract() {
         "proposals-gpt-5.6-sol-streaming",
         "mixed-tools-gpt-5.6-sol-nonstreaming",
         "mixed-tools-gpt-5.6-sol-streaming",
+        "client-owned-tools-gpt-5.6-sol-nonstreaming",
+        "client-owned-tools-gpt-5.6-sol-streaming",
     ] {
         let path = directory.join(format!("multi-agent-openai-reference-{suffix}.yaml"));
         RecordedSession::load(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
@@ -38,9 +40,14 @@ fn assert_qwen_case(scenario: &str, mode: &str) {
         &gateway,
         &ComparisonPolicy {
             require_reference_tool_kinds: true,
+            minimum_delegated_agents: Some(if scenario == "proposals" { 2 } else { 3 }),
         },
     )
     .unwrap_or_else(|error| panic!("{scenario} {mode}: {error}"));
+    if scenario == "client-owned-tools" {
+        reference.assert_client_owned_tools().unwrap();
+        gateway.assert_client_owned_tools().unwrap();
+    }
 }
 
 #[test]
@@ -74,6 +81,16 @@ fn mixed_tools_streaming_matches_reference_contract() {
 }
 
 #[test]
+fn client_owned_tools_nonstreaming_matches_reference_contract() {
+    assert_qwen_case("client-owned-tools", "nonstreaming");
+}
+
+#[test]
+fn client_owned_tools_streaming_matches_reference_contract() {
+    assert_qwen_case("client-owned-tools", "streaming");
+}
+
+#[test]
 #[ignore = "requires independently recorded OpenAI and gateway cassettes"]
 fn compare_recorded_multi_agent_contract() {
     let reference = std::env::var("MULTI_AGENT_REFERENCE_CASSETTE").expect("set reference cassette path");
@@ -85,6 +102,7 @@ fn compare_recorded_multi_agent_contract() {
         &gateway,
         &ComparisonPolicy {
             require_reference_tool_kinds: true,
+            minimum_delegated_agents: None,
         },
     )
     .unwrap();

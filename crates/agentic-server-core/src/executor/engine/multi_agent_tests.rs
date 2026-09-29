@@ -1,5 +1,9 @@
 //! Synthetic inference integration; reference cassettes belong to integration qualification.
 use super::*;
+#[path = "multi_agent_tests/client_tools.rs"]
+mod client_tools;
+#[path = "multi_agent_tests/explicit_compaction.rs"]
+mod explicit_compaction;
 #[path = "multi_agent_tests/root_completion.rs"]
 mod root_completion;
 #[path = "multi_agent_tests/shell_continuation.rs"]
@@ -112,6 +116,8 @@ async fn setup_with_gate(gate: Option<Arc<Semaphore>>) -> (Arc<ExecutionContext>
             } else if let Some(output) = root_completion_output(&request) {
                 output
             } else if let Some(output) = reasoning_only_recovery_output(&request) {
+                output
+            } else if let Some(output) = client_tools::client_tools_output(&request) {
                 output
             } else if let Some(output) = shell_review_output(&request) {
                 output
@@ -390,11 +396,17 @@ fn forks_do_not_duplicate_pending_parent_calls() {
         {"role":"user","content":"context"},
         {"type":"function_call","call_id":"open","name":"get_proposal","arguments":"{}"},
         {"type":"function_call","call_id":"closed","name":"get_proposal","arguments":"{}"},
-        {"type":"function_call_output","call_id":"closed","output":"value"}
+        {"type":"function_call_output","call_id":"closed","output":"value"},
+        {"type":"custom_tool_call","id":"ctc_open","call_id":"custom_open","name":"echo","input":"hello"},
+        {"type":"tool_search_call","id":"tsc_open","call_id":"search_open","arguments":{}},
+        {"type":"custom_tool_call","id":"ctc_closed","call_id":"custom_closed","name":"echo","input":"hello"},
+        {"type":"custom_tool_call_output","call_id":"custom_closed","output":"done"},
+        {"type":"tool_search_call","id":"tsc_closed","call_id":"search_closed","arguments":{}},
+        {"type":"tool_search_output","call_id":"search_closed","tools":[]}
     ]))
     .unwrap();
     let forked = fork_history(&history, "all").unwrap();
-    assert_eq!(forked.len(), 3);
+    assert_eq!(forked.len(), 7);
     assert!(fork_history(&history, "none").unwrap().is_empty());
     assert!(fork_history(&history, "0").is_err());
 }

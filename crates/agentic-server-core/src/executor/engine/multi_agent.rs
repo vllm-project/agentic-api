@@ -2,6 +2,7 @@
 //! Round tasks work from owned snapshots and return through the scoped task owner.
 
 mod actions;
+mod compaction;
 mod context;
 mod delivery;
 mod guidance;
@@ -102,12 +103,16 @@ impl MultiAgentRun {
         let limit = usize::try_from(config.max_concurrent_subagents.unwrap_or(3))
             .map_err(|_| invalid("invalid max_concurrent_subagents"))?;
         let budget = ExecutorResponseBudget::with_limit(exec.responses_config.max_retained_bytes);
+        let mut restored = restore_agents(&mut pipeline.request, exec, &budget)?;
+        if restored.continuing_tree {
+            restored.continue_input(&pipeline.request.response_id, &pipeline.request.new_input_items)?;
+        }
         let RestoredAgents {
             registry,
             pending,
             agents,
-            continuing_tree,
-        } = restore_agents(&mut pipeline.request, exec, &budget)?;
+            ..
+        } = restored;
         if registry
             .agents()
             .filter(|agent| !agent.identity.is_root() && matches!(agent.state, AgentState::Active(_)))
@@ -142,7 +147,7 @@ impl MultiAgentRun {
         // One bounded event in flight, plus one size-limited awaited frame per
         // active worker. Client backpressure reaches upstream readers.
         let (frame_sender, frames) = mpsc::channel(1);
-        let mut run = Self {
+        Ok(Self {
             frame_sender,
             frames,
             completed_items: BTreeMap::new(),
@@ -159,11 +164,7 @@ impl MultiAgentRun {
             payload,
             rounds: 0,
             max_retained_bytes: exec.responses_config.max_retained_bytes,
-        };
-        if continuing_tree {
-            run.continue_input(&pipeline.request.new_input_items)?;
-        }
-        Ok(run)
+        })
     }
 
     pub(super) async fn run(

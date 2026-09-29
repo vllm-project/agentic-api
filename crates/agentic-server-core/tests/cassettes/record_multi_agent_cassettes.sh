@@ -10,16 +10,17 @@ Usage: bash record_multi_agent_cassettes.sh [--dry-run | --help]
 
 Record OpenAI first, review the observations, then implement and compare gateway behavior.
 Records delegated review (one request), proposal comparison (bounded continuations), and
-three separate web/MCP/shell tasks (bounded continuations), each over HTTP JSON and SSE.
+mixed tools with three web/MCP/shell jobs,
+each over HTTP JSON and SSE.
 All scenarios enable multi-agent with store:true and the multi-agent beta header.
 Proposal and mixed-tools continuations use previous_response_id and matching tool outputs.
 
 Environment:
   MULTI_AGENT_RECORD_SET  openai (default), gateway, or all
-  MULTI_AGENT_SUITE       all (default), workflows, review, proposals, or mixed-tools
+  MULTI_AGENT_SUITE       all (default), workflows, review, proposals, mixed-tools, or client-owned-tools
   MULTI_AGENT_STREAM_MODE both (default), streaming, or nonstreaming
   MULTI_AGENT_MAX_CONTINUATIONS  Extra client-tool requests per scenario (default: 10; max: 100)
-  HTTP_READ_TIMEOUT      Upstream read inactivity timeout in seconds (default: 300)
+  HTTP_READ_TIMEOUT      Upstream read inactivity timeout in seconds (default: 900)
   OPENAI_API_KEY         Required for live OpenAI recording; never written to logs
   OPENAI_MODEL           Default: gpt-5.6-sol
   GATEWAY_URL            Default: http://localhost:9000
@@ -40,26 +41,31 @@ To supply dependencies without changing your project environment:
     --with pyyaml bash crates/agentic-server-core/tests/cassettes/record_multi_agent_cassettes.sh
 
 --dry-run prints commands without contacting APIs or writing any files.
-all/workflows selects review, proposals, and mixed-tools: six YAML files per provider
-with the default both mode, or three when selecting one stream mode.
+all/workflows selects review, proposals, and mixed-tools: six YAML files
+per provider with the default both mode, or three when selecting one stream mode.
 The former parameter-only edge-cases, failure-cases, and compaction recordings
 are not behavioral coverage and are no longer generated. Existing YAML is left alone.
 Runtime edge cases, failures, and compaction still need dedicated scenarios.
 Recordings use stable filenames containing provider, group/scenario, model, and mode.
 Re-running replaces those cassettes. A failed recording is retained for inspection.
-Scenario inputs are fixed fixture files; no scripts or run directories are copied.
+Failures do not skip other selected recordings; the script exits nonzero after listing failures.
+All scenario prompts are sections of multi_agent/prompts.txt; no scripts or run directories are copied.
 The proposal and mixed-tools drivers continue pending client calls within the configured limit; inspect pending calls and completion
 after recording. Capture does not enforce agent counts or a particular answer.
 
-mixed-tools is included in all/workflows and can be selected alone. It records one initial
-prompt assigning web search, GitMCP tiktoken, and local-shell tasks to separate agents,
-once as JSON and once as SSE. Like record_shell_cassettes.sh, the second request
-submits simulated shell_call_output for the exact requested fixture command.
-The output is 55 followed by a newline, empty stderr, and exit code 0.
-Model-generated commands are not executed; unsupported commands stop the driver.
-The MCP fixture uses https://gitmcp.io/openai/tiktoken
-and allows search_tiktoken_documentation without an approval round trip.
-This records the selected model's actual support for the combined configuration.
+mixed-tools is included in all/workflows and can be selected alone. One prompt asks
+three agents to use web search, GitMCP tiktoken, and the local shell. Its tool
+configuration contains only web_search, mcp, and shell. The shell fixture supplies
+stdout 55 followed by a newline, empty stderr, and exit code 0 for the exact command.
+Unsupported commands receive simulated failures; commands are not executed.
+The MCP fixture uses https://gitmcp.io/openai/tiktoken and allows
+search_tiktoken_documentation without an approval round trip.
+
+client-owned-tools is an opt-in diagnostic (not included in all/workflows). It records only
+the [client-owned-tools] section of prompts.txt in a fresh session, with the standalone tool_search
+catalog plus the custom echo tool and their output fixtures. It exposes no web,
+MCP, or shell tools and writes
+separate client-owned-tools YAML files. Select MULTI_AGENT_SUITE=client-owned-tools to run it.
 
 Remaining coverage: partial/duplicate/mismatched outputs for a real pending call,
 branch/configuration changes, long-context compaction and its races, all hosted
@@ -82,11 +88,12 @@ RECORDER="$SCRIPTS_DIR/record_cassette.py"
 RECORD_SET="${MULTI_AGENT_RECORD_SET:-openai}"
 SUITE="${MULTI_AGENT_SUITE:-all}"
 STREAM_MODE="${MULTI_AGENT_STREAM_MODE:-both}"
-HTTP_READ_TIMEOUT="${HTTP_READ_TIMEOUT:-300}"
+HTTP_READ_TIMEOUT="${HTTP_READ_TIMEOUT:-900}"
 OPENAI_MODEL="${OPENAI_MODEL:-gpt-5.6-sol}"
 GATEWAY_URL="${GATEWAY_URL:-http://localhost:9000}"
 GATEWAY_MODEL="${GATEWAY_MODEL:-${MODEL:-}}"
 FIXTURES_DIR="$SCRIPTS_DIR/multi_agent"
+TOOL_SEARCH_FIXTURES="$SCRIPTS_DIR/tool_search"
 BASE_DIR="${MULTI_AGENT_OUTPUT_DIR:-$FIXTURES_DIR}"
 MAX_OUTPUT_TOKENS="${MAX_OUTPUT_TOKENS:-16384}"
 PROXY_PORT="${PROXY_PORT:-7070}"
@@ -99,8 +106,8 @@ fi
 MULTI_AGENT_CONFIG="$(printf '{"enabled":true,"max_concurrent_subagents":%s}' "$MAX_CONCURRENT_SUBAGENTS")"
 
 case "$SUITE" in
-  all|workflows|review|proposals|mixed-tools) ;;
-  *) echo 'ERROR: MULTI_AGENT_SUITE must be all, workflows, review, proposals, or mixed-tools' >&2; exit 2 ;;
+  all|workflows|review|proposals|mixed-tools|client-owned-tools) ;;
+  *) echo 'ERROR: MULTI_AGENT_SUITE must be all, workflows, review, proposals, mixed-tools, or client-owned-tools' >&2; exit 2 ;;
 esac
 case "$STREAM_MODE" in
   both|streaming|nonstreaming) ;;
@@ -134,23 +141,48 @@ if [[ "$DRY_RUN" == false ]]; then
   }
 fi
 
-for fixture in review.txt proposals.txt tools.json tool_outputs.py mixed-tools.txt mixed_tools.json mixed_tool_outputs.py; do
+for fixture in prompts.txt tools.json tool_outputs.py mixed_tools.json mixed_tool_outputs.py client_owned_tools.json; do
   if [[ ! -f "$FIXTURES_DIR/$fixture" ]]; then
     echo "ERROR: missing multi-agent fixture: $FIXTURES_DIR/$fixture" >&2
     exit 2
   fi
 done
+if [[ "$SUITE" == client-owned-tools ]]; then
+  for fixture in openai_tools.json returned_tools.json function_outputs.json; do
+    if [[ ! -f "$TOOL_SEARCH_FIXTURES/$fixture" ]]; then
+      echo "ERROR: missing tool-search fixture: $TOOL_SEARCH_FIXTURES/$fixture" >&2
+      exit 2
+    fi
+  done
+fi
 if [[ "$DRY_RUN" == false ]]; then
   mkdir -p "$BASE_DIR"
 fi
 
+if [[ ! -f "$SCRIPTS_DIR/custom_tool/tool_outputs.json" ]]; then
+  echo 'ERROR: missing shared custom-tool output fixture' >&2
+  exit 2
+fi
+
+FAILED_RECORDINGS=()
+
+scenario_prompts() {
+  awk -v section="[$1]" -v expected="$2" '
+    /^\[/ { active = ($0 == section); next }
+    active && NF { print; count++ }
+    END { if (count != expected) exit 1 }
+  ' "$FIXTURES_DIR/prompts.txt"
+}
+
 record_workflows() {
   local provider="$1" endpoint_flag="$2" endpoint="$3" model="$4"
-  local scenario mode turns output prompts model_slug
+  local scenario mode turns output prompts model_slug status
   model_slug="$(printf '%s' "$model" | tr '/: ' '---')"
   local -a command tool_args
-  for scenario in review proposals mixed-tools; do
-    if [[ "$SUITE" == review || "$SUITE" == proposals || "$SUITE" == mixed-tools ]]; then
+  for scenario in review proposals mixed-tools client-owned-tools; do
+    # Isolated diagnostics are opt-in; keep the normal workflow suite unchanged.
+    if [[ "$scenario" == client-owned-tools && "$SUITE" != client-owned-tools ]]; then continue; fi
+    if [[ "$SUITE" != all && "$SUITE" != workflows ]]; then
       if [[ "$scenario" != "$SUITE" ]]; then continue; fi
     fi
     turns=1
@@ -158,9 +190,19 @@ record_workflows() {
     if [[ "$scenario" == proposals ]]; then
       tool_args=(--auto-tool-continuations "${MULTI_AGENT_MAX_CONTINUATIONS:-10}" --tools "$FIXTURES_DIR/tools.json" --tool-outputs "$FIXTURES_DIR/tool_outputs.py")
     elif [[ "$scenario" == mixed-tools ]]; then
-      tool_args=(--auto-tool-continuations "${MULTI_AGENT_MAX_CONTINUATIONS:-10}" --tools "$FIXTURES_DIR/mixed_tools.json" --tool-outputs "$FIXTURES_DIR/mixed_tool_outputs.py")
+      tool_args=(--auto-tool-continuations "${MULTI_AGENT_MAX_CONTINUATIONS:-10}"
+        --tools "$FIXTURES_DIR/mixed_tools.json"
+        --tool-outputs "$FIXTURES_DIR/mixed_tool_outputs.py")
+    elif [[ "$scenario" == client-owned-tools ]]; then
+      tool_args=(--auto-tool-continuations "${MULTI_AGENT_MAX_CONTINUATIONS:-10}"
+        --tools "$FIXTURES_DIR/client_owned_tools.json"
+        --tool-search-output-tools "$TOOL_SEARCH_FIXTURES/returned_tools.json"
+        --tool-outputs "$FIXTURES_DIR/mixed_tool_outputs.py")
     fi
-    prompts="$FIXTURES_DIR/$scenario.txt"
+    if ! prompts="$(scenario_prompts "$scenario" "$turns")"; then
+      echo "ERROR: prompts.txt must contain $turns prompt(s) in [$scenario]" >&2
+      exit 2
+    fi
     for mode in nonstreaming streaming; do
       if [[ "$STREAM_MODE" != both && "$mode" != "$STREAM_MODE" ]]; then continue; fi
       output="$BASE_DIR/multi-agent-$provider-$scenario-$model_slug-$mode.yaml"
@@ -172,15 +214,23 @@ record_workflows() {
       if [[ "$mode" == streaming ]]; then command+=(--stream); else command+=(--no-stream); fi
       if [[ "$DRY_RUN" == true ]]; then
         printf '%q ' "${command[@]}"
-        printf '< %q\n' "$prompts"
+        printf '<<< %q\n' "$prompts"
         continue
       fi
       printf 'Recording %s %s %s with %s\n' "$provider" "$scenario" "$mode" "$model"
-      if ! "${command[@]}" < "$prompts"; then
-        echo "ERROR: recording failed; captured YAML retained at $output" >&2
-        return 1
+      if "${command[@]}" <<< "$prompts"; then
+        echo "Captured $output; agent behavior and completion are evaluated after recording."
+      else
+        status=$?
+        # Respect cancellation instead of starting another API request.
+        if (( status == 130 || status == 143 )); then exit "$status"; fi
+        if [[ -f "$output" ]]; then
+          echo "ERROR: recording failed; inspect YAML at $output for captured exchanges" >&2
+        else
+          echo "ERROR: recording failed before a cassette was created: $output" >&2
+        fi
+        FAILED_RECORDINGS+=("$output")
       fi
-      echo "Captured $output; agent behavior and completion are evaluated after recording."
     done
   done
 }
@@ -190,6 +240,11 @@ if [[ "$RECORD_SET" == openai || "$RECORD_SET" == all ]]; then
 fi
 if [[ "$RECORD_SET" == gateway || "$RECORD_SET" == all ]]; then
   record_workflows gateway --gateway "$GATEWAY_URL" "$GATEWAY_MODEL"
+fi
+if (( ${#FAILED_RECORDINGS[@]} > 0 )); then
+  echo 'ERROR: selected recordings were attempted, but these recordings failed:' >&2
+  printf '  %s\n' "${FAILED_RECORDINGS[@]}" >&2
+  exit 1
 fi
 if [[ "$DRY_RUN" == true ]]; then
   echo 'Dry run complete; no API requests were sent.'

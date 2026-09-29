@@ -86,7 +86,8 @@ impl ValidatedTreeCheckpoint {
                 let kind = match call.kind {
                     CallKind::Function => ClientCallKind::Function,
                     CallKind::Shell => ClientCallKind::Shell,
-                    CallKind::Custom => return Err(invalid("unsupported unresolved call kind")),
+                    CallKind::Custom => ClientCallKind::Custom,
+                    CallKind::ToolSearch => ClientCallKind::ToolSearch,
                 };
                 unresolved.insert((agent.identity.clone(), call.call_id), kind);
             }

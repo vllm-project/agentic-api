@@ -20,6 +20,13 @@ not be used as evidence for multi-agent runtime behavior or gateway acceptance t
 The script no longer generates those groups or supports the `validation` suite.
 Existing recordings are left untouched; further evidence must come from new API recordings.
 
+## Scenario prompts
+
+All prompts live in `prompts.txt`, under `[review]`, `[proposals]`, `[mixed-tools]`,
+and `[client-owned-tools]`. Each nonempty line within a section is one user prompt.
+Each section has one prompt. The shell script
+checks the selected section's prompt count before starting the recorder.
+
 ## Capture boundary
 
 Each workflow starts with one client prompt describing multiple jobs. The review
@@ -43,56 +50,81 @@ The continuation limit is a recording budget, not proof that the agent tree has
 finished. Reaching it with pending client calls fails the driver and retains the
 captured exchanges for inspection.
 
-## Three separate tasks: web search, MCP, and shell
+## Gateway beta scope
 
-Select `MULTI_AGENT_SUITE=mixed-tools` to request three independent tasks in one
-initial prompt, each assigned to a different subagent:
+The gateway supports multi-agent continuations for client-executed functions,
+local shell, custom tools, and tool search. Search results load definitions only
+for the agent that owns the call; discovered namespace members keep their public
+namespace on output. Outputs are matched by call ID and kind before agents resume.
 
-- Web search: research Python CSV documentation.
-- MCP: search tiktoken documentation through GitMCP for encoding and decoding text.
-- Shell: request a Python calculation through the local shell tool.
+An explicit `compaction_trigger` compacts only the root's resolved context,
+returns a root-attributed compaction item, and preserves children and pending calls.
+It does not start agent inference. Automatic per-agent compaction remains enabled. OpenAI documents
+`/responses/compact` as unsupported with multi-agent; that endpoint restriction
+does not establish a restriction on the `compaction_trigger` input marker.
+The client-owned-tools scenario contains tool search, functions, and custom tools.
+The mixed-tools scenario contains only web search, MCP, and local shell.
 
-The root is asked to delegate each task separately and collect the results.
+## Isolated client-owned-tools diagnostic
 
-With your Python environment active and `OPENAI_API_KEY` exported, run from the
-repository root:
+Select `MULTI_AGENT_SUITE=client-owned-tools` to record the `[client-owned-tools]`
+section of `prompts.txt`, in a fresh stored Responses session for each mode. This diagnostic is opt-in and is not included in `all/workflows`.
+
+It uses `client_owned_tools.json`: the existing tool-search catalog plus the custom
+`agentic_raw_echo` tool. Three agents are requested for weather, time zone, and a
+custom-tool output reported on one line. Returned definitions come from
+`../tool_search/returned_tools.json`; callbacks in `mixed_tool_outputs.py` reuse the
+existing function and custom-tool output fixtures. Web, MCP, and shell are not declared.
+Discovery outputs and subsequent function outputs are submitted through ordinary
+HTTP continuations with matching call IDs.
+
+```bash
+MULTI_AGENT_RECORD_SET=openai \
+MULTI_AGENT_SUITE=client-owned-tools \
+MULTI_AGENT_STREAM_MODE=both \
+MAX_CONCURRENT_SUBAGENTS=3 \
+HTTP_READ_TIMEOUT=900 \
+bash crates/agentic-server-core/tests/cassettes/record_multi_agent_cassettes.sh
+```
+
+This produces separate `multi-agent-openai-reference-client-owned-tools-<model>-<mode>.yaml`
+files and leaves mixed-tools captures unchanged. Inspect function-call ownership
+and final answers: a completed HTTP response alone does not establish task success.
+
+## Mixed tools: web search, MCP, and shell
+
+`MULTI_AGENT_SUITE=mixed-tools` supplies one prompt requesting three agents for
+Python CSV web research, GitMCP tiktoken research, and the local-shell command
+`python3 -c 'print(sum(range(1, 11)))'`. `mixed_tools.json` declares only web search,
+MCP, and local shell. Tool search and custom tools belong to client-owned-tools.
+
+The request sets `max_concurrent_subagents: 3`. The shell callback in
+`mixed_tool_outputs.py` supplies simulated stdout `55\n`, empty stderr, and exit
+code 0 for the exact command. Unsupported commands receive explicit simulated
+failures; nothing is executed. Automatic continuations submit matching shell
+outputs with `previous_response_id` and add no user messages. Responses and SSE
+events are captured without modification.
+
+The MCP declaration uses `https://gitmcp.io/openai/tiktoken`, server label
+`gitmcp_tiktoken`, and allowed tool `search_tiktoken_documentation` with approval
+set to `never`. No GitHub token is configured by this scenario.
+
+With your Python environment active and `OPENAI_API_KEY` exported:
 
 ```bash
 MULTI_AGENT_RECORD_SET=openai \
 MULTI_AGENT_SUITE=mixed-tools \
+MULTI_AGENT_STREAM_MODE=both \
 MAX_CONCURRENT_SUBAGENTS=3 \
+HTTP_READ_TIMEOUT=900 \
 bash crates/agentic-server-core/tests/cassettes/record_multi_agent_cassettes.sh
 ```
 
-`mixed_tools.json` supplies the tool declarations directly through `--tools`.
-Its MCP declaration uses `server_label: gitmcp_tiktoken`,
-`server_url: https://gitmcp.io/openai/tiktoken`,
-`allowed_tools: [search_tiktoken_documentation]`, and `require_approval: never`.
-No MCP URL environment variable or GitHub token is configured by this scenario.
-No request or response YAML is generated by hand.
-
-The scenario uses [local shell mode](https://developers.openai.com/api/docs/guides/tools-shell#local-shell-mode)
-with `environment.type: local`. OpenAI returns `shell_call` items for the client
-to execute and answer with `shell_call_output` in a subsequent request.
-Following `record_shell_cassettes.sh` and `shell/scenarios.py`, this scenario supplies
-simulated client output rather than executing the command. The first prompt requests
-the exact command `python3 -c 'print(sum(range(1, 11)))'`. The callback in
-`mixed_tool_outputs.py` checks each returned command and supplies stdout `55\n`,
-empty stderr, and exit code 0. Unsupported commands receive explicit simulated exit-code-1 outputs; no command
-is executed. The model can then request a supported command.
-
-Continuation requests submit `shell_call_output` using each actual call's `call_id`,
-with `previous_response_id` pointing to the preceding response. Continuations add
-no new user message. These are fixture inputs sent to the API; OpenAI's responses
-are recorded without fabrication. Tool availability is shared across agents; the
-prompt requests separate responsibilities without creating per-agent tool permissions.
-
-This scenario writes two `multi-agent-<provider>-mixed-tools-<model>-<mode>.yaml`
-files and is included in `all`/`workflows`. It requires access to the remote MCP server
-and local-shell tool support. Each file captures the HTTP exchanges, including
-the client-supplied shell output and OpenAI's response to it. The selected model may reject this tool combination; preserve and
-inspect that outcome. Confirm actual delegation and tool use afterward from the
-recorded items; a prompt requesting three agents is not proof that three ran.
+This writes the usual two mixed-tools YAML files per provider/model, containing
+the user prompt and all client-tool continuations. Re-recording replaces the
+selected files. A longer read timeout allows slow nonstreaming responses; it does
+not establish that the tool combination works. Inspect actual calls, errors, and
+completion after recording. Existing captures are not changed by editing fixtures.
 
 ## Runtime coverage still to record
 
@@ -115,7 +147,7 @@ Re-recording replaces the selected scenarios. `--dry-run` previews commands with
 writing files or contacting an API. Input fixtures in this directory are required
 by the recorder; keep them when removing recorded YAML files.
 
-To retry only mixed-tools over SSE with a longer read timeout:
+To retry only mixed-tools over SSE:
 
 ```bash
 MULTI_AGENT_RECORD_SET=openai \
@@ -127,11 +159,12 @@ bash crates/agentic-server-core/tests/cassettes/record_multi_agent_cassettes.sh
 ```
 
 Use `MULTI_AGENT_STREAM_MODE=nonstreaming` for the JSON recording, or `both`
-(the default) for both modes. The read timeout defaults to 300 seconds and measures
+(the default) for both modes. The multi-agent script read timeout defaults to 900 seconds and measures
 time waiting for network data, not the total duration of the agent tasks. Changing
 it affects recorder transport settings only; it does not change the API payload.
 The local client allows an extra ten seconds for the proxy to report an upstream
-read timeout. Transport failures are recorded as `response.transport_error`, without
+read timeout. If a recording fails, the script still attempts the other selected modes
+and scenarios, then lists failures and exits nonzero. Transport failures are recorded as `response.transport_error`, without
 inventing an upstream HTTP status or response body. Such a capture is diagnostic
 evidence, not a successful multi-agent response cassette.
 

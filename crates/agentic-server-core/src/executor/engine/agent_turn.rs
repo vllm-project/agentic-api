@@ -6,7 +6,7 @@
 //! These steps neither spawn agents nor finalize/persist a public response.
 
 use super::accumulate_usage;
-use std::num::NonZeroUsize;
+use std::{collections::HashMap, num::NonZeroUsize};
 
 use tracing::{Instrument as _, debug};
 
@@ -24,7 +24,7 @@ use crate::executor::rehydrate::prepare_reasoning_for_vllm;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::upstream::{fetch_blocking_payload, fetch_stream_payload};
-use crate::tool::{ShellHandler, ToolRegistry, mcp};
+use crate::tool::{ToolRegistry, mcp};
 use crate::types::io::{InputItem, OutputItem, ResponsesInput, ToolChoice};
 use crate::types::request_response::ResponsePayload;
 
@@ -326,29 +326,34 @@ impl<'a> AgentTurn<'a> {
             classify_round(has_client_owned, &gateway_results, round, self.max_rounds.get())
         };
         if matches!(decision, RoundDecision::Continue) || multi_agent {
-            self.append_round_input(&current_output, multi_agent)?;
+            self.append_round_input(&current_output, &payload.output, multi_agent);
         }
         self.record_gateway_results(gateway_results);
         Ok(RoundResult { payload, decision })
     }
 
-    fn append_round_input(&mut self, output: &[OutputItem], multi_agent: bool) -> ExecutorResult<()> {
+    fn append_round_input(&mut self, output: &[OutputItem], public: &[OutputItem], multi_agent: bool) {
         self.pipeline.request.enriched_request.tool_choice = Some(ToolChoice::Auto);
         if multi_agent {
-            let canonical = output
+            // Preserve client-call kinds for checkpoint validation and output routing.
+            // Reuse the public projection; built-in calls retain their canonical history.
+            let client_calls: HashMap<_, _> = public
                 .iter()
-                .map(|item| match item {
-                    OutputItem::FunctionCall(call) if self.registry.is_client_shell_name(&call.name) => {
-                        ShellHandler::output_item(call)
-                            .ok_or_else(|| ExecutorError::ParseError("invalid client shell call".into()))
-                    }
-                    item => Ok(item.clone()),
+                .filter_map(|item| match item {
+                    OutputItem::ShellCall(call) => Some((call.call_id.as_str(), item)),
+                    OutputItem::CustomToolCall(call) => Some((call.call_id.as_str(), item)),
+                    OutputItem::ToolSearchCall(call) => Some((call.call_id.as_str(), item)),
+                    _ => None,
                 })
-                .collect::<ExecutorResult<Vec<_>>>()?;
-            for item in &canonical {
-                // Shell ownership must survive checkpointing; normalize only for upstream inference.
+                .collect();
+            for item in output {
+                let item = match item {
+                    OutputItem::FunctionCall(call) => client_calls.get(call.call_id.as_str()).copied().unwrap_or(item),
+                    item => item,
+                };
                 let input = match item {
                     OutputItem::ShellCall(call) => Some(InputItem::ShellCall(call.clone())),
+                    OutputItem::CustomToolCall(call) => Some(InputItem::CustomToolCall(call.clone())),
                     item => item.to_input_item(),
                 };
                 if let Some(input) = input {
@@ -358,7 +363,6 @@ impl<'a> AgentTurn<'a> {
         } else {
             append_output_items_to_input(&mut self.pipeline.request.enriched_request.input, output);
         }
-        Ok(())
     }
 
     async fn emit_failed_round_events(

@@ -50,6 +50,16 @@ impl CompactionPlan {
         if estimate_history_tokens(history) <= threshold {
             return Ok(None);
         }
+        Self::prepare_explicit(agent, generation, history, request)
+    }
+
+    /// Capture only the resolved prefix; pending calls remain outside the snapshot.
+    pub(in crate::executor) fn prepare_explicit(
+        agent: &AgentIdentity,
+        generation: u64,
+        history: &[InputItem],
+        request: &RequestPayload,
+    ) -> ExecutorResult<Option<Self>> {
         let end = resolved_prefix_len(history)?;
         if end == 0 {
             return Ok(None);

@@ -17,6 +17,7 @@ use crate::types::{
     io::output::MessagePhase,
     io::{InputItem, MultiAgentAction, OutputItem, OutputMessageContent, ResponsesInput},
     request_response::IncompleteDetails,
+    tools::ToolSearchStatus,
 };
 
 use super::{
@@ -342,10 +343,9 @@ impl MultiAgentRun {
                     (call.call_id.as_str(), ClientCallKind::Function)
                 }
                 OutputItem::ShellCall(call) => (call.call_id.as_str(), ClientCallKind::Shell),
-                OutputItem::CustomToolCall(_) | OutputItem::ToolSearchCall(_) => {
-                    return Err(invalid(
-                        "multi-agent client continuation supports function and local shell calls",
-                    ));
+                OutputItem::CustomToolCall(call) => (call.call_id.as_str(), ClientCallKind::Custom),
+                OutputItem::ToolSearchCall(call) if call.status == ToolSearchStatus::Completed => {
+                    (call.call_id.as_str(), ClientCallKind::ToolSearch)
                 }
                 _ => continue,
             };

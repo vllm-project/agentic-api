@@ -5,7 +5,7 @@
     "crates/agentic-server-core/src/executor/gateway.rs": 580,
     "crates/agentic-server-core/src/executor/session.rs": 508,
     "crates/agentic-server-core/src/tool/registry.rs": 515,
-    "crates/agentic-server-core/src/tool/tool_search.rs": 1680,
+    "crates/agentic-server-core/src/tool/tool_search.rs": 1661,
     "crates/agentic-server-core/src/types/io/input.rs": 510,
     "crates/agentic-server-core/src/types/io/output.rs": 1075,
     "crates/agentic-server-core/src/types/tools/params.rs": 537,

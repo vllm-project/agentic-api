@@ -17,6 +17,7 @@ pub(super) enum CallKind {
     Function,
     Custom,
     Shell,
+    ToolSearch,
 }
 
 impl CallKind {
@@ -25,6 +26,7 @@ impl CallKind {
             Self::Function => "function_call",
             Self::Custom => "custom_tool_call",
             Self::Shell => "shell_call",
+            Self::ToolSearch => "tool_search_call",
         }
     }
 
@@ -33,6 +35,7 @@ impl CallKind {
             Self::Function => "function_call_output",
             Self::Custom => "custom_tool_call_output",
             Self::Shell => "shell_call_output",
+            Self::ToolSearch => "tool_search_output",
         }
     }
 }
@@ -82,10 +85,14 @@ fn scan_calls(items: &[InputItem]) -> ExecutorResult<(Vec<PendingCall>, usize)> 
             InputItem::ShellCallOutput(output) => {
                 resolve_call(&output.call_id, CallKind::Shell, &mut pending)?;
             }
+            InputItem::ToolSearchCall(call) => {
+                add_call(&call.call_id, CallKind::ToolSearch, &mut seen_call_ids, &mut pending)?;
+            }
+            InputItem::ToolSearchOutput(output) => {
+                resolve_call(&output.call_id, CallKind::ToolSearch, &mut pending)?;
+            }
             InputItem::Message(_)
             | InputItem::Reasoning(_)
-            | InputItem::ToolSearchCall(_)
-            | InputItem::ToolSearchOutput(_)
             | InputItem::McpListTools(_)
             | InputItem::Compaction(_)
             | InputItem::CompactionTrigger

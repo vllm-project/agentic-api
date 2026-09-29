@@ -6,7 +6,9 @@ use std::borrow::Borrow;
 use serde::{Deserialize, Serialize};
 
 use super::agent::AgentTurnKey;
-use super::io::{FunctionToolResultMessage, InputItem, ShellCallOutputMessage};
+use super::io::{
+    CustomToolCallOutputMessage, FunctionToolResultMessage, InputItem, ShellCallOutputMessage, ToolSearchOutputMessage,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
@@ -52,6 +54,8 @@ impl Borrow<str> for ClientCallId {
 pub enum ClientCallKind {
     Function,
     Shell,
+    Custom,
+    ToolSearch,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,6 +76,8 @@ pub struct ClientCallRegistration {
 pub enum ClientToolOutput {
     Function(FunctionToolResultMessage),
     Shell(ShellCallOutputMessage),
+    Custom(CustomToolCallOutputMessage),
+    ToolSearch(ToolSearchOutputMessage),
 }
 
 impl ClientToolOutput {
@@ -80,6 +86,8 @@ impl ClientToolOutput {
         match self {
             Self::Function(output) => &output.call_id,
             Self::Shell(output) => &output.call_id,
+            Self::Custom(output) => &output.call_id,
+            Self::ToolSearch(output) => &output.call_id,
         }
     }
 
@@ -88,6 +96,8 @@ impl ClientToolOutput {
         match self {
             Self::Function(_) => ClientCallKind::Function,
             Self::Shell(_) => ClientCallKind::Shell,
+            Self::Custom(_) => ClientCallKind::Custom,
+            Self::ToolSearch(_) => ClientCallKind::ToolSearch,
         }
     }
 }
@@ -97,6 +107,8 @@ impl From<ClientToolOutput> for InputItem {
         match output {
             ClientToolOutput::Function(output) => Self::FunctionCallOutput(output),
             ClientToolOutput::Shell(output) => Self::ShellCallOutput(output),
+            ClientToolOutput::Custom(output) => Self::CustomToolCallOutput(output),
+            ClientToolOutput::ToolSearch(output) => Self::ToolSearchOutput(output),
         }
     }
 }

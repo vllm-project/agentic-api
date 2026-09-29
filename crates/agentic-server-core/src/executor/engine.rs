@@ -189,15 +189,25 @@ async fn run_compaction_trigger(
 ) -> ExecutorResult<ResponsePayload> {
     let model = ctx.enriched_request.model.clone();
     let instructions = ctx.enriched_request.instructions.clone();
-    let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
-    let (mut compacted, usage) = compact_items(&ctx.enriched_request, input, exec_ctx, auth).await?;
-    let Some(InputItem::Compaction(compaction)) = compacted.pop() else {
-        unreachable!("compact_items always appends a compaction item");
+    let (compaction, usage) = if ctx
+        .enriched_request
+        .multi_agent
+        .as_ref()
+        .is_some_and(|config| config.enabled)
+    {
+        MultiAgentRun::compact_root(ctx, exec_ctx, auth).await?
+    } else {
+        let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
+        let (mut compacted, usage) = compact_items(&ctx.enriched_request, input, exec_ctx, auth).await?;
+        let Some(InputItem::Compaction(compaction)) = compacted.pop() else {
+            unreachable!("compact_items always appends a compaction item");
+        };
+        ctx.new_input_items = compacted;
+        if let Some(continuation) = &mut ctx.continuation {
+            continuation.mark_history_replaced();
+        }
+        (compaction, usage)
     };
-    ctx.new_input_items = compacted;
-    if let Some(continuation) = &mut ctx.continuation {
-        continuation.mark_history_replaced();
-    }
     let mut payload = ResponsePayload {
         id: ctx.response_id.clone(),
         object: "response".to_owned(),

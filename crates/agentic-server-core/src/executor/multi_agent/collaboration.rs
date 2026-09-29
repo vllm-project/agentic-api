@@ -50,6 +50,9 @@ pub(in crate::executor) fn instructions(identity: &AgentIdentity, max_subagents:
     format!(
         "You are `{identity}`, an agent in a team working on the user's task. {role} \
          Each agent has its own context and the same tools. \
+         Tools discovered before spawning are available to the child. Once a task is assigned to a child, \
+         use its returned result rather than repeating its tool calls yourself. \
+         Client tool outputs are routed to the calling agent, which resumes and reports its findings. \
          Collaboration actions are function tools. Invoke them as actual function calls; \
          writing a tool name, JSON arguments, or a <to=...> block in a message does not execute an action. \
          You may call more than one function tool in a model round. \
@@ -108,7 +111,7 @@ pub(in crate::executor) fn tools() -> Vec<UpstreamTool> {
         ),
         (
             "list_agents",
-            "List the entire team, including yourself, ancestors and siblings. Entries are not necessarily your children. Canonical paths show parentage. Includes statuses and most recent assigned tasks.",
+            "List the entire team and its statuses, including yourself, ancestors and siblings. Call with exactly {}: this tool accepts no arguments or wrapper fields. Entries are not necessarily your children; canonical paths show parentage.",
             json!({}),
             vec![],
         ),

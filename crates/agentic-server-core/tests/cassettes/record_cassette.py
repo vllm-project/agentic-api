@@ -1429,10 +1429,19 @@ def run_responses(
     last_response: dict | None = None
     search_tools_loaded = False
     manual_history: list[dict] = []
+    prompt_turn = 0
+    automatic_turns = 0
     for turn in range(1, turns + auto_tool_continuations + 1):
-        automatic = turn > turns
-        if automatic and not _extract_tool_calls(last_response):
-            break
+        # Finish pending client work before reading the next scripted user prompt.
+        automatic = bool(auto_tool_continuations and _extract_tool_calls(last_response))
+        if automatic:
+            if automatic_turns >= auto_tool_continuations:
+                break
+            automatic_turns += 1
+        else:
+            if prompt_turn >= turns:
+                break
+            prompt_turn += 1
         if turn in branch_map:
             branch_from = branch_map[turn]
             if branch_from not in response_ids:
@@ -1451,9 +1460,9 @@ def run_responses(
             # input_image item array) can still be continued by previous_response_id.
             input_value: Any = preset_input
         else:
-            prompt = "" if automatic else _prompt(f"Turn {turn}/{turns} — enter prompt: ")
+            prompt = "" if automatic else _prompt(f"Turn {prompt_turn}/{turns} — enter prompt: ")
             if automatic:
-                click.echo(f"  [automatic client-tool continuation {turn - turns}/{auto_tool_continuations}]")
+                click.echo(f"  [automatic client-tool continuation {automatic_turns}/{auto_tool_continuations}]")
 
             # Inject matching client-tool outputs before the user message.
             has_output_fixtures = (
@@ -1507,8 +1516,13 @@ def run_responses(
         if previous_response_id and store:
             body["previous_response_id"] = previous_response_id
         effective_tools = tools_after_search if search_tools_loaded else tools
+        if auto_tool_continuations and tools_after_search is None:
+            effective_tools = tools
         turn_tool_choice = tool_choice_sequence[turn - 1] if tool_choice_sequence is not None else tool_choice
-        effective_parallel_tool_calls = False if tool_search_output_tools is not None else parallel_tool_calls
+        effective_parallel_tool_calls = (
+            False if tool_search_output_tools is not None and not auto_tool_continuations
+            else parallel_tool_calls
+        )
         _inject_tools(body, effective_tools, turn_tool_choice, effective_parallel_tool_calls)
         if request_overrides is not None:
             # Characterization must send invalid/null values without repairing them.
@@ -1911,7 +1925,7 @@ def main(
             raise click.UsageError(
                 "tool-search recorder fixtures require --mode responses."
             )
-        if turns != 4:
+        if not auto_tool_continuations and turns != 4:
             raise click.UsageError(
                 "tool-search recorder fixtures require exactly --turns 4."
             )
@@ -1935,7 +1949,7 @@ def main(
             raise click.UsageError(
                 "tool-search recording requires --tools and --tool-outputs."
             )
-        if not tool_choice_sequence_file:
+        if not auto_tool_continuations and not tool_choice_sequence_file:
             raise click.UsageError(
                 "tool-search recording requires --tool-choice-sequence."
             )

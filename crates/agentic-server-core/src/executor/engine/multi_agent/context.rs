@@ -19,22 +19,24 @@ use crate::types::{
 use crate::utils::common::serialized_size_up_to;
 
 use super::{
-    AgentContext, DEFAULT_COMPACT_THRESHOLD, MAX_AGENTS, MAX_CALLS, MAX_MAIL, MAX_ROUNDS, MultiAgentRun, call_error,
-    invalid, registry_error,
+    AgentContext, DEFAULT_COMPACT_THRESHOLD, MAX_AGENTS, MAX_CALLS, MAX_MAIL, MAX_ROUNDS, call_error, invalid,
+    registry_error,
 };
 
-impl MultiAgentRun {
-    pub(super) fn continue_input(&mut self, input: &[InputItem]) -> ExecutorResult<()> {
+impl RestoredAgents {
+    pub(super) fn continue_input(&mut self, response_id: &str, input: &[InputItem]) -> ExecutorResult<()> {
         let mut outputs = Vec::new();
         let mut root_input = Vec::new();
         for item in input {
             match item {
                 InputItem::FunctionCallOutput(output) => outputs.push(ClientToolOutput::Function(output.clone())),
                 InputItem::ShellCallOutput(output) => outputs.push(ClientToolOutput::Shell(output.clone())),
+                InputItem::CustomToolCallOutput(output) => outputs.push(ClientToolOutput::Custom(output.clone())),
+                InputItem::ToolSearchOutput(output) => outputs.push(ClientToolOutput::ToolSearch(output.clone())),
                 InputItem::Message(_) => root_input.push(item.clone()),
                 _ => {
                     return Err(invalid(
-                        "multi-agent continuation accepts new messages and pending function or shell outputs",
+                        "multi-agent continuation accepts new messages and pending function, shell, custom, or tool-search outputs",
                     ));
                 }
             }
@@ -52,7 +54,7 @@ impl MultiAgentRun {
         }
         self.pending
             .accept_outputs(ClientToolOutputBatch {
-                response_id: self.payload.id.clone(),
+                response_id: response_id.to_owned(),
                 outputs,
             })
             .map_err(|error| invalid(&error.to_string()))?;
@@ -63,10 +65,10 @@ impl MultiAgentRun {
                 .take_accepted(&id)
                 .expect("accepted output retained until transfer");
             let key = routed.owner.agent_turn;
-            self.contexts
-                .get_mut(&key.agent)
+            self.agents
+                .iter_mut()
+                .find(|agent| agent.identity == key.agent)
                 .expect("validated call owner")
-                .stored
                 .history
                 .push(routed.output.into());
             if let Some(agent) = self
@@ -85,29 +87,14 @@ impl MultiAgentRun {
                 .set_phase(&key, AgentPhase::Runnable)
                 .map_err(registry_error)?;
         }
-        let waiters = self
-            .registry
-            .agents()
-            .filter(|agent| {
-                agent.state == AgentState::Active(AgentPhase::WaitingForMailbox)
-                    && self.contexts[agent.identity].stored.wait.is_none()
-            })
-            .map(|agent| AgentTurnKey {
-                agent: agent.identity.clone(),
-                turn: agent.turn,
-            })
-            .collect::<Vec<_>>();
-        for waiter in waiters {
-            self.registry
-                .set_phase(&waiter, AgentPhase::Runnable)
-                .map_err(registry_error)?;
-        }
+        // Client outputs resume only their owners. Parents parked at the previous
+        // response boundary remain asleep until registry mailbox delivery wakes them.
         if !root_input.is_empty() {
             self.registry.resume_root();
-            self.contexts
-                .get_mut(&AgentIdentity::root())
+            self.agents
+                .iter_mut()
+                .find(|agent| agent.identity.is_root())
                 .expect("root exists")
-                .stored
                 .history
                 .extend(root_input);
         }
@@ -207,6 +194,11 @@ pub(super) async fn prepare_agent(
         &stored.loaded_tools,
         parent.original_request.tools.is_some(),
     )?;
+    // Discovery resolves public search pairs before this private history is used for inference.
+    stored.history = match &request.input {
+        ResponsesInput::Items(items) => items.clone(),
+        ResponsesInput::Text(_) => Vec::from(&request.input),
+    };
     let ctx = RequestContext {
         multi_agent_tree: None,
         original_request: request.clone(),
@@ -261,6 +253,8 @@ pub(super) fn fork_history(history: &[InputItem], fork_turns: &str) -> ExecutorR
         .filter_map(|item| match item {
             InputItem::FunctionCallOutput(output) => Some(output.call_id.as_str()),
             InputItem::ShellCallOutput(output) => Some(output.call_id.as_str()),
+            InputItem::CustomToolCallOutput(output) => Some(output.call_id.as_str()),
+            InputItem::ToolSearchOutput(output) => Some(output.call_id.as_str()),
             _ => None,
         })
         .collect::<HashSet<_>>();
@@ -269,6 +263,8 @@ pub(super) fn fork_history(history: &[InputItem], fork_turns: &str) -> ExecutorR
         .filter_map(|item| match item {
             InputItem::FunctionCall(call) => Some(call.call_id.as_str()),
             InputItem::ShellCall(call) => Some(call.call_id.as_str()),
+            InputItem::CustomToolCall(call) => Some(call.call_id.as_str()),
+            InputItem::ToolSearchCall(call) => Some(call.call_id.as_str()),
             _ => None,
         })
         .collect::<HashSet<_>>();
@@ -277,8 +273,12 @@ pub(super) fn fork_history(history: &[InputItem], fork_turns: &str) -> ExecutorR
         .filter(|item| match item {
             InputItem::FunctionCall(call) => completed.contains(call.call_id.as_str()),
             InputItem::ShellCall(call) => completed.contains(call.call_id.as_str()),
+            InputItem::CustomToolCall(call) => completed.contains(call.call_id.as_str()),
+            InputItem::ToolSearchCall(call) => completed.contains(call.call_id.as_str()),
             InputItem::FunctionCallOutput(output) => calls.contains(output.call_id.as_str()),
             InputItem::ShellCallOutput(output) => calls.contains(output.call_id.as_str()),
+            InputItem::CustomToolCallOutput(output) => calls.contains(output.call_id.as_str()),
+            InputItem::ToolSearchOutput(output) => calls.contains(output.call_id.as_str()),
             _ => item.is_model_visible(),
         })
         .cloned()

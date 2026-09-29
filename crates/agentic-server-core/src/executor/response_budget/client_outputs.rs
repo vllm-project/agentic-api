@@ -1,9 +1,10 @@
 use super::{RETAINED_CONTAINER_OVERHEAD_BYTES, RetainedSize, opt_len, sum_retained};
 use crate::types::client_calls::ClientToolOutput;
 use crate::types::io::{
-    FunctionToolResultMessage, InputFileContent, InputImageContent, InputTextContent, ShellCallOutputContent,
-    ShellCallOutputMessage, ToolCallOutput, ToolOutputContent,
+    CustomToolCallOutputMessage, FunctionToolResultMessage, InputFileContent, InputImageContent, InputTextContent,
+    ShellCallOutputContent, ShellCallOutputMessage, ToolCallOutput, ToolOutputContent, ToolSearchOutputMessage,
 };
+use crate::utils::common::serialized_size_up_to;
 
 impl RetainedSize for InputTextContent {
     fn retained_bytes(&self) -> usize {
@@ -100,11 +101,33 @@ impl RetainedSize for ShellCallOutputMessage {
     }
 }
 
+impl RetainedSize for CustomToolCallOutputMessage {
+    fn retained_bytes(&self) -> usize {
+        RETAINED_CONTAINER_OVERHEAD_BYTES
+            + self.call_id.len()
+            + opt_len(self.name.as_ref())
+            + self.output.retained_bytes()
+    }
+}
+
+impl RetainedSize for ToolSearchOutputMessage {
+    fn retained_bytes(&self) -> usize {
+        // Count the catalog without allocating a second JSON representation.
+        serialized_size_up_to(self, usize::MAX)
+            .ok()
+            .flatten()
+            .unwrap_or(usize::MAX)
+            .saturating_add(RETAINED_CONTAINER_OVERHEAD_BYTES)
+    }
+}
+
 impl RetainedSize for ClientToolOutput {
     fn retained_bytes(&self) -> usize {
         match self {
             Self::Function(output) => output.retained_bytes(),
             Self::Shell(output) => output.retained_bytes(),
+            Self::Custom(output) => output.retained_bytes(),
+            Self::ToolSearch(output) => output.retained_bytes(),
         }
     }
 }

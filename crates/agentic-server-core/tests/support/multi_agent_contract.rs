@@ -5,8 +5,10 @@ use std::io::Read;
 use std::path::Path;
 
 use agentic_core::events::{SSEEventType, normalize_sse_line};
+use agentic_core::types::client_calls::ClientCallKind;
 use agentic_core::types::io::{InputItem, MessagePhase, MultiAgentAction, OutputItem};
 use agentic_core::types::request_response::ResponsePayload;
+use agentic_core::types::tools::{CodexNamespaceMember, ResponsesTool, ToolSearchStatus};
 use serde_json::Value;
 
 use crate::support::{Cassette, Turn, responses_turns};
@@ -39,6 +41,8 @@ struct RecordedExchange {
 /// providers. Identity relationships within each trace must still be exact.
 pub struct ComparisonPolicy {
     pub require_reference_tool_kinds: bool,
+    /// Requested independent tasks, excluding optional retries in the reference.
+    pub minimum_delegated_agents: Option<usize>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -99,6 +103,7 @@ impl RecordedSession {
 
     fn validate(&self) -> Result<(), ContractMismatch> {
         let mut pending = HashMap::new();
+        let mut client_ids = HashSet::new();
         let mut previous = None;
         for exchange in &self.exchanges {
             if exchange.previous_response_id.as_deref() != previous {
@@ -106,8 +111,15 @@ impl RecordedSession {
             }
             for input in &exchange.input {
                 let (id, kind) = match input {
-                    InputItem::FunctionCallOutput(output) => (&output.call_id, "function"),
-                    InputItem::ShellCallOutput(output) => (&output.call_id, "shell"),
+                    InputItem::FunctionCallOutput(output) => (&output.call_id, ClientCallKind::Function),
+                    InputItem::ShellCallOutput(output) => (&output.call_id, ClientCallKind::Shell),
+                    InputItem::CustomToolCallOutput(output) => (&output.call_id, ClientCallKind::Custom),
+                    InputItem::ToolSearchOutput(output) => {
+                        if output.status != ToolSearchStatus::Completed {
+                            return Err(mismatch("client tool-search output is not completed"));
+                        }
+                        (&output.call_id, ClientCallKind::ToolSearch)
+                    }
                     _ => continue,
                 };
                 if pending.remove(id) != Some(kind) {
@@ -129,6 +141,12 @@ impl RecordedSession {
                 if agent.is_some_and(|name| name != "/root" && !name.starts_with("/root/")) {
                     return Err(mismatch("invalid agent ancestry"));
                 }
+                if let Some((id, kind)) = client_call(item) {
+                    if id.is_empty() || agent.is_none() || !client_ids.insert(id) {
+                        return Err(mismatch("invalid client-call owner or reused ID"));
+                    }
+                    pending.insert(id.to_owned(), kind);
+                }
                 match item {
                     OutputItem::MultiAgentCall(call) => {
                         if agent.is_none() || collaboration.insert(&call.call_id, (call.action, agent)).is_some() {
@@ -138,16 +156,6 @@ impl RecordedSession {
                     OutputItem::MultiAgentCallOutput(output) => {
                         if collaboration.remove(output.call_id.as_str()) != Some((output.action, agent)) {
                             return Err(mismatch("unmatched collaboration output"));
-                        }
-                    }
-                    OutputItem::FunctionCall(call) => {
-                        if agent.is_none() || pending.insert(call.call_id.clone(), "function").is_some() {
-                            return Err(mismatch("invalid function-call owner or ID"));
-                        }
-                    }
-                    OutputItem::ShellCall(call) => {
-                        if agent.is_none() || pending.insert(call.call_id.clone(), "shell").is_some() {
-                            return Err(mismatch("invalid shell-call owner or ID"));
                         }
                     }
                     OutputItem::AgentMessage(message) if agent != Some(message.recipient.as_str()) => {
@@ -163,6 +171,9 @@ impl RecordedSession {
         }
         if self.exchanges.is_empty() {
             return Err(mismatch("no Responses exchanges"));
+        }
+        if !pending.is_empty() {
+            return Err(mismatch("session ends with unresolved client calls"));
         }
         Ok(())
     }
@@ -276,13 +287,15 @@ pub fn assert_multi_agent_contract(
     if gateway_limit != reference_limit {
         return Err(mismatch("max_concurrent_subagents differs from reference"));
     }
-    let required_agents = reference
-        .delegated_agents()
-        .len()
-        .min(usize::try_from(reference_limit).unwrap_or(usize::MAX));
-    if gateway.delegated_agents().len() < required_agents {
+    let required_agents = policy.minimum_delegated_agents.unwrap_or_else(|| {
+        reference
+            .delegated_agents()
+            .len()
+            .min(usize::try_from(reference_limit).unwrap_or(usize::MAX))
+    });
+    if reference.delegated_agents().len() < required_agents || gateway.delegated_agents().len() < required_agents {
         return Err(mismatch(
-            "gateway delegated fewer independent child tasks than reference",
+            "recording delegated fewer independent child tasks than requested",
         ));
     }
     for exchange in &gateway.exchanges {
@@ -305,6 +318,8 @@ pub fn assert_multi_agent_contract(
             .collect::<HashSet<_>>();
         for kind in [
             "function_call",
+            "custom_tool_call",
+            "tool_search_call",
             "shell_call",
             "web_search_call",
             "mcp_call",
@@ -322,11 +337,7 @@ pub fn assert_multi_agent_contract(
         .last()
         .ok_or_else(|| mismatch("empty gateway session"))?
         .response;
-    if last
-        .output
-        .iter()
-        .any(|item| matches!(item, OutputItem::FunctionCall(_) | OutputItem::ShellCall(_)))
-    {
+    if last.output.iter().any(|item| client_call(item).is_some()) {
         return Err(mismatch("gateway session ends with pending client calls"));
     }
     if !last.output.iter().any(|item| {
@@ -337,4 +348,66 @@ pub fn assert_multi_agent_contract(
         return Err(mismatch("gateway session has no root final answer"));
     }
     Ok(())
+}
+
+fn client_call(item: &OutputItem) -> Option<(&str, ClientCallKind)> {
+    match item {
+        OutputItem::FunctionCall(call) => Some((&call.call_id, ClientCallKind::Function)),
+        OutputItem::ShellCall(call) => Some((&call.call_id, ClientCallKind::Shell)),
+        OutputItem::CustomToolCall(call) => Some((&call.call_id, ClientCallKind::Custom)),
+        OutputItem::ToolSearchCall(call) if call.status == ToolSearchStatus::Completed => {
+            Some((&call.call_id, ClientCallKind::ToolSearch))
+        }
+        _ => None,
+    }
+}
+
+impl RecordedSession {
+    /// Check the scenario's public names and discovery results, allowing different
+    /// agents, call counts and model text between providers.
+    pub fn assert_client_owned_tools(&self) -> Result<(), ContractMismatch> {
+        let mut discovered = HashSet::new();
+        let mut called = HashSet::new();
+        let mut custom = false;
+        for exchange in &self.exchanges {
+            for input in &exchange.input {
+                if let InputItem::ToolSearchOutput(output) = input {
+                    for tool in &output.tools {
+                        match tool {
+                            ResponsesTool::Function(function) => {
+                                discovered.insert((None, function.name.as_str()));
+                            }
+                            ResponsesTool::Namespace(namespace) => {
+                                for member in &namespace.tools {
+                                    if let CodexNamespaceMember::Function(function) = member {
+                                        discovered.insert((Some(namespace.name.as_str()), function.name.as_str()));
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            for item in &exchange.response.output {
+                match item {
+                    OutputItem::FunctionCall(call) => {
+                        let identity = (call.namespace.as_deref(), call.name.as_str());
+                        if !discovered.contains(&identity) {
+                            return Err(mismatch("function was not returned by earlier tool discovery"));
+                        }
+                        called.insert(identity);
+                    }
+                    OutputItem::CustomToolCall(call) if call.name == "agentic_raw_echo" => custom = true,
+                    _ => {}
+                }
+            }
+        }
+        if !custom || !called.contains(&(None, "get_weather")) || !called.contains(&(Some("travel"), "get_timezone")) {
+            return Err(mismatch(
+                "client-owned scenario must exercise weather, travel.get_timezone and custom echo",
+            ));
+        }
+        Ok(())
+    }
 }
