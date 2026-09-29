@@ -60,8 +60,9 @@ variables.
 
 For a lightweight wrapper around an already-running gateway, use `scripts/agentic-claude.sh`. It reads
 `GET /v1/models` to select or validate `AGENTIC_MODEL`, records the server-advertised context limit when available,
-and writes the same canonical-model override to
-`${AGENTIC_CLAUDE_CONFIG_DIR:-/tmp/claude-agentic-3020}/agentic-settings.json`:
+and writes the same canonical-model override. It requires `curl` and `jq`. By default, each invocation creates an
+isolated temporary Claude configuration and removes it when Claude exits; set `AGENTIC_CLAUDE_CONFIG_DIR` to preserve
+configuration and session state between invocations:
 
 ```console
 AGENTIC_GATEWAY_URL=http://127.0.0.1:9000 \

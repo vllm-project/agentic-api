@@ -56,6 +56,7 @@ cat >"$fake_bin/claude" <<'EOF'
   printf 'ANTHROPIC_BASE_URL=%s\n' "${ANTHROPIC_BASE_URL:-}"
   printf 'ANTHROPIC_MODEL=%s\n' "${ANTHROPIC_MODEL:-}"
   printf 'ANTHROPIC_DEFAULT_OPUS_MODEL=%s\n' "${ANTHROPIC_DEFAULT_OPUS_MODEL:-}"
+  printf 'CLAUDE_CONFIG_DIR=%s\n' "${CLAUDE_CONFIG_DIR:-}"
   printf 'CLAUDE_CODE_EFFORT_LEVEL=%s\n' "${CLAUDE_CODE_EFFORT_LEVEL:-}"
   printf 'CLAUDE_CODE_MAX_CONTEXT_TOKENS=%s\n' "${CLAUDE_CODE_MAX_CONTEXT_TOKENS:-}"
   printf 'ANTHROPIC_API_KEY=%s\n' "${ANTHROPIC_API_KEY:-}"
@@ -82,8 +83,16 @@ EOF
 
 cat >"$fake_bin/curl" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' "$@" >"$CAPTURE_DIR/curl.txt"
 if [[ "$*" != *'client_version='* ]]; then
+  printf '%s\n' "$@" >"$CAPTURE_DIR/claude-curl.txt"
+  if [[ "${MODEL_CATALOG_SHAPE:-data}" == models ]]; then
+    cat <<'JSON'
+{
+  "models": [{"slug": "agentic-api", "context_window": 49152}]
+}
+JSON
+    exit 0
+  fi
   cat <<'JSON'
 {
   "object": "list",
@@ -92,6 +101,7 @@ if [[ "$*" != *'client_version='* ]]; then
 JSON
   exit 0
 fi
+printf '%s\n' "$@" >"$CAPTURE_DIR/curl.txt"
 cat <<'JSON'
 {
   "models": [{
@@ -165,6 +175,31 @@ assert_file_contains "$capture_dir/claude.txt" 'manual'
 assert_file_excludes "$capture_dir/claude.txt" 'CLAUDE_CODE_USE_VERTEX='
 assert_file_excludes "$capture_dir/claude.txt" 'ANTHROPIC_VERTEX_PROJECT_ID='
 assert_file_contains "$claude_home/agentic-settings.json" '"claude-sonnet-4-5-20250929": "agentic-api"'
+
+claude_models_home="$test_root/claude-models-home"
+PATH="$fake_bin:$PATH" CAPTURE_DIR="$capture_dir" CLAUDE_BIN="$fake_bin/claude" \
+  AGENTIC_CLAUDE_CONFIG_DIR="$claude_models_home" MODEL_CATALOG_SHAPE=models \
+  "$repo_root/scripts/agentic-claude.sh" >/dev/null
+assert_file_contains "$capture_dir/claude.txt" 'CLAUDE_CODE_MAX_CONTEXT_TOKENS=49152'
+assert_file_contains "$claude_models_home/agentic-settings.json" '"claude-sonnet-4-5-20250929": "agentic-api"'
+
+default_config_one=""
+PATH="$fake_bin:$PATH" CAPTURE_DIR="$capture_dir" CLAUDE_BIN="$fake_bin/claude" \
+  "$repo_root/scripts/agentic-claude.sh" >/dev/null
+default_config_one="$(sed -n 's/^CLAUDE_CONFIG_DIR=//p' "$capture_dir/claude.txt")"
+[[ ! -e "$default_config_one" ]] || fail "temporary Claude config directory was not removed: $default_config_one"
+
+default_config_two=""
+PATH="$fake_bin:$PATH" CAPTURE_DIR="$capture_dir" CLAUDE_BIN="$fake_bin/claude" \
+  "$repo_root/scripts/agentic-claude.sh" >/dev/null
+default_config_two="$(sed -n 's/^CLAUDE_CONFIG_DIR=//p' "$capture_dir/claude.txt")"
+[[ "$default_config_one" != "$default_config_two" ]] || fail 'default Claude config directories must be unique per run'
+
+PATH="$fake_bin:$PATH" CAPTURE_DIR="$capture_dir" CLAUDE_BIN="$fake_bin/claude" \
+  AGENTIC_CLAUDE_CONFIG_DIR="$claude_home" AGENTIC_GATEWAY_API_KEY=secret-token \
+  "$repo_root/scripts/agentic-claude.sh" >/dev/null
+assert_file_contains "$capture_dir/claude-curl.txt" '--config'
+assert_file_excludes "$capture_dir/claude-curl.txt" 'secret-token'
 
 codex_home="$test_root/codex-home"
 PATH="$fake_bin:$PATH" CAPTURE_DIR="$capture_dir" CODEX_BIN="$fake_bin/codex" \
