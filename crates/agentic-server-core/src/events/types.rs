@@ -4,7 +4,7 @@ pub use item::SSEItemType;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::types::io::{AgentAttribution, AgentMessageContent, OutputItem, OutputMessageContent, ResponseUsage};
+use crate::types::io::{AgentAttribution, AgentMessageContent, OutputItem, ResponseUsage};
 
 /// Classification of SSE event types from the Responses API.
 ///
@@ -245,22 +245,13 @@ pub enum EventPayload {
         item: Value,
     },
 
-    /// A completed encrypted part of an agent message. This protocol permits
-    /// completion without a corresponding content-part-added event.
-    AgentMessageContentDone {
+    /// A completed content part. The accumulator resolves its owning message or
+    /// `agent_message` by output index and item ID, not by the content part's type.
+    ContentPartDone {
         item_id: String,
         output_index: Option<u32>,
         content_index: u32,
         part: AgentMessageContent,
-    },
-
-    /// A completed message part, including forked user input without a prior
-    /// part-added event. Retains the part kind and its metadata.
-    MessageContentDone {
-        item_id: String,
-        output_index: Option<u32>,
-        content_index: u32,
-        part: OutputMessageContent,
     },
 
     /// `response.output_text.delta`
@@ -371,8 +362,7 @@ impl EventFrame {
         match &self.payload {
             EventPayload::OutputItemAdded { output_index, .. }
             | EventPayload::OutputItemDone { output_index, .. }
-            | EventPayload::AgentMessageContentDone { output_index, .. }
-            | EventPayload::MessageContentDone { output_index, .. }
+            | EventPayload::ContentPartDone { output_index, .. }
             | EventPayload::TextDelta { output_index, .. }
             | EventPayload::TextDone { output_index, .. }
             | EventPayload::FunctionCallArgsDelta { output_index, .. }
@@ -393,8 +383,7 @@ impl EventFrame {
         match &mut self.payload {
             EventPayload::OutputItemAdded { output_index, .. }
             | EventPayload::OutputItemDone { output_index, .. }
-            | EventPayload::AgentMessageContentDone { output_index, .. }
-            | EventPayload::MessageContentDone { output_index, .. }
+            | EventPayload::ContentPartDone { output_index, .. }
             | EventPayload::TextDelta { output_index, .. }
             | EventPayload::TextDone { output_index, .. }
             | EventPayload::FunctionCallArgsDelta { output_index, .. }

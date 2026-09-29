@@ -6,7 +6,7 @@ use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::response_budget::{RETAINED_CONTAINER_OVERHEAD_BYTES, RetainedAccount, RetainedSize};
 use crate::types::event::MessageStatus;
 use crate::types::io::{
-    ApplyDone, OutputItem, OutputMessage, OutputMessageContent, OutputTextContent, ReasoningOutput,
+    AgentMessageContent, ApplyDone, OutputItem, OutputMessage, OutputMessageContent, OutputTextContent, ReasoningOutput,
 };
 use indexmap::IndexMap;
 use std::collections::HashMap;
@@ -134,15 +134,20 @@ impl MessageState {
                     retained.clone_from(text);
                 }
             }
-            EventPayload::MessageContentDone {
+            EventPayload::ContentPartDone {
                 content_index, part, ..
             } => {
+                let part = match part {
+                    AgentMessageContent::InputText(part) => OutputMessageContent::InputText(part.clone()),
+                    AgentMessageContent::OutputText(part) => OutputMessageContent::OutputText(part.clone()),
+                    _ => return Err(invalid_message("unsupported content part for message item")),
+                };
                 let previous = self.parts.get(content_index);
                 match previous {
                     Some(MessagePart::Completed(_)) => {
                         return Err(invalid_message("message repeats a completed content part"));
                     }
-                    Some(MessagePart::Streaming { text, .. }) if !matches!(part, OutputMessageContent::OutputText(done) if done.text == *text) =>
+                    Some(MessagePart::Streaming { text, .. }) if !matches!(&part, OutputMessageContent::OutputText(done) if done.text == *text) =>
                     {
                         return Err(invalid_message("completed message part contradicts output text"));
                     }
@@ -150,7 +155,7 @@ impl MessageState {
                 }
                 let previous_bytes = previous.map_or(0, RetainedSize::retained_bytes);
                 account.charge(budget, part.retained_bytes().saturating_sub(previous_bytes))?;
-                self.parts.insert(*content_index, MessagePart::Completed(part.clone()));
+                self.parts.insert(*content_index, MessagePart::Completed(part));
             }
             _ => {}
         }

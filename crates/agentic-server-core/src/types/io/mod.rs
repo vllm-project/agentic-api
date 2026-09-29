@@ -12,8 +12,9 @@ pub use input::{
     InputToolSearchCall, RefusalContent, ResponsesInput, ToolCallOutput, ToolOutputContent, ToolSearchOutputMessage,
 };
 pub use multi_agent::{
-    AgentAttribution, AgentMessage, AgentMessageContent, MultiAgentAction, MultiAgentCall, MultiAgentCallOutput,
-    MultiAgentCallOutputContent, MultiAgentConfig,
+    AgentAttribution, AgentMessage, AgentMessageContent, InputAgentMessage, InputMultiAgentCall,
+    InputMultiAgentCallOutput, MultiAgentAction, MultiAgentCall, MultiAgentCallOutput, MultiAgentCallOutputContent,
+    MultiAgentConfig,
 };
 pub use output::{
     ApplyDone, CustomToolCall, FunctionToolCall, GatewayCallStatus, McpCall, McpCallError, McpCallStatus, McpListTool,

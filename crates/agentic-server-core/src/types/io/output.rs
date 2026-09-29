@@ -1065,9 +1065,9 @@ impl OutputItem {
             Self::ShellCall(call) => Some(InputItem::FunctionCall(call.clone().into())),
             Self::McpListTools(list_tools) => Some(InputItem::McpListTools(list_tools.clone())),
             Self::Compaction(item) => Some(InputItem::Compaction(item.clone())),
-            Self::MultiAgentCall(item) => Some(InputItem::MultiAgentCall(item.clone())),
-            Self::MultiAgentCallOutput(item) => Some(InputItem::MultiAgentCallOutput(item.clone())),
-            Self::AgentMessage(item) => Some(InputItem::AgentMessage(item.clone())),
+            Self::MultiAgentCall(item) => Some(InputItem::MultiAgentCall(item.clone().into())),
+            Self::MultiAgentCallOutput(item) => Some(InputItem::MultiAgentCallOutput(item.clone().into())),
+            Self::AgentMessage(item) => Some(InputItem::AgentMessage(item.clone().into())),
             Self::WebSearchCall(_) | Self::McpCall(_) | Self::Unknown => None,
         }
     }

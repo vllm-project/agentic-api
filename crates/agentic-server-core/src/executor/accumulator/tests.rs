@@ -452,6 +452,96 @@ fn agent_message_completed_parts_reject_duplicates_and_conflicting_snapshots() {
     }
 }
 
+#[test]
+fn agent_message_parts_are_routed_by_owner_and_validate_completion() {
+    use serde_json::json;
+    for part in [
+        json!({"type":"input_text","text":"task"}),
+        json!({"type":"output_text","text":"answer","annotations":[],"logprobs":[]}),
+        json!({"type":"text","text":"text"}),
+        json!({"type":"summary_text","text":"summary"}),
+        json!({"type":"reasoning_text","text":"reasoning"}),
+        json!({"type":"refusal","refusal":"refused"}),
+        json!({"type":"input_image","image_url":"data:image/png;base64,AAAA","detail":"auto"}),
+        json!({"type":"computer_screenshot","file_id":"file_1","detail":"high"}),
+        json!({"type":"input_file","file_id":"file_1"}),
+        json!({"type":"encrypted_content","encrypted_content":"opaque"}),
+    ] {
+        for validation in [Validation::Strict, Validation::Lenient] {
+            let mut item = collaboration_items()[2].clone();
+            item["content"] = json!([part]);
+            let mut acc = collaboration_accumulator(validation);
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type":"response.output_item.added",
+                "output_index":0,"item":collaboration_opening(item.clone())}),
+            )
+            .unwrap();
+            let done = json!({"type":"response.content_part.done","output_index":0,
+                "item_id":item["id"],"content_index":0,"part":part});
+            let mut wrong_id = done.clone();
+            wrong_id["item_id"] = json!("other");
+            assert!(feed_collaboration_event(&mut acc, &wrong_id).is_err());
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type":"response.content_part.added",
+                "output_index":0,"item_id":item["id"],"content_index":0,"part":part}),
+            )
+            .unwrap();
+            feed_collaboration_event(&mut acc, &done).unwrap();
+            assert!(feed_collaboration_event(&mut acc, &done).is_err());
+            let mut conflict = item.clone();
+            conflict["content"] = json!([]);
+            assert!(
+                feed_collaboration_event(
+                    &mut acc,
+                    &json!({"type":"response.output_item.done",
+                "output_index":0,"item":conflict})
+                )
+                .is_err()
+            );
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type":"response.output_item.done",
+                "output_index":0,"item":item}),
+            )
+            .unwrap();
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type":"response.completed",
+                "response":{"id":"resp_test","status":"completed","output":[item]}}),
+            )
+            .unwrap();
+            assert_eq!(
+                serde_json::to_value(acc.finish("model", None, None).unwrap().output).unwrap(),
+                json!([item])
+            );
+        }
+    }
+}
+
+#[test]
+fn shared_content_events_cannot_target_a_function_call() {
+    use serde_json::json;
+    let mut acc = collaboration_accumulator(Validation::Strict);
+    feed_collaboration_event(
+        &mut acc,
+        &json!({"type":"response.output_item.added","output_index":0,
+        "item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"f","arguments":""}}),
+    )
+    .unwrap();
+    for event in ["response.content_part.added", "response.content_part.done"] {
+        assert!(
+            feed_collaboration_event(
+                &mut acc,
+                &json!({"type":event,"output_index":0,
+            "item_id":"fc_1","content_index":0,"part":{"type":"input_text","text":"x"}})
+            )
+            .is_err()
+        );
+    }
+}
+
 fn completed_item_late_event_cases() -> Vec<(serde_json::Value, Vec<serde_json::Value>)> {
     use serde_json::json;
 

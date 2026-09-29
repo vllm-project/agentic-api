@@ -5,7 +5,7 @@ use crate::executor::response_budget::{RetainedAccount, RetainedSize};
 use crate::types::io::{AgentMessage, AgentMessageContent};
 use indexmap::IndexMap;
 
-/// Encrypted parts have a completed-only lifecycle. Keep their observed indexes
+/// Content parts may complete without an added event. Keep their observed indexes
 /// until item completion so the authoritative snapshot cannot contradict them.
 #[derive(Clone)]
 pub(in crate::executor::accumulator) struct AgentMessageState {
@@ -27,7 +27,7 @@ impl AgentMessageState {
         account: &mut RetainedAccount,
         budget: Budget<'_>,
     ) -> ExecutorResult<()> {
-        let EventPayload::AgentMessageContentDone {
+        let EventPayload::ContentPartDone {
             content_index, part, ..
         } = payload
         else {
