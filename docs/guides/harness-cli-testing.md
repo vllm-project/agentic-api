@@ -37,6 +37,41 @@ PNG, and verify that the same attachment is absent with an explicit text-only ca
 CLI and gateway, without contacting a live model or claiming fresh vision inference. Run the same checks locally with `bash scripts/claude-code-smoke.sh` and
 `bash scripts/codex-smoke.sh` after building both binaries with `cargo build -p agentic-server --bins`.
 
+## Claude Code with a self-hosted model
+
+Do not start Claude Code directly with a self-hosted model ID such as `zai-org/GLM-5.2-FP8`. Claude Code validates
+the selected model against its own catalog before it sends a request, so it reports an `unrecognized_model` error for
+IDs it does not recognize. Updating Claude Code alone does not make an arbitrary served model a catalog entry.
+
+Use the attach command for an existing Agentic API gateway:
+
+```console
+agentic harness claude \
+  --gateway-url http://127.0.0.1:9000 \
+  --model zai-org/GLM-5.2-FP8 \
+  -- -p "summarize the files in this directory"
+```
+
+For a locally started gateway, use `agentic run claude --upstream <vLLM URL> --model <served model>` instead. Both
+commands generate a private settings file that maps Claude Code's canonical
+`claude-sonnet-4-5-20250929` identifier to the selected served model, then launch Claude with the canonical
+identifier. They also isolate Claude state from the user's normal configuration and remove cloud-provider routing
+variables.
+
+For a lightweight wrapper around an already-running gateway, use `scripts/agentic-claude.sh`. It reads
+`GET /v1/models` to select or validate `AGENTIC_MODEL`, records the server-advertised context limit when available,
+and writes the same canonical-model override to
+`${AGENTIC_CLAUDE_CONFIG_DIR:-/tmp/claude-agentic-3020}/agentic-settings.json`:
+
+```console
+AGENTIC_GATEWAY_URL=http://127.0.0.1:9000 \
+AGENTIC_MODEL=zai-org/GLM-5.2-FP8 \
+bash scripts/agentic-claude.sh -p "summarize the files in this directory"
+```
+
+Set `AGENTIC_GATEWAY_API_KEY` when the gateway requires authentication; the wrapper uses it for both model discovery
+and Claude Code's gateway requests.
+
 ## CLI behavior worth knowing
 
 | Behavior | Detail |

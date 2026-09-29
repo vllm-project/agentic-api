@@ -108,8 +108,8 @@ nav:
     - Python Launcher (agentic-api): reference/python-cli.md
   - Guides:
     - Python Installation: guides/python-installation.md
+    - Claude Code with self-hosted models: guides/harness-cli-testing.md
     - Responses Compaction: guides/responses-compaction.md
-    - Harness CLI Testing: guides/harness-cli-testing.md
     - Codex Desktop: guides/codex-desktop.md
     - NVIDIA Dynamo Upstream: guides/dynamo-upstream.md
     - SGLang Upstream: guides/sglang-upstream.md

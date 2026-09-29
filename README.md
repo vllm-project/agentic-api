@@ -111,6 +111,9 @@ model the upstream lists at `/v1/models`; pass `--model` to choose a different o
   --model Qwen/Qwen3-30B-A3B-FP8
 ```
 
+For self-hosted Claude Code setup—including models that Claude Code does not recognize in its own catalog—see
+[Configure Claude Code with a self-hosted model](docs/guides/harness-cli-testing.md#claude-code-with-a-self-hosted-model).
+
 SQLite is the default storage backend. Use PostgreSQL explicitly when the session is shared:
 
 ```bash
@@ -182,7 +185,8 @@ Qwen3.8-27B's vLLM chat template accepts `low`, `medium`, and `xhigh` reasoning 
 default `high`. Override the pinned value with `AGENTIC_CLAUDE_EFFORT`. See the [Claude Code effort
 configuration](https://code.claude.com/docs/en/model-config) and [vLLM reasoning output
 documentation](https://docs.vllm.ai/en/latest/features/reasoning_outputs/) for the underlying behavior, and
-[Harness CLI Testing](docs/guides/harness-cli-testing.md) for an end-to-end verification checklist.
+[Harness CLI Testing](docs/guides/harness-cli-testing.md) for an end-to-end verification checklist and the
+[self-hosted Claude Code configuration](docs/guides/harness-cli-testing.md#claude-code-with-a-self-hosted-model).
 
 **1. Serve a model with vLLM.** Any recipe from [recipes.vllm.ai](https://recipes.vllm.ai) works:
 

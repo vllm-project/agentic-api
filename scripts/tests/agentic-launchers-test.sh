@@ -57,6 +57,7 @@ cat >"$fake_bin/claude" <<'EOF'
   printf 'ANTHROPIC_MODEL=%s\n' "${ANTHROPIC_MODEL:-}"
   printf 'ANTHROPIC_DEFAULT_OPUS_MODEL=%s\n' "${ANTHROPIC_DEFAULT_OPUS_MODEL:-}"
   printf 'CLAUDE_CODE_EFFORT_LEVEL=%s\n' "${CLAUDE_CODE_EFFORT_LEVEL:-}"
+  printf 'CLAUDE_CODE_MAX_CONTEXT_TOKENS=%s\n' "${CLAUDE_CODE_MAX_CONTEXT_TOKENS:-}"
   printf 'ANTHROPIC_API_KEY=%s\n' "${ANTHROPIC_API_KEY:-}"
   printf 'ANTHROPIC_AUTH_TOKEN=%s\n' "${ANTHROPIC_AUTH_TOKEN:-}"
   if [[ -n "${CLAUDE_CODE_USE_VERTEX+x}" ]]; then printf 'CLAUDE_CODE_USE_VERTEX=set\n'; fi
@@ -82,6 +83,15 @@ EOF
 cat >"$fake_bin/curl" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$@" >"$CAPTURE_DIR/curl.txt"
+if [[ "$*" != *'client_version='* ]]; then
+  cat <<'JSON'
+{
+  "object": "list",
+  "data": [{"id": "agentic-api", "max_model_len": 65536}]
+}
+JSON
+  exit 0
+fi
 cat <<'JSON'
 {
   "models": [{
@@ -133,7 +143,9 @@ assert_file_contains "$capture_dir/gateway.txt" '--bin'
 assert_file_contains "$capture_dir/gateway.txt" 'agentic-server'
 assert_file_contains "$capture_dir/gateway.txt" 'http://127.0.0.1:8000/v1'
 
+claude_home="$test_root/claude-home"
 PATH="$fake_bin:$PATH" CAPTURE_DIR="$capture_dir" CLAUDE_BIN="$fake_bin/claude" \
+  AGENTIC_CLAUDE_CONFIG_DIR="$claude_home" \
   CLAUDE_CODE_USE_VERTEX=1 ANTHROPIC_VERTEX_PROJECT_ID=test-project ANTHROPIC_API_KEY= \
   "$repo_root/scripts/agentic-claude.sh" >/dev/null
 
@@ -141,15 +153,18 @@ assert_file_contains "$capture_dir/claude.txt" 'ANTHROPIC_BASE_URL=http://127.0.
 assert_file_contains "$capture_dir/claude.txt" 'ANTHROPIC_MODEL=agentic-api'
 assert_file_contains "$capture_dir/claude.txt" 'ANTHROPIC_DEFAULT_OPUS_MODEL=agentic-api'
 assert_file_contains "$capture_dir/claude.txt" 'CLAUDE_CODE_EFFORT_LEVEL=medium'
+assert_file_contains "$capture_dir/claude.txt" 'CLAUDE_CODE_MAX_CONTEXT_TOKENS=65536'
 assert_file_contains "$capture_dir/claude.txt" 'ANTHROPIC_API_KEY=demo'
 assert_file_contains "$capture_dir/claude.txt" 'ANTHROPIC_AUTH_TOKEN=demo'
-assert_file_contains "$capture_dir/claude.txt" '--bare'
+assert_file_contains "$capture_dir/claude.txt" 'claude-sonnet-4-5-20250929'
+assert_file_contains "$capture_dir/claude.txt" '--settings'
 assert_file_excludes "$capture_dir/claude.txt" '--dangerously-skip-permissions'
 assert_file_contains "$capture_dir/claude.txt" '--effort'
 assert_file_contains "$capture_dir/claude.txt" 'medium'
 assert_file_contains "$capture_dir/claude.txt" 'manual'
 assert_file_excludes "$capture_dir/claude.txt" 'CLAUDE_CODE_USE_VERTEX='
 assert_file_excludes "$capture_dir/claude.txt" 'ANTHROPIC_VERTEX_PROJECT_ID='
+assert_file_contains "$claude_home/agentic-settings.json" '"claude-sonnet-4-5-20250929": "agentic-api"'
 
 codex_home="$test_root/codex-home"
 PATH="$fake_bin:$PATH" CAPTURE_DIR="$capture_dir" CODEX_BIN="$fake_bin/codex" \
@@ -172,6 +187,7 @@ assert_catalog_modalities "$codex_home/model_catalog.json" '["text","image"]'
 assert_file_contains "$capture_dir/curl.txt" 'http://127.0.0.1:3020/v1/models?client_version=0.148.0'
 
 PATH="$fake_bin:$PATH" CAPTURE_DIR="$capture_dir" AGENTIC_YOLO=1 CLAUDE_BIN="$fake_bin/claude" \
+  AGENTIC_CLAUDE_CONFIG_DIR="$claude_home" \
   "$repo_root/scripts/agentic-claude.sh" >/dev/null
 assert_file_contains "$capture_dir/claude.txt" '--dangerously-skip-permissions'
 
