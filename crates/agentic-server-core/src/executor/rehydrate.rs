@@ -235,6 +235,11 @@ fn validate_multi_agent_request(request: &RequestPayload, in_session: bool) -> E
             "max_concurrent_subagents must be positive".into(),
         ));
     }
+    if request.max_tool_calls.is_some() {
+        return Err(ExecutorError::InvalidRequest(
+            "max_tool_calls is not supported with multi_agent".into(),
+        ));
+    }
     if request
         .reasoning
         .as_ref()
@@ -454,6 +459,9 @@ mod tests {
     use crate::storage::{
         ConversationStore, ConversationVersion, InOutItem, ResponseMetadata, ResponseStore, create_pool_with_schema,
     };
+    use crate::types::agent::{AgentIdentity, AgentTurnId};
+    use crate::types::agent_tree::{AgentState, StoredAgent, StoredTreeSnapshot};
+    use crate::types::io::MultiAgentConfig;
     use crate::types::io::output::{McpListTools, OutputItem};
     use crate::types::request_response::RequestPayload;
 
@@ -693,6 +701,103 @@ mod tests {
         request.multi_agent = serde_json::from_value(serde_json::json!({"enabled":false})).unwrap();
         validate_multi_agent_request(&request, false).unwrap();
         request.multi_agent = serde_json::from_value(serde_json::json!({"enabled":true})).unwrap();
+        validate_multi_agent_request(&request, false).unwrap();
+    }
+
+    #[tokio::test]
+    async fn multi_agent_max_tool_calls_is_rejected_before_history_access() {
+        let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
+        for stream in [false, true] {
+            for limit in [0, 5] {
+                for previous in [None, Some("resp_missing")] {
+                    let request: RequestPayload = serde_json::from_value(serde_json::json!({
+                        "model": "test", "input": "hello", "stream": stream,
+                        "previous_response_id": previous,
+                        "multi_agent": {"enabled": true}, "max_tool_calls": limit
+                    }))
+                    .unwrap();
+                    let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
+                    assert!(matches!(error, ExecutorError::InvalidRequest(message)
+                        if message == "max_tool_calls is not supported with multi_agent"));
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn inherited_multi_agent_rejects_max_tool_calls() {
+        let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
+        let response_store = ResponseStore::new(pool.clone());
+        let conversation_store = ConversationStore::new(pool);
+        let conversation = conversation_store.create().await.unwrap();
+        let metadata = ResponseMetadata {
+            multi_agent_tree: Some(StoredTreeSnapshot {
+                version: 1,
+                config: MultiAgentConfig {
+                    enabled: true,
+                    max_concurrent_subagents: Some(3),
+                },
+                agents: vec![StoredAgent {
+                    identity: AgentIdentity::root(),
+                    parent: None,
+                    turn: AgentTurnId::new(),
+                    state: AgentState::Idle,
+                    mailbox: Vec::new(),
+                    history: Vec::new(),
+                    loaded_tools: Vec::new(),
+                    last_task: String::new(),
+                    final_answer: None,
+                    rounds: 0,
+                    wait: None,
+                }],
+                client_calls: Vec::new(),
+            }),
+            ..Default::default()
+        };
+        response_store
+            .persist("resp_tree", None, Vec::new(), &metadata)
+            .await
+            .unwrap();
+        conversation_store
+            .persist(
+                &conversation.conversation_id,
+                "resp_conversation_tree",
+                None,
+                Vec::new(),
+                &metadata,
+            )
+            .await
+            .unwrap();
+        let exec_ctx = execution_context(conversation_store, response_store);
+        for stream in [false, true] {
+            for (conversation_id, previous) in [
+                (None, Some("resp_tree")),
+                (Some(conversation.conversation_id.as_str()), None),
+            ] {
+                // No explicit multi_agent: admission must check again after restoring the tree.
+                let mut request = request(conversation_id, previous);
+                request.stream = stream;
+                request.max_tool_calls = Some(5);
+                let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
+                assert!(matches!(error, ExecutorError::InvalidRequest(message)
+                    if message == "max_tool_calls is not supported with multi_agent"));
+            }
+        }
+    }
+
+    #[test]
+    fn max_tool_calls_restriction_only_applies_to_enabled_multi_agent() {
+        for config in [serde_json::Value::Null, serde_json::json!({"enabled": false})] {
+            let request: RequestPayload = serde_json::from_value(serde_json::json!({
+                "model": "test", "input": "hello", "multi_agent": config, "max_tool_calls": 5
+            }))
+            .unwrap();
+            validate_multi_agent_request(&request, false).unwrap();
+        }
+        let request: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test", "input": "hello", "multi_agent": {"enabled": true}, "max_tool_calls": null
+        }))
+        .unwrap();
         validate_multi_agent_request(&request, false).unwrap();
     }
 

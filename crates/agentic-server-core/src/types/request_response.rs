@@ -159,6 +159,7 @@ impl utoipa::PartialSchema for RequestPayload {
             .property("temperature", nullable_num())
             .property("top_p", nullable_num())
             .property("max_output_tokens", nullable_int())
+            .property("max_tool_calls", nullable_int())
             .property("ignore_eos", nullable_bool())
             .property("truncation", nullable_str())
             .property(
@@ -217,6 +218,9 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig> {
     pub temperature: Option<f64>,
     pub top_p: Option<f64>,
     pub max_output_tokens: Option<u32>,
+    /// Parsed for admission checks; unsupported when multi-agent execution is enabled.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tool_calls: Option<u32>,
     /// vLLM extension: continue generation past the end-of-sequence token.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ignore_eos: Option<bool>,
@@ -331,7 +335,6 @@ impl<T: ?Sized> RequestPayload<T> {
         self,
         map: impl FnOnce(Box<T>) -> Result<Box<U>, E>,
     ) -> Result<RequestPayload<U>, E> {
-        let text = self.text.map(map).transpose()?;
         Ok(RequestPayload {
             model: self.model,
             input: self.input,
@@ -344,10 +347,11 @@ impl<T: ?Sized> RequestPayload<T> {
             store: self.store,
             include: self.include,
             reasoning: self.reasoning,
-            text,
+            text: self.text.map(map).transpose()?,
             temperature: self.temperature,
             top_p: self.top_p,
             max_output_tokens: self.max_output_tokens,
+            max_tool_calls: self.max_tool_calls,
             ignore_eos: self.ignore_eos,
             truncation: self.truncation,
             metadata: self.metadata,
@@ -560,6 +564,23 @@ mod tests {
                     assert_eq!(upstream["parallel_tool_calls"], parallel_tool_calls);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn request_preserves_max_tool_calls_for_admission() {
+        for limit in [None, Some(0), Some(5)] {
+            let mut wire = serde_json::json!({"model": "test-model", "input": "hello"});
+            if let Some(limit) = limit {
+                wire["max_tool_calls"] = limit.into();
+            }
+            let request: RequestPayload = serde_json::from_value(wire).unwrap();
+            let request = request.try_map_text(Ok::<_, std::convert::Infallible>).unwrap();
+            assert_eq!(request.max_tool_calls, limit);
+            assert_eq!(
+                serde_json::to_value(request).unwrap().get("max_tool_calls"),
+                limit.map(serde_json::Value::from).as_ref()
+            );
         }
     }
 

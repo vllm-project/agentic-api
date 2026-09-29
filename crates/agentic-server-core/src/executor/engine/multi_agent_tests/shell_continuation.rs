@@ -35,7 +35,12 @@ pub(super) fn shell_review_output(request: &Value) -> Option<Vec<Value>> {
                 "agent_status":{"completed":"shell result is 55"}})));
             vec![message("combined shell result is 55")]
         } else {
-            vec![function("list_after_shell", "list_agents", json!({}))]
+            // Listing ignores model-generated wrappers and returns the actual tree.
+            vec![function(
+                "list_after_shell",
+                "list_agents",
+                json!({"parameters": {}, "function_results": {"fake_agent": "completed"}}),
+            )]
         }
     } else if input
         .iter()

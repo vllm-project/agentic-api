@@ -123,7 +123,7 @@ impl MultiAgentRun {
         if let Some(parent) = parent {
             self.contexts.get_mut(&parent).expect("parent exists").generation += 1;
         }
-        if !self.root_finished && self.registry.resume_queued_task(&turn.agent) {
+        if self.registry.resume_queued_task(&turn.agent) {
             let context = self.contexts.get_mut(&turn.agent).expect("agent exists");
             context.execution.restart();
             context.generation += 1;

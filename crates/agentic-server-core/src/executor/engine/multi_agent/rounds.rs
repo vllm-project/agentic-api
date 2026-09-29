@@ -31,9 +31,6 @@ impl MultiAgentRun {
         auth: Option<&str>,
         pipeline: &AgentPipeline,
     ) -> ExecutorResult<()> {
-        if self.root_finished {
-            return Ok(());
-        }
         let runnable = self
             .registry
             .agents()
@@ -321,9 +318,6 @@ impl MultiAgentRun {
                 .final_answer = Some(final_answer.clone());
             self.settle_turn(turn, &AgentCompletion::Finished(final_answer.clone()))
                 .map_err(registry_error)?;
-            if turn.agent.is_root() {
-                self.finish_root(turn, pipeline).await?;
-            }
             if let Some(parent) = self.registry.get(&turn.agent).and_then(|agent| agent.parent.cloned()) {
                 self.publish_mail(&turn.agent, &parent, &final_answer, pipeline).await?;
             }

@@ -543,10 +543,10 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   public error mapping nor transport-specific batch policy is defined by it.
   `engine/multi_agent.rs` coordinates these components for stored HTTP responses.
   Canonical histories and pending calls remain owned by the coordinator; the pipeline never
-  spawns subagents. Its `context`, `actions`, `rounds`, `delivery`, `compaction`, and
-  `shutdown` modules separate restoration, collaboration commands, scheduling, public
-  output, explicit root compaction, and teardown. Interruption takes effect at the
-  current round boundary. The contracts are described below.
+  spawns subagents. Its `context`, `actions`, `rounds`, `delivery`, and `compaction`
+  modules separate restoration, collaboration commands, scheduling, public output and
+  explicit root compaction. The run owner cancels and joins tasks during teardown.
+  Interruption takes effect at the current round boundary. The contracts are described below.
 - **`persist.rs`** — `persist_response`/`persist_turn`, which apply the request's
   storage policy (`should_persist`: a no-session `store: false` turn is not written) and
   route to `ConversationHandler` or `ResponseHandler` in `modes/` depending on whether the
@@ -597,8 +597,11 @@ slots to each model round without storing that guidance in canonical history.
 The coordinator alone mutates canonical agent state. Workers receive snapshots and
 return typed outcomes. `AgentRegistry` records logical phases and mailbox contents;
 waiting agents resume on mail or a wait deadline, without holding an inference task
-open. Child completion notifies its parent once. The run shares a retained-data
-budget and accumulates inference/compaction usage, while separate retention, round
+open. Child completion notifies its parent once. A root final answer settles only the
+root's turn: descendants continue until they finish or pause for client tool outputs.
+Mail to an idle root is retained without restarting it. Root completion does not
+implicitly interrupt descendants; interruption remains an explicit collaboration action.
+The run shares a retained-data budget and accumulates inference/compaction usage, while separate retention, round
 and runtime limits bound work. Teardown cancels and joins scoped tasks before the
 terminal response decision is exposed.
 

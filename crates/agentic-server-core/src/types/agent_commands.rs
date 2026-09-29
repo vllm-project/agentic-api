@@ -42,8 +42,9 @@ fn wait_timeout() -> u64 {
     30_000
 }
 
+/// Read-only listing has no argument-dependent behavior. Ignore extra object
+/// fields from the model so wrapper fields cannot cause a retry loop.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct ListAgents {}
 
 #[derive(Debug, Clone, Serialize)]
@@ -110,6 +111,54 @@ impl MultiAgentAction {
             "interrupt_agent" => Some(Self::InterruptAgent),
             "list_agents" => Some(Self::ListAgents),
             _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn list_agents_ignores_extra_fields_without_changing_the_command() {
+        for arguments in [
+            "{}",
+            r#"{"parameters":{}}"#,
+            r#"{"functions":[{"name":"get_proposal"}]}"#,
+            r#"{"function_results":{"get_proposal":"untrusted model text"}}"#,
+        ] {
+            let command = AgentCommand::parse(MultiAgentAction::ListAgents, arguments).unwrap();
+            assert!(matches!(command, AgentCommand::List(_)));
+            assert_eq!(serde_json::to_string(&command).unwrap(), "{}");
+        }
+    }
+
+    #[test]
+    fn list_agents_still_rejects_malformed_json() {
+        for arguments in ["", "{", "null", "true", "42", r#""not an object""#] {
+            assert!(AgentCommand::parse(MultiAgentAction::ListAgents, arguments).is_err());
+        }
+    }
+
+    #[test]
+    fn other_collaboration_commands_still_reject_unknown_fields() {
+        for (action, arguments) in [
+            (
+                MultiAgentAction::SpawnAgent,
+                r#"{"task_name":"worker","message":"work","extra":true}"#,
+            ),
+            (
+                MultiAgentAction::SendMessage,
+                r#"{"target":"worker","message":"hello","extra":true}"#,
+            ),
+            (
+                MultiAgentAction::FollowupTask,
+                r#"{"target":"worker","message":"work","extra":true}"#,
+            ),
+            (MultiAgentAction::WaitAgent, r#"{"timeout_ms":30000,"extra":true}"#),
+            (MultiAgentAction::InterruptAgent, r#"{"target":"worker","extra":true}"#),
+        ] {
+            assert!(AgentCommand::parse(action, arguments).is_err());
         }
     }
 }

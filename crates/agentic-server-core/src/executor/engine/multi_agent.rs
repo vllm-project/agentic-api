@@ -7,7 +7,6 @@ mod context;
 mod delivery;
 mod guidance;
 mod rounds;
-mod shutdown;
 use context::{RestoredAgents, fork_history, mail_input, prepare_agent, restore_agents};
 
 use indexmap::IndexMap;
@@ -81,7 +80,6 @@ pub(super) struct MultiAgentRun {
     pending: PendingClientCalls,
     tasks: RunOwner<CompletedWork>,
     interrupted: HashSet<AgentTurnKey>,
-    root_finished: bool,
     budget: ExecutorResponseBudget,
     sealer: TranscriptSealer,
     payload: ResponsePayload,
@@ -158,7 +156,6 @@ impl MultiAgentRun {
             pending,
             tasks: RunOwner::new(limit),
             interrupted: HashSet::new(),
-            root_finished: false,
             budget,
             sealer: TranscriptSealer::new()?,
             payload,

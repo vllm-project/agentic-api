@@ -40,13 +40,7 @@ impl MultiAgentRun {
         .await?;
         let result = match command {
             Err(error) => Some(CollaborationResult::Error {
-                error: if action == MultiAgentAction::ListAgents {
-                    format!(
-                        "list_agents takes no arguments. Call list_agents with exactly {{}}; do not wrap it in parameters, arguments or function_call. {error}"
-                    )
-                } else {
-                    error.to_string()
-                },
+                error: error.to_string(),
             }),
             Ok(_) if self.interrupted.contains(turn) => Some(CollaborationResult::Error {
                 error: "Agent was interrupted before executing this collaboration action.".into(),
