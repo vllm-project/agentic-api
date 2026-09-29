@@ -704,3 +704,28 @@ fn pending_identity_is_not_charged_again_at_completion() {
         RETAINED_CONTAINER_OVERHEAD_BYTES + "resp_1".len() + output[0].retained_bytes()
     );
 }
+
+#[test]
+fn service_tier_is_charged_and_bounded_on_both_ingestion_paths() {
+    for validation in [Validation::Lenient, Validation::Strict] {
+        let mut terminal = completed(&[]);
+        terminal["response"]["service_tier"] = json!("priority");
+        let events = [
+            created(),
+            json!({"type": "response.in_progress", "response": {"id": "resp_1", "status": "in_progress"}}),
+            terminal.clone(),
+        ];
+        let (mut stream, stream_budget) = budgeted(4096, validation);
+        feed(&mut stream, &events).unwrap();
+        let (mut json_acc, json_budget) = budgeted(4096, validation);
+        json_acc.load_json_body(&terminal["response"].to_string()).unwrap();
+        assert_eq!(stream_budget.used(), json_budget.used());
+        assert_eq!(stream.service_tier.as_deref(), Some("priority"));
+
+        let limit = stream_budget.used() - 1;
+        let (mut stream, _) = budgeted(limit, validation);
+        assert_budget_exceeded(&feed(&mut stream, &events).unwrap_err());
+        let (mut json_acc, _) = budgeted(limit, validation);
+        assert_budget_exceeded(&json_acc.load_json_body(&terminal["response"].to_string()).unwrap_err());
+    }
+}

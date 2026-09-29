@@ -1201,6 +1201,7 @@ fn assert_request_config_is_preserved(request_bodies: &[serde_json::Value]) {
     assert_eq!(request_bodies[0]["max_output_tokens"], 1024);
     assert_eq!(request_bodies[0]["prompt_cache_key"], "workspace-a");
     assert_eq!(request_bodies[1]["prompt_cache_key"], "workspace-a");
+    assert!(request_bodies.iter().all(|body| body["service_tier"] == "priority"));
     assert_eq!(request_bodies[0]["reasoning"], serde_json::json!({"effort": "high"}));
     assert_eq!(request_bodies[1]["reasoning"], request_bodies[0]["reasoning"]);
     assert_eq!(
@@ -1243,7 +1244,7 @@ async fn execute_runs_web_search_and_sends_tool_output_back_to_model() {
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: Some("workspace-a".to_owned()),
-        service_tier: None,
+        service_tier: Some("priority".to_owned()),
         cache_salt: None,
         context_management: None,
     };
@@ -1696,7 +1697,7 @@ async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence()
         ignore_eos: None,
         truncation: None,
         prompt_cache_key: Some("workspace-a".to_owned()),
-        service_tier: None,
+        service_tier: Some("priority".to_owned()),
         cache_salt: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -1722,6 +1723,7 @@ async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence()
             .all(|body| body["prompt_cache_key"] == "workspace-a")
     );
 
+    assert!(request_bodies.iter().all(|body| body["service_tier"] == "priority"));
     let json_events = streamed_sse_events(&chunks);
     assert_single_logical_lifecycle(&json_events);
     assert_contiguous_sequence_numbers(
@@ -2559,4 +2561,43 @@ async fn stream_returns_incomplete_after_max_gateway_tool_rounds() {
         captured_you.recv().await.expect("mock You.com should receive request");
     }
     assert_eq!(llm.request_bodies().await.len(), 10);
+}
+
+#[tokio::test]
+async fn service_tier_comes_only_from_the_final_tool_round() {
+    for actual in [Some("default"), Some("flex"), None] {
+        let (you_url, _captured, _server) = spawn_mock_you().await;
+        let support::MockResponse::Json(first) = web_search_function_call_response() else {
+            panic!("expected JSON fixture");
+        };
+        let mut first: serde_json::Value = serde_json::from_str(&first).unwrap();
+        first["service_tier"] = serde_json::json!("priority");
+        let support::MockResponse::Json(last) = support::text_response("done") else {
+            panic!("expected JSON fixture");
+        };
+        let mut last: serde_json::Value = serde_json::from_str(&last).unwrap();
+        if let Some(tier) = actual {
+            last["service_tier"] = serde_json::json!(tier);
+        }
+        let llm = support::MockServer::start_deque(vec![
+            support::MockResponse::Json(first.to_string()),
+            support::MockResponse::Json(last.to_string()),
+        ])
+        .await;
+        let exec = build_exec_ctx(llm.url(), you_url).await;
+        let request: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test", "input": "search", "store": true,
+            "service_tier": "priority", "tools": [{"type": "web_search_preview"}]
+        }))
+        .unwrap();
+        let Either::Left(response) = ExecuteRequest::new(request, Arc::clone(&exec)).run().await.unwrap() else {
+            panic!("expected JSON response");
+        };
+        assert_eq!(response.service_tier.as_deref(), actual);
+        let stored = exec.resp_handler.retrieve(&response.id).await.unwrap();
+        assert_eq!(stored.service_tier.as_deref(), actual);
+        let requests = llm.request_bodies().await;
+        assert_eq!(requests.len(), 2);
+        assert!(requests.iter().all(|request| request["service_tier"] == "priority"));
+    }
 }
