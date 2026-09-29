@@ -2,6 +2,7 @@
 
 use crate::storage::{InOutItem, ResponseData, ResponseMetadata, ResponseStore};
 use crate::types::io::OutputItem;
+use crate::types::request_response::ResponsePayload;
 
 use super::CommittedResponse;
 use crate::executor::error::{ExecutorError, ExecutorResult};
@@ -32,6 +33,24 @@ impl ResponseHandler {
         Self { store }
     }
 
+    /// Retrieves the terminal payload of a response created with `store=true`.
+    ///
+    /// # Errors
+    /// Returns a storage error for missing IDs or unavailable storage, and a conflict
+    /// for older records that contain continuation history but no response snapshot.
+    pub async fn retrieve(&self, response_id: &str) -> ExecutorResult<ResponsePayload> {
+        let stored = self.store.get(response_id).await?;
+        stored
+            .metadata
+            .response_snapshot
+            .map(|snapshot| *snapshot)
+            .ok_or_else(|| {
+                ExecutorError::Conflict(
+                    "stored response has no retrievable payload; create a new response with store=true".into(),
+                )
+            })
+    }
+
     /// Retrieves the stored response for `previous_response_id`.
     ///
     /// Reads `previous_response_id` from `ctx.original_request`.
@@ -45,7 +64,10 @@ impl ResponseHandler {
             .previous_response_id
             .as_deref()
             .ok_or_else(|| ExecutorError::InvalidRequest("previous_response_id is required for get".into()))?;
-        self.store.get(prev_id).await.map_err(ExecutorError::Storage)
+        let mut stored = self.store.get(prev_id).await?;
+        // Continuation checkpoints retain history and settings, not a duplicate payload.
+        stored.metadata.response_snapshot = None;
+        Ok(stored)
     }
 
     /// Validates that the response for `previous_response_id` exists.
@@ -90,6 +112,7 @@ impl ResponseHandler {
             previous_response_id: ctx.original_request.previous_response_id.take(),
             effective_tools: ctx.enriched_request.tools.take(),
             tool_search_loaded_tools: None,
+            response_snapshot: None,
             effective_tool_choice: ctx.enriched_request.tool_choice.take().unwrap_or_default(),
             effective_instructions: ctx.enriched_request.instructions.take(),
         };
@@ -102,7 +125,7 @@ impl ResponseHandler {
         &self,
         mut ctx: RequestContext,
         output_items: Vec<OutputItem>,
-        metadata: ResponseMetadata,
+        mut metadata: ResponseMetadata,
     ) -> ExecutorResult<()> {
         let continuation = ctx.continuation.take();
         let write_durable = continuation.is_none() || ctx.original_request.store;
@@ -120,6 +143,7 @@ impl ResponseHandler {
                 .map(|(_, item)| InOutItem::Output(item)),
         );
 
+        let snapshot = metadata.response_snapshot.take();
         let checkpoint = continuation
             .as_ref()
             .map(|lease| {
@@ -132,6 +156,8 @@ impl ResponseHandler {
                 )
             })
             .transpose()?;
+
+        metadata.response_snapshot = snapshot;
 
         // A stored child of a transient parent needs its complete canonical
         // checkpoint, not a database reference to a response that was never stored.

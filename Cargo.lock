@@ -70,6 +70,7 @@ dependencies = [
  "serde_json",
  "serde_yml",
  "sqlx",
+ "subtle",
  "tempfile",
  "thiserror",
  "tokio",

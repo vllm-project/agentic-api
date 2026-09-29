@@ -8,6 +8,7 @@ use super::super::models::Response as StorageDbResponse;
 use super::errors::StorageError;
 use crate::types::agent_tree::StoredTreeSnapshot;
 use crate::types::io::ToolChoice;
+use crate::types::request_response::ResponsePayload;
 use crate::types::tools::ResponsesTool;
 use crate::utils::common::serialize_to_string;
 
@@ -16,6 +17,9 @@ use crate::utils::common::serialize_to_string;
 pub struct ResponseMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub multi_agent_tree: Option<StoredTreeSnapshot>,
+    /// Exact terminal Responses payload, absent for legacy and non-Responses records.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_snapshot: Option<Box<ResponsePayload>>,
     pub model: String,
     pub previous_response_id: Option<String>,
     pub effective_tools: Option<Vec<ResponsesTool>>,
@@ -76,6 +80,13 @@ impl TryFrom<&ResponseMetadata> for String {
                 tool.sanitize_for_persistence();
             }
         }
+        if let Some(snapshot) = persisted.response_snapshot.as_mut() {
+            if let Some(tools) = snapshot.tools.as_mut() {
+                for tool in tools {
+                    tool.sanitize_for_persistence();
+                }
+            }
+        }
         serialize_to_string(&persisted).map_err(StorageError::Serialization)
     }
 }
@@ -132,6 +143,7 @@ mod tests {
             previous_response_id: Some("resp_1".to_string()),
             effective_tools: None,
             tool_search_loaded_tools: None,
+            response_snapshot: None,
             effective_tool_choice: ToolChoice::Auto,
             effective_instructions: Some("be helpful".to_string()),
         };
@@ -168,14 +180,32 @@ mod tests {
                 }))
                 .expect("discovered MCP tool"),
             });
+        let snapshot = ResponsePayload {
+            id: "resp_snapshot".into(),
+            object: "response".into(),
+            created_at: 123,
+            model: "test-model".into(),
+            status: "completed".into(),
+            output: Vec::new(),
+            usage: None,
+            incomplete_details: None,
+            error: None,
+            previous_response_id: None,
+            conversation_id: None,
+            instructions: None,
+            tools: Some(vec![tool.clone()]),
+            tool_choice: None,
+        };
         let metadata = ResponseMetadata {
             multi_agent_tree: None,
             effective_tools: Some(vec![tool]),
             tool_search_loaded_tools: None,
+            response_snapshot: Some(Box::new(snapshot)),
             ..ResponseMetadata::default()
         };
 
         let serialized = String::try_from(&metadata).expect("serialization failed");
+        assert!(!serialized.contains("secret"));
         let serialized_value: serde_json::Value =
             serde_json::from_str(&serialized).expect("serialized response metadata");
         assert!(

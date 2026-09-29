@@ -16,12 +16,16 @@ use crate::types::io::{InputItem, OutputItem};
 use crate::types::request_response::ResponsePayload;
 use tracing::error;
 
+/// Decides whether a completed turn reaches the storage handlers.
+///
+/// `store` governs the no-session path: a `store: false` request leaves no row
+/// even when `previous_response_id` hydrated it from a stored response, so its
+/// id can be neither retrieved nor continued. Session continuations always reach
+/// the handler, which keeps `store: false` checkpoints connection-local. An
+/// explicit conversation stays durable.
 #[must_use]
 pub(crate) fn should_persist(ctx: &RequestContext) -> bool {
-    ctx.continuation.is_some()
-        || ctx.original_request.store
-        || ctx.original_request.previous_response_id.is_some()
-        || ctx.original_request.conversation_id.is_some()
+    ctx.continuation.is_some() || ctx.original_request.store || ctx.original_request.conversation_id.is_some()
 }
 
 pub(crate) async fn persist_if_needed(
@@ -47,7 +51,9 @@ pub(crate) async fn persist_if_needed(
 
 /// Step 3 — Persist the completed response to storage.
 ///
-/// Skipped if [`ResponseStatus`] is not `Completed`/`Incomplete` or `payload.id` is empty.
+/// Applies the same storage policy as [`execute`](crate::executor::execute): a
+/// no-session `store: false` context is returned unstored. Also skipped if
+/// [`ResponseStatus`] is not `Completed`/`Incomplete` or `payload.id` is empty.
 /// Routes explicit `conversation_id` requests to [`ConversationHandler`] and
 /// all other requests, including `previous_response_id` continuations, to [`ResponseHandler`].
 ///
@@ -60,17 +66,19 @@ pub async fn persist_response(
     resp_handler: ResponseHandler,
 ) -> ExecutorResult<()> {
     // Use typed enum — no hardcoded status strings.
-    if !matches!(
-        payload.status.parse::<ResponseStatus>().unwrap_or_default(),
-        ResponseStatus::Completed | ResponseStatus::Incomplete
-    ) || payload.id.is_empty()
+    if !should_persist(&ctx)
+        || !matches!(
+            payload.status.parse::<ResponseStatus>().unwrap_or_default(),
+            ResponseStatus::Completed | ResponseStatus::Incomplete
+        )
+        || payload.id.is_empty()
     {
         return Ok(());
     }
 
     let (ctx, tool_search_state) = prepare_request_tools(ctx, &conv_handler, &resp_handler).await?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
-    persist_prepared_turn(ctx, tool_search_metadata, payload.output, &conv_handler, &resp_handler).await
+    persist_prepared_response(payload, ctx, tool_search_metadata, conv_handler, resp_handler).await
 }
 
 async fn persist_prepared_response(
@@ -88,10 +96,27 @@ async fn persist_prepared_response(
         return Ok(());
     }
 
-    persist_prepared_turn(ctx, tool_search_metadata, payload.output, &conv_handler, &resp_handler).await
+    let (output_items, snapshot) = if ctx.original_request.store {
+        (payload.output.clone(), Some(Box::new(payload)))
+    } else {
+        (payload.output, None)
+    };
+    persist_prepared_turn(
+        ctx,
+        tool_search_metadata,
+        output_items,
+        snapshot,
+        &conv_handler,
+        &resp_handler,
+    )
+    .await
 }
 
 /// Persists one completed turn with the handler selected by its explicit conversation discriminator.
+///
+/// Applies the same storage policy as [`persist_response`]: a no-session
+/// `store: false` context is returned unstored, while a session context always
+/// reaches its handler so the connection-local checkpoint is published.
 ///
 /// # Errors
 /// Returns [`ExecutorError`] if the selected storage operation fails.
@@ -101,9 +126,20 @@ pub async fn persist_turn(
     conv_handler: &ConversationHandler,
     resp_handler: &ResponseHandler,
 ) -> ExecutorResult<()> {
+    if !should_persist(&ctx) {
+        return Ok(());
+    }
     let (ctx, tool_search_state) = prepare_request_tools(ctx, conv_handler, resp_handler).await?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
-    persist_prepared_turn(ctx, tool_search_metadata, output_items, conv_handler, resp_handler).await
+    persist_prepared_turn(
+        ctx,
+        tool_search_metadata,
+        output_items,
+        None,
+        conv_handler,
+        resp_handler,
+    )
+    .await
 }
 
 #[tracing::instrument(name = "agentic.persist", skip_all, fields(
@@ -113,6 +149,7 @@ pub(crate) async fn persist_prepared_turn(
     mut ctx: RequestContext,
     tool_search_metadata: Option<ToolSearchMetadata>,
     output_items: Vec<OutputItem>,
+    response_snapshot: Option<Box<ResponsePayload>>,
     conv_handler: &ConversationHandler,
     resp_handler: &ResponseHandler,
 ) -> ExecutorResult<()> {
@@ -122,6 +159,7 @@ pub(crate) async fn persist_prepared_turn(
         previous_response_id: ctx.original_request.previous_response_id.take(),
         effective_tools: ctx.enriched_request.tools.take(),
         tool_search_loaded_tools: None,
+        response_snapshot,
         effective_tool_choice: ctx.enriched_request.tool_choice.take().unwrap_or_default(),
         effective_instructions: ctx.enriched_request.instructions.take(),
     };
