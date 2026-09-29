@@ -92,6 +92,7 @@ fn scan_calls(items: &[InputItem]) -> ExecutorResult<(Vec<PendingCall>, usize)> 
                 resolve_call(&output.call_id, CallKind::ToolSearch, &mut pending)?;
             }
             InputItem::Message(_)
+            | InputItem::CodeInterpreterCall(_)
             | InputItem::Reasoning(_)
             | InputItem::McpListTools(_)
             | InputItem::Compaction(_)

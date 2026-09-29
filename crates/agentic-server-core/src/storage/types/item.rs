@@ -6,10 +6,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::storage::StorageError;
+use crate::types::io::code_interpreter::CodeInterpreterCallOrigin;
 use crate::types::io::{InputItem, OutputItem, ResponsesInput};
 use crate::utils::common::serialize_to_value;
 
 pub(crate) const STORED_ITEM_KIND_KEY: &str = "_agentic_item_kind";
+pub(crate) const STORED_CODE_INTERPRETER_ORIGIN_KEY: &str = "_agentic_code_interpreter_origin";
 
 /// Item kind (input vs output) for storage and retrieval.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -95,6 +97,16 @@ impl TryFrom<&InOutItem> for String {
                 STORED_ITEM_KIND_KEY.to_string(),
                 Value::String(kind.as_str().to_string()),
             );
+            if matches!(
+                item,
+                InOutItem::Output(OutputItem::CodeInterpreterCall(call))
+                    if call.origin == CodeInterpreterCallOrigin::Gateway
+            ) {
+                obj.insert(
+                    STORED_CODE_INTERPRETER_ORIGIN_KEY.to_owned(),
+                    Value::String("gateway".to_owned()),
+                );
+            }
         }
 
         serde_json::to_string(&value).map_err(StorageError::Serialization)

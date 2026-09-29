@@ -143,7 +143,8 @@ Responses tool shapes and execution semantics, so it can be always on.
 | `custom` | Client-executed custom tool. Preserve its opaque format and forward it natively. |
 | `web_search_preview` | Gateway-executed built-in tool normalized to the web-search function tool. Without a usable provider, execution produces a failed tool result instead of returning the call for client execution. |
 | `mcp` | Gateway-executed built-in tool. Normalize discovered MCP tools to model-visible function tools, execute calls with request-scoped MCP bindings, and expose public `mcp_call` items. Streaming emits `response.output_item.added`, `response.mcp_call.in_progress`, `response.mcp_call_arguments.delta`/`.done`, `response.mcp_call.completed` or `.failed`, and `response.output_item.done`. |
-| `file_search`, `code_interpreter` | Accepted by the typed request parser but skipped during upstream normalization because no gateway handler is registered yet. |
+| `file_search` | Accepted by the typed request parser but skipped during upstream normalization because no gateway handler is registered yet. |
+| `code_interpreter` | Gateway-executed when the binary includes `embedded-code-interpreter` and the operator enables a ready Eryx runtime; otherwise the declaration is rejected before inference. |
 | Unknown tool | Recognized and skipped on the typed path; opaque fields are not preserved or executed. Eligible raw-proxy requests remain byte-transparent. |
 
 For response items:
@@ -154,6 +155,7 @@ For response items:
 | `custom_tool_call` | Preserve raw `input`; return it to Codex for local execution. |
 | `web_search_call` | Result from the gateway-executed web-search tool. |
 | `mcp_call` | Result from a gateway-executed MCP tool with `server_label`, discovered tool `name`, JSON-string `arguments`, and `status`; successful calls contain `output`, while failures contain a structured `mcp_tool_execution_error`. |
+| `code_interpreter_call` | Result from the opt-in gateway-executed Eryx tool, with the executed code, status, and bounded retained logs. |
 | Unknown output item | Recognized as an unknown unit variant on the typed path; opaque fields are not preserved or executed. |
 
 ---

@@ -137,6 +137,7 @@ impl utoipa::PartialSchema for InputItem {
             .discriminator(Some(utoipa::openapi::schema::Discriminator::new("type")))
             .item(message_branch)
             .item(tagged_ref("function_call", "InputFunctionToolCall"))
+            .item(tagged_ref("code_interpreter_call", "CodeInterpreterCall"))
             .item(tagged_ref("function_call_output", "FunctionToolResultMessage"))
             .item(tagged_ref("tool_search_call", "InputToolSearchCall"))
             .item(tagged_ref("tool_search_output", "ToolSearchOutputMessage"))

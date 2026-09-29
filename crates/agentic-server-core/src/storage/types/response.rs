@@ -155,6 +155,23 @@ mod tests {
     }
 
     #[test]
+    fn code_interpreter_openai_declaration_round_trips_through_metadata_serialization() {
+        let declaration = serde_json::json!({"type": "code_interpreter", "container": {"type": "auto"}});
+        let tool = serde_json::from_value(declaration.clone()).expect("OpenAI tool declaration");
+        let metadata = ResponseMetadata {
+            effective_tools: Some(vec![tool]),
+            ..ResponseMetadata::default()
+        };
+
+        let serialized = String::try_from(&metadata).expect("stored metadata");
+        let stored: ResponseMetadata = serde_json::from_str(&serialized).expect("rehydrated metadata");
+        assert_eq!(
+            serde_json::to_value(stored.effective_tools).expect("stored tools"),
+            serde_json::json!([declaration])
+        );
+    }
+
+    #[test]
     fn test_response_metadata_serialization_removes_request_scoped_mcp_state() {
         let mut tool = serde_json::from_value(serde_json::json!({
             "type": "mcp",

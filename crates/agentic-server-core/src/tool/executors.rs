@@ -3,12 +3,16 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
+use super::code_interpreter::CodeInterpreterHandler;
 use super::mcp::handler::McpServerToolSet;
 use super::mcp::{McpClientPool, McpDiscoveredHandler, McpHandler};
+use super::normalize::code_interpreter_unavailable_error;
 use super::web_search::{WebSearchExecutor, WebSearchHandler};
 use super::{GatewayExecutor, ToolError};
 use crate::config::ToolRuntimeConfig;
-use crate::types::tools::McpToolParam;
+use crate::types::tools::{McpToolParam, ResponsesTool};
+
+use super::code_interpreter::CodeInterpreterExecutor;
 
 pub enum GatewayExecutorRegistration {
     WebSearch(Arc<WebSearchExecutor>),
@@ -49,6 +53,8 @@ pub struct GatewayExecutors {
     mcp_discovered: Arc<RwLock<HashMap<String, Vec<McpDiscoveredHandler>>>>,
     mcp_allowed_hosts: Vec<String>,
     web_search: Option<Arc<WebSearchExecutor>>,
+    /// Present only after an opted-in provider passes startup readiness checks.
+    code_interpreter: Option<Arc<CodeInterpreterExecutor>>,
 }
 
 impl GatewayExecutors {
@@ -61,6 +67,7 @@ impl GatewayExecutors {
             mcp_discovered: Arc::new(RwLock::new(HashMap::new())),
             mcp_allowed_hosts: super::mcp::pool::allowed_hosts_from_env(),
             web_search: Some(Arc::new(WebSearchHandler::from_env(client))),
+            code_interpreter: None,
         }
     }
 
@@ -74,6 +81,20 @@ impl GatewayExecutors {
     /// Invalid policy configuration is returned as an error. Connection and
     /// discovery happen when a configured server is requested.
     pub fn from_config(client: Arc<reqwest::Client>, config: &ToolRuntimeConfig) -> Result<Self, ToolError> {
+        config
+            .code_interpreter
+            .validate()
+            .map_err(|error| ToolError::Config(error.to_string()))?;
+        #[cfg(feature = "embedded-code-interpreter")]
+        let code_interpreter = config
+            .code_interpreter
+            .enabled
+            .then(|| CodeInterpreterExecutor::from_config(config.code_interpreter))
+            .transpose()
+            .map(|executor| executor.map(Arc::new))
+            .map_err(|error| ToolError::Config(error.to_string()))?;
+        #[cfg(not(feature = "embedded-code-interpreter"))]
+        let code_interpreter = None;
         let executors = Self {
             mcp: HashMap::new(),
             mcp_configs: config.mcp_servers.clone(),
@@ -89,6 +110,7 @@ impl GatewayExecutors {
                 &config.web_search,
                 config.max_concurrent_gateway_calls,
             ))),
+            code_interpreter,
         };
         if config.mcp_servers.is_empty() {
             return Ok(executors);
@@ -133,6 +155,39 @@ impl GatewayExecutors {
     #[must_use]
     pub(crate) fn request_scoped(&self) -> Self {
         self.clone()
+    }
+
+    /// Validates request declarations against the executors that actually
+    /// completed startup readiness checks.
+    ///
+    /// This runs before request state may be persisted, and again after
+    /// conversation settings are rehydrated, so an inherited declaration
+    /// cannot bypass operator gating.
+    pub(crate) fn validate_declarations(&self, tools: Option<&[ResponsesTool]>) -> Result<(), ToolError> {
+        let Some(tools) = tools else {
+            return Ok(());
+        };
+        CodeInterpreterHandler::validate_declarations(tools)?;
+        for tool in tools {
+            tool.validate()?;
+        }
+        if tools
+            .iter()
+            .any(|tool| matches!(tool, ResponsesTool::CodeInterpreter(_)))
+        {
+            let ready = self.code_interpreter.is_some();
+            if !ready {
+                return Err(code_interpreter_unavailable_error());
+            }
+        }
+        Ok(())
+    }
+
+    /// Return the shared, eagerly-ready code interpreter when an operator
+    /// enabled a registered provider.
+    #[must_use]
+    pub(crate) fn code_interpreter_executor(&self) -> Option<Arc<CodeInterpreterExecutor>> {
+        self.code_interpreter.clone()
     }
 
     /// Returns the discovered handlers for one request-declared MCP server.
@@ -298,14 +353,16 @@ fn validate_mcp_execution_options(param: &McpToolParam, configured_server: bool)
 
 impl std::fmt::Debug for GatewayExecutors {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("GatewayExecutors")
+        let mut debug = f.debug_struct("GatewayExecutors");
+        debug
             .field("mcp_server_handlers", &self.mcp.len())
             .field("mcp_server_configs", &self.mcp_configs.len())
             .field("mcp_clients", &Arc::strong_count(&self.mcp_clients))
             .field("mcp_discovered", &Arc::strong_count(&self.mcp_discovered))
             .field("mcp_allowed_hosts", &self.mcp_allowed_hosts)
-            .field("web_search", &self.web_search.is_some())
-            .finish()
+            .field("web_search", &self.web_search.is_some());
+        debug.field("code_interpreter", &self.code_interpreter.is_some());
+        debug.finish()
     }
 }
 
@@ -316,9 +373,10 @@ mod tests {
 
     use super::{GatewayExecutorRegistration, GatewayExecutors, validate_mcp_execution_options};
     use crate::config::ToolRuntimeConfig;
+    use crate::tool::ToolError;
     use crate::tool::mcp::McpServerEntry;
     use crate::tool::mcp::{McpDiscoveredHandler, McpHandler};
-    use crate::types::tools::{McpDiscoveredToolParam, McpToolParam};
+    use crate::types::tools::{McpDiscoveredToolParam, McpToolParam, ResponsesTool};
 
     fn mcp_param(value: serde_json::Value) -> McpToolParam {
         serde_json::from_value(value).unwrap()
@@ -392,6 +450,27 @@ mod tests {
 
         let error = validate_mcp_execution_options(&param, false).unwrap_err();
         assert!(error.to_string().contains("connector_id is not supported"));
+    }
+
+    #[test]
+    fn request_validation_rejects_code_interpreter_without_a_ready_executor() {
+        let tools = [serde_json::from_value::<ResponsesTool>(serde_json::json!({
+            "type": "code_interpreter",
+            "container": {"type": "auto"}
+        }))
+        .expect("valid declaration")];
+
+        let error = GatewayExecutors::default()
+            .validate_declarations(Some(&tools))
+            .expect_err("an unregistered executor must fail closed");
+
+        assert!(matches!(error, ToolError::Config(message) if message.contains("code_interpreter")));
+    }
+
+    #[test]
+    fn from_env_never_registers_the_operator_gated_code_interpreter() {
+        let executors = GatewayExecutors::from_env(Arc::new(reqwest::Client::new()));
+        assert!(executors.code_interpreter_executor().is_none());
     }
 
     #[tokio::test]

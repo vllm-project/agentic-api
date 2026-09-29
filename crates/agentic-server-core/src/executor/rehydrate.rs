@@ -172,7 +172,11 @@ pub(crate) async fn rehydrate_with_continuation(
     continuation: Option<ResponseContinuation>,
 ) -> ExecutorResult<RequestContext> {
     validate_multi_agent_request(&request, continuation.is_some())?;
-    // Fail before storage work for new files; check again once history is resolved.
+    // Fail before storage work for explicitly declared tools and new content;
+    // check again once stored effective settings and history are resolved.
+    exec_ctx
+        .gateway_executors
+        .validate_declarations(request.tools.as_deref())?;
     validate_message_content(&request.input)?;
     let response_id = uuid7_str("resp_");
     // Persistence keeps the public items. Tool lowering belongs to the enriched
@@ -209,6 +213,9 @@ pub(crate) async fn rehydrate_with_continuation(
         ctx.enriched_request.input = ResponsesInput::Items(Vec::from(&ctx.original_request.input));
     }
 
+    exec_ctx
+        .gateway_executors
+        .validate_declarations(ctx.enriched_request.tools.as_deref())?;
     validate_message_content(&ctx.enriched_request.input)?;
     validate_multi_agent_request(&ctx.enriched_request, ctx.continuation.is_some())?;
     Ok(ctx)
@@ -1110,6 +1117,55 @@ mod tests {
             serde_json::to_value(&ctx.enriched_request.input).expect("prepared private history serializes");
         assert_eq!(private_input[0]["call_id"], "call_search_stored");
         assert_eq!(private_input[1]["call_id"], "call_search_stored");
+    }
+
+    #[tokio::test]
+    async fn native_code_interpreter_call_rehydrates_for_previous_response_and_conversation()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let native_call: OutputItem = serde_json::from_value(serde_json::json!({
+            "type": "code_interpreter_call",
+            "id": "ci_native",
+            "container_id": "cntr_native",
+            "code": "print(7)",
+            "status": "completed",
+            "outputs": [{"type": "logs", "logs": "7\n"}]
+        }))?;
+        let response_pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
+        let conversation_pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
+        let response_store = ResponseStore::new(response_pool);
+        let conversation_store = ConversationStore::new(conversation_pool);
+        response_store
+            .persist(
+                "resp_native",
+                None,
+                vec![InOutItem::Output(native_call.clone())],
+                &ResponseMetadata::default(),
+            )
+            .await?;
+        let conversation = conversation_store.create().await?;
+        conversation_store
+            .persist(
+                &conversation.conversation_id,
+                "resp_conversation_native",
+                None,
+                vec![InOutItem::Output(native_call)],
+                &ResponseMetadata::default(),
+            )
+            .await?;
+        let exec_ctx = execution_context(conversation_store, response_store);
+
+        for request in [
+            request(None, Some("resp_native")),
+            request(Some(&conversation.conversation_id), None),
+        ] {
+            let ctx = rehydrate_conversation(request, &exec_ctx).await?;
+            let model_input = serde_json::to_value(ctx.enriched_request.input.model_input())?;
+            assert_eq!(model_input[0]["type"], "code_interpreter_call");
+            assert_eq!(model_input[0]["id"], "ci_native");
+            assert_eq!(model_input[0]["outputs"][0]["logs"], "7\n");
+            assert_eq!(model_input[1]["role"], "user");
+        }
+        Ok(())
     }
 
     #[tokio::test]

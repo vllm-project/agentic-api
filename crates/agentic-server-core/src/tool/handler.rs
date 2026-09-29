@@ -75,8 +75,9 @@ pub trait ToolHandler: Send + Sync {
 /// Extension of [`ToolHandler`] for tool types that are executed by the gateway.
 ///
 /// Only executable gateway handlers implement this trait. MCP and web search
-/// implement it today. File search and code interpreter are gateway-owned in
-/// the registry but do not yet have executors. Client-owned tools (`Function`,
+/// implement it unconditionally; the Eryx-backed code interpreter implements
+/// it when its Cargo feature is enabled. File search remains gateway-owned in
+/// the registry without an executor. Client-owned tools (`Function`,
 /// `ToolSearch`, `Custom`, `CodexNamespace`) do not implement it, so they cannot
 /// be dispatched through this interface.
 ///

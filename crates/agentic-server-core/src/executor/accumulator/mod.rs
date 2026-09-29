@@ -336,7 +336,24 @@ impl ResponseAccumulator {
             return Ok(None);
         };
         let disposition = self.process_normalized_event(&frame)?;
-        Ok(disposition.into_frame(frame))
+        let Some(mut frame) = disposition.into_frame(frame) else {
+            return Ok(None);
+        };
+        if let EventPayload::OutputItemDone {
+            item_id,
+            item_type: SSEItemType::CodeInterpreterCall,
+            output_index: Some(index),
+            ..
+        } = &frame.payload
+            && item_id.is_empty()
+            && let Some(OutputItem::CodeInterpreterCall(call)) = self
+                .slots
+                .get(OutputIndex::new(*index))
+                .and_then(|slot| slot.state.done_item())
+        {
+            frame.set_done_item_id(&call.id);
+        }
+        Ok(Some(frame))
     }
 
     fn process_normalized_event(&mut self, frame: &EventFrame) -> ExecutorResult<EventDisposition> {

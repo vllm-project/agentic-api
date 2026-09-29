@@ -14,9 +14,57 @@
     "crates/agentic-server/src/handler/websocket/responses.rs": 784
   },
   "exceptions": {
+    "crates/agentic-server-core/src/config.rs": {
+      "limit": 629,
+      "reason": "Operator-owned code-interpreter worker limits and admission validation share runtime configuration with the Tavily web-search provider settings."
+    },
+    "crates/agentic-server-core/src/executor/accumulator/active.rs": {
+      "limit": 512,
+      "reason": "Code-interpreter call state shares the typed item lifecycle dispatcher with multi-agent call and agent-message states."
+    },
+    "crates/agentic-server-core/src/executor/accumulator/mod.rs": {
+      "limit": 683,
+      "reason": "Code-interpreter done-only completion projects its generated item ID into the emitted event in the existing ingestion path."
+    },
+    "crates/agentic-server-core/src/executor/accumulator/slot.rs": {
+      "limit": 518,
+      "reason": "Code-interpreter done-only ID backfill remains in the shared output-item slot validation path."
+    },
+    "crates/agentic-server-core/src/executor/gateway.rs": {
+      "limit": 696,
+      "reason": "Gateway-owned code-interpreter calls emit their public SSE lifecycle through the existing scheduler after policy extraction."
+    },
     "crates/agentic-server-core/src/executor/messages_stream.rs": {
       "limit": 532,
       "reason": "Streaming lifecycle validation must stay with the single accumulator transition path."
+    },
+    "crates/agentic-server-core/src/executor/response_budget.rs": {
+      "limit": 505,
+      "reason": "Code-interpreter outputs and optional agent attribution are charged in the shared retained-item budget."
+    },
+    "crates/agentic-server-core/src/tool/registry.rs": {
+      "limit": 528,
+      "reason": "The code interpreter follows the existing registry validation and executor registration flow."
+    },
+    "crates/agentic-server-core/src/tool/tool_search.rs": {
+      "limit": 1681,
+      "reason": "Code-interpreter continuation items pass through tool-search history without changing discovery state."
+    },
+    "crates/agentic-server-core/src/types/io/input.rs": {
+      "limit": 514,
+      "reason": "The shared input-item union accepts typed native code-interpreter calls for continuation replay."
+    },
+    "crates/agentic-server-core/src/types/io/output.rs": {
+      "limit": 1087,
+      "reason": "The shared output-item conversion replays native code-interpreter calls while omitting gateway projections."
+    },
+    "crates/agentic-server-core/src/types/tools/params.rs": {
+      "limit": 576,
+      "reason": "The shared tagged tool declaration validates the OpenAI auto-container form and exposes its closed public schema."
+    },
+    "crates/agentic-server/src/main.rs": {
+      "limit": 643,
+      "reason": "Server configuration applies documented file and environment precedence to code-interpreter worker memory and guest resource limits."
     }
   },
   "generated": {}

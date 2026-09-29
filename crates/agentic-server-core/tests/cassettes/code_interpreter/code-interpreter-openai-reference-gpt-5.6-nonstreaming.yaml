@@ -1,0 +1,116 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Use the python tool to calculate the sum of the squares of the integers
+        from 1 through 10. The code must print exactly CODE_INTERPRETER_OK=385. After
+        it runs, answer exactly CODE_INTERPRETER_OK=385.
+      max_output_tokens: 2048
+      model: gpt-5.6
+      parallel_tool_calls: false
+      store: false
+      stream: false
+      tool_choice: required
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790318520
+      created_at: 1790318517
+      error: null
+      frequency_penalty: 0.0
+      id: resp_020ffaaa85f1ecf6016ab617b5044087d18b3ed82566403c0c
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 2048
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - code: 'print(f"CODE_INTERPRETER_OK={sum(i**2 for i in range(1, 11))}")
+
+          '
+        container_id: cntr_6ab617b594c4819382eee217438ef95a0f2c410c10efc2e0
+        id: ci_020ffaaa85f1ecf6016ab617b64c4c87d1b4d893d7936f5244
+        outputs: null
+        status: completed
+        type: code_interpreter_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: CODE_INTERPRETER_OK=385
+          type: output_text
+        id: msg_020ffaaa85f1ecf6016ab617b7bd7487d1968233eda02e0739
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: false
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: required
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 1316
+        input_tokens_details:
+          cache_write_tokens: 1143
+          cached_tokens: 0
+        output_tokens: 44
+        output_tokens_details:
+          reasoning_tokens: 33
+        total_tokens: 1360
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

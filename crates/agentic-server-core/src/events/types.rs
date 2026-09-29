@@ -55,6 +55,11 @@ pub enum SSEEventType {
     WebSearchCallInProgress,
     WebSearchCallSearching,
     WebSearchCallCompleted,
+    CodeInterpreterCallInProgress,
+    CodeInterpreterCallCodeDelta,
+    CodeInterpreterCallCodeDone,
+    CodeInterpreterCallInterpreting,
+    CodeInterpreterCallCompleted,
     McpCallInProgress,
     McpCallArgumentsDelta,
     McpCallArgumentsDone,
@@ -101,6 +106,11 @@ impl From<&str> for SSEEventType {
             "response.web_search_call.in_progress" => Self::WebSearchCallInProgress,
             "response.web_search_call.searching" => Self::WebSearchCallSearching,
             "response.web_search_call.completed" => Self::WebSearchCallCompleted,
+            "response.code_interpreter_call.in_progress" => Self::CodeInterpreterCallInProgress,
+            "response.code_interpreter_call_code.delta" => Self::CodeInterpreterCallCodeDelta,
+            "response.code_interpreter_call_code.done" => Self::CodeInterpreterCallCodeDone,
+            "response.code_interpreter_call.interpreting" => Self::CodeInterpreterCallInterpreting,
+            "response.code_interpreter_call.completed" => Self::CodeInterpreterCallCompleted,
             "response.mcp_call.in_progress" => SSEEventType::McpCallInProgress,
             "response.mcp_call_arguments.delta" => SSEEventType::McpCallArgumentsDelta,
             "response.mcp_call_arguments.done" => SSEEventType::McpCallArgumentsDone,
@@ -149,6 +159,11 @@ impl TryFrom<SSEEventType> for &'static str {
             SSEEventType::WebSearchCallInProgress => Ok("response.web_search_call.in_progress"),
             SSEEventType::WebSearchCallSearching => Ok("response.web_search_call.searching"),
             SSEEventType::WebSearchCallCompleted => Ok("response.web_search_call.completed"),
+            SSEEventType::CodeInterpreterCallInProgress => Ok("response.code_interpreter_call.in_progress"),
+            SSEEventType::CodeInterpreterCallCodeDelta => Ok("response.code_interpreter_call_code.delta"),
+            SSEEventType::CodeInterpreterCallCodeDone => Ok("response.code_interpreter_call_code.done"),
+            SSEEventType::CodeInterpreterCallInterpreting => Ok("response.code_interpreter_call.interpreting"),
+            SSEEventType::CodeInterpreterCallCompleted => Ok("response.code_interpreter_call.completed"),
             SSEEventType::McpCallInProgress => Ok("response.mcp_call.in_progress"),
             SSEEventType::McpCallArgumentsDelta => Ok("response.mcp_call_arguments.delta"),
             SSEEventType::McpCallArgumentsDone => Ok("response.mcp_call_arguments.done"),
@@ -403,6 +418,22 @@ impl EventFrame {
         }
     }
 
+    /// Keeps a completed item's typed and wire IDs aligned after ingestion backfills one.
+    pub(crate) fn set_done_item_id(&mut self, id: &str) {
+        let (EventPayload::OutputItemDone { item_id, item, .. }, Some(wire_item)) =
+            (&mut self.payload, self.wire.rest.get_mut("item"))
+        else {
+            return;
+        };
+        let (Some(item), Some(wire_item)) = (item.as_object_mut(), wire_item.as_object_mut()) else {
+            return;
+        };
+        item_id.clear();
+        item_id.push_str(id);
+        item.insert("id".to_owned(), Value::String(id.to_owned()));
+        wire_item.insert("id".to_owned(), Value::String(id.to_owned()));
+    }
+
     #[must_use]
     pub fn synthetic(event_type: SSEEventType, mut rest: Map<String, Value>) -> Option<Self> {
         let event_type_name = <&str>::try_from(event_type).ok()?;
@@ -496,6 +527,11 @@ mod tests {
             SSEEventType::WebSearchCallInProgress,
             SSEEventType::WebSearchCallSearching,
             SSEEventType::WebSearchCallCompleted,
+            SSEEventType::CodeInterpreterCallInProgress,
+            SSEEventType::CodeInterpreterCallCodeDelta,
+            SSEEventType::CodeInterpreterCallCodeDone,
+            SSEEventType::CodeInterpreterCallInterpreting,
+            SSEEventType::CodeInterpreterCallCompleted,
             SSEEventType::McpCallInProgress,
             SSEEventType::McpCallArgumentsDelta,
             SSEEventType::McpCallArgumentsDone,

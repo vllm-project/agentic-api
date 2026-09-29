@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::num::NonZeroUsize;
+use std::num::{NonZeroU64, NonZeroUsize};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -90,6 +90,220 @@ impl ResponsesConfig {
             )));
         }
         Ok(())
+    }
+}
+
+/// Conservative operator-owned defaults for the opt-in code interpreter.
+///
+/// These values do not make a code interpreter available: registration remains
+/// fail-closed until the feature, operator opt-in, and runtime readiness checks
+/// all succeed.
+pub const DEFAULT_CODE_INTERPRETER_MAX_SOURCE_BYTES: NonZeroUsize =
+    NonZeroUsize::new(64 * 1024).expect("default is nonzero");
+pub const DEFAULT_CODE_INTERPRETER_EXECUTION_WALL_TIME: Duration = Duration::from_secs(10);
+pub const DEFAULT_CODE_INTERPRETER_MAX_FUEL: NonZeroU64 = NonZeroU64::new(10_000_000_000).expect("default is nonzero");
+pub const DEFAULT_CODE_INTERPRETER_MAX_GUEST_MEMORY_BYTES: NonZeroUsize =
+    NonZeroUsize::new(128 * 1024 * 1024).expect("default is nonzero");
+pub const DEFAULT_CODE_INTERPRETER_MAX_STDOUT_BYTES: NonZeroUsize =
+    NonZeroUsize::new(64 * 1024).expect("default is nonzero");
+pub const DEFAULT_CODE_INTERPRETER_MAX_STDERR_BYTES: NonZeroUsize =
+    NonZeroUsize::new(64 * 1024).expect("default is nonzero");
+pub const DEFAULT_CODE_INTERPRETER_MAX_CONCURRENT_GUESTS: NonZeroUsize =
+    NonZeroUsize::new(2).expect("default is nonzero");
+pub const DEFAULT_CODE_INTERPRETER_MAX_AGGREGATE_GUEST_MEMORY_BYTES: NonZeroUsize =
+    NonZeroUsize::new(256 * 1024 * 1024).expect("default is nonzero");
+pub const DEFAULT_CODE_INTERPRETER_MAX_WORKER_MEMORY_BYTES: NonZeroUsize =
+    NonZeroUsize::new(1024 * 1024 * 1024).expect("default is nonzero");
+pub const DEFAULT_CODE_INTERPRETER_MAX_AGGREGATE_WORKER_MEMORY_BYTES: NonZeroUsize =
+    NonZeroUsize::new(2 * 1024 * 1024 * 1024).expect("default is nonzero");
+/// Hard protocol budget before serializing a worker request.
+pub const CODE_INTERPRETER_MAX_WORKER_SOURCE_BYTES: usize = 512 * 1024;
+/// Maximum configured retained text before JSON escaping into worker IPC.
+pub const CODE_INTERPRETER_MAX_WORKER_RETAINED_OUTPUT_BYTES: usize = 2 * 1024 * 1024;
+
+/// Operator-owned runtime limits for the gateway-executed code interpreter.
+///
+/// This is not a client request setting. The default remains disabled, and a
+/// feature-enabled build continues rejecting declarations until it has a
+/// verified runtime implementation. Nonzero numeric types prevent unusable
+/// zero-byte, zero-fuel, and zero-capacity configurations at construction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CodeInterpreterRuntimeConfig {
+    /// Whether an operator intends to enable the runtime once it is available.
+    pub enabled: bool,
+    /// Largest accepted UTF-8 source string before guest creation.
+    pub max_source_bytes: NonZeroUsize,
+    /// Maximum time allotted to guest execution after initialization.
+    pub execution_wall_time: Duration,
+    /// Maximum WASM execution fuel allotted to one guest.
+    pub max_fuel: NonZeroU64,
+    /// Maximum guest memory reservation for one execution.
+    pub max_guest_memory_bytes: NonZeroUsize,
+    /// Maximum stdout bytes retained from Eryx's normal output handler.
+    pub max_stdout_bytes: NonZeroUsize,
+    /// Maximum stderr bytes retained from Eryx's normal output handler.
+    pub max_stderr_bytes: NonZeroUsize,
+    /// Process-wide maximum number of simultaneously admitted guests.
+    pub max_concurrent_guests: NonZeroUsize,
+    /// Process-wide maximum sum of admitted guest memory reservations.
+    pub max_aggregate_guest_memory_bytes: NonZeroUsize,
+    /// Hard cgroup v2 memory limit for one Eryx worker, including host allocations.
+    pub max_worker_memory_bytes: NonZeroUsize,
+    /// Maximum admitted sum of worker cgroup memory reservations.
+    pub max_aggregate_worker_memory_bytes: NonZeroUsize,
+}
+
+impl Default for CodeInterpreterRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            max_source_bytes: DEFAULT_CODE_INTERPRETER_MAX_SOURCE_BYTES,
+            execution_wall_time: DEFAULT_CODE_INTERPRETER_EXECUTION_WALL_TIME,
+            max_fuel: DEFAULT_CODE_INTERPRETER_MAX_FUEL,
+            max_guest_memory_bytes: DEFAULT_CODE_INTERPRETER_MAX_GUEST_MEMORY_BYTES,
+            max_stdout_bytes: DEFAULT_CODE_INTERPRETER_MAX_STDOUT_BYTES,
+            max_stderr_bytes: DEFAULT_CODE_INTERPRETER_MAX_STDERR_BYTES,
+            max_concurrent_guests: DEFAULT_CODE_INTERPRETER_MAX_CONCURRENT_GUESTS,
+            max_aggregate_guest_memory_bytes: DEFAULT_CODE_INTERPRETER_MAX_AGGREGATE_GUEST_MEMORY_BYTES,
+            max_worker_memory_bytes: DEFAULT_CODE_INTERPRETER_MAX_WORKER_MEMORY_BYTES,
+            max_aggregate_worker_memory_bytes: DEFAULT_CODE_INTERPRETER_MAX_AGGREGATE_WORKER_MEMORY_BYTES,
+        }
+    }
+}
+
+impl CodeInterpreterRuntimeConfig {
+    /// Validate cross-field invariants before a runtime or admission controller
+    /// is constructed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a single guest reservation could never fit in the
+    /// configured process-wide memory budget or the wall-time limit is zero.
+    pub fn validate(self) -> Result<(), CodeInterpreterRuntimeConfigError> {
+        if self.execution_wall_time.is_zero() {
+            return Err(CodeInterpreterRuntimeConfigError::ZeroWallTime);
+        }
+        if self.max_guest_memory_bytes.get() > self.max_aggregate_guest_memory_bytes.get() {
+            return Err(CodeInterpreterRuntimeConfigError::GuestMemoryExceedsAggregate {
+                guest_memory_bytes: self.max_guest_memory_bytes.get(),
+                aggregate_memory_bytes: self.max_aggregate_guest_memory_bytes.get(),
+            });
+        }
+        if self.max_source_bytes.get() > CODE_INTERPRETER_MAX_WORKER_SOURCE_BYTES {
+            return Err(CodeInterpreterRuntimeConfigError::SourceExceedsWorkerIpc);
+        }
+        if self.max_stdout_bytes.get().saturating_add(self.max_stderr_bytes.get())
+            > CODE_INTERPRETER_MAX_WORKER_RETAINED_OUTPUT_BYTES
+        {
+            return Err(CodeInterpreterRuntimeConfigError::OutputExceedsWorkerIpc);
+        }
+        if self.max_worker_memory_bytes.get() <= self.max_guest_memory_bytes.get() {
+            return Err(CodeInterpreterRuntimeConfigError::WorkerMemoryBelowGuest);
+        }
+        if self.max_worker_memory_bytes.get() > self.max_aggregate_worker_memory_bytes.get() {
+            return Err(CodeInterpreterRuntimeConfigError::WorkerMemoryExceedsAggregate);
+        }
+        if self.max_concurrent_guests.get() > tokio::sync::Semaphore::MAX_PERMITS {
+            return Err(CodeInterpreterRuntimeConfigError::ConcurrencyExceedsSemaphore {
+                configured: self.max_concurrent_guests.get(),
+                maximum: tokio::sync::Semaphore::MAX_PERMITS,
+            });
+        }
+        Ok(())
+    }
+}
+
+/// Cross-field configuration errors for [`CodeInterpreterRuntimeConfig`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum CodeInterpreterRuntimeConfigError {
+    /// A duration constructed programmatically had no execution time.
+    #[error("code interpreter execution_wall_time must be greater than zero")]
+    ZeroWallTime,
+    /// A worker requires memory beyond the guest's linear-memory reservation.
+    #[error("code interpreter max_worker_memory_bytes must exceed max_guest_memory_bytes")]
+    WorkerMemoryBelowGuest,
+    /// The request could exceed the bounded worker control frame.
+    #[error("code interpreter max_source_bytes exceeds the worker IPC source limit")]
+    SourceExceedsWorkerIpc,
+    /// Retained output could exceed the bounded worker control frame.
+    #[error("code interpreter stdout and stderr limits exceed the worker IPC output limit")]
+    OutputExceedsWorkerIpc,
+    /// At least one worker must fit into the aggregate admission budget.
+    #[error("code interpreter max_worker_memory_bytes exceeds max_aggregate_worker_memory_bytes")]
+    WorkerMemoryExceedsAggregate,
+    /// A single guest could never acquire the configured aggregate reservation.
+    #[error(
+        "code interpreter max_guest_memory_bytes ({guest_memory_bytes}) exceeds max_aggregate_guest_memory_bytes ({aggregate_memory_bytes})"
+    )]
+    GuestMemoryExceedsAggregate {
+        /// Per-guest reservation in bytes.
+        guest_memory_bytes: usize,
+        /// Process-wide aggregate reservation in bytes.
+        aggregate_memory_bytes: usize,
+    },
+    /// Tokio cannot construct a semaphore larger than its platform limit.
+    #[error("code interpreter max_concurrent_guests ({configured}) exceeds the supported maximum ({maximum})")]
+    ConcurrencyExceedsSemaphore {
+        /// Operator-provided concurrency.
+        configured: usize,
+        /// Tokio's maximum supported permit count.
+        maximum: usize,
+    },
+}
+
+#[cfg(test)]
+mod code_interpreter_config_tests {
+    use super::*;
+
+    #[test]
+    fn code_interpreter_rejects_worker_memory_and_ipc_limits_that_cannot_be_enforced() {
+        let defaults = CodeInterpreterRuntimeConfig::default();
+        assert!(matches!(
+            CodeInterpreterRuntimeConfig {
+                max_worker_memory_bytes: defaults.max_guest_memory_bytes,
+                ..defaults
+            }
+            .validate(),
+            Err(CodeInterpreterRuntimeConfigError::WorkerMemoryBelowGuest)
+        ));
+        assert!(matches!(
+            CodeInterpreterRuntimeConfig {
+                max_aggregate_worker_memory_bytes: defaults.max_guest_memory_bytes,
+                ..defaults
+            }
+            .validate(),
+            Err(CodeInterpreterRuntimeConfigError::WorkerMemoryExceedsAggregate)
+        ));
+        assert!(matches!(
+            CodeInterpreterRuntimeConfig {
+                max_source_bytes: NonZeroUsize::new(CODE_INTERPRETER_MAX_WORKER_SOURCE_BYTES + 1).expect("nonzero"),
+                ..defaults
+            }
+            .validate(),
+            Err(CodeInterpreterRuntimeConfigError::SourceExceedsWorkerIpc)
+        ));
+        assert!(matches!(
+            CodeInterpreterRuntimeConfig {
+                max_stdout_bytes: NonZeroUsize::new(CODE_INTERPRETER_MAX_WORKER_RETAINED_OUTPUT_BYTES)
+                    .expect("nonzero"),
+                ..defaults
+            }
+            .validate(),
+            Err(CodeInterpreterRuntimeConfigError::OutputExceedsWorkerIpc)
+        ));
+    }
+
+    #[test]
+    fn code_interpreter_rejects_a_concurrency_value_that_would_panic_semaphore_construction() {
+        let config = CodeInterpreterRuntimeConfig {
+            max_concurrent_guests: NonZeroUsize::new(tokio::sync::Semaphore::MAX_PERMITS + 1).expect("nonzero"),
+            ..CodeInterpreterRuntimeConfig::default()
+        };
+
+        assert!(matches!(
+            config.validate(),
+            Err(CodeInterpreterRuntimeConfigError::ConcurrencyExceedsSemaphore { .. })
+        ));
     }
 }
 
@@ -327,6 +541,9 @@ pub struct ToolRuntimeConfig {
     pub mcp_servers: HashMap<String, McpServerEntry>,
     pub mcp_allowed_hosts: Vec<String>,
     pub messages_gateway_tool_aliases: Option<String>,
+    /// Operator-only limits for the opt-in code interpreter. A default config
+    /// is disabled and does not make the tool available.
+    pub code_interpreter: CodeInterpreterRuntimeConfig,
     /// Upper bound on gateway-owned tool calls executing concurrently within one
     /// round. A sliding window admits another call as one finishes. Handlers with
     /// nested outbound work also use this value as their provider-level concurrency
@@ -343,6 +560,7 @@ impl Default for ToolRuntimeConfig {
             mcp_servers: HashMap::default(),
             mcp_allowed_hosts: Vec::default(),
             messages_gateway_tool_aliases: None,
+            code_interpreter: CodeInterpreterRuntimeConfig::default(),
             max_concurrent_gateway_calls: DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS,
         }
     }

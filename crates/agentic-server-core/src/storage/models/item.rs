@@ -6,9 +6,10 @@ use std::fmt::Write;
 use tracing::warn;
 
 use super::super::pool::{DbPool, DbResult, DbTransaction};
-use super::super::types::item::{InOutItem, ItemKind, STORED_ITEM_KIND_KEY};
+use super::super::types::item::{InOutItem, ItemKind, STORED_CODE_INTERPRETER_ORIGIN_KEY, STORED_ITEM_KIND_KEY};
 use crate::storage::{StorageError, StoreResult};
 use crate::types::conversations::ItemOrder;
+use crate::types::io::code_interpreter::CodeInterpreterCallOrigin;
 use crate::types::io::{InputItem, OutputItem};
 use crate::utils::common::{deserialize_from_str_opt, utcnow_str, uuid7_str};
 
@@ -53,24 +54,32 @@ impl Item {
         self.reference_id.as_deref().unwrap_or(&self.id)
     }
 
-    fn data_without_storage_marker(&self) -> Option<Value> {
+    fn data_without_storage_marker(&self) -> Option<(Value, bool)> {
         let mut value = deserialize_from_str_opt::<Value>(&self.data)?;
+        let gateway_origin = value.get(STORED_CODE_INTERPRETER_ORIGIN_KEY).and_then(Value::as_str) == Some("gateway");
         if let Some(object) = value.as_object_mut() {
             object.remove(STORED_ITEM_KIND_KEY);
+            object.remove(STORED_CODE_INTERPRETER_ORIGIN_KEY);
         }
-        Some(value)
+        Some((value, gateway_origin))
     }
 
     /// Deserialize data column as `InputItem`.
     #[must_use]
     pub fn as_input(&self) -> Option<InputItem> {
-        serde_json::from_value(self.data_without_storage_marker()?).ok()
+        let (value, _) = self.data_without_storage_marker()?;
+        serde_json::from_value(value).ok()
     }
 
     /// Deserialize data column as `OutputItem`.
     #[must_use]
     pub fn as_output(&self) -> Option<OutputItem> {
-        serde_json::from_value(self.data_without_storage_marker()?).ok()
+        let (value, gateway_origin) = self.data_without_storage_marker()?;
+        let mut output: OutputItem = serde_json::from_value(value).ok()?;
+        if gateway_origin && let OutputItem::CodeInterpreterCall(call) = &mut output {
+            call.origin = CodeInterpreterCallOrigin::Gateway;
+        }
+        Some(output)
     }
 
     /// Deserialize data column as either `InputItem` or `OutputItem`.
@@ -461,7 +470,9 @@ pub async fn detach_from_conversation_in_tx(
 mod tests {
     use super::*;
     use crate::types::event::MessageStatus;
-    use crate::types::io::{InputItem, OutputItem, OutputMessage, ReasoningOutput, ReasoningTextContent};
+    use crate::types::io::{
+        InputItem, OutputItem, OutputMessage, ReasoningOutput, ReasoningTextContent, ResponsesInput,
+    };
 
     #[test]
     fn new_items_reuse_public_ids_and_generate_storage_ids() {
@@ -493,6 +504,105 @@ mod tests {
         assert_eq!(rows[1].0, "msg_generated");
         assert!(rows[2].0.starts_with("msg_"));
         assert_eq!(rows[3].0, "fc_supplied");
+    }
+
+    #[test]
+    fn response_history_preserves_code_interpreter_public_id() {
+        let output = OutputItem::CodeInterpreterCall(crate::types::io::CodeInterpreterCall {
+            agent: None,
+            id: "ci_public".to_owned(),
+            container_id: "cntr_public".to_owned(),
+            code: "print(42)".to_owned(),
+            status: crate::types::io::CodeInterpreterCallStatus::Completed,
+            outputs: Some(vec![]),
+            origin: CodeInterpreterCallOrigin::default(),
+        });
+        let rows = serialize_new_items(vec![InOutItem::Output(output)], ItemSource::ResponseHistory)
+            .expect("serialize code interpreter response history");
+
+        assert_eq!(rows[0].0, "ci_public");
+        let data: Value = serde_json::from_str(&rows[0].1).expect("stored output JSON");
+        assert_eq!(data["id"], "ci_public");
+        assert_eq!(data["type"], "code_interpreter_call");
+    }
+
+    #[test]
+    fn code_interpreter_history_replays_native_call_without_gateway_duplicate() {
+        let gateway_call: InputItem = serde_json::from_value(serde_json::json!({
+            "type": "function_call",
+            "id": "fc_gateway",
+            "call_id": "call_gateway",
+            "name": "code_interpreter",
+            "arguments": "{\"code\":\"print(42)\"}",
+            "status": "completed"
+        }))
+        .expect("gateway model-facing call");
+        let gateway_result: InputItem = serde_json::from_value(serde_json::json!({
+            "type": "function_call_output",
+            "call_id": "call_gateway",
+            "output": "42"
+        }))
+        .expect("gateway model-facing output");
+        let native_call: OutputItem = serde_json::from_value(serde_json::json!({
+            "type": "code_interpreter_call",
+            "id": "ci_native",
+            "container_id": "cntr_native",
+            "code": "print(7)",
+            "status": "completed",
+            "outputs": [{"type": "logs", "logs": "7\n"}]
+        }))
+        .expect("native upstream call");
+        let mut gateway_projection = native_call.clone();
+        let OutputItem::CodeInterpreterCall(call) = &mut gateway_projection else {
+            panic!("code interpreter call");
+        };
+        call.id = "ci_gateway".to_owned();
+        call.container_id = "cntr_gateway".to_owned();
+        call.origin = CodeInterpreterCallOrigin::Gateway;
+
+        let stored = serialize_new_items(
+            vec![
+                InOutItem::Input(gateway_call),
+                InOutItem::Input(gateway_result),
+                InOutItem::Output(gateway_projection),
+                InOutItem::Output(native_call),
+            ],
+            ItemSource::ResponseHistory,
+        )
+        .expect("serialize response history");
+        let gateway_data: Value = serde_json::from_str(&stored[2].1).expect("stored gateway call");
+        let native_data: Value = serde_json::from_str(&stored[3].1).expect("stored native call");
+        assert_eq!(gateway_data[STORED_CODE_INTERPRETER_ORIGIN_KEY], "gateway");
+        assert!(native_data.get(STORED_CODE_INTERPRETER_ORIGIN_KEY).is_none());
+
+        let history = stored
+            .into_iter()
+            .map(|(id, data)| {
+                Item {
+                    id,
+                    data,
+                    created_at: 0,
+                    conversation_id: None,
+                    seq: None,
+                    tenant_id: None,
+                    reference_id: None,
+                }
+                .as_inout()
+                .expect("rehydrate stored item")
+            })
+            .collect();
+        let inputs = InOutItem::into_input_items(history);
+        assert_eq!(inputs.len(), 3);
+        assert!(matches!(&inputs[0], InputItem::FunctionCall(call) if call.call_id == "call_gateway"));
+        assert!(matches!(&inputs[1], InputItem::FunctionCallOutput(output) if output.call_id == "call_gateway"));
+        assert!(
+            matches!(&inputs[2], InputItem::CodeInterpreterCall(call) if call.id == "ci_native"
+            && call.code == "print(7)" && call.outputs.as_ref().is_some_and(|outputs| outputs.len() == 1))
+        );
+        let model_input =
+            serde_json::to_value(ResponsesInput::Items(inputs).model_input()).expect("model input serializes");
+        assert_eq!(model_input[2]["type"], "code_interpreter_call");
+        assert!(model_input[2].get(STORED_CODE_INTERPRETER_ORIGIN_KEY).is_none());
     }
 
     #[test]

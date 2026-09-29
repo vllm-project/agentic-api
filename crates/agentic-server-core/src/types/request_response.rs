@@ -1088,7 +1088,7 @@ mod tests {
             }),
             serde_json::json!({"type": "web_search_preview"}),
             serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_abc"]}),
-            serde_json::json!({"type": "code_interpreter"}),
+            serde_json::json!({"type": "code_interpreter", "container": {"type": "auto"}}),
         ]
     }
 
@@ -1340,6 +1340,36 @@ mod tests {
             assert_eq!(event["type"], expected_type);
             assert_eq!(event["response"]["status"], status);
         }
+    }
+
+    #[test]
+    fn response_payload_echoes_openai_code_interpreter_declaration() {
+        let declaration = serde_json::json!({"type": "code_interpreter", "container": {"type": "auto"}});
+        let tool = serde_json::from_value(declaration.clone()).expect("OpenAI tool declaration");
+        let payload = ResponsePayload {
+            id: "resp_test".to_owned(),
+            object: "response".to_owned(),
+            created_at: 0,
+            model: "test-model".to_owned(),
+            status: "completed".to_owned(),
+            output: Vec::new(),
+            usage: None,
+            incomplete_details: None,
+            error: None,
+            previous_response_id: None,
+            conversation_id: None,
+            instructions: None,
+            tools: Some(vec![tool]),
+            tool_choice: None,
+        };
+
+        let response = serde_json::to_value(&payload).expect("blocking response");
+        assert_eq!(response["tools"], serde_json::json!([declaration]));
+        let chunk = payload.as_created_response_chunk();
+        let event: Value =
+            serde_json::from_str(chunk.trim().strip_prefix("data: ").unwrap()).expect("created streaming event");
+        assert_eq!(event["response"]["tools"], response["tools"]);
+        assert!(response["tools"][0].get("execution").is_none());
     }
 
     #[test]

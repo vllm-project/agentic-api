@@ -16,10 +16,10 @@ use serde_json::Value;
 use crate::executor::error::{ExecutorError, ExecutorResult, ResourceLimit};
 use crate::types::io::output::{McpListTool, McpListTools, McpToolExecutionError, ReasoningTextContent};
 use crate::types::io::{
-    AgentAttribution, AgentMessage, AgentMessageContent, CompactionItem, CustomToolCall, FunctionToolCall, McpCall,
-    McpCallError, MultiAgentCall, MultiAgentCallOutput, MultiAgentCallOutputContent, OutputItem, OutputMessage,
-    OutputMessageContent, OutputTextContent, OutputTextLogprob, ReasoningOutput, ShellCall, ToolSearchCall, TopLogprob,
-    WebSearchAction, WebSearchCall,
+    AgentAttribution, AgentMessage, AgentMessageContent, CodeInterpreterCall, CodeInterpreterCallOutput,
+    CompactionItem, CustomToolCall, FunctionToolCall, McpCall, McpCallError, MultiAgentCall, MultiAgentCallOutput,
+    MultiAgentCallOutputContent, OutputItem, OutputMessage, OutputMessageContent, OutputTextContent, OutputTextLogprob,
+    ReasoningOutput, ShellCall, ToolSearchCall, TopLogprob, WebSearchAction, WebSearchCall,
 };
 use crate::types::request_response::IncompleteDetails;
 #[cfg(test)]
@@ -223,6 +223,30 @@ impl RetainedSize for CustomToolCall {
             + self.call_id.len()
             + self.name.len()
             + self.input.len()
+    }
+}
+
+impl RetainedSize for CodeInterpreterCallOutput {
+    fn retained_bytes(&self) -> usize {
+        RETAINED_CONTAINER_OVERHEAD_BYTES
+            + match self {
+                Self::Logs { logs } => logs.len(),
+                Self::Image { url } => url.len(),
+            }
+    }
+}
+
+impl RetainedSize for CodeInterpreterCall {
+    fn retained_bytes(&self) -> usize {
+        RETAINED_CONTAINER_OVERHEAD_BYTES
+            + self.agent.retained_bytes()
+            + self.id.len()
+            + self.container_id.len()
+            + self.code.len()
+            + self
+                .outputs
+                .as_ref()
+                .map_or(0, |outputs| RETAINED_CONTAINER_OVERHEAD_BYTES + sum_retained(outputs))
     }
 }
 
@@ -474,6 +498,7 @@ impl RetainedSize for OutputItem {
         match self {
             Self::Message(item) => item.retained_bytes(),
             Self::FunctionCall(item) => item.retained_bytes(),
+            Self::CodeInterpreterCall(item) => item.retained_bytes(),
             Self::CustomToolCall(item) => item.retained_bytes(),
             Self::ShellCall(item) => item.retained_bytes(),
             Self::Reasoning(item) => item.retained_bytes(),
@@ -513,7 +538,35 @@ mod tests {
         McpListTool, McpListTools, ReasoningOutput, ReasoningTextContent, WebSearchActionOpenPage,
         WebSearchActionSearch, WebSearchCall, WebSearchCallStatus,
     };
-    use crate::types::io::{McpCall, McpCallStatus};
+    use crate::types::io::{CodeInterpreterCallStatus, McpCall, McpCallStatus};
+
+    #[test]
+    fn retained_accounting_for_code_interpreter_call_and_outputs() {
+        let call = OutputItem::CodeInterpreterCall(CodeInterpreterCall {
+            agent: None,
+            id: "ci_1".to_owned(),
+            container_id: "cntr_1".to_owned(),
+            code: "print(42)".to_owned(),
+            status: CodeInterpreterCallStatus::Completed,
+            outputs: Some(vec![
+                CodeInterpreterCallOutput::logs("42\n".to_owned()),
+                CodeInterpreterCallOutput::Image {
+                    url: "https://example.test/plot.png".to_owned(),
+                },
+            ]),
+            origin: crate::types::io::code_interpreter::CodeInterpreterCallOrigin::default(),
+        });
+
+        assert_eq!(
+            retained_output_item_bytes(&call),
+            RETAINED_CONTAINER_OVERHEAD_BYTES * 4
+                + "ci_1".len()
+                + "cntr_1".len()
+                + "print(42)".len()
+                + "42\n".len()
+                + "https://example.test/plot.png".len()
+        );
+    }
 
     #[test]
     fn agent_message_parts_charge_media_text_and_extension_fields() {

@@ -2,6 +2,7 @@ use crate::types::io::FunctionTool;
 use crate::types::io::input::FunctionToolResultMessage;
 use crate::types::tools::ResponsesTool;
 
+use super::code_interpreter::CodeInterpreterHandler;
 use super::codex::CodexNamespaceHandler;
 use super::custom::CustomHandler;
 use super::function::FunctionHandler;
@@ -11,6 +12,18 @@ use super::registry::ToolType;
 use super::shell::ShellHandler;
 use super::tool_search::ToolSearchHandler;
 use super::web_search::web_search_function_tool;
+
+#[cfg(not(feature = "embedded-code-interpreter"))]
+const CODE_INTERPRETER_UNAVAILABLE: &str =
+    "code_interpreter is disabled; rebuild with the embedded-code-interpreter feature";
+
+#[cfg(feature = "embedded-code-interpreter")]
+const CODE_INTERPRETER_UNAVAILABLE: &str =
+    "code_interpreter is disabled by operator configuration or its embedded runtime is not ready";
+
+pub(crate) fn code_interpreter_unavailable_error() -> ToolError {
+    ToolError::Config(CODE_INTERPRETER_UNAVAILABLE.to_owned())
+}
 
 impl ResponsesTool {
     /// Validate this declaration through its tool handler before normalization.
@@ -24,7 +37,9 @@ impl ResponsesTool {
             Self::Function(param) => FunctionHandler.validate(param),
             Self::Mcp(param) => McpHandler::spec_from_param(param).validate(param),
             Self::ToolSearch(param) => ToolSearchHandler.validate(param),
-            Self::WebSearch(_) | Self::FileSearch(_) | Self::CodeInterpreter(_) | Self::Unknown => Ok(()),
+            Self::WebSearch(_) | Self::FileSearch(_) | Self::Unknown => Ok(()),
+            // Runtime availability is checked before the request is normalized.
+            Self::CodeInterpreter(param) => CodeInterpreterHandler.validate(param),
             Self::Shell(param) => ShellHandler.validate(param),
             Self::Namespace(param) => CodexNamespaceHandler.validate(param),
             Self::Custom(param) => CustomHandler.validate(param),
@@ -64,8 +79,11 @@ impl ResponsesTool {
     /// - Unformatted `Custom` variants become function tools with one string
     ///   `input` parameter; formatted declarations are rejected by the request
     ///   path because normalization cannot preserve constrained decoding.
-    /// - Unimplemented variants (`FileSearch`, `CodeInterpreter`) return
-    ///   an empty list and emit a `tracing::debug!`.
+    /// - `CodeInterpreter` lowers to its fixed function contract in every build;
+    ///   supported request flows reject an unavailable runtime before calling
+    ///   this conversion.
+    /// - Unimplemented `FileSearch` variants return an empty list and emit a
+    ///   `tracing::debug!`.
     ///
     /// `RequestPayload::to_upstream_request()` uses this conversion for
     /// all model-visible tools.
@@ -82,10 +100,7 @@ impl ResponsesTool {
                 tracing::debug!("file_search tool skipped in normalize - handler not yet registered");
                 vec![]
             }
-            Self::CodeInterpreter(_) => {
-                tracing::debug!("code_interpreter tool skipped in normalize - handler not yet registered");
-                vec![]
-            }
+            Self::CodeInterpreter(param) => CodeInterpreterHandler.normalize(param),
             Self::Shell(param) => ShellHandler.normalize(param),
             Self::Namespace(param) => CodexNamespaceHandler.normalize(param),
             Self::Custom(param) => CustomHandler.normalize(param),
@@ -103,5 +118,26 @@ impl From<ToolOutput> for FunctionToolResultMessage {
             call_id: o.call_id,
             output: o.output.into(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn code_interpreter_normalizes_to_its_fixed_function_contract() {
+        let tool: ResponsesTool = serde_json::from_value(serde_json::json!({
+            "type": "code_interpreter",
+            "container": {"type": "auto"}
+        }))
+        .expect("tool parses");
+
+        let [function] = tool
+            .to_function_tools()
+            .try_into()
+            .expect("normalization emits exactly one function");
+        assert_eq!(function.name, "code_interpreter");
+        assert_eq!(function.strict, Some(true));
     }
 }

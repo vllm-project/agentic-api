@@ -1,3 +1,4 @@
+pub mod code_interpreter;
 pub mod input;
 mod item_id;
 pub mod multi_agent;
@@ -6,6 +7,9 @@ pub mod shell;
 pub mod tools;
 pub mod usage;
 
+pub use code_interpreter::{
+    CodeInterpreterCall, CodeInterpreterCallOutput, CodeInterpreterCallStatus, CodeInterpreterCallStreamEvent,
+};
 pub use input::{
     CompactionItem, CustomToolCallOutputMessage, FunctionToolResultMessage, InputContent, InputFileContent,
     InputFunctionToolCall, InputImageContent, InputItem, InputMessage, InputMessageContent, InputTextContent,

@@ -311,13 +311,20 @@ impl SlotMap {
         let EventPayload::OutputItemDone { item: raw_item, .. } = payload else {
             return Ok(None);
         };
-        let parsed = validated_done_item.cloned().or_else(|| {
+        let mut parsed = validated_done_item.cloned().or_else(|| {
             deserialize_from_value_opt::<OutputItem>(raw_item.clone()).or_else(|| {
                 (identity.item_type == Some(SSEItemType::Reasoning))
                     .then(|| ReasoningOutput::try_from(payload).ok().map(OutputItem::Reasoning))
                     .flatten()
             })
         });
+        if let Some(OutputItem::CodeInterpreterCall(call)) = &mut parsed
+            && call.id.is_empty()
+            && let Some(SlotState::Done(OutputItem::CodeInterpreterCall(previous))) =
+                self.slots.get(&index).map(|slot| &slot.state)
+        {
+            call.id.clone_from(&previous.id);
+        }
         if let Some(slot) = self.slots.get(&index) {
             if let SlotState::Active(active) = &slot.state {
                 active.validate_completion(parsed.as_ref())?;
@@ -374,9 +381,20 @@ impl SlotMap {
             }
             return Ok(None);
         }
+        self.complete_done_only(index, identity, parsed, budget)
+    }
+
+    fn complete_done_only(
+        &mut self,
+        index: OutputIndex,
+        identity: ItemIdentity<'_>,
+        parsed: Option<OutputItem>,
+        budget: Option<&ExecutorResponseBudget>,
+    ) -> ExecutorResult<Option<OutputIndex>> {
         if let Some(
             mut item @ (OutputItem::Reasoning(_)
             | OutputItem::FunctionCall(_)
+            | OutputItem::CodeInterpreterCall(_)
             | OutputItem::ToolSearchCall(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::ShellCall(_)
@@ -393,6 +411,11 @@ impl SlotMap {
                 && call.id.is_empty()
             {
                 call.id = uuid7_str("ws_");
+            }
+            if let OutputItem::CodeInterpreterCall(call) = &mut item
+                && call.id.is_empty()
+            {
+                call.id = uuid7_str("ci_");
             }
             let mut account = RetainedAccount::default();
             account.charge(budget, item.retained_bytes())?;

@@ -1,6 +1,7 @@
 use crate::types::io::input::model_items;
 use crate::types::io::{
-    InputContent, InputFileContent, InputItem, InputMessageContent, ResponsesInput, ToolCallOutput, ToolOutputContent,
+    CodeInterpreterCallOutput, InputContent, InputFileContent, InputItem, InputMessageContent, ResponsesInput,
+    ToolCallOutput, ToolOutputContent,
 };
 use crate::types::tools::ResponsesTool;
 use crate::utils::common::serialize_to_value;
@@ -150,6 +151,19 @@ fn add_input_item(estimate: &mut InputTokenEstimate, item: &InputItem) {
         InputItem::FunctionCallOutput(output) => {
             estimate.add_text(&output.call_id);
             add_tool_call_output(estimate, &output.output);
+        }
+        InputItem::CodeInterpreterCall(call) => {
+            estimate.add_text(&call.id);
+            estimate.add_text(&call.container_id);
+            estimate.add_text(&call.code);
+            if let Some(outputs) = &call.outputs {
+                for output in outputs {
+                    match output {
+                        CodeInterpreterCallOutput::Logs { logs } => estimate.add_text(logs),
+                        CodeInterpreterCallOutput::Image { .. } => estimate.add_tokens(ESTIMATED_IMAGE_TOKENS),
+                    }
+                }
+            }
         }
         InputItem::ToolSearchCall(call) => {
             estimate.add_text(&call.id);

@@ -26,8 +26,8 @@ use crate::executor::response_budget::{
 use crate::types::event::MessageStatus;
 use crate::types::io::output::McpListTools;
 use crate::types::io::{
-    ApplyDone, CompactionItem, CustomToolCall, FunctionToolCall, McpCall, MultiAgentCall, MultiAgentCallOutput,
-    OutputItem, OutputMessage, ReasoningOutput, ShellCall, ToolSearchCall, WebSearchCall,
+    ApplyDone, CodeInterpreterCall, CompactionItem, CustomToolCall, FunctionToolCall, McpCall, MultiAgentCall,
+    MultiAgentCallOutput, OutputItem, OutputMessage, ReasoningOutput, ShellCall, ToolSearchCall, WebSearchCall,
 };
 
 pub(super) type Budget<'a> = Option<&'a ExecutorResponseBudget>;
@@ -218,6 +218,7 @@ pub(super) enum ActiveItem {
     FunctionCall(FunctionCallState),
     CustomToolCall(CustomToolCallState),
     ShellCall(ShellCallState),
+    CodeInterpreterCall { item: Option<CodeInterpreterCall> },
     ToolSearchCall { item: ToolSearchCall },
     WebSearchCall { item: Option<WebSearchCall> },
     McpCall { item: McpCall },
@@ -266,6 +267,7 @@ impl ActiveItem {
                 item: FunctionToolCall::try_from(payload).ok()?,
                 arguments: String::with_capacity(128),
             }),
+            SSEItemType::CodeInterpreterCall => Self::CodeInterpreterCall { item: None },
             SSEItemType::ToolSearchCall => Self::ToolSearchCall {
                 item: ToolSearchCall::try_from(payload).ok()?,
             },
@@ -301,6 +303,7 @@ impl ActiveItem {
                 item,
                 arguments: String::new(),
             }),
+            OutputItem::CodeInterpreterCall(item) => Self::CodeInterpreterCall { item: Some(item) },
             OutputItem::ToolSearchCall(item) => Self::ToolSearchCall { item },
             OutputItem::CustomToolCall(item) => Self::CustomToolCall(CustomToolCallState {
                 item,
@@ -325,6 +328,7 @@ impl ActiveItem {
             Self::FunctionCall(state) => Some(&state.item.id),
             Self::CustomToolCall(state) => Some(&state.item.id),
             Self::ShellCall(state) => state.item.id.as_deref(),
+            Self::CodeInterpreterCall { item } => item.as_ref().map(|item| item.id.as_str()),
             Self::ToolSearchCall { item } => Some(&item.id),
             Self::WebSearchCall { item } => item.as_ref().map(|item| item.id.as_str()),
             Self::McpCall { item } => Some(&item.id),
@@ -341,6 +345,7 @@ impl ActiveItem {
             Self::Message(_) => SSEItemType::Message,
             Self::Reasoning(_) => SSEItemType::Reasoning,
             Self::FunctionCall(_) => SSEItemType::FunctionCall,
+            Self::CodeInterpreterCall { .. } => SSEItemType::CodeInterpreterCall,
             Self::ToolSearchCall { .. } => SSEItemType::ToolSearchCall,
             Self::CustomToolCall(_) => SSEItemType::CustomToolCall,
             Self::ShellCall(_) => SSEItemType::ShellCall,
@@ -376,7 +381,8 @@ impl ActiveItem {
             Self::FunctionCall(state) => state.apply(payload, account, budget),
             Self::CustomToolCall(state) => state.apply(payload, account, budget),
             Self::ShellCall(state) => state.apply(payload, account, budget),
-            Self::MultiAgentCall { .. }
+            Self::CodeInterpreterCall { .. }
+            | Self::MultiAgentCall { .. }
             | Self::MultiAgentCallOutput { .. }
             | Self::ToolSearchCall { .. }
             | Self::WebSearchCall { .. }
@@ -434,6 +440,9 @@ impl ActiveItem {
             (Self::FunctionCall(state), Some(OutputItem::FunctionCall(done))) => {
                 state.item.merge_done(done, &mut state.arguments);
             }
+            (Self::CodeInterpreterCall { item }, Some(OutputItem::CodeInterpreterCall(done))) => {
+                item.merge_done(done, item_id);
+            }
             (Self::ToolSearchCall { item }, Some(OutputItem::ToolSearchCall(done))) => item.merge_done(done, ()),
             (Self::CustomToolCall(state), Some(OutputItem::CustomToolCall(done))) => {
                 state.item.merge_done(done, &mut state.input);
@@ -459,6 +468,7 @@ impl ActiveItem {
             Self::ShellCall(state) => OutputItem::ShellCall(state.item),
             Self::Reasoning(state) => OutputItem::Reasoning(state.item),
             Self::FunctionCall(state) => state.finalize(),
+            Self::CodeInterpreterCall { item } => OutputItem::CodeInterpreterCall(item?),
             Self::ToolSearchCall { item } => OutputItem::ToolSearchCall(item),
             Self::Message(state) => state.finalize(),
             Self::CustomToolCall(state) => state.finalize(),
@@ -484,6 +494,9 @@ impl RetainedSize for ActiveItem {
             Self::FunctionCall(state) => state.retained_bytes(),
             Self::CustomToolCall(state) => state.retained_bytes(),
             Self::ShellCall(state) => state.retained_bytes(),
+            Self::CodeInterpreterCall { item } => item
+                .as_ref()
+                .map_or(RETAINED_CONTAINER_OVERHEAD_BYTES, RetainedSize::retained_bytes),
             Self::ToolSearchCall { item } => item.retained_bytes(),
             Self::WebSearchCall { item } => item
                 .as_ref()
