@@ -75,7 +75,7 @@ impl AgentCommand {
 
 /// Results of hosted actions. An action error is a successful tool response,
 /// distinct from an infrastructure failure of the containing response.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum CollaborationResult {
     Spawned { task_name: String },
@@ -85,7 +85,7 @@ pub enum CollaborationResult {
     Error { error: String },
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentListingStatus {
     Running,
@@ -94,7 +94,7 @@ pub enum AgentListingStatus {
     Failed,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AgentListing {
     pub agent_name: String,
     pub agent_status: AgentListingStatus,

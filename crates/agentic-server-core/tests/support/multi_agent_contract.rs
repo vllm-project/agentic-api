@@ -5,8 +5,11 @@ use std::io::Read;
 use std::path::Path;
 
 use agentic_core::events::{SSEEventType, normalize_sse_line};
+use agentic_core::types::agent_commands::CollaborationResult;
 use agentic_core::types::client_calls::ClientCallKind;
-use agentic_core::types::io::{InputItem, MessagePhase, MultiAgentAction, OutputItem};
+use agentic_core::types::io::{
+    InputItem, MessagePhase, MultiAgentAction, MultiAgentCallOutput, MultiAgentCallOutputContent, OutputItem,
+};
 use agentic_core::types::request_response::ResponsePayload;
 use agentic_core::types::tools::{CodexNamespaceMember, ResponsesTool, ToolSearchStatus};
 use serde_json::Value;
@@ -157,6 +160,7 @@ impl RecordedSession {
                         if collaboration.remove(output.call_id.as_str()) != Some((output.action, agent)) {
                             return Err(mismatch("unmatched collaboration output"));
                         }
+                        validate_collaboration_result(output)?;
                     }
                     OutputItem::AgentMessage(message) if agent != Some(message.recipient.as_str()) => {
                         return Err(mismatch("agent_message attribution differs from recipient"));
@@ -176,6 +180,50 @@ impl RecordedSession {
             return Err(mismatch("session ends with unresolved client calls"));
         }
         Ok(())
+    }
+}
+
+/// Validate the JSON inside `output_text`, independently of model-dependent values.
+fn validate_collaboration_result(output: &MultiAgentCallOutput) -> Result<(), ContractMismatch> {
+    let text: String = output
+        .output
+        .iter()
+        .map(|part| {
+            let MultiAgentCallOutputContent::OutputText(part) = part;
+            part.text.as_str()
+        })
+        .collect();
+    if text.is_empty()
+        && matches!(
+            output.action,
+            MultiAgentAction::SendMessage | MultiAgentAction::FollowupTask
+        )
+    {
+        return Ok(());
+    }
+    let result: CollaborationResult = serde_json::from_str(&text).map_err(|error| {
+        mismatch(format!(
+            "{:?} result for {} has an invalid schema: {error}",
+            output.action, output.call_id
+        ))
+    })?;
+    if matches!(
+        (output.action, result),
+        (_, CollaborationResult::Error { .. })
+            | (MultiAgentAction::SpawnAgent, CollaborationResult::Spawned { .. })
+            | (MultiAgentAction::ListAgents, CollaborationResult::Listing { .. })
+            | (
+                MultiAgentAction::InterruptAgent,
+                CollaborationResult::Interrupted { .. }
+            )
+            | (MultiAgentAction::WaitAgent, CollaborationResult::Wait { .. })
+    ) {
+        Ok(())
+    } else {
+        Err(mismatch(format!(
+            "{:?} result for {} has the wrong action schema",
+            output.action, output.call_id
+        )))
     }
 }
 
@@ -409,5 +457,123 @@ impl RecordedSession {
             ));
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn action_output(action: MultiAgentAction, text: &str) -> MultiAgentCallOutput {
+        // This outer wire item is valid even when text contains an invalid result schema.
+        serde_json::from_value(json!({
+            "id": "maco_test", "call_id": "call_test", "action": action,
+            "output": [{"type": "output_text", "text": text}]
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn collaboration_results_accept_observed_schemas() {
+        for (action, result) in [
+            (
+                MultiAgentAction::SpawnAgent,
+                json!({"task_name": "/root/arbitrary_name"}),
+            ),
+            (
+                MultiAgentAction::ListAgents,
+                json!({"agents": [
+                    {"agent_name": "/root", "agent_status": "running"},
+                    {"agent_name": "/root/a", "agent_status": {"completed": null}},
+                    {"agent_name": "/root/b", "agent_status": {"completed": "any answer"}},
+                    {"agent_name": "/root/c", "agent_status": "interrupted"},
+                    {"agent_name": "/root/d", "agent_status": "failed"}
+                ]}),
+            ),
+            (MultiAgentAction::InterruptAgent, json!({"previous_status": "running"})),
+            (
+                MultiAgentAction::InterruptAgent,
+                json!({"previous_status": {"completed": null}}),
+            ),
+            (
+                MultiAgentAction::WaitAgent,
+                json!({"message": "any notification", "timed_out": false}),
+            ),
+            (
+                MultiAgentAction::WaitAgent,
+                json!({"message": "another notification", "timed_out": true}),
+            ),
+        ] {
+            validate_collaboration_result(&action_output(action, &result.to_string())).unwrap();
+        }
+        for action in [MultiAgentAction::SendMessage, MultiAgentAction::FollowupTask] {
+            validate_collaboration_result(&action_output(action, "")).unwrap();
+        }
+    }
+
+    #[test]
+    fn collaboration_results_reject_missing_wrong_and_mismatched_fields() {
+        for (action, result) in [
+            (MultiAgentAction::SpawnAgent, json!({})),
+            (MultiAgentAction::SpawnAgent, json!({"task_name": 42})),
+            (MultiAgentAction::ListAgents, json!({"agents": "not an array"})),
+            (
+                MultiAgentAction::ListAgents,
+                json!({"agents": [{"agent_name": "/root"}]}),
+            ),
+            (
+                MultiAgentAction::ListAgents,
+                json!({"agents": [{"agent_status": "running"}]}),
+            ),
+            (
+                MultiAgentAction::ListAgents,
+                json!({"agents": [{"task_name": "/root", "status": "running"}]}),
+            ),
+            (
+                MultiAgentAction::ListAgents,
+                json!({"agents": [{"agent_name": "/root", "agent_status": {"completed": 42}}]}),
+            ),
+            (
+                MultiAgentAction::ListAgents,
+                json!({"agents": [{"agent_name": "/root", "agent_status": "unknown"}]}),
+            ),
+            (MultiAgentAction::InterruptAgent, json!({"previous_status": null})),
+            (MultiAgentAction::InterruptAgent, json!({"previous_status": "unknown"})),
+            (MultiAgentAction::WaitAgent, json!({"message": "missing timeout"})),
+            (
+                MultiAgentAction::WaitAgent,
+                json!({"message": "wrong timeout", "timed_out": "false"}),
+            ),
+            (MultiAgentAction::WaitAgent, json!({"message": 42, "timed_out": false})),
+            (
+                MultiAgentAction::WaitAgent,
+                json!({"task_name": "/root/valid_but_wrong_action"}),
+            ),
+            (MultiAgentAction::SpawnAgent, json!({"agents": []})),
+        ] {
+            let error = validate_collaboration_result(&action_output(action, &result.to_string())).unwrap_err();
+            assert!(error.to_string().contains("call_test"));
+        }
+        for text in ["", "not JSON", "{", "null"] {
+            assert!(validate_collaboration_result(&action_output(MultiAgentAction::ListAgents, text)).is_err());
+        }
+    }
+
+    #[test]
+    fn collaboration_error_results_require_a_string_for_every_action() {
+        for action in [
+            MultiAgentAction::SpawnAgent,
+            MultiAgentAction::SendMessage,
+            MultiAgentAction::FollowupTask,
+            MultiAgentAction::WaitAgent,
+            MultiAgentAction::InterruptAgent,
+            MultiAgentAction::ListAgents,
+        ] {
+            validate_collaboration_result(&action_output(action, r#"{"error":"any model-visible error"}"#)).unwrap();
+            for text in [r#"{"error":42}"#, r#"{"error":null}"#] {
+                assert!(validate_collaboration_result(&action_output(action, text)).is_err());
+            }
+        }
     }
 }
