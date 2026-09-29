@@ -7,7 +7,7 @@ use agentic_core::error::Error;
 
 use crate::config_file::WebSearchFileConfig;
 
-/// Environment override for the `web_search` backend (`you` or `brave`).
+/// Environment override for the `web_search` backend (`you`, `brave`, or `tavily`).
 const WEB_SEARCH_PROVIDER_ENV: &str = "AGENTIC_WEB_SEARCH_PROVIDER";
 /// Provider-neutral environment override for the `web_search` endpoint.
 const WEB_SEARCH_BASE_URL_ENV: &str = "AGENTIC_WEB_SEARCH_BASE_URL";
@@ -159,6 +159,45 @@ mod tests {
     }
 
     #[test]
+    fn web_search_config_selects_tavily_from_environment_or_file() {
+        let config = resolve_web_search_config(
+            &WebSearchFileConfig::default(),
+            env_from(&[
+                ("AGENTIC_WEB_SEARCH_PROVIDER", "Tavily"),
+                ("TAVILY_API_KEY", "tvly-secret"),
+                ("BRAVE_API_KEY", "brave-secret"),
+                ("YOU_API_KEY", "you-secret"),
+                ("YOU_API_BASE_URL", "https://you.example"),
+            ]),
+        )
+        .expect("resolve tavily");
+        assert_eq!(config.provider, WebSearchProviderKind::Tavily);
+        assert_eq!(config.api_key.as_deref(), Some("tvly-secret"));
+        assert_eq!(
+            config.base_url.as_deref(),
+            Some("https://api.tavily.com"),
+            "YOU_API_BASE_URL must not leak into the Tavily endpoint"
+        );
+        assert_eq!(
+            config.max_concurrent_queries, None,
+            "Tavily inherits the gateway ceiling"
+        );
+
+        let file = WebSearchFileConfig {
+            provider: Some(WebSearchProviderKind::Tavily),
+            api_key_env: Some("MY_TAVILY_KEY".to_owned()),
+            base_url: Some("https://tavily.example".to_owned()),
+            max_concurrent_queries: NonZeroUsize::new(3),
+        };
+        let config = resolve_web_search_config(&file, env_from(&[("MY_TAVILY_KEY", "custom-secret")]))
+            .expect("resolve tavily from file");
+        assert_eq!(config.provider, WebSearchProviderKind::Tavily);
+        assert_eq!(config.api_key.as_deref(), Some("custom-secret"));
+        assert_eq!(config.base_url.as_deref(), Some("https://tavily.example"));
+        assert_eq!(config.max_concurrent_queries.map(NonZeroUsize::get), Some(3));
+    }
+
+    #[test]
     fn web_search_config_applies_environment_precedence_for_endpoint_and_concurrency() {
         let file = WebSearchFileConfig {
             base_url: Some("https://file.example".to_owned()),
@@ -192,7 +231,7 @@ mod tests {
         .expect_err("unknown provider");
         assert_eq!(
             error.to_string(),
-            "AGENTIC_WEB_SEARCH_PROVIDER: unknown web_search provider \"bing\"; expected one of: you, brave"
+            "AGENTIC_WEB_SEARCH_PROVIDER: unknown web_search provider \"bing\"; expected one of: you, brave, tavily"
         );
 
         let error = resolve_web_search_config(
@@ -235,7 +274,12 @@ mod tests {
 
     #[test]
     fn generated_web_search_config_can_switch_provider_without_pinning_credentials() {
-        for (initial, next, key) in [("you", "brave", "BRAVE_API_KEY"), ("brave", "you", "YOU_API_KEY")] {
+        for (initial, next, key) in [
+            ("you", "brave", "BRAVE_API_KEY"),
+            ("brave", "you", "YOU_API_KEY"),
+            ("brave", "tavily", "TAVILY_API_KEY"),
+            ("tavily", "you", "YOU_API_KEY"),
+        ] {
             let generated = generated_web_search_file_config(env_from(&[("AGENTIC_WEB_SEARCH_PROVIDER", initial)]));
             let config = resolve_web_search_config(
                 &generated,

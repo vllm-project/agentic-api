@@ -744,7 +744,8 @@ fn sse_response(events: impl IntoIterator<Item = serde_json::Value>) -> support:
     support::MockResponse::Sse(body)
 }
 
-fn web_search_function_call_sse_response() -> support::MockResponse {
+fn web_search_function_call_sse_response(call_id: &str) -> support::MockResponse {
+    let item_id = format!("fc_{call_id}");
     sse_response([
         serde_json::json!({
             "type": "response.created",
@@ -754,9 +755,9 @@ fn web_search_function_call_sse_response() -> support::MockResponse {
             "type": "response.output_item.added",
             "output_index": 0,
             "item": {
-                "id": "fc_search",
+                "id": item_id,
                 "type": "function_call",
-                "call_id": "call_search",
+                "call_id": call_id,
                 "name": "web_search",
                 "arguments": "",
                 "status": "in_progress"
@@ -764,9 +765,9 @@ fn web_search_function_call_sse_response() -> support::MockResponse {
         }),
         serde_json::json!({
             "type": "response.function_call_arguments.done",
-            "item_id": "fc_search",
+            "item_id": item_id,
             "output_index": 0,
-            "call_id": "call_search",
+            "call_id": call_id,
             "name": "web_search",
             "arguments": "{\"query\":\"rust async\",\"count\":2}"
         }),
@@ -1195,7 +1196,11 @@ fn json_object_text_config() -> ResponseTextConfig {
     .unwrap()
 }
 
-fn assert_generation_config_is_preserved(request_bodies: &[serde_json::Value]) {
+fn assert_request_config_is_preserved(request_bodies: &[serde_json::Value]) {
+    assert_eq!(request_bodies[0]["tools"][0]["name"], "web_search");
+    assert_eq!(request_bodies[0]["max_output_tokens"], 1024);
+    assert_eq!(request_bodies[0]["prompt_cache_key"], "workspace-a");
+    assert_eq!(request_bodies[1]["prompt_cache_key"], "workspace-a");
     assert_eq!(request_bodies[0]["reasoning"], serde_json::json!({"effort": "high"}));
     assert_eq!(request_bodies[1]["reasoning"], request_bodies[0]["reasoning"]);
     assert_eq!(
@@ -1237,6 +1242,7 @@ async fn execute_runs_web_search_and_sends_tool_output_back_to_model() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: Some("workspace-a".to_owned()),
         cache_salt: None,
         context_management: None,
     };
@@ -1251,9 +1257,7 @@ async fn execute_runs_web_search_and_sends_tool_output_back_to_model() {
 
     let request_bodies = llm.request_bodies().await;
     assert_eq!(request_bodies.len(), 2);
-    assert_eq!(request_bodies[0]["tools"][0]["name"], "web_search");
-    assert_eq!(request_bodies[0]["max_output_tokens"], 1024);
-    assert_generation_config_is_preserved(&request_bodies);
+    assert_request_config_is_preserved(&request_bodies);
     let second_input = request_bodies[1]["input"]
         .as_array()
         .expect("second request input array");
@@ -1343,6 +1347,7 @@ async fn execute_relaxes_forced_tool_choice_after_web_search_result() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: None,
         cache_salt: None,
         context_management: None,
     };
@@ -1378,6 +1383,7 @@ fn base_payload(input: ResponsesInput) -> RequestPayload {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: None,
         cache_salt: None,
         context_management: None,
     }
@@ -1513,6 +1519,7 @@ async fn execute_accumulates_usage_across_web_search_model_rounds() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: None,
         cache_salt: None,
         context_management: None,
     };
@@ -1535,7 +1542,7 @@ async fn execute_accumulates_usage_across_web_search_model_rounds() {
 async fn stream_emits_web_search_lifecycle_events_before_final_payload() {
     let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
     let llm = support::MockServer::start_deque(vec![
-        web_search_function_call_sse_response(),
+        web_search_function_call_sse_response("call_search"),
         text_sse_response("Use async carefully."),
     ])
     .await;
@@ -1561,6 +1568,7 @@ async fn stream_emits_web_search_lifecycle_events_before_final_payload() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: None,
         cache_salt: None,
         context_management: None,
     };
@@ -1657,7 +1665,7 @@ fn assert_output_event_indices_in_order(json_events: &[serde_json::Value], expec
 async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence() {
     let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
     let llm = support::MockServer::start_deque(vec![
-        web_search_function_call_sse_response(),
+        web_search_function_call_sse_response("call_search"),
         two_messages_then_web_search_sse_response(),
         text_sse_response_with_output_index("Use async carefully.", 0),
     ])
@@ -1682,6 +1690,7 @@ async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence()
         max_output_tokens: Some(1024),
         ignore_eos: None,
         truncation: None,
+        prompt_cache_key: Some("workspace-a".to_owned()),
         cache_salt: None,
         metadata: None,
         parallel_tool_calls: None,
@@ -1698,6 +1707,14 @@ async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence()
         .recv()
         .await
         .expect("mock You.com should receive second request");
+
+    let request_bodies = llm.request_bodies().await;
+    assert_eq!(request_bodies.len(), 3);
+    assert!(
+        request_bodies
+            .iter()
+            .all(|body| body["prompt_cache_key"] == "workspace-a")
+    );
 
     let json_events = streamed_sse_events(&chunks);
     assert_single_logical_lifecycle(&json_events);
@@ -1762,6 +1779,7 @@ async fn stream_hides_web_search_function_events_when_name_arrives_on_done() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: None,
         cache_salt: None,
         context_management: None,
     };
@@ -1829,6 +1847,7 @@ async fn stream_orders_gateway_lifecycle_before_later_client_function_events() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: None,
         cache_salt: None,
         context_management: None,
     };
@@ -1915,6 +1934,7 @@ async fn execute_runs_multiple_web_search_calls_concurrently() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: None,
         cache_salt: None,
         context_management: None,
     };
@@ -1968,6 +1988,7 @@ async fn execute_feeds_web_search_execution_errors_back_to_model() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: None,
         cache_salt: None,
         context_management: None,
     };
@@ -1997,8 +2018,8 @@ async fn execute_feeds_web_search_execution_errors_back_to_model() {
 #[tokio::test]
 async fn execute_returns_incomplete_after_max_gateway_tool_rounds() {
     let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
-    let llm_responses = std::iter::repeat_with(web_search_function_call_response)
-        .take(10)
+    let llm_responses = (0..10)
+        .map(|round| web_search_function_call_response_with_id(&format!("call_r{round}")))
         .collect();
     let llm = support::MockServer::start_deque(llm_responses).await;
     let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
@@ -2023,6 +2044,7 @@ async fn execute_returns_incomplete_after_max_gateway_tool_rounds() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: None,
         cache_salt: None,
         context_management: None,
     };
@@ -2078,6 +2100,7 @@ async fn execute_feeds_invalid_web_search_arguments_back_to_model() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: None,
         cache_salt: None,
         context_management: None,
     };
@@ -2140,6 +2163,7 @@ async fn execute_runs_large_gateway_fanout_without_hard_cap() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: None,
         cache_salt: None,
         context_management: None,
     };
@@ -2292,6 +2316,7 @@ async fn stream_error_events_escape_error_messages() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: None,
         cache_salt: None,
         context_management: None,
     };
@@ -2369,6 +2394,7 @@ async fn incomplete_turn_persists_a_consistent_conversation_for_continuation() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: None,
         cache_salt: None,
         context_management: None,
     };
@@ -2400,6 +2426,7 @@ async fn incomplete_turn_persists_a_consistent_conversation_for_continuation() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: None,
         cache_salt: None,
         context_management: None,
     };
@@ -2449,8 +2476,8 @@ async fn stream_returns_incomplete_after_max_gateway_tool_rounds() {
     // Streaming counterpart of the blocking cap test: past the round budget over
     // an SSE stream, the final streamed payload must carry status "incomplete".
     let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
-    let llm_responses = std::iter::repeat_with(web_search_function_call_sse_response)
-        .take(10)
+    let llm_responses = (0..10)
+        .map(|round| web_search_function_call_sse_response(&format!("call_r{round}")))
         .collect();
     let llm = support::MockServer::start_deque(llm_responses).await;
     let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
@@ -2475,6 +2502,7 @@ async fn stream_returns_incomplete_after_max_gateway_tool_rounds() {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: None,
         cache_salt: None,
         context_management: None,
     };

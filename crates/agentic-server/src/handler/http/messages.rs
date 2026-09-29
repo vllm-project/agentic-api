@@ -6,13 +6,12 @@ use bytes::Bytes;
 use http::HeaderMap;
 use tracing::debug;
 
+use agentic_core::executor::telemetry::Api;
 use agentic_core::executor::{
     ExecutorError, MessagesRequestContext, MessagesUpstream, ParsedMessagesRequest,
     normalize_native_web_search_for_upstream, run_messages_loop, run_messages_stream,
 };
-use agentic_core::proxy::{
-    ProxyAuth, ProxyRequest, error_response_for_auth, proxy_request_with_path, upstream_request_headers,
-};
+use agentic_core::proxy::{ProxyAuth, ProxyRequest, error_response_for_auth, upstream_request_headers};
 use agentic_core::tool::ToolRegistry;
 use agentic_core::types::messages::registry_tools;
 
@@ -28,14 +27,14 @@ async fn proxy_messages(
     path: &'static str,
 ) -> Response {
     convert_response(
-        proxy_request_with_path(
+        crate::telemetry::proxy::trace_proxy_request(
+            Api::Messages,
             ProxyRequest {
                 headers: parts.headers,
                 body,
                 query: parts.uri.query().map(str::to_owned),
             },
             path,
-            ProxyAuth::Anthropic,
             &state.proxy_state,
         )
         .await,

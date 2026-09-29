@@ -16,9 +16,9 @@
 //! (#119/#132); kept deliberately parallel for a future consolidation. Reuses
 //! only the neutral tool layer via [`crate::types::messages::tool_seam`].
 
-mod block;
+mod blocks;
 mod wire;
-use block::BufferedBlock;
+use blocks::{BufferedBlock, StreamedCall, execute_gateway_calls};
 use wire::{error_sse, executor_error_sse, sse};
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -27,17 +27,18 @@ use std::sync::Arc;
 use async_stream::stream;
 use futures::StreamExt;
 use serde_json::{Value, json};
+use tracing::Instrument as _;
 
 use crate::events::{ClassifiedSseLine, SseLine};
 use crate::executor::error::ExecutorResult;
 use crate::executor::inference::{BoxStream, response_lines, send_request};
 use crate::executor::messages_context::MessagesRequestContext;
-use crate::executor::messages_request::web_search_budget_exhausted_result;
 use crate::executor::messages_usage::MessagesUsageTotals;
 use crate::executor::request::ExecutionContext;
+use crate::executor::telemetry::{Api, ExecutionSpan, FailureCategory, InstrumentedStream, Route};
 use crate::proxy::processed_response_headers;
 use crate::tool::ToolRegistry;
-use crate::types::messages::{GatewayToolResult, tool_seam};
+use crate::types::messages::tool_seam;
 use crate::utils::common::deserialize_from_str;
 
 // Shared with the non-streaming loop so the two Messages loops can't drift.
@@ -59,11 +60,44 @@ pub async fn run_messages_stream(
     upstream: MessagesUpstream,
 ) -> ExecutorResult<MessagesResponse<BoxStream>> {
     ctx.force_stream(true);
+    let mut execution = ExecutionSpan::start(Api::Messages, Route::Executor, true);
+    let span = execution.span().clone();
+    let first_round = span.in_scope(|| super::telemetry::stages::inference_round(0));
+    let primed = prime_messages_stream(&ctx, &exec_ctx, &upstream)
+        .instrument(first_round.clone())
+        .await;
+    let first_response = match primed {
+        Ok(first_response) => first_response,
+        Err(error) => {
+            execution.failed(&error);
+            execution.not_delivered();
+            return Err(error);
+        }
+    };
+    let response_headers = processed_response_headers(first_response.headers());
+    let body = messages_stream_body(
+        ctx,
+        registry,
+        exec_ctx,
+        upstream,
+        (first_response, first_round),
+        execution,
+    );
+    Ok(MessagesResponse {
+        body: Box::pin(InstrumentedStream::new(body, span)),
+        headers: response_headers,
+    })
+}
 
-    // Prime the first upstream request before the handler commits an HTTP 200.
-    // This lets initial vLLM errors retain their original status and body.
+/// Send the first upstream request before the handler commits an HTTP 200, so
+/// initial vLLM errors retain their original status and body.
+async fn prime_messages_stream(
+    ctx: &MessagesRequestContext,
+    exec_ctx: &ExecutionContext,
+    upstream: &MessagesUpstream,
+) -> ExecutorResult<reqwest::Response> {
     let first_body = ctx.upstream_body()?;
-    let first_response = send_request(
+    send_request(
         &exec_ctx.client,
         upstream.url(),
         first_body,
@@ -71,23 +105,40 @@ pub async fn run_messages_stream(
         Some(upstream.headers()),
         exec_ctx.streaming_timeout,
     )
-    .await?;
-    let response_headers = processed_response_headers(first_response.headers());
+    .await
+}
 
-    let body: BoxStream = Box::pin(stream! {
+/// The client-facing frame stream. `execution` lives inside it: every exit
+/// states the outcome before its last frame, and dropping the stream
+/// finalizes it as cancelled.
+fn messages_stream_body(
+    mut ctx: MessagesRequestContext,
+    registry: Arc<ToolRegistry>,
+    exec_ctx: Arc<ExecutionContext>,
+    upstream: MessagesUpstream,
+    first_response: (reqwest::Response, tracing::Span),
+    mut execution: ExecutionSpan,
+) -> BoxStream {
+    Box::pin(stream! {
         let mut acc = MessagesStreamAccumulator {
             gateway_map: exec_ctx.messages_gateway_tools.clone(),
             ..Default::default()
         };
         let mut prepared_response = Some(first_response);
 
-        for _round in 0..MAX_GATEWAY_TOOL_ROUNDS {
-            let response = if let Some(response) = prepared_response.take() {
+        for round in 0..MAX_GATEWAY_TOOL_ROUNDS {
+            let (response, round_span) = if let Some(response) = prepared_response.take() {
                 response
             } else {
+                let round_span = super::telemetry::stages::inference_round(round);
                 let body = match ctx.upstream_body() {
                     Ok(b) => b,
-                    Err(e) => { yield executor_error_sse(&e); return; }
+                    Err(e) => {
+                        execution.failed(&e);
+                        execution.delivered();
+                        yield executor_error_sse(&e);
+                        return;
+                    }
                 };
                 match send_request(
                     &exec_ctx.client,
@@ -97,28 +148,41 @@ pub async fn run_messages_stream(
                     Some(upstream.headers()),
                     exec_ctx.streaming_timeout,
                 )
+                .instrument(round_span.clone())
                 .await
                 {
-                    Ok(response) => response,
-                    Err(e) => { yield executor_error_sse(&e); return; }
+                    Ok(response) => (response, round_span),
+                    Err(e) => {
+                        execution.failed(&e);
+                        execution.delivered();
+                        yield executor_error_sse(&e);
+                        return;
+                    }
                 }
             };
-            let mut response_stream = Box::pin(response_lines(
+            let mut response_stream = InstrumentedStream::new(Box::pin(response_lines(
                 response,
                 exec_ctx.streaming_timeout,
                 exec_ctx.responses_config.max_upstream_sse_line_bytes,
-            ));
+            )), round_span);
 
             acc.begin_round();
             while let Some(line) = response_stream.next().await {
                 let line = match line {
                     Ok(l) => l,
-                    Err(e) => { yield error_sse(&e.to_string()); return; }
+                    Err(e) => {
+                        execution.failed(&e);
+                        execution.delivered();
+                        yield error_sse(&e.to_string());
+                        return;
+                    }
                 };
                 for out in acc.push(&line) {
                     yield out;
                 }
                 if acc.has_error() {
+                    execution.failed_with(acc.failure_category());
+                    execution.delivered();
                     return;
                 }
                 if acc.has_completed_round() {
@@ -132,7 +196,10 @@ pub async fn run_messages_stream(
             // Round finished. Continue only for a pure gateway-tool round; a
             // client-executed function tool makes the round terminal.
             if !acc.should_continue_loop(&ctx) {
-                for out in acc.finish() {
+                execution.completed_with_stop_reason(acc.stop_reason());
+                let terminal = acc.finish();
+                execution.delivered();
+                for out in terminal {
                     yield out;
                 }
                 return;
@@ -150,25 +217,18 @@ pub async fn run_messages_stream(
                 allowed_searches,
             ).await;
             if let Err(e) = ctx.append_round(&assistant_content, tool_results) {
+                execution.failed(&e);
+                execution.delivered();
                 yield executor_error_sse(&e);
                 return;
             }
         }
 
         // Round budget exhausted.
+        execution.failed_with(FailureCategory::RoundBudget);
+        execution.delivered();
         yield error_sse(&format!("gateway tool loop exceeded {MAX_GATEWAY_TOOL_ROUNDS} rounds"));
-    });
-    Ok(MessagesResponse {
-        body,
-        headers: response_headers,
     })
-}
-
-/// A gateway `tool_use` reconstructed from the stream, ready to dispatch.
-struct StreamedCall {
-    id: String,
-    name: String,
-    input_json: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -177,6 +237,7 @@ enum RoundState {
     Active,
     Completed,
     Failed,
+    UpstreamError,
 }
 
 /// State machine that turns per-round Anthropic SSE into one client-visible
@@ -203,7 +264,7 @@ struct MessagesStreamAccumulator {
     has_client_tool_use: bool,
     /// Buffered terminal `message_delta` from the final round (emitted by `finish`).
     final_message_delta: Option<Value>,
-    /// Whether this round is active, complete, or terminated with an error.
+    /// Whether this round is active, complete, or terminated with an upstream error.
     round_state: RoundState,
     /// Every consumed round's terminal `usage`, reported once in the final `message_delta`.
     usage: MessagesUsageTotals,
@@ -275,7 +336,22 @@ impl MessagesStreamAccumulator {
     }
 
     fn has_error(&self) -> bool {
-        self.round_state == RoundState::Failed
+        matches!(self.round_state, RoundState::Failed | RoundState::UpstreamError)
+    }
+
+    fn failure_category(&self) -> FailureCategory {
+        match self.round_state {
+            RoundState::UpstreamError => FailureCategory::UpstreamError,
+            RoundState::Active | RoundState::Completed | RoundState::Failed => FailureCategory::Stream,
+        }
+    }
+
+    /// The round's terminal `stop_reason`, while the `message_delta` that
+    /// carries it is still buffered (it is taken by [`Self::finish`]).
+    fn stop_reason(&self) -> Option<&str> {
+        self.final_message_delta
+            .as_ref()
+            .and_then(|event| event["delta"]["stop_reason"].as_str())
     }
 
     fn has_completed_round(&self) -> bool {
@@ -297,7 +373,7 @@ impl MessagesStreamAccumulator {
         ) && event.get("index").and_then(Value::as_u64).is_none()
         {
             return self.fail("invalid content block index in upstream Messages stream");
-        }
+        };
         match event.get("type").and_then(Value::as_str) {
             Some("message_start") => self.on_message_start(&event),
             Some("content_block_start") => self.on_block_start(&mut event),
@@ -310,7 +386,7 @@ impl MessagesStreamAccumulator {
                 Vec::new()
             }
             Some("error") => {
-                self.round_state = RoundState::Failed;
+                self.round_state = RoundState::UpstreamError;
                 vec![sse("error", &event)]
             }
             Some("message_stop") => {
@@ -452,46 +528,6 @@ impl MessagesStreamAccumulator {
         out.push(sse("message_stop", &json!({"type": "message_stop"})));
         out
     }
-}
-
-/// Execute reconstructed gateway calls (concurrent, per-call timeout). Errors
-/// become error `tool_result`s (E5).
-///
-/// Returns one `tool_result` block per call, fed back next round. (The assistant
-/// turn — including each call's `tool_use` block — is reconstructed from the
-/// accumulator's buffered blocks in [`MessagesStreamAccumulator::take_round`].)
-async fn execute_gateway_calls(
-    calls: &[StreamedCall],
-    registry: &ToolRegistry,
-    gateway_map: &tool_seam::GatewayToolMap,
-    allowed_searches: usize,
-) -> Vec<GatewayToolResult> {
-    let futures = calls.iter().enumerate().map(|(index, c)| async move {
-        if index >= allowed_searches {
-            return web_search_budget_exhausted_result(&c.id);
-        }
-        // F4: reject a malformed/incomplete reconstructed input rather than
-        // coercing to {} and dispatching the tool with args the model never sent.
-        let (output, is_error) = match tool_seam::parse_tool_input(&c.input_json) {
-            Ok(input) => {
-                let call = tool_seam::tool_use_to_call(&c.id, &c.name, &input, gateway_map);
-                match tokio::time::timeout(GATEWAY_TOOL_TIMEOUT, registry.dispatch(&call)).await {
-                    Ok(Some(result)) => match result.output {
-                        Ok(o) => (o.output, false),
-                        Err(e) => (format!("tool execution failed: {e}"), true),
-                    },
-                    Ok(None) => (format!("no handler for tool '{}'", c.name), true),
-                    Err(_) => (
-                        format!("gateway tool '{}' timed out after {GATEWAY_TOOL_TIMEOUT:?}", c.name),
-                        true,
-                    ),
-                }
-            }
-            Err(reason) => (format!("{reason}; tool was not run"), true),
-        };
-        tool_seam::tool_result_block(&c.id, output, is_error)
-    });
-    futures::future::join_all(futures).await
 }
 
 #[cfg(test)]

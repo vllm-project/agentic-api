@@ -64,7 +64,7 @@ impl WsError {
         }
     }
 
-    fn param(&self) -> Option<&'static str> {
+    fn param(&self) -> Option<&str> {
         match self {
             Self::Executor(err) => err.error_param(),
             _ => None,

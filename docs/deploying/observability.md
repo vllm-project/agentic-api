@@ -5,13 +5,10 @@ OTLP-compatible backend. Export is **off by default**: with no exporter
 selected the gateway creates no provider, exporter thread, or network
 connection, and only prints local logs as before.
 
-This page covers the foundation shipped in phase 1 of
-[#279](https://github.com/vllm-project/agentic-api/issues/279): one server span
-per HTTP request parented on the caller's W3C trace context, the standard HTTP
-request metrics, trace-correlated local logs, and the export lifecycle.
-Execution-level spans (rehydration, inference rounds, tools, compaction,
-persistence), context propagation to the upstream, and gateway metrics follow
-in later phases.
+This page covers HTTP and execution traces, upstream context propagation,
+standard HTTP request metrics, trace-correlated local logs, and the export
+lifecycle from [#279](https://github.com/vllm-project/agentic-api/issues/279).
+Gateway-specific metrics remain a later phase.
 
 ## Enable export
 
@@ -99,11 +96,128 @@ the response body fails mid-stream. A request dropped before any response
 existed — a timeout around the handler, the client disconnecting, or the
 runtime shutting down mid-request — carries `error.type=cancelled` with no
 status code and is **not** marked as an error. A `2xx` on a streaming
-response does **not** by itself mean the execution succeeded — execution
-outcomes are recorded on the execution spans added in phase 2.
+response does **not** by itself mean the execution succeeded — that is what
+the execution span below records.
 
 WebSocket upgrades on `/v1/responses` produce a span for the upgrade request
-only; the session itself is instrumented in phase 2.
+only; the session and individual executions have separate traces described below.
+
+#### Execution span
+
+Every HTTP request the executor runs — Responses or Messages, streaming or not —
+produces one `agentic.execute` span as a child of the HTTP server span. It
+opens when the executor accepts the request and closes when the response
+payload has been handed back or, for a stream, when the last frame has been
+yielded or the client dropped the stream. Work done while streaming (later
+inference rounds, persistence after the last round) is attributed to it.
+
+| Attribute | Value |
+| --- | --- |
+| `agentic.api` | `responses` \| `messages` |
+| `agentic.route` | `executor` \| `proxy` |
+| `agentic.stream` | Whether the client asked for a stream |
+| `agentic.queue.wait` | WebSocket only: seconds between admission and dispatch, or discard while queued |
+| `agentic.execution.outcome` | `completed` \| `incomplete` \| `failed` \| `cancelled` |
+| `agentic.delivery.outcome` | `delivered` \| `disconnected` \| `not_started` |
+| `error.type` | On `failed` only, a bounded category derived from the error's *kind*, never its message: `storage`, `persistence`, `conversation_locked`, `upstream_status`, `upstream_transport`, `upstream_error`, `network`, `parse`, `stream`, `not_found`, `invalid_request`, `payload_too_large`, `resource_limit`, `round_budget`, `conflict`, `compaction`, `tool`, or `panic` |
+
+Execution and delivery are recorded separately because they answer different
+questions:
+
+- **`execution.outcome`** is what the executor concluded. `completed` and
+  `incomplete` (a Responses `incomplete` status or a Messages `max_tokens`
+  stop) are terminal results; `failed` marks the span with error status; and
+  `cancelled` means the executor was stopped before a terminal state — the
+  stream was dropped or the task was aborted at shutdown — and is not an
+  error.
+- **`delivery.outcome`** is whether the transport was handed everything the
+  execution produced: the payload, or the terminal streamed frame
+  (`delivered`); the stream was dropped before that frame (`disconnected`);
+  or the execution failed before there was anything to send (`not_started`).
+
+So an SSE `error` frame under an HTTP 200 is `execution=failed`,
+`delivery=delivered`; a client that leaves mid-stream is
+`execution=cancelled`, `delivery=disconnected`; and a Messages upstream error
+body, which the gateway relays verbatim, is `execution=failed`,
+`error.type=upstream_error` even though the handler never saw an `Err`.
+
+No request, response, or conversation identifier, model name, prompt, tool
+argument, or error message appears on the span.
+
+#### Execution stages and upstream propagation
+
+Stages are children of `agentic.execute`, including work resumed from a
+stream or spawned executor task. A typical Responses tool loop has two
+`agentic.inference_round` children with `agentic.tool.execute` between them;
+each round contains its upstream `http.client.request`.
+
+| Span | Allowed stage attributes |
+| --- | --- |
+| `agentic.rehydrate` | `agentic.rehydrate.source`: `none`, `previous_response`, or `conversation` |
+| `agentic.inference_round` | `agentic.inference.round`: zero-based round index |
+| `agentic.tool.execute` | `agentic.tool.type`: the gateway's tool category (`function`, `tool_search`, `custom`, `shell`, `codex_namespace`, `mcp`, `web_search`, `file_search`, or `code_interpreter`), never the tool name |
+| `agentic.compaction` | `agentic.compaction.operation`: `summarize`; `agentic.compaction.trigger`: `context_management`, `input_item`, or `explicit` |
+| `agentic.persist` | `agentic.persist.destination`: `response` or `conversation` |
+
+Rehydration, persistence, compaction, and gateway tool stages describe the
+Responses executor. Inference rounds and HTTP client spans also cover the
+Messages executor. Explicit `/v1/responses/compact` requests emit compaction,
+rehydration, and persistence stages under their HTTP span, without an
+`agentic.execute` wrapper. Compaction's summarization HTTP call is a child
+of its compaction span.
+
+The `http.client.request` span has client kind and only
+`http.request.method=POST`, `server.address` (host only), `server.port`,
+`http.response.status_code`, and, on failure, `error.type` (`timeout`,
+`transport`, or `upstream_status`). It measures sending the request and
+receiving headers, including reading an HTTP error body; streamed body
+consumption continues inside the inference round. It never records
+`url.full`, a URL path/query, headers, or an error message.
+
+Both upstream API adapters replace outgoing `traceparent` and `tracestate`
+with the active HTTP client span's W3C context. These headers carry context,
+not span attributes; inherited trace state may travel with that context.
+
+#### WebSocket sessions
+
+Each socket has an independent root `agentic.websocket.session` span. Each
+accepted `response.create` starts a new trace whose `agentic.execute` root
+is **linked** to that session, not parented on it or on the HTTP upgrade.
+This includes local `generate:false` requests. Invalid or rejected frames
+do not create execution spans.
+
+Pipelined requests start their spans on admission. `agentic.queue.wait`
+records queue time in seconds at dispatch, or when an undispatched request
+is discarded. Disconnecting cancels active and queued executions that have
+not reached a terminal outcome. The session span has no application
+attributes; links contain only trace context.
+
+#### Raw proxy routes
+
+Raw Responses and Messages proxy routes produce a thin `agentic.execute`
+with `agentic.route=proxy`, parented on the HTTP server span. They replace
+the caller's outbound trace headers with that execution span's context
+without changing the request or response bytes.
+
+Proxy outcomes describe **transport**, not model execution: a non-success
+HTTP status is `failed` with `error.type=upstream_status`; successfully
+forwarding the body is `completed`/`delivered`. Streaming completion is
+detected at EOF or when the declared content length is exhausted. An early
+drop is `cancelled`/`disconnected`; a body read failure is
+`failed`/`disconnected` with `error.type=network`. The proxy does not parse
+SSE terminal events, so an upstream semantic error inside an HTTP 200 body
+does not turn the proxy span into a failed execution.
+
+#### Attribute privacy contract
+
+Export tests enforce per-span attribute allow-lists and bounded enum values
+across real executor, WebSocket, and proxy traces. They scan attribute values
+against fixture prompts, tool arguments, credentials (`Authorization` and
+`x-api-key`), URL queries, summaries, and upstream error bodies. No such
+content, tool name, model name, or application identifier belongs in span
+attributes. Log events are not exported as span events, and error status
+descriptions are empty. Operator-configured resource attributes and W3C
+trace context are separate from this application-attribute contract.
 
 ### Metrics
 
@@ -121,9 +235,11 @@ trace sampling decision.
 
 ## Sampling
 
-The default sampler is `parentbased_always_on`: every request is traced, and
-a caller's sampling decision carried in `traceparent` is honoured. For high
-request volumes use ratio sampling:
+The default sampler is `parentbased_always_on`: HTTP traces honour a caller's
+sampling decision carried in `traceparent`; requests without a parent are
+sampled. WebSocket session and execution traces are independent roots, so
+their sampling decisions come from the root sampler, not their links. For
+high request volumes use ratio sampling:
 
 ```bash
 export OTEL_TRACES_SAMPLER=parentbased_traceidratio

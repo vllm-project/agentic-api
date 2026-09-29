@@ -1,12 +1,13 @@
-use std::future::Future;
-use std::num::NonZeroUsize;
-use std::sync::Arc;
+mod policy;
+
+pub(crate) use policy::GatewaySchedulerPolicy;
+#[cfg(test)]
+pub(super) use policy::MAX_CONCURRENT_MATERIALIZATIONS;
 use std::time::Duration;
 
 use futures::future::join_all;
-use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio::sync::Semaphore;
 
-use crate::config::DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS;
 use crate::events::SSEEventType;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent, synthetic_event};
@@ -19,51 +20,6 @@ use crate::types::io::output::{FunctionToolCall, GatewayCallStatus, McpCallStatu
 use crate::types::io::{InputItem, OutputItem, ResponsesInput};
 use crate::types::request_response::ResponsePayload;
 use crate::utils::common::{serialize_to_string, serialize_to_value};
-
-pub(super) const MAX_CONCURRENT_MATERIALIZATIONS: usize = 16;
-
-/// Request-independent execution policy owned by one [`ExecutionContext`].
-///
-/// The nonzero type prevents a zero-capacity per-request semaphore. Distinct
-/// execution contexts retain their own limits instead of sharing process-global state.
-#[derive(Debug, Clone)]
-pub(crate) struct GatewaySchedulerPolicy {
-    max_concurrent_calls: NonZeroUsize,
-    materialization_permits: Arc<Semaphore>,
-}
-
-impl GatewaySchedulerPolicy {
-    #[must_use]
-    pub(crate) fn new(max_concurrent_calls: NonZeroUsize) -> Self {
-        // Each permit protects one handler whose output is capped at
-        // MAX_GATEWAY_TOOL_OUTPUT_BYTES. The policy is cloned with an
-        // ExecutionContext, so this bound is shared by concurrent requests
-        // (including WebSocket lanes) instead of being recreated per turn.
-        Self {
-            max_concurrent_calls,
-            materialization_permits: Arc::new(Semaphore::new(MAX_CONCURRENT_MATERIALIZATIONS)),
-        }
-    }
-
-    /// Acquires one process-wide materialization slot shared by cloned execution contexts.
-    pub(crate) fn acquire_materialization_permit(
-        &self,
-    ) -> impl Future<Output = OwnedSemaphorePermit> + Send + 'static + use<> {
-        let materialization_permits = Arc::clone(&self.materialization_permits);
-        async move {
-            materialization_permits
-                .acquire_owned()
-                .await
-                .expect("materialization semaphore is never closed")
-        }
-    }
-}
-
-impl Default for GatewaySchedulerPolicy {
-    fn default() -> Self {
-        Self::new(DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS)
-    }
-}
 
 /// Per-call wall-clock budget. A tool exceeding this yields an error output fed
 /// back to the model (never a whole-request failure). `Duration::ZERO` disables
@@ -118,6 +74,7 @@ enum GatewayExecutionPlan {
 /// relationship cannot diverge.
 #[derive(Clone)]
 struct GatewayCallPlan {
+    tool_type: crate::tool::ToolType,
     item_index: usize,
     call: FunctionToolCall,
     execution: GatewayExecutionPlan,
@@ -174,6 +131,7 @@ impl GatewayScheduler {
                         GatewayExecutionPlan::Bound(binding.clone())
                     });
                 Some(GatewayCallPlan {
+                    tool_type: entry.tool_type,
                     item_index,
                     call: call.clone(),
                     execution,
@@ -268,6 +226,9 @@ impl GatewayScheduler {
         Ok(results)
     }
 
+    #[tracing::instrument(name = "agentic.tool.execute", skip_all, fields(
+        agentic.tool.r#type = super::telemetry::stages::tool_type(plan.tool_type)
+    ))]
     async fn run_one(
         &self,
         plan: GatewayCallPlan,
@@ -1466,6 +1427,7 @@ mod tests {
         let mut call = web_search_call(call_id);
         call.name = name.to_owned();
         GatewayCallPlan {
+            tool_type: crate::tool::ToolType::WebSearch,
             item_index,
             events: GatewayEventPlan {
                 output_index: u32::try_from(item_index).expect("test item index fits in u32"),

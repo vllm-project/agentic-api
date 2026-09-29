@@ -1116,6 +1116,123 @@ async fn test_stateful_request_forwards_reasoning_configuration() {
 }
 
 #[tokio::test]
+async fn test_prompt_cache_key_matches_pass_through_and_typed_execution() {
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let client = reqwest::Client::new();
+    let mut stored_response_id = None;
+
+    for store in [false, true] {
+        let response = client
+            .post(format!("{gateway_url}/v1/responses"))
+            .json(&serde_json::json!({
+                "model": "test",
+                "input": "hi",
+                "prompt_cache_key": "workspace-a",
+                "store": store,
+                "stream": false
+            }))
+            .send()
+            .await
+            .expect("response request");
+        assert_eq!(response.status(), StatusCode::OK);
+        if store {
+            let body: serde_json::Value = response.json().await.expect("typed response body");
+            stored_response_id = Some(body["id"].as_str().expect("stored response id").to_owned());
+        }
+    }
+
+    let stored_response_id = stored_response_id.expect("stateful request should return an id");
+    let continuation = client
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&serde_json::json!({
+            "model": "test",
+            "input": "continue",
+            "previous_response_id": stored_response_id,
+            "store": true,
+            "stream": false
+        }))
+        .send()
+        .await
+        .expect("continuation request");
+    assert_eq!(continuation.status(), StatusCode::OK);
+
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 3);
+    assert_eq!(requests[0]["prompt_cache_key"], "workspace-a");
+    assert_eq!(requests[1]["prompt_cache_key"], "workspace-a");
+    assert!(requests[2].get("prompt_cache_key").is_none());
+}
+
+#[tokio::test]
+async fn test_prompt_cache_key_matches_pass_through_and_typed_sse_execution() {
+    let (llm_url, requests, llm) = spawn_tool_search_sse_sequence(vec![final_message_sse(); 2]).await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
+    for store in [false, true] {
+        let response = reqwest::Client::new()
+            .post(format!("{gateway_url}/v1/responses"))
+            .json(&serde_json::json!({
+                "model": "test", "input": "hi", "prompt_cache_key": "workspace-a",
+                "store": store, "stream": true
+            }))
+            .send()
+            .await
+            .expect("streaming response");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            response.headers()[header::CONTENT_TYPE]
+                .to_str()
+                .unwrap()
+                .starts_with("text/event-stream")
+        );
+        let body = response.text().await.expect("complete SSE body");
+        let events: Vec<serde_json::Value> = body
+            .lines()
+            .filter_map(|line| line.strip_prefix("data:"))
+            .map(str::trim)
+            .filter(|data| *data != "[DONE]")
+            .map(|data| serde_json::from_str(data).expect("SSE JSON event"))
+            .collect();
+        assert_eq!(events.last().expect("terminal event")["type"], "response.completed");
+    }
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 2);
+    for request in requests.iter() {
+        assert_eq!(request["prompt_cache_key"], "workspace-a");
+        assert_eq!(request["stream"], true);
+    }
+    gateway.abort();
+    llm.abort();
+}
+
+#[tokio::test]
+async fn test_null_prompt_cache_key_preserves_proxy_body_and_is_omitted_by_executor() {
+    let (llm_url, requests, llm) = spawn_mock_vllm_json_capture().await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
+    for store in [false, true] {
+        let response = reqwest::Client::new()
+            .post(format!("{gateway_url}/v1/responses"))
+            .json(&serde_json::json!({
+                "model": "test", "input": "hi", "prompt_cache_key": null, "store": store
+            }))
+            .send()
+            .await
+            .expect("response request");
+        assert_eq!(response.status(), StatusCode::OK);
+        let _: serde_json::Value = response.json().await.expect("response body");
+    }
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0].get("prompt_cache_key"), Some(&serde_json::Value::Null));
+    assert!(requests[1].get("prompt_cache_key").is_none());
+    gateway.abort();
+    llm.abort();
+}
+
+#[tokio::test]
 async fn test_stateful_request_forwards_text_configuration() {
     let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
     let fixture = storage_backed_state(&llm_url).await;

@@ -2,12 +2,13 @@
 //!
 //! `mod.rs` owns the OpenAI-facing adapter: the [`WebSearchHandler`], the
 //! mapping to public `web_search_call` output items. [`provider`] defines the
-//! private provider contract and normalized result types. [`args`] parses the model's arguments; provider modules
-//! ([`you`], [`brave`]) shape requests and map responses.
+//! private provider contract, normalized result types, and the response helpers every provider shares. [`args`]
+//! parses the model's arguments; provider modules ([`you`], [`brave`], [`tavily`]) shape requests and map responses.
 
 pub(crate) mod args;
 pub(crate) mod brave;
 mod provider;
+pub(crate) mod tavily;
 pub(crate) mod you;
 
 use std::collections::HashMap;
@@ -18,7 +19,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use futures::{StreamExt, TryStreamExt};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use tokio::sync::Semaphore;
 
@@ -26,7 +27,9 @@ use self::args::{MAX_WEB_SEARCH_QUERIES, WebSearchArguments};
 use self::brave::BraveSearchProvider;
 use self::provider::{
     ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, clean_base_url,
+    null_as_default, read_response_limited,
 };
+use self::tavily::TavilySearchProvider;
 use self::you::{YOU_API_BASE_URL, YOU_API_KEY, YouSearchProvider};
 use super::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
 use super::handler::{GatewayExecutor, GatewayToolEventPlan, ToolError, ToolHandler, ToolOutput};
@@ -227,6 +230,15 @@ impl WebSearchHandler {
                     .or(WebSearchProviderKind::Brave.default_max_concurrent_queries())
                     .unwrap_or(max_concurrent_gateway_calls),
             )),
+            WebSearchProviderKind::Tavily => Arc::new(TavilySearchProvider::from_values(
+                client,
+                config.api_key.clone(),
+                config.base_url.clone(),
+                config
+                    .max_concurrent_queries
+                    .or(WebSearchProviderKind::Tavily.default_max_concurrent_queries())
+                    .unwrap_or(max_concurrent_gateway_calls),
+            )),
         };
         let effective = effective_query_concurrency(provider.as_ref(), requested);
         Self::with_provider_and_query_concurrency(provider, effective)
@@ -355,38 +367,6 @@ struct WebSearchToolOutput<'a> {
     queries: &'a [String],
     results: WebSearchResultSections,
     metadata: Vec<WebSearchProviderMetadata>,
-}
-
-/// Deserializes an explicit JSON `null` as the field's default instead of
-/// failing, so a degenerate provider response cannot fail the whole search.
-pub(crate) fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Default + Deserialize<'de>,
-{
-    Option::<T>::deserialize(deserializer).map(Option::unwrap_or_default)
-}
-
-/// Reads a provider HTTP response body, failing as soon as it exceeds
-/// [`MAX_GATEWAY_TOOL_OUTPUT_BYTES`] so an oversized provider reply is never
-/// buffered in full. Every provider module reads its responses through here.
-pub(super) async fn read_response_limited(
-    resp: reqwest::Response,
-    provider: WebSearchProviderKind,
-) -> Result<String, ToolError> {
-    let mut stream = resp.bytes_stream();
-    let mut body = Vec::new();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk
-            .map_err(|error| ToolError::Execution(format!("failed to read {provider} search response: {error}")))?;
-        if chunk.len() > MAX_GATEWAY_TOOL_OUTPUT_BYTES.saturating_sub(body.len()) {
-            return Err(ToolError::Execution(format!(
-                "{provider} search response exceeded {MAX_GATEWAY_TOOL_OUTPUT_BYTES} bytes"
-            )));
-        }
-        body.extend_from_slice(&chunk);
-    }
-    String::from_utf8(body).map_err(|_| ToolError::Execution(format!("{provider} search response was not valid UTF-8")))
 }
 
 impl ToolHandler for WebSearchHandler {

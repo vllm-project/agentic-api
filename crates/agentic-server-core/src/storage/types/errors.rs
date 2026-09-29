@@ -15,6 +15,10 @@ pub enum StorageError {
     #[error("not found: {resource_type} with id '{id}'")]
     NotFound { resource_type: String, id: String },
 
+    /// A pagination cursor no longer identifies an item in the conversation.
+    #[error("No item found with id '{id}'")]
+    ItemCursorNotFound { id: String },
+
     /// A conversation item did not have its required sequence number.
     #[error("invalid conversation sequence for conversation '{conversation_id}' item '{item_id}'")]
     InvalidConversationSequence { conversation_id: String, item_id: String },
@@ -33,6 +37,22 @@ pub enum StorageError {
     /// Storage is not configured or disabled.
     #[error("storage not configured or disabled")]
     NotConfigured,
+
+    /// Validation error for malformed or invalid data.
+    #[error("validation error: {0}")]
+    Validation(String),
+
+    /// An incoming item already belongs to the target conversation.
+    #[error("Item already in conversation")]
+    ItemAlreadyInConversation,
+
+    /// A supplied conversation item ID does not match its item type.
+    #[error("Invalid '{param}': '{id}'. Expected an ID that begins with '{prefix}'.")]
+    InvalidItemId {
+        param: String,
+        id: String,
+        prefix: &'static str,
+    },
 
     /// Serialization or deserialization of data failed.
     ///
@@ -54,7 +74,7 @@ impl StorageError {
     /// Returns `true` if this error is "not found".
     #[must_use]
     pub fn is_not_found(&self) -> bool {
-        matches!(self, Self::NotFound { .. })
+        matches!(self, Self::NotFound { .. } | Self::ItemCursorNotFound { .. })
     }
 
     /// Returns `true` if this error is "not configured".
@@ -91,6 +111,15 @@ impl StorageError {
     #[must_use]
     pub fn is_serialization(&self) -> bool {
         matches!(self, Self::Serialization(_))
+    }
+
+    /// Returns `true` if this error is a validation error.
+    #[must_use]
+    pub fn is_validation(&self) -> bool {
+        matches!(
+            self,
+            Self::Validation(_) | Self::InvalidItemId { .. } | Self::ItemAlreadyInConversation
+        )
     }
 }
 

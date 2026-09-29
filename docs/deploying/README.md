@@ -429,6 +429,24 @@ kubectl create secret generic agentic-api-secrets \
   --from-literal=brave-api-key="$BRAVE_API_KEY"
 ```
 
+To use Tavily instead, select the provider and supply its key; the endpoint defaults
+to `https://api.tavily.com` and batched queries inherit the gateway concurrency limit:
+
+```yaml
+            - name: AGENTIC_WEB_SEARCH_PROVIDER
+              value: tavily
+            - name: TAVILY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentic-api-secrets
+                  key: tavily-api-key
+```
+
+```console
+kubectl create secret generic agentic-api-secrets \
+  --from-literal=tavily-api-key="$TAVILY_API_KEY"
+```
+
 Do not commit API keys to the manifest or source tree.
 
 ## Optional: deploy with llm-d

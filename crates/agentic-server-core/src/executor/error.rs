@@ -151,6 +151,7 @@ impl ExecutorError {
     pub fn http_status(&self) -> StatusCode {
         match self.client_visible_error() {
             Self::Storage(e) if e.is_not_found() => StatusCode::NOT_FOUND,
+            Self::Storage(e) if e.is_validation() => StatusCode::BAD_REQUEST,
             Self::LLMRequest { status, .. } | Self::LLMTransport { status, .. } => *status,
             Self::ConversationLocked { .. }
             | Self::Tool(ToolError::Config(_) | ToolError::MissingOutput { .. })
@@ -184,8 +185,10 @@ impl ExecutorError {
             | Self::PreviousResponseNotFound { .. }
             | Self::ParseError(_)
             | Self::JsonError(_)
-            | Self::PayloadTooLarge(_) => "invalid_request_error",
+            | Self::PayloadTooLarge(_)
+            | Self::Storage(StorageError::ItemCursorNotFound { .. }) => "invalid_request_error",
             Self::Storage(e) if e.is_not_found() => "not_found",
+            Self::Storage(e) if e.is_validation() => "invalid_request_error",
             Self::Conflict(_) => "conflict_error",
             Self::LLMRequest { .. } | Self::LLMTransport { .. } | Self::CompactionFailed { .. } => "upstream_error",
             Self::ResourceLimitExceeded { limit, .. } => match limit {
@@ -208,6 +211,8 @@ impl ExecutorError {
             Self::ConversationLocked { .. } => "conversation_locked",
             Self::PreviousResponseNotFound { .. } => "previous_response_not_found",
             Self::Conflict(_) => "response_already_stored",
+            Self::Storage(StorageError::InvalidItemId { .. }) => "invalid_value",
+            Self::Storage(StorageError::ItemAlreadyInConversation) => "item_already_in_conversation",
             Self::PayloadTooLarge(_) => "body_too_large",
             Self::ResourceLimitExceeded { .. } => "response_resource_limit_exceeded",
             other => other.error_type(),
@@ -216,8 +221,11 @@ impl ExecutorError {
 
     /// Request parameter associated with the API error, when applicable.
     #[must_use]
-    pub fn error_param(&self) -> Option<&'static str> {
+    pub fn error_param(&self) -> Option<&str> {
         match self.client_visible_error() {
+            Self::Storage(StorageError::InvalidItemId { param, .. }) => Some(param),
+            Self::Storage(StorageError::ItemAlreadyInConversation) => Some("items"),
+            Self::Storage(StorageError::ItemCursorNotFound { .. }) => Some("after"),
             Self::ConversationLocked { .. } => Some("conversation"),
             Self::PreviousResponseNotFound { .. } => Some("previous_response_id"),
             Self::Tool(ToolError::MissingOutput { .. }) => Some("input"),
@@ -229,6 +237,12 @@ impl ExecutorError {
     #[must_use]
     pub fn error_message(&self) -> String {
         match self.client_visible_error() {
+            Self::Storage(
+                error @ (StorageError::InvalidItemId { .. }
+                | StorageError::ItemAlreadyInConversation
+                | StorageError::ItemCursorNotFound { .. }),
+            ) => error.to_string(),
+            Self::Storage(StorageError::Database(_)) => "Internal server error".to_owned(),
             Self::Tool(error @ ToolError::MissingOutput { .. }) => error.to_string(),
             other => other.to_string(),
         }
@@ -236,7 +250,10 @@ impl ExecutorError {
 
     /// Builds the OpenAI-compatible error object shared by HTTP and SSE.
     pub(crate) fn response_error(&self) -> serde_json::Value {
-        let code = if matches!(self.client_visible_error(), Self::Tool(ToolError::MissingOutput { .. })) {
+        let code = if matches!(
+            self.client_visible_error(),
+            Self::Tool(ToolError::MissingOutput { .. }) | Self::Storage(StorageError::ItemCursorNotFound { .. })
+        ) {
             serde_json::Value::Null
         } else {
             serde_json::json!(self.error_code())
@@ -412,6 +429,28 @@ mod tests {
                     "code": null
                 }
             })
+        );
+    }
+}
+
+#[cfg(test)]
+mod storage_error_mapping_tests {
+    use super::*;
+    use std::error::Error;
+
+    #[test]
+    fn database_details_remain_in_the_source_but_not_the_response() {
+        let error = ExecutorError::Storage(StorageError::Database(sqlx::Error::Protocol(
+            "UNIQUE constraint failed: items.id".to_owned(),
+        )));
+        assert!(error.source().unwrap().to_string().contains("items.id"));
+        assert_eq!(error.http_status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body: serde_json::Value = serde_json::from_slice(&error.into_response_body()).unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({"error": {
+                "message": "Internal server error", "type": "server_error", "code": "server_error"
+            }})
         );
     }
 }

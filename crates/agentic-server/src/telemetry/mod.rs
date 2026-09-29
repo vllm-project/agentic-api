@@ -10,6 +10,7 @@
 pub mod config;
 pub mod http;
 mod lifecycle;
+pub(crate) mod proxy;
 mod subscriber;
 
 pub use config::{ExporterSelection, OtlpCompression, OtlpProtocol, TelemetryConfig, TelemetryConfigError};

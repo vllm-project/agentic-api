@@ -8,13 +8,15 @@ use crate::executor::gateway_accumulator::{
 use crate::executor::inference::{BoxStream, DONE_MARKER};
 use crate::executor::persist::persist_if_needed;
 use crate::executor::request::{ExecutionContext, RequestContext};
+use crate::executor::telemetry::{ExecutionSpan, FailureCategory, InstrumentedStream};
 use crate::executor::upstream::agent_pipeline_with_limits;
-use crate::tool::ToolSearchState;
+use crate::tool::{ToolSearchMetadata, ToolSearchState};
 use crate::types::request_response::ResponsePayload;
 use crate::utils::common::utcnow_str;
 use async_stream::stream;
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use tracing::Instrument as _;
 
 pub(super) struct AbortOnDrop<T> {
     handle: tokio::task::JoinHandle<T>,
@@ -53,103 +55,153 @@ impl<T> Drop for AbortOnDrop<T> {
 /// `response.completed` frame is validated against it before the response is
 /// persisted or a session checkpoint is published, so a frame the transport
 /// cannot deliver never leaves a stored response behind.
+///
+/// `execution` is the request's `agentic.execute` span guard. It is moved
+/// into the stream so the span stays open, and is entered on every poll,
+/// until the terminal frame has been yielded or the stream is dropped. The
+/// executor task is instrumented with the same span so the stages it runs
+/// are parented correctly on whichever worker thread polls them.
 pub(super) fn run_stream(
     ctx: RequestContext,
     tool_search_state: Option<ToolSearchState>,
     exec_ctx: Arc<ExecutionContext>,
     auth: Option<String>,
     max_stream_event_bytes: usize,
+    mut execution: ExecutionSpan,
 ) -> BoxStream {
-    Box::pin(stream! {
-        let failure_context = StreamFailureContext::from(&ctx);
-        let (event_tx, mut event_rx) = mpsc::channel(STREAM_EVENT_BUFFER);
-        let exec_ctx_for_run = Arc::clone(&exec_ctx);
-        let event_tx_for_run = event_tx.clone();
-        let mut agent = agent_pipeline_with_limits(
-            ctx,
-            tool_search_state,
-            Some(event_tx_for_run),
-            max_stream_event_bytes,
-        );
-        let mut run_handle = AbortOnDrop::new(tokio::spawn(async move {
-            let result = run_until_gateway_tools_complete(
-                &mut agent,
-                exec_ctx_for_run.as_ref(),
-                auth.as_deref(),
-                true,
-            )
-            .await;
-            let (ctx, stream_accumulator) = agent.into_parts();
-            (result.map(|(payload, metadata)| (payload, ctx, metadata)), stream_accumulator)
-        }));
-
-        let mut next_sequence_number = 0;
-        loop {
-            tokio::select! {
-                Some(event) = event_rx.recv() => {
-                    yield consume_stream_event(event, &mut next_sequence_number);
+    let span = execution.span().clone();
+    let task_span = span.clone();
+    let frames: BoxStream = Box::pin(stream! {
+            let failure_context = StreamFailureContext::from(&ctx);
+            let (event_tx, mut event_rx) = mpsc::channel(STREAM_EVENT_BUFFER);
+            let exec_ctx_for_run = Arc::clone(&exec_ctx);
+            let event_tx_for_run = event_tx.clone();
+            let mut agent = agent_pipeline_with_limits(
+                ctx,
+                tool_search_state,
+                Some(event_tx_for_run),
+                max_stream_event_bytes,
+            );
+            let mut run_handle = AbortOnDrop::new(tokio::spawn(
+                async move {
+                    let result = run_until_gateway_tools_complete(
+                        &mut agent,
+                        exec_ctx_for_run.as_ref(),
+                        auth.as_deref(),
+                        true,
+                    )
+                    .await;
+                    let (ctx, stream_accumulator) = agent.into_parts();
+                    (result.map(|(payload, metadata)| (payload, ctx, metadata)), stream_accumulator)
                 }
-                result = &mut run_handle.handle => {
-                    match result {
-                        Err(e) => {
-                            for chunk in panicked_stream_chunks(&e, &mut event_rx, &mut next_sequence_number) {
-                                yield chunk;
-                            }
-                        }
-                        Ok((Err(e), mut stream_accumulator)) => {
-                            while let Ok(event) = event_rx.try_recv() {
-                                yield consume_stream_event(event, &mut next_sequence_number);
-                            }
-                            if e.is_invalid_upstream_tool_search() {
-                                let payload = failure_context.failed_payload(&e);
-                                match stream_accumulator.terminal_response_chunk(&payload) {
-                                    Ok(chunk) => yield chunk,
-                                    Err(serialize_error) => {
-                                        yield GatewayStreamAccumulator::executor_error_chunk_at(
-                                            &serialize_error,
-                                            next_sequence_number,
-                                        );
-                                    }
+                .instrument(task_span),
+            ));
+
+            let mut next_sequence_number = 0;
+            loop {
+                tokio::select! {
+                    Some(event) = event_rx.recv() => {
+                        yield consume_stream_event(event, &mut next_sequence_number);
+                    }
+                    result = &mut run_handle.handle => {
+                        match result {
+                            Err(e) => {
+                                if e.is_panic() {
+                                    execution.failed_with(FailureCategory::Panic);
+                                } else {
+                                    execution.cancelled();
                                 }
-                            } else {
-                                yield GatewayStreamAccumulator::executor_error_chunk_at(&e, next_sequence_number);
+                                for chunk in panicked_stream_chunks(&e, &mut event_rx, &mut next_sequence_number) {
+                                    yield chunk;
+                                }
+                                execution.delivered();
                             }
-                            yield DONE_MARKER.to_string();
-                        }
-                        Ok((Ok((payload, ctx, tool_search_metadata)), stream_accumulator)) => {
-                            while let Ok(event) = event_rx.try_recv() {
-                                yield consume_stream_event(event, &mut next_sequence_number);
-                            }
-                            // Codex may close its WebSocket as soon as it receives
-                            // `response.completed`. Persist before exposing that
-                            // event so a custom call/output continuation cannot be
-                            // cancelled by the client disconnect.
-                            let ch = exec_ctx.conv_handler.clone();
-                            let rh = exec_ctx.resp_handler.clone();
-                            let mut terminal_accumulator = stream_accumulator.clone();
-                            let terminal_chunk = terminal_accumulator.terminal_response_chunk(&payload);
-                            match terminal_chunk {
-                                Err(e) => {
+                            Ok((Err(e), mut stream_accumulator)) => {
+                                execution.failed(&e);
+                                while let Ok(event) = event_rx.try_recv() {
+                                    yield consume_stream_event(event, &mut next_sequence_number);
+                                }
+                                if e.is_invalid_upstream_tool_search() {
+                                    let payload = failure_context.failed_payload(&e);
+                                    match stream_accumulator.terminal_response_chunk(&payload) {
+                                        Ok(chunk) => yield chunk,
+                                        Err(serialize_error) => {
+                                            yield GatewayStreamAccumulator::executor_error_chunk_at(
+                                                &serialize_error,
+                                                next_sequence_number,
+                                            );
+                                        }
+                                    }
+                                } else {
                                     yield GatewayStreamAccumulator::executor_error_chunk_at(&e, next_sequence_number);
                                 }
-                                Ok(chunk) => match persist_if_needed(payload, ctx, tool_search_metadata, ch, rh).await {
-                                    Ok(()) => yield chunk,
-                                    Err(e) => {
-                                        yield GatewayStreamAccumulator::executor_error_chunk_at(
-                                            &e,
-                                            next_sequence_number,
-                                        );
-                                    }
-                                }
+                                execution.delivered();
+                                yield DONE_MARKER.to_string();
                             }
-                            yield DONE_MARKER.to_string();
+                            Ok((Ok((payload, ctx, tool_search_metadata)), stream_accumulator)) => {
+                                while let Ok(event) = event_rx.try_recv() {
+                                    yield consume_stream_event(event, &mut next_sequence_number);
+                                }
+                                let terminal = completed_stream_chunk(
+                                    payload,
+                                    ctx,
+                                    tool_search_metadata,
+                                    &stream_accumulator,
+                                    &exec_ctx,
+                                    next_sequence_number,
+                                    &mut execution,
+                                )
+                                .await;
+                                execution.delivered();
+                                yield terminal;
+                                yield DONE_MARKER.to_string();
+                            }
                         }
+                        break;
                     }
-                    break;
                 }
             }
+    });
+    Box::pin(InstrumentedStream::new(frames, span))
+}
+
+/// The terminal frame for an execution that produced a response: the
+/// `response.completed` event, or an error frame when it cannot be
+/// serialized or persisted.
+///
+/// Codex may close its WebSocket as soon as it receives `response.completed`,
+/// so the response is persisted before that event is exposed and a custom
+/// call/output continuation cannot be cancelled by the client disconnect.
+async fn completed_stream_chunk(
+    payload: ResponsePayload,
+    ctx: RequestContext,
+    tool_search_metadata: Option<ToolSearchMetadata>,
+    stream_accumulator: &GatewayStreamAccumulator,
+    exec_ctx: &ExecutionContext,
+    next_sequence_number: u64,
+    execution: &mut ExecutionSpan,
+) -> String {
+    let mut terminal_accumulator = stream_accumulator.clone();
+    let chunk = match terminal_accumulator.terminal_response_chunk(&payload) {
+        Ok(chunk) => chunk,
+        Err(e) => {
+            execution.failed(&e);
+            return GatewayStreamAccumulator::executor_error_chunk_at(&e, next_sequence_number);
         }
-    })
+    };
+    let status = payload.status.clone();
+    let ch = exec_ctx.conv_handler.clone();
+    let rh = exec_ctx.resp_handler.clone();
+    match persist_if_needed(payload, ctx, tool_search_metadata, ch, rh).await {
+        Ok(()) => {
+            execution.completed_with_status(&status);
+            chunk
+        }
+        Err(e) => {
+            execution.failed(&e);
+            GatewayStreamAccumulator::executor_error_chunk_at(&e, next_sequence_number)
+        }
+    }
 }
 
 pub(super) struct StreamFailureContext {

@@ -1026,6 +1026,12 @@ async fn every_v1_route_rejects_missing_credentials() {
         .await
         .expect("protected models request");
     assert_eq!(models.status(), reqwest::StatusCode::UNAUTHORIZED);
+    let retrieved = client
+        .get(format!("http://{}/v1/responses/resp_private", gateway.address))
+        .send()
+        .await
+        .expect("protected response retrieval");
+    assert_eq!(retrieved.status(), reqwest::StatusCode::UNAUTHORIZED);
 
     let websocket_error = tokio_tungstenite::connect_async(format!("ws://{}/v1/responses", gateway.address))
         .await
@@ -1235,4 +1241,62 @@ async fn anthropic_authentication_errors_include_matching_request_id() {
     assert!(request_id.starts_with("req_"));
     assert_eq!(body["request_id"], request_id);
     assert_eq!(body["error"]["type"], "authentication_error");
+}
+
+#[tokio::test]
+async fn retrieval_uses_oidc_instead_of_the_configured_upstream_key() {
+    let (issuer, private_key, _public_jwk, _jwks_requests, _provider) = spawn_oidc_provider().await;
+    let authenticator = discover_test_authenticator(&issuer).await;
+    let mut config = test_config("http://127.0.0.1:9");
+    config.db_url = Some("sqlite://?mode=memory".into());
+    let exec = std::sync::Arc::new(
+        agentic_core::executor::ExecutionContext::from_config(&config)
+            .await
+            .unwrap(),
+    );
+    let snapshot = json!({
+        "id": "resp_private", "object": "response", "created_at": 123,
+        "model": "test-model", "status": "completed", "output": []
+    });
+    let payload: agentic_core::types::request_response::ResponsePayload = serde_json::from_value(snapshot).unwrap();
+    let expected = serde_json::to_value(&payload).unwrap();
+    let store = agentic_core::storage::ResponseStore::new(std::sync::Arc::new(exec.storage_pool().unwrap().clone()));
+    store
+        .persist(
+            "resp_private",
+            None,
+            Vec::new(),
+            &agentic_core::storage::ResponseMetadata {
+                response_snapshot: Some(Box::new(payload)),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    let mut state = test_state(&config);
+    state.exec_ctx = std::sync::Arc::clone(&exec);
+    let gateway = spawn_router(build_router_with_auth(
+        state,
+        &ServerConfig::from_env(),
+        Some(authenticator),
+    ))
+    .await;
+    let client = reqwest::Client::new();
+    let url = format!("http://{}/v1/responses/resp_private", gateway.address);
+    for token in ["test-key", "invalid-oidc-token"] {
+        let response = client.get(&url).bearer_auth(token).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+    let token = identity_token(
+        &issuer,
+        TEST_AUDIENCE,
+        jsonwebtoken::get_current_timestamp() + 300,
+        "test-key",
+        &private_key,
+    );
+    let response = client.get(&url).bearer_auth(token).send().await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.json::<Value>().await.unwrap(), expected);
+    drop(gateway);
+    exec.storage_pool().unwrap().close().await;
 }

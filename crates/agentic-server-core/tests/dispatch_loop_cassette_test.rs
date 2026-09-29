@@ -131,6 +131,7 @@ fn request(text: &str, tools: Option<Vec<ResponsesTool>>) -> RequestPayload {
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: None,
         cache_salt: None,
         context_management: None,
     }

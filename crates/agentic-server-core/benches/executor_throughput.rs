@@ -149,6 +149,7 @@ fn make_request(input: &str, stream: bool, prev_id: Option<String>) -> RequestPa
         truncation: None,
         metadata: None,
         parallel_tool_calls: None,
+        prompt_cache_key: None,
         cache_salt: None,
         context_management: None,
     }

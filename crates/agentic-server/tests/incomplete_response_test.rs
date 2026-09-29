@@ -29,7 +29,7 @@ impl Drop for AbortOnDrop {
     }
 }
 
-fn response_body(status: &str, tool: bool, empty: bool) -> Value {
+fn response_body(status: &str, tool: bool, empty: bool, message_id: &str) -> Value {
     let output = if tool {
         vec![json!({"id":"fc_search", "type":"function_call", "status":"completed",
             "call_id":"call_search", "name":"web_search", "arguments":"{\"query\":\"weather\"}"})]
@@ -37,7 +37,7 @@ fn response_body(status: &str, tool: bool, empty: bool) -> Value {
         Vec::new()
     } else {
         vec![
-            json!({"id":"msg_answer", "type":"message", "role":"assistant", "status":"completed",
+            json!({"id":message_id, "type":"message", "role":"assistant", "status":"completed",
             "content":[{"type":"output_text", "text":ANSWER}]}),
         ]
     };
@@ -162,7 +162,11 @@ async fn check_delivery_and_restart(
             };
             // A mistaken extra inference round returns a completed response, making
             // status loss observable instead of hanging or exhausting the round cap.
-            let response = if first {response_body(status, tool, empty)} else {response_body("completed", false, false)};
+            let response = if first {
+                response_body(status, tool, empty, "msg_answer")
+            } else {
+                response_body("completed", false, false, "msg_followup")
+            };
             if streaming {
                 let event_type = if first {terminal_type} else {"response.completed"};
                 Response::builder().header("content-type", "text/event-stream")
@@ -207,7 +211,7 @@ async fn check_delivery_and_restart(
     assert_eq!(response["status"], status);
     assert_eq!(
         response["incomplete_details"],
-        response_body(status, tool, empty)["incomplete_details"]
+        response_body(status, tool, empty, "msg_answer")["incomplete_details"]
     );
     assert_eq!(response["usage"]["output_tokens"], 5);
     assert_eq!(response["usage"]["input_tokens"], 3);
@@ -237,13 +241,20 @@ async fn check_delivery_and_restart(
     let response_id = response["id"].as_str().unwrap();
     assert_ne!(response_id, "resp_upstream");
 
-    // Persistence stores item history and effective settings, not terminal status
-    // or usage. Verify that accepted partial history really reaches later inference.
+    // Verify exact retrieval after restart, as well as continuation from partial history.
     let exec_ctx = Arc::new(ExecutionContext::from_config(&config).await.unwrap());
     let mut state = common::test_state(&config);
     state.exec_ctx = Arc::clone(&exec_ctx);
     let (gateway_url, gateway) = common::spawn_gateway(state).await;
     let _gateway_guard = AbortOnDrop(gateway.abort_handle());
+    let retrieved = client
+        .get(format!("{gateway_url}/v1/responses/{response_id}"))
+        .bearer_auth("test-key")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(retrieved.status(), http::StatusCode::OK);
+    assert_eq!(retrieved.json::<Value>().await.unwrap(), response);
     let followup = client
         .post(format!("{gateway_url}/v1/responses"))
         .json(

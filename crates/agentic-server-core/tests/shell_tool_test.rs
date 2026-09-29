@@ -152,12 +152,12 @@ async fn native_shell_stream_obeys_strict_lifecycle() {
     }
 }
 
-fn model_response(stream: bool, shell: bool) -> support::MockResponse {
+fn model_response(stream: bool, shell: bool, message_id: &str) -> support::MockResponse {
     let item = if shell {
         json!({"type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "shell", "status": "completed",
             "arguments": shell_item("completed")["action"].to_string()})
     } else {
-        json!({"type": "message", "id": "msg_1", "role": "assistant", "status": "completed",
+        json!({"type": "message", "id": message_id, "role": "assistant", "status": "completed",
             "content": [{"type": "output_text", "text": "sandbox checked", "annotations": []}]})
     };
     if stream {
@@ -200,9 +200,9 @@ async fn run(request: RequestPayload, ctx: Arc<agentic_core::executor::Execution
 async fn client_shell_continuation_blocking_and_streaming() {
     for stream in [false, true] {
         let fixture = support::TestFixture::new_with_responses(vec![
-            model_response(stream, true),
-            model_response(stream, false),
-            model_response(stream, false),
+            model_response(stream, true, "msg_unused"),
+            model_response(stream, false, "msg_1"),
+            model_response(stream, false, "msg_2"),
         ])
         .await;
         let first = run(request(stream), fixture.exec_ctx.clone()).await;
@@ -271,7 +271,7 @@ async fn client_shell_continuation_blocking_and_streaming() {
 #[tokio::test]
 async fn submitted_shell_items_preserve_public_fields_in_storage() {
     for conversation in [false, true] {
-        let fixture = support::TestFixture::new_with_responses(vec![model_response(false, false)]).await;
+        let fixture = support::TestFixture::new_with_responses(vec![model_response(false, false, "msg_1")]).await;
         let mut req = request(false);
         if conversation {
             req.conversation_id = Some(fixture.exec_ctx.conv_handler.create().await.unwrap().conversation_id);

@@ -1,0 +1,206 @@
+turns:
+- filename: t1
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1790239012
+      id: conv_6ab4e1242df881938ae33db7ce6d5cad0641a6d27105304e
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      conversation: conv_6ab4e1242df881938ae33db7ce6d5cad0641a6d27105304e
+      input:
+      - content: Remember the secret word SAPPHIRE. Reply with only SAPPHIRE.
+        role: user
+      model: gpt-4.1
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790239013
+      conversation:
+        id: conv_6ab4e1242df881938ae33db7ce6d5cad0641a6d27105304e
+      created_at: 1790239012
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0641a6d27105304e006ab4e124899881939d2a70865fa387b7
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE
+          type: output_text
+        id: msg_0641a6d27105304e006ab4e124fb0c8193a2f2cdb349e5c508
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 24
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 5
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 29
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      items:
+      - content: The new secret word is ORCHID.
+        role: user
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_6ab4e1242df881938ae33db7ce6d5cad0641a6d27105304e/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: The new secret word is ORCHID.
+          type: input_text
+        id: msg_6ab4e125d1d881938bbac0deb8d7c2010641a6d27105304e
+        role: user
+        status: completed
+        type: message
+      first_id: msg_6ab4e125d1d881938bbac0deb8d7c2010641a6d27105304e
+      has_more: false
+      last_id: msg_6ab4e125d1d881938bbac0deb8d7c2010641a6d27105304e
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/conversations/conv_6ab4e1242df881938ae33db7ce6d5cad0641a6d27105304e/items/msg_6ab4e125d1d881938bbac0deb8d7c2010641a6d27105304e
+    query_params: {}
+  response:
+    body:
+      created_at: 1790239012
+      id: conv_6ab4e1242df881938ae33db7ce6d5cad0641a6d27105304e
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_6ab4e1242df881938ae33db7ce6d5cad0641a6d27105304e/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember the secret word SAPPHIRE. Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_0641a6d27105304e006ab4e124c2808193942cc3e9798afeb3
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE
+          type: output_text
+        id: msg_0641a6d27105304e006ab4e124fb0c8193a2f2cdb349e5c508
+        role: assistant
+        status: completed
+        type: message
+      first_id: msg_0641a6d27105304e006ab4e124c2808193942cc3e9798afeb3
+      has_more: false
+      last_id: msg_0641a6d27105304e006ab4e124fb0c8193a2f2cdb349e5c508
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200

@@ -28,10 +28,10 @@ impl Drop for AbortOnDrop {
     }
 }
 
-fn response_body() -> Value {
+fn response_body(message_id: &str) -> Value {
     json!({
         "id":"resp_upstream", "object":"response", "model":"test-model", "status":"completed",
-        "output":[{"id":"msg_answer", "type":"message", "role":"assistant", "status":"completed",
+        "output":[{"id":message_id, "type":"message", "role":"assistant", "status":"completed",
             "content":[{"type":"output_text", "text":ANSWER}]}]
     })
 }
@@ -43,8 +43,8 @@ fn upstream_sse(unspaced: bool) -> String {
             "item":{"id":"msg_answer", "type":"message", "role":"assistant", "status":"in_progress"}}),
         json!({"type":"response.output_text.delta", "item_id":"msg_answer", "output_index":0,
             "content_index":0, "delta":ANSWER}),
-        json!({"type":"response.output_item.done", "output_index":0, "item":response_body()["output"][0]}),
-        json!({"type":"response.completed", "response":response_body()}),
+        json!({"type":"response.output_item.done", "output_index":0, "item":response_body("msg_answer")["output"][0]}),
+        json!({"type":"response.completed", "response":response_body("msg_answer")}),
     ];
     let separator = if unspaced { "" } else { " " };
     let mut body = String::new();
@@ -122,7 +122,7 @@ async fn check_stream_and_restart(websocket: bool, unspaced: bool) {
                         .body(Body::from(upstream_sse(unspaced)))
                         .unwrap()
                 } else {
-                    Json(response_body()).into_response()
+                    Json(response_body("msg_followup")).into_response()
                 }
             }
         }),

@@ -53,6 +53,17 @@ pub struct ProxyRequest {
     pub query: Option<String>,
 }
 
+impl ProxyRequest {
+    /// Read only the transport preference while preserving the original request bytes.
+    #[must_use]
+    pub fn is_streaming(&self) -> bool {
+        serde_json::from_slice::<Value>(&self.body)
+            .ok()
+            .and_then(|value| value.get("stream")?.as_bool())
+            .unwrap_or(false)
+    }
+}
+
 /// Authentication fallback used when proxying a request to an upstream API.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProxyAuth {
@@ -110,7 +121,8 @@ impl ProxyState {
 ///
 /// Hop-by-hop and origin-specific headers are removed, all other headers stay
 /// open-ended, and the configured credential is injected only when the client
-/// did not supply one.
+/// did not supply one. W3C trace headers are replaced with the current gateway
+/// span's context; caller headers are never forwarded as the outbound parent.
 #[must_use]
 pub fn upstream_request_headers(headers: &HeaderMap, config: &Config, auth: ProxyAuth) -> reqwest::header::HeaderMap {
     let connection_options = connection_options(headers);
@@ -146,6 +158,7 @@ pub fn upstream_request_headers(headers: &HeaderMap, config: &Config, auth: Prox
         }
     }
 
+    crate::executor::telemetry::stages::inject_context(&mut out);
     out
 }
 
@@ -273,10 +286,7 @@ pub async fn proxy_request_with_path(
     auth: ProxyAuth,
     state: &ProxyState,
 ) -> ProxyResponse {
-    let is_streaming = serde_json::from_slice::<Value>(&request.body)
-        .ok()
-        .and_then(|v| v.get("stream")?.as_bool())
-        .unwrap_or(false);
+    let is_streaming = request.is_streaming();
 
     let llm_headers = upstream_request_headers(&request.headers, &state.config, auth);
 

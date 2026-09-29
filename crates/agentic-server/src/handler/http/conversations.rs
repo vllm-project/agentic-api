@@ -1,26 +1,17 @@
 use axum::extract::{Path, Request, State};
-use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
 use agentic_core::executor::ExecutorError;
-use agentic_core::storage::{ConversationData, InOutItem, StorageError};
+use agentic_core::storage::{ConversationData, StorageError};
 use agentic_core::types::{
     ConversationResponse, CreateConversationRequest, DeletedResponse, UpdateConversationRequest,
 };
 
-use super::super::common::{error_response, executor_error_response, extract_json, read_bytes};
+use super::super::common::{executor_error_response, extract_json, extract_store, read_bytes};
 use crate::app::AppState;
 
-/// Extract tenant ID from authenticated principal in request extensions.
-///
-/// Returns Result to support future authentication error handling.
-#[allow(clippy::unnecessary_wraps, clippy::result_large_err)]
-pub(super) fn extract_tenant_id(_req: &Request) -> Result<String, Response> {
-    // For now, return a placeholder until we wire up authentication
-    // In production, this would extract from the AuthenticatedPrincipal extension
-    // and return Err(response) for authentication failures
-    Ok("default_tenant".to_string())
-}
+// Authentication is not wired into these management routes yet.
+pub(super) const DEFAULT_TENANT_ID: &str = "default_tenant";
 
 /// Create a new conversation with optional metadata and initial items.
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -35,18 +26,16 @@ pub(super) fn extract_tenant_id(_req: &Request) -> Result<String, Response> {
     tag = "conversations",
 ))]
 pub async fn create_conversation(State(state): State<AppState>, req: Request) -> Response {
-    let tenant_id = match extract_tenant_id(&req) {
-        Ok(id) => id,
-        Err(err) => return err,
-    };
-
     let (_, body) = req.into_parts();
     let bytes = match read_bytes(body, state.max_request_body_size).await {
         Ok(b) => b,
         Err(e) => return e,
     };
 
-    // Empty body is valid - treat as default request with no metadata or items
+    if !extract_store(&bytes) {
+        return executor_error_response(ExecutorError::InvalidRequest("conversations require store=true".into()));
+    }
+
     let request: CreateConversationRequest = if bytes.is_empty() {
         CreateConversationRequest {
             metadata: None,
@@ -54,42 +43,19 @@ pub async fn create_conversation(State(state): State<AppState>, req: Request) ->
         }
     } else {
         match extract_json(&bytes) {
-            Ok(r) => r,
-            Err(e) => return e,
+            Ok(request) => request,
+            Err(error) => return error,
         }
     };
-
-    if request.items.as_ref().is_some_and(|items| items.len() > 20) {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "invalid_request_error",
-            "a conversation accepts at most 20 initial items",
-        );
-    }
-
-    let initial_items: Vec<InOutItem> = request
-        .items
-        .unwrap_or_default()
-        .into_iter()
-        .map(|item| match item {
-            agentic_core::types::ConversationItem::Input(input) => InOutItem::Input(input),
-            agentic_core::types::ConversationItem::Output(output) => InOutItem::Output(output),
-        })
-        .collect();
 
     match state
         .exec_ctx
         .conv_handler
-        .store()
-        .create_with_metadata_and_items(Some(&tenant_id), request.metadata, initial_items)
+        .create_with_metadata_and_items(DEFAULT_TENANT_ID, request.metadata, request.items.unwrap_or_default())
         .await
     {
         Ok(data) => conversation_response(data),
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "storage_error",
-            &format!("Failed to create conversation: {e}"),
-        ),
+        Err(error) => executor_error_response(error),
     }
 }
 
@@ -107,32 +73,15 @@ pub async fn create_conversation(State(state): State<AppState>, req: Request) ->
     security(("bearer_auth" = [])),
     tag = "conversations",
 ))]
-pub async fn retrieve_conversation(
-    State(state): State<AppState>,
-    Path(conversation_id): Path<String>,
-    req: Request,
-) -> Response {
-    let tenant_id = match extract_tenant_id(&req) {
-        Ok(id) => id,
-        Err(err) => return err,
-    };
-
+pub async fn retrieve_conversation(State(state): State<AppState>, Path(conversation_id): Path<String>) -> Response {
     match state
         .exec_ctx
         .conv_handler
-        .store()
-        .retrieve(&tenant_id, &conversation_id)
+        .retrieve(DEFAULT_TENANT_ID, &conversation_id)
         .await
     {
         Ok(data) => conversation_response(data),
-        Err(agentic_core::storage::StorageError::NotFound { .. }) => {
-            error_response(StatusCode::NOT_FOUND, "not_found", "Conversation not found")
-        }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "storage_error",
-            &format!("Failed to retrieve conversation: {e}"),
-        ),
+        Err(error) => executor_error_response(error),
     }
 }
 
@@ -156,11 +105,6 @@ pub async fn update_conversation(
     Path(conversation_id): Path<String>,
     req: Request,
 ) -> Response {
-    let tenant_id = match extract_tenant_id(&req) {
-        Ok(id) => id,
-        Err(err) => return err,
-    };
-
     let (_, body) = req.into_parts();
     let bytes = match read_bytes(body, state.max_request_body_size).await {
         Ok(b) => b,
@@ -175,19 +119,11 @@ pub async fn update_conversation(
     match state
         .exec_ctx
         .conv_handler
-        .store()
-        .update_metadata(&tenant_id, &conversation_id, request.metadata)
+        .update_metadata(DEFAULT_TENANT_ID, &conversation_id, request.metadata)
         .await
     {
         Ok(data) => conversation_response(data),
-        Err(agentic_core::storage::StorageError::NotFound { .. }) => {
-            error_response(StatusCode::NOT_FOUND, "not_found", "Conversation not found")
-        }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "storage_error",
-            &format!("Failed to update conversation: {e}"),
-        ),
+        Err(error) => executor_error_response(error),
     }
 }
 
@@ -205,35 +141,18 @@ pub async fn update_conversation(
     security(("bearer_auth" = [])),
     tag = "conversations",
 ))]
-pub async fn delete_conversation(
-    State(state): State<AppState>,
-    Path(conversation_id): Path<String>,
-    req: Request,
-) -> Response {
-    let tenant_id = match extract_tenant_id(&req) {
-        Ok(id) => id,
-        Err(err) => return err,
-    };
-
+pub async fn delete_conversation(State(state): State<AppState>, Path(conversation_id): Path<String>) -> Response {
     match state
         .exec_ctx
         .conv_handler
-        .store()
-        .delete(&tenant_id, &conversation_id)
+        .delete(DEFAULT_TENANT_ID, &conversation_id)
         .await
     {
         Ok(()) => {
             let response = DeletedResponse::conversation(conversation_id);
             axum::Json(response).into_response()
         }
-        Err(agentic_core::storage::StorageError::NotFound { .. }) => {
-            error_response(StatusCode::NOT_FOUND, "not_found", "Conversation not found")
-        }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "storage_error",
-            &format!("Failed to delete conversation: {e}"),
-        ),
+        Err(error) => executor_error_response(error),
     }
 }
 

@@ -5,29 +5,40 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
 
-use agentic_core::storage::{InOutItem, Item};
 #[cfg(feature = "openapi")]
 use agentic_core::types::ConversationResponse;
-use agentic_core::types::conversations::ItemOrder;
-use agentic_core::types::{ConversationItem, CreateItemRequest, ItemResponse, ListItemsResponse};
+use agentic_core::types::{CreateItemRequest, ItemResponse, ListItemsResponse};
 
-use super::super::common::{error_response, extract_json, read_bytes};
-use super::conversations::{conversation_response, extract_tenant_id, storage_error};
+use super::super::common::{error_response, executor_error_response, extract_json, read_bytes};
+use super::conversations::{DEFAULT_TENANT_ID, conversation_response};
 use crate::app::AppState;
 
 /// Query parameters for listing conversation items.
 #[derive(Debug, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::IntoParams))]
 pub struct ListItemsQuery {
+    /// Maximum number of items to return (default: 20, max: 100).
     #[serde(default = "default_limit")]
-    pub limit: u8,
+    pub limit: i64,
+
+    /// Cursor for pagination (item ID to start after).
     pub after: Option<String>,
-    #[serde(default)]
-    pub order: ItemOrder,
+
+    /// Sort order for items (default: desc). Ascending order is oldest-first.
+    #[serde(default = "default_order")]
+    pub order: String,
+
+    /// Optional output expansion, encoded as `include[]=value` by `OpenAI` clients.
+    #[serde(alias = "include[]")]
+    pub include: Option<String>,
 }
 
-fn default_limit() -> u8 {
+fn default_limit() -> i64 {
     20
+}
+
+fn default_order() -> String {
+    "desc".to_string()
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -45,36 +56,30 @@ fn default_limit() -> u8 {
     security(("bearer_auth" = [])),
     tag = "conversations",
 ))]
-pub async fn create_item(State(state): State<AppState>, Path(id): Path<String>, req: Request) -> Response {
-    let tenant = match extract_tenant_id(&req) {
-        Ok(id) => id,
-        Err(error) => return error,
-    };
-    let bytes = match read_bytes(req.into_body(), state.max_request_body_size).await {
+pub async fn create_item(State(state): State<AppState>, Path(conversation_id): Path<String>, req: Request) -> Response {
+    let (_, body) = req.into_parts();
+    let bytes = match read_bytes(body, state.max_request_body_size).await {
         Ok(bytes) => bytes,
         Err(error) => return error,
     };
+
     let request: CreateItemRequest = match extract_json(&bytes) {
         Ok(request) => request,
         Err(error) => return error,
     };
-    if request.items.is_empty() || request.items.len() > 20 {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "invalid_request_error",
-            "items must contain between 1 and 20 items",
-        );
-    }
-    let items = request.items.into_iter().map(into_stored_item).collect();
+
     match state
         .exec_ctx
         .conv_handler
-        .store()
-        .create_items(&tenant, &id, items)
+        .create_items(DEFAULT_TENANT_ID, &conversation_id, request.items)
         .await
     {
-        Ok(items) => list_response(items, false),
-        Err(error) => storage_error(error),
+        Ok(item_responses) => {
+            // Return list response (matches OpenAI format)
+            let response = agentic_core::types::ListItemsResponse::new(item_responses, false);
+            axum::Json(response).into_response()
+        }
+        Err(e) => executor_error_response(e),
     }
 }
 
@@ -94,35 +99,51 @@ pub async fn create_item(State(state): State<AppState>, Path(id): Path<String>, 
 ))]
 pub async fn list_items(
     State(state): State<AppState>,
-    Path(id): Path<String>,
+    Path(conversation_id): Path<String>,
     Query(query): Query<ListItemsQuery>,
-    req: Request,
 ) -> Response {
-    let tenant = match extract_tenant_id(&req) {
-        Ok(id) => id,
-        Err(error) => return error,
-    };
-    if !(1..=100).contains(&query.limit) {
+    // Validate limit parameter
+    if query.limit < 1 || query.limit > 100 {
         return error_response(
             StatusCode::BAD_REQUEST,
-            "invalid_request_error",
+            "invalid_request",
             "limit must be between 1 and 100",
         );
     }
-    let limit = i64::from(query.limit);
+
+    // Validate order parameter
+    if query.order != "asc" && query.order != "desc" {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            "order must be 'asc' or 'desc'",
+        );
+    }
+
+    // Text output logprobs are already present in stored message items. Other
+    // include expansions need their own data sources before they can be served.
+    if query
+        .include
+        .as_deref()
+        .is_some_and(|value| value != "message.output_text.logprobs")
+    {
+        return error_response(StatusCode::BAD_REQUEST, "invalid_request", "unsupported include value");
+    }
+
     match state
         .exec_ctx
         .conv_handler
-        .store()
-        .list_items(&tenant, &id, limit + 1, query.after.as_deref(), query.order)
+        .list_items(
+            DEFAULT_TENANT_ID,
+            &conversation_id,
+            query.limit,
+            query.after.as_deref(),
+            &query.order,
+        )
         .await
     {
-        Ok(mut items) => {
-            let has_more = items.len() > usize::from(query.limit);
-            items.truncate(usize::from(query.limit));
-            list_response(items, has_more)
-        }
-        Err(error) => storage_error(error),
+        Ok(response) => axum::Json(response).into_response(),
+        Err(e) => executor_error_response(e),
     }
 }
 
@@ -142,25 +163,16 @@ pub async fn list_items(
 ))]
 pub async fn retrieve_item(
     State(state): State<AppState>,
-    Path((id, item_id)): Path<(String, String)>,
-    req: Request,
+    Path((conversation_id, item_id)): Path<(String, String)>,
 ) -> Response {
-    let tenant = match extract_tenant_id(&req) {
-        Ok(id) => id,
-        Err(error) => return error,
-    };
     match state
         .exec_ctx
         .conv_handler
-        .store()
-        .retrieve_item(&tenant, &id, &item_id)
+        .retrieve_item(DEFAULT_TENANT_ID, &conversation_id, &item_id)
         .await
     {
-        Ok(item) => match item_response(item) {
-            Ok(item) => axum::Json(item).into_response(),
-            Err(error) => error,
-        },
-        Err(error) => storage_error(error),
+        Ok(response) => axum::Json(response).into_response(),
+        Err(e) => executor_error_response(e),
     }
 }
 
@@ -180,51 +192,15 @@ pub async fn retrieve_item(
 ))]
 pub async fn delete_item(
     State(state): State<AppState>,
-    Path((id, item_id)): Path<(String, String)>,
-    req: Request,
+    Path((conversation_id, item_id)): Path<(String, String)>,
 ) -> Response {
-    let tenant = match extract_tenant_id(&req) {
-        Ok(id) => id,
-        Err(error) => return error,
-    };
     match state
         .exec_ctx
         .conv_handler
-        .store()
-        .delete_item(&tenant, &id, &item_id)
+        .delete_item(DEFAULT_TENANT_ID, &conversation_id, &item_id)
         .await
     {
         Ok(conversation) => conversation_response(conversation),
-        Err(error) => storage_error(error),
-    }
-}
-
-pub(super) fn into_stored_item(item: ConversationItem) -> InOutItem {
-    match item {
-        ConversationItem::Input(input) => InOutItem::Input(input),
-        ConversationItem::Output(output) => InOutItem::Output(output),
-    }
-}
-
-#[allow(clippy::result_large_err)]
-fn item_response(item: Item) -> Result<ItemResponse, Response> {
-    let content = match item.as_inout() {
-        Some(InOutItem::Input(input)) => ConversationItem::Input(input),
-        Some(InOutItem::Output(output)) => ConversationItem::Output(output),
-        None => {
-            return Err(error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "storage_error",
-                "failed to decode stored item",
-            ));
-        }
-    };
-    Ok(ItemResponse::new(item.id, content))
-}
-
-fn list_response(items: Vec<Item>, has_more: bool) -> Response {
-    match items.into_iter().map(item_response).collect::<Result<Vec<_>, _>>() {
-        Ok(items) => axum::Json(ListItemsResponse::new(items, has_more)).into_response(),
-        Err(error) => error,
+        Err(e) => executor_error_response(e),
     }
 }

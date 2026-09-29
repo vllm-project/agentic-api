@@ -83,7 +83,13 @@ impl GatewayExecutor for LocalSearch {
         _params: &WebSearchToolParam,
     ) -> Option<OutputItem> {
         Some(OutputItem::WebSearchCall(
-            WebSearchCall::try_new(&call.id, status, vec!["local".to_owned()], Vec::new()).unwrap(),
+            WebSearchCall::try_new(
+                format!("ws_{}", call.id.strip_prefix("fc_").unwrap_or(&call.id)),
+                status,
+                vec!["local".to_owned()],
+                Vec::new(),
+            )
+            .unwrap(),
         ))
     }
 }
@@ -345,7 +351,9 @@ async fn explicit_conversation_tool_history(use_session: bool, gateway_tool: boo
         } else {
             execution
         };
-        let result = execution.run().await.unwrap();
+        let result = execution.run().await.unwrap_or_else(|error| {
+            panic!("gateway_tool={gateway_tool}, store={store}, session={use_session}, turn={index}: {error}")
+        });
         assert!(matches!(result, either::Either::Left(_)));
         session.wait_until_idle().await.unwrap();
     }
@@ -520,7 +528,7 @@ async fn parent_with_call(exec: &ExecutionContext, session: &ResponseSession) ->
         .unwrap();
     let payload = response(&ctx, json!([function_call("call_first")]));
     let id = ctx.response_id.clone();
-    commit(ctx, payload, exec)
+    Box::pin(commit(ctx, payload, exec))
         .await
         .expect("initial unstored call checkpoint");
     id

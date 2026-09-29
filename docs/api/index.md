@@ -53,11 +53,27 @@ For a complete GitHub-backed deployment example, see
 HTTP Responses requests use the OpenAI-compatible Responses shape. Requests
 with `store=true`, `previous_response_id`, `conversation_id`, compaction input,
 or `context_management` run through the executor. Other stateless `store=false`
-requests are passed directly to the configured vLLM backend.
+requests are passed directly to the configured vLLM backend. A `store=false`
+request that continues a stored response is hydrated from that response but is
+not stored itself: its id can be neither retrieved nor used as `previous_response_id`.
 
 Executor-backed requests accept at most 64 MCP server declarations and 128
 discovered MCP tools. MCP discovery metadata shares the request's 1 MiB
 response budget with upstream rounds and gateway tool output.
+
+`prompt_cache_key` is forwarded unchanged on direct and executor-backed HTTP
+requests, WebSocket requests, gateway tool rounds, automatic compaction, and
+summary inference requested by a `compaction_trigger` input item.
+
+- The key is scoped to the current request. A continuation using
+  `previous_response_id` must send it again to remain in the same upstream
+  cache group.
+- Executor-backed requests omit an absent or `null` key. Direct HTTP requests
+  preserve the original body, including an explicit `null`.
+- This support applies to `/v1/responses`. Response-object echoing and the
+  separate `/v1/responses/compact` endpoint are outside its scope.
+
+The configured upstream decides whether a request receives a cache hit.
 
 ### `POST /v1/responses/compact`
 

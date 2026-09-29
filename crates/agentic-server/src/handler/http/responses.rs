@@ -1,4 +1,4 @@
-use axum::extract::{Request, State};
+use axum::extract::{Path, Request, State};
 use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
@@ -8,8 +8,9 @@ use tracing::debug;
 
 use std::sync::Arc;
 
+use agentic_core::executor::telemetry::Api;
 use agentic_core::executor::{ExecuteRequest, compact_response as execute_compaction};
-use agentic_core::proxy::{ProxyRequest, proxy_request};
+use agentic_core::proxy::ProxyRequest;
 use agentic_core::tool::ToolSearchHandler;
 use agentic_core::types::request_response::{CompactRequest, RequestPayload, ResponseTextConfig};
 
@@ -26,7 +27,10 @@ async fn proxy_responses(state: &AppState, parts: Parts, body: Bytes) -> Respons
         body,
         query: parts.uri.query().map(str::to_string),
     };
-    convert_response(proxy_request(proxy_req, &state.proxy_state).await)
+    convert_response(
+        crate::telemetry::proxy::trace_proxy_request(Api::Responses, proxy_req, "/v1/responses", &state.proxy_state)
+            .await,
+    )
 }
 
 async fn execute_responses(state: &AppState, parts: Parts, payload: RequestPayload) -> Response {
@@ -122,6 +126,27 @@ pub async fn compact_response(State(state): State<AppState>, req: Request) -> Re
     let auth = extract_bearer(&parts.headers, state.openai_api_key.as_deref());
     match execute_compaction(request, state.exec_ctx.as_ref(), auth.as_deref()).await {
         Ok(response) => axum::Json(response).into_response(),
+        Err(error) => executor_error_response(error),
+    }
+}
+
+/// Return a locally persisted Responses payload without invoking inference.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/v1/responses/{response_id}",
+    params(("response_id" = String, Path, description = "Stored response ID")),
+    responses(
+        (status = 200, description = "Stored response", body = agentic_core::types::request_response::ResponsePayload),
+        (status = 401, description = "Missing or invalid bearer token", body = crate::openapi::ApiErrorResponse),
+        (status = 404, description = "Response not found", body = crate::openapi::ApiErrorResponse),
+        (status = 409, description = "Legacy response has no retrievable payload", body = crate::openapi::ApiErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+    tag = "responses",
+))]
+pub async fn retrieve_response(State(state): State<AppState>, Path(response_id): Path<String>) -> Response {
+    match state.exec_ctx.resp_handler.retrieve(&response_id).await {
+        Ok(payload) => axum::Json(payload).into_response(),
         Err(error) => executor_error_response(error),
     }
 }

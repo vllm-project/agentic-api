@@ -81,8 +81,6 @@ pub(super) async fn read_json<T: DeserializeOwned>(body: Body, limit: NonZeroUsi
     serde_json::from_slice::<T>(&bytes).map_err(|error| executor_error_response(ExecutorError::from(error)))
 }
 
-// Currently unused after Conversations API rewrite, but kept for potential future use
-#[allow(dead_code)]
 pub(super) fn extract_store(bytes: &[u8]) -> bool {
     serde_json::from_slice::<serde_json::Value>(bytes)
         .ok()

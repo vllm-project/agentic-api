@@ -18,7 +18,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def make_handler(response_body: bytes):
+def make_handler(response_template: dict):
+    import uuid
+
     class FixtureHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             if self.path == "/health":
@@ -57,6 +59,13 @@ def make_handler(response_body: bytes):
                 self.send_error(422, "request did not match the recorded fixture")
                 return
 
+            # Generate unique IDs per request to avoid duplicate key errors
+            response = response_template.copy()
+            response["id"] = f"resp_{uuid.uuid4().hex}"
+            if response.get("output") and len(response["output"]) > 0:
+                response["output"][0]["id"] = f"msg_{uuid.uuid4().hex}"
+
+            response_body = json.dumps(response).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(response_body)))
@@ -68,8 +77,8 @@ def make_handler(response_body: bytes):
 
 def main() -> None:
     args = parse_args()
-    response_body = json.dumps(json.loads(args.fixture.read_text())).encode()
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(response_body))
+    response_template = json.loads(args.fixture.read_text())
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(response_template))
     server.serve_forever()
 
 
