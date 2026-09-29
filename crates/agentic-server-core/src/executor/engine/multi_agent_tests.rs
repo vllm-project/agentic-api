@@ -29,6 +29,18 @@ use std::sync::Arc;
 use std::{collections::HashMap, fmt::Write};
 use tokio::sync::{Barrier, Semaphore};
 
+#[test]
+fn completed_listing_status_preserves_null_and_present_answers() {
+    for (answer, expected) in [
+        (None, json!({"completed": null})),
+        (Some(""), json!({"completed": ""})),
+        (Some("child result"), json!({"completed": "child result"})),
+    ] {
+        let status = listing_status(AgentState::Idle, answer);
+        assert_eq!(serde_json::to_value(status).unwrap(), expected);
+    }
+}
+
 #[allow(clippy::needless_pass_by_value)] // Convenient owned JSON test fixtures.
 fn function(call_id: &str, name: &str, arguments: Value) -> Value {
     json!({"type":"function_call","id":uuid7_str("fc_"),"call_id":call_id,

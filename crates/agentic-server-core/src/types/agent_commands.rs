@@ -89,7 +89,7 @@ pub enum CollaborationResult {
 #[serde(rename_all = "snake_case")]
 pub enum AgentListingStatus {
     Running,
-    Completed(String),
+    Completed(Option<String>),
     Interrupted,
     Failed,
 }
