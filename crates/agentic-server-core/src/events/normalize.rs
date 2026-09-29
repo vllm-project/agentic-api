@@ -205,18 +205,8 @@ fn extract_content_part_done(json: &Value) -> EventPayload {
     else {
         return EventPayload::Raw(json.clone());
     };
-    if json["part"]["type"] == "encrypted_content"
-        && let Some(part) = deserialize_from_value_opt::<AgentMessageContent>(json["part"].clone())
-    {
-        return EventPayload::AgentMessageContentDone {
-            item_id: json_str(json, "item_id"),
-            output_index: json_output_index(json),
-            content_index,
-            part,
-        };
-    }
-    if let Some(part) = deserialize_from_value_opt(json["part"].clone()) {
-        return EventPayload::MessageContentDone {
+    if let Some(part) = deserialize_from_value_opt::<AgentMessageContent>(json["part"].clone()) {
+        return EventPayload::ContentPartDone {
             item_id: json_str(json, "item_id"),
             output_index: json_output_index(json),
             content_index,

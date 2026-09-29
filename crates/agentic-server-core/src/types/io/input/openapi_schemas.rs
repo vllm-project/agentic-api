@@ -147,9 +147,9 @@ impl utoipa::PartialSchema for InputItem {
             .item(tagged_ref("reasoning", "ReasoningOutput"))
             .item(tagged_ref("mcp_list_tools", "McpListTools"))
             .item(tagged_ref("compaction", "CompactionItem"))
-            .item(tagged_ref("multi_agent_call", "MultiAgentCall"))
-            .item(tagged_ref("multi_agent_call_output", "MultiAgentCallOutput"))
-            .item(tagged_ref("agent_message", "AgentMessage"))
+            .item(tagged_ref("multi_agent_call", "InputMultiAgentCall"))
+            .item(tagged_ref("multi_agent_call_output", "InputMultiAgentCallOutput"))
+            .item(tagged_ref("agent_message", "InputAgentMessage"))
             .item(
                 ObjectBuilder::new()
                     .property(

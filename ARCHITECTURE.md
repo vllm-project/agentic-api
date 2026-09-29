@@ -373,12 +373,17 @@ access happen — those live in `tool/`, `executor/`, and `storage/` respectivel
   (the normalized `FunctionTool` and `ToolChoice`, distinct from tool *declarations*),
   `usage.rs` (token accounting structs). `ResponsesInput::model_input()` is the final
   model-visibility boundary used by `RequestPayload::to_upstream_request`: it removes
-  orchestration-only `McpListTools` and `CompactionTrigger` input items. A persisted
+  orchestration-only `McpListTools`, `CompactionTrigger`, and public collaboration input items. A persisted
   `Compaction` item is different: the latest checkpoint supersedes earlier model
   context and is converted into an assistant `output_text` summary, while canonical
   retained user messages and items after the checkpoint remain. This keeps rich
   continuation state available to orchestration without sending unsupported public
   item types to vLLM.
+- **`types/io/multi_agent.rs`** — public collaboration output items and agent-message
+  content. Its `input` module defines replay forms with optional IDs; output IDs remain
+  required. Agent-message content includes text, images, files, refusals and encrypted
+  parts, preserving response content during replay. These wire types do not impose a
+  storage policy; stored-only execution is a gateway admission constraint.
 - **`types/tools/params.rs`** — the tool **declaration** shapes a client sends:
   `ResponsesTool` (tagged enum: `Function`, `ToolSearch`, `Mcp`, `WebSearch`, `FileSearch`,
   `CodeInterpreter`, `Namespace`, `Custom`, `Unknown`) and each variant's param struct.
@@ -608,6 +613,11 @@ semantic identities, and `json.rs` contains strict JSON response-shape validatio
 `active.rs` dispatches exhaustively to per-kind state; `active_text.rs` owns message
 parts and reasoning text/summary accounting. Both JSON and SSE ultimately use the same finalization
 state.
+
+Shared `response.content_part.*` events identify an item by output index and item ID,
+not by content type. Normalization parses a typed completed part; the existing slot
+resolves whether it belongs to a message or an agent message. Each owner's state
+validates the allowed content, duplicate completion and consistency with the final item.
 
 Output items are constructed through their `TryFrom<&EventPayload>` implementations in
 `types/io/output.rs`. Active slots fold deltas in place and use the type's `ApplyDone`

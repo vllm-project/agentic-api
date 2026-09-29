@@ -37,7 +37,8 @@ impl OutputIndex {
 pub(super) struct ItemIdentity<'a> {
     pub(super) index: Option<OutputIndex>,
     pub(super) item_id: Option<&'a str>,
-    pub(super) item_type: SSEItemType,
+    /// Shared content events resolve their item kind from the existing slot.
+    pub(super) item_type: Option<SSEItemType>,
     pub(super) event_agent: Option<&'a AgentAttribution>,
 }
 
@@ -104,7 +105,8 @@ impl SlotMap {
         action: SlotAction,
         validation: Validation,
     ) -> ExecutorResult<Option<OutputIndex>> {
-        let index_only_shell_command = identity.item_type == SSEItemType::ShellCall && action == SlotAction::Mutate;
+        let index_only_shell_command =
+            identity.item_type == Some(SSEItemType::ShellCall) && action == SlotAction::Mutate;
         if validation == Validation::Strict
             && (identity.index.is_none() || (identity.item_id.is_none() && !index_only_shell_command))
         {
@@ -123,7 +125,7 @@ impl SlotMap {
             // slot. Do not guess by kind or silently create a duplicate.
             if action != SlotAction::Open
                 && self.slots.values().any(|slot| {
-                    slot.state.item_type() == Some(identity.item_type)
+                    slot.state.item_type() == identity.item_type
                         && (slot.item_id.is_none() || identity.item_id.is_none())
                 })
             {
@@ -157,7 +159,17 @@ impl SlotMap {
         {
             return Err(invalid("upstream stream changes an output item's event attribution"));
         }
-        if slot.state.item_type() != Some(identity.item_type) {
+        let kind_matches = match identity.item_type {
+            Some(kind) => slot.state.item_type() == Some(kind),
+            None => {
+                action == SlotAction::Mutate
+                    && matches!(
+                        slot.state.item_type(),
+                        Some(SSEItemType::Message | SSEItemType::AgentMessage)
+                    )
+            }
+        };
+        if !kind_matches {
             return if action == SlotAction::Mutate && validation == Validation::Lenient {
                 Ok(None)
             } else {
@@ -259,7 +271,7 @@ impl SlotMap {
             self.insert(index, identity, SlotState::Active(item), account, budget)?;
             return Ok(Some(index));
         }
-        if identity.item_type.is_collaboration() {
+        if identity.item_type.is_some_and(SSEItemType::is_collaboration) {
             return Err(invalid("collaboration item has an invalid opening snapshot"));
         }
         Ok(None)
@@ -301,7 +313,7 @@ impl SlotMap {
         };
         let parsed = validated_done_item.cloned().or_else(|| {
             deserialize_from_value_opt::<OutputItem>(raw_item.clone()).or_else(|| {
-                (identity.item_type == SSEItemType::Reasoning)
+                (identity.item_type == Some(SSEItemType::Reasoning))
                     .then(|| ReasoningOutput::try_from(payload).ok().map(OutputItem::Reasoning))
                     .flatten()
             })

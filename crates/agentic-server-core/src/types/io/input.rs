@@ -12,7 +12,7 @@ use crate::types::event::MessageStatus;
 use crate::types::tools::{ResponsesTool, ToolSearchExecution, ToolSearchStatus};
 use crate::utils::common::deserialize_from_value;
 
-use super::multi_agent::{AgentAttribution, AgentMessage, MultiAgentCall, MultiAgentCallOutput};
+use super::multi_agent::{AgentAttribution, InputAgentMessage, InputMultiAgentCall, InputMultiAgentCallOutput};
 use super::output::{CustomToolCall, FunctionToolCall, McpListTools, MessagePhase, ReasoningOutput, ToolSearchCall};
 use super::shell::{ShellCall, ShellCallOutputMessage, ShellCallStatus};
 
@@ -271,11 +271,11 @@ impl From<CustomToolCallOutputMessage> for FunctionToolResultMessage {
 #[serde(tag = "type")]
 pub enum InputItem {
     #[serde(rename = "multi_agent_call")]
-    MultiAgentCall(MultiAgentCall),
+    MultiAgentCall(InputMultiAgentCall),
     #[serde(rename = "multi_agent_call_output")]
-    MultiAgentCallOutput(MultiAgentCallOutput),
+    MultiAgentCallOutput(InputMultiAgentCallOutput),
     #[serde(rename = "agent_message")]
-    AgentMessage(AgentMessage),
+    AgentMessage(InputAgentMessage),
     #[serde(rename = "message")]
     Message(InputMessage),
     /// The model's tool invocation — appears in rehydrated history so vLLM sees

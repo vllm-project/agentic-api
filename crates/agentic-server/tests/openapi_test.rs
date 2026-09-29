@@ -244,3 +244,23 @@ async fn swagger_ui_returns_html() {
         "swagger-ui should return HTML, got: {content_type}"
     );
 }
+
+#[tokio::test]
+async fn collaboration_input_schemas_allow_omitted_ids_without_weakening_output() {
+    let spec = fetch_spec().await;
+    let schemas = &spec["components"]["schemas"];
+    for name in ["MultiAgentCall", "MultiAgentCallOutput", "AgentMessage"] {
+        let has_required_id = |name: &str| {
+            schemas[name]["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|value| value == "id")
+        };
+        assert!(has_required_id(name), "{name} output requires id");
+        assert!(
+            !has_required_id(&format!("Input{name}")),
+            "{name} input allows omitted id"
+        );
+    }
+}

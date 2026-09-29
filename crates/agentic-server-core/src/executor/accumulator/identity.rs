@@ -1,7 +1,7 @@
 //! Semantic event identities and lifecycle validation errors.
 
 use super::slot::{ItemIdentity, OutputIndex};
-use crate::events::{EventFrame, EventPayload, ValidatedFrame, expected_item_type};
+use crate::events::{EventFrame, EventPayload, SSEEventType, ValidatedFrame, expected_item_type};
 use crate::executor::error::ExecutorError;
 use crate::types::io::OutputItem;
 
@@ -47,12 +47,19 @@ pub(super) fn item_identity<'a>(
     }
     let (item_id, item_type) = match &frame.payload {
         EventPayload::OutputItemAdded { item_id, item_type, .. }
-        | EventPayload::OutputItemDone { item_id, item_type, .. } => (item_id.as_str(), *item_type),
+        | EventPayload::OutputItemDone { item_id, item_type, .. } => (item_id.as_str(), Some(*item_type)),
         payload => {
-            let item_type = expected_item_type(frame)?;
+            let item_type = expected_item_type(frame);
+            if item_type.is_none()
+                && !matches!(
+                    frame.event_type,
+                    SSEEventType::ContentPartAdded | SSEEventType::ContentPartDone
+                )
+            {
+                return None;
+            }
             let item_id = match payload {
-                EventPayload::AgentMessageContentDone { item_id, .. }
-                | EventPayload::MessageContentDone { item_id, .. }
+                EventPayload::ContentPartDone { item_id, .. }
                 | EventPayload::TextDelta { item_id, .. }
                 | EventPayload::TextDone { item_id, .. }
                 | EventPayload::FunctionCallArgsDelta { item_id, .. }

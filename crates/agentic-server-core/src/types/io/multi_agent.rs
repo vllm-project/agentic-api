@@ -1,11 +1,16 @@
 //! Wire types for the Responses multi-agent configuration and collaboration items.
 //!
 //! These values describe the public transcript, not executable collaboration commands or
-//! scheduler state. Request admission owns defaults, deployment limits, and the `store: true`
-//! requirement; deserializing these types does not enable multi-agent execution.
+//! scheduler state. Request admission owns defaults and deployment limits. The gateway
+//! currently supports stored execution only; `store: true` is not a wire-type requirement.
+//! Deserializing these types does not enable multi-agent execution.
 
 use serde::{Deserialize, Serialize};
 
+mod input;
+pub use input::{InputAgentMessage, InputMultiAgentCall, InputMultiAgentCallOutput};
+
+use super::input::{InputFileContent, InputImageContent, InputTextContent, RefusalContent};
 use super::output::OutputTextContent;
 
 /// Multi-agent options supplied in a Responses request.
@@ -92,11 +97,20 @@ pub struct MultiAgentCallOutput {
     pub agent: Option<AgentAttribution>,
 }
 
-/// A content part in a public inter-agent message.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Input and output content preserved in a public inter-agent message.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AgentMessageContent {
+    InputText(InputTextContent),
+    OutputText(OutputTextContent),
+    Text(InputTextContent),
+    SummaryText(InputTextContent),
+    ReasoningText(InputTextContent),
+    Refusal(RefusalContent),
+    InputImage(InputImageContent),
+    ComputerScreenshot(InputImageContent),
+    InputFile(InputFileContent),
     EncryptedContent {
         /// Opaque public content, distinct from canonical plaintext agent context.
         encrypted_content: String,
@@ -107,7 +121,7 @@ pub enum AgentMessageContent {
 ///
 /// The enclosing input/output item enum supplies the `type` discriminator. Attribution
 /// identifies the recipient in the recordings; `author` identifies the sender.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct AgentMessage {
     pub id: String,
@@ -159,6 +173,55 @@ mod tests {
             serde_json::to_value(ResponsesInput::Items(inputs).model_input()).unwrap(),
             serde_json::json!([])
         );
+    }
+
+    #[test]
+    fn input_ids_are_optional_but_output_ids_are_required() {
+        use crate::types::io::{InputItem, OutputItem};
+        for mut wire in [
+            serde_json::json!({"type":"multi_agent_call","call_id":"call_1","action":"wait_agent","arguments":"{}"}),
+            serde_json::json!({"type":"multi_agent_call_output","call_id":"call_1","action":"wait_agent","output":[]}),
+            serde_json::json!({"type":"agent_message","author":"/root","recipient":"/root/review","content":[]}),
+        ] {
+            for id in [None, Some(serde_json::Value::Null), Some(serde_json::json!("item_1"))] {
+                if let Some(id) = &id {
+                    wire["id"] = id.clone();
+                }
+                let input: InputItem = serde_json::from_value(wire.clone()).unwrap();
+                let expected = id.as_ref().and_then(serde_json::Value::as_str);
+                assert_eq!(input.id(), expected);
+                let serialized = serde_json::to_value(input).unwrap();
+                assert_eq!(serialized.get("id").and_then(serde_json::Value::as_str), expected);
+                assert_eq!(
+                    serde_json::from_value::<OutputItem>(wire.clone()).is_ok(),
+                    expected.is_some()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn agent_message_content_union_roundtrips_through_output_and_input() {
+        use crate::types::io::{InputItem, OutputItem};
+        let wire = serde_json::json!({"type":"agent_message","id":"amsg_parts",
+        "author":"/root","recipient":"/root/review","content":[
+            {"type":"input_text","text":"task"},
+            {"type":"output_text","text":"answer","annotations":[],"logprobs":[]},
+            {"type":"text","text":"text"},
+            {"type":"summary_text","text":"summary"},
+            {"type":"reasoning_text","text":"reasoning"},
+            {"type":"refusal","refusal":"refused"},
+            {"type":"input_image","image_url":"data:image/png;base64,AAAA","detail":"original"},
+            {"type":"computer_screenshot","file_id":"file_1","detail":"high",
+                "prompt_cache_breakpoint":{"mode":"explicit"}},
+            {"type":"input_file","file_url":"https://example.com/a.txt","filename":"a.txt"},
+            {"type":"encrypted_content","encrypted_content":"opaque"}
+        ]});
+        let output: OutputItem = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&output).unwrap(), wire);
+        assert_eq!(serde_json::to_value(output.to_input_item().unwrap()).unwrap(), wire);
+        let input: InputItem = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(input).unwrap(), wire);
     }
 
     #[test]

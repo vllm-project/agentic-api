@@ -438,6 +438,21 @@ impl RetainedSize for MultiAgentCallOutput {
 impl RetainedSize for AgentMessageContent {
     fn retained_bytes(&self) -> usize {
         match self {
+            Self::InputText(part) | Self::Text(part) | Self::SummaryText(part) | Self::ReasoningText(part) => {
+                part.retained_bytes()
+            }
+            Self::OutputText(part) => part.retained_bytes(),
+            Self::InputImage(part) | Self::ComputerScreenshot(part) => part.retained_bytes(),
+            Self::InputFile(part) => part.retained_bytes(),
+            Self::Refusal(part) => {
+                RETAINED_CONTAINER_OVERHEAD_BYTES
+                    + part.refusal.len()
+                    + part
+                        .extra
+                        .iter()
+                        .map(|(key, value)| key.len() + value.retained_bytes())
+                        .sum::<usize>()
+            }
             Self::EncryptedContent { encrypted_content } => RETAINED_CONTAINER_OVERHEAD_BYTES + encrypted_content.len(),
         }
     }
@@ -499,6 +514,41 @@ mod tests {
         WebSearchActionSearch, WebSearchCall, WebSearchCallStatus,
     };
     use crate::types::io::{McpCall, McpCallStatus};
+
+    #[test]
+    fn agent_message_parts_charge_media_text_and_extension_fields() {
+        for (mut wire, field) in [
+            (serde_json::json!({"type":"input_text","text":""}), "text"),
+            (serde_json::json!({"type":"output_text","text":""}), "text"),
+            (serde_json::json!({"type":"text","text":""}), "text"),
+            (serde_json::json!({"type":"summary_text","text":""}), "text"),
+            (serde_json::json!({"type":"reasoning_text","text":""}), "text"),
+            (serde_json::json!({"type":"input_image","image_url":""}), "image_url"),
+            (
+                serde_json::json!({"type":"computer_screenshot","image_url":""}),
+                "image_url",
+            ),
+            (serde_json::json!({"type":"input_file","file_data":""}), "file_data"),
+            (serde_json::json!({"type":"refusal","refusal":""}), "refusal"),
+            (
+                serde_json::json!({"type":"encrypted_content","encrypted_content":""}),
+                "encrypted_content",
+            ),
+        ] {
+            let small: AgentMessageContent = serde_json::from_value(wire.clone()).unwrap();
+            wire[field] = serde_json::json!("x".repeat(1024));
+            let large: AgentMessageContent = serde_json::from_value(wire).unwrap();
+            assert_eq!(large.retained_bytes() - small.retained_bytes(), 1024);
+            assert!(small.retained_bytes() >= RETAINED_CONTAINER_OVERHEAD_BYTES);
+        }
+        let empty: AgentMessageContent = serde_json::from_value(serde_json::json!({
+            "type":"computer_screenshot","detail":"high"}))
+        .unwrap();
+        let extended: AgentMessageContent = serde_json::from_value(serde_json::json!({
+            "type":"computer_screenshot","detail":"high","extension":"x".repeat(1024)}))
+        .unwrap();
+        assert!(extended.retained_bytes() >= empty.retained_bytes() + 1024);
+    }
 
     #[test]
     fn attribution_collaboration_and_logprobs_are_charged() {
