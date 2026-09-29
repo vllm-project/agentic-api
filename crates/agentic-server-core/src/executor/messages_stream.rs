@@ -373,7 +373,7 @@ impl MessagesStreamAccumulator {
         ) && event.get("index").and_then(Value::as_u64).is_none()
         {
             return self.fail("invalid content block index in upstream Messages stream");
-        };
+        }
         match event.get("type").and_then(Value::as_str) {
             Some("message_start") => self.on_message_start(&event),
             Some("content_block_start") => self.on_block_start(&mut event),
