@@ -1,4 +1,6 @@
 //! Integration-only comparison of independently recorded provider exchanges.
+#[path = "multi_agent_code_interpreter.rs"]
+mod code_interpreter;
 use flate2::read::GzDecoder;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Read;
@@ -37,6 +39,7 @@ struct RecordedExchange {
     input: Vec<InputItem>,
     stream: bool,
     max_concurrent_subagents: Option<u64>,
+    parallel_tool_calls: Option<bool>,
     kinds: HashSet<String>,
 }
 
@@ -96,6 +99,7 @@ impl RecordedSession {
                 input,
                 stream: turn.request.body.stream,
                 max_concurrent_subagents: turn.request.body.extra["multi_agent"]["max_concurrent_subagents"].as_u64(),
+                parallel_tool_calls: turn.request.body.parallel_tool_calls,
                 kinds,
             });
         }
@@ -301,6 +305,7 @@ fn read_recorded_response(turn: &Turn) -> Result<(Value, ResponsePayload), Contr
             }
         }
     }
+    code_interpreter::validate_stream(turn, &response)?;
     Ok((terminal, response))
 }
 
@@ -370,6 +375,7 @@ pub fn assert_multi_agent_contract(
             "tool_search_call",
             "shell_call",
             "web_search_call",
+            "code_interpreter_call",
             "mcp_call",
             "multi_agent_call",
         ] {

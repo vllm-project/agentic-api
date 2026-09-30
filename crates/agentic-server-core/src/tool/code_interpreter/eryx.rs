@@ -2,14 +2,14 @@
 
 use std::future::Future;
 use std::num::NonZeroUsize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use eryx::{CancellationToken, Error as EryxError, OutputHandler, ResourceLimits, Sandbox};
 
-use crate::config::CodeInterpreterRuntimeConfig;
+use crate::config::{CodeInterpreterRuntimeConfig, agentic_api_home};
 use crate::tool::ToolError;
 
 use super::isolation::{self, WorkerRequest, WorkerResponse};
@@ -117,19 +117,26 @@ impl OutputHandler for BoundedOutputHandler {
 #[derive(Debug)]
 pub(super) struct EryxProvider {
     config: CodeInterpreterRuntimeConfig,
+    temp_dir: PathBuf,
 }
 
 impl EryxProvider {
     pub(super) fn new(config: CodeInterpreterRuntimeConfig) -> Result<Self, ToolError> {
-        ensure_private_temp_directory(std::env::temp_dir().as_path())?;
-        Ok(Self { config })
+        let temp_dir = match std::env::var_os("TMPDIR") {
+            Some(path) => PathBuf::from(path),
+            None => agentic_api_home()
+                .map_err(|error| ToolError::Config(error.to_string()))?
+                .join("tmp"),
+        };
+        ensure_private_temp_directory(&temp_dir)?;
+        Ok(Self { config, temp_dir })
     }
 }
 
 impl CodeInterpreterProvider for EryxProvider {
     fn check_ready(&self) -> Result<(), ToolError> {
         // Exercise runtime initialization inside a memory-limited worker.
-        match isolation::run_isolated(self.config, None, None) {
+        match isolation::run_isolated(self.config, &self.temp_dir, None, None) {
             Ok(WorkerResponse::Ready) => Ok(()),
             Ok(_) => Err(ToolError::Config(
                 "code interpreter isolated worker failed readiness".to_owned(),
@@ -148,11 +155,13 @@ impl CodeInterpreterProvider for EryxProvider {
         cancellation: Arc<ExecutionCancellation>,
     ) -> Pin<Box<dyn Future<Output = Result<ExecutionOutput, ToolError>> + Send + '_>> {
         let config = self.config;
+        let temp_dir = self.temp_dir.clone();
         Box::pin(async move {
-            let response =
-                tokio::task::spawn_blocking(move || isolation::run_isolated(config, Some(code), Some(cancellation)))
-                    .await
-                    .map_err(|_| ToolError::Execution("code interpreter worker supervisor failed".to_owned()))??;
+            let response = tokio::task::spawn_blocking(move || {
+                isolation::run_isolated(config, &temp_dir, Some(code), Some(cancellation))
+            })
+            .await
+            .map_err(|_| ToolError::Execution("code interpreter worker supervisor failed".to_owned()))??;
             match response {
                 WorkerResponse::Output(output) => Ok(output),
                 WorkerResponse::Ready | WorkerResponse::Failed => Err(ToolError::Execution(
@@ -266,7 +275,7 @@ fn ensure_private_temp_directory(temp_dir: &Path) -> Result<(), ToolError> {
                 "code interpreter TMPDIR must be an absolute path without '..'".to_owned(),
             ));
         }
-        let path: std::path::PathBuf = temp_dir.components().collect();
+        let path: PathBuf = temp_dir.components().collect();
         #[cfg(target_os = "linux")]
         let effective_uid = nix::unistd::geteuid().as_raw();
         let ancestors: Vec<_> = path.ancestors().collect();

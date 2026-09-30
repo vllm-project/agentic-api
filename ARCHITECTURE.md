@@ -620,10 +620,19 @@ it; a new user message resumes the root.
 Tool-search outputs restore discovered definitions into the requesting agent's
 `ToolSearchState` before its next registry and upstream request are built. Namespace
 and custom declarations still use the existing canonical function normalization and
-public-shape translators. MCP and web search execute in the gateway and append their
+public-shape translators. MCP, web search and operator-enabled code interpreter execute in the gateway and append their
 canonical call/output pairs during the round, so they require no client output
 continuation. Tool search retains its normal `parallel_tool_calls` validation; enabling
 multi-agent execution does not bypass that rule.
+
+Code interpreter uses the same canonical function/tool loop in every agent. Agents
+share the ready executor and its process-wide guest permits through `ExecutionContext`;
+`max_concurrent_subagents` does not increase interpreter capacity. Its public
+`code_interpreter_call` items and streaming events are attributed to the executing
+agent and use the response-wide output indexes. Canonical call/output pairs survive
+stored tree continuation, so submitting a sibling's client tool output does not
+execute completed Python calls again. Feature, operator and readiness gates apply
+before inference, including when the tool declaration is inherited from storage.
 
 **Compaction.** Automatic compaction is per agent. `prepare_agent` supplies a default
 compaction threshold of 100,000 estimated tokens when none is configured. A

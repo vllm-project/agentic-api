@@ -10,14 +10,14 @@ Usage: bash record_multi_agent_cassettes.sh [--dry-run | --help]
 
 Record OpenAI first, review the observations, then implement and compare gateway behavior.
 Records delegated review, proposal comparison, mixed web/MCP/shell tools,
-and client-owned tool search, functions, and custom tools,
+client-owned tool search, functions, and custom tools, and two-agent algorithm jobs,
 each over HTTP JSON and SSE.
 All scenarios enable multi-agent with store:true and the multi-agent beta header.
 Client-tool continuations use previous_response_id and matching tool outputs.
 
 Environment:
   MULTI_AGENT_RECORD_SET  openai (default), gateway, or all
-  MULTI_AGENT_SUITE       all (default), review, proposals, mixed-tools, or client-owned-tools
+  MULTI_AGENT_SUITE       all (default), review, proposals, mixed-tools, client-owned-tools, or code-interpreter
   MULTI_AGENT_STREAM_MODE both (default), streaming, or nonstreaming
   MULTI_AGENT_MAX_CONTINUATIONS  Extra client-tool requests per scenario (default: 10; max: 100)
   HTTP_READ_TIMEOUT      Upstream read inactivity timeout in seconds (default: 900)
@@ -26,7 +26,7 @@ Environment:
   GATEWAY_URL            Default: http://localhost:9000
   GATEWAY_MODEL          Served gateway model (also accepts MODEL)
   MULTI_AGENT_OUTPUT_DIR Cassette directory (default: multi_agent beside this script)
-  MAX_CONCURRENT_SUBAGENTS Maximum active subagents, excluding root (default: 3)
+  MAX_CONCURRENT_SUBAGENTS Maximum active subagents, excluding root (default: 3; code-interpreter: 2)
   MAX_OUTPUT_TOKENS     Default: 16384; 0 omits the request limit
   PROXY_PORT            Default: 7070
   PYTHON                Python executable with recorder dependencies
@@ -41,8 +41,8 @@ To supply dependencies without changing your project environment:
     --with pyyaml bash crates/agentic-server-core/tests/cassettes/record_multi_agent_cassettes.sh
 
 --dry-run prints commands without contacting APIs or writing any files.
-all selects review, proposals, mixed-tools, and client-owned-tools: eight YAML files
-per provider with the default both mode, or four when selecting one stream mode.
+all selects review, proposals, mixed-tools, client-owned-tools, and code-interpreter:
+ten YAML files per provider with the default both mode, or five for one stream mode.
 The former parameter-only edge-cases, failure-cases, and compaction recordings
 are not behavioral coverage and are no longer generated. Existing YAML is left alone.
 Runtime edge cases, failures, and compaction still need dedicated scenarios.
@@ -66,6 +66,14 @@ the [client-owned-tools] section of prompts.txt in a fresh session, with the sta
 catalog plus the custom echo tool and their output fixtures. It exposes no web,
 MCP, or shell tools and writes
 separate client-owned-tools YAML files. Select MULTI_AGENT_SUITE=client-owned-tools to run it.
+
+code-interpreter asks two subagents to find popular LeetCode problems online using
+web search, then implement and execute two algorithms each using code interpreter.
+Both tools are declared with parallel_tool_calls:true.
+It uses two subagent slots by default. Execution outputs come from the service;
+no client output fixtures or automatic client-tool continuations are used.
+Gateway recording requires a binary built with --features embedded-code-interpreter
+and a ready, operator-enabled runtime; see docs/design/embedded-code-interpreter.md.
 
 Remaining coverage: partial/duplicate/mismatched outputs for a real pending call,
 branch/configuration changes, long-context compaction and its races, all hosted
@@ -98,17 +106,21 @@ BASE_DIR="${MULTI_AGENT_OUTPUT_DIR:-$FIXTURES_DIR}"
 MAX_OUTPUT_TOKENS="${MAX_OUTPUT_TOKENS:-16384}"
 PROXY_PORT="${PROXY_PORT:-7070}"
 PYTHON="${PYTHON:-python3}"
-MAX_CONCURRENT_SUBAGENTS="${MAX_CONCURRENT_SUBAGENTS:-3}"
-if [[ ! "$MAX_CONCURRENT_SUBAGENTS" =~ ^[1-9][0-9]*$ ]]; then
+MAX_CONCURRENT_SUBAGENTS="${MAX_CONCURRENT_SUBAGENTS:-}"
+if [[ -n "$MAX_CONCURRENT_SUBAGENTS" && ! "$MAX_CONCURRENT_SUBAGENTS" =~ ^[1-9][0-9]*$ ]]; then
   echo 'ERROR: MAX_CONCURRENT_SUBAGENTS must be a positive integer' >&2
   exit 2
 fi
-MULTI_AGENT_CONFIG="$(printf '{"enabled":true,"max_concurrent_subagents":%s}' "$MAX_CONCURRENT_SUBAGENTS")"
 
 case "$SUITE" in
-  all|review|proposals|mixed-tools|client-owned-tools) ;;
-  *) echo 'ERROR: MULTI_AGENT_SUITE must be all, review, proposals, mixed-tools, or client-owned-tools' >&2; exit 2 ;;
+  all|review|proposals|mixed-tools|client-owned-tools|code-interpreter) ;;
+  *) echo 'ERROR: MULTI_AGENT_SUITE must be all, review, proposals, mixed-tools, client-owned-tools, or code-interpreter' >&2; exit 2 ;;
 esac
+if [[ ( "$SUITE" == all || "$SUITE" == code-interpreter ) && -n "$MAX_CONCURRENT_SUBAGENTS" ]] &&
+   (( MAX_CONCURRENT_SUBAGENTS < 2 )); then
+  echo 'ERROR: code-interpreter requires MAX_CONCURRENT_SUBAGENTS >= 2; omit it to use per-scenario defaults' >&2
+  exit 2
+fi
 case "$STREAM_MODE" in
   both|streaming|nonstreaming) ;;
   *) echo 'ERROR: MULTI_AGENT_STREAM_MODE must be both, streaming, or nonstreaming' >&2; exit 2 ;;
@@ -141,7 +153,7 @@ if [[ "$DRY_RUN" == false ]]; then
   }
 fi
 
-for fixture in prompts.txt tools.json tool_outputs.py mixed_tools.json mixed_tool_outputs.py client_owned_tools.json; do
+for fixture in prompts.txt tools.json tool_outputs.py mixed_tools.json mixed_tool_outputs.py client_owned_tools.json code_interpreter_tools.json; do
   if [[ ! -f "$FIXTURES_DIR/$fixture" ]]; then
     echo "ERROR: missing multi-agent fixture: $FIXTURES_DIR/$fixture" >&2
     exit 2
@@ -176,12 +188,15 @@ scenario_prompts() {
 
 record_scenarios() {
   local provider="$1" endpoint_flag="$2" endpoint="$3" model="$4"
-  local scenario mode turns output prompts model_slug status
+  local scenario mode turns output prompts model_slug status agent_limit multi_agent_config
   model_slug="$(printf '%s' "$model" | tr '/: ' '---')"
   local -a command tool_args
-  for scenario in review proposals mixed-tools client-owned-tools; do
+  for scenario in review proposals mixed-tools client-owned-tools code-interpreter; do
     if [[ "$SUITE" != all && "$scenario" != "$SUITE" ]]; then continue; fi
     turns=1
+    agent_limit="${MAX_CONCURRENT_SUBAGENTS:-3}"
+    if [[ "$scenario" == code-interpreter ]]; then agent_limit="${MAX_CONCURRENT_SUBAGENTS:-2}"; fi
+    multi_agent_config="$(printf '{"enabled":true,"max_concurrent_subagents":%s}' "$agent_limit")"
     tool_args=()
     if [[ "$scenario" == proposals ]]; then
       tool_args=(--auto-tool-continuations "${MULTI_AGENT_MAX_CONTINUATIONS:-10}" --tools "$FIXTURES_DIR/tools.json" --tool-outputs "$FIXTURES_DIR/tool_outputs.py")
@@ -189,6 +204,8 @@ record_scenarios() {
       tool_args=(--auto-tool-continuations "${MULTI_AGENT_MAX_CONTINUATIONS:-10}"
         --tools "$FIXTURES_DIR/mixed_tools.json"
         --tool-outputs "$FIXTURES_DIR/mixed_tool_outputs.py")
+    elif [[ "$scenario" == code-interpreter ]]; then
+      tool_args=(--tools "$FIXTURES_DIR/code_interpreter_tools.json" --parallel-tool-calls true)
     elif [[ "$scenario" == client-owned-tools ]]; then
       tool_args=(--auto-tool-continuations "${MULTI_AGENT_MAX_CONTINUATIONS:-10}"
         --tools "$FIXTURES_DIR/client_owned_tools.json"
@@ -204,7 +221,7 @@ record_scenarios() {
       output="$BASE_DIR/multi-agent-$provider-$scenario-$model_slug-$mode.yaml"
       command=("$PYTHON" -u "$RECORDER" --mode responses --transport http --turns "$turns"
         --model "$model" "$endpoint_flag" "$endpoint" --proxy-port "$PROXY_PORT"
-        --multi-agent "$MULTI_AGENT_CONFIG" --openai-beta responses_multi_agent=v1
+        --multi-agent "$multi_agent_config" --openai-beta responses_multi_agent=v1
         --http-read-timeout "$HTTP_READ_TIMEOUT"
         --max-output-tokens "$MAX_OUTPUT_TOKENS" --output "$output" "${tool_args[@]}")
       if [[ "$mode" == streaming ]]; then command+=(--stream); else command+=(--no-stream); fi

@@ -40,8 +40,8 @@ impl Cgroup {
     }
 
     fn new(memory_bytes: usize) -> io::Result<Self> {
-        // The service manager must place the gateway in a leaf below a
-        // delegated parent before startup. Never migrate a running process.
+        // Server startup or the service manager places the gateway in a leaf
+        // below a delegated parent. Never migrate a running executor.
         let current = Self::current_path()?;
         let parent = current
             .parent()
@@ -146,8 +146,8 @@ struct PrivateSocket {
 }
 
 impl PrivateSocket {
-    fn new() -> io::Result<Self> {
-        let directory = std::env::temp_dir().join(format!("agentic-eryx-{}", uuid::Uuid::now_v7().simple()));
+    fn new(temp_dir: &Path) -> io::Result<Self> {
+        let directory = temp_dir.join(format!("agentic-eryx-{}", uuid::Uuid::now_v7().simple()));
         DirBuilder::new().mode(0o700).create(&directory)?;
         let path = directory.join("control.sock");
         let listener = UnixListener::bind(&path)?;
@@ -219,10 +219,11 @@ fn worker_executable() -> io::Result<PathBuf> {
 
 pub(in crate::tool::code_interpreter) fn run_isolated(
     config: CodeInterpreterRuntimeConfig,
+    temp_dir: &Path,
     code: Option<String>,
     cancellation: Option<Arc<ExecutionCancellation>>,
 ) -> Result<WorkerResponse, ToolError> {
-    run_isolated_inner(config, code, cancellation).map_err(|error| {
+    run_isolated_inner(config, temp_dir, code, cancellation).map_err(|error| {
         tracing::error!(%error, "code interpreter isolated worker failed");
         if error.kind() == ErrorKind::OutOfMemory {
             ToolError::Execution("code interpreter worker exceeded its memory limit".to_owned())
@@ -234,6 +235,7 @@ pub(in crate::tool::code_interpreter) fn run_isolated(
 
 fn run_isolated_inner(
     config: CodeInterpreterRuntimeConfig,
+    temp_dir: &Path,
     code: Option<String>,
     cancellation: Option<Arc<ExecutionCancellation>>,
 ) -> io::Result<WorkerResponse> {
@@ -244,7 +246,7 @@ fn run_isolated_inner(
     };
     let is_probe = matches!(request, WorkerRequest::Probe(_));
     let group = Cgroup::new(limits.worker_memory_bytes())?;
-    let socket = PrivateSocket::new()?;
+    let socket = PrivateSocket::new(temp_dir)?;
     let cancelled = Arc::new(AtomicBool::new(false));
     if let Some(cancellation) = cancellation {
         let path = group.path.clone();
@@ -262,7 +264,7 @@ fn run_isolated_inner(
         .arg(super::WORKER_MARKER)
         .arg(&socket.path)
         .env_clear()
-        .env("TMPDIR", std::env::temp_dir())
+        .env("TMPDIR", temp_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());

@@ -138,6 +138,7 @@ pub(super) use linux::{run_isolated, worker_main};
 #[cfg(not(target_os = "linux"))]
 pub(super) fn run_isolated(
     _config: CodeInterpreterRuntimeConfig,
+    _temp_dir: &Path,
     _code: Option<String>,
     _cancellation: Option<std::sync::Arc<super::provider::ExecutionCancellation>>,
 ) -> Result<WorkerResponse, crate::tool::ToolError> {

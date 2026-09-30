@@ -36,6 +36,52 @@ The model sees the normalized declaration as a function and therefore emits a ca
 
 Native upstream `code_interpreter_call` items remain typed continuation input across inference rounds and stored response or conversation history. Gateway-generated public calls carry private origin metadata in storage and are omitted from continuation input because their model-facing `function_call` and `function_call_output` are retained separately. The origin metadata is not exposed in the public item.
 
+## HTTP multi-agent execution
+
+Stored HTTP multi-agent requests use the same interpreter executor in each agent's
+tool registry. A model call is normalized as `code_interpreter({"code": "..."})`;
+the gateway executes it and supplies the canonical function call output to that
+agent. The client sees an attributed `code_interpreter_call` and, for SSE, its
+normal lifecycle with response-wide output indexes. Interpreter execution does not
+require a client continuation. A local shell call still does.
+
+All agents share the ready executor and its guest limits. Subagent slots do
+not create independent interpreter capacity budgets. Startup gates, fresh
+sandbox semantics, failure handling and cancellation are unchanged. Persisted agent
+histories retain completed canonical calls and outputs across client continuations.
+
+The `code-interpreter` suite in `record_multi_agent_cassettes.sh` asks two subagents
+to find four distinct popular LeetCode problems online, two per agent, implement them in
+Python, execute example inputs, and summarize the algorithms, sources and actual outputs.
+Web search and code interpreter are declared, with `parallel_tool_calls: true`. Parallel calls
+are permitted, not forced; an agent may execute both algorithms in one Python call.
+Record OpenAI first, then the gateway with the runtime below enabled:
+
+```bash
+MULTI_AGENT_RECORD_SET=openai MULTI_AGENT_SUITE=code-interpreter \
+  MULTI_AGENT_STREAM_MODE=both MAX_CONCURRENT_SUBAGENTS=2 \
+  bash crates/agentic-server-core/tests/cassettes/record_multi_agent_cassettes.sh
+
+MULTI_AGENT_RECORD_SET=gateway MULTI_AGENT_SUITE=code-interpreter \
+  MULTI_AGENT_STREAM_MODE=both MAX_CONCURRENT_SUBAGENTS=2 \
+  GATEWAY_URL=http://localhost:9000 GATEWAY_MODEL=your-served-model \
+  bash crates/agentic-server-core/tests/cassettes/record_multi_agent_cassettes.sh
+```
+
+The recorder supplies no simulated tool outputs. Code interpreter outputs come
+from actual service execution. The algorithm prompt is in
+`multi_agent/prompts.txt`; the tools are in `multi_agent/code_interpreter_tools.json`.
+
+The Rust cassette integration tests compare both transports with the OpenAI
+references. They verify two child owners, web search and completed Python calls,
+gateway execution logs, and the attributed streaming lifecycle and code deltas.
+OpenAI's recorded `outputs: null` is allowed; model text and call counts need not
+match. These checks need no interpreter runtime or live service:
+
+```bash
+cargo test -p agentic-server-core --test multi_agent_contract_test -- --test-threads=2
+```
+
 ## Runtime provisioning
 
 ### Opt-in source build
@@ -94,23 +140,43 @@ The feature is not part of the repository's default build. A user-built opt-in b
 
 The locked Eryx version is 0.8.0, which declares `rust-version = "1.98.1"`. The checked-in development toolchain is therefore pinned to Rust 1.98.1 so feature builds pass Cargo's version check. This toolchain pin is distinct from the project's Rust 1.85 MSRV policy for default-feature builds.
 
-At runtime, set `TMPDIR` to a dedicated operator-owned directory. On Linux it must be a directory owned by the gateway’s effective user with mode `0700`; its path must contain no symlinks:
+At executor construction, an explicit `TMPDIR` selects the interpreter's temporary
+directory. When it is unset, the gateway uses `<AGENTIC_API_HOME>/tmp`, or
+`~/.agentic-api/tmp` when the application home is also unset. The directory is
+created with mode `0700` if absent. Existing directories must already have private
+permissions; symlinks are rejected, and Linux also verifies ownership and trusted
+parent directories.
+
+The resolved path is retained by the executor, used for worker control sockets,
+and passed as `TMPDIR` to each isolated worker. The gateway does not modify its
+process-wide environment. An enabled server also needs a delegated cgroup v2 parent
+with `memory` and `pids` enabled for child groups, with the gateway already running
+in a separate leaf. Startup fails if the directory, cgroup controls, worker
+executable, or limited Eryx readiness probe is unavailable.
+
+The server establishes this layout before telemetry or Tokio starts threads. It
+reuses a prepared gateway leaf, or creates one inside a delegated scope occupied
+only by the startup process. Otherwise, it re-executes itself through
+`systemd-run --user --scope --property=Delegate=yes` once, preserving arguments,
+environment, and standard streams. An internal retry marker prevents a delegation
+loop. The private worker entry point bypasses this server startup path.
+
+Run the feature-enabled binary or Cargo directly:
 
 ```console
-install -d -m 700 "$HOME/.agentic-api/tmp"
+cargo run --release -p agentic-server --bin agentic-server \
+  --features embedded-code-interpreter -- --llm-api-base http://127.0.0.1:5050
 ```
 
-The server resolves `std::env::temp_dir()` at executor construction. It creates the directory if absent and, on Unix, rejects symlinks in the path and requires mode `0700`; on Linux, it also verifies ownership by the gateway’s effective user and rejects parent directories controlled by another user or writable without sticky-bit protection. The worker receives the operator-owned `TMPDIR`; each call also creates a mode-`0700` subdirectory for its control socket. An enabled server also needs a delegated cgroup v2 parent with `memory` and `pids` enabled for child groups, with the gateway already running in a separate leaf. Startup fails if the directory, cgroup controls, worker executable, or limited Eryx readiness probe is unavailable.
-
-For local verification under a running systemd user manager, `scripts/tests/with-code-interpreter-cgroup.sh` performs this setup before the gateway starts. It must itself run inside a transient delegated scope:
-
-```console
-systemd-run --user --scope --quiet --property=Delegate=yes \
-  bash scripts/tests/with-code-interpreter-cgroup.sh \
-  env TMPDIR="$HOME/.agentic-api/tmp" ./target/release/agentic-server
-```
-
-A production service manager must provide the same delegated parent and gateway leaf before starting the server. It must also terminate the delegated scope as a unit if the gateway exits unexpectedly; otherwise an in-flight worker can outlive the gateway. The gateway verifies the cgroup controls; it does not move an already running server process between cgroups.
+A systemd user manager must be available for automatic delegation. A production
+service can instead provide `Delegate=yes`; startup creates the gateway leaf
+before starting threads. The service manager must terminate the delegated scope
+as a unit if the gateway exits unexpectedly, so in-flight workers cannot outlive
+it. Cgroup controls live in the kernel's `/sys/fs/cgroup` hierarchy; temporary
+worker files live in the application home and require no additional metadata.
+Missing delegation or controllers causes startup to fail without running
+uncontained workers. The test wrapper remains available for test executables
+that do not run through the server's startup path.
 
 ## Worker containment boundaries
 

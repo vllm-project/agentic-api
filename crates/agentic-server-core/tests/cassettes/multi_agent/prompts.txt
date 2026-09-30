@@ -9,3 +9,6 @@ Use three subagents: one to search the web for Python csv documentation, one to 
 
 [client-owned-tools]
 Use three subagents: one to find Paris weather using a discovered function tool, one to get the Paris time zone using a discovered function tool, and one to call the custom tool agentic_raw_echo with CUSTOM_CASSETTE_OK and report its output on one line.
+
+[code-interpreter]
+Spawn two subagents. Each should use web search to find two popular LeetCode problems, four distinct problems in total, implement its two algorithms in Python, execute them with example inputs using code interpreter, and show the actual outputs. Finish with a summary of each algorithm, its sources, and its input/output results.
