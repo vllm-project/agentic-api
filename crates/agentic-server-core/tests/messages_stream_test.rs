@@ -877,3 +877,26 @@ async fn messages_stream_rejects_duplicate_message_starts_in_each_round() {
         }
     }
 }
+
+#[tokio::test]
+async fn messages_stream_requires_message_start_in_each_round() {
+    let streams = cassette_turn_streams();
+    for (round, body) in streams.iter().enumerate() {
+        let start = body
+            .split_inclusive("\n\n")
+            .find(|frame| frame.contains("event: message_start"))
+            .expect("fixture has a message start");
+        let mut rounds = streams[..round].to_vec();
+        rounds.push(body.replacen(start, "", 1));
+        assert_failed_stream(rounds, round, "before message_start").await;
+    }
+    for kind in [
+        "content_block_delta",
+        "content_block_stop",
+        "message_delta",
+        "message_stop",
+    ] {
+        let body = format!("data: {}\n\n", serde_json::json!({"type":kind, "index":0}));
+        assert_failed_stream(vec![body], 0, "before message_start").await;
+    }
+}

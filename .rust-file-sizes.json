@@ -34,10 +34,6 @@
       "limit": 696,
       "reason": "Gateway-owned code-interpreter calls emit their public SSE lifecycle through the existing scheduler after policy extraction."
     },
-    "crates/agentic-server-core/src/executor/messages_stream.rs": {
-      "limit": 532,
-      "reason": "Streaming lifecycle validation must stay with the single accumulator transition path."
-    },
     "crates/agentic-server-core/src/executor/response_budget.rs": {
       "limit": 505,
       "reason": "Code-interpreter outputs and optional agent attribution are charged in the shared retained-item budget."
