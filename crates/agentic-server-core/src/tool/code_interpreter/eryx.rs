@@ -122,7 +122,7 @@ pub(super) struct EryxProvider {
 
 impl EryxProvider {
     pub(super) fn new(config: CodeInterpreterRuntimeConfig) -> Result<Self, ToolError> {
-        let temp_dir = match std::env::var_os("TMPDIR") {
+        let temp_dir = match std::env::var_os("TMPDIR").filter(|value| !value.is_empty()) {
             Some(path) => PathBuf::from(path),
             None => agentic_api_home()
                 .map_err(|error| ToolError::Config(error.to_string()))?

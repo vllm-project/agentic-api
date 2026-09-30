@@ -23,7 +23,9 @@ use super::{
 };
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
-const CGROUP_ROOT: &str = "/sys/fs/cgroup";
+mod cgroup;
+
+pub use cgroup::prepare;
 
 struct Cgroup {
     path: PathBuf,
@@ -31,12 +33,7 @@ struct Cgroup {
 
 impl Cgroup {
     fn current_path() -> io::Result<PathBuf> {
-        let content = fs::read_to_string("/proc/self/cgroup")?;
-        let suffix = content
-            .lines()
-            .find_map(|line| line.strip_prefix("0::"))
-            .ok_or_else(|| io::Error::new(ErrorKind::Unsupported, "cgroup v2 is required"))?;
-        Ok(Path::new(CGROUP_ROOT).join(suffix.trim_start_matches('/')))
+        cgroup::current_cgroup()
     }
 
     fn new(memory_bytes: usize) -> io::Result<Self> {
@@ -46,19 +43,10 @@ impl Cgroup {
         let parent = current
             .parent()
             .ok_or_else(|| io::Error::new(ErrorKind::PermissionDenied, "gateway needs a delegated parent cgroup"))?;
-        if !parent.starts_with(CGROUP_ROOT) {
+        if !cgroup::is_delegated_parent(parent) {
             return Err(io::Error::new(
                 ErrorKind::PermissionDenied,
-                "gateway cgroup is outside cgroup v2",
-            ));
-        }
-        let controls = fs::read_to_string(parent.join("cgroup.subtree_control"))?;
-        if !controls.split_whitespace().any(|name| name == "memory")
-            || !controls.split_whitespace().any(|name| name == "pids")
-        {
-            return Err(io::Error::new(
-                ErrorKind::PermissionDenied,
-                "gateway parent needs delegated memory and pids controllers",
+                "gateway parent must be delegated with memory and pids controllers, not a systemd slice",
             ));
         }
         let path = parent.join(format!("agentic-eryx-{}", uuid::Uuid::now_v7().simple()));
@@ -77,12 +65,7 @@ impl Cgroup {
     fn attach(&self, child: &Child, memory_bytes: usize) -> io::Result<()> {
         fs::write(self.path.join("cgroup.procs"), child.id().to_string())?;
         let membership = fs::read_to_string(format!("/proc/{}/cgroup", child.id()))?;
-        let relative = self
-            .path
-            .strip_prefix(CGROUP_ROOT)
-            .map_err(|_| io::Error::new(ErrorKind::InvalidData, "worker cgroup path is invalid"))?;
-        let expected = format!("/{}", relative.display());
-        if membership.lines().find_map(|line| line.strip_prefix("0::")) != Some(expected.as_str()) {
+        if cgroup::parse_membership(&membership)? != self.path {
             return Err(io::Error::new(
                 ErrorKind::PermissionDenied,
                 "worker cgroup attachment was not confirmed",

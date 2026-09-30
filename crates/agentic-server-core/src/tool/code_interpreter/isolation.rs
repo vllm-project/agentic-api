@@ -133,7 +133,7 @@ mod linux;
 #[cfg(all(test, target_os = "linux"))]
 pub(super) use linux::active_worker_cgroups;
 #[cfg(target_os = "linux")]
-pub(super) use linux::{run_isolated, worker_main};
+pub(super) use linux::{prepare, run_isolated, worker_main};
 
 #[cfg(not(target_os = "linux"))]
 pub(super) fn run_isolated(

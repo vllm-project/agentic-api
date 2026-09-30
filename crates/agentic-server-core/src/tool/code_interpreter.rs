@@ -98,6 +98,19 @@ mod isolation;
 pub fn run_embedded_worker(socket_path: &std::path::Path) -> std::io::Result<()> {
     isolation::worker_main(socket_path)
 }
+/// Prepare Linux worker cgroup delegation before creating runtime threads.
+///
+/// May re-execute the current binary in a delegated systemd user scope. Call
+/// only during single-threaded server startup, never from the worker entry point.
+///
+/// # Errors
+///
+/// Returns an I/O error when delegation or the required controllers are unavailable.
+#[cfg(all(feature = "embedded-code-interpreter", target_os = "linux"))]
+pub fn prepare_embedded_runtime() -> std::io::Result<()> {
+    isolation::prepare()
+}
+
 mod provider;
 
 use std::future::Future;
