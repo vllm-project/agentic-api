@@ -144,24 +144,24 @@ permission checks and disables Codex approvals and sandboxing.
 
 ### Python distribution
 
-The `agentic-api` Python package is [available on PyPI](https://pypi.org/project/agentic-api/0.8.0/). Version 0.8.0
+The `agentic-api` Python package is [available on PyPI](https://pypi.org/project/agentic-api/0.9.0/). Version 0.9.0
 includes the Rust gateway, the `agentic` CLI, and a small Python launcher. Prebuilt wheels support Linux x86_64
 (glibc 2.17 or newer), macOS Intel, and macOS Apple Silicon; Python 3.10 or newer is required.
 
 With uv installed, run the packaged Rust CLI without a global installation:
 
 ```bash
-uvx --from agentic-api==0.8.0 agentic --version
-uvx --from agentic-api==0.8.0 agentic serve --upstream http://existing-vllm:8000
+uvx --from agentic-api==0.9.0 agentic --version
+uvx --from agentic-api==0.9.0 agentic serve --upstream http://existing-vllm:8000
 ```
 
 Or install the Python launcher, with the optional local inference runtime:
 
 ```bash
-python -m pip install agentic-api==0.8.0
+python -m pip install agentic-api==0.9.0
 agentic-api serve --vllm-base-url http://existing-vllm:8000
 
-python -m pip install "agentic-api[local]==0.8.0"
+python -m pip install "agentic-api[local]==0.9.0"
 agentic-api serve --model MODEL_ID
 ```
 
@@ -176,10 +176,10 @@ script needs machine-readable diagnostics.
 Use uv to install the published package or run the Python launcher without a global installation:
 
 ```bash
-uv pip install agentic-api==0.8.0
-uv pip install "agentic-api[local]==0.8.0"
-uvx --from agentic-api==0.8.0 agentic-api doctor
-uvx --from agentic-api==0.8.0 agentic-api serve --vllm-base-url http://existing-vllm:8000
+uv pip install agentic-api==0.9.0
+uv pip install "agentic-api[local]==0.9.0"
+uvx --from agentic-api==0.9.0 agentic-api doctor
+uvx --from agentic-api==0.9.0 agentic-api serve --vllm-base-url http://existing-vllm:8000
 ```
 
 The Rust-native `agentic` CLI remains supported for `run codex`, `run claude`, `serve`, and `validate`. For the full

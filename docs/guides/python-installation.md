@@ -8,7 +8,7 @@ The Rust-native `agentic` CLI remains supported for `run codex`, `run claude`, `
 
 ## Install from PyPI
 
-Version 0.8.0 is [published on PyPI](https://pypi.org/project/agentic-api/0.8.0/). Use Python 3.10 or newer.
+Version 0.9.0 is [published on PyPI](https://pypi.org/project/agentic-api/0.9.0/). Use Python 3.10 or newer.
 The [Python CLI reference](https://vllm-project.github.io/agentic-api/docs/latest/python-cli) lists commands, options, and defaults generated from the parser.
 
 ### Install the base package
@@ -16,7 +16,7 @@ The [Python CLI reference](https://vllm-project.github.io/agentic-api/docs/lates
 The base wheel bundles the Rust executables and does not install vLLM:
 
 ```bash
-python -m pip install agentic-api==0.8.0
+python -m pip install agentic-api==0.9.0
 agentic-api serve --vllm-base-url http://existing-vllm:8000
 ```
 
@@ -28,7 +28,7 @@ Use this mode when an upstream inference server is already running. Every Python
 On supported Linux GPU hosts, the local extra adds the tested vLLM dependency:
 
 ```bash
-python -m pip install "agentic-api[local]==0.8.0"
+python -m pip install "agentic-api[local]==0.9.0"
 agentic-api serve --model Qwen/Qwen3-30B-A3B-FP8
 ```
 
@@ -50,10 +50,10 @@ With uv installed, run the packaged Rust CLI in an isolated environment without 
 Install Codex or Claude Code separately and connect to an existing inference server:
 
 ```bash
-uvx --from agentic-api==0.8.0 agentic --version
-uvx --from agentic-api==0.8.0 agentic run codex --upstream http://existing-vllm:8000
-uvx --from agentic-api==0.8.0 agentic run claude --upstream http://existing-vllm:8000
-uvx --from agentic-api==0.8.0 agentic serve --upstream http://existing-vllm:8000
+uvx --from agentic-api==0.9.0 agentic --version
+uvx --from agentic-api==0.9.0 agentic run codex --upstream http://existing-vllm:8000
+uvx --from agentic-api==0.9.0 agentic run claude --upstream http://existing-vllm:8000
+uvx --from agentic-api==0.9.0 agentic serve --upstream http://existing-vllm:8000
 ```
 
 ### Install a workflow artifact

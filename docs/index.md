@@ -43,7 +43,7 @@ See the [API reference](api/index.md) for the full endpoint list.
 The `agentic-api` wheel packages the Rust gateway and a small Python launcher. Use the base package for proxy-only
 installations, and the `[local]` extra when you want the launcher to manage a local vLLM process.
 
-- Version 0.8.0 is [published on PyPI](https://pypi.org/project/agentic-api/0.8.0/) for Linux x86_64, macOS Intel, and macOS Apple Silicon
+- Version 0.9.0 is [published on PyPI](https://pypi.org/project/agentic-api/0.9.0/) for Linux x86_64, macOS Intel, and macOS Apple Silicon
 - [Python installation and workflows](guides/python-installation.md) for PyPI and uvx installs, workflow artifact testing, `doctor`, and known-good model profiles
 - The Rust-native `agentic` CLI remains supported for `serve`, `run codex`, `run claude`, and `validate`
 - vLLM is a supported backend, not part of the Agentic API product name
