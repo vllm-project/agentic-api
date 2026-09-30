@@ -996,7 +996,10 @@ async fn messages_stream_rejects_terminal_with_open_content_blocks() {
             let damaged: String = frames
                 .iter()
                 .enumerate()
-                .filter_map(|(index, frame)| (index != stop).then_some(*frame))
+                // Omit message_delta so this specifically exercises the message_stop gate.
+                .filter_map(|(index, frame)| {
+                    (index != stop && !frame.contains("event: message_delta")).then_some(*frame)
+                })
                 .collect();
             let mut rounds = streams[..round].to_vec();
             rounds.push(damaged);
@@ -1123,4 +1126,37 @@ async fn messages_stream_requires_message_start_in_each_round() {
         let body = format!("data: {}\n\n", serde_json::json!({"type":kind, "index":0}));
         assert_failed_stream(vec![body], 0, "before message_start").await;
     }
+}
+
+#[tokio::test]
+async fn messages_stream_rejects_content_interleaved_with_message_deltas() {
+    let streams = cassette_turn_streams();
+    for (round, body) in streams.iter().enumerate() {
+        let terminal = body
+            .split_inclusive("\n\n")
+            .find(|frame| frame.contains("event: message_delta"))
+            .expect("fixture has a terminal delta");
+        for before in ["event: content_block_start", "event: content_block_stop"] {
+            let damaged = body.replacen(before, &format!("{terminal}{before}"), 1);
+            assert_ne!(&damaged, body);
+            let mut rounds = streams[..round].to_vec();
+            rounds.push(damaged);
+            assert_failed_stream(rounds, round, "invalid message_delta ordering").await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn messages_stream_allows_repeated_terminal_usage_snapshots() {
+    let streams = cassette_turn_streams()
+        .into_iter()
+        .map(|body| {
+            let terminal = body
+                .split_inclusive("\n\n")
+                .find(|frame| frame.contains("event: message_delta"))
+                .expect("fixture has a terminal delta");
+            body.replacen(terminal, &format!("{terminal}{terminal}"), 1)
+        })
+        .collect();
+    assert_messages_stream_presents_one_message(streams).await;
 }
