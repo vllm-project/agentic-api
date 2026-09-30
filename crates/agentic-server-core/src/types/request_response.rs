@@ -2,13 +2,13 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
-use super::io::{FunctionTool, InputItem, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
+use super::io::{FunctionTool, InputItem, MultiAgentConfig, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
 use super::tools::ResponsesTool;
 use crate::tool::{CodexNamespaceHandler, CustomHandler, ToolError};
-use crate::utils::common::serialize_to_string;
 
+mod response_stream;
 mod serde_helpers;
 use serde_helpers::{default_true, is_absent_or_default_tool_choice, serialize_upstream_tool_choice};
 #[cfg(feature = "openapi")]
@@ -31,7 +31,7 @@ pub struct ReasoningConfig {
 }
 
 /// Responses text-generation settings forwarded to the upstream service.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ResponseTextConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -75,7 +75,10 @@ pub enum ResponseTextFormat {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// A Responses request. Rust's derived default uses `store: false`; JSON deserialization
+/// uses `store: true` when storage is not specified. Set `store` explicitly when constructing
+/// a stored request with struct update syntax.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(bound(serialize = "Box<T>: Serialize", deserialize = "Box<T>: Deserialize<'de>"))]
 pub struct RequestPayload<T: ?Sized = ResponseTextConfig> {
     pub model: String,
@@ -99,12 +102,19 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig> {
     pub temperature: Option<f64>,
     pub top_p: Option<f64>,
     pub max_output_tokens: Option<u32>,
+    /// Parsed for admission checks; unsupported when multi-agent execution is enabled.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tool_calls: Option<u32>,
     /// vLLM extension: continue generation past the end-of-sequence token.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ignore_eos: Option<bool>,
     pub truncation: Option<String>,
     pub metadata: Option<Value>,
     pub parallel_tool_calls: Option<bool>,
+    /// Hosted collaboration configuration, interpreted by the gateway coordinator.
+    /// Independent of the model's `parallel_tool_calls` generation preference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multi_agent: Option<MultiAgentConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -176,6 +186,9 @@ impl<T: ?Sized> RequestPayload<T> {
     /// can serve it.
     #[must_use]
     pub fn in_process_feature(&self) -> Option<&'static str> {
+        if self.multi_agent.as_ref().is_some_and(|config| config.enabled) {
+            return Some("multi_agent");
+        }
         if self.conversation_id.is_some() {
             return Some("conversation_id");
         }
@@ -210,7 +223,6 @@ impl<T: ?Sized> RequestPayload<T> {
         self,
         map: impl FnOnce(Box<T>) -> Result<Box<U>, E>,
     ) -> Result<RequestPayload<U>, E> {
-        let text = self.text.map(map).transpose()?;
         Ok(RequestPayload {
             model: self.model,
             input: self.input,
@@ -223,16 +235,18 @@ impl<T: ?Sized> RequestPayload<T> {
             store: self.store,
             include: self.include,
             reasoning: self.reasoning,
-            text,
+            text: self.text.map(map).transpose()?,
             temperature: self.temperature,
             top_p: self.top_p,
             max_output_tokens: self.max_output_tokens,
+            max_tool_calls: self.max_tool_calls,
             ignore_eos: self.ignore_eos,
             truncation: self.truncation,
             metadata: self.metadata,
             parallel_tool_calls: self.parallel_tool_calls,
             prompt_cache_key: self.prompt_cache_key,
             service_tier: self.service_tier,
+            multi_agent: self.multi_agent,
             cache_salt: self.cache_salt,
             context_management: self.context_management,
         })
@@ -282,7 +296,7 @@ impl RequestPayload {
         });
         let tools = tools.filter(|tools| !tools.is_empty());
         let namespace_map = CodexNamespaceHandler.build_namespace_map(self.tools.as_deref())?;
-        let input = CodexNamespaceHandler.resolve_input(namespace_map.as_ref(), self.input.model_input());
+        let input = CodexNamespaceHandler.resolve_input(namespace_map.as_ref(), self.input.normalized_model_input());
         let tool_choice = CodexNamespaceHandler.resolve_tool_choice(namespace_map.as_ref(), self.tool_choice.as_ref());
         CustomHandler::validate_tool_choice(self.tools.as_deref(), &tool_choice)?;
         Ok(UpstreamRequest {
@@ -376,48 +390,102 @@ pub struct ResponsePayload {
     pub tool_choice: Option<ToolChoice>,
 }
 
-impl ResponsePayload {
-    #[must_use]
-    pub fn as_created_response_chunk(&self) -> String {
-        let mut response = self.clone();
-        "in_progress".clone_into(&mut response.status);
-        let event = json!({
-            "type": "response.created",
-            "response": response,
-        });
-        let json_str = serialize_to_string(&event).unwrap_or_else(|_| String::new());
-        format!("data: {json_str}\n\n")
-    }
-
-    #[must_use]
-    pub fn as_responses_chunk(&self) -> String {
-        let json_str = serialize_to_string(self).unwrap_or_else(|_| String::new());
-        format!("data: {json_str}\n\n")
-    }
-
-    #[must_use]
-    pub fn as_terminal_response_chunk(&self) -> String {
-        let event = json!({
-            "type": self.terminal_event_type(),
-            "response": self,
-        });
-        let json_str = serialize_to_string(&event).unwrap_or_else(|_| String::new());
-        format!("data: {json_str}\n\n")
-    }
-
-    pub(crate) fn terminal_event_type(&self) -> &'static str {
-        match self.status.as_str() {
-            "incomplete" => "response.incomplete",
-            "failed" | "error" => "response.failed",
-            "in_progress" => "response.in_progress",
-            _ => "response.completed",
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stored_struct_defaults_match_minimal_wire_request() {
+        let wire: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test-model", "input": "hello"
+        }))
+        .unwrap();
+        let fixture: RequestPayload = RequestPayload {
+            model: "test-model".into(),
+            input: ResponsesInput::Text("hello".into()),
+            store: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            serde_json::to_value(fixture).unwrap(),
+            serde_json::to_value(wire).unwrap()
+        );
+    }
+
+    #[test]
+    fn rust_defaults_do_not_make_required_wire_fields_optional() {
+        let default: RequestPayload = RequestPayload::default();
+        assert!(!default.store);
+        assert!(matches!(default.input, ResponsesInput::Items(items) if items.is_empty()));
+
+        for wire in [
+            serde_json::json!({"model": "test-model"}),
+            serde_json::json!({"input": "hello"}),
+        ] {
+            assert!(serde_json::from_value::<RequestPayload>(wire).is_err());
+        }
+    }
+
+    #[test]
+    fn request_preserves_multi_agent_independently_of_parallel_tool_calls() {
+        for enabled in [false, true] {
+            for parallel_tool_calls in [false, true] {
+                let config = serde_json::json!({"enabled": enabled, "max_concurrent_subagents": 3});
+                let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+                    "model": "test-model",
+                    "input": "Review independent tasks.",
+                    "multi_agent": config,
+                    "parallel_tool_calls": parallel_tool_calls
+                }))
+                .unwrap();
+                let payload = payload.try_map_text(Ok::<_, std::convert::Infallible>).unwrap();
+
+                assert_eq!(
+                    payload.multi_agent,
+                    Some(MultiAgentConfig {
+                        enabled,
+                        max_concurrent_subagents: Some(3),
+                    })
+                );
+                assert_eq!(serde_json::to_value(&payload).unwrap()["multi_agent"], config);
+                assert_eq!(payload.in_process_feature(), enabled.then_some("multi_agent"));
+
+                for stream in [false, true] {
+                    let upstream = serde_json::to_value(payload.to_upstream_request(stream).unwrap()).unwrap();
+                    assert!(upstream.get("multi_agent").is_none());
+                    assert_eq!(upstream["parallel_tool_calls"], parallel_tool_calls);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn request_preserves_max_tool_calls_for_admission() {
+        for limit in [None, Some(0), Some(5)] {
+            let mut wire = serde_json::json!({"model": "test-model", "input": "hello"});
+            if let Some(limit) = limit {
+                wire["max_tool_calls"] = limit.into();
+            }
+            let request: RequestPayload = serde_json::from_value(wire).unwrap();
+            let request = request.try_map_text(Ok::<_, std::convert::Infallible>).unwrap();
+            assert_eq!(request.max_tool_calls, limit);
+            assert_eq!(
+                serde_json::to_value(request).unwrap().get("max_tool_calls"),
+                limit.map(serde_json::Value::from).as_ref()
+            );
+        }
+    }
+
+    #[test]
+    fn omitted_multi_agent_does_not_enable_collaboration() {
+        let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test-model", "input": "hello"
+        }))
+        .unwrap();
+        assert!(payload.multi_agent.is_none());
+        assert!(serde_json::to_value(&payload).unwrap().get("multi_agent").is_none());
+        assert_eq!(payload.in_process_feature(), None);
+    }
 
     #[test]
     fn request_payload_accepts_openai_conversation_field() {
@@ -935,7 +1003,7 @@ mod tests {
             }),
             serde_json::json!({"type": "web_search_preview"}),
             serde_json::json!({"type": "file_search", "vector_store_ids": ["vs_abc"]}),
-            serde_json::json!({"type": "code_interpreter"}),
+            serde_json::json!({"type": "code_interpreter", "container": {"type": "auto"}}),
         ]
     }
 
@@ -1188,6 +1256,37 @@ mod tests {
             assert_eq!(event["type"], expected_type);
             assert_eq!(event["response"]["status"], status);
         }
+    }
+
+    #[test]
+    fn response_payload_echoes_openai_code_interpreter_declaration() {
+        let declaration = serde_json::json!({"type": "code_interpreter", "container": {"type": "auto"}});
+        let tool = serde_json::from_value(declaration.clone()).expect("OpenAI tool declaration");
+        let payload = ResponsePayload {
+            id: "resp_test".to_owned(),
+            object: "response".to_owned(),
+            created_at: 0,
+            model: "test-model".to_owned(),
+            status: "completed".to_owned(),
+            output: Vec::new(),
+            usage: None,
+            incomplete_details: None,
+            error: None,
+            previous_response_id: None,
+            conversation_id: None,
+            instructions: None,
+            service_tier: None,
+            tools: Some(vec![tool]),
+            tool_choice: None,
+        };
+
+        let response = serde_json::to_value(&payload).expect("blocking response");
+        assert_eq!(response["tools"], serde_json::json!([declaration]));
+        let chunk = payload.as_created_response_chunk();
+        let event: Value =
+            serde_json::from_str(chunk.trim().strip_prefix("data: ").unwrap()).expect("created streaming event");
+        assert_eq!(event["response"]["tools"], response["tools"]);
+        assert!(response["tools"][0].get("execution").is_none());
     }
 
     #[test]

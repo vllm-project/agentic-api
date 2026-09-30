@@ -5,9 +5,10 @@
 
 use super::session::{ResponseCheckpoint, ResponseContinuation, ResponseSession, canonical_session_history};
 use crate::executor::error::{ExecutorError, ExecutorResult};
+use crate::executor::multi_agent::{CheckpointLimits, ValidatedTreeCheckpoint};
 use crate::executor::pending_calls::pending_calls;
 use crate::executor::request::{ExecutionContext, RequestContext};
-use crate::storage::InOutItem;
+use crate::storage::{InOutItem, ResponseMetadata};
 use crate::tool::ToolError;
 use crate::types::io::{
     InputContent, InputItem, InputMessageContent, ReasoningOutput, ReasoningTextContent, ResponsesInput,
@@ -170,7 +171,12 @@ pub(crate) async fn rehydrate_with_continuation(
     exec_ctx: &ExecutionContext,
     continuation: Option<ResponseContinuation>,
 ) -> ExecutorResult<RequestContext> {
-    // Fail before storage work for new files; check again once history is resolved.
+    validate_multi_agent_request(&request, continuation.is_some())?;
+    // Fail before storage work for explicitly declared tools and new content;
+    // check again once stored effective settings and history are resolved.
+    exec_ctx
+        .gateway_executors
+        .validate_declarations(request.tools.as_deref())?;
     validate_message_content(&request.input)?;
     let response_id = uuid7_str("resp_");
     // Persistence keeps the public items. Tool lowering belongs to the enriched
@@ -183,6 +189,7 @@ pub(crate) async fn rehydrate_with_continuation(
     // One clone for the unmodified original; `request` is moved as enriched_request.
     let original_request = request.clone();
     let mut ctx = RequestContext {
+        multi_agent_tree: None,
         enriched_request: request,
         original_request,
         new_input_items,
@@ -206,8 +213,50 @@ pub(crate) async fn rehydrate_with_continuation(
         ctx.enriched_request.input = ResponsesInput::Items(Vec::from(&ctx.original_request.input));
     }
 
+    exec_ctx
+        .gateway_executors
+        .validate_declarations(ctx.enriched_request.tools.as_deref())?;
     validate_message_content(&ctx.enriched_request.input)?;
+    validate_multi_agent_request(&ctx.enriched_request, ctx.continuation.is_some())?;
     Ok(ctx)
+}
+
+fn validate_multi_agent_request(request: &RequestPayload, in_session: bool) -> ExecutorResult<()> {
+    let Some(config) = request.multi_agent.as_ref().filter(|config| config.enabled) else {
+        return Ok(());
+    };
+    // TODO: Support and test multi-agent WebSocket sessions, including generate:false
+    // and continuations that inherit an agent tree, before removing this gate.
+    if in_session {
+        return Err(ExecutorError::InvalidRequest(
+            "multi_agent is not supported with websocket response sessions; use the HTTP Responses API".into(),
+        ));
+    }
+    if !request.store {
+        return Err(ExecutorError::InvalidRequest(
+            "multi_agent requires store: true; store: false is not supported".into(),
+        ));
+    }
+    if config.max_concurrent_subagents == Some(0) {
+        return Err(ExecutorError::InvalidRequest(
+            "max_concurrent_subagents must be positive".into(),
+        ));
+    }
+    if request.max_tool_calls.is_some() {
+        return Err(ExecutorError::InvalidRequest(
+            "max_tool_calls is not supported with multi_agent".into(),
+        ));
+    }
+    if request
+        .reasoning
+        .as_ref()
+        .is_some_and(|reasoning| reasoning.summary.is_some() || reasoning.generate_summary.is_some())
+    {
+        return Err(ExecutorError::InvalidRequest(
+            "reasoning.summary is not supported with multi_agent".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// Hydrates `ctx` from the previous response chain.
@@ -220,6 +269,10 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
         return from_session_response(ctx, exec_ctx).await;
     }
     let stored = exec_ctx.resp_handler.get(ctx).await?;
+    if restore_agent_tree(ctx, &stored.metadata, exec_ctx.responses_config.max_retained_bytes)? {
+        ctx.conversation_id = stored.conversation_id;
+        return Ok(());
+    }
     let history = exec_ctx.resp_handler.rehydrate(ctx).await?;
 
     let mut items = InOutItem::into_input_items(history);
@@ -272,6 +325,13 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
         })?;
         std::sync::Arc::new(continuation.retain_parent(checkpoint)?)
     };
+    if restore_agent_tree(ctx, &parent.metadata, exec_ctx.responses_config.max_retained_bytes)? {
+        ctx.conversation_id.clone_from(&parent.conversation_id);
+        if let Some(continuation) = ctx.continuation.as_mut() {
+            continuation.parent = Some(parent);
+        }
+        return Ok(());
+    }
     let mut items = parent.history.clone();
     // Match durable rehydration: lower custom/shell call outputs only in the
     // inference copy. new_input_items retains their public wire types.
@@ -317,6 +377,18 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
         exec_ctx.conv_handler.rehydrate_snapshot(ctx),
     )?;
 
+    if let Some(metadata) = exec_ctx
+        .conv_handler
+        .response_metadata_at_version(ctx, &snapshot.version)
+        .await?
+    {
+        if restore_agent_tree(ctx, &metadata, exec_ctx.responses_config.max_retained_bytes)? {
+            ctx.conversation_id = Some(conv_data.conversation_id);
+            ctx.conversation_version = Some(snapshot.version);
+            return Ok(());
+        }
+    }
+
     let mut items = InOutItem::into_input_items(snapshot.items);
     items.reserve(ctx.new_input_items.len());
     items.extend(Vec::from(&ctx.original_request.input));
@@ -332,7 +404,7 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
     Ok(())
 }
 
-pub(crate) fn apply_effective_settings(ctx: &mut RequestContext, stored: &crate::storage::ResponseMetadata) {
+pub(crate) fn apply_effective_settings(ctx: &mut RequestContext, stored: &ResponseMetadata) {
     let tools_explicitly_set = ctx.original_request.tools.is_some();
     ctx.enriched_request.tools = resolve_tools(
         ctx.original_request.tools.as_deref(),
@@ -346,6 +418,45 @@ pub(crate) fn apply_effective_settings(ctx: &mut RequestContext, stored: &crate:
     ));
 }
 
+/// Public transcript rows are never merged into any agent's private context.
+/// The coordinator validates this versioned snapshot and routes new outputs.
+fn restore_agent_tree(ctx: &mut RequestContext, metadata: &ResponseMetadata, max_bytes: usize) -> ExecutorResult<bool> {
+    let Some(tree) = &metadata.multi_agent_tree else {
+        return Ok(false);
+    };
+    if !ctx.original_request.store {
+        return Err(ExecutorError::InvalidRequest(
+            "multi_agent requires store: true; store: false is not supported".into(),
+        ));
+    }
+    if ctx
+        .original_request
+        .multi_agent
+        .as_ref()
+        .is_some_and(|config| !config.enabled)
+    {
+        return Err(ExecutorError::InvalidRequest(
+            "cannot disable multi_agent when continuing an agent tree".into(),
+        ));
+    }
+    apply_effective_settings(ctx, metadata);
+    if ctx.enriched_request.multi_agent.is_none() {
+        ctx.enriched_request.multi_agent = Some(tree.config.clone());
+    }
+    let root = tree
+        .agents
+        .first()
+        .filter(|agent| agent.identity.is_root())
+        .ok_or_else(|| ExecutorError::InvalidRequest("multi-agent checkpoint has no root".into()))?;
+    ctx.enriched_request.input = ResponsesInput::Items(root.history.clone());
+    ctx.enriched_request.previous_response_id = None;
+    ctx.multi_agent_tree = Some(ValidatedTreeCheckpoint::from_stored(
+        tree.clone(),
+        &CheckpointLimits::for_response(max_bytes),
+    )?);
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -355,7 +466,9 @@ mod tests {
     use crate::storage::{
         ConversationStore, ConversationVersion, InOutItem, ResponseMetadata, ResponseStore, create_pool_with_schema,
     };
-    use crate::tool::ToolError;
+    use crate::types::agent::{AgentIdentity, AgentTurnId};
+    use crate::types::agent_tree::{AgentState, StoredAgent, StoredTreeSnapshot};
+    use crate::types::io::MultiAgentConfig;
     use crate::types::io::output::{McpListTools, OutputItem};
     use crate::types::request_response::RequestPayload;
 
@@ -427,6 +540,7 @@ mod tests {
 
     fn reasoning_item(content: &[&str], encrypted_content: Option<serde_json::Value>) -> InputItem {
         InputItem::Reasoning(ReasoningOutput {
+            agent: None,
             id: "rs_prior".to_owned(),
             content: content.iter().map(|text| ReasoningTextContent::new(*text)).collect(),
             summary: vec![serde_json::json!({"type": "summary_text", "text": "public summary"})],
@@ -557,27 +671,10 @@ mod tests {
         RequestPayload {
             model: "test".into(),
             input: ResponsesInput::Text("new input".into()),
-            instructions: None,
+            store: true,
             previous_response_id: previous_response_id.map(str::to_owned),
             conversation_id: conversation_id.map(str::to_owned),
-            tools: None,
-            tool_choice: None,
-            stream: false,
-            store: true,
-            include: None,
-            reasoning: None,
-            text: None,
-            temperature: None,
-            top_p: None,
-            max_output_tokens: None,
-            ignore_eos: None,
-            truncation: None,
-            metadata: None,
-            parallel_tool_calls: None,
-            prompt_cache_key: None,
-            service_tier: None,
-            cache_salt: None,
-            context_management: None,
+            ..Default::default()
         }
     }
 
@@ -588,6 +685,180 @@ mod tests {
             Arc::new(reqwest::Client::new()),
             "http://localhost:8000".to_owned(),
         )
+    }
+
+    #[test]
+    fn multi_agent_compaction_trigger_is_allowed() {
+        let mut request = request(None, None);
+        request.input = ResponsesInput::Items(vec![InputItem::CompactionTrigger]);
+        request.multi_agent = serde_json::from_value(serde_json::json!({"enabled":true})).unwrap();
+        validate_multi_agent_request(&request, false).unwrap();
+    }
+
+    #[test]
+    fn client_tools_are_supported_with_multi_agent() {
+        let mut request = request(None, None);
+        request.tools = Some(
+            serde_json::from_value(serde_json::json!([
+                {"type":"custom","name":"echo"}, {"type":"tool_search","execution":"client"}
+            ]))
+            .unwrap(),
+        );
+        validate_multi_agent_request(&request, false).unwrap();
+        request.multi_agent = serde_json::from_value(serde_json::json!({"enabled":false})).unwrap();
+        validate_multi_agent_request(&request, false).unwrap();
+        request.multi_agent = serde_json::from_value(serde_json::json!({"enabled":true})).unwrap();
+        validate_multi_agent_request(&request, false).unwrap();
+    }
+
+    #[tokio::test]
+    async fn multi_agent_max_tool_calls_is_rejected_before_history_access() {
+        let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
+        for stream in [false, true] {
+            for limit in [0, 5] {
+                for previous in [None, Some("resp_missing")] {
+                    let request: RequestPayload = serde_json::from_value(serde_json::json!({
+                        "model": "test", "input": "hello", "stream": stream,
+                        "previous_response_id": previous,
+                        "multi_agent": {"enabled": true}, "max_tool_calls": limit
+                    }))
+                    .unwrap();
+                    let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
+                    assert!(matches!(error, ExecutorError::InvalidRequest(message)
+                        if message == "max_tool_calls is not supported with multi_agent"));
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn inherited_multi_agent_rejects_max_tool_calls() {
+        let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
+        let response_store = ResponseStore::new(pool.clone());
+        let conversation_store = ConversationStore::new(pool);
+        let conversation = conversation_store.create().await.unwrap();
+        let metadata = ResponseMetadata {
+            multi_agent_tree: Some(StoredTreeSnapshot {
+                version: 1,
+                config: MultiAgentConfig {
+                    enabled: true,
+                    max_concurrent_subagents: Some(3),
+                },
+                agents: vec![StoredAgent {
+                    identity: AgentIdentity::root(),
+                    parent: None,
+                    turn: AgentTurnId::new(),
+                    state: AgentState::Idle,
+                    mailbox: Vec::new(),
+                    history: Vec::new(),
+                    loaded_tools: Vec::new(),
+                    last_task: String::new(),
+                    final_answer: None,
+                    rounds: 0,
+                    wait: None,
+                }],
+                client_calls: Vec::new(),
+            }),
+            ..Default::default()
+        };
+        response_store
+            .persist("resp_tree", None, Vec::new(), &metadata)
+            .await
+            .unwrap();
+        conversation_store
+            .persist(
+                &conversation.conversation_id,
+                "resp_conversation_tree",
+                None,
+                Vec::new(),
+                &metadata,
+            )
+            .await
+            .unwrap();
+        let exec_ctx = execution_context(conversation_store, response_store);
+        for stream in [false, true] {
+            for (conversation_id, previous) in [
+                (None, Some("resp_tree")),
+                (Some(conversation.conversation_id.as_str()), None),
+            ] {
+                // No explicit multi_agent: admission must check again after restoring the tree.
+                let mut request = request(conversation_id, previous);
+                request.stream = stream;
+                request.max_tool_calls = Some(5);
+                let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
+                assert!(matches!(error, ExecutorError::InvalidRequest(message)
+                    if message == "max_tool_calls is not supported with multi_agent"));
+            }
+        }
+    }
+
+    #[test]
+    fn max_tool_calls_restriction_only_applies_to_enabled_multi_agent() {
+        for config in [serde_json::Value::Null, serde_json::json!({"enabled": false})] {
+            let request: RequestPayload = serde_json::from_value(serde_json::json!({
+                "model": "test", "input": "hello", "multi_agent": config, "max_tool_calls": 5
+            }))
+            .unwrap();
+            validate_multi_agent_request(&request, false).unwrap();
+        }
+        let request: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test", "input": "hello", "multi_agent": {"enabled": true}, "max_tool_calls": null
+        }))
+        .unwrap();
+        validate_multi_agent_request(&request, false).unwrap();
+    }
+
+    #[tokio::test]
+    async fn nonstored_multi_agent_is_rejected_before_history_access() {
+        let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
+        for store in [false] {
+            for stream in [false, true] {
+                for (conversation_id, previous_response_id) in
+                    [(None, None), (Some("conv_missing"), None), (None, Some("resp_missing"))]
+                {
+                    let mut request = request(conversation_id, previous_response_id);
+                    request.store = store;
+                    request.stream = stream;
+                    request.multi_agent = Some(crate::types::io::MultiAgentConfig {
+                        enabled: true,
+                        max_concurrent_subagents: Some(3),
+                    });
+                    let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
+                    let ExecutorError::InvalidRequest(message) = error else {
+                        panic!("admission must reject before accessing disabled history stores: {error}");
+                    };
+                    assert_eq!(
+                        message,
+                        "multi_agent requires store: true; store: false is not supported"
+                    );
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn omitted_or_disabled_multi_agent_preserves_rehydration() {
+        let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
+        for store in [false, true] {
+            for multi_agent in [
+                None,
+                Some(crate::types::io::MultiAgentConfig {
+                    enabled: false,
+                    max_concurrent_subagents: None,
+                }),
+            ] {
+                let mut request = request(None, None);
+                request.store = store;
+                request.multi_agent = multi_agent;
+                let expected_input = Vec::<InputItem>::from(&request.input);
+                let ctx = rehydrate_conversation(request, &exec_ctx).await.unwrap();
+                assert_eq!(ctx.original_request.store, store);
+                assert_eq!(
+                    serde_json::to_value(&ctx.enriched_request.input).unwrap(),
+                    serde_json::to_value(expected_input).unwrap()
+                );
+            }
+        }
     }
 
     #[tokio::test]
@@ -733,7 +1004,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn execution_preparation_validates_tool_search_after_full_rehydration() {
+    async fn rehydration_rejects_orphan_tool_search_outputs() {
         let pool = create_pool_with_schema(Some("sqlite://?mode=memory"))
             .await
             .expect("create response store");
@@ -755,16 +1026,11 @@ mod tests {
             .expect("seed prior response");
         let exec_ctx = execution_context(ConversationStore::disabled(), response_store);
 
-        let ctx = rehydrate_conversation(request(None, Some("resp_search")), &exec_ctx)
+        let error = rehydrate_conversation(request(None, Some("resp_search")), &exec_ctx)
             .await
-            .expect("orphan history remains a valid rehydrated public shape");
-        let error =
-            crate::executor::prepare::prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler)
-                .await
-                .expect_err("explicit preparation rejects orphan stored public history");
-
+            .expect_err("shared call validation rejects orphan stored search outputs");
         assert!(
-            matches!(error, ExecutorError::Tool(ToolError::Config(ref message)) if message.contains("orphan")),
+            matches!(&error, ExecutorError::InvalidRequest(message) if message.contains("without a pending call")),
             "unexpected error: {error}"
         );
         assert_eq!(error.http_status(), http::StatusCode::BAD_REQUEST);
@@ -802,6 +1068,7 @@ mod tests {
         ]))
         .expect("valid effective public declarations");
         let metadata = ResponseMetadata {
+            multi_agent_tree: None,
             effective_tools: Some(effective_tools),
             ..ResponseMetadata::default()
         };
@@ -850,6 +1117,55 @@ mod tests {
             serde_json::to_value(&ctx.enriched_request.input).expect("prepared private history serializes");
         assert_eq!(private_input[0]["call_id"], "call_search_stored");
         assert_eq!(private_input[1]["call_id"], "call_search_stored");
+    }
+
+    #[tokio::test]
+    async fn native_code_interpreter_call_rehydrates_for_previous_response_and_conversation()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let native_call: OutputItem = serde_json::from_value(serde_json::json!({
+            "type": "code_interpreter_call",
+            "id": "ci_native",
+            "container_id": "cntr_native",
+            "code": "print(7)",
+            "status": "completed",
+            "outputs": [{"type": "logs", "logs": "7\n"}]
+        }))?;
+        let response_pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
+        let conversation_pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
+        let response_store = ResponseStore::new(response_pool);
+        let conversation_store = ConversationStore::new(conversation_pool);
+        response_store
+            .persist(
+                "resp_native",
+                None,
+                vec![InOutItem::Output(native_call.clone())],
+                &ResponseMetadata::default(),
+            )
+            .await?;
+        let conversation = conversation_store.create().await?;
+        conversation_store
+            .persist(
+                &conversation.conversation_id,
+                "resp_conversation_native",
+                None,
+                vec![InOutItem::Output(native_call)],
+                &ResponseMetadata::default(),
+            )
+            .await?;
+        let exec_ctx = execution_context(conversation_store, response_store);
+
+        for request in [
+            request(None, Some("resp_native")),
+            request(Some(&conversation.conversation_id), None),
+        ] {
+            let ctx = rehydrate_conversation(request, &exec_ctx).await?;
+            let model_input = serde_json::to_value(ctx.enriched_request.input.model_input())?;
+            assert_eq!(model_input[0]["type"], "code_interpreter_call");
+            assert_eq!(model_input[0]["id"], "ci_native");
+            assert_eq!(model_input[0]["outputs"][0]["logs"], "7\n");
+            assert_eq!(model_input[1]["role"], "user");
+        }
+        Ok(())
     }
 
     #[tokio::test]

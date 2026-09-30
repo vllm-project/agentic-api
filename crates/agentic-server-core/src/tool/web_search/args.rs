@@ -107,6 +107,13 @@ impl TryFrom<RawWebSearchArguments> for WebSearchArguments {
     }
 }
 
+/// How many provider searches a `web_search` call asks for: the unit a search
+/// budget counts. Zero when the arguments do not parse, because the handler
+/// then fails before any provider request.
+pub(crate) fn requested_searches(arguments: &str) -> usize {
+    WebSearchArguments::from_json(arguments).map_or(0, |arguments| arguments.queries().len())
+}
+
 /// Recency filter accepted by `web_search`.
 ///
 /// The wire format is `day`, `week`, `month`, `year`, or an inclusive
@@ -316,6 +323,25 @@ mod tests {
                 .to_string()
                 .starts_with("invalid tool config: web_search arguments must be valid JSON: ")
         );
+    }
+
+    #[test]
+    fn requested_searches_counts_what_the_handler_would_run() {
+        assert_eq!(requested_searches(r#"{"query":"one"}"#), 1);
+        assert_eq!(requested_searches(r#"{"queries":["a","b","c"]}"#), 3);
+        // `queries` wins over `query`, and blank entries are never searched.
+        assert_eq!(requested_searches(r#"{"query":"potato","queries":[" a ","","b"]}"#), 2);
+        assert_eq!(requested_searches(r#"{"query":"potato","queries":["  "]}"#), 1);
+        // Arguments that do not parse never reach a provider.
+        for rejected in [
+            r#"{"query":"  "}"#,
+            r#"{"queries":["1","2","3","4","5","6"]}"#,
+            r#"{"query":"q","freshness":"never"}"#,
+            "{not json",
+        ] {
+            assert!(WebSearchArguments::from_json(rejected).is_err(), "{rejected}");
+            assert_eq!(requested_searches(rejected), 0, "{rejected}");
+        }
     }
 
     #[test]

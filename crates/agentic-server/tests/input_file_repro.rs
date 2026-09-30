@@ -179,6 +179,7 @@ impl Fixture {
     async fn seed_file_history(&self, conversation: bool) -> Value {
         let response_id = "resp_file_history";
         let metadata = ResponseMetadata {
+            multi_agent_tree: None,
             model: "test-model".to_owned(),
             ..Default::default()
         };
@@ -609,6 +610,7 @@ fn composed_upstream_request_cannot_bypass_file_validation() {
     let request: RequestPayload =
         serde_json::from_value(json!({"model":"test-model", "input":user_input(&file_part())})).unwrap();
     let ctx = RequestContext {
+        multi_agent_tree: None,
         original_request: request.clone(),
         enriched_request: request,
         new_input_items: Vec::new(),

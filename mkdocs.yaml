@@ -108,8 +108,8 @@ nav:
     - Python Launcher (agentic-api): reference/python-cli.md
   - Guides:
     - Python Installation: guides/python-installation.md
+    - Claude Code with self-hosted models: guides/harness-cli-testing.md
     - Responses Compaction: guides/responses-compaction.md
-    - Harness CLI Testing: guides/harness-cli-testing.md
     - Codex Desktop: guides/codex-desktop.md
     - NVIDIA Dynamo Upstream: guides/dynamo-upstream.md
     - SGLang Upstream: guides/sglang-upstream.md
@@ -124,6 +124,7 @@ nav:
     - Codex Integration: design/codex-integration.md
     - llm-d Backend Mode: design/agentic-llm-d.md
     - Core Public API: design/core-public-api.md
+    - Embedded Code Interpreter: design/embedded-code-interpreter.md
     - MCP Gateway Integration: design/mcp-gateway-integration.md
     - Messages Gateway Tool Classification: design/messages-gateway-tool-classification.md
     - OIDC Bearer Authentication: design/oidc-bearer-authentication.md

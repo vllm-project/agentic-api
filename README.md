@@ -69,6 +69,7 @@ flowchart LR
 | `GET /v1/responses` | WebSocket transport for the Responses API | ✅ |
 | `POST /v1/conversations` | Conversation management | ✅ |
 | `GET /v1/models` | Model listing proxied from vLLM | ✅ |
+| `POST /v1/chat/completions` · `POST /v1/completions` | Forwarded to the upstream verbatim, so clients on those endpoints keep working when the gateway is the entry point | ✅ |
 | `GET /health` · `GET /ready` | Liveness and readiness probes | ✅ |
 | Messages API | Anthropic-style stateful messages on shared primitives | 🚧 Planned |
 | Interactions API | Higher-level agentic workflow surface | ⏳ Planned |
@@ -109,6 +110,9 @@ model the upstream lists at `/v1/models`; pass `--model` to choose a different o
   --upstream http://127.0.0.1:5050 \
   --model Qwen/Qwen3-30B-A3B-FP8
 ```
+
+For self-hosted Claude Code setup—including models that Claude Code does not recognize in its own catalog—see
+[Configure Claude Code with a self-hosted model](docs/guides/harness-cli-testing.md#claude-code-with-a-self-hosted-model).
 
 SQLite is the default storage backend. Use PostgreSQL explicitly when the session is shared:
 
@@ -181,7 +185,8 @@ Qwen3.8-27B's vLLM chat template accepts `low`, `medium`, and `xhigh` reasoning 
 default `high`. Override the pinned value with `AGENTIC_CLAUDE_EFFORT`. See the [Claude Code effort
 configuration](https://code.claude.com/docs/en/model-config) and [vLLM reasoning output
 documentation](https://docs.vllm.ai/en/latest/features/reasoning_outputs/) for the underlying behavior, and
-[Harness CLI Testing](docs/guides/harness-cli-testing.md) for an end-to-end verification checklist.
+[Harness CLI Testing](docs/guides/harness-cli-testing.md) for an end-to-end verification checklist and the
+[self-hosted Claude Code configuration](docs/guides/harness-cli-testing.md#claude-code-with-a-self-hosted-model).
 
 **1. Serve a model with vLLM.** Any recipe from [recipes.vllm.ai](https://recipes.vllm.ai) works:
 
@@ -442,6 +447,40 @@ Configured `allowed_tools` form the maximum tool set; request-provided `allowed_
 `require_approval = "never"` lets requests omit that field. If a label exists in `config.toml`, a request cannot
 override it with `server_url`; otherwise the existing request-declared HTTP MCP flow remains available.
 
+### Optional embedded code interpreter
+
+The Eryx code interpreter is excluded from default builds. To opt in from source, prepare the platform-specific Eryx 0.8 runtime and then enable the Cargo feature:
+
+```bash
+./scripts/setup-eryx-runtime.sh
+cargo build --release -p agentic-server --features embedded-code-interpreter
+```
+
+The setup script installs the `eryx-precompile` version matching `Cargo.lock` when needed and prepares Eryx's cached runtime. During the Cargo build, Eryx finds that `runtime.cwasm`, copies it into Cargo's build output, and embeds it in the server binary. `ERYX_RUNTIME_CWASM=/absolute/path/to/runtime.cwasm` is only needed to select an artifact outside the cache; it does not build the artifact and is not needed when running the resulting binary.
+
+Enable the compiled executor in `~/.agentic-api/config.toml`:
+
+```toml
+[code_interpreter]
+enabled = true
+```
+
+Alternatively, set `AGENTIC_CODE_INTERPRETER_ENABLED=true`, which takes precedence over the file. The Cargo feature and the runtime setting are both required. When `TMPDIR` is unset, the interpreter creates a private `tmp` directory under `AGENTIC_API_HOME` (default `~/.agentic-api`). An explicit `TMPDIR` overrides that location.
+
+Run the server normally; no wrapper script is needed:
+
+```bash
+cargo run --release -p agentic-server --bin agentic-server \
+  --features embedded-code-interpreter -- --llm-api-base http://127.0.0.1:5050
+# Or use the feature-enabled binary built above:
+./target/release/agentic-server --llm-api-base http://127.0.0.1:5050
+```
+
+On Linux, startup reuses an existing delegated cgroup or automatically requests a transient scope through `systemd-run --user`. It creates a gateway leaf before starting runtime threads, allowing isolated workers to enforce their memory and process limits. This requires cgroup v2 with `memory` and `pids` controllers and either a running systemd user manager or a service configured with `Delegate=yes`. Startup fails if containment cannot be established.
+
+See the [embedded code interpreter design](docs/design/embedded-code-interpreter.md) for resource limits, request
+shape, containment limitations, and feature-enabled verification.
+
 ## 🤖 Codex on your own GPUs
 
 For the desktop UI, see [Codex Desktop with local models](docs/guides/codex-desktop.md). The guide covers a tested
@@ -535,6 +574,10 @@ YOU_API_KEY=<you.com-key> YOU_API_BASE_URL=<you.com-base-url> \
 The gateway supports the basic `web_search_20250305` contract, including `max_uses`, `allowed_domains`,
 `blocked_domains`, and the country in `user_location`. Other versioned native web-search declarations are rejected rather
 than forwarded in a shape the upstream cannot execute.
+
+`max_uses` limits the searches performed across the whole request, not the number of tool calls. The model may batch
+several queries into one call, and every query counts as one search. A call that the remaining budget cannot cover is
+not run, and the model is told the limit was reached; a later call that fits still runs.
 
 Older clients that declare a function tool named `WebSearch` can still opt in with
 `MESSAGES_GATEWAY_TOOL_ALIASES="WebSearch=web_search"`. This variable maps a client tool name to a gateway executor

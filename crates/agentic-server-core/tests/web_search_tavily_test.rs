@@ -144,6 +144,7 @@ fn error_body(message: &str) -> serde_json::Value {
 
 fn call(arguments: &str) -> FunctionToolCall {
     FunctionToolCall {
+        agent: None,
         id: "fc_tavily".to_owned(),
         call_id: "call_tavily".to_owned(),
         name: "web_search".to_owned(),

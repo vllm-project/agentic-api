@@ -1,3 +1,7 @@
+mod validation;
+pub(crate) use validation::ensure_request_prepared;
+use validation::{request_contains_tool_search_state, validate_tool_search_request};
+
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -207,10 +211,6 @@ enum ToolSearchActivity {
     Active,
 }
 
-struct PendingSearchCall {
-    call_id: String,
-}
-
 struct DefinitionAccumulator<'a> {
     public_tools: &'a mut Vec<ResponsesTool>,
     definitions: &'a mut Vec<DefinitionRecord>,
@@ -263,6 +263,7 @@ impl CatalogEntry {
 ///
 /// The state deliberately has no `Serialize` implementation and its `Debug`
 /// output contains counts only.
+#[derive(Clone)]
 pub struct ToolSearchState {
     activity: ToolSearchActivity,
     has_completed_search: bool,
@@ -520,103 +521,6 @@ impl ToolSearchState {
     }
 }
 
-fn validate_tool_search_request(request: &RequestPayload, input: &ResponsesInput) -> Result<bool, ToolError> {
-    if !request_contains_tool_search_state(request, input) {
-        return Ok(false);
-    }
-
-    let tools = request.tools.as_deref().unwrap_or_default();
-    if tools
-        .iter()
-        .filter(|tool| matches!(tool, ResponsesTool::ToolSearch(_)))
-        .count()
-        > 1
-    {
-        return Err(ToolError::Config(
-            "tool search accepts at most one tool_search declaration".to_owned(),
-        ));
-    }
-    if request.parallel_tool_calls == Some(true) {
-        return Err(ToolError::Config(
-            "parallel_tool_calls must be false when tool search is active".to_owned(),
-        ));
-    }
-
-    for tool in tools {
-        tool.validate()?;
-        if has_reserved_tool_search_name(tool) {
-            return Err(ToolError::Config(
-                "model-visible tool name 'tool_search' is reserved while tool search is active".to_owned(),
-            ));
-        }
-    }
-
-    Ok(true)
-}
-
-fn request_contains_tool_search_state<T: ?Sized>(request: &RequestPayload<T>, input: &ResponsesInput) -> bool {
-    input_contains_tool_search_state(input)
-        || request
-            .tools
-            .as_deref()
-            .is_some_and(|tools| tools.iter().any(tool_activates_tool_search))
-}
-
-fn input_contains_tool_search_state(input: &ResponsesInput) -> bool {
-    matches!(
-        input,
-        ResponsesInput::Items(items)
-            if items
-                .iter()
-                .any(|item| matches!(item, InputItem::ToolSearchCall(_) | InputItem::ToolSearchOutput(_)))
-    )
-}
-
-fn tool_activates_tool_search(tool: &ResponsesTool) -> bool {
-    matches!(tool, ResponsesTool::ToolSearch(_)) || tool_has_deferred_definition(tool)
-}
-
-fn tool_has_deferred_definition(tool: &ResponsesTool) -> bool {
-    match tool {
-        ResponsesTool::Function(function) => function.defer_loading == Some(true),
-        ResponsesTool::Namespace(namespace) => namespace.tools.iter().any(
-            |member| matches!(member, CodexNamespaceMember::Function(function) if function.defer_loading == Some(true)),
-        ),
-        ResponsesTool::Mcp(mcp) => mcp.defer_loading == Some(true),
-        ResponsesTool::Custom(custom) => custom.defer_loading == Some(true),
-        ResponsesTool::ToolSearch(_)
-        | ResponsesTool::WebSearch(_)
-        | ResponsesTool::FileSearch(_)
-        | ResponsesTool::CodeInterpreter(_)
-        | ResponsesTool::Shell(_)
-        | ResponsesTool::Unknown => false,
-    }
-}
-
-pub(crate) fn ensure_request_prepared(request: &RequestPayload, prepared: bool) -> Result<(), ToolError> {
-    if ToolSearchHandler::request_has_state(request) && !prepared {
-        return Err(ToolError::Config(
-            "tool_search requests require prepared request-scoped state before upstream conversion".to_owned(),
-        ));
-    }
-    Ok(())
-}
-
-fn has_reserved_tool_search_name(tool: &ResponsesTool) -> bool {
-    match tool {
-        ResponsesTool::Function(function) => function.name.as_str() == TOOL_SEARCH_NAME,
-        ResponsesTool::Custom(custom) => custom.name.as_str() == TOOL_SEARCH_NAME,
-        ResponsesTool::Namespace(namespace) => namespace.name == TOOL_SEARCH_NAME,
-        ResponsesTool::ToolSearch(_)
-        | ResponsesTool::Mcp(_)
-        | ResponsesTool::WebSearch(_)
-        | ResponsesTool::FileSearch(_)
-        | ResponsesTool::CodeInterpreter(_)
-        | ResponsesTool::Shell(_)
-        | ResponsesTool::Unknown => false,
-    }
-}
-
 fn validate_effective_tool_choice(
     tool_choice: Option<&ToolChoice>,
     withheld_function_names: &HashSet<String>,
@@ -722,6 +626,7 @@ pub(crate) fn started_public_call(call: &FunctionToolCall) -> Result<ToolSearchC
         return Err(invalid_upstream_search_call());
     }
     Ok(ToolSearchCall {
+        agent: call.agent.clone(),
         id: public_item_id(&call.id),
         call_id: call.call_id.clone(),
         execution: crate::types::tools::ToolSearchExecution::Client,
@@ -798,6 +703,8 @@ pub(crate) fn strict_started_function(item: &Value) -> Result<FunctionToolCall, 
 
 #[derive(Debug, Deserialize)]
 struct StrictFunctionToolCall {
+    #[serde(default)]
+    agent: Option<crate::types::io::AgentAttribution>,
     id: String,
     call_id: String,
     name: String,
@@ -814,6 +721,7 @@ pub(crate) fn strict_function_call(item: &Value) -> Result<FunctionToolCall, Too
         return Err(invalid_upstream_search_call());
     }
     let call = FunctionToolCall {
+        agent: call.agent,
         id: call.id,
         call_id: call.call_id,
         name: call.name,
@@ -856,7 +764,7 @@ pub(crate) fn validate_blocking_response(
         .and_then(Value::as_str)
         .map_or(ResponseStatus::Completed, |status| status.parse().unwrap_or_default());
     let allow_unfinished = matches!(status, ResponseStatus::Error | ResponseStatus::Incomplete);
-    let mut saw_tool_search_call = false;
+    let mut call_ids = HashSet::new();
     for item in value.get("output").and_then(Value::as_array).into_iter().flatten() {
         if item.get("type").and_then(Value::as_str) == Some("function_call")
             && item
@@ -868,11 +776,10 @@ pub(crate) fn validate_blocking_response(
         }
         match item.get("type").and_then(Value::as_str) {
             Some("tool_search_call") => {
-                if saw_tool_search_call {
+                let call = strict_native_call(item.clone())?;
+                if !call_ids.insert(call.call_id.clone()) {
                     return Err(invalid_upstream_search_call());
                 }
-                saw_tool_search_call = true;
-                let call = strict_native_call(item.clone())?;
                 if !allow_unfinished && call.status != ToolSearchStatus::Completed {
                     return Err(invalid_upstream_search_call());
                 }
@@ -880,11 +787,10 @@ pub(crate) fn validate_blocking_response(
             Some("function_call")
                 if tool_search_enabled && item.get("name").and_then(Value::as_str) == Some(TOOL_SEARCH_NAME) =>
             {
-                if saw_tool_search_call {
+                let call = strict_function_call(item)?;
+                if !call_ids.insert(call.call_id.clone()) {
                     return Err(invalid_upstream_search_call());
                 }
-                saw_tool_search_call = true;
-                let call = strict_function_call(item)?;
                 if !allow_unfinished && call.status != MessageStatus::Completed {
                     return Err(invalid_upstream_search_call());
                 }
@@ -1079,7 +985,7 @@ fn prepare_history(
         return Ok(input.clone());
     };
     let mut private_items = Vec::with_capacity(items.len());
-    let mut unresolved_call: Option<PendingSearchCall> = None;
+    let mut unresolved_calls = HashSet::new();
     let mut completed_call_ids = HashSet::new();
     let mut item_ids = HashSet::new();
     let DefinitionViews {
@@ -1106,7 +1012,7 @@ fn prepare_history(
             InputItem::ToolSearchCall(call) => {
                 private_items.push(prepare_search_call(
                     call,
-                    &mut unresolved_call,
+                    &mut unresolved_calls,
                     &completed_call_ids,
                     &mut item_ids,
                 )?);
@@ -1114,7 +1020,7 @@ fn prepare_history(
             InputItem::ToolSearchOutput(output) => {
                 private_items.push(prepare_search_output(
                     output,
-                    &mut unresolved_call,
+                    &mut unresolved_calls,
                     &mut completed_call_ids,
                     &mut definition_accumulator,
                 )?);
@@ -1125,6 +1031,7 @@ fn prepare_history(
             }
             InputItem::CompactionTrigger => {}
             InputItem::Message(_)
+            | InputItem::CodeInterpreterCall(_)
             | InputItem::McpListTools(_)
             | InputItem::FunctionCallOutput(_)
             | InputItem::CustomToolCall(_)
@@ -1133,11 +1040,14 @@ fn prepare_history(
             | InputItem::ShellCallOutput(_)
             | InputItem::Reasoning(_)
             | InputItem::Compaction(_)
+            | InputItem::MultiAgentCall(_)
+            | InputItem::MultiAgentCallOutput(_)
+            | InputItem::AgentMessage(_)
             | InputItem::Unknown => private_items.push(item.clone()),
         }
     }
 
-    if unresolved_call.is_some() {
+    if !unresolved_calls.is_empty() {
         return Err(ToolError::Config(
             "unresolved tool_search_call requires a matching completed tool_search_output".to_owned(),
         ));
@@ -1190,7 +1100,7 @@ fn withheld_function_history_call() -> ToolError {
 
 fn prepare_search_call(
     call: &InputToolSearchCall,
-    unresolved_call: &mut Option<PendingSearchCall>,
+    unresolved_calls: &mut HashSet<String>,
     completed_call_ids: &HashSet<String>,
     item_ids: &mut HashSet<String>,
 ) -> Result<InputItem, ToolError> {
@@ -1205,20 +1115,13 @@ fn prepare_search_call(
     if !item_ids.insert(call.id.clone()) {
         return Err(ToolError::Config("duplicate tool_search_call item id".to_owned()));
     }
-    if unresolved_call.is_some() {
-        return Err(ToolError::Config(
-            "ambiguous tool-search history contains a call before the preceding call is resolved".to_owned(),
-        ));
-    }
-    if completed_call_ids.contains(call.call_id.as_str()) {
+    if completed_call_ids.contains(call.call_id.as_str()) || !unresolved_calls.insert(call.call_id.clone()) {
         return Err(ToolError::Config("duplicate tool_search_call call_id".to_owned()));
     }
     let canonical_arguments = serialize_to_string(&call.arguments)
         .map_err(|_| ToolError::Config("tool_search_call arguments could not be canonicalized safely".to_owned()))?;
-    *unresolved_call = Some(PendingSearchCall {
-        call_id: call.call_id.clone(),
-    });
     Ok(InputItem::FunctionCall(InputFunctionToolCall {
+        agent: call.agent.clone(),
         id: Some(call.id.clone()),
         call_id: call.call_id.clone(),
         name: TOOL_SEARCH_NAME.to_owned(),
@@ -1230,7 +1133,7 @@ fn prepare_search_call(
 
 fn prepare_search_output(
     output: &ToolSearchOutputMessage,
-    unresolved_call: &mut Option<PendingSearchCall>,
+    unresolved_calls: &mut HashSet<String>,
     completed_call_ids: &mut HashSet<String>,
     definition_accumulator: &mut DefinitionAccumulator<'_>,
 ) -> Result<InputItem, ToolError> {
@@ -1242,14 +1145,9 @@ fn prepare_search_output(
     if completed_call_ids.contains(output.call_id.as_str()) {
         return Err(ToolError::Config("duplicate tool_search_output call_id".to_owned()));
     }
-    let Some(pending) = unresolved_call.take() else {
+    if !unresolved_calls.remove(&output.call_id) {
         return Err(ToolError::Config(
-            "orphan tool_search_output has no unresolved call".to_owned(),
-        ));
-    };
-    if pending.call_id != output.call_id {
-        return Err(ToolError::Config(
-            "tool_search_output call_id does not match the preceding unresolved call".to_owned(),
+            "tool_search_output has no matching unresolved call_id".to_owned(),
         ));
     }
     if output.status != ToolSearchStatus::Completed {

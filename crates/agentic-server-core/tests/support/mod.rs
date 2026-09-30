@@ -22,7 +22,7 @@ use tokio::task::JoinHandle;
 
 use agentic_core::executor::{BoxStream, ConversationHandler, ExecutionContext, ResponseHandler};
 use agentic_core::storage::{ConversationStore, DbPool, ResponseStore, create_pool_with_schema};
-use agentic_core::types::io::OutputItem;
+use agentic_core::types::io::{OutputItem, OutputMessageContent};
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload};
 
 #[derive(Debug, Deserialize)]
@@ -522,30 +522,14 @@ pub fn make_request(
     conversation_id: Option<String>,
 ) -> RequestPayload {
     RequestPayload {
-        model: "test-model".to_string(),
+        model: "test-model".into(),
         input: serde_json::from_value(serde_json::to_value(input).expect("serialize Responses input"))
             .expect("request should contain valid Responses input"),
-        instructions: None,
         previous_response_id,
         conversation_id,
-        tools: None,
-        tool_choice: None,
         stream,
         store,
-        include: None,
-        reasoning: None,
-        text: None,
-        temperature: None,
-        top_p: None,
-        max_output_tokens: None,
-        ignore_eos: None,
-        truncation: None,
-        metadata: None,
-        parallel_tool_calls: None,
-        prompt_cache_key: None,
-        service_tier: None,
-        cache_salt: None,
-        context_management: None,
+        ..Default::default()
     }
 }
 
@@ -583,8 +567,9 @@ pub fn output_text(payload: &ResponsePayload) -> String {
         .output
         .iter()
         .filter_map(|item| match item {
-            OutputItem::Message(msg) => Some(msg.content.iter().map(|c| c.text.as_str()).collect::<String>()),
+            OutputItem::Message(msg) => Some(msg.content.iter().map(OutputMessageContent::text).collect::<String>()),
             OutputItem::FunctionCall(_)
+            | OutputItem::CodeInterpreterCall(_)
             | OutputItem::ToolSearchCall(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::ShellCall(_)
@@ -593,6 +578,9 @@ pub fn output_text(payload: &ResponsePayload) -> String {
             | OutputItem::McpListTools(_)
             | OutputItem::Reasoning(_)
             | OutputItem::Compaction(_)
+            | OutputItem::MultiAgentCall(_)
+            | OutputItem::MultiAgentCallOutput(_)
+            | OutputItem::AgentMessage(_)
             | OutputItem::Unknown => None,
         })
         .collect::<String>()

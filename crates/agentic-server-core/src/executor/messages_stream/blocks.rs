@@ -3,8 +3,8 @@
 
 use serde_json::{Value, json};
 
-use super::GATEWAY_TOOL_TIMEOUT;
-use crate::executor::messages_request::web_search_budget_exhausted_result;
+use crate::executor::messages_context::MessagesRequestContext;
+use crate::executor::messages_tools::{self, GatewayToolUse};
 use crate::tool::ToolRegistry;
 use crate::types::messages::{GatewayToolResult, tool_seam};
 
@@ -20,6 +20,8 @@ pub(super) struct StreamedCall {
 /// the next round's history — F3. The client-facing SSE is still forwarded live;
 /// this is a parallel record for the fed-back conversation state.
 pub(super) struct BufferedBlock {
+    /// Whether this block received its upstream `content_block_stop`.
+    pub(super) closed: bool,
     /// The `content_block` skeleton from `content_block_start`, mutated by deltas.
     pub(super) block: Value,
     /// Accumulated `input_json_delta` fragments for a `tool_use` block.
@@ -68,42 +70,27 @@ fn append_str(block: &mut Value, field: &str, fragment: Option<&Value>) {
     block[field] = Value::from(combined);
 }
 
-/// Execute reconstructed gateway calls (concurrent, per-call timeout). Errors
-/// become error `tool_result`s (E5).
+/// Execute reconstructed gateway calls through the dispatcher shared with the
+/// JSON loop. Errors become error `tool_result`s (E5).
 ///
 /// Returns one `tool_result` block per call, fed back next round. (The assistant
 /// turn — including each call's `tool_use` block — is reconstructed from the
 /// accumulator's buffered blocks in `MessagesStreamAccumulator::take_round`.)
 pub(super) async fn execute_gateway_calls(
     calls: &[StreamedCall],
+    ctx: &mut MessagesRequestContext,
     registry: &ToolRegistry,
     gateway_map: &tool_seam::GatewayToolMap,
-    allowed_searches: usize,
 ) -> Vec<GatewayToolResult> {
-    let futures = calls.iter().enumerate().map(|(index, c)| async move {
-        if index >= allowed_searches {
-            return web_search_budget_exhausted_result(&c.id);
-        }
-        // F4: reject a malformed/incomplete reconstructed input rather than
-        // coercing to {} and dispatching the tool with args the model never sent.
-        let (output, is_error) = match tool_seam::parse_tool_input(&c.input_json) {
-            Ok(input) => {
-                let call = tool_seam::tool_use_to_call(&c.id, &c.name, &input, gateway_map);
-                match tokio::time::timeout(GATEWAY_TOOL_TIMEOUT, registry.dispatch(&call)).await {
-                    Ok(Some(result)) => match result.output {
-                        Ok(o) => (o.output, false),
-                        Err(e) => (format!("tool execution failed: {e}"), true),
-                    },
-                    Ok(None) => (format!("no handler for tool '{}'", c.name), true),
-                    Err(_) => (
-                        format!("gateway tool '{}' timed out after {GATEWAY_TOOL_TIMEOUT:?}", c.name),
-                        true,
-                    ),
-                }
-            }
-            Err(reason) => (format!("{reason}; tool was not run"), true),
-        };
-        tool_seam::tool_result_block(&c.id, output, is_error)
-    });
-    futures::future::join_all(futures).await
+    let tool_uses = calls
+        .iter()
+        .map(|call| GatewayToolUse {
+            id: &call.id,
+            name: &call.name,
+            // F4: a malformed/incomplete reconstructed input is reported, never
+            // coerced to {} and dispatched with args the model never sent.
+            input: tool_seam::parse_tool_input(&call.input_json),
+        })
+        .collect();
+    messages_tools::execute_gateway_calls(tool_uses, ctx, registry, gateway_map).await
 }

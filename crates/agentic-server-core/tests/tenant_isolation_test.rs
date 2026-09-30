@@ -122,10 +122,9 @@ async fn test_conversation_create_with_initial_items() {
     let store = ConversationStore::new(pool);
 
     let initial_items = vec![InOutItem::Input(InputItem::Message(InputMessage {
-        id: None,
         role: "user".to_string(),
-        status: None,
         content: InputMessageContent::Text("Hello, world!".to_string()),
+        ..Default::default()
     }))];
 
     // Create conversation with initial items

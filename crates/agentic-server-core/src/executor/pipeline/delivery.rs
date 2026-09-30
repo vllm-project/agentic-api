@@ -1,14 +1,20 @@
 //! Ordered client delivery; no response assembly or tool-call translation lives here.
+use super::projection::{AgentRoundId, SourceProjection};
 use crate::events::{EventFrame, SSEEventType, WireEvent};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway::{
     emit_gateway_completed_events, emit_gateway_start_events, mcp_list_tools_event_plans, public_output_items,
 };
 use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent, emit_sse_frame_limited};
+use crate::executor::multi_agent::collaboration::attribution;
 use crate::executor::request::RequestContext;
 use crate::executor::translate::Translation;
 use crate::tool::ToolRegistry;
-use crate::utils::common::serialize_to_string;
+use crate::tool::mcp::handler::started_list_tools_output_item;
+use crate::types::agent::AgentIdentity;
+use crate::types::event::MessageStatus;
+use crate::types::io::{OutputItem, OutputMessageContent};
+use crate::utils::common::{serialize_to_string, serialize_to_value};
 use serde_json::Value;
 use tokio::sync::mpsc::Sender;
 
@@ -22,6 +28,7 @@ struct StreamEmitContext<'a> {
 }
 
 pub(super) struct StreamDelivery {
+    projection: SourceProjection,
     pub(super) accumulator: GatewayStreamAccumulator,
     pub(super) sender: Option<Sender<StreamEvent>>,
     defer_from_output_index: Option<u64>,
@@ -29,8 +36,12 @@ pub(super) struct StreamDelivery {
     deferred_bytes: usize,
 }
 impl StreamDelivery {
+    pub(super) fn has_live_agent_items(&self, agent: &AgentIdentity) -> bool {
+        self.projection.has_live_items(agent)
+    }
     pub(super) fn new(sender: Option<Sender<StreamEvent>>) -> Self {
         Self {
+            projection: SourceProjection::default(),
             accumulator: GatewayStreamAccumulator::new(),
             sender,
             defer_from_output_index: None,
@@ -43,6 +54,7 @@ impl StreamDelivery {
         max_stream_event_bytes: usize,
     ) -> Self {
         Self {
+            projection: SourceProjection::default(),
             accumulator: GatewayStreamAccumulator::with_max_stream_event_bytes(max_stream_event_bytes),
             sender,
             defer_from_output_index: None,
@@ -54,6 +66,76 @@ impl StreamDelivery {
         self.defer_from_output_index = None;
         self.deferred_bytes = 0;
         std::mem::take(&mut self.deferred_events)
+    }
+
+    pub(super) async fn accept_agent_frame(
+        &mut self,
+        source: &AgentRoundId,
+        mut frame: EventFrame,
+    ) -> ExecutorResult<()> {
+        if let Some(local) = frame.wire.output_index {
+            let index = if frame.event_type == SSEEventType::OutputItemAdded {
+                let item = frame
+                    .wire
+                    .rest
+                    .get_mut("item")
+                    .and_then(Value::as_object_mut)
+                    .ok_or_else(|| ExecutorError::StreamError("missing translated output item".into()))?;
+                let id = item
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| ExecutorError::StreamError("missing translated item ID".into()))?;
+                let index = self.projection.added(source, local, id)?;
+                item.insert(
+                    "agent".into(),
+                    serialize_to_value(&attribution(&source.agent)).map_err(ExecutorError::JsonError)?,
+                );
+                index
+            } else {
+                self.projection.index(source, local)?
+            };
+            frame.wire.output_index = Some(index as u64);
+        }
+        frame.wire.agent = Some(attribution(&source.agent));
+        if let Some(sender) = &self.sender {
+            emit_gateway_event(&mut frame, &mut self.accumulator, sender).await?;
+        }
+        Ok(())
+    }
+
+    pub(super) async fn emit_agent_item(&mut self, item: &OutputItem) -> ExecutorResult<usize> {
+        let index = item
+            .agent()
+            .zip(item.id())
+            .and_then(|(agent, id)| self.projection.take_item(&agent.agent_name, id));
+        if let Some(index) = index {
+            let mut frame = EventFrame::synthetic(
+                SSEEventType::OutputItemDone,
+                serde_json::Map::from_iter([
+                    ("output_index".into(), index.into()),
+                    (
+                        "item".into(),
+                        serialize_to_value(item).map_err(ExecutorError::JsonError)?,
+                    ),
+                ]),
+            )
+            .ok_or_else(|| ExecutorError::StreamError("missing item-done representation".into()))?;
+            frame.wire.agent = item.agent().cloned();
+            if let Some(sender) = &self.sender {
+                emit_gateway_event(&mut frame, &mut self.accumulator, sender).await?;
+            }
+            Ok(index)
+        } else {
+            let index = self.projection.reserve()?;
+            if let Some(sender) = &self.sender {
+                emit_materialized_item(item, index, &mut self.accumulator, sender).await?;
+            }
+            Ok(index)
+        }
+    }
+
+    pub(super) fn finish_agent_source(&mut self, source: &AgentRoundId) {
+        self.projection.finish_source(source);
     }
     pub(super) async fn accept(
         &mut self,
@@ -183,12 +265,100 @@ pub(in crate::executor) async fn emit_gateway_event(
     Ok(())
 }
 
+/// Project an already ingested completed item through the same delivery owner.
+/// Used by concurrent round work: no task owns the public sequence or terminal.
+pub(super) async fn emit_materialized_item(
+    item: &OutputItem,
+    output_index: usize,
+    accumulator: &mut GatewayStreamAccumulator,
+    sender: &Sender<StreamEvent>,
+) -> ExecutorResult<()> {
+    use serde_json::json;
+    let mut started = item.clone();
+    match &mut started {
+        OutputItem::Message(message) => {
+            message.content.clear();
+            message.status = MessageStatus::InProgress;
+        }
+        OutputItem::FunctionCall(call) => {
+            call.arguments.clear();
+            call.status = MessageStatus::InProgress;
+        }
+        OutputItem::McpListTools(item) => started = started_list_tools_output_item(item),
+        _ => {}
+    }
+    let mut events = vec![(
+        SSEEventType::OutputItemAdded,
+        json!({"output_index": output_index, "item": serialize_to_value(&started).map_err(ExecutorError::JsonError)?}),
+    )];
+    match item {
+        OutputItem::McpListTools(list) => {
+            events.push((
+                SSEEventType::McpListToolsInProgress,
+                json!({"output_index":output_index,"item_id":list.id}),
+            ));
+            events.push((
+                SSEEventType::McpListToolsCompleted,
+                json!({"output_index":output_index,"item_id":list.id}),
+            ));
+        }
+        OutputItem::Message(message) => {
+            for (content_index, part) in message.content.iter().enumerate() {
+                let mut added = part.clone();
+                match &mut added {
+                    OutputMessageContent::InputText(text) => text.text.clear(),
+                    OutputMessageContent::OutputText(text) => text.text.clear(),
+                }
+                events.push((SSEEventType::ContentPartAdded, json!({"output_index":output_index,"item_id":message.id,"content_index":content_index,"part":added})));
+                if let OutputMessageContent::OutputText(text) = part {
+                    events.push((SSEEventType::OutputTextDelta, json!({"output_index":output_index,"item_id":message.id,"content_index":content_index,"delta":text.text})));
+                    events.push((SSEEventType::OutputTextDone, json!({"output_index":output_index,"item_id":message.id,"content_index":content_index,"text":text.text})));
+                }
+                events.push((
+                    SSEEventType::ContentPartDone,
+                    json!({"output_index":output_index,"item_id":message.id,"content_index":content_index,"part":part}),
+                ));
+            }
+        }
+        OutputItem::FunctionCall(call) => {
+            events.push((
+                SSEEventType::FunctionCallArgumentsDelta,
+                json!({"output_index":output_index,"item_id":call.id,"delta":call.arguments}),
+            ));
+            events.push((
+                SSEEventType::FunctionCallArgumentsDone,
+                json!({"output_index":output_index,"item_id":call.id,"name":call.name,"arguments":call.arguments}),
+            ));
+        }
+        _ => {}
+    }
+    events.push((
+        SSEEventType::OutputItemDone,
+        json!({"output_index":output_index,"item":item}),
+    ));
+    for (kind, fields) in events {
+        let mut frame = EventFrame::synthetic(kind, fields.as_object().expect("event fields are an object").clone())
+            .ok_or_else(|| ExecutorError::StreamError("output event has no wire representation".into()))?;
+        frame.wire.agent = item.agent().cloned();
+        emit_gateway_event(&mut frame, accumulator, sender).await?;
+    }
+    Ok(())
+}
+
 async fn emit_client_frame(
     frame: &mut EventFrame,
     accumulator: &mut GatewayStreamAccumulator,
     sender: &Sender<StreamEvent>,
     output_offset: usize,
 ) -> ExecutorResult<bool> {
+    if let Some(sink) = &accumulator.agent_sink {
+        let mut frame = frame.clone();
+        if let Some(index) = &mut frame.wire.output_index {
+            *index += output_offset as u64;
+        }
+        sink.send(&frame, accumulator.max_stream_event_bytes()).await?;
+        return Ok(true);
+    }
     // Only three scalar fields are cloned. Commit presentation state after
     // enqueueing, not on a cancelled wait, closed receiver, or oversized event.
     let mut published = accumulator.clone();
@@ -292,6 +462,61 @@ fn apply_context_response_ids(wire: &mut WireEvent, ctx: &RequestContext) {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn synthetic_gateway_items_share_public_indexes_with_upstream_items() {
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(16);
+        let mut delivery = StreamDelivery::new(Some(sender));
+        for (index, name, kind) in [
+            (0, "root", "reasoning"),
+            (1, "mcp", "mcp_call"),
+            (2, "web", "web_search_call"),
+        ] {
+            let agent = if name == "root" {
+                AgentIdentity::root()
+            } else {
+                AgentIdentity::root().child(name).unwrap()
+            };
+            let source = AgentRoundId { agent, round: 0 };
+            let frame = EventFrame::synthetic(
+                SSEEventType::OutputItemAdded,
+                serde_json::json!({"output_index":1,"item":{"id":name,"type":kind}})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+            delivery.accept_agent_frame(&source, frame).await.unwrap();
+            let event = receiver.try_recv().unwrap();
+            let frame = event
+                .content
+                .lines()
+                .find_map(crate::events::normalize_sse_line)
+                .unwrap();
+            assert_eq!(frame.wire.output_index, Some(index));
+            assert_eq!(frame.wire.rest["item"]["agent"]["agent_name"], source.agent.as_str());
+            assert_eq!(
+                delivery.projection.take_item(source.agent.as_str(), name),
+                Some(usize::try_from(index).unwrap())
+            );
+            let frame = EventFrame::synthetic(
+                SSEEventType::McpCallInProgress,
+                serde_json::json!({"output_index":1,"item_id":name})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+            .unwrap();
+            delivery.accept_agent_frame(&source, frame).await.unwrap();
+            let event = receiver.try_recv().unwrap();
+            let frame = event
+                .content
+                .lines()
+                .find_map(crate::events::normalize_sse_line)
+                .unwrap();
+            assert_eq!(frame.wire.output_index, Some(index));
+            delivery.finish_agent_source(&source);
+        }
+    }
     use super::*;
     use crate::events::EventPayload;
     use crate::executor::upstream::tests::request_context;

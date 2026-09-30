@@ -2,12 +2,12 @@
 
 use indexmap::IndexMap;
 
-use super::active::StreamedPart;
+use super::active::MessagePart;
 use crate::events::EventPayload;
 use crate::types::io::output::McpListTools;
 use crate::types::io::{
-    CompactionItem, CustomToolCall, FunctionToolCall, McpCall, OutputMessage, ReasoningOutput, ShellCall,
-    ToolSearchCall, WebSearchCall,
+    CodeInterpreterCall, CompactionItem, CustomToolCall, FunctionToolCall, McpCall, OutputMessage, ReasoningOutput,
+    ShellCall, ToolSearchCall, WebSearchCall,
 };
 use crate::utils::uuid7_str;
 
@@ -20,8 +20,8 @@ pub(super) trait MergeDone<Context = (), Completed = Self> {
     fn merge_done(&mut self, done: &Completed, context: Context);
 }
 
-impl MergeDone<&mut IndexMap<u32, StreamedPart>> for OutputMessage {
-    fn merge_done(&mut self, done: &Self, parts: &mut IndexMap<u32, StreamedPart>) {
+impl MergeDone<&mut IndexMap<u32, MessagePart>> for OutputMessage {
+    fn merge_done(&mut self, done: &Self, parts: &mut IndexMap<u32, MessagePart>) {
         self.clone_from(done);
         parts.clear();
     }
@@ -106,6 +106,20 @@ impl MergeDone<&str, WebSearchCall> for Option<WebSearchCall> {
         if done.id.is_empty() {
             done.id = if item_id.is_empty() {
                 uuid7_str("ws_")
+            } else {
+                item_id.to_owned()
+            };
+        }
+        *self = Some(done);
+    }
+}
+
+impl MergeDone<&str, CodeInterpreterCall> for Option<CodeInterpreterCall> {
+    fn merge_done(&mut self, done: &CodeInterpreterCall, item_id: &str) {
+        let mut done = done.clone();
+        if done.id.is_empty() {
+            done.id = if item_id.is_empty() {
+                uuid7_str("ci_")
             } else {
                 item_id.to_owned()
             };

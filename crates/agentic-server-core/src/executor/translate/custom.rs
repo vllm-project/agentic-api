@@ -5,6 +5,8 @@ use crate::executor::accumulator::AccumulatedFunctionCall;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::synthetic_event;
 use crate::tool::custom::CustomToolMap;
+use crate::types::event::MessageStatus;
+use crate::types::io::{CustomToolCall, OutputItem};
 use crate::utils::common::serialize_to_value_or_custom_default;
 use serde_json::{Map, Value};
 
@@ -80,14 +82,14 @@ fn custom_added_frame(call: &AccumulatedFunctionCall<'_>) -> ExecutorResult<Even
         call.output_index,
         [(
             "item".to_owned(),
-            serde_json::json!({
-                "id": crate::tool::custom::public_item_id(&call.item.id),
-                "type": "custom_tool_call",
-                "status": "in_progress",
-                "call_id": call.item.call_id,
-                "input": "",
-                "name": call.item.name,
-            }),
+            serde_json::to_value(OutputItem::CustomToolCall(CustomToolCall {
+                agent: call.item.agent.clone(),
+                id: crate::tool::custom::public_item_id(&call.item.id),
+                status: Some(MessageStatus::InProgress),
+                call_id: call.item.call_id.clone(),
+                input: String::new(),
+                name: call.item.name.clone(),
+            }))?,
         )],
     )
 }
@@ -152,14 +154,14 @@ fn custom_done_frame(state: &CustomCallState, call: &AccumulatedFunctionCall<'_>
         state.output_index,
         [(
             "item".to_owned(),
-            serde_json::json!({
-                "id": state.public_item_id,
-                "type": "custom_tool_call",
-                "status": "completed",
-                "call_id": call.item.call_id,
-                "input": state.emitted_input,
-                "name": call.item.name,
-            }),
+            serde_json::to_value(OutputItem::CustomToolCall(CustomToolCall {
+                agent: call.item.agent.clone(),
+                id: state.public_item_id.clone(),
+                status: Some(MessageStatus::Completed),
+                call_id: call.item.call_id.clone(),
+                input: state.emitted_input.clone(),
+                name: call.item.name.clone(),
+            }))?,
         )],
     )
 }

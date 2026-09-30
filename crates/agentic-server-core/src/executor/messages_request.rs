@@ -6,22 +6,24 @@ use crate::executor::{ExecutorError, ExecutorResult};
 use crate::tool::web_search::web_search_function_tool;
 use crate::types::messages::tool_seam::{NATIVE_WEB_SEARCH_TYPE, WEB_SEARCH_EXECUTOR};
 
-/// Request-wide native web-search execution budget.
+/// Request-wide native web-search execution budget, counted in searches.
 #[derive(Debug)]
 pub(super) struct WebSearchBudget {
     remaining: Option<usize>,
 }
 
 impl WebSearchBudget {
-    /// Reserve up to `requested` searches and return how many may execute.
-    pub(super) fn reserve(&mut self, requested: usize) -> usize {
+    /// Admit one call that would perform `searches` searches. The call runs only
+    /// when the remaining budget covers all of them; a refused call leaves the
+    /// budget untouched, so a later call that fits may still run.
+    pub(super) fn admit(&mut self, searches: usize) -> bool {
         match &mut self.remaining {
+            Some(remaining) if searches > *remaining => false,
             Some(remaining) => {
-                let allowed = requested.min(*remaining);
-                *remaining -= allowed;
-                allowed
+                *remaining -= searches;
+                true
             }
-            None => requested,
+            None => true,
         }
     }
 }

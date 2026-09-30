@@ -27,6 +27,7 @@ impl ShellHandler {
     pub(crate) fn output_item_with_status(call: &FunctionToolCall, status: ShellCallStatus) -> Option<OutputItem> {
         let action = deserialize_from_str::<ShellCallAction>(&call.arguments).ok()?;
         Some(OutputItem::ShellCall(ShellCall {
+            agent: call.agent.clone(),
             id: Some(public_item_id(&call.id)),
             call_id: call.call_id.clone(),
             action,
@@ -157,6 +158,7 @@ mod tests {
     #[test]
     fn normalized_function_call_restores_shell_call() {
         let call = FunctionToolCall {
+            agent: None,
             id: "fc_123".to_owned(),
             call_id: "call_123".to_owned(),
             name: SHELL_FUNCTION_NAME.to_owned(),
@@ -171,13 +173,17 @@ mod tests {
         assert_eq!(shell.id.as_deref(), Some("sh_123"));
         assert_eq!(shell.call_id, "call_123");
         assert_eq!(shell.action.commands, ["pwd"]);
-        assert_eq!(shell.action.timeout_ms, Some(1000));
+        assert_eq!(
+            shell.action.timeout_ms,
+            Some(crate::types::io::ShellCallLimit::Value(1000))
+        );
         assert_eq!(shell.status, Some(ShellCallStatus::Completed));
     }
 
     #[test]
     fn malformed_function_arguments_are_not_restored() {
         let call = FunctionToolCall {
+            agent: None,
             id: "fc_123".to_owned(),
             call_id: "call_123".to_owned(),
             name: SHELL_FUNCTION_NAME.to_owned(),

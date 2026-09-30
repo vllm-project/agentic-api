@@ -1,0 +1,111 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Use the python tool to calculate the sum of the squares of the integers
+        from 1 through 10. The code must print exactly CODE_INTERPRETER_OK=385. After
+        it runs, answer exactly CODE_INTERPRETER_OK=385.
+      max_output_tokens: 2048
+      model: Qwen/Qwen3.6-35B-A3B
+      parallel_tool_calls: false
+      store: false
+      stream: false
+      tool_choice: required
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1790324502
+      error: null
+      id: resp_01a0d7a7-dd1b-7803-8b45-e06fd1ef06de
+      incomplete_details: null
+      instructions: null
+      model: Qwen/Qwen3.6-35B-A3B
+      object: response
+      output:
+      - content:
+        - text: 'The user wants to calculate the sum of squares of integers from 1
+            to 10.
+
+            The expected result is 385.
+
+            I need to write a Python script that calculates this and prints "CODE_INTERPRETER_OK=385".
+
+            Then I will output exactly "CODE_INTERPRETER_OK=385".
+
+
+            Sum of squares formula: n(n+1)(2n+1)/6.
+
+            For n=10: 10*11*21/6 = 10*11*3.5 = 10 * 38.5 = 385.
+
+
+            Let''s write a simple Python script to compute this and print the exact
+            string.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0d7a7-e269-7472-8048-b6c6f981d5d5
+        status: null
+        summary: []
+        type: reasoning
+      - code: 'result = sum(i**2 for i in range(1, 11))
+
+          print(f"CODE_INTERPRETER_OK={result}")'
+        container_id: cntr_01a0d7a7-e276-7da2-a8ac-cb74c68ec843
+        id: ci_01a0d7a7-e276-7da2-a8ac-cb74c68ec843
+        outputs:
+        - logs: 'CODE_INTERPRETER_OK=385
+
+            '
+          type: logs
+        status: completed
+        type: code_interpreter_call
+      - content:
+        - text: 'The code executed successfully and printed "CODE_INTERPRETER_OK=385".
+
+            The user requested that after it runs, I answer exactly "CODE_INTERPRETER_OK=385".
+
+            I will output that exact string.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0d7a7-ee41-7662-b2b9-50bfdcf99558
+        status: null
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            CODE_INTERPRETER_OK=385'
+          type: output_text
+        id: msg_01a0d7a7-ee4b-78d2-a10f-47eb65f0a235
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: null
+      status: completed
+      usage:
+        input_tokens: 969
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 270
+        output_tokens_details:
+          reasoning_tokens: 200
+        total_tokens: 1239
+    headers:
+      content-type: application/json
+    status_code: 200

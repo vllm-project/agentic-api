@@ -66,6 +66,7 @@ impl From<SplitContext> for RequestContext {
             // Conversation mode is rejected, so there is no version to resume.
             conversation_version: None,
             continuation: None,
+            multi_agent_tree: None,
         }
     }
 }

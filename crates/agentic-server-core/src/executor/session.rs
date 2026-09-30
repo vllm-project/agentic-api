@@ -772,6 +772,7 @@ mod tests {
         let too_small = session(10, size - 1);
         let lease = too_small.begin(None).unwrap();
         let metadata = ResponseMetadata {
+            multi_agent_tree: None,
             effective_instructions: Some("large metadata".repeat(100)),
             ..ResponseMetadata::default()
         };
@@ -786,6 +787,7 @@ mod tests {
         let session = session(10, 10_000);
         let lease = session.begin(None).unwrap();
         let metadata = ResponseMetadata {
+            multi_agent_tree: None,
             effective_tools: Some(
                 serde_json::from_value(json!([{
                     "type":"mcp", "server_label":"counter", "server_url":"https://example.com/mcp",

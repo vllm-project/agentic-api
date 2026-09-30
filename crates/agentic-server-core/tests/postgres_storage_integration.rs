@@ -12,10 +12,9 @@ use tokio::time::timeout;
 
 fn input_item(text: &str) -> InOutItem {
     InOutItem::Input(InputItem::Message(InputMessage {
-        id: None,
         role: "user".to_owned(),
-        status: None,
         content: InputMessageContent::Text(text.to_owned()),
+        ..Default::default()
     }))
 }
 

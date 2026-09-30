@@ -8,6 +8,7 @@
 //! block indices stay contiguous across rounds, and no raw per-round terminal
 //! leaks.
 
+use std::fmt::Write as _;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -19,6 +20,7 @@ use agentic_core::storage::{ConversationStore, ResponseStore};
 use agentic_core::tool::{ToolRegistry, WebSearchHandler};
 use agentic_core::types::messages::{GatewayToolMap, ToolParam, registry_tools};
 use axum::extract::State;
+use axum::http::Uri;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -432,6 +434,229 @@ async fn messages_stream_hides_a_gateway_call_on_a_terminal_round() {
     }
 }
 
+/// One upstream SSE round whose assistant turn is the gateway calls `calls`
+/// (`tool_use` id and input), or the final answer when there are none.
+fn round_stream(calls: &[(&str, Value)]) -> String {
+    let mut events = vec![serde_json::json!({"type":"message_start", "message":{
+        "id":"m", "type":"message", "role":"assistant", "model":"qwen3", "content":[],
+        "stop_reason":null, "usage":{"input_tokens":5, "output_tokens":0}}})];
+    for (index, (id, input)) in calls.iter().enumerate() {
+        events.extend([
+            serde_json::json!({"type":"content_block_start", "index":index,
+                "content_block":{"type":"tool_use", "id":id, "name":"web_search", "input":{}}}),
+            serde_json::json!({"type":"content_block_delta", "index":index,
+                "delta":{"type":"input_json_delta", "partial_json":input.to_string()}}),
+            serde_json::json!({"type":"content_block_stop", "index":index}),
+        ]);
+    }
+    if calls.is_empty() {
+        events.extend([
+            serde_json::json!({"type":"content_block_start", "index":0, "content_block":{"type":"text", "text":""}}),
+            serde_json::json!({"type":"content_block_delta", "index":0, "delta":{"type":"text_delta", "text":"Done."}}),
+            serde_json::json!({"type":"content_block_stop", "index":0}),
+        ]);
+    }
+    events.extend([
+        serde_json::json!({"type":"message_delta", "usage":{"output_tokens":3},
+            "delta":{"stop_reason":if calls.is_empty() { "end_turn" } else { "tool_use" }}}),
+        serde_json::json!({"type":"message_stop"}),
+    ]);
+    events.iter().fold(String::new(), |mut body, event| {
+        write!(body, "data: {event}\n\n").unwrap();
+        body
+    })
+}
+
+/// Streaming half of the JSON loop's native web-search budget tests. Returns the
+/// queries the search backend received, sorted, and for every tool round the
+/// error text of each fed-back result (`None` for a search that ran).
+async fn streamed_search_outcomes(
+    max_uses: Option<u64>,
+    turns: &[Vec<(&str, Value)>],
+) -> (Vec<String>, Vec<Vec<Option<String>>>) {
+    let mut streams: Vec<String> = turns.iter().map(|calls| round_stream(calls)).collect();
+    streams.push(round_stream(&[]));
+    let (vllm_url, upstream, _v) = spawn_mock_vllm_stream(streams).await;
+    let searched = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let recorded = Arc::clone(&searched);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let search_url = format!("http://{}", listener.local_addr().unwrap());
+    let app = Router::new().route(
+        "/v1/search",
+        get(move |uri: Uri| {
+            let query = url::form_urlencoded::parse(uri.query().unwrap_or_default().as_bytes())
+                .find(|(key, _)| key == "query")
+                .map(|(_, value)| value.into_owned())
+                .expect("query");
+            recorded.lock().unwrap().push(query);
+            async { Json(serde_json::json!({"results":{"web":[],"news":[]}})) }
+        }),
+    );
+    let _search = tokio::spawn(async move {
+        axum::serve(listener, app).await.ok();
+    });
+    let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
+    let mut request = serde_json::json!({
+        "model": "qwen3", "max_tokens": 1024, "stream": true,
+        "messages": [{"role": "user", "content": "Search."}],
+        "tools": [{"type": "web_search_20250305", "name": "web_search"}]
+    });
+    if let Some(max_uses) = max_uses {
+        request["tools"][0]["max_uses"] = max_uses.into();
+    }
+    let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
+    let mut params = registry_tools(Some(&tools), &GatewayToolMap::default());
+    let mut executors = exec_ctx.gateway_executors.clone();
+    let registry = Arc::new(
+        ToolRegistry::build_with_handlers(&mut params, &mut executors)
+            .await
+            .unwrap(),
+    );
+
+    let sse = run_test_messages_stream(request, registry, Arc::clone(&exec_ctx))
+        .await
+        .collect::<Vec<_>>()
+        .await
+        .join("");
+    assert!(sse.contains("Done."), "final answer reaches the client:\n{sse}");
+    assert!(!sse.contains("event: error"), "the turn completes:\n{sse}");
+    assert!(
+        !sse.contains(r#""type":"tool_use""#),
+        "gateway calls stay hidden:\n{sse}"
+    );
+    for kind in ["message_start", "message_delta", "message_stop"] {
+        assert_eq!(sse.matches(&format!("event: {kind}")).count(), 1, "one {kind}");
+    }
+
+    let mut searched = searched.lock().unwrap().clone();
+    searched.sort();
+    let requests = upstream.requests.lock().await;
+    assert_eq!(
+        requests.len(),
+        turns.len() + 1,
+        "one inference follows every tool round"
+    );
+    let outcomes = requests[1..]
+        .iter()
+        .map(|request| {
+            request["messages"]
+                .as_array()
+                .and_then(|messages| messages.last())
+                .and_then(|message| message["content"].as_array())
+                .expect("tool results fed back")
+                .iter()
+                .map(|result| {
+                    result["is_error"]
+                        .as_bool()
+                        .expect("is_error")
+                        .then(|| result["content"].as_str().expect("error text").to_owned())
+                })
+                .collect()
+        })
+        .collect();
+    (searched, outcomes)
+}
+
+const MAX_USES_EXCEEDED: &str = "web_search max_uses exceeded; search was not run";
+
+/// `max_uses` limits the searches performed on the streaming path too: a
+/// batched call is charged for every query and refused whole when the budget
+/// cannot cover it, while a later call that fits still runs.
+#[tokio::test]
+async fn messages_stream_max_uses_counts_every_batched_query() {
+    let (searched, outcomes) = streamed_search_outcomes(
+        Some(2),
+        &[
+            vec![
+                ("t1", serde_json::json!({"queries": ["a one", "a two", "a three"]})),
+                ("t2", serde_json::json!({"query": "b one"})),
+                ("t3", serde_json::json!({"queries": ["c one", "c two"]})),
+            ],
+            vec![("t4", serde_json::json!({"query": "d one"}))],
+            vec![("t5", serde_json::json!({"query": "e one"}))],
+        ],
+    )
+    .await;
+
+    assert_eq!(searched, ["b one", "d one"], "max_uses=2 allows exactly two searches");
+    let exceeded = Some(MAX_USES_EXCEEDED.to_owned());
+    assert_eq!(
+        outcomes,
+        [
+            vec![exceeded.clone(), None, exceeded.clone()],
+            vec![None],
+            vec![exceeded]
+        ]
+    );
+}
+
+/// The streaming path had no `max_uses` coverage: one search per call is
+/// limited exactly as on the JSON path.
+#[tokio::test]
+async fn messages_stream_enforces_max_uses() {
+    let (searched, outcomes) = streamed_search_outcomes(
+        Some(1),
+        &[vec![
+            ("t1", serde_json::json!({"query": "rust one"})),
+            ("t2", serde_json::json!({"query": "rust two"})),
+        ]],
+    )
+    .await;
+    assert_eq!(searched, ["rust one"]);
+    assert_eq!(outcomes, [vec![None, Some(MAX_USES_EXCEEDED.to_owned())]]);
+}
+
+/// A call with malformed arguments performs no search, so it must not use up
+/// the budget of one that can run.
+#[tokio::test]
+async fn messages_stream_malformed_calls_do_not_use_the_budget() {
+    let (searched, outcomes) = streamed_search_outcomes(
+        Some(1),
+        &[vec![
+            ("t1", serde_json::json!({"queries": []})),
+            ("t2", serde_json::json!("not an object")),
+            ("t3", serde_json::json!({"query": "kept"})),
+        ]],
+    )
+    .await;
+    assert_eq!(searched, ["kept"]);
+    assert_eq!(
+        outcomes,
+        [vec![
+            Some(
+                "tool execution failed: invalid tool config: web_search requires a non-empty query or queries"
+                    .to_owned()
+            ),
+            Some("tool arguments must be a JSON object; tool was not run".to_owned()),
+            None
+        ]]
+    );
+}
+
+/// Controls: a batch the budget covers runs in full, and a request without
+/// `max_uses` is not limited.
+#[tokio::test]
+async fn messages_stream_budget_admits_what_fits() {
+    let (searched, outcomes) = streamed_search_outcomes(
+        Some(3),
+        &[vec![("t1", serde_json::json!({"queries": ["a", "b", "c"]}))]],
+    )
+    .await;
+    assert_eq!(searched, ["a", "b", "c"]);
+    assert_eq!(outcomes, [vec![None]]);
+
+    let (searched, outcomes) = streamed_search_outcomes(
+        None,
+        &[vec![
+            ("t1", serde_json::json!({"queries": ["a", "b", "c", "d", "e"]})),
+            ("t2", serde_json::json!({"query": "f"})),
+        ]],
+    )
+    .await;
+    assert_eq!(searched, ["a", "b", "c", "d", "e", "f"]);
+    assert_eq!(outcomes, [vec![None, None]]);
+}
+
 #[tokio::test]
 async fn messages_stream_multiround_single_lifecycle() {
     let (vllm_url, upstream, _v) = spawn_mock_vllm_stream(streams_at(MULTIROUND)).await;
@@ -620,4 +845,282 @@ async fn messages_stream_preserves_claude_code_cache_control_across_rounds() {
         serde_json::json!({"type": "ephemeral", "ttl": "1h"})
     );
     assert!(requests[1]["tools"][0].get("cache_control").is_none());
+}
+
+/// A terminal `stop_reason` or transport `[DONE]` cannot substitute for `message_stop`.
+#[tokio::test]
+async fn incomplete_rounds_never_dispatch_tools_or_report_success() {
+    for tool in [false, true] {
+        for terminal_delta in [false, true] {
+            for done_marker in [false, true] {
+                let block = if tool {
+                    serde_json::json!({"type":"tool_use", "id":"search", "name":"web_search", "input":{}})
+                } else {
+                    serde_json::json!({"type":"text", "text":""})
+                };
+                let mut events = vec![
+                    serde_json::json!({"type":"message_start", "message":{"id":"m"}}),
+                    serde_json::json!({"type":"content_block_start", "index":0, "content_block":block}),
+                ];
+                if tool {
+                    events.push(serde_json::json!({"type":"content_block_delta", "index":0,
+                        "delta":{"type":"input_json_delta", "partial_json":"{\"query\":\"rust\"}"}}));
+                }
+                events.push(serde_json::json!({"type":"content_block_stop", "index":0}));
+                if terminal_delta {
+                    events.push(serde_json::json!({"type":"message_delta", "delta":{
+                        "stop_reason":if tool { "tool_use" } else { "end_turn" }
+                    }}));
+                }
+                let mut body = String::new();
+                for event in events {
+                    write!(body, "data: {event}\n\n").unwrap();
+                }
+                if done_marker {
+                    body.push_str("data: [DONE]\n\n");
+                }
+                assert_failed_stream(vec![body], 0, "message_stop").await;
+            }
+        }
+    }
+    assert_failed_stream(vec![String::new()], 0, "message_stop").await;
+    // A completed tool round must not make an incomplete later round successful.
+    assert_failed_stream(
+        vec![cassette_turn_streams().remove(0), String::new()],
+        1,
+        "message_stop",
+    )
+    .await;
+}
+
+async fn assert_failed_stream(streams: Vec<String>, expected_searches: usize, expected_error: &str) {
+    let (vllm_url, upstream, vllm) = spawn_mock_vllm_stream(streams).await;
+    let searches = Arc::new(AtomicUsize::new(0));
+    let search_calls = Arc::clone(&searches);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let search_url = format!("http://{}", listener.local_addr().unwrap());
+    let app = Router::new().route(
+        "/v1/search",
+        get(move || {
+            search_calls.fetch_add(1, Ordering::SeqCst);
+            async { Json(serde_json::json!({"results":{"web":[],"news":[]}})) }
+        }),
+    );
+    let search = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
+    let request = serde_json::json!({
+        "model":"test", "max_tokens":64, "stream":true,
+        "messages":[{"role":"user", "content":"Search"}],
+        "tools":[{"name":"web_search", "input_schema":{"type":"object"}}]
+    });
+    let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
+    let mut params = registry_tools(Some(&tools), &GatewayToolMap::default());
+    let mut handlers = exec_ctx.gateway_executors.clone();
+    let registry = Arc::new(
+        ToolRegistry::build_with_handlers(&mut params, &mut handlers)
+            .await
+            .unwrap(),
+    );
+    let stream = run_test_messages_stream(request, registry, exec_ctx).await;
+    let sse = tokio::time::timeout(std::time::Duration::from_secs(5), stream.collect::<Vec<_>>())
+        .await
+        .expect("finite incomplete stream")
+        .join("");
+    vllm.abort();
+    search.abort();
+    let _ = tokio::join!(vllm, search);
+
+    assert_eq!(
+        searches.load(Ordering::SeqCst),
+        expected_searches,
+        "no tool execution from incomplete round"
+    );
+    assert_eq!(
+        upstream.calls.load(Ordering::SeqCst),
+        expected_searches + 1,
+        "no continuation after EOF"
+    );
+    assert!(!sse.contains("DO_NOT_ECHO"), "error must not expose upstream content");
+    assert_eq!(sse.matches("event: error").count(), 1, "one error: {sse}");
+    assert!(sse.contains(expected_error), "expected error missing: {sse}");
+    assert!(!sse.contains("event: message_stop"), "no successful completion: {sse}");
+    assert!(
+        !sse.contains("event: message_delta"),
+        "no successful terminal metadata: {sse}"
+    );
+}
+
+#[tokio::test]
+async fn messages_stream_rejects_malformed_json_before_tools_or_completion() {
+    let invalid = "data: {\"private\":\"DO_NOT_ECHO\",\n\n";
+    let streams = cassette_turn_streams();
+    for (index, body) in streams.iter().enumerate() {
+        let damaged = body.replacen("event: message_stop", &format!("{invalid}event: message_stop"), 1);
+        assert_ne!(&damaged, body, "fixture contains a terminal");
+        let mut rounds = streams[..index].to_vec();
+        rounds.push(damaged);
+        assert_failed_stream(rounds, index, "invalid JSON in upstream Messages stream").await;
+    }
+}
+
+#[tokio::test]
+async fn messages_stream_ignores_well_formed_unknown_events() {
+    let streams = cassette_turn_streams()
+        .into_iter()
+        .map(|body| format!("data: {{\"type\":\"future_event\",\"extension\":1}}\n\n: heartbeat\n\n{body}"))
+        .collect();
+    assert_messages_stream_presents_one_message(streams).await;
+}
+
+#[tokio::test]
+async fn messages_stream_rejects_terminal_with_open_content_blocks() {
+    let streams = cassette_turn_streams();
+    for (round, body) in streams.iter().enumerate() {
+        let frames: Vec<&str> = body.split_inclusive("\n\n").collect();
+        let stops: Vec<usize> = frames
+            .iter()
+            .enumerate()
+            .filter_map(|(index, frame)| {
+                frame
+                    .lines()
+                    .filter_map(|line| line.strip_prefix("data: "))
+                    .filter_map(|data| serde_json::from_str::<Value>(data).ok())
+                    .any(|event| event["type"] == "content_block_stop")
+                    .then_some(index)
+            })
+            .collect();
+        assert!(!stops.is_empty(), "fixture has completed blocks");
+        for stop in stops {
+            let damaged: String = frames
+                .iter()
+                .enumerate()
+                .filter_map(|(index, frame)| (index != stop).then_some(*frame))
+                .collect();
+            let mut rounds = streams[..round].to_vec();
+            rounds.push(damaged);
+            assert_failed_stream(rounds, round, "open content blocks").await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn messages_stream_rejects_invalid_block_transitions_before_dispatch() {
+    use serde_json::json;
+    let start = json!({"type":"content_block_start", "index":0, "content_block":{
+        "type":"tool_use", "id":"search", "name":"web_search", "input":{}}});
+    let delta = json!({"type":"content_block_delta", "index":0, "delta":{
+        "type":"input_json_delta", "partial_json":"{\"query\":\"rust\"}"}});
+    let stop = json!({"type":"content_block_stop", "index":0});
+    let mut cases = vec![
+        vec![start.clone(), start.clone(), delta.clone(), stop.clone()],
+        vec![delta.clone(), start.clone(), stop.clone()],
+        vec![stop.clone(), start.clone(), delta.clone(), stop.clone()],
+        vec![start.clone(), delta.clone(), stop.clone(), delta.clone()],
+        vec![start.clone(), delta.clone(), stop.clone(), stop.clone()],
+        vec![start.clone(), delta.clone(), stop.clone(), start.clone(), stop.clone()],
+    ];
+    for event in [&start, &delta, &stop] {
+        for invalid_index in [Value::Null, json!(-1), json!("0")] {
+            let mut bad = event.clone();
+            bad["index"] = invalid_index;
+            cases.push(vec![bad]);
+        }
+        let mut missing = event.clone();
+        missing.as_object_mut().unwrap().remove("index");
+        cases.push(vec![missing]);
+    }
+    for events in cases {
+        let mut body = format!("data: {}\n\n", json!({"type":"message_start", "message":{"id":"m"}}));
+        for event in events {
+            write!(body, "data: {event}\n\n").unwrap();
+        }
+        for event in [
+            json!({"type":"message_delta", "delta":{"stop_reason":"tool_use"}}),
+            json!({"type":"message_stop"}),
+        ] {
+            write!(body, "data: {event}\n\n").unwrap();
+        }
+        assert_failed_stream(vec![body], 0, "invalid content block").await;
+    }
+}
+
+#[tokio::test]
+async fn messages_stream_rejects_invalid_identifiers_before_dispatch() {
+    use serde_json::json;
+    for field in ["message_id", "tool_id", "tool_name"] {
+        for invalid in [None, Some(Value::Null), Some(json!(42)), Some(json!(""))] {
+            let mut start = json!({"type":"message_start", "message":{"id":"m"}});
+            let mut tool = json!({"type":"content_block_start", "index":0, "content_block":{
+                "type":"tool_use", "id":"search", "name":"web_search", "input":{}}});
+            let (object, key) = match field {
+                "message_id" => (&mut start["message"], "id"),
+                "tool_id" => (&mut tool["content_block"], "id"),
+                _ => (&mut tool["content_block"], "name"),
+            };
+            if let Some(value) = invalid {
+                object[key] = value;
+            } else {
+                object.as_object_mut().unwrap().remove(key);
+            }
+            let mut body = String::new();
+            for event in [
+                start,
+                tool,
+                json!({"type":"content_block_delta", "index":0, "delta":{
+                    "type":"input_json_delta", "partial_json":"{\"query\":\"rust\"}"}}),
+                json!({"type":"content_block_stop", "index":0}),
+                json!({"type":"message_delta", "delta":{"stop_reason":"tool_use"}}),
+                json!({"type":"message_stop"}),
+            ] {
+                write!(body, "data: {event}\n\n").unwrap();
+            }
+            assert_failed_stream(vec![body], 0, "invalid identifier").await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn messages_stream_rejects_duplicate_message_starts_in_each_round() {
+    let streams = cassette_turn_streams();
+    for (round, body) in streams.iter().enumerate() {
+        let start = body
+            .split_inclusive("\n\n")
+            .find(|frame| frame.contains("event: message_start"))
+            .expect("fixture has a message start");
+        for before_terminal in [false, true] {
+            let damaged = if before_terminal {
+                body.replacen("event: message_stop", &format!("{start}event: message_stop"), 1)
+            } else {
+                body.replacen(start, &format!("{start}{start}"), 1)
+            };
+            let mut rounds = streams[..round].to_vec();
+            rounds.push(damaged);
+            assert_failed_stream(rounds, round, "duplicate message_start").await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn messages_stream_requires_message_start_in_each_round() {
+    let streams = cassette_turn_streams();
+    for (round, body) in streams.iter().enumerate() {
+        let start = body
+            .split_inclusive("\n\n")
+            .find(|frame| frame.contains("event: message_start"))
+            .expect("fixture has a message start");
+        let mut rounds = streams[..round].to_vec();
+        rounds.push(body.replacen(start, "", 1));
+        assert_failed_stream(rounds, round, "before message_start").await;
+    }
+    for kind in [
+        "content_block_delta",
+        "content_block_stop",
+        "message_delta",
+        "message_stop",
+    ] {
+        let body = format!("data: {}\n\n", serde_json::json!({"type":kind, "index":0}));
+        assert_failed_stream(vec![body], 0, "before message_start").await;
+    }
 }

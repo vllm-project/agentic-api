@@ -1,4 +1,4 @@
-use super::{RequestPayload, ResponseTextFormat};
+use super::{MultiAgentConfig, RequestPayload, ResponseTextFormat};
 use utoipa::openapi::schema::{AllOfBuilder, ArrayBuilder, ObjectBuilder, OneOfBuilder, SchemaType, Type};
 use utoipa::openapi::{Ref, RefOr};
 
@@ -81,6 +81,7 @@ impl utoipa::PartialSchema for RequestPayload {
             .property("temperature", nullable_num())
             .property("top_p", nullable_num())
             .property("max_output_tokens", nullable_int())
+            .property("max_tool_calls", nullable_int())
             .property("ignore_eos", nullable_bool())
             .property("truncation", nullable_str())
             .property(
@@ -90,6 +91,12 @@ impl utoipa::PartialSchema for RequestPayload {
             .property("parallel_tool_calls", nullable_bool())
             .property("prompt_cache_key", nullable_str())
             .property("service_tier", nullable_str())
+            .property(
+                "multi_agent",
+                OneOfBuilder::new()
+                    .item(<MultiAgentConfig as utoipa::PartialSchema>::schema())
+                    .item(null_type()),
+            )
             .property("cache_salt", nullable_str())
             .property(
                 "context_management",

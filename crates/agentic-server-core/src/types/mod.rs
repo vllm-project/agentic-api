@@ -1,3 +1,5 @@
+pub mod agent;
+pub mod client_calls;
 pub mod conversations;
 pub mod event;
 pub mod io;
@@ -10,7 +12,8 @@ pub use conversations::{
     ItemResponse, ListItemsResponse, UpdateConversationRequest,
 };
 pub use io::{
-    AllowedTool, AllowedToolsMode, CompactionItem, CustomToolCall, CustomToolCallOutputMessage, FunctionTool,
+    AllowedTool, AllowedToolsMode, CodeInterpreterCall, CodeInterpreterCallOutput, CodeInterpreterCallStatus,
+    CodeInterpreterCallStreamEvent, CompactionItem, CustomToolCall, CustomToolCallOutputMessage, FunctionTool,
     FunctionToolCall, FunctionToolResultMessage, GatewayCallStatus, InputContent, InputFileContent,
     InputFunctionToolCall, InputImageContent, InputItem, InputMessage, InputMessageContent, InputTextContent,
     InputTokenDetails, InputToolSearchCall, McpCall, McpCallError, McpCallStatus, McpToolExecutionError,
@@ -25,8 +28,12 @@ pub use request_response::{
     ResponsePayload, ResponseTextConfig, ResponseTextFormat, UpstreamRequest, UpstreamTool,
 };
 pub use tools::{
-    CodeInterpreterToolParam, CodexNamespaceMember, CodexNamespaceToolParam, CustomToolParam, EmptyToolNameError,
-    FileSearchToolParam, FunctionToolParam, LocalShellEnvironment, McpToolParam, NonEmptyToolName, ResponsesTool,
-    ShellEnvironment, ShellToolParam, ToolSearchExecution, ToolSearchStatus, ToolSearchToolParam, WebSearchContextSize,
-    WebSearchFilters, WebSearchToolParam, WebSearchUserLocation,
+    CodeInterpreterCallArguments, CodeInterpreterCallArgumentsError, CodeInterpreterToolParam, CodexNamespaceMember,
+    CodexNamespaceToolParam, CustomToolParam, EmptyToolNameError, FileSearchToolParam, FunctionToolParam,
+    LocalShellEnvironment, McpToolParam, NonEmptyToolName, ResponsesTool, ShellEnvironment, ShellToolParam,
+    ToolSearchExecution, ToolSearchStatus, ToolSearchToolParam, WebSearchContextSize, WebSearchFilters,
+    WebSearchToolParam, WebSearchUserLocation,
 };
+
+pub mod agent_commands;
+pub mod agent_tree;

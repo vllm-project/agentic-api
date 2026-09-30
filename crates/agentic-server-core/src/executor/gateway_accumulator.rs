@@ -1,12 +1,14 @@
 use crate::config::DEFAULT_MAX_STREAM_EVENT_BYTES;
 use crate::events::{EventFrame, EventPayload, SSEEventType, WireEvent, normalize_sse_line};
 use crate::executor::error::{ExecutorError, ExecutorResult};
+use crate::executor::pipeline::AgentFrameSink;
 use crate::types::request_response::ResponsePayload;
 use crate::utils::common::{serialize_to_string, serialize_to_value};
 use serde_json::Value;
 
 #[derive(Clone)]
 pub struct GatewayStreamAccumulator {
+    pub(super) agent_sink: Option<AgentFrameSink>,
     next_sequence_number: u64,
     emitted_created: bool,
     emitted_in_progress: bool,
@@ -33,6 +35,7 @@ impl GatewayStreamAccumulator {
     #[must_use]
     pub fn with_max_stream_event_bytes(max_stream_event_bytes: usize) -> Self {
         Self {
+            agent_sink: None,
             next_sequence_number: 0,
             emitted_created: false,
             emitted_in_progress: false,
@@ -47,6 +50,14 @@ impl GatewayStreamAccumulator {
     pub fn process_sse_line(&mut self, line: &str, output_offset: usize) -> Option<EventFrame> {
         let mut frame = normalize_sse_line(line)?;
         self.process_event(&mut frame, output_offset).then_some(frame)
+    }
+
+    /// Sequence number that the next successfully enqueued event will receive.
+    ///
+    /// Typed gateway event construction may use this value, but
+    /// [`Self::process_event`] remains the authority that stamps and advances it.
+    pub(crate) const fn upcoming_sequence_number(&self) -> u64 {
+        self.next_sequence_number
     }
 
     #[must_use]

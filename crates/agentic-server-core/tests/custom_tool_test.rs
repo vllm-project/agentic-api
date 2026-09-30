@@ -70,7 +70,7 @@ fn output_text(output: &[OutputItem]) -> String {
                 message
                     .content
                     .iter()
-                    .map(|content| content.text.as_str())
+                    .map(agentic_core::types::io::OutputMessageContent::text)
                     .collect::<String>(),
             ),
             _ => None,

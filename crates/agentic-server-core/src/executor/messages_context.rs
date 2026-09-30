@@ -213,9 +213,11 @@ impl MessagesRequestContext {
         self.raw["stream"] = Value::Bool(streaming);
     }
 
-    /// Reserve up to `requested` native web searches, returning how many may run.
-    pub(super) fn reserve_searches(&mut self, requested: usize) -> usize {
-        self.web_search_budget.reserve(requested)
+    /// Admit one gateway call that would perform `searches` native web
+    /// searches. `max_uses` limits searches, so a batched call is charged for
+    /// every query and is refused whole when the budget cannot cover it.
+    pub(super) fn admit_searches(&mut self, searches: usize) -> bool {
+        self.web_search_budget.admit(searches)
     }
 
     /// Whether a finished round permits executing its gateway calls.
@@ -393,9 +395,27 @@ mod tests {
     #[test]
     fn budget_is_shared_across_rounds() {
         let mut ctx = MessagesRequestContext::from_value(request()).unwrap();
-        assert_eq!(ctx.reserve_searches(1), 1);
-        assert_eq!(ctx.reserve_searches(3), 1, "max_uses caps the request-wide total");
-        assert_eq!(ctx.reserve_searches(1), 0);
+        assert!(ctx.admit_searches(1));
+        assert!(
+            !ctx.admit_searches(3),
+            "a batch the budget cannot cover is refused whole"
+        );
+        assert!(
+            ctx.admit_searches(1),
+            "a refused call leaves the budget for one that fits"
+        );
+        assert!(!ctx.admit_searches(1), "max_uses caps the request-wide total");
+        assert!(ctx.admit_searches(0), "a call that performs no search is never charged");
+    }
+
+    #[test]
+    fn requests_without_max_uses_are_not_limited() {
+        let mut body = request();
+        body["tools"][0].as_object_mut().unwrap().remove("max_uses");
+        let mut ctx = MessagesRequestContext::from_value(body).unwrap();
+        for searches in [5, 5, 5] {
+            assert!(ctx.admit_searches(searches));
+        }
     }
 
     #[test]

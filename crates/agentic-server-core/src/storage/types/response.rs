@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::super::models::Response as StorageDbResponse;
 use super::errors::StorageError;
+use crate::types::agent_tree::StoredTreeSnapshot;
 use crate::types::io::ToolChoice;
 use crate::types::request_response::ResponsePayload;
 use crate::types::tools::ResponsesTool;
@@ -14,6 +15,8 @@ use crate::utils::common::serialize_to_string;
 /// Response metadata with effective configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ResponseMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multi_agent_tree: Option<StoredTreeSnapshot>,
     /// Exact terminal Responses payload, absent for legacy and non-Responses records.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response_snapshot: Option<Box<ResponsePayload>>,
@@ -135,6 +138,7 @@ mod tests {
     #[test]
     fn test_response_metadata_serialization() {
         let metadata = ResponseMetadata {
+            multi_agent_tree: None,
             model: "gpt-4".to_string(),
             previous_response_id: Some("resp_1".to_string()),
             effective_tools: None,
@@ -148,6 +152,23 @@ mod tests {
         assert!(json_str.contains("gpt-4"));
         assert!(json_str.contains("resp_1"));
         assert!(json_str.contains("be helpful"));
+    }
+
+    #[test]
+    fn code_interpreter_openai_declaration_round_trips_through_metadata_serialization() {
+        let declaration = serde_json::json!({"type": "code_interpreter", "container": {"type": "auto"}});
+        let tool = serde_json::from_value(declaration.clone()).expect("OpenAI tool declaration");
+        let metadata = ResponseMetadata {
+            effective_tools: Some(vec![tool]),
+            ..ResponseMetadata::default()
+        };
+
+        let serialized = String::try_from(&metadata).expect("stored metadata");
+        let stored: ResponseMetadata = serde_json::from_str(&serialized).expect("rehydrated metadata");
+        assert_eq!(
+            serde_json::to_value(stored.effective_tools).expect("stored tools"),
+            serde_json::json!([declaration])
+        );
     }
 
     #[test]
@@ -194,6 +215,7 @@ mod tests {
             tool_choice: None,
         };
         let metadata = ResponseMetadata {
+            multi_agent_tree: None,
             effective_tools: Some(vec![tool]),
             tool_search_loaded_tools: None,
             response_snapshot: Some(Box::new(snapshot)),

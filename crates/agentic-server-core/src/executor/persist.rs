@@ -154,6 +154,7 @@ pub(crate) async fn persist_prepared_turn(
     resp_handler: &ResponseHandler,
 ) -> ExecutorResult<()> {
     let mut metadata = ResponseMetadata {
+        multi_agent_tree: None,
         model: std::mem::take(&mut ctx.enriched_request.model),
         previous_response_id: ctx.original_request.previous_response_id.take(),
         effective_tools: ctx.enriched_request.tools.take(),
@@ -165,6 +166,15 @@ pub(crate) async fn persist_prepared_turn(
     if let Some(tool_search_metadata) = tool_search_metadata {
         metadata.effective_tools = tool_search_metadata.effective_tools;
         metadata.tool_search_loaded_tools = Some(tool_search_metadata.loaded_tools);
+    }
+    if let Some(tree) = ctx.multi_agent_tree.take() {
+        let committed = if ctx.original_request.conversation_id.is_some() {
+            Box::pin(conv_handler.commit_tree(ctx, output_items, metadata, tree)).await?
+        } else {
+            Box::pin(resp_handler.commit_tree(ctx, output_items, metadata, tree)).await?
+        };
+        tracing::debug!(response_id = %committed.response_id, "committed response and agent tree");
+        return Ok(());
     }
     if ctx.original_request.conversation_id.is_some() {
         conv_handler

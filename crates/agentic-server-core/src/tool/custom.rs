@@ -88,6 +88,7 @@ impl CustomHandler {
     #[must_use]
     pub(crate) fn output_item(call: &FunctionToolCall) -> OutputItem {
         OutputItem::CustomToolCall(CustomToolCall {
+            agent: call.agent.clone(),
             id: public_item_id(&call.id),
             status: Some(call.status),
             call_id: call.call_id.clone(),
@@ -214,6 +215,7 @@ mod tests {
     #[test]
     fn function_fallback_uses_public_custom_tool_shape() {
         let call = FunctionToolCall {
+            agent: None,
             id: "fc_1".to_owned(),
             call_id: "call_1".to_owned(),
             name: "raw_echo".to_owned(),

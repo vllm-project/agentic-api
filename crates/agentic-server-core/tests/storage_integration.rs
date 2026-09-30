@@ -14,10 +14,9 @@ use support::setup_pool;
 
 fn create_input_item(text: &str) -> InOutItem {
     InOutItem::Input(InputItem::Message(InputMessage {
-        id: None,
         role: "user".to_string(),
-        status: None,
         content: InputMessageContent::Text(text.to_string()),
+        ..Default::default()
     }))
 }
 
@@ -262,6 +261,7 @@ async fn zero_item_turn_advances_version_and_retains_exact_metadata() -> Result<
     let conversation = store.create().await?;
     let empty = store.rehydrate_snapshot(&conversation.conversation_id).await?;
     let first_metadata = ResponseMetadata {
+        multi_agent_tree: None,
         model: "first-zero-item-turn".to_owned(),
         ..ResponseMetadata::default()
     };
@@ -304,6 +304,7 @@ async fn zero_item_turn_advances_version_and_retains_exact_metadata() -> Result<
             None,
             Vec::new(),
             &ResponseMetadata {
+                multi_agent_tree: None,
                 model: "second-zero-item-turn".to_owned(),
                 ..ResponseMetadata::default()
             },
@@ -1161,12 +1162,14 @@ async fn test_tool_search_conversation_conflict_does_not_persist_stale_loaded_st
     }))
     .expect("stale tool");
     let winning = ResponseMetadata {
+        multi_agent_tree: None,
         model: "winner".to_owned(),
         effective_tools: Some(vec![winning_tool.clone()]),
         tool_search_loaded_tools: Some(vec![winning_tool]),
         ..ResponseMetadata::default()
     };
     let stale = ResponseMetadata {
+        multi_agent_tree: None,
         model: "stale".to_owned(),
         effective_tools: Some(vec![stale_tool.clone()]),
         tool_search_loaded_tools: Some(vec![stale_tool]),

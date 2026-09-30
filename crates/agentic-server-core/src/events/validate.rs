@@ -2,7 +2,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value};
 use thiserror::Error;
 
-use super::{EventFrame, SSEEventType, SSEItemType};
+use super::{EventFrame, EventPayload, SSEEventType, SSEItemType};
 use crate::types::io::OutputItem;
 
 #[derive(Debug, Error)]
@@ -18,7 +18,8 @@ pub(crate) struct ValidatedFrame<'a> {
 pub(crate) struct ValidatedItem<'a> {
     pub(crate) item_id: &'a str,
     pub(crate) output_index: u32,
-    pub(crate) item_type: SSEItemType,
+    /// None for shared content events whose owner is resolved by the accumulator.
+    pub(crate) item_type: Option<SSEItemType>,
     pub(crate) done_item: Option<OutputItem>,
 }
 
@@ -46,16 +47,27 @@ pub(crate) fn validate_frame(frame: &EventFrame) -> Result<ValidatedFrame<'_>, E
         SSEEventType::OutputItemDone => {
             validate_output_item(frame, event_name, true).map(|item| ValidatedFrame { item: Some(item) })
         }
-        SSEEventType::Other => Ok(ValidatedFrame { item: None }),
+        SSEEventType::Keepalive | SSEEventType::Other => Ok(ValidatedFrame { item: None }),
         event_type => {
             let output_index = required_output_index(frame, event_name)?;
             let item_id = validate_event_item_id(frame, event_name)?;
             validate_event_fields(&frame.wire.rest, event_type, event_name)?;
-            let item_type = expected_item_type(event_type).ok_or_else(|| {
-                invalid(format!(
+            if event_type == SSEEventType::ContentPartDone
+                && !matches!(frame.payload, EventPayload::ContentPartDone { .. })
+            {
+                return Err(invalid("invalid completed content part"));
+            }
+            let item_type = expected_item_type(frame);
+            if item_type.is_none()
+                && !matches!(
+                    event_type,
+                    SSEEventType::ContentPartAdded | SSEEventType::ContentPartDone
+                )
+            {
+                return Err(invalid(format!(
                     "upstream output item type for event '{event_name}' is unsupported"
-                ))
-            })?;
+                )));
+            }
             Ok(ValidatedFrame {
                 item: Some(ValidatedItem {
                     item_id,
@@ -68,12 +80,9 @@ pub(crate) fn validate_frame(frame: &EventFrame) -> Result<ValidatedFrame<'_>, E
     }
 }
 
-pub(crate) fn expected_item_type(event_type: SSEEventType) -> Option<SSEItemType> {
-    match event_type {
-        SSEEventType::OutputTextDelta
-        | SSEEventType::OutputTextDone
-        | SSEEventType::ContentPartAdded
-        | SSEEventType::ContentPartDone => Some(SSEItemType::Message),
+pub(crate) fn expected_item_type(frame: &EventFrame) -> Option<SSEItemType> {
+    match frame.event_type {
+        SSEEventType::OutputTextDelta | SSEEventType::OutputTextDone => Some(SSEItemType::Message),
         SSEEventType::FunctionCallArgumentsDelta | SSEEventType::FunctionCallArgumentsDone => {
             Some(SSEItemType::FunctionCall)
         }
@@ -92,6 +101,11 @@ pub(crate) fn expected_item_type(event_type: SSEEventType) -> Option<SSEItemType
         SSEEventType::WebSearchCallInProgress
         | SSEEventType::WebSearchCallSearching
         | SSEEventType::WebSearchCallCompleted => Some(SSEItemType::WebSearchCall),
+        SSEEventType::CodeInterpreterCallInProgress
+        | SSEEventType::CodeInterpreterCallCodeDelta
+        | SSEEventType::CodeInterpreterCallCodeDone
+        | SSEEventType::CodeInterpreterCallInterpreting
+        | SSEEventType::CodeInterpreterCallCompleted => Some(SSEItemType::CodeInterpreterCall),
         SSEEventType::McpCallInProgress
         | SSEEventType::McpCallArgumentsDelta
         | SSEEventType::McpCallArgumentsDone
@@ -100,7 +114,9 @@ pub(crate) fn expected_item_type(event_type: SSEEventType) -> Option<SSEItemType
         SSEEventType::McpListToolsInProgress
         | SSEEventType::McpListToolsCompleted
         | SSEEventType::McpListToolsFailed => Some(SSEItemType::McpListTools),
-        SSEEventType::ResponseCreated
+        SSEEventType::ContentPartAdded
+        | SSEEventType::ContentPartDone
+        | SSEEventType::ResponseCreated
         | SSEEventType::ResponseInProgress
         | SSEEventType::ResponseCompleted
         | SSEEventType::ResponseFailed
@@ -109,6 +125,7 @@ pub(crate) fn expected_item_type(event_type: SSEEventType) -> Option<SSEItemType
         | SSEEventType::OutputItemDone
         | SSEEventType::FileSearchCallSearching
         | SSEEventType::FileSearchCallCompleted
+        | SSEEventType::Keepalive
         | SSEEventType::Other => None,
     }
 }
@@ -173,10 +190,21 @@ fn validate_output_item<'a>(
     let item = required_object(&frame.wire.rest, "item", event_name)?;
     let (item_id, item_type) = output_item_identity(item, "output item")?;
     if !complete {
+        if item_type.is_collaboration()
+            && !matches!(
+                &frame.payload,
+                EventPayload::OutputItemAdded {
+                    initial_item: Some(_),
+                    ..
+                }
+            )
+        {
+            return Err(invalid("collaboration item has an invalid opening snapshot"));
+        }
         return Ok(ValidatedItem {
             item_id,
             output_index,
-            item_type,
+            item_type: Some(item_type),
             done_item: None,
         });
     }
@@ -196,7 +224,7 @@ fn validate_output_item<'a>(
     Ok(ValidatedItem {
         item_id,
         output_index,
-        item_type,
+        item_type: Some(item_type),
         done_item: Some(output),
     })
 }
@@ -248,11 +276,13 @@ fn validate_event_fields(
         | SSEEventType::ShellCallCommandDelta
         | SSEEventType::ReasoningTextDelta
         | SSEEventType::ReasoningSummaryTextDelta
-        | SSEEventType::McpCallArgumentsDelta => Some("delta"),
+        | SSEEventType::McpCallArgumentsDelta
+        | SSEEventType::CodeInterpreterCallCodeDelta => Some("delta"),
         SSEEventType::OutputTextDone | SSEEventType::ReasoningTextDone | SSEEventType::ReasoningSummaryTextDone => {
             Some("text")
         }
         SSEEventType::FunctionCallArgumentsDone | SSEEventType::McpCallArgumentsDone => Some("arguments"),
+        SSEEventType::CodeInterpreterCallCodeDone => Some("code"),
         SSEEventType::CustomToolCallInputDone => Some("input"),
         SSEEventType::ShellCallCommandAdded | SSEEventType::ShellCallCommandDone => Some("command"),
         SSEEventType::ContentPartAdded
@@ -274,12 +304,16 @@ fn validate_event_fields(
         | SSEEventType::WebSearchCallInProgress
         | SSEEventType::WebSearchCallSearching
         | SSEEventType::WebSearchCallCompleted
+        | SSEEventType::CodeInterpreterCallInProgress
+        | SSEEventType::CodeInterpreterCallInterpreting
+        | SSEEventType::CodeInterpreterCallCompleted
         | SSEEventType::McpCallInProgress
         | SSEEventType::McpCallCompleted
         | SSEEventType::McpCallFailed
         | SSEEventType::McpListToolsInProgress
         | SSEEventType::McpListToolsCompleted
         | SSEEventType::McpListToolsFailed
+        | SSEEventType::Keepalive
         | SSEEventType::Other => None,
     };
     if let Some(field) = required {

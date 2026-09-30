@@ -378,6 +378,170 @@ async fn native_web_search_enforces_max_uses() {
     assert!(results[1]["content"].as_str().unwrap_or_default().contains("max_uses"));
 }
 
+fn search_call(id: &str, input: Value) -> Value {
+    let mut call = serde_json::json!({"type": "tool_use", "id": id, "name": "web_search"});
+    call["input"] = input;
+    call
+}
+
+/// Run one native web-search request whose model turns are `turns` (each a list
+/// of `tool_use` blocks) followed by a final answer. Returns the queries the
+/// search backend received, sorted, and for every tool round the error text of
+/// each fed-back result (`None` for a search that ran).
+async fn native_search_outcomes(
+    max_uses: Option<u64>,
+    turns: &[Vec<Value>],
+) -> (Vec<String>, Vec<Vec<Option<String>>>) {
+    let mut bodies: Vec<Value> = turns
+        .iter()
+        .map(|calls| {
+            serde_json::json!({
+                "id": "m", "type": "message", "role": "assistant", "model": "qwen3", "content": calls,
+                "stop_reason": "tool_use", "usage": {"input_tokens": 5, "output_tokens": 3}
+            })
+        })
+        .collect();
+    bodies.push(serde_json::json!({
+        "id": "done", "type": "message", "role": "assistant", "model": "qwen3",
+        "content": [{"type": "text", "text": "Done."}],
+        "stop_reason": "end_turn", "usage": {"input_tokens": 5, "output_tokens": 3}
+    }));
+    let (vllm_url, upstream, _v) = spawn_mock_vllm_messages(bodies).await;
+    let (search_url, mut captured, _s) = spawn_mock_search().await;
+    let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
+    let mut request = serde_json::json!({
+        "model": "qwen3", "max_tokens": 1024, "stream": false,
+        "messages": [{"role": "user", "content": "Search."}],
+        "tools": [{"type": "web_search_20250305", "name": "web_search"}]
+    });
+    if let Some(max_uses) = max_uses {
+        request["tools"][0]["max_uses"] = max_uses.into();
+    }
+    let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
+    let registry = build_tool_registry(&tools, &exec_ctx).await;
+
+    let message = run_test_messages_loop(request, &registry, &exec_ctx)
+        .await
+        .expect("loop runs");
+    assert_eq!(message["content"][0]["text"], "Done.");
+
+    let mut searched = Vec::new();
+    while let Ok(search) = captured.try_recv() {
+        searched.push(search.body["query"].as_str().expect("query").to_owned());
+    }
+    searched.sort();
+    let requests = upstream.requests.lock().await;
+    assert_eq!(
+        requests.len(),
+        turns.len() + 1,
+        "one inference follows every tool round"
+    );
+    let outcomes = requests[1..]
+        .iter()
+        .map(|request| {
+            request["messages"]
+                .as_array()
+                .and_then(|messages| messages.last())
+                .and_then(|message| message["content"].as_array())
+                .expect("tool results fed back")
+                .iter()
+                .map(|result| {
+                    result["is_error"]
+                        .as_bool()
+                        .expect("is_error")
+                        .then(|| result["content"].as_str().expect("error text").to_owned())
+                })
+                .collect()
+        })
+        .collect();
+    (searched, outcomes)
+}
+
+const MAX_USES_EXCEEDED: &str = "web_search max_uses exceeded; search was not run";
+
+/// `max_uses` limits the searches performed, so a batched call is charged for
+/// every query. A call the remaining budget cannot cover is refused whole and
+/// leaves the budget for a later call that fits, in this round or the next.
+#[tokio::test]
+async fn native_web_search_max_uses_counts_every_batched_query() {
+    let (searched, outcomes) = native_search_outcomes(
+        Some(2),
+        &[
+            vec![
+                search_call("t1", serde_json::json!({"queries": ["a one", "a two", "a three"]})),
+                search_call("t2", serde_json::json!({"query": "b one"})),
+                search_call("t3", serde_json::json!({"queries": ["c one", "c two"]})),
+            ],
+            vec![search_call("t4", serde_json::json!({"query": "d one"}))],
+            vec![search_call("t5", serde_json::json!({"query": "e one"}))],
+        ],
+    )
+    .await;
+
+    assert_eq!(searched, ["b one", "d one"], "max_uses=2 allows exactly two searches");
+    let exceeded = Some(MAX_USES_EXCEEDED.to_owned());
+    assert_eq!(
+        outcomes,
+        [
+            vec![exceeded.clone(), None, exceeded.clone()],
+            vec![None],
+            vec![exceeded]
+        ]
+    );
+}
+
+/// A call with malformed arguments performs no search, so it must not use up
+/// the budget of one that can run.
+#[tokio::test]
+async fn native_web_search_malformed_calls_do_not_use_the_budget() {
+    let (searched, outcomes) = native_search_outcomes(
+        Some(1),
+        &[vec![
+            search_call("t1", serde_json::json!({"queries": []})),
+            search_call("t2", serde_json::json!("not an object")),
+            search_call("t3", serde_json::json!({"query": "kept"})),
+        ]],
+    )
+    .await;
+
+    assert_eq!(searched, ["kept"]);
+    assert_eq!(
+        outcomes,
+        [vec![
+            Some(
+                "tool execution failed: invalid tool config: web_search requires a non-empty query or queries"
+                    .to_owned()
+            ),
+            Some("invalid tool arguments (not a JSON object); tool was not run".to_owned()),
+            None
+        ]]
+    );
+}
+
+/// Controls: a batch the budget covers runs in full, and a request without
+/// `max_uses` is not limited.
+#[tokio::test]
+async fn native_web_search_budget_admits_what_fits() {
+    let (searched, outcomes) = native_search_outcomes(
+        Some(3),
+        &[vec![search_call("t1", serde_json::json!({"queries": ["a", "b", "c"]}))]],
+    )
+    .await;
+    assert_eq!(searched, ["a", "b", "c"]);
+    assert_eq!(outcomes, [vec![None]]);
+
+    let (searched, outcomes) = native_search_outcomes(
+        None,
+        &[vec![
+            search_call("t1", serde_json::json!({"queries": ["a", "b", "c", "d", "e"]})),
+            search_call("t2", serde_json::json!({"query": "f"})),
+        ]],
+    )
+    .await;
+    assert_eq!(searched, ["a", "b", "c", "d", "e", "f"]);
+    assert_eq!(outcomes, [vec![None, None]]);
+}
+
 // ── Repro tests for Maral's #131 review (currently FAILING — proves each bug) ──
 
 // F3: the assistant turn fed back on the next round must preserve preceding

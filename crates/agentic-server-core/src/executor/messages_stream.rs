@@ -17,6 +17,7 @@
 //! only the neutral tool layer via [`crate::types::messages::tool_seam`].
 
 mod blocks;
+mod ingestion;
 mod wire;
 use blocks::{BufferedBlock, StreamedCall, execute_gateway_calls};
 use wire::{error_sse, executor_error_sse, sse};
@@ -29,7 +30,6 @@ use futures::StreamExt;
 use serde_json::{Value, json};
 use tracing::Instrument as _;
 
-use crate::events::{ClassifiedSseLine, SseLine};
 use crate::executor::error::ExecutorResult;
 use crate::executor::inference::{BoxStream, response_lines, send_request};
 use crate::executor::messages_context::MessagesRequestContext;
@@ -39,12 +39,9 @@ use crate::executor::telemetry::{Api, ExecutionSpan, FailureCategory, Instrument
 use crate::proxy::processed_response_headers;
 use crate::tool::ToolRegistry;
 use crate::types::messages::tool_seam;
-use crate::utils::common::deserialize_from_str;
 
 // Shared with the non-streaming loop so the two Messages loops can't drift.
-use crate::executor::messages_loop::{
-    GATEWAY_TOOL_TIMEOUT, MAX_GATEWAY_TOOL_ROUNDS, MessagesResponse, MessagesUpstream,
-};
+use crate::executor::messages_loop::{MAX_GATEWAY_TOOL_ROUNDS, MessagesResponse, MessagesUpstream};
 
 /// Drive the streaming Messages-native loop, yielding Anthropic SSE lines for
 /// the client. Owns the multi-round → single-message accumulation.
@@ -180,9 +177,8 @@ fn messages_stream_body(
                 for out in acc.push(&line) {
                     yield out;
                 }
-                if acc.has_upstream_error() {
-                    // The upstream `error` event was forwarded to the client.
-                    execution.failed_with(FailureCategory::UpstreamError);
+                if acc.has_error() {
+                    execution.failed_with(acc.failure_category());
                     execution.delivered();
                     return;
                 }
@@ -210,12 +206,11 @@ fn messages_stream_body(
             // the gateway tool_use (F3, streaming half). The gateway calls are
             // derived from the same buffered blocks for dispatch.
             let (assistant_content, calls) = acc.take_round();
-            let allowed_searches = ctx.reserve_searches(calls.len());
             let tool_results = execute_gateway_calls(
                 &calls,
+                &mut ctx,
                 &registry,
                 &exec_ctx.messages_gateway_tools,
-                allowed_searches,
             ).await;
             if let Err(e) = ctx.append_round(&assistant_content, tool_results) {
                 execution.failed(&e);
@@ -237,6 +232,7 @@ enum RoundState {
     #[default]
     Active,
     Completed,
+    Failed,
     UpstreamError,
 }
 
@@ -245,6 +241,8 @@ enum RoundState {
 #[derive(Default)]
 struct MessagesStreamAccumulator {
     message_started: bool,
+    /// Whether the current upstream round has supplied its `message_start`.
+    round_started: bool,
     /// Next client-visible block index (contiguous across rounds).
     next_index: u32,
     /// Map upstream (per-round) block index → client index, for the blocks we
@@ -279,6 +277,7 @@ impl MessagesStreamAccumulator {
         self.blocks.clear();
         self.has_client_tool_use = false;
         self.round_state = RoundState::Active;
+        self.round_started = false;
         // F6: clear the previous round's terminal so a clean-EOF round can't
         // re-emit a stale stop_reason.
         self.final_message_delta = None;
@@ -320,9 +319,7 @@ impl MessagesStreamAccumulator {
             .final_message_delta
             .as_ref()
             .and_then(|event| event["delta"]["stop_reason"].as_str());
-        // Preserve clean-EOF behavior for ordinary tool_use rounds. The named
-        // end_turn compatibility case requires an explicit message_stop.
-        (self.has_completed_round() || stop_reason == Some("tool_use"))
+        self.has_completed_round()
             && self.gateway_call_count() > 0
             && !self.has_client_tool_use
             && ctx.is_tool_call_stop(
@@ -334,8 +331,15 @@ impl MessagesStreamAccumulator {
             )
     }
 
-    fn has_upstream_error(&self) -> bool {
-        self.round_state == RoundState::UpstreamError
+    fn has_error(&self) -> bool {
+        matches!(self.round_state, RoundState::Failed | RoundState::UpstreamError)
+    }
+
+    fn failure_category(&self) -> FailureCategory {
+        match self.round_state {
+            RoundState::UpstreamError => FailureCategory::UpstreamError,
+            RoundState::Active | RoundState::Completed | RoundState::Failed => FailureCategory::Stream,
+        }
     }
 
     /// The round's terminal `stop_reason`, while the `message_delta` that
@@ -350,123 +354,15 @@ impl MessagesStreamAccumulator {
         self.round_state == RoundState::Completed
     }
 
-    /// Translate one upstream SSE line into zero or more client SSE lines.
-    fn push(&mut self, line: &str) -> Vec<String> {
-        let ClassifiedSseLine::Data(data) = SseLine::parse(line) else {
-            return Vec::new();
-        };
-        let Ok(mut event) = deserialize_from_str::<Value>(data.as_str()) else {
-            return Vec::new();
-        };
-        match event.get("type").and_then(Value::as_str) {
-            Some("message_start") => self.on_message_start(&event),
-            Some("content_block_start") => self.on_block_start(&mut event),
-            Some("content_block_delta") => self.on_block_delta(&mut event),
-            Some("content_block_stop") => self.on_block_stop(&mut event),
-            Some("message_delta") => {
-                // Buffer as the (possibly) final terminal; suppress mid-loop.
-                self.usage.observe(event.get("usage"));
-                self.final_message_delta = Some(event);
-                Vec::new()
-            }
-            Some("error") => {
-                self.round_state = RoundState::UpstreamError;
-                vec![sse("error", &event)]
-            }
-            Some("message_stop") => {
-                self.round_state = RoundState::Completed;
-                // `finish` emits the single client-visible terminal at loop end.
-                Vec::new()
-            }
-            // Unknown events do not end the round.
-            _ => Vec::new(),
-        }
-    }
-
-    fn on_message_start(&mut self, event: &Value) -> Vec<String> {
-        // Later rounds' message_start is suppressed, but its usage still counts.
-        self.usage.observe(event["message"].get("usage"));
-        if self.message_started {
-            return Vec::new();
-        }
-        self.message_started = true;
-        vec![sse("message_start", event)]
-    }
-
-    fn on_block_start(&mut self, event: &mut Value) -> Vec<String> {
-        let up_index = event.get("index").and_then(Value::as_u64).unwrap_or(0);
-        let block_type = event["content_block"]["type"].as_str().unwrap_or_default();
-        let name = event["content_block"]["name"].as_str().unwrap_or_default();
-
-        // Buffer every block for history reconstruction (F3), preserving order.
-        let is_gateway_tool = block_type == "tool_use" && self.gateway_map.is_gateway_owned(name);
-        self.blocks.insert(
-            up_index,
-            BufferedBlock {
-                block: event["content_block"].clone(),
-                input_json: String::new(),
-                is_gateway_tool,
-            },
-        );
-
-        if block_type == "tool_use" {
-            if is_gateway_tool {
-                // Suppress gateway-owned tool_use from the client; it stays in the
-                // buffered history only and drives the loop.
-                self.suppressed_indices.insert(up_index);
-                return Vec::new();
-            }
-            // A client-owned tool_use: the client must execute it, so this round
-            // is terminal (E7). Forward it (below) and stop the loop.
-            self.has_client_tool_use = true;
-        }
-
-        // Forward with a rebased contiguous client index.
-        let client_index = self.next_index;
-        self.next_index += 1;
-        self.index_map.insert(up_index, client_index);
-        event["index"] = Value::from(client_index);
-        vec![sse("content_block_start", event)]
-    }
-
-    fn on_block_delta(&mut self, event: &mut Value) -> Vec<String> {
-        let up_index = event.get("index").and_then(Value::as_u64).unwrap_or(0);
-        // Accumulate the delta into the buffered block (for history — F3),
-        // regardless of whether it is forwarded to the client.
-        if let Some(buffered) = self.blocks.get_mut(&up_index) {
-            buffered.apply_delta(&event["delta"]);
-        }
-        // A suppressed gateway tool_use is not forwarded to the client (its
-        // input_json_delta was just buffered above).
-        if self.suppressed_indices.contains(&up_index) {
-            return Vec::new();
-        }
-        let Some(&client_index) = self.index_map.get(&up_index) else {
-            return Vec::new();
-        };
-        event["index"] = Value::from(client_index);
-        vec![sse("content_block_delta", event)]
-    }
-
-    fn on_block_stop(&mut self, event: &mut Value) -> Vec<String> {
-        let up_index = event.get("index").and_then(Value::as_u64).unwrap_or(0);
-        if self.suppressed_indices.contains(&up_index) {
-            return Vec::new();
-        }
-        let Some(&client_index) = self.index_map.get(&up_index) else {
-            return Vec::new();
-        };
-        event["index"] = Value::from(client_index);
-        vec![sse("content_block_stop", event)]
-    }
-
-    /// Emit the terminal `message_delta` + `message_stop` once, at loop end.
+    /// Emit completion only for an explicitly completed upstream round.
     fn finish(&mut self) -> Vec<String> {
+        if !self.has_completed_round() {
+            return vec![error_sse("upstream Messages stream ended before message_stop")];
+        }
         let mut out = Vec::new();
         if let Some(mut delta) = self.final_message_delta.take() {
-            // A completed client call requires client action, even when vLLM
-            // labels a named call end_turn. Do not hide truncation or clean EOF.
-            if self.has_client_tool_use && self.has_completed_round() && delta["delta"]["stop_reason"] == "end_turn" {
+            // A completed client call requires client action even when vLLM labels it end_turn.
+            if self.has_client_tool_use && delta["delta"]["stop_reason"] == "end_turn" {
                 delta["delta"]["stop_reason"] = json!("tool_use");
             }
             self.usage.finish(&mut delta);
@@ -602,6 +498,7 @@ mod tests {
         for completed in [false, true] {
             for reason in ["end_turn", "tool_use", "max_tokens", "stop_sequence", "future"] {
                 let mut acc = acc();
+                acc.push(&line(&message_start(0)));
                 acc.push(&line(
                     &json!({"type":"content_block_start", "index":0, "content_block":{
                         "type":"tool_use", "id":"client", "name":"client_echo", "input":{}
@@ -616,7 +513,14 @@ mod tests {
                     acc.push(&line(&json!({"type":"message_stop"})));
                 }
                 assert!(!acc.should_continue_loop(&context()));
-                if completed && reason == "end_turn" {
+                if !completed {
+                    assert_eq!(
+                        acc.finish(),
+                        vec![error_sse("upstream Messages stream ended before message_stop")]
+                    );
+                    continue;
+                }
+                if reason == "end_turn" {
                     terminal["delta"]["stop_reason"] = json!("tool_use");
                 }
                 assert_eq!(
@@ -645,6 +549,7 @@ mod tests {
             }))
             .unwrap();
             let mut acc = acc();
+            acc.push(&line(&message_start(0)));
             acc.push(&line(
                 &json!({"type":"content_block_start", "index":0, "content_block":{
                     "type":"tool_use", "id":"search", "name":"web_search", "input":{"query":"proof"}
@@ -791,6 +696,7 @@ mod tests {
         acc.push(&line(&json!({"type": "content_block_stop", "index": 1})));
         // round 2: text (upstream idx0) must map to client idx1
         acc.begin_round();
+        acc.push(&line(&message_start(0)));
         let out = acc.push(&line(
             &json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text"}}),
         ));
@@ -847,6 +753,7 @@ mod tests {
         ));
         // Round 2: text, but upstream ends with NO message_delta (cut short).
         acc.begin_round();
+        acc.push(&line(&message_start(0)));
         acc.push(&line(
             &json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text"}}),
         ));
@@ -855,6 +762,8 @@ mod tests {
         ));
         acc.push(&line(&json!({"type": "content_block_stop", "index": 0})));
         let out = acc.finish().join("");
+        assert!(out.contains("event: error"), "incomplete later round must fail: {out}");
+        assert!(!out.contains("event: message_stop"), "no synthetic completion: {out}");
         assert!(
             !out.contains(r#""stop_reason":"tool_use""#),
             "must not emit round 1's stale tool_use terminal: {out}"
@@ -932,9 +841,9 @@ mod tests {
         // reconstructed call is flagged invalid rather than silently dispatchable.
         let resolved = execute_gateway_calls(
             &calls,
+            &mut context(),
             &no_op_registry().await,
             &tool_seam::GatewayToolMap::default(),
-            calls.len(),
         )
         .await;
         let content = &resolved[0].content;

@@ -295,10 +295,32 @@ pub struct FileSearchToolParam {
     pub vector_store_ids: Option<Vec<String>>,
 }
 
-/// Parameters for a code interpreter tool (no required fields).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// The only `OpenAI` container selector supported by the gateway.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct CodeInterpreterToolParam {}
+#[serde(deny_unknown_fields)]
+pub struct CodeInterpreterAutoContainer {
+    #[serde(rename = "type")]
+    pub kind: CodeInterpreterAutoContainerType,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum CodeInterpreterAutoContainerType {
+    Auto,
+}
+
+/// Parameters for the gateway-executed code interpreter built-in tool.
+///
+/// Accepts only the `OpenAI` auto-container declaration. The gateway selects
+/// the executor; clients cannot supply a container ID or runtime settings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(deny_unknown_fields)]
+pub struct CodeInterpreterToolParam {
+    pub container: CodeInterpreterAutoContainer,
+}
 
 /// Parameters for the shell built-in tool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -418,7 +440,7 @@ pub enum CodexNamespaceMember {
 impl utoipa::PartialSchema for ResponsesTool {
     fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
         use utoipa::openapi::Ref;
-        use utoipa::openapi::schema::{AllOfBuilder, ObjectBuilder, SchemaType, Type};
+        use utoipa::openapi::schema::{AdditionalProperties, AllOfBuilder, ObjectBuilder, SchemaType, Type};
 
         fn tagged(type_value: &str, schema: &str) -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
             AllOfBuilder::new()
@@ -433,6 +455,23 @@ impl utoipa::PartialSchema for ResponsesTool {
                         .required("type"),
                 )
                 .item(Ref::from_schema_name(schema))
+                .into()
+        }
+
+        // Keep the tagged declaration in one closed object so its schema
+        // matches the serde tagged enum variant.
+        fn code_interpreter_tagged() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+            ObjectBuilder::new()
+                .property(
+                    "type",
+                    ObjectBuilder::new()
+                        .schema_type(SchemaType::new(Type::String))
+                        .enum_values(Some(["code_interpreter"])),
+                )
+                .property("container", Ref::from_schema_name("CodeInterpreterAutoContainer"))
+                .required("type")
+                .required("container")
+                .additional_properties(Some(AdditionalProperties::FreeForm(false)))
                 .into()
         }
 
@@ -461,7 +500,7 @@ impl utoipa::PartialSchema for ResponsesTool {
                     .item(Ref::from_schema_name("WebSearchToolParam")),
             )
             .item(tagged("file_search", "FileSearchToolParam"))
-            .item(tagged("code_interpreter", "CodeInterpreterToolParam"))
+            .item(code_interpreter_tagged())
             .item(tagged("shell", "ShellToolParam"))
             .item(tagged("namespace", "CodexNamespaceToolParam"))
             .item(tagged("custom", "CustomToolParam"))
@@ -829,10 +868,75 @@ mod tests {
 
     #[test]
     fn responses_tool_code_interpreter_round_trips() {
-        let json = serde_json::json!({"type": "code_interpreter"});
-        let tool: ResponsesTool = serde_json::from_value(json).unwrap();
+        let declaration = serde_json::json!({"type": "code_interpreter", "container": {"type": "auto"}});
+        let tool: ResponsesTool = serde_json::from_value(declaration.clone()).unwrap();
         assert!(matches!(tool, ResponsesTool::CodeInterpreter(_)));
-        assert_eq!(serde_json::to_value(&tool).unwrap()["type"], "code_interpreter");
+        assert_eq!(serde_json::to_value(&tool).unwrap(), declaration);
+    }
+
+    #[test]
+    fn code_interpreter_openai_reference_declaration_parses() {
+        let tools: Vec<ResponsesTool> = serde_json::from_str(include_str!(
+            "../../../tests/cassettes/code_interpreter/openai_tools.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(&tools).unwrap(),
+            serde_json::json!([{"type": "code_interpreter", "container": {"type": "auto"}}])
+        );
+    }
+
+    #[test]
+    fn code_interpreter_declaration_rejects_unknown_fields() {
+        let error = serde_json::from_value::<ResponsesTool>(serde_json::json!({
+            "type": "code_interpreter",
+            "container": {"type": "auto"},
+            "misspelled_execution": "gateway"
+        }))
+        .expect_err("closed declaration must reject unknown fields");
+
+        assert!(error.to_string().contains("unknown field"));
+    }
+
+    #[test]
+    fn code_interpreter_declaration_rejects_client_container_settings() {
+        for declaration in [
+            serde_json::json!({"type": "code_interpreter", "container": "cntr_client"}),
+            serde_json::json!({"type": "code_interpreter", "container": "auto"}),
+            serde_json::json!({"type": "code_interpreter", "container": {"id": "cntr_client"}}),
+            serde_json::json!({"type": "code_interpreter", "container": {"type": "auto", "file_ids": ["file_1"]}}),
+            serde_json::json!({"type": "code_interpreter", "container": {"type": "auto", "memory_limit": "4g"}}),
+            serde_json::json!({"type": "code_interpreter", "container": {"type": "auto"}, "container_id": "cntr_client"}),
+            serde_json::json!({"type": "code_interpreter", "container": {"type": "auto"}, "container_reuse": "cntr_client"}),
+            serde_json::json!({"type": "code_interpreter", "container": {"type": "auto"}, "runtime": {"packages": ["untrusted"]}}),
+        ] {
+            assert!(
+                serde_json::from_value::<ResponsesTool>(declaration.clone()).is_err(),
+                "client container or runtime settings must not deserialize: {declaration}"
+            );
+        }
+    }
+
+    #[test]
+    fn code_interpreter_declaration_requires_auto_container() {
+        let missing = serde_json::from_value::<ResponsesTool>(serde_json::json!({
+            "type": "code_interpreter"
+        }))
+        .expect_err("container is required");
+        assert!(missing.to_string().contains("missing field `container`"));
+
+        for declaration in [
+            serde_json::json!({"type": "code_interpreter", "execution": "gateway"}),
+            serde_json::json!({"type": "code_interpreter", "execution": "client"}),
+            serde_json::json!({"type": "code_interpreter", "container": null}),
+            serde_json::json!({"type": "code_interpreter", "execution": null, "container": {"type": "auto"}}),
+            serde_json::json!({"type": "code_interpreter", "execution": "gateway", "container": {"type": "auto"}}),
+        ] {
+            assert!(
+                serde_json::from_value::<ResponsesTool>(declaration).is_err(),
+                "only the auto-container declaration is accepted"
+            );
+        }
     }
 
     #[test]

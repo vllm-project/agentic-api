@@ -96,6 +96,7 @@ fn parse_tools_from_turn(cassette_file: &str, turn_idx: usize, turn: &Turn) -> V
 
 fn upstream_request_value(payload: RequestPayload, stream: bool) -> Value {
     let ctx = RequestContext {
+        multi_agent_tree: None,
         original_request: payload.clone(),
         enriched_request: payload,
         new_input_items: Vec::new(),

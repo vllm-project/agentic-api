@@ -648,7 +648,7 @@ fn synthetic_tool_search_emits_public_frames_but_accumulates_function_call() {
 }
 
 #[test]
-fn second_tool_search_call_is_rejected_across_native_and_synthetic_shapes() {
+fn duplicate_tool_search_call_id_is_rejected_across_native_and_synthetic_shapes() {
     let synthetic = |output_index: u32, suffix: &str| {
         serde_json::json!({
             "type": "response.output_item.added",
@@ -688,7 +688,8 @@ fn second_tool_search_call_is_rejected_across_native_and_synthetic_shapes() {
         ("native then synthetic", native(0, "first"), synthetic(1, "second")),
     ];
 
-    for (case, first, second) in cases {
+    for (case, first, mut second) in cases {
+        second["item"]["call_id"] = first["item"]["call_id"].clone();
         let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
         let context = test_context(HashMap::from([("tool_search".to_owned(), ToolType::ToolSearch)]));
         let mut translator = TranslationDispatcher::new(context);
@@ -710,7 +711,7 @@ fn second_tool_search_call_is_rejected_across_native_and_synthetic_shapes() {
 }
 
 #[test]
-fn terminal_output_rejects_multiple_tool_search_calls() {
+fn terminal_output_rejects_duplicate_tool_search_call_ids() {
     let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
     let context = test_context(HashMap::from([("tool_search".to_owned(), ToolType::ToolSearch)]));
     let mut translator = TranslationDispatcher::new(context);
@@ -731,7 +732,7 @@ fn terminal_output_rejects_multiple_tool_search_calls() {
                 {
                     "id": "fc_synthetic",
                     "type": "function_call",
-                    "call_id": "call_synthetic",
+                    "call_id": "call_native",
                     "name": "tool_search",
                     "arguments": "",
                     "status": "in_progress"
@@ -741,7 +742,7 @@ fn terminal_output_rejects_multiple_tool_search_calls() {
     });
 
     let error = RoundIngestion::translate_line(&mut accumulator, SseLine::parse(&sse(&terminal)), &mut translator)
-        .expect_err("terminal response must not contain two search calls");
+        .expect_err("terminal response must not contain duplicate search call IDs");
     assert!(matches!(
         error,
         ExecutorError::Tool(crate::tool::ToolError::InvalidUpstreamToolSearch)
@@ -829,53 +830,55 @@ fn synthetic_tool_search_rejects_non_string_name_in_buffered_added_item() {
 
 #[test]
 fn native_tool_search_frames_pass_through_and_accumulate_natively() {
-    let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
-    let context = test_context(HashMap::new());
-    let mut translator = TranslationDispatcher::new(context);
-    let events = [
-        serde_json::json!({
-            "type": "response.output_item.added",
-            "output_index": 0,
-            "item": {
-                "id": "tsc_native",
-                "type": "tool_search_call",
-                "call_id": "call_search",
-                "execution": "client",
-                "arguments": {},
-                "status": "in_progress"
-            }
-        }),
-        serde_json::json!({
-            "type": "response.output_item.done",
-            "output_index": 0,
-            "item": {
-                "id": "tsc_native",
-                "type": "tool_search_call",
-                "call_id": "call_search",
-                "execution": "client",
-                "arguments": ["weather", "timezone"],
-                "status": "completed"
-            }
-        }),
-        serde_json::json!({
-            "type": "response.completed",
-            "response": {"id": "resp_1", "status": "completed", "output": []}
-        }),
-    ];
+    for added_status in ["in_progress", "completed"] {
+        let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
+        let context = test_context(HashMap::new());
+        let mut translator = TranslationDispatcher::new(context);
+        let events = [
+            serde_json::json!({
+                "type": "response.output_item.added",
+                "output_index": 0,
+                "item": {
+                    "id": "tsc_native",
+                    "type": "tool_search_call",
+                    "call_id": "call_search",
+                    "execution": "client",
+                    "arguments": {},
+                    "status": added_status
+                }
+            }),
+            serde_json::json!({
+                "type": "response.output_item.done",
+                "output_index": 0,
+                "item": {
+                    "id": "tsc_native",
+                    "type": "tool_search_call",
+                    "call_id": "call_search",
+                    "execution": "client",
+                    "arguments": ["weather", "timezone"],
+                    "status": "completed"
+                }
+            }),
+            serde_json::json!({
+                "type": "response.completed",
+                "response": {"id": "resp_1", "status": "completed", "output": []}
+            }),
+        ];
 
-    let frames = events
-        .iter()
-        .flat_map(|event| translate(&mut accumulator, &mut translator, event).frames)
-        .collect::<Vec<_>>();
-    translator.finish().expect("completed native lifecycle");
-    assert_eq!(frames[0].wire.rest["item"]["type"], "tool_search_call");
-    assert_eq!(frames[1].wire.rest["item"]["type"], "tool_search_call");
+        let frames = events
+            .iter()
+            .flat_map(|event| translate(&mut accumulator, &mut translator, event).frames)
+            .collect::<Vec<_>>();
+        translator.finish().expect("completed native lifecycle");
+        assert_eq!(frames[0].wire.rest["item"]["type"], "tool_search_call");
+        assert_eq!(frames[1].wire.rest["item"]["type"], "tool_search_call");
 
-    let payload = accumulator.finalize("test", None, None);
-    let [OutputItem::ToolSearchCall(call)] = payload.output.as_slice() else {
-        panic!("native tool_search_call must remain typed");
-    };
-    assert_eq!(call.arguments, serde_json::json!(["weather", "timezone"]));
+        let payload = accumulator.finalize("test", None, None);
+        let [OutputItem::ToolSearchCall(call)] = payload.output.as_slice() else {
+            panic!("native tool_search_call must remain typed");
+        };
+        assert_eq!(call.arguments, serde_json::json!(["weather", "timezone"]));
+    }
 }
 
 #[test]
@@ -1544,4 +1547,112 @@ fn malformed_shell_arguments_fail_closed() {
     let error = RoundIngestion::translate_line(&mut accumulator, SseLine::parse(&sse(&done)), &mut translator)
         .expect_err("invalid shell action must fail");
     assert!(error.to_string().contains("invalid action arguments"));
+}
+
+fn attributed_call_events(name: &str, arguments: &str) -> [Value; 4] {
+    [
+        serde_json::json!({
+            "type": "response.output_item.added", "output_index": 0,
+            "item": {"id": "fc_attributed", "type": "function_call", "call_id": "call_attributed",
+                "name": name, "arguments": "", "status": "in_progress"}
+        }),
+        serde_json::json!({
+            "type": "response.function_call_arguments.delta", "output_index": 0,
+            "item_id": "fc_attributed", "delta": arguments
+        }),
+        serde_json::json!({
+            "type": "response.function_call_arguments.done", "output_index": 0,
+            "item_id": "fc_attributed", "call_id": "call_attributed", "name": name,
+            "arguments": arguments
+        }),
+        serde_json::json!({
+            "type": "response.output_item.done", "output_index": 0,
+            "item": {"id": "fc_attributed", "type": "function_call", "call_id": "call_attributed",
+                "name": name, "arguments": arguments, "status": "completed"}
+        }),
+    ]
+}
+
+#[test]
+fn translators_preserve_event_and_item_attribution_independently() {
+    let attribution = serde_json::json!({"agent_name": "/root/worker"});
+    let event_attribution = serde_json::json!({"agent_name": "/root"});
+    for (name, kind, arguments, public_type) in [
+        ("lookup", ToolType::Function, "{}", "function_call"),
+        ("lookup", ToolType::CodexNamespace, "{}", "function_call"),
+        ("raw_echo", ToolType::Custom, r#"{"input":"hello"}"#, "custom_tool_call"),
+        ("shell", ToolType::Shell, r#"{"commands":["pwd"]}"#, "shell_call"),
+        (
+            "tool_search",
+            ToolType::ToolSearch,
+            r#"{"query":"weather"}"#,
+            "tool_search_call",
+        ),
+    ] {
+        for (event_agent, item_agent) in [(false, false), (false, true), (true, false), (true, true)] {
+            let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
+            let mut translator = TranslationDispatcher::new(test_context(HashMap::from([(name.to_owned(), kind)])));
+            let mut lifecycle_count = 0;
+            for (index, mut event) in attributed_call_events(name, arguments).into_iter().enumerate() {
+                // An unattributed delta after an attributed opening must stay unattributed.
+                if event_agent && index != 1 {
+                    event["agent"] = event_attribution.clone();
+                }
+                if item_agent && let Some(item) = event.get_mut("item") {
+                    item["agent"] = attribution.clone();
+                }
+                for frame in translate(&mut accumulator, &mut translator, &event).frames {
+                    let wire = serde_json::to_value(&frame.wire).unwrap();
+                    assert_eq!(wire.get("agent"), event.get("agent"), "{name}: event attribution");
+                    if let Some(item) = wire.get("item") {
+                        lifecycle_count += 1;
+                        assert_eq!(item["type"], public_type);
+                        assert_eq!(
+                            item.get("agent"),
+                            item_agent.then_some(&attribution),
+                            "{name}: item attribution"
+                        );
+                    }
+                }
+            }
+            assert_eq!(lifecycle_count, 2, "{name}: added and done snapshots");
+        }
+    }
+}
+
+#[test]
+fn buffered_translation_preserves_each_source_events_attribution() {
+    let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
+    let mut translator =
+        TranslationDispatcher::new(test_context(HashMap::from([("raw_echo".to_owned(), ToolType::Custom)])));
+    let mut events = attributed_call_events("raw_echo", r#"{"input":"hello"}"#);
+    events[0]["item"].as_object_mut().unwrap().remove("name");
+    events[0]["agent"] = serde_json::json!({"agent_name": "/root"});
+    events[0]["item"]["agent"] = serde_json::json!({"agent_name": "/root/worker"});
+    assert!(
+        translate(&mut accumulator, &mut translator, &events[0])
+            .frames
+            .is_empty()
+    );
+    assert!(
+        translate(&mut accumulator, &mut translator, &events[1])
+            .frames
+            .is_empty()
+    );
+    // The resolving event omits attribution. It must not overwrite the buffered opening.
+    let frames = translate(&mut accumulator, &mut translator, &events[2]).frames;
+    let added = serde_json::to_value(&frames[0].wire).unwrap();
+    assert_eq!(added["agent"], events[0]["agent"]);
+    assert_eq!(added["item"]["agent"], events[0]["item"]["agent"]);
+    assert!(frames.iter().skip(1).all(|frame| frame.wire.agent.is_none()));
+    assert!(
+        frames
+            .iter()
+            .any(|frame| frame.event_type == SSEEventType::CustomToolCallInputDelta)
+    );
+    // An authoritative completion can omit item attribution; do not fill it from earlier events.
+    let frames = translate(&mut accumulator, &mut translator, &events[3]).frames;
+    let done = serde_json::to_value(&frames.last().unwrap().wire).unwrap();
+    assert!(done.get("agent").is_none());
+    assert!(done["item"].get("agent").is_none());
 }

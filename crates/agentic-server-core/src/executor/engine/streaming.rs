@@ -16,15 +16,20 @@ use crate::utils::common::utcnow_str;
 use async_stream::stream;
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 use tracing::Instrument as _;
 
 pub(super) struct AbortOnDrop<T> {
     handle: tokio::task::JoinHandle<T>,
+    cancellation: Option<CancellationToken>,
 }
 
 impl<T> AbortOnDrop<T> {
     pub(super) fn new(handle: tokio::task::JoinHandle<T>) -> Self {
-        Self { handle }
+        Self {
+            handle,
+            cancellation: None,
+        }
     }
 }
 
@@ -45,7 +50,11 @@ impl<T> std::ops::DerefMut for AbortOnDrop<T> {
 impl<T> Drop for AbortOnDrop<T> {
     fn drop(&mut self) {
         if !self.handle.is_finished() {
-            self.handle.abort();
+            if let Some(cancellation) = &self.cancellation {
+                cancellation.cancel();
+            } else {
+                self.handle.abort();
+            }
         }
     }
 }
@@ -82,6 +91,8 @@ pub(super) fn run_stream(
                 Some(event_tx_for_run),
                 max_stream_event_bytes,
             );
+            let cancellation = agent.request.enriched_request.multi_agent.as_ref()
+                .is_some_and(|config| config.enabled).then(|| agent.cancellation_token());
             let mut run_handle = AbortOnDrop::new(tokio::spawn(
                 async move {
                     let result = run_until_gateway_tools_complete(
@@ -96,6 +107,7 @@ pub(super) fn run_stream(
                 }
                 .instrument(task_span),
             ));
+            run_handle.cancellation = cancellation;
 
             let mut next_sequence_number = 0;
             loop {
@@ -142,7 +154,7 @@ pub(super) fn run_stream(
                                 while let Ok(event) = event_rx.try_recv() {
                                     yield consume_stream_event(event, &mut next_sequence_number);
                                 }
-                                let terminal = completed_stream_chunk(
+                                let terminal = Box::pin(completed_stream_chunk(
                                     payload,
                                     ctx,
                                     tool_search_metadata,
@@ -150,7 +162,7 @@ pub(super) fn run_stream(
                                     &exec_ctx,
                                     next_sequence_number,
                                     &mut execution,
-                                )
+                                ))
                                 .await;
                                 execution.delivered();
                                 yield terminal;

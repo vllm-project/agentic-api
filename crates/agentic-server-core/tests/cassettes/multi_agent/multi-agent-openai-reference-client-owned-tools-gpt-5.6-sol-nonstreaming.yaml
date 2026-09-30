@@ -1,0 +1,1605 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: 'Use three subagents: one to find Paris weather using a discovered function
+        tool, one to get the Paris time zone using a discovered function tool, and
+        one to call the custom tool agentic_raw_echo with CUSTOM_CASSETTE_OK and report
+        its output on one line.'
+      max_output_tokens: 16384
+      model: gpt-5.6-sol
+      multi_agent:
+        enabled: true
+        max_concurrent_subagents: 3
+      store: true
+      stream: false
+      tools:
+      - description: Search the client tool catalog for tools that can satisfy the
+          request.
+        execution: client
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: A concise description of the needed capabilities.
+              type: string
+          required:
+          - query
+          type: object
+        type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Search for hotels in a city
+        name: search_hotels
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - description: Emit the requested cassette token as raw text. The input must
+          be exactly CUSTOM_CASSETTE_OK.
+        name: agentic_raw_echo
+        type: custom
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      openai-beta: responses_multi_agent=v1
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790656459
+      created_at: 1790656412
+      error: null
+      frequency_penalty: 0.0
+      id: resp_075aae158cb8797a006abb3f9cb70487d096d0eb5873900a2a
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 16384
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABquz_M_jM0TEnwlTxI3wyKMZ9aB-6uzEyTCgieYw_DrTwXqDBVsU47oDz0wS-1jdD7ww1IT9Y99DVKQvtoy8EPNX20dWkUa1tTc94NoJZx524syhFkzfgDP6SGraj4jSKYuUw9JQ5TqstSBRJG9ZUT6R074U9rDxhgFklciDMHEnSAMzP3UMmENPfb9nGK_qszkOWmrZ0aI0HGF66uDfzNz94CuoV1pwn4QzlztrC1Ljn3gIf4tDTaVTzvhj48RWhmrmIBc1ZSefW6vFguyqfgiNISiP85FUH79iAetXYtZhIkFrhGbUrvDvHgXlDsYaiHhd0aO-vJu_nJAB9zgYgaQW447AP5c8N8s5F_bxYlZAm4RbxA6pCjvTWXJQPUsyymloyMzIfopTdqmfDaFmSgAG8ymD66PCoGyOwfddQqxIFBkerfa08OWMnvZWgOwnIbQfewvK5QstnHTf4Kz33WJEgG0DNZIVdkypofHtBJYBiH0A7wBhyQpgpnWP0yJBe1akiPGvCQ6uDo1kN-UndMyRE1Q80O2VTReGlvp0_afUXZB53vxreIhSfyaMN2RbjY17tyYWnK_7EiY2PfETaKqEZWwQYESVfwBaoWAV5VAZOGBXv6iKnS3viyXGYbCvIjY3qtlpVMpVolPrgi3Buo7QBo4EB-evOON80esy0Zy8Cp-RlNATf_RXTg9GJLJ8yVjC66yVv3MartL3vDfv82kzYm66Jh2YoeYpK6UYwjwPhYPP_41tDzCKoftv5gUgQ5cV6kSBYpkGis-0Il8tdR-DRqAf5vd4ozDzLGijSzJ1WhxNnwhRkLRSwY_5nyiTvpmB4e1ix9LvDgizv8fB6ppamyw3sxzVgPYwSZBXnd8gdlH8qAyihKAwOZWDdMzwAPmOscGCfgQxKMw0iuFXiUVTlET8fw9MCeHHqqqAvXYM96d2wHS1MOL11JmYo4Swap6JHLmT6qt36hOGlhvOWPFZFT-V2ChexpenxDRKWNaM4HqcIUTlZkGSB2yyL93D0Ifn5O8huImepDGKsdIb5fu8WtIrUgk8uG8rsWSiD6USqUM7t7xQyBDh7GVw-aNyWbiHzBB4ChU9y06QnEl3OuICVFL-SBIVlscMEU4YS3a_SirkXfkzYv84IIJF0Lps_X3p5-YBqEnyzeZApsNp62NblYDVLeurh8IBUH3Xm_mWuu5khKUHc22afaf2rCJ4Pn5p9HyDmAlh8nr-qJXkRo302iliOF-CwKNwM8uHAuuDOdxNnvXR-4r1mrtnfeCEIcF2PG6D0xYarW-gVQBkwU8rJQ-RPVB2TCTUnT2SsMJ7rkLfLpBpmcDe6q99kuhl7T7IXmatB00vUmNq0k8yQR_uTJGQ==
+        id: rs_075aae158cb8797a006abb3f9d976887d0819c4a424491a3d0
+        summary: []
+        type: reasoning
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        arguments: '{"task_name":"paris_weather","fork_turns":"all","message":"gAAAAABquz-eVHR8T7wQHXULj_MaqzDWH5CXcGwVqA9GgpJwsKAioqcvjhTubJT0NaNJIHvS0Jt38tvqz0TgX1dnF2v7SWwRKpk6Py2b-9KPzxLOgCeqGEG0O8HEb1aAiCefssXaSouKPeGLejhB1LSGBY7sOXOK4cAYv6J3EY8TLNMMr_T0SNK50Pe8gyeWCX0WNGArPmsomQMi4vLz-3mLSTaPoG7aUlQgnw3L_PDFNWoIddNYkY1-2_zFLJMr_pyPsSAt_9HosIgLgmZ7DbidATpObqy2sg=="}'
+        call_id: call_eFsjx4QsAbXvn6HyuGXtBBLQ
+        id: mac_075aae158cb8797a006abb3f9e124487d0adac3cc38b7a3643
+        type: multi_agent_call
+      - agent:
+          agent_name: /root/paris_weather
+        content:
+        - text: 'Use three subagents: one to find Paris weather using a discovered
+            function tool, one to get the Paris time zone using a discovered function
+            tool, and one to call the custom tool agentic_raw_echo with CUSTOM_CASSETTE_OK
+            and report its output on one line.'
+          type: input_text
+        id: msg_075aae158cb8797a006abb3f9e991887d0ba8b15d1c313c809
+        role: user
+        status: completed
+        type: message
+      - agent:
+          agent_name: /root/paris_weather
+        author: /root
+        content:
+        - encrypted_content: gAAAAABquz-e7bxUSMbJ4KP87QefNUhg2dn5gEcV1zs-4qA8eyPQ7K2foR5wDAEQS7_BYwSF5mMrCu4c9MJMB4JNzGilpp_74XiwD1RPRNx2blodgvm9HGbbwsiIoVCLCNRXgZsN0i5E_CtWRi2wF18tV_j4egGb7QiTD-VfGoELNQkvvALmGZtHr3V-ATyPApW2IrZH5O5BcbAPjflhGHeGA4R7OrW81aElUT31uUufWeMKuY1D2BwazJZbP888tKx2bOjx6SjubWQ3F0ZuBkGqRi7nZC09zmx5bMOLBQ2pBSbpUAdXkPYnOevN0nWEakGo2KzJoHSzN-gb3J2dsH2pFr7O92-R7rgGZn6pERCerUVX-Sp6pSEzFX6ZFd5FVPBileSrvvwM
+          type: encrypted_content
+        id: amsg_075aae158cb8797a006abb3f9e995087d0932b7db90ad016b1
+        recipient: /root/paris_weather
+        type: agent_message
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        call_id: call_eFsjx4QsAbXvn6HyuGXtBBLQ
+        id: maco_075aae158cb8797a006abb3f9ea4dc87d0a8ac49262a045c4a
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"task_name": "/root/paris_weather"}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root/paris_weather
+        content: []
+        encrypted_content: gAAAAABquz_MOH6Ejg0kHhsg9J3BzsL9KBFreH82--A11YO2KzvCkHYH17uNW1PenHnt9t18detlbKaaGCClTw4YAKl7NRis8d1GuUowMQ1ag2MbjZ_ar7C95O1R_WZXQOr0eEELB7f3Cnj5D1aCnk2ZR2PwVMw-KsWTmRabZAPFZYaoL84xr6Np_1dNld89OKAC4G2SVv2t1kR1kXFErPBg_nYBrCT_7p8gptzsN07gWA0mfxj9UucPrw4XZL4QgISChKHbYUW9PjgWkaUqhnRE81qPhIF2inkV5j2WuXJIVsTVlaExdpuxapmtJRKaBKcd3Bcozd2AYT-q6EyKivRfuWv7lSiORcy2DrbaGFhKA42bcs69OcsFuxeifN8VNRpnSuV249rfsGdfXItH-JQtbPyIAID9B5_ca9OkvE_RZaE1LV8v6K82FoKIxNl0PMdVYaTBSBrO2woyNA3x2Qqv6kZEyv-ATswRITOCuozZHqBnTSEUfOiBxgVi3EqD9byFmQmfpPerEkr60GH52N-XntDsMKO8jay_jvDTjHkqoV1gPqpeFcirMdXQcZQptkd6_UwXvjDAGCC-zGpOQYkainrSXzuEX44e8cITOTsHCUJj076maGqnAUtYaxUPTnHWtikr3qk17LFExtPZdUqpLs1KXfkMdhBgjiyJHMLguv3trcF0JE-JheDZioFyoOE_EVniOpZGSc2ErtWi8Gdz4qc9xkPFCeh8RpfX78uQzTCFFoENWH4toXDPWe_6al5U-ASgxX4dphVIupz1w4EuEVTzZIg9M6b-k9CGA9Vmk95grTAslC3lh6SnEGzPKXLKsbw6tGipsMrzXhGMucl9z0rJZa6-1g0z163_vhZknyhWLtV-l-uxGXX8fO4TP7bkt2GikRj3fwNusgr-Ml2ucyjSJDBCfRFr7xMnQ4Xj2QZqNJd2ErWn6KTxQ1peCoY9h6fwpx-5p7-8sDoQpvZMw9P2nNvkQlDn6I6Y1N4ygzYniX6sN1lIG2R0gYzkjPiJ2Pg4oFJZUSpb35NGc_9LkY5suyKscfE0Fw6Nmn743JeUuyqohDKnY5hCl7oQxoe_vyqQdQME50BBvy1vW48PgxeIp4AScoZTn_dD9_b6pnaRE8joIsKvW1MzVlEWOLRrBilJ2VfeMTDu1YYMmPiLjth2dk5KruSbq1aqDEeRgyFvVVK7gxfTYmhHmhDjY9qqg6Ytd2D7
+        id: rs_075aae158cb8797a006abb3f9f556c87d0ad5452405b47ed71
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root/paris_weather
+        arguments:
+          query: A function tool to get current weather conditions for Paris, France
+        call_id: call_q7fp9CTUNFBagqQnYTbAG1N8
+        execution: client
+        id: tsc_075aae158cb8797a006abb3f9f775c87d085a15329a8f2c583
+        status: completed
+        type: tool_search_call
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        arguments: '{"task_name":"paris_timezone","fork_turns":"all","message":"gAAAAABquz-gEX2eDcrTzYlBN0qn4snArzOvc-LAMXgWhuYoaPgJN9xvPF1-VPYnNRK3D5Z7o38xLxaFg1kkfCJMqcrKkW7371u0JVRy7bKLET6ebtv3TaUpdxmUoItYlZIH9ak4s1cxT1oz3if5pUgm67TXIpqEDu_XweiOZzgBgIg2MXJmsLgi_WlzAcKefoKMinvxm-EhYv4GbsIvc8zLx24ttlsM9AEwQuAmo9PRGF42mA4wXprFpbNv_EfHpD2cOu5FX2Lsv8PRob8orGNljEpWKWET2g=="}'
+        call_id: call_n8L9CZZsu7jcjX3UpS0X008q
+        id: mac_075aae158cb8797a006abb3f9fb59c87d098b0c88db0575c98
+        type: multi_agent_call
+      - agent:
+          agent_name: /root/paris_timezone
+        content:
+        - text: 'Use three subagents: one to find Paris weather using a discovered
+            function tool, one to get the Paris time zone using a discovered function
+            tool, and one to call the custom tool agentic_raw_echo with CUSTOM_CASSETTE_OK
+            and report its output on one line.'
+          type: input_text
+        id: msg_075aae158cb8797a006abb3fa00e6887d09f874562c4b50b78
+        role: user
+        status: completed
+        type: message
+      - agent:
+          agent_name: /root/paris_timezone
+        author: /root
+        content:
+        - encrypted_content: gAAAAABquz-gZHMGhi7PDT6jQq1cbExIaxa1vj8G_UfRz9ASTU-3edkAdX4BLe8J7xc_G5sgqTEhMLeGCwNYPDAKNIxsGYjgglPjjPIaQvMbckrnF2O4_MH5rKiVl3kCxTwHyUIWrswTMPb2VQGwJlN859DfsH4IHLt9PIyYdp93wvQ6Z1ygmqXoWuF0XPngsK1VSc61WjZvRJND1JOSD3yR2Kb3Ln_H_0KEinWsSGRj6RPebAVoY8vLXSjYabQx4l48uVQJlyMcUmYblHMdH_AS4otVPKaD07peA-Oor0Ybj927-OPJOa7u9Kkq3kZ65BYI59yiiIkWAXJ82ylLNdb8nOPsq5xS_WxWyFP9ELaNYptdWani49VSY4z0wrE8lBdKfi85BaH5
+          type: encrypted_content
+        id: amsg_075aae158cb8797a006abb3fa00ea487d0af44673c76e05c88
+        recipient: /root/paris_timezone
+        type: agent_message
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        call_id: call_n8L9CZZsu7jcjX3UpS0X008q
+        id: maco_075aae158cb8797a006abb3fa01c7887d08b00e23b31ba38d1
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"task_name": "/root/paris_timezone"}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root
+        author: /root/paris_weather
+        content:
+        - encrypted_content: gAAAAABquz-nlvfTEKP3tLMtF82ygGj0uPatHqYY0vUp-0hXEemH0KPDUkpqO89fegOX3yXEoe2H0KK3Uid8gn7ZONjJTWBGJ57eYPjogKGaqC5E52W3AfsnNVV85oRPrpvvPAsgkbtdT-rP8gwOc-PoUhrnOAxkhKDV8kT-QZB_FEyQoO6aCKLzF-PoqgMZkbCVXVTRJoP9fcHti4MsW5YA3STkNAHo-w==
+          type: encrypted_content
+        id: amsg_075aae158cb8797a006abb3fa03ee087d08270eb8b5b3710e5
+        recipient: /root
+        type: agent_message
+      - agent:
+          agent_name: /root/paris_timezone
+        content: []
+        encrypted_content: gAAAAABquz_MTxK4XXoC-EjC4tASCBqLzRJT0w__em_eYlST2efbbocVH9c5nXil6LiaROYdRVtyEwT2dVqwKudPcK6vaIeR_VyZzhQ_OndlX-8xSbpSEr78m7UP0GUqhb4HdrvBQGJI94NhEY_Oi3HPrm8ieYxnt45ExicpQxXfBbaDxWJHgL4sQrCZYA1D0LaOXPzhV3aKLn1vTjaJyjEy51A000wQZ7_xqO4tpnP5vTlIWExka-ZY2-7mhu5H8-UtH3x6OCglFnDPGLb50ciirgM9UhuGQ0yBflk50Cb9EkHcTcnURpfs6QiE3-Kh76TRY1d5PEDgXUpxwA_5tZigLyxPPNGfQgYfc4oDNd_ByQHy8eiQEDOcL8uOYweP41aQQSvTFIvlzW3PyaaMaV43B6jnDtBTclzeDZ57u1-_u2g4PjsaZMovwyMHlu5xFle60omm0fmmds4FlhT12MNa6kCypnyREhtZcYC-ysPM9IW7hcmfruhyQO7Xc__AFV9nIXNDcxZApHbFmseuwmOjHbv-PQ15SIvBjJ4EAgC61DJ1_D3RKUNu_hLDxnMfHlUDCasRkVgJuFsm8WCFLyKm7MsWXlCjk6zmVglhgKYc9axCLOY7Jx-PNq5VifmCPwiXsyRqbX1keHEfW-ST-cxpdTRnwTNhaN0ttfMt7Y2kL4ULNEfb-aHfPbBXDi0hoVAP99xeunV341YFijr1K3F-87Uo_L2H-N4iEcU5inNAPVQf_uFvGyDCauRs7abvrPZcRYa7PW1RcU9j2o49qT7nxM4gTcZ61awXIY6TzRRs_aGoe0LXUwFWDEbNPy1YocyKw_fn4nxSbuBYnidmYMIfdYZgAeyJCdn1hVdtuMTtByd2ULIuPI-V6VkU28CvDrhJ6c9jUKSf_ej1pPStP4TA-6h_UyWRzF7AHfIQft8PRzTjiVWmFXEmSMWR9vP8G2WIHSxSBq6AxKt38a_bCbtzJ6c9bwN5eBU_m7rCrd5ES4xnw6sCRxjIPEIUM3WJPnH7WDqjoz3ZI_Jmntm3OHsoMPRf7Ae69x6pEb9TyIT2gNugUS1iM8G5_3k6pkOgtiWkLabhfUgdLFN7cosz0p6VpFPmE_t_WoCrTRDmbNeOY-x9Im1MWqRltMimUzq9GgPXd0jVwHfk4jvsL6LG0e6mxo2B2WAAmrv2ck7f4V9THOvW2TUss-rVNMMUIzzF6QVjS7TEZtDUrhnxGNJMRpOrz80LoH9TSI6Nl2nQq36HsnnJTtln6hg=
+        id: rs_075aae158cb8797a006abb3fa0c0e887d0927e6f90e37777e6
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root/paris_timezone
+        arguments:
+          query: Find a function tool that returns the time zone for a city such as
+            Paris, France
+        call_id: call_N8Qox7GsFNxDEwqkbo4GPOPa
+        execution: client
+        id: tsc_075aae158cb8797a006abb3fa0f77887d0bf3a8998ea3fadcd
+        status: completed
+        type: tool_search_call
+      - agent:
+          agent_name: /root
+        author: /root/paris_timezone
+        content:
+        - encrypted_content: gAAAAABquz-nq-T1RIg7-8NIF0-MBcdh0Sk_UVgIkaL3Olh0-sYORgg18u8df_1f2MaOdH_cPWII-6VxOc2gVL1Yl9VslmO2-hdxkmZ0xkf4Y9nXJ6wOArejfBqagLRxjbFaRoQv44SWTNhYXOAJmzQo7sH843ezR-KmXaKi78qnzWlFkKChvDuRpqVPypgvfYjd_ghpLnPdc73cqXVrA5r5XM77EAxE123dwj8ueZIOE1SN4Sfsgkk=
+          type: encrypted_content
+        id: amsg_075aae158cb8797a006abb3fa1a6b487d0a5c793eeece5ccac
+        recipient: /root
+        type: agent_message
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        arguments: '{"task_name":"raw_echo","fork_turns":"all","message":"gAAAAABquz-iDiQ0o3nHwZWrexwqepdFbivy-l_0IvD3YkAoHf_lvX2_KXfHgRsehu_qt0VlAuon9TbhOz_L8qsIgp9dfjur3A-tSqlQk2_FqJt3guJf4-cXuBGUy0deqkQX42JU7JBdmwCaegNlrt6W6H71CItGrxDyZgn9ltKyUyHvHNYBlenYL9KaMm6ZythxmTK2sbvAfrnxtutcSSQkrpxxc7GnMYPF2HIthrqPVLwTRkdjRFP35dy5OeferCdBSVZ2Le7u"}'
+        call_id: call_jDZlNCfpo0PxL712gUKyDYUy
+        id: mac_075aae158cb8797a006abb3fa2226087d080b67a82f823b47d
+        type: multi_agent_call
+      - agent:
+          agent_name: /root/raw_echo
+        content:
+        - text: 'Use three subagents: one to find Paris weather using a discovered
+            function tool, one to get the Paris time zone using a discovered function
+            tool, and one to call the custom tool agentic_raw_echo with CUSTOM_CASSETTE_OK
+            and report its output on one line.'
+          type: input_text
+        id: msg_075aae158cb8797a006abb3fa2756487d0bf4c301ee2414122
+        role: user
+        status: completed
+        type: message
+      - agent:
+          agent_name: /root/raw_echo
+        author: /root
+        content:
+        - encrypted_content: gAAAAABquz-iqQdAm7FoAlPKpHNyHPGGGN7ufke1Z958qwxwjRdPnnwJJxiAAYBU9wUfvU6w3CA0g5ZoNkTr2LnHTSIagRZ8E87p3DmLP7xz2h5JtbV0qthEXKs9aPMRm3rp9KmhGvf2E3jL_EEZQHBYyq4DDSMeyWaiMM6XaScXMKmgNfYyvEnSqPZEnRAnAqC4M9oBngeQtSI1l-kZTu8e4toMUfc15MWA3PBWw6F_lCtbFW5srBbzHUDG2dikYK_hfCAEOETZKlP4m1B4FkFp4JXy__mx1X6NmroH4ZjM_oPrrhzmvqkYWZyMO6Q1aBv6JP3h4Jzge3NQ_SijFj_89Rsnqa53j5QZpl2kwLU73AU0s6obogQ=
+          type: encrypted_content
+        id: amsg_075aae158cb8797a006abb3fa275c087d098dd6ccbd57bb079
+        recipient: /root/raw_echo
+        type: agent_message
+      - action: spawn_agent
+        agent:
+          agent_name: /root
+        call_id: call_jDZlNCfpo0PxL712gUKyDYUy
+        id: maco_075aae158cb8797a006abb3fa287a087d083bf6bf48795dae0
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"task_name": "/root/raw_echo"}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root/raw_echo
+        content: []
+        encrypted_content: gAAAAABquz_M_IwXZ39L25wfq7dNjYh7Hw2UY-wWHkaEyNHEh_2ZPnKd53OeeQULbDcl505By3ck15UQhJ13nVDOpuQnJz0A8yCE_fVIqYDPhCqXT10amL1n1qGQgvy5vavSoTBP4nNwbrsxtm1cGDyI2Yd30u6p48rqXxaIUDavaMsuaxefuuwgTBYrxiu6lPpXHxP9nsNw0sFLR5axyMLTymuKYppstggM5hFlT3e6fgVGqKGcarXj1alGWp53DNiACRGE6W4HB1UR89LJul7nfS6m0lw3YpFjScbDRNJ1C251_cWIFhUp1IbsQY_wKWpQ1JALyFl-hBkt-cjTGUexsrZ_z6TF1ghNXH1eUfRpV9E5glN0EUi_KMc6D9A8AJVk9IGUDx0U6fbV2BoCmSlY7C_n0XwSSBCizFp2BeooOSo1kfSTcHy8y26uCIb6QyqvNmpzFDG0T3TNncPA7GiKnd7zcMWjCZc6SBg4Zc7EkJ3HXA52yT2H3MDrFHochyMpCi1NSz26sKVyBYIKAHMy6bW8UmIgJKCKIUuLnJUfOa_5sQME8zrJ8sKcu7PT_VdJo9pKk9zGC4387xAz0C8RArUn_dzJ59LlM8B530FMg9n7c6jOkS5m_kjHLggqUOq1WepuklOrpDXTFp22t_84nSpokcEnoJnu5fflaT-BuxagsUjt2C_aYXdGQcNRHygDKxX3hse4s_2-Rrr9vsean-7CmrYhQtKgUcTkyT-cRD0USsEV-jVO_hQ4MGPJt2U0BQEeCrWwWGRgehBDTCU1alJzHe9rYEy5r-s5KgOgIdDMXdk5M6llOeN2yiMTFGiMUQRBB3d_yufDuuEPvdAV4PWkIdl1N0c3sWQ6y9ngZmOQ4DV2XiFsALd9zcoe5TMgiKVSMOYMttpzP0_8TF7SgXVDR8-1Wzd152sDEVr6geKGypjpqkaVF1-gPAqQXYGOMEygbbJt2Wyr-rKlGABLGQGHfyd3ftBOXR5JZ36CPBEAJCbyGciD62WihEF7VzfrWH5kJc0yFEXObt9AaDovo1Cx-sIh4L5b1aYRvQ5SMFAq6qlMb3A7Fpo00ma-cG2pnEvaIzV_inN07F31uWm64xBsGr_93HaDKhGqz2xZr5I9sxnS9iOQhZf-fAl7vYSuyP0szbpTY9UCHflJEnDqNKP6SUT9SjNmR2lW5ih9E4UNAVLeghw=
+        id: rs_075aae158cb8797a006abb3fa31fcc87d0ab0a91403c534851
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root/raw_echo
+        call_id: call_y2csWa1znsOXTNnQ8Jgi3WS7
+        id: ctc_075aae158cb8797a006abb3fa32d9087d090838b748e083d7c
+        input: 'CUSTOM_CASSETTE_OK
+
+          '
+        name: agentic_raw_echo
+        status: completed
+        type: custom_tool_call
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABquz_M5rWDH6MTn-ugBuNx2cM58I7G__AT1hr6oNBGB1T-spZxNpIqhaQ-Or1DcFPA5ClpNYXQcbktDMYrNZDvDz2SkgT75AYR-MAzmNXwifiCyS7-Vz63dHSga7nUYfpouEg_R5lqWXU8jGriWT-xSLcnQpOQv1VvGo3htWHRrHYj3cM40OBxxKVzZNUzfE5TfbNDUjuwz2dEirlMS6v0ryBOXPRfrZl8rCt8yENn5n47ShTeOSA_BLbmr_t-9nQa1EsKrxBR_yBjvWYAVY3V54_QpNjCRhKUmUYqS2d--mw2PdpvDTNfO7lQQnYVFHQOnBSVEcdpiOazJKNRtukfrlauP_Do7v3X9f0_WNmOnCFmMyLckN0MC2fmx5jXZrAqTgSVn-D9qinSY1IR4hmMCBPmPYTHVU9kW0lete9b7Dae3_pnHVwDB0IonyLOIGp44t3pZ9MLJ76B2GWReITXCknFcyuOp6SppIQFudvK-x-h-oeIS5hk2__fSxE0d0_cgdBVpysv1O09iu8-Kfd7aQWr-vJnnhT3h4KJH7xevQ6x9uIx3XLL-r88fNzWh4XF7QWRNozUy1-bTtSv6uc-8M-WtMZxSjG3MFr8d0fyxFKE_KRQB52mHs_iUZxrbu7ovNucak9M66PmuExZprzkUcTYa_w59TkP6zhzWG6OZxAS_tnSWo5XDurfBwwFMXDF1QhXYe02o1DjmvSAyjXpD0P33uL-nIoRzhgiSgegJ8y_9imFSBbNnySH7kluO-687Bf-9-4IXN0frZvhEy44A8YerR-HeGDz9fJYE7CbQxNnluRLdrn6-P7i__Efn3GjfEv4FL4ffsqWOtgx10mpGf6sc72-NNbGoac5F4oro2wNoYvBFbVEpIqJ6srNLJMcMiLdq2KpEr5ceOrQWGQ02cQyTOeLAvTkxZwLK4RHTNqEieiAP-UCN3jEwSEBhBsbB_QwYVMwc3lqX2aogj0dSfY1qFxPceaH-zEQcy4pnt3kn_-YvcKq6HN41PlRAPa_7vzoWEpvkVIgSd-1Itps3nOI619RW7TOTuhzkvO58szv6oyUwhPjJ2MgK_XKyt9_hyfj0jJ3f5-9pBLeU95qfJSmeBJ2UY8dr7aAm5PxQGiOtmfNU-pNLuqvbxWkTLfFgj9iM29czAj2cMmokn609cTtpOWtzAUQg4hLt-614a_oT9DVX1dFgTo2BIYIbfHokVDxQeiH3Ao4CCpi8iYCpcXqeJ8myW-nafvuloTsvV74dWTTFoNwob9DmZe3O5HnpurE
+        id: rs_075aae158cb8797a006abb3fa459d487d0a062766d45f74757
+        summary: []
+        type: reasoning
+      - action: followup_task
+        agent:
+          agent_name: /root
+        arguments: '{"target":"/root/paris_weather","message":"gAAAAABquz-kxRA-gEtbiSjtvoLG7wvo6xzE7TjK5c1n5lPLDCphCWutxDW2EURkixEZFm4TZlELsoaX8uD03HXGv4fMK9BfMvayHZEwAthDlGTQvLTITukaCX7WtxdKjTdnK9TEiSxT4rD4QG5XAqmwy3P7Ijx9nlSQK4bvqjkrubsb9RcWKjZaWI32Olz43WWrhMGvdBdZDD-ctuPMD5Z1oMxEPu1aq_bZq4zPqvO-7xTL4XE8VGWNt4iY6OWMzupDSbYFJPZeYeEhnN2SiqQx4ba3TlHSCv3NljXtBeTmAeqpuWhlD2U="}'
+        call_id: call_OJP71WqazdlIE9njDRoCASJZ
+        id: mac_075aae158cb8797a006abb3fa4908487d09ec39d7d228ad89f
+        type: multi_agent_call
+      - action: followup_task
+        agent:
+          agent_name: /root
+        call_id: call_OJP71WqazdlIE9njDRoCASJZ
+        id: maco_075aae158cb8797a006abb3fa5055087d09678968231f3e189
+        output:
+        - annotations: []
+          logprobs: []
+          text: ''
+          type: output_text
+        type: multi_agent_call_output
+      - action: followup_task
+        agent:
+          agent_name: /root
+        arguments: '{"target":"/root/paris_timezone","message":"gAAAAABquz-mW84SeILwa0dr3oYbFKTW2Sj2tLHfN1jy1txjpeIdOwsotDt485NMu9v1Zvgj4wcYfUQ0yTm7nl_syyZwlJT_R78JR0Nkd1FF_l8Pq90mKlL5Dd6oXsrVxPbiMZHHXIJxII8PMWJ50UK3DlNtcFktKl34-2DuQuPbCZwC0ZE1_EhXZBfV-2TKKRQo2yxxgIi6mjfDLhLuyrUcS4cvRfc1T253Bz0gNZqvIQgvGJAqhjx7XStvlBM58j43m2NFoBK5wFS1W7kdbhaQkkURLsigQIv74PFW3C1R87727iaJGG4="}'
+        call_id: call_P1RXyWILDDDKRTHXzNQYMieu
+        id: mac_075aae158cb8797a006abb3fa5f0b487d0a08a67856fada380
+        type: multi_agent_call
+      - action: followup_task
+        agent:
+          agent_name: /root
+        call_id: call_P1RXyWILDDDKRTHXzNQYMieu
+        id: maco_075aae158cb8797a006abb3fa64e9c87d0a17220b2c0af02ec
+        output:
+        - annotations: []
+          logprobs: []
+          text: ''
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root/paris_weather
+        content: []
+        encrypted_content: gAAAAABquz_MBQr6rJrg-gycrlZ2bZ3sOpHaLj_bsJ20j3ZXNzP3yAHjEQtIFZARKmAM3JBwkzRpoDNRM4JFO0r18T_dSCR-H2bZqCTPzEDW9MLxf3X8YeYb43masEUfgaqf3Qnaq34z4S0WVOoukcSXjRgqIiHZRsfJB1FxqQ8jU7OppsV_Rl3UE20e8jcR-P2fP7vcyOvIZxzCstHQFV1VIVL-zamhZDB2bII9zxlB4TLjUtILfMmFEainzlI4anPwLneUN7eB6c345ZnDxd2O3wN2BAKwAErqx5-_ZQEcALx7wm-j_NgK0MLfeLXuBrB5-fXTDnZc29uJvNrd70tEb4UetQ80CK3yhbL6oN18qQuTQ4GlhGxrEtHdRiYbPI89nZfMr46yv1RFjuJjxHN0UD1kLKhXakgu-qIN8NRvVyX7OM_J6Gt4Kf2jjOkPgEiOIY4DQrHHazI2kxr0Oj6vXFE7fAc31ZQ8qKaddsgP25Uj92roy5ZzTCBfVv6Q0FtrrX2Hw2_B5gdrpxBVpkdtle9_3GrplouGRSZhNctvJANGes3CIe2AoA2Vxu_zycaGNKTITzLmbmNHt5LDvCeT7H1pESGpi0dD7kRk3ssT3l6bLykQIPnMNL7PZRhdGdpJHeFtxUS6EPyXsvCjuC0LOLLDDFprbxjxABJPztotT8KCLy8BpHDb5ZOKOfW2OZfzV7fiSkTU5mnjTxccpFxWD2kbEzRoZOOFC5903qYhZMnsisWy2gnHle7lsUNwWFng8YlrlStOeCqjHLPgbz5BJGzxd8PA6k4fvX8Lywm0XTHxiEvmqZB1qvzGat4C2rvAMKTy4vyXhsPGZ1KxCodpc3FIL4Pm8EZvX1rVwh9wi6jcnvBkhnKQyN1zr3jDsRw2rTaJNBsPYmobB6TIS5YKNqDuqKaBwaEZgE51XbP92GHG9YnYPLhuEEI9DlH2w0a3hBAVUXHbvgq12Pi1G9ilY3m75nja2-aop10ZfdkOIkeJ7h7PM1ozpvBIJCJrvruCS2VnpcMaEglREIE-ci6KfKQ_TTKay3NVFcWnNluCB4F54k_FJEiYpTj5j8rGRz_UI8SJoC-KoJbsIwLMMGzCG3IBEt4Yf3NJiraJOu-Ks2Whzka9MhsYIb99fV9qREnO2LQOKGHPCxCMvnWJTD6oh6TtYzZ_9NfUTtxHZtgUmC1UuFeHgNCW3TWxbJomH2H8eOVOaheY_Xj7yW0BzvAi6AcJIKpe4WZb37Ryt-ldOplbydfPsDw=
+        id: rs_075aae158cb8797a006abb3fa712b887d08616a9bba83d7c10
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root/paris_weather
+        arguments:
+          query: current weather by city, specifically Paris France, including temperature
+            and conditions
+        call_id: call_vy9tsIvPbe7AX6wKaLowoPp9
+        execution: client
+        id: tsc_075aae158cb8797a006abb3fa7394887d0b752083c4fbc2205
+        status: completed
+        type: tool_search_call
+      - agent:
+          agent_name: /root/paris_timezone
+        content: []
+        encrypted_content: gAAAAABquz_MWBNrwyUzmtm8iskPpk0Q1AaL5qqksx5w-AE1mbS_MwpsYqEK0-m49U3-n0nuOeedaC5jXS4SNnMVa-yx4l_sqh9_j5viKxZqG9EvrvlfbsGhumTONrPXJU0P85C2Ow7fMOfxBearqlEt1p_1bkvEOainbaqm-IKkRVGXpKvBGXib-WBZSm2qpDIFH3Au502SaOxQ8kr9MlZLjARrGHo9JuE6ILOHTVtWCIPtTKjSSQW7SOiKVMT0i_cuJqdNsIrYIhe_L4wstzmtA_CEGgShutbMuqFUbXu_Xl4ecqzQ1AZ_VT1SSrJltYbodTP29lRk2POJh8Bst7s_cRCuDd3gFirfwq9RAr5nrvODUhjGD8AyxX2pdyn368NPyA0y8bfThBlyYBL6Lb1ukgUjnQi4oR6G5h_QOgd-CguQ1wMceJT3VOux95X7kBtwA2-KvZ6U_GAW3MKxBSzEkoFoKzKxKMEZdypeegvF1vsxHCle6LAeYl4uPqlXG9PlC6dZXKPUTfsUJOZuDD4E9_Ade2DN1iph9Mj3sk8h1CbwXo05om3LyebmUtIl04Jh7PeFN1R58fX_zivS5bwbG-VqXmQLX8gfP_3a2DgwN2RVTv9YJqdyhqgOqmqhxZOhol9veCTtcNhsh_vIr9CZcTxW-DJmVr0YWJfcy29xcfSh2LwWYmq9uRylrh3CD7NPoSkN-LFQAYPmNPCl1aySjITb-FcjHhsXOT32oPLpPOzRO1I96O6d7TjqzPtC9NE-_oNM1x36Fnym67ZW_N_SwgTQkMBGpHUIEBlHpRaL_C5L2AoJlzCuV_S3zHsG4GAqHHk0ugOflWoDxJZmXO2BOe0p6jnPdgLFOn7I0UNZW7G0hd_yVjwJOeG2kAw4uAPyvZnXwkAGbjBBWc05Zu0P4fiihlj_STbyEqSOUyuc-KAVx84QXu6tmouoRCKh0xVMvrIhZjmHA90iqCYS9tN8ifPr65rrZrztrcqIEAeAupNTT7jMD6xmRsUdeNXmcNMKp1VIPz67LYODi_EWV4-qfItthZf2mdoBRKhaznE-7xQrbUIhCDLij6fh1sdUU9rfDNot8vTirPQinLKUmmRUZraDWAPcLM77yRzvN9y6u3WhjRcH7BUaHTXIH4FiYauFMstP92Fgie1EsUNl9FRb4YDzz_V_O8QTHwThRSlgt1RH6t--hTwWjhiQKwS1xf1zH-YhDJwG2wDC4pDshxORw6JyKeBb--XoYAaUUP5u7IwP3-WPRoS9x0yz0Ish-hqIxRSgsOUB
+        id: rs_075aae158cb8797a006abb3fa749b087d099a57c9a49e374e9
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABquz_M-izqI8Pfmzmx0jl_3dZb1q90dVejWLUrkNhLBBP4xXuH4kVIY18SMF9pyfDJqfxryFTPc-nTs5s2gQO2Bm0HT8f9KKjchhOuUj4dfiZEYXH212GZFWjiqGjsYcrLfZSjItZi3iUNR6dmSSX5TuoX2kkFPFbAaauc7C1bZfZzDeUgQ7asvxgEM5LQybJ_z-3CZ7fF_TGcEeUwgw2lRdihW52L8ctNOgePBiGvGqwB3lZAcR3DPghbgBeYRKCvrwvH6qbACXPFj2BYkgEhPJxF6OPGi_Cv37e_9AGr7ZnAWbn5M4w6VwOvmNW-5q6SCb3VuagxonfSIjt2TD8RDvKWcXMo6FNlqkQy-Bz29MEsMt6MvRCVQIRxzkzF7ogQTsMIWmwymN6CIlwTYEx9A7Vo1Kj73VJS7huIgoTB0MkNWUGNxvnu9ARiYBPLEjoaSy10MdwmCDQF2SLznV75d49p-KxF_KAeG74NhhyNjmNvO0VIpShzTUCsCm5jsT-A5dQYF1JB7MS_VyWqkYTSLjgHvPvsWNPwDVKUJq_vR4K7jYMQAdvnPpELB891wcWGmXJjbX2FgUEdPcyQlFhv-c0JnDDQ5eoI3i3w1kDQNEJuU31rCdacGWwI9PQG7eykZ6ZG3P73MVoxjBIdLqmdPIG11Z1a7rXbi4753iz2v8HvZcy_tMGHyBgIAHhNrNZmwL0_R7vQtmflwZMRX86QUTEi5vpLpWq8JTw2Tmts-rvEh0v-5cyMRMnkpOGmjYFuxGPeRu1F188YepHsQy5Pjr1eViG53TwU-Jc3blXE4yV4Aj_GRcug2YuS_d2iPQaCgNo4P1DThRyTgUDsLdNVNXe4aA4KbHxSj-4FOmRvea4IZ47MUuoz52mdf-FabZVk7_aOLFGq4F1uX0C3gZCpmXcuvsmkHrIin-V2m7_dhjP29oBR6WG-oVDqiVu_kja2et5YjU7gYpyWMrXVnvsR5y_Y15cV2l21joDX22ZJ0YVFu-VB0o6aE8LjqYF5VjDbH86Fh5OPePLaW7JbsJvWGg_4HXFSSHPCr8mKlg5pey67mz2u8bQGCcwEfnfoqt9nBJptlk66NE3KDNkqt9OuAuxIeJzsSmJEHAmyJPQwaofHWKq60Ow6Zqr26iXJBSFr4byHScxJq6OJIfIsQayFpkaVcLoggQvRkGBtA013yBUj_TFD1JLFtb79wGfYalNpv3zH
+        id: rs_075aae158cb8797a006abb3fa7567487d093b15ce86718229d
+        summary: []
+        type: reasoning
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        arguments: '{"timeout_ms":30000}'
+        call_id: call_IH3h1lCVcXEt8OHxdyT5e2LJ
+        id: mac_075aae158cb8797a006abb3fa78b1887d0b8cd93a27d07b307
+        type: multi_agent_call
+      - agent:
+          agent_name: /root/paris_timezone
+        arguments:
+          query: timezone lookup by city/location; need Paris France time zone
+        call_id: call_SGAfztPMKKWBqPW7MdVp5Ids
+        execution: client
+        id: tsc_075aae158cb8797a006abb3fa7941887d0899eafd8a36918d0
+        status: completed
+        type: tool_search_call
+      - agent:
+          agent_name: /root
+        author: /root/paris_weather
+        content:
+        - encrypted_content: gAAAAABquz-oWXNb-sKIbskgFnJtp9b5j_U11Nvw2WsrbLc60iBLQn0l-Aprb1Itk5o_Qg-qbGQ6y9eXFWQ2tZqaw49fBbfjCnU3AbKjZhDUC2WzMeqSgq66ZVkqqS89xhapwg7pdyVXb8dtBz9DxDUWhpMmnrRUvsIePr_7Y9MRlv8W-Bl-UJ-j1EIYRF9EfyjSo1M-hJUg3L7uJCEi0_s_R_Ycs2yeJQ==
+          type: encrypted_content
+        id: amsg_075aae158cb8797a006abb3fa8191087d084fb789b0344d398
+        recipient: /root
+        type: agent_message
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        call_id: call_IH3h1lCVcXEt8OHxdyT5e2LJ
+        id: maco_075aae158cb8797a006abb3fa822cc87d0b6d3168224c08398
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"message": "Wait completed.", "timed_out": false}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root
+        author: /root/paris_timezone
+        content:
+        - encrypted_content: gAAAAABquz-oJ7uJEUgMPtIQ7vW5Ez2FLhHIx2KI3fE8Htpzq_4wEV8gJfR1k8wFdDjuS9ivL8CM6C6VYGEZDhiN4UARkQZcY7gey7jpwhrMfqKEUQcLY-PET9sqjGUewpKZtcP9Y9W06NeF6NZq5gLyGtZFrcceArXaNGvfqBjKyqqPa4b1W3a4pb3zIWxZMjmqXqKbBa4W3PK3PWWNWqegvArZCayb6RHY7ideFhzegh-CIz5tGCM=
+          type: encrypted_content
+        id: amsg_075aae158cb8797a006abb3fa8457c87d0a3dafca140fca4c6
+        recipient: /root
+        type: agent_message
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABquz_MscEnLfmI1gV4xRtmfgCMP_cxvIRHOiA6XvT9BU14m34Agiy43803opKUBRYECwJVrfY3iligang8xMNDjwLZf9OKLOLHQnchZgFzhnZtQywe7PNr5Tk64oVKhemIhpy8Cv6Wjc8eLmqla9LFK1zucMBatyxWY_ZmBM89jguTRKfzela40Zg2hh5RCJHzQs0lzTQ6X0yWk0-cXaSPYkfWuiAoGePyhUCNEinqvNymGE1R13QkzihKFCFADvcyQg7QonouT8QpTzojHxZirKQZv5YG7aq3WGDT0_hLohWWdst5wKErtaa-O8dTnC7KExY3bnhwSrftgOybyBUqxmRexsdU7QYwYEIs18dC8mLb3qdZr1kSMt-zTBBh2OKE376ZLzLr0EQ6eO4biiunYttCOrhN59rMJ1PDCGW-BP-Ey1VM4f47yrXUA_HBtKeF5p8fbqfKziACOb6Jh452eM_b5gtfK3b_375x0GG1f5D6RZ3TzBc0mi8dkx5eEfxW2gsb2Gl6xw8TJ-vriarevTWe3lJcCvi4-3H1gxvxDalVZMezkqQoU6CP4jkmPwnGpLxMTIVS1o3Mfb6eE7G-Cmu1Qeu6fdOSgSizqOtnmHkCVJNeV8GrE0kvJeSL2mxn_Xd3Qz36rcsyRieGIm-rUbxBFl0si7Fzhq34Ft0oIouuqJRNBoprowpBSFiKvNva8jmk-EwA4XOCFGvmnnPw1ulK17tzZA2f41YicPCFuatwfW8pVibgalSQgPw77bP0UxJW--mIi41vM9Tg-iwjiulaiBktE_R9Y1eTKty3nesKg4PzA2JG8i6Q7B-wkATUm-maW-rYm_tKE9lh52eWjmo3R_NVetoPwOH3GLofVN1saBbJDXaiX9bVhrp2URuZmYBzfUK6OP4plPZNgQNyvJFG5uQRH2EaOBnwX3NWvgJYe1-Whzk0X8PE9BeqMkFxd9ufi5-JuVlP-E7O2Wi7HbLY6BNv232Qm0YgtDfqjpcQBBBW-fPkh_xMPMoYG-2JeaK-lZhk6q-Lb5TWSZK2F_OaRNwgENlvf6hHgrA_qXAfpDkwZytIcCEZHW1Im0pK6HV9vCmlSbX4rkyHSI_SDeE7K7SrHFxEX-TJgj4fT9Vj2ARvqT5eMJGlvk8hRh0HQXofB0z6CZqdd3Siis4TAlDPooHR3h3WBhN_il5RTmlrqhNunn0ZB9J0fhqEbsz8jiVJFzc0ULI2W-ei4gHU3PDT6P__DQZlo9cTWqHlt_wQ5rHLpwvBPtCBXCdT4IueS5gqYDZHJwLpTur-2GDmELjBVjB7aKzqATJUYBYxVwJB7OhmyjoNLOuWviT-yWnwJjRRG1uoudfGlOetoPpfB5hHQ61p7nnEVKxDL_vSWtQ4O2VzCHfqunY6cuLvl4pfostWd1eXmdvd8OLVXDSL99mYHO0o_aKkTizxd_zUfNuT0dzZsJ0tX9c8YB_JMqiE0e_bNdeaXo1DcoYqxZmRT9HzXKTztuVqMiE44MSLAik2TSQ=
+        id: rs_075aae158cb8797a006abb3fa9322887d0b0bb48f879d4391d
+        summary: []
+        type: reasoning
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        arguments: '{"timeout_ms":30000}'
+        call_id: call_ythhLanGAror1KeDJ5HAUiLM
+        id: mac_075aae158cb8797a006abb3faa156087d0837182bce6319be5
+        type: multi_agent_call
+      - action: wait_agent
+        agent:
+          agent_name: /root
+        call_id: call_ythhLanGAror1KeDJ5HAUiLM
+        id: maco_075aae158cb8797a006abb3fc8260887d085a6112d845292b7
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"message": "Wait timed out.", "timed_out": true}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABquz_MDVlUIixJ6RbKwzM0molH8AwaTYV9qy3lHckv6F_nRG2CdVqAH5hEHKwWdZ-kkoqPfcw0dX1Nn3WGWHm8eXSS4syQ_CwbRZtTpzik3a1iJYEq0NwS5HmK7Agb-a6XKjsFEclVSaH4dQ0JoCbuOel7ax_1_mqm2lL9tpObBYO4Gdy-RxRvtRK2iaSSMACSRuh4ja7eDIIe3U930vSn_Hk0MzOsFmIMZQgwVqiJw9SGVQTiUdIo3c_L9UzmQRHhPYjuzAA2zj3DgA9IIhQ6_wSYRtOX-1-AWD_nbkuI5mWPKOKfmNj0frDGTCFOgMv3DtG3dulhXyBEswyaW-FikbATpJzTRwsSNSElKMXBhjsrlXhc227_6Du4S8kxzg0sRIb64EbAvggnkkZXQklsyK0xCvlZaz75_ZbPD6ZdkfXZXFhR2D_vIqsQCltozYRkaggpSlXyeRD0QlG9pn3EBF51_nF_OFLQIuxSa8Sj0CUZOejWZQCc9QuZkBNkpOOj-hOZXGZjmxmmD5tFoTqyjPk6CR70i1ws3u0JDbVI8v1c5pVgqX1LUxowh1yLDIS3D9CEkKrq_H-_eehNSiM4wNI08WyOxCY5dW7DiqEMNZrqQZ4ghIJhFGi-rXqBeLJ9qB-0ThgB8g_sXhuDsHwrp0FU0mZynXyI4V-77FL8hJzlCndvxBaKdv4ZDtGE0gJXPdzy0v0SUj3BHPnoWczoCvLd-RVQuKUI-rPtDE4ntQMaBjO1mPbsfujUVGWgBgdjJiS1Qpp6S6asrFPBVwhJZyjV6W3HKELNFkrF74098weTkKG1CAGbKopo4TfHqF3wZYk60uWzydnadTFbzTylXqaALspQoMkZoVrBxFPv3elcbH8W1YwYWM5-fHnn476u2K9NCQYszjEX690KdbExe_QiBFbR_xsv9GjeN_ERH0cqlOhCKNoMWo553Ds1vChdg9XLZVGiFLjfaOdU1K7gO2--up24IBqCEKbGveiyE5eCOXsSdXhkCsCqfDRpTiyk6WffuCHhYyGCycDHhdGzkOWhcUuW9IvnjggyA3Ypaku5btR2upO9HPKNiX_j007xDA_GY7Gjntg8uVcH_xlqa_J2NvbEkP09vaaKD6YXN5GhvH3mSXXSUtqRv9kYHC_LTcF1CQlreRL3MPgZcEQLrEUJSTp-Y7QyOelnJ5DT_XWqlA4W9rbBbf_9fOLPzW4e4BI36wJ4_0LnQ8i5w0uuKHwBGA==
+        id: rs_075aae158cb8797a006abb3fc911f887d0a1d23a827081616f
+        summary: []
+        type: reasoning
+      - action: list_agents
+        agent:
+          agent_name: /root
+        arguments: '{}'
+        call_id: call_XopNS2A76gap5MFlWhToGOpT
+        id: mac_075aae158cb8797a006abb3fc93df887d0805138f51e1301da
+        type: multi_agent_call
+      - action: list_agents
+        agent:
+          agent_name: /root
+        call_id: call_XopNS2A76gap5MFlWhToGOpT
+        id: maco_075aae158cb8797a006abb3fc9503c87d093957952c0f0d120
+        output:
+        - annotations: []
+          logprobs: []
+          text: '{"agents": [{"agent_name": "/root", "agent_status": "running"}, {"agent_name":
+            "/root/paris_timezone", "agent_status": {"completed": null}}, {"agent_name":
+            "/root/paris_weather", "agent_status": {"completed": null}}, {"agent_name":
+            "/root/raw_echo", "agent_status": "running"}]}'
+          type: output_text
+        type: multi_agent_call_output
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABquz_M4QdENka64H_Gj7DaeX7YDBJTbghSB_CK9UnFWk-zRujk78FoNubLMy6sFEA-LvrbpEOkjtJHSbqlH5mSoik7qynGLWPVT9YRmkCmifq1p_0WzDwB_w_FHtrulKW461tJwpDxCPHnLQkXU5CcxezkBwiDQ-HNgKSM8DZmYqGfQkOHJ4KKGbcun9hNVn3uNJxTitFfr0I6Ei9nsQXeK3SSaftkYGClarOBO7M1sl3Pye8OrMFfWK-Ip3AKLWtLZgmda2GCiNjYoSKLakOAy2xIr9IPXXxZHlK1lZolRERIqqJTBq1PJr_N_lOUt9HDcTTVCVQyCYCccjVQeWVvNM_jHYI5uJmbhPK3FVyUyhYrJq9oljQio52julDp4QpKof3KFQJc_RWRQLfHbhXzMqmH9LoEGkz3UsLwfmeAoXobJ38ta-aYP4qfauiNb1eobplGTaRHKf-0MIqUa-FxJzIi_Gni3MjwjsiBrQ2jilqA-12-4tUjB1vQMe_d5DSZvADY4_DArg-uUJHOK_6uoy04e-SolDE4xtMs6_vK7O4G3izUJ9unbVjhYJXYzn5JT_YO4AoVyr7XMhkC_4BTnFGDk7JKnmFsd1sgU3t68R6Ph8r61ESBcgTv47xvzxrQZQ6GyH4gLiNlAF9I6Tn-RNHu9TLSROZy75BMFzN03LX2JQxi_ee5DvJ8r_6nmpZbhgVuokp0cVcQI0b8TgNdedibsYmgQJmwUIbxevZMk8f9OxZLk-dOSR64KNVnK8pzyqXAauW0F8kEZe07icbPuPcwfLFmWsgMAczLZ-Vyhve7NdlMLwURs2RlkscSGhdvdgRjVZACM7j3XA_J5KDDtotyWqP2ySlLbuOoyBbStmI6hY6cDdI-X9ThUARf4rid7LZkN8Qnj4TnyhoB_R3tzZXo7zxO3qWStlWFSOYW0UXeP7WxO3lfkgmDV16Acrtzcdq8Gli3DwUV8UehPLySYFo_7JHTxoNthI9_pPiq4vwpPb1BesVBIvRcHNwqrHTEWPEZlBpq9rQPS132Kq0L8_KIPfvvUBD8HcrPVihyju7RY_bsZZOJPDscWghFdXSa_iHdOIQfu1j8lPc6jragkimcK7tKR6xacfLcOUSZ_C6JAdvt81O7caKTTHKO4Ff-mMxtwa1YjBH8BKOEEJ2fvOGfVWpzRIow-dsNbnAOyDJus1IUEfdXozP23w42OxB6BWq1SvcgWUnsfeSsBQ0uWIL-ZPy3rXOIevvldXMOym942di6d1rhCAOLkGk07SWIMGlydUoAOTqjCiYKigl3YvjI_ZBwWZcDA7OhyGyL0RNng54fyjRg--RZUPmkoZzvBrP0
+        id: rs_075aae158cb8797a006abb3fca4b8487d0b8d0e27b1c2b13ce
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root
+        arguments:
+          query: A function tool to get current weather for Paris, France
+        call_id: call_bRjo4yC1tOgSs2NXgZSLR8D4
+        execution: client
+        id: tsc_075aae158cb8797a006abb3fcb0b9c87d0b31aad132bd3ac04
+        status: completed
+        type: tool_search_call
+      - agent:
+          agent_name: /root
+        arguments:
+          query: A function tool to get the time zone for Paris, France
+        call_id: call_Th64khSfOA7vMQsERCCBJKcE
+        execution: client
+        id: tsc_075aae158cb8797a006abb3fcb0bac87d092fb8265d501a675
+        status: completed
+        type: tool_search_call
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Search for hotels in a city
+        name: search_hotels
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Emit the requested cassette token as raw text. The input must
+          be exactly CUSTOM_CASSETTE_OK.
+        format:
+          type: text
+        name: agentic_raw_echo
+        type: custom
+      - description: Search the client tool catalog for tools that can satisfy the
+          request.
+        execution: client
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: A concise description of the needed capabilities.
+              type: string
+          required:
+          - query
+          type: object
+        type: tool_search
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 6274
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 1267
+        output_tokens: 790
+        output_tokens_details:
+          reasoning_tokens: 26
+        total_tokens: 7064
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: call_q7fp9CTUNFBagqQnYTbAG1N8
+        execution: client
+        status: completed
+        tools:
+        - defer_loading: true
+          description: Get the current weather for a city
+          name: get_weather
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get the IANA time zone for a city
+            name: get_timezone
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      - call_id: call_N8Qox7GsFNxDEwqkbo4GPOPa
+        execution: client
+        status: completed
+        tools:
+        - defer_loading: true
+          description: Get the current weather for a city
+          name: get_weather
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get the IANA time zone for a city
+            name: get_timezone
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      - call_id: call_y2csWa1znsOXTNnQ8Jgi3WS7
+        output: CUSTOM_CASSETTE_OUTPUT_OK
+        type: custom_tool_call_output
+      - call_id: call_vy9tsIvPbe7AX6wKaLowoPp9
+        execution: client
+        status: completed
+        tools:
+        - defer_loading: true
+          description: Get the current weather for a city
+          name: get_weather
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get the IANA time zone for a city
+            name: get_timezone
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      - call_id: call_SGAfztPMKKWBqPW7MdVp5Ids
+        execution: client
+        status: completed
+        tools:
+        - defer_loading: true
+          description: Get the current weather for a city
+          name: get_weather
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get the IANA time zone for a city
+            name: get_timezone
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      - call_id: call_bRjo4yC1tOgSs2NXgZSLR8D4
+        execution: client
+        status: completed
+        tools:
+        - defer_loading: true
+          description: Get the current weather for a city
+          name: get_weather
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get the IANA time zone for a city
+            name: get_timezone
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      - call_id: call_Th64khSfOA7vMQsERCCBJKcE
+        execution: client
+        status: completed
+        tools:
+        - defer_loading: true
+          description: Get the current weather for a city
+          name: get_weather
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - description: Travel location tools
+          name: travel
+          tools:
+          - defer_loading: true
+            description: Get the IANA time zone for a city
+            name: get_timezone
+            parameters:
+              additionalProperties: false
+              properties:
+                city:
+                  type: string
+              required:
+              - city
+              type: object
+            strict: true
+            type: function
+          type: namespace
+        type: tool_search_output
+      max_output_tokens: 16384
+      model: gpt-5.6-sol
+      multi_agent:
+        enabled: true
+        max_concurrent_subagents: 3
+      previous_response_id: resp_075aae158cb8797a006abb3f9cb70487d096d0eb5873900a2a
+      store: true
+      stream: false
+      tools:
+      - description: Search the client tool catalog for tools that can satisfy the
+          request.
+        execution: client
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: A concise description of the needed capabilities.
+              type: string
+          required:
+          - query
+          type: object
+        type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Search for hotels in a city
+        name: search_hotels
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - description: Emit the requested cassette token as raw text. The input must
+          be exactly CUSTOM_CASSETTE_OK.
+        name: agentic_raw_echo
+        type: custom
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      openai-beta: responses_multi_agent=v1
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790656463
+      created_at: 1790656461
+      error: null
+      frequency_penalty: 0.0
+      id: resp_075aae158cb8797a006abb3fcd337087d0bd5c8bb8ae958640
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 16384
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - agent:
+          agent_name: /root/raw_echo
+        content:
+        - annotations: []
+          logprobs: []
+          text: CUSTOM_CASSETTE_OUTPUT_OK
+          type: output_text
+        id: msg_075aae158cb8797a006abb3fce1f5087d0aa648b52032f3d4e
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABquz_P65BPLedfybs6Si8BsJk8-RciVNrY4JVPUipDUBq37uBcYXJo0GWokgCyz0Q8Nugditkrxjd-xVX89qtVJZ7fEHC_izOx_ebzMIFwC91iVY1Xhc_2RxC-ev-6Got54iK6iPXgsjbZXKrrXRgpr5TeYcQsL9psnX8uYNg9zGpx_wQgOjUhnBKqzMCo6r_s-dMjb_AfEY2zpUEzIRz0NlYahdMqnvpEjzLQu3Lalw7C2AdKwsHY3V6IV-CjzaeX2jHkFyREJWAsr-tcpG43nJ-92dm0zwb8v7xK3dTKcxnXlHGC4DKz8Xh7aN4-5IWMQZIPLBYBo1pydqEJUz2-mJ3YxW12HXNyIjfztbMiIO1jWLRTvQS1OnTfC-xkJwL8ag-hoAxgj75iD_pgZRyRvcCP-Ox-ZJ9Tig5mw76JPi6jnV1BsvdwGkeyUpqe-Rx_Dws-GOnCWJGJH6tEs4i0qhBO3Y2DhO81aBbZCoZB1CAEYBu9P7sTiGBZbzWU4qDLAB5sm5fXusmSwMezNww1MU0BqZqi9K59-t9fg5skIhTKGCCSDzryC4vgQs5AZEzeU3y61HQ_0DoBhgPY3_B3fot4SVhbKSfWJt-1mKcxDhELBrSsRjY-vFIRdu_l1hXMF09mYl2UIKrSTAIu4BVvi6Wf_AWwZs6NZERwVhLnlhvhy7B0nX5Bia47AvBtnyQw3ic0CXi09tthedB7tervm_Mf8NuTUrpAXxhRuXWUjm_hDYh2aJiWZel1xe3O5Tav-5tsHxHLEG9sWilZ8DQGkSsMHoKtZA0X_eW3rBzWfWicsaZdY88gtLzaHbQDCgt23_HwfPRlMRXAG7ZHcLrGe38X7mVoBMVYBGr_hPQ6g5uM_9eYmXdipio2kCx5cc_KIgSSAAtLLNjcZJjTZFQ4ZT8MeclJ5QKKNzLchaSCv4lLEFvZlcJjizuktOnlRaW1ayssf4v1hoUZIiv4YCyjnATLY3X1PlGFPwl6NC8R4R3En2mN6cisy4sSWrfO5ge3cXZvM6QOpq5gzTchlKoLGh57fWXLY63Jl4U4M78tHYxdVvLrJ6OSu3Qs98Tlct_R74Q6ktIGrXCvnQIUc7VipyYnn-rOPqxiDLh5oXBlfQSlZDn0QFEvfiBklDrSbxohdcDrKVoLJ-CuBa_H0QguJo042kt6AsEpzPZ6jSlXUSzD0NWW2MbfOqUQHUOtHX6tTn7YPL6IC5LzNanMCIMyKWG9BZanc9NmDergxplvLJQcdngpZNkDsW-EzekQOfqpLj7a
+        id: rs_075aae158cb8797a006abb3fce3d4c87d08a1d66a039fd8e14
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root
+        author: /root/raw_echo
+        content:
+        - encrypted_content: gAAAAABquz_OzigUdhMwhpkg2cEMKI4viBAfEqNl3etW-qtz2hoy7IqNhtagqS18Q3MO6lryMJoTxCtqrmbi3MdheT_LIElL6CaHzL4oWU0YxGW12lM0b_kvrnHI06SRAZwXlnILjxVCX2Irek5UsrMKHse_NAkf-RNiWWcj20vWprW4P84851rGZ5RL1avHwfWQ-BZl_JZcbGTYDci_UWn4E4kMgRrA1aKQ7Y43BeW_R5hueIfCKMErV6sRYYj2saiBuvmXoIB4
+          type: encrypted_content
+        id: amsg_075aae158cb8797a006abb3fceaef487d0a701f306a83e087f
+        recipient: /root
+        type: agent_message
+      - agent:
+          agent_name: /root
+        arguments: '{"city":"Paris"}'
+        call_id: call_hBvUwMT7HfVXRf6NH4Hgea0u
+        id: fc_075aae158cb8797a006abb3fcec9cc87d09c4044d00c2dfe3a
+        name: get_weather
+        status: completed
+        type: function_call
+      - agent:
+          agent_name: /root
+        arguments: '{"city":"Paris"}'
+        call_id: call_gfBv9wVgyTD7KsaIanV0U8jJ
+        id: fc_075aae158cb8797a006abb3fcec9e087d0927f2a7bf4ac8cb3
+        name: get_timezone
+        namespace: travel
+        status: completed
+        type: function_call
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_075aae158cb8797a006abb3f9cb70487d096d0eb5873900a2a
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current weather for a city
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Search for hotels in a city
+        name: search_hotels
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Emit the requested cassette token as raw text. The input must
+          be exactly CUSTOM_CASSETTE_OK.
+        format:
+          type: text
+        name: agentic_raw_echo
+        type: custom
+      - description: Search the client tool catalog for tools that can satisfy the
+          request.
+        execution: client
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: A concise description of the needed capabilities.
+              type: string
+          required:
+          - query
+          type: object
+        type: tool_search
+      - description: Travel location tools
+        name: travel
+        tools:
+        - description: Get the IANA time zone for a city
+          name: get_timezone
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 3940
+        input_tokens_details:
+          cache_write_tokens: 1891
+          cached_tokens: 0
+        output_tokens: 76
+        output_tokens_details:
+          reasoning_tokens: 15
+        total_tokens: 4016
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - call_id: call_hBvUwMT7HfVXRf6NH4Hgea0u
+        output: '{"city":"Paris","condition":"clear","temperature_c":21}'
+        type: function_call_output
+      - call_id: call_gfBv9wVgyTD7KsaIanV0U8jJ
+        output: '{"city":"Paris","iana_timezone":"Europe/Paris"}'
+        type: function_call_output
+      max_output_tokens: 16384
+      model: gpt-5.6-sol
+      multi_agent:
+        enabled: true
+        max_concurrent_subagents: 3
+      previous_response_id: resp_075aae158cb8797a006abb3fcd337087d0bd5c8bb8ae958640
+      store: true
+      stream: false
+      tools:
+      - description: Search the client tool catalog for tools that can satisfy the
+          request.
+        execution: client
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: A concise description of the needed capabilities.
+              type: string
+          required:
+          - query
+          type: object
+        type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Search for hotels in a city
+        name: search_hotels
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Travel location tools
+        name: travel
+        tools:
+        - defer_loading: true
+          description: Get the IANA time zone for a city
+          name: get_timezone
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      - description: Emit the requested cassette token as raw text. The input must
+          be exactly CUSTOM_CASSETTE_OK.
+        name: agentic_raw_echo
+        type: custom
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      openai-beta: responses_multi_agent=v1
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790656466
+      created_at: 1790656464
+      error: null
+      frequency_penalty: 0.0
+      id: resp_075aae158cb8797a006abb3fd022f887d0b2465134b2409584
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 16384
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - agent:
+          agent_name: /root
+        content: []
+        encrypted_content: gAAAAABquz_TwK9fe6WBYzRkL47Ts5T7H2R0z1h4hjVc8okEGlaJIvPIb-m08tX6JdliX1fgvEP1-BN2YTdlx-sw61Uo-KH3XRJhDzdkFa0KudT5hXveoWhWNlaIUIDDr8LhuosjCxiwEsSEj7Q4YFW0rA3ELJnqRwtJhkxwhppyEq-WLAzRCRZL0kkx98cNpDDdeAgzqJehUFnp8dBHedwXIXwFfaxd3UVdJ0EjT2fEWP_HFQjY-kS4KPMxd6qF9J3nWjpifXhIFCj_9fNAXgna2nYjXbgGosCFNBFCJTnsxTnUVLqep671rElJvMjNQK9spnxfvggv9Xq_BIoOjl_cYR7LWyvq-qWXl5MloC62PRLaNcCp0cYRKoN4HJIpQbhrX7zLh_gRrwSFbdnFnWfJXcTs_-aqekT1KRdKiPyYBKKJu1e7uQSXcCNJsXXCaxLWajAeHf4IZxQ59JkU5n62mkWeEzqzr7CMVHKalGXd3SkriUzjZZhobnP9868Cs9JH-_rIVl1JFRrZTGb1NThaCTWHO58Kzyf3wdenqpLYAjvHpDnA-UcKbBY0pqrKYkHHvw-EI2fd1geie-dxKZe1qxsrEhZAV108HdWq9FET7XUKy6-wRSHgKmBuPckVPavxPi3En0M_NkqO-qEqRPDbtdQwmm59NeggjtOlGAXYq1KVmrf4AtqQHsmnJaWDQQLwTI8SCsSoCUYt-sGm-5jZI_4S1_3fy9MjMreu2ADiT0E1NeN5IJUDh4OkCNbpOM0hn68J9ei4qNjFdfs6NSMUc5ayfQh7KHiPFRqXlFam_frQyR6AJlz5AhHXaETI4uvaBT0_GaoTG74y0w6dERgkEP26v-K84phVQPZ-eNczzn9vJkPjVHp6OiAc1NGi8S8pHtHdM1ejJH9Qui8TkkYQa5-0lLU-ufZoozOHgAiUpqbDBZC4azvSHM9GRExK4tfVFUwNuxje5c47CT3hRCH9IE7E43WDAegUojeulGrcFkJ00W7h6V4iPfuyFYSXVumtpKyBha9oDsYMCizvgJSLqwFRzx-QezLFl1MlZI5uv9sTFGTa_kymSjMyhiAzdy3Wr_AI0LYGb6Ng2psTqzW4tifjR0xy5gDYDmjLrXYK9IWddlb89ZEE3LQ1ObBSbiUXtRZeNLDAMOOK1ln9C7pfH0OWASpvxLHJI8e9Fdng8sHzsr4c8LnH50Q7Aoq7X4BBO3dZlRpf3ELUbz3_VX0sFuOV1HLeTBSvFCm3y_H8Tg5trwfdSV-dzNx814WBUiuQfcvw0LiptqaVhcNRQ9KeTMXw7o2-GZybJlxLF4fppvNxozP2svQ3YwpdnHySgxjgVxeTr0bEsNadrGjspEV54G2XBr6bBjBjvGmztBWLAPeNNyVPQ4OGT4uuxQa12Eza3TE2bJofW5Qen06Uqk8Rg4srwvI6oodqtlaVAZuBVEMy7qLe0HUsPhXVdinBV8K4scmdI9TltgY4XG_PGLl-VtVkuxgqi4g9UUB5SMGb9fR8194D-Cx_flPNZ7nh8AeVQqmd3JOYjKgicItIIUTIMR8OgzNLvn5cZKeMail5WcZPVvsfoS4=
+        id: rs_075aae158cb8797a006abb3fd107fc87d09a4847202eb0d8ed
+        summary: []
+        type: reasoning
+      - agent:
+          agent_name: /root
+        content:
+        - annotations: []
+          logprobs: []
+          text: '- Paris weather: Clear, 21 °C
+
+            - Paris time zone: Europe/Paris
+
+            - Custom tool output: `CUSTOM_CASSETTE_OUTPUT_OK`'
+          type: output_text
+        id: msg_075aae158cb8797a006abb3fd20a8887d096c106dc5e6dbc6e
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_075aae158cb8797a006abb3fcd337087d0bd5c8bb8ae958640
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Get the current weather for a city
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Search for hotels in a city
+        name: search_hotels
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Emit the requested cassette token as raw text. The input must
+          be exactly CUSTOM_CASSETTE_OK.
+        format:
+          type: text
+        name: agentic_raw_echo
+        type: custom
+      - description: Search the client tool catalog for tools that can satisfy the
+          request.
+        execution: client
+        parameters:
+          additionalProperties: false
+          properties:
+            query:
+              description: A concise description of the needed capabilities.
+              type: string
+          required:
+          - query
+          type: object
+        type: tool_search
+      - description: Travel location tools
+        name: travel
+        tools:
+        - description: Get the IANA time zone for a city
+          name: get_timezone
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Get latitude and longitude for a city
+          name: get_coordinates
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        - defer_loading: true
+          description: Calculate the distance between two cities
+          name: calculate_distance
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              destination:
+                type: string
+              origin:
+                type: string
+            required:
+            - origin
+            - destination
+            type: object
+          strict: true
+          type: function
+        type: namespace
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 2724
+        input_tokens_details:
+          cache_write_tokens: 153
+          cached_tokens: 1614
+        output_tokens: 103
+        output_tokens_details:
+          reasoning_tokens: 63
+        total_tokens: 2827
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
