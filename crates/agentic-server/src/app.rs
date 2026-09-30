@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
@@ -5,7 +6,9 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use axum::Router;
 use axum::middleware;
 use axum::routing::{get, post};
+use axum::serve::{Listener, ListenerExt as _};
 use http::HeaderValue;
+use tokio::net::{TcpListener, TcpStream};
 #[cfg(debug_assertions)]
 use tokio::sync::oneshot;
 use tokio::sync::{Notify, Semaphore, SemaphorePermit};
@@ -18,9 +21,9 @@ use agentic_core::proxy::ProxyState;
 use crate::auth::api_key::require_api_key;
 use crate::auth::{ANTHROPIC_COUNT_TOKENS_PATH, ANTHROPIC_MESSAGES_PATH, OidcAuthenticator, require_oidc};
 use crate::handler::{
-    compact_response, count_tokens, create_conversation, create_item, delete_conversation, delete_item, health,
-    list_items, messages, models, ready, responses, responses_ws_with_auth, retrieve_conversation, retrieve_item,
-    retrieve_response, update_conversation,
+    chat_completions, compact_response, completions, count_tokens, create_conversation, create_item,
+    delete_conversation, delete_item, health, list_items, messages, models, ready, responses, responses_ws_with_auth,
+    retrieve_conversation, retrieve_item, retrieve_response, update_conversation,
 };
 use crate::model_capabilities::ModelCapabilities;
 use crate::telemetry::http::{HttpMetrics, track_request};
@@ -270,6 +273,23 @@ pub struct AppState {
     pub max_request_body_size: NonZeroUsize,
 }
 
+/// The gateway's listener: `listener` with Nagle's algorithm disabled on
+/// every accepted connection.
+///
+/// Streamed responses and WebSocket turns are written as several small
+/// frames. With Nagle's algorithm on, each frame after the first waits until
+/// the client acknowledges the previous one, and clients delay that
+/// acknowledgement (about 40 ms on Linux), which stalled every streamed
+/// response and WebSocket turn. A connection whose option cannot be set is
+/// still served.
+pub fn gateway_listener(listener: TcpListener) -> impl Listener<Io = TcpStream, Addr = SocketAddr> {
+    listener.tap_io(|stream: &mut TcpStream| {
+        if let Err(error) = stream.set_nodelay(true) {
+            tracing::warn!(%error, "failed to disable Nagle's algorithm on an accepted connection");
+        }
+    })
+}
+
 pub fn build_router(state: AppState, server_config: &ServerConfig) -> Router {
     build_router_with_auth(state, server_config, None)
 }
@@ -309,6 +329,8 @@ pub fn build_router_with_auth(
             "/v1/conversations/{conversation_id}/items/{item_id}",
             get(retrieve_item).delete(delete_item),
         )
+        .route("/v1/chat/completions", post(chat_completions))
+        .route("/v1/completions", post(completions))
         .route("/v1/models", get(models))
         .route(ANTHROPIC_MESSAGES_PATH, post(messages))
         .route(ANTHROPIC_COUNT_TOKENS_PATH, post(count_tokens))

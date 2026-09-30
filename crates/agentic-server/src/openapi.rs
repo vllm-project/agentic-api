@@ -11,6 +11,8 @@ use utoipa::OpenApi;
         license(name = "Apache-2.0"),
     ),
     paths(
+        crate::handler::http::chat_completions::chat_completions,
+        crate::handler::http::chat_completions::completions,
         crate::handler::http::models::health,
         crate::handler::http::models::ready,
         crate::handler::http::models::models,
