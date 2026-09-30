@@ -729,3 +729,26 @@ fn service_tier_is_charged_and_bounded_on_both_ingestion_paths() {
         assert_budget_exceeded(&json_acc.load_json_body(&terminal["response"].to_string()).unwrap_err());
     }
 }
+
+#[test]
+fn repeated_terminal_service_tiers_reconcile_retained_memory() {
+    let charge = RETAINED_CONTAINER_OVERHEAD_BYTES + "priority".len();
+    let (mut acc, budget) = budgeted(
+        "resp_1".len() + RETAINED_CONTAINER_OVERHEAD_BYTES + charge + 1,
+        Validation::Lenient,
+    );
+    feed(&mut acc, &[created()]).unwrap();
+    let base = budget.used();
+    for tier in [json!("priority"), json!("priority"), json!("flex"), Value::Null] {
+        let mut event = completed(&[]);
+        event["response"]["service_tier"] = tier.clone();
+        feed(&mut acc, &[event]).unwrap();
+        assert_eq!(budget.used(), base + charge);
+        assert_eq!(acc.service_tier.as_deref(), tier.as_str());
+    }
+    let mut larger = completed(&[]);
+    larger["response"]["service_tier"] = json!("priorityxx");
+    assert_budget_exceeded(&feed(&mut acc, &[larger]).unwrap_err());
+    assert!(acc.service_tier.is_none());
+    assert_eq!(budget.used(), base + charge);
+}

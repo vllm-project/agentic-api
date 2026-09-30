@@ -29,11 +29,12 @@ impl ResponseAccumulator {
         service_tier: Option<String>,
     ) -> ExecutorResult<()> {
         self.finalize_all()?;
-        if let Some(service_tier) = &service_tier
-            && let Some(budget) = &self.budget
-        {
-            budget.consume(RETAINED_CONTAINER_OVERHEAD_BYTES + service_tier.len())?;
-        }
+        self.service_tier_account.reconcile(
+            self.budget.as_ref(),
+            service_tier
+                .as_ref()
+                .map_or(0, |tier| RETAINED_CONTAINER_OVERHEAD_BYTES + tier.len()),
+        )?;
         self.status = status;
         self.usage = usage;
         self.service_tier = service_tier;

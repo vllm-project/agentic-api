@@ -32,7 +32,9 @@ use crate::utils::uuid7_str;
 mod active;
 mod active_text;
 mod identity;
-use identity::{invalid_lifecycle, invalid_lifecycle_or_id, invalid_stream, item_identity, output_item_call_id};
+use identity::{
+    CallIdObservation, invalid_lifecycle, invalid_lifecycle_or_id, invalid_stream, item_identity, output_item_call_id,
+};
 mod completion;
 mod details;
 mod json;
@@ -47,25 +49,6 @@ use slot::{OutputIndex, SlotMap, SlotState};
 pub(super) enum Validation {
     Strict,
     Lenient,
-}
-
-#[derive(Debug, Default)]
-struct CallIdObservation {
-    first: Option<String>,
-    changed: bool,
-}
-
-impl CallIdObservation {
-    fn observe(&mut self, call_id: Option<&str>) {
-        let Some(call_id) = call_id.filter(|call_id| !call_id.is_empty()) else {
-            return;
-        };
-        match self.first.as_deref() {
-            Some(first) if first != call_id => self.changed = true,
-            None => self.first = Some(call_id.to_owned()),
-            Some(_) => {}
-        }
-    }
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -129,6 +112,7 @@ pub struct ResponseAccumulator {
     output: Vec<OutputItem>,
     usage: Option<ResponseUsage>,
     service_tier: Option<String>,
+    service_tier_account: RetainedAccount,
     status: ResponseStatus,
     incomplete_details: Option<IncompleteDetails>,
     error: Option<serde_json::Value>,
@@ -159,6 +143,7 @@ impl ResponseAccumulator {
             output: Vec::new(),
             usage: None,
             service_tier: None,
+            service_tier_account: RetainedAccount::default(),
             status: ResponseStatus::InProgress,
             incomplete_details: None,
             error: None,
@@ -238,6 +223,7 @@ impl ResponseAccumulator {
             output,
             usage,
             service_tier,
+            service_tier_account: RetainedAccount::default(),
             status,
             incomplete_details,
             error,

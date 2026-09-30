@@ -74,3 +74,22 @@ pub(super) fn item_identity<'a>(
         item_type,
     })
 }
+
+#[derive(Debug, Default)]
+pub(super) struct CallIdObservation {
+    first: Option<String>,
+    pub(super) changed: bool,
+}
+
+impl CallIdObservation {
+    pub(super) fn observe(&mut self, call_id: Option<&str>) {
+        let Some(call_id) = call_id.filter(|call_id| !call_id.is_empty()) else {
+            return;
+        };
+        match self.first.as_deref() {
+            Some(first) if first != call_id => self.changed = true,
+            None => self.first = Some(call_id.to_owned()),
+            Some(_) => {}
+        }
+    }
+}
