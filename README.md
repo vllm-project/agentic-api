@@ -8,7 +8,7 @@
 
 **The stateful, agentic API layer for [vLLM](https://github.com/vllm-project/vllm), written in Rust 🦀**
 
-*Run OpenAI-grade agentic workloads (Responses API, server-side tools, Codex) on your own GPUs.*
+*Run OpenAI-grade agentic workloads (Responses and Messages APIs, server-side tools, Codex, Claude Code) on your own GPUs.*
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.85%2B-orange.svg?logo=rust)](Cargo.toml)
@@ -27,14 +27,14 @@ vLLM gives you state-of-the-art inference throughput. But real agentic applicati
 
 ```mermaid
 flowchart LR
-    C(["🧑‍💻 Client<br/>Codex · SDKs · curl"]) -->|"📮 <code>POST /v1/responses</code><br/>🌐 HTTP&nbsp;&nbsp;📡 SSE&nbsp;&nbsp;🔌 WebSocket"| A
+    C(["🧑‍💻 Client<br/>Codex · Claude Code · SDKs · curl"]) -->|"📮 <code>POST /v1/responses</code> · <code>/v1/messages</code><br/>🌐 HTTP&nbsp;&nbsp;📡 SSE&nbsp;&nbsp;🔌 WebSocket"| A
     subgraph A ["⚡ Agentic API (Rust 🦀)"]
         direction TB
         S["🔄 State hydration<br/><code>previous_response_id</code>"]
-        T["🛠️ Server-side tools<br/>web search · functions"]
-        P["💾 Persistence<br/>SQLite response store"]
+        T["🛠️ Server-side tools<br/>web search · MCP · code interpreter"]
+        P["💾 Persistence<br/>SQLite · PostgreSQL"]
     end
-    A -->|"🚀 <code>POST /v1/responses</code><br/>⚙️ stateless&nbsp;&nbsp;🤝 OpenAI-compatible"| V(["🚀 vLLM core<br/>inference engine"])
+    A -->|"🚀 <code>POST /v1/responses</code> · <code>/v1/messages</code><br/>⚙️ stateless&nbsp;&nbsp;🤝 OpenAI/Anthropic-compatible"| V(["🚀 vLLM core<br/>inference engine"])
 
     classDef client fill:#FFE8B3,stroke:#F59E0B,stroke-width:2px,color:#7C2D12
     classDef inner fill:#E0E7FF,stroke:#6366F1,stroke-width:2px,color:#312E81
@@ -53,12 +53,14 @@ flowchart LR
 
 ## ✨ Key Features
 
-- 🔄 **Stateful conversations**: the server manages history via `previous_response_id`. No client-side message tracking, no replaying full transcripts.
-- 🛠️ **Server-side tool execution**: an explicit tool-ownership model (gateway / client / provider) decides exactly what runs where. Web search ships today via [You.com](https://you.com), [Brave Search](https://brave.com/search/api/), or [Tavily](https://tavily.com), and the model executes multi-step tool chains automatically.
-- 📡 **Every transport**: non-streaming HTTP, server-sent events for token streaming, and full **WebSocket** support for interactive clients.
-- 🧰 **Codex-ready**: accepts Codex-shaped Responses traffic out of the box, preserving the tool declarations and response item shapes Codex depends on.
-- 🏃 **Background execution**: fire-and-forget requests that keep processing server-side.
-- ✅ **Compatibility tested**: validated against the [Open Responses](https://www.openresponses.org/) compatibility suite, with replay-cassette tests for real OpenAI and vLLM traffic.
+- 🔄 **Stateful conversations**: the server manages history via `previous_response_id` or the [Conversations API](#-api-surface). No client-side message tracking, no replaying full transcripts.
+- 🛠️ **Server-side tool execution**: an explicit tool-ownership model (gateway / client / provider) decides exactly what runs where. Web search ships today via [You.com](https://you.com), [Brave Search](https://brave.com/search/api/), or [Tavily](https://tavily.com), alongside MCP tools and an opt-in [embedded code interpreter](#optional-embedded-code-interpreter); the model executes multi-step tool chains automatically.
+- 🤝 **Multi-agent orchestration**: a stored Responses request can spawn and coordinate subagents server-side over HTTP, returning their attributed work in one response ([details](#-multi-agent-responses)).
+- 📡 **Every transport**: non-streaming HTTP, server-sent events for token streaming, and full **WebSocket** support for interactive clients, with `stream_id` multiplexing.
+- 🧰 **Codex and Claude Code ready**: accepts Codex-shaped Responses traffic and Anthropic Messages traffic, preserving the tool declarations and item shapes each client depends on.
+- 🗜️ **Compaction**: automatic and explicit context compaction through `/v1/responses/compact` ([guide](docs/guides/responses-compaction.md)).
+- 🔭 **Observability**: opt-in OpenTelemetry traces and metrics over OTLP ([guide](docs/deploying/observability.md)).
+- ✅ **Compatibility tested**: validated against the [Open Responses](https://www.openresponses.org/) compatibility suite, with replay-cassette tests for real OpenAI, vLLM, SGLang, and NVIDIA Dynamo traffic.
 
 ## 🧭 API Surface
 
@@ -67,12 +69,17 @@ flowchart LR
 | `POST /v1/responses` | OpenAI-compatible Responses API with state, tools, and streaming | ✅ |
 | `GET /v1/responses/{response_id}` | Retrieve a locally stored response | ✅ |
 | `GET /v1/responses` | WebSocket transport for the Responses API | ✅ |
-| `POST /v1/conversations` | Conversation management | ✅ |
+| `POST /v1/responses/compact` | Compact direct input or a stored response chain | ✅ |
+| `/v1/conversations` · `/v1/conversations/{id}/items` | Conversations API: create, retrieve, update, and delete conversations and their items | ✅ |
+| `POST /v1/messages` · `POST /v1/messages/count_tokens` | Anthropic Messages API forwarded to the upstream, with a server-side loop for gateway-owned tools | ✅ |
 | `GET /v1/models` | Model listing proxied from vLLM | ✅ |
 | `POST /v1/chat/completions` · `POST /v1/completions` | Forwarded to the upstream verbatim, so clients on those endpoints keep working when the gateway is the entry point | ✅ |
 | `GET /health` · `GET /ready` | Liveness and readiness probes | ✅ |
-| Messages API | Anthropic-style stateful messages on shared primitives | 🚧 Planned |
+| `GET /swagger-ui` · `GET /openapi.json` | Generated OpenAPI spec and Swagger UI, served when `ENABLE_OPENAPI_DOCS=true` | ✅ |
+| Stateful Messages | Messages continuation on the shared persistence primitives | ⏳ Planned |
 | Interactions API | Higher-level agentic workflow surface | ⏳ Planned |
+
+See the [API reference](docs/api/index.md) for routing, authentication, and WebSocket details.
 
 Responses created with `store: true` retain a terminal snapshot for retrieval, including status, usage,
 and this turn's output. Retrieval does not call the upstream model. Unknown IDs return a JSON `404`;
@@ -137,24 +144,24 @@ permission checks and disables Codex approvals and sandboxing.
 
 ### Python distribution
 
-The `agentic-api` Python package is [available on PyPI](https://pypi.org/project/agentic-api/0.8.0/). Version 0.8.0
+The `agentic-api` Python package is [available on PyPI](https://pypi.org/project/agentic-api/0.9.0/). Version 0.9.0
 includes the Rust gateway, the `agentic` CLI, and a small Python launcher. Prebuilt wheels support Linux x86_64
 (glibc 2.17 or newer), macOS Intel, and macOS Apple Silicon; Python 3.10 or newer is required.
 
 With uv installed, run the packaged Rust CLI without a global installation:
 
 ```bash
-uvx --from agentic-api==0.8.0 agentic --version
-uvx --from agentic-api==0.8.0 agentic serve --upstream http://existing-vllm:8000
+uvx --from agentic-api==0.9.0 agentic --version
+uvx --from agentic-api==0.9.0 agentic serve --upstream http://existing-vllm:8000
 ```
 
 Or install the Python launcher, with the optional local inference runtime:
 
 ```bash
-python -m pip install agentic-api==0.8.0
+python -m pip install agentic-api==0.9.0
 agentic-api serve --vllm-base-url http://existing-vllm:8000
 
-python -m pip install "agentic-api[local]==0.8.0"
+python -m pip install "agentic-api[local]==0.9.0"
 agentic-api serve --model MODEL_ID
 ```
 
@@ -169,10 +176,10 @@ script needs machine-readable diagnostics.
 Use uv to install the published package or run the Python launcher without a global installation:
 
 ```bash
-uv pip install agentic-api==0.8.0
-uv pip install "agentic-api[local]==0.8.0"
-uvx --from agentic-api==0.8.0 agentic-api doctor
-uvx --from agentic-api==0.8.0 agentic-api serve --vllm-base-url http://existing-vllm:8000
+uv pip install agentic-api==0.9.0
+uv pip install "agentic-api[local]==0.9.0"
+uvx --from agentic-api==0.9.0 agentic-api doctor
+uvx --from agentic-api==0.9.0 agentic-api serve --vllm-base-url http://existing-vllm:8000
 ```
 
 The Rust-native `agentic` CLI remains supported for `run codex`, `run claude`, `serve`, and `validate`. For the full
@@ -329,8 +336,8 @@ parsed. Order of precedence is `--max-request-body-size-bytes`, then `AGENTIC_MA
 file setting.
 
 `api_key_env` names the process environment variable containing the web-search credential; it does not contain the
-credential itself. When it is unset, the selected provider's conventional variable is read (`YOU_API_KEY` or
-`BRAVE_API_KEY`). Newly generated files leave `api_key_env` unset so changing providers also changes the default
+credential itself. When it is unset, the selected provider's conventional variable is read (`YOU_API_KEY`,
+`BRAVE_API_KEY`, or `TAVILY_API_KEY`). Newly generated files leave `api_key_env` unset so changing providers also changes the default
 credential variable. `AGENTIC_WEB_SEARCH_PROVIDER`, `AGENTIC_WEB_SEARCH_BASE_URL`, `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES`,
 `AGENTIC_MCP_ALLOWED_HOSTS`, `AGENTIC_MAX_REQUEST_BODY_SIZE_BYTES`, and `AGENTIC_MAX_CONCURRENT_GATEWAY_CALLS` can
 override their typed file settings; `YOU_API_BASE_URL` is still honored as the endpoint override when the provider is
@@ -592,19 +599,44 @@ Every tool call has exactly one execution path, so nothing runs by accident:
 
 | Ownership | Who executes it | Examples |
 | --- | --- | --- |
-| **Gateway-owned** | Agentic API executes it server-side and continues the loop | Web search, file search, MCP-backed tools |
-| **Client-owned** | Preserved and returned to the client | Codex shell / editor tools, your functions |
+| **Gateway-owned** | Agentic API executes it server-side and continues the loop | Web search, MCP-backed tools, code interpreter (opt-in) |
+| **Client-owned** | Preserved and returned to the client | Shell tool, Codex editor tools, your functions |
 | **Provider-owned** | Passed through to vLLM or an upstream provider | Provider-native tools |
 
 Unknown or ambiguous tool shapes are **never executed by default**. They are preserved and returned.
+
+## 🤝 Multi-agent Responses
+
+Set `multi_agent.enabled` on a stored Responses request and the gateway runs the [Responses multi-agent](https://developers.openai.com/api/docs/guides/responses-multi-agent) collaboration loop itself: the root agent spawns subagents, each with its own history and tool registry, and the response returns their attributed `multi_agent_call`, `multi_agent_call_output`, and `agent_message` items. Continue the whole agent tree with `previous_response_id`.
+
+```bash
+curl http://localhost:9000/v1/responses \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen3-30B-A3B-FP8",
+    "store": true,
+    "multi_agent": {"enabled": true, "max_concurrent_subagents": 3},
+    "input": "Have one agent review correctness and another review test coverage, then summarize."
+  }'
+```
+
+- `store: true` is required; the gateway does not yet support stateless multi-agent requests.
+- `max_concurrent_subagents` limits active descendant turns (default `3`); it is not a total agent count.
+- Multi-agent execution is HTTP and SSE only. WebSocket requests with multi-agent enabled are rejected.
+- `max_tool_calls` and reasoning summaries are rejected while multi-agent is enabled.
+
+See [HTTP multi-agent execution](ARCHITECTURE.md#http-multi-agent-execution) for scheduling and persistence details.
 
 ## 🏗️ Repository Layout
 
 ```
 crates/
-├── agentic-server/       # Axum binary, transport handlers (HTTP/SSE/WS), configuration
+├── agentic-server/       # Axum binary, transport handlers (HTTP/SSE/WS), configuration, `agentic` CLI
 ├── agentic-server-core/  # Protocol types, executor, tool framework, persistence
+├── agentic-llm-d/        # Split-execution state backend for the llm-d coordinator
+├── agentic-cli-docs/     # Build-time generator for the CLI reference docs
 └── agentic-praxis/       # Praxis gateway integration
+python/agentic_api/       # Python distribution and launcher for the packaged gateway
 docs/                     # MkDocs documentation, ADRs, and design notes
 ```
 
@@ -631,10 +663,14 @@ Design and migration decisions are tracked as ADRs in [docs/adr/](docs/adr/), wi
 
 - [x] **Responses API hydration**: stateful continuation with `previous_response_id`
 - [x] **Codex support**: practical Codex sessions through the Responses API
-- [x] **Server-side tool execution**: explicit ownership, web search built in
-- [ ] **Messages API**: built on the same persistence and execution primitives
+- [x] **Server-side tool execution**: explicit ownership, web search, MCP, and code interpreter built in
+- [x] **Messages API**: Claude Code support with a server-side gateway tool loop
+- [x] **Conversations API**: OpenAI-compatible conversation and item management
+- [ ] **Multi-agent Responses**: HTTP execution ships today; WebSocket injection and stateless requests are next
+- [ ] **File search**: Files and Vector Stores APIs with a gateway-executed `file_search` tool
+- [ ] **Stateful Messages**: Messages continuation on the same persistence and execution primitives
 - [ ] **Interactions API**: durable, higher-level agentic workflows
-- [ ] **Production hardening**: storage backends, observability, cached-prefix continuation
+- [ ] **Production hardening**: tenant-scoped state, gateway metrics, cached-prefix continuation
 
 ______________________________________________________________________
 

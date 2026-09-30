@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-09-19",
-  "defaultVersion": "v0.8.0",
+  "checkedAt": "2026-09-30",
+  "defaultVersion": "v0.9.0",
   "versions": [
     {
       "id": "latest",
@@ -8,6 +8,24 @@
       "channel": "development",
       "ref": "main",
       "sourceRef": "main",
+      "hostedBaseUrl": null,
+      "sections": [
+        "overview",
+        "api",
+        "codex-desktop",
+        "developing",
+        "community",
+        "sglang",
+        "dynamo",
+        "llmd"
+      ]
+    },
+    {
+      "id": "v0.9.0",
+      "label": "v0.9.0",
+      "channel": "release",
+      "ref": "v0.9.0",
+      "sourceRef": "8038abf26c310ed54799f1414eb4fe1406ae0aee",
       "hostedBaseUrl": null,
       "sections": [
         "overview",

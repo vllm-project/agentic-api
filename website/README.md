@@ -17,7 +17,7 @@ npm run check
 npm run format:check
 ```
 
-Requires Node.js 22.13 or newer plus Python 3.11+ and Rust/Cargo for source-based CLI documentation generation (CI uses Python 3.12 and Rust 1.98.0). Set `PYTHON` to a Python executable path if needed. Standalone website checkouts use bundled CLI references and do not need Python or Cargo. The site exports static HTML and browser assets to `dist/client`. Deploy that folder with clean-URL HTML routing (`/docs/v0.8.0` serves `docs/v0.5.0.html`) and `404.html` for missing routes. `NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_BASE_PATH` configure the canonical URL and deployment prefix at build time; their defaults preserve the Sites preview. The PR preview is hosted at [vLLM Agentic API](https://vllm-agentic-api.franciscojavierarceo.chatgpt.site/). Hosting credentials and account configuration are not part of this repository. There is no application server, database, or runtime GitHub dependency.
+Requires Node.js 22.13 or newer plus Python 3.11+ and Rust/Cargo for source-based CLI documentation generation (CI uses Python 3.12 and Rust 1.98.0). Set `PYTHON` to a Python executable path if needed. Standalone website checkouts use bundled CLI references and do not need Python or Cargo. The site exports static HTML and browser assets to `dist/client`. Deploy that folder with clean-URL HTML routing (`/docs/v0.9.0` serves `docs/v0.9.0.html`) and `404.html` for missing routes. `NEXT_PUBLIC_SITE_URL` and `NEXT_PUBLIC_BASE_PATH` configure the canonical URL and deployment prefix at build time; their defaults preserve the Sites preview. The PR preview is hosted at [vLLM Agentic API](https://vllm-agentic-api.franciscojavierarceo.chatgpt.site/). Hosting credentials and account configuration are not part of this repository. There is no application server, database, or runtime GitHub dependency.
 
 Routes:
 
@@ -26,7 +26,7 @@ Routes:
 - `/community/team` — maintainers from the project's CODEOWNERS.
 - `/community/contributors` — a contributor directory and guidance for thoughtful contributions.
 - `/docs` — documentation directory for the default tagged version.
-- `/docs/latest` and `/docs/v0.1.0` through `/docs/v0.8.0` — shareable documentation directories for development and tagged snapshots.
+- `/docs/latest` and `/docs/v0.1.0` through `/docs/v0.9.0` — shareable documentation directories for development and tagged snapshots.
 - `/docs/latest/rust-cli` — Rust `agentic` command reference, generated from the Clap definitions; `/docs/latest/rust-cli.md` provides the same content as Markdown.
 - `/docs/latest/python-cli` — Python launcher reference generated from the real CLI parser; `/docs/latest/python-cli.md` provides the same content as Markdown.
 - `/llms.txt` — a concise Markdown project overview and curated links to raw documentation, following [llmstxt.org](https://llmstxt.org/).
@@ -80,7 +80,7 @@ Integration copy and commands were checked against the project's [README](https:
 
 The quickstart also links to the [Codex Desktop guide](../docs/guides/codex-desktop.md), with the verified Linux setup and freeform `apply_patch` limitation. The guide appears in `/docs/latest` and `/llms.txt`; tagged documentation snapshots omit it until their source contains the guide.
 
-The quickstart defaults to the published `agentic-server` crate and offers PyPI and build-from-source tabs. Both registry options pin version 0.8.0. PyPI uses `uvx --from agentic-api==0.8.0 agentic` for version checks, serving, and harness launches without a global installation. Cargo installs launch `agentic`; source builds launch `./target/debug/agentic`. The optional WebMCP tool accepts an `installation` value (`crates`, `pypi`, or `source`) and defaults to crates.io. `PUBLISHED_VERSION` in `lib/quickstart.ts` supplies the install commands and visible release labels; update it and `public/llms.txt` after publishing a new release. The base Python wheel bundles the Rust executables and does not install vLLM.
+The quickstart defaults to the published `agentic-server` crate and offers PyPI and build-from-source tabs. Both registry options pin version 0.9.0. PyPI uses `uvx --from agentic-api==0.9.0 agentic` for version checks, serving, and harness launches without a global installation. Cargo installs launch `agentic`; source builds launch `./target/debug/agentic`. The optional WebMCP tool accepts an `installation` value (`crates`, `pypi`, or `source`) and defaults to crates.io. `PUBLISHED_VERSION` in `lib/quickstart.ts` supplies the install commands and visible release labels; update it and `public/llms.txt` after publishing a new release. The base Python wheel bundles the Rust executables and does not install vLLM.
 
 The community information architecture is inspired by the supplied vLLM Semantic Router pages. The layout, visual system, and wording were created for this site. The website does not run an agent or contact a model: the launch instructions are examples for a user's own environment.
 

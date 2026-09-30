@@ -27,6 +27,8 @@ This repository is Rust-first under the `vllm-project` GitHub organization.
 ├── TERMINOLOGY.md              # Normative project vocabulary
 ├── crates/agentic-server/       # Axum binary, transport handlers, and configuration
 ├── crates/agentic-server-core/  # Protocol types, execution, tools, and persistence
+├── crates/agentic-llm-d/        # Split-execution state backend for the llm-d coordinator
+├── crates/agentic-cli-docs/     # Build-time generator for the CLI reference docs
 ├── crates/agentic-praxis/       # Praxis integration
 ├── python/agentic_api/          # Python distribution, diagnostics, and launcher
 ├── tests/python/                # Python package and CLI tests

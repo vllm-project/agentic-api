@@ -84,6 +84,7 @@ Initial and expected tool areas include:
 
 - File search.
 - Web search.
+- Code interpreter.
 - Web fetch.
 - Computer use.
 - Shell tools.
@@ -93,6 +94,10 @@ Initial and expected tool areas include:
 ### 4. Messages API
 
 The third major API goal is Messages.
+
+Status: `/v1/messages` forwards Anthropic Messages traffic to the upstream and
+runs a server-side loop for gateway-owned tools, which is enough for Claude
+Code. Stateful continuation and persistence for Messages remain the work below.
 
 Messages should build on the same persistence, rehydration, and execution
 foundations as Responses, while exposing the API surface expected by agentic
@@ -191,9 +196,18 @@ independent WebSocket lanes, async calls, and steering have distinct semantics.
   ([#334](https://github.com/vllm-project/agentic-api/issues/334)).
 - **Multi-agent orchestration:** implement isolated agent contexts and shared
   scheduling through the existing tracker
-  ([#298](https://github.com/vllm-project/agentic-api/issues/298)), including HTTP
-  execution ([#299](https://github.com/vllm-project/agentic-api/issues/299)) and
-  WebSocket injection ([#300](https://github.com/vllm-project/agentic-api/issues/300)).
+  ([#298](https://github.com/vllm-project/agentic-api/issues/298)). HTTP execution
+  for stored requests has shipped
+  ([#299](https://github.com/vllm-project/agentic-api/issues/299)); WebSocket
+  injection ([#300](https://github.com/vllm-project/agentic-api/issues/300)) and
+  stateless requests ([#393](https://github.com/vllm-project/agentic-api/issues/393))
+  remain.
+- **File search:** add the Files and Vector Stores APIs, indexed retrieval, and a
+  gateway-executed `file_search` tool with OpenAI-compatible streaming events
+  ([#34](https://github.com/vllm-project/agentic-api/pull/34)). Resolve `file_id`
+  references in Responses input against the same file store
+  ([#356](https://github.com/vllm-project/agentic-api/issues/356)). Until then,
+  `file_search` declarations are accepted but not offered to the model.
 - **Computer use:** add typed computer calls, ordered actions, screenshots, and
   explicit execution-location handling through the existing feature issue
   ([#171](https://github.com/vllm-project/agentic-api/issues/171)).

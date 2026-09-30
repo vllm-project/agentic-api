@@ -4,6 +4,47 @@ All notable changes to Agentic API are documented here.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-30
+
+### Added
+
+- Added an OpenAI-compatible Conversations API with conversation and item CRUD, metadata updates, cursor pagination,
+  and atomic initial-item creation. Stored Responses items can be managed through conversations (#351, #370).
+- Added `GET /v1/responses/{response_id}` for stored response payloads, preserving output, status, usage, and IDs
+  without another upstream request. History-only and legacy records return 409 because they lack a retrievable
+  snapshot (#354).
+- Added opt-in multi-agent HTTP Responses execution for stored requests with `multi_agent.enabled: true`. The gateway
+  can coordinate subagents, stream their work as one response, and resume their stored tree through
+  `previous_response_id`; it validates the stored tree and enforces a shared response budget (#372, #373).
+- Added opt-in gateway-executed `code_interpreter` using isolated Linux workers and a `code_interpreter_call` output
+  lifecycle. Building with `embedded-code-interpreter` also requires the documented runtime setup and operator
+  enablement; default builds do not register the tool (#368).
+- Added Tavily as a selectable `web_search` provider with `AGENTIC_WEB_SEARCH_PROVIDER=tavily` and `TAVILY_API_KEY`
+  (#329).
+- Passed `/v1/chat/completions` and `/v1/completions` through to the configured upstream, including streaming
+  responses and upstream status codes (#369).
+- Added execution-level OpenTelemetry spans for Responses and Messages, including inference rounds, gateway tool
+  calls, compaction, persistence, delivery, and upstream trace-context propagation (#349).
+
+### Changed
+
+- Rust API migration: `InputItem` and `OutputItem` include multi-agent item variants, and Responses streaming
+  event types include agent attribution and collaboration events. Downstream exhaustive matches must handle the
+  new variants. `WebSearchProviderKind::ALL` is now a `&'static [Self]` slice (#329, #372).
+- Preserved `prompt_cache_key` across typed Responses execution, gateway tool rounds, and internal compaction;
+  callers must supply it again on a later request if they want it on that continuation (#347).
+- Disabled Nagle's algorithm on accepted gateway connections to avoid delayed small SSE and WebSocket frames (#380).
+
+### Fixed
+
+- Rejected incomplete or malformed upstream Messages streams before built-in tool dispatch or successful
+  completion, including missing starts or stops, invalid block indexes, duplicate events, and malformed SSE data
+  (#345, #396).
+- Counted every search in a batched Messages `web_search` call against `max_uses`; a call that would exceed the
+  remaining budget is refused in full (#391).
+- Hid unexecuted gateway-executed tool calls from terminal Messages results (#346).
+- Prevented `store: false` HTTP continuations of stored Responses from writing a durable child response (#387).
+
 ## [0.8.0] - 2026-09-19
 
 ### Added
@@ -40,23 +81,6 @@ All notable changes to Agentic API are documented here.
   `crawl_timeout`, and `boost_domains` arguments are ignored. Rejected credentials and HTTP 429 responses fail the
   `web_search_call` without an automatic retry, naming the key variable or the upstream `Retry-After` value and never
   echoing the secret. Each Brave `metadata[]` entry carries `"provider": "brave"`.
-- Added Tavily as a selectable backend for the gateway-owned `web_search` tool (#327, Phase 3 of #291). Select it
-  with `AGENTIC_WEB_SEARCH_PROVIDER=tavily` or `[web_search] provider = "tavily"` and supply `TAVILY_API_KEY`; the
-  endpoint defaults to `https://api.tavily.com` and can be overridden with `AGENTIC_WEB_SEARCH_BASE_URL` or
-  `[web_search] base_url`. Each query is one `POST /search` with a JSON body and a bearer token; the key is never
-  placed in the body. `allowed_domains` / `blocked_domains` and the model's `include_domains` / `exclude_domains` are
-  forwarded to Tavily's native `include_domains` / `exclude_domains` and re-checked client-side, `count` is clamped
-  to Tavily's maximum of 20, `freshness` maps to `time_range` or to `start_date` / `end_date` widened by one day on
-  each side because Tavily's bounds are exclusive and sent with `filter_by_published_date` so undated results cannot
-  bypass the requested recency window, `language` keeps Tavily's documented compound tags (`zh-cn`) and
-  otherwise reduces to its primary subtag, `safesearch` maps to the boolean `safe_search`, and `country` plus the
-  You.com-specific
-  `livecrawl`, `livecrawl_formats`, `crawl_timeout`, and `boost_domains` arguments are ignored. Results fill
-  `results.web` with `published_date` as `page_age`; `results.news` stays empty because a second news search per
-  query would double credit usage. Rejected credentials, HTTP 429, and Tavily's 432/433 plan-limit statuses fail the
-  `web_search_call` without an automatic retry, naming the key variable or the upstream `Retry-After` value and never
-  echoing the secret. Each Tavily `metadata[]` entry carries `"provider": "tavily"`, Tavily's `request_id` as
-  `search_uuid`, and its `response_time` as `latency`. Tavily inherits the gateway concurrency limit.
 - Added `[web_search] max_concurrent_queries` and `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES` to cap concurrent
   provider requests inside one batched search. Brave defaults to `1` for its free-plan rate limit; You.com keeps
   inheriting `max_concurrent_gateway_calls`. The effective ceiling is the smallest of the gateway limit, this
@@ -99,11 +123,6 @@ All notable changes to Agentic API are documented here.
   uses it. With `provider` unset, You.com behavior, configuration, and model-facing output are unchanged; a generated
   `config.toml` now records `provider = "you"` and leaves `api_key_env` unset so provider switches select the matching
   default credential variable.
-- `WebSearchProviderKind` gains a `Tavily` variant; `WebSearchProviderKind::ALL` is now a `&'static [Self]` slice
-  listing all three providers, so adding a provider no longer changes its type; and
-  `WebSearchHandler::from_config` builds the Tavily provider for it (#327). The shared `null_as_default` and
-  `read_response_limited` helpers moved from `tool/web_search/mod.rs` to `tool/web_search/provider.rs`; both were and
-  remain crate-private, so no public API changed.
 
 ### Fixed
 

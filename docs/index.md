@@ -23,22 +23,27 @@ vLLM Agentic API provides the stateful APIs needed for real-world agentic applic
 
     This project is in early development. Follow along and contribute on [GitHub](https://github.com/vllm-project/agentic-api).
 
-## Responses API
+## Agentic APIs
 
-Our first milestone is implementing the [Responses API](https://platform.openai.com/docs/api-reference/responses), bringing stateful, agentic capabilities to vLLM. We validate our implementation against the [Open Responses](https://www.openresponses.org/) compatibility test suite.
+Agentic API implements the OpenAI-compatible [Responses API](https://platform.openai.com/docs/api-reference/responses)
+and serves the Anthropic Messages API for Claude Code. We validate the Responses implementation against the
+[Open Responses](https://www.openresponses.org/) compatibility test suite.
 
-- **Stateful conversations** — The server manages conversation history via `previous_response_id`, eliminating client-side message tracking
-- **Built-in tool use** — Web search, file search, and function calling handled within the API, with the model automatically executing multi-step tool chains
-- **Streaming** — Server-sent events for real-time token streaming with structured lifecycle events
-- **Background execution** — Fire-and-forget requests that continue processing server-side
-- **Compatibility tested** — Validated against the open Responses API compatibility test suite
+- **Stateful conversations** — The server manages conversation history via `previous_response_id` or the Conversations API, eliminating client-side message tracking
+- **Server-side tool execution** — Web search, MCP tools, and an opt-in embedded code interpreter run inside the gateway, with the model automatically executing multi-step tool chains
+- **Multi-agent orchestration** — Stored HTTP Responses requests can spawn and coordinate subagents server-side
+- **Streaming** — Server-sent events and WebSocket transports with structured lifecycle events
+- **Compaction** — Automatic and explicit context compaction for long-running sessions
+- **Compatibility tested** — Validated against the open Responses API compatibility test suite and replay recordings of vLLM, SGLang, and NVIDIA Dynamo traffic
+
+See the [API reference](api/index.md) for the full endpoint list.
 
 ## Python Distribution
 
 The `agentic-api` wheel packages the Rust gateway and a small Python launcher. Use the base package for proxy-only
 installations, and the `[local]` extra when you want the launcher to manage a local vLLM process.
 
-- Version 0.8.0 is [published on PyPI](https://pypi.org/project/agentic-api/0.8.0/) for Linux x86_64, macOS Intel, and macOS Apple Silicon
+- Version 0.9.0 is [published on PyPI](https://pypi.org/project/agentic-api/0.9.0/) for Linux x86_64, macOS Intel, and macOS Apple Silicon
 - [Python installation and workflows](guides/python-installation.md) for PyPI and uvx installs, workflow artifact testing, `doctor`, and known-good model profiles
 - The Rust-native `agentic` CLI remains supported for `serve`, `run codex`, `run claude`, and `validate`
 - vLLM is a supported backend, not part of the Agentic API product name

@@ -574,7 +574,7 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
 
 `multi_agent.enabled` selects gateway orchestration; it is not forwarded to the
 upstream model. Enabled requests require `store: true`; the current validator also
-rejects `reasoning.summary` and `reasoning.generate_summary`. These are gateway
+rejects `max_tool_calls`, `reasoning.summary`, and `reasoning.generate_summary`. These are gateway
 validation rules, not a claim that every upstream provider has the same restrictions.
 New requests without multi-agent configuration use single-agent execution;
 continuations of a stored agent tree inherit its configuration.
