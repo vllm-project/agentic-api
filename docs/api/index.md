@@ -90,13 +90,15 @@ summary inference requested by a `compaction_trigger` input item.
 The configured upstream decides whether a request receives a cache hit.
 
 `service_tier` is also request-scoped. Direct and executor-backed HTTP requests,
-WebSocket requests, gateway tool rounds, automatic compaction, and
-`compaction_trigger` summary inference forward an explicit value unchanged. An
-absent or `null` value is not inherited by a continuation. When the upstream
-reports the tier that actually served the terminal inference round, that value
+WebSocket requests, gateway tool rounds, automatic compaction, standalone
+`/v1/responses/compact` requests, and `compaction_trigger` summary inference
+forward an explicit value unchanged. An absent or `null` value is not inherited
+by a continuation. When the upstream reports the tier that actually served the terminal inference round, that value
 is returned to the client and retained in stored response snapshots; it may
 differ from the requested value. The gateway does not select a tier or silently
-retry with another one.
+retry with another one. In multi-agent execution, the last root-agent inference
+round determines the returned tier; child-agent tiers do not override it, and a
+missing final root tier clears any earlier value.
 
 ### `POST /v1/responses/compact`
 

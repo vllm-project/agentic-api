@@ -344,6 +344,8 @@ pub struct CompactRequest {
     pub instructions: Option<String>,
     #[serde(default)]
     pub previous_response_id: Option<String>,
+    #[serde(default)]
+    pub service_tier: Option<String>,
     /// Compatibility fields sent by current SDK and Codex clients.
     #[serde(flatten)]
     pub compatibility: HashMap<String, Value>,
@@ -353,6 +355,8 @@ pub struct CompactRequest {
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CompactedResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<String>,
     pub id: String,
     pub object: String,
     pub created_at: i64,

@@ -242,6 +242,9 @@ impl MultiAgentRun {
             tool_search,
         } = completed;
         accumulate_usage(&mut self.payload.usage, payload.usage.take());
+        if turn.agent.is_root() {
+            self.payload.service_tier = payload.service_tier.take();
+        }
         self.registry
             .set_phase(turn, AgentPhase::Runnable)
             .map_err(registry_error)?;

@@ -6,6 +6,8 @@ mod client_tools;
 mod explicit_compaction;
 #[path = "multi_agent_tests/root_completion.rs"]
 mod root_completion;
+#[path = "multi_agent_tests/service_tier.rs"]
+mod service_tier;
 #[path = "multi_agent_tests/shell_continuation.rs"]
 mod shell_continuation;
 use crate::executor::{

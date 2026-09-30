@@ -89,6 +89,7 @@ async fn spawn_compaction_model() -> (String, Arc<Mutex<Vec<serde_json::Value>>>
                     .await
                     .push(serde_json::from_slice(&body).expect("model request is JSON"));
                 axum::Json(serde_json::json!({
+                    "service_tier": "default",
                     "id": "resp_upstream",
                     "object": "response",
                     "created_at": 0,
@@ -261,6 +262,7 @@ async fn compact_endpoint_returns_reusable_canonical_window() {
                 {"role": "user", "content": "retain this request"},
                 {"type": "function_call_output", "call_id": "call_1", "output": "large result"}
             ],
+            "service_tier": "priority",
             "tools": [],
             "parallel_tool_calls": true,
             "reasoning": {"effort": "medium"},
@@ -273,6 +275,7 @@ async fn compact_endpoint_returns_reusable_canonical_window() {
     assert_eq!(response.status(), reqwest::StatusCode::OK);
     let body: serde_json::Value = response.json().await.expect("compact response JSON");
     assert_eq!(body["object"], "response.compaction");
+    assert_eq!(body["service_tier"], "default");
     assert_eq!(body["usage"]["total_tokens"], 25);
     assert_eq!(body["output"][0]["type"], "message");
     assert_eq!(body["output"][0]["status"], "completed");
@@ -297,6 +300,8 @@ async fn compact_endpoint_returns_reusable_canonical_window() {
     let requests = model_requests.lock().await;
     assert_eq!(requests.len(), 2);
     assert_eq!(requests[0]["stream"], false);
+    assert_eq!(requests[0]["service_tier"], "priority");
+    assert!(requests[1].get("service_tier").is_none());
     let final_input = requests[0]["input"]
         .as_array()
         .expect("model input array")
@@ -549,4 +554,35 @@ async fn compact_endpoint_preserves_retained_image_message() {
     assert_eq!(requests.len(), 2);
     assert_eq!(requests[1]["input"][0]["content"], content);
     assert_eq!(requests[1]["input"][1]["role"], "assistant");
+}
+
+#[tokio::test]
+async fn compact_endpoint_does_not_fill_missing_tiers() {
+    let (model_url, requests, model) =
+        spawn_sequential_model(vec![("summary", 3), ("summary", 3), ("summary", 3)]).await;
+    let (gateway_url, gateway) = spawn_gateway(test_state(&test_config(&model_url))).await;
+    for tier in [None, Some(serde_json::Value::Null), Some(serde_json::json!("priority"))] {
+        let mut request = serde_json::json!({"model":"test-model","input":"retain context"});
+        if let Some(tier) = tier {
+            request["service_tier"] = tier;
+        }
+        let response = reqwest::Client::new()
+            .post(format!("{gateway_url}/v1/responses/compact"))
+            .json(&request)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        let response: serde_json::Value = response.json().await.unwrap();
+        assert!(response.get("service_tier").is_none());
+    }
+    let requests = requests.lock().await;
+    assert!(
+        requests[..2]
+            .iter()
+            .all(|request| request.get("service_tier").is_none())
+    );
+    assert_eq!(requests[2]["service_tier"], "priority");
+    model.abort();
+    gateway.abort();
 }

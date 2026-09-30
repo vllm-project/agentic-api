@@ -264,12 +264,13 @@ pub async fn compact_response(
         request.instructions,
     );
     payload.previous_response_id = request.previous_response_id;
+    payload.service_tier = request.service_tier;
     let ctx = rehydrate_conversation(payload, exec_ctx).await?;
     let (mut ctx, tool_search_state) =
         prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler).await?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
     let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
-    let (output, usage, _) = compact_items_with_trigger(
+    let (output, usage, service_tier) = compact_items_with_trigger(
         &ctx.enriched_request,
         input,
         exec_ctx,
@@ -295,6 +296,7 @@ pub async fn compact_response(
     }
 
     Ok(CompactedResponse {
+        service_tier,
         id: response_id,
         object: "response.compaction".to_owned(),
         created_at: utcnow_str(),
