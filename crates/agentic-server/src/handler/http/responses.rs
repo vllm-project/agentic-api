@@ -83,7 +83,7 @@ pub async fn responses(State(state): State<AppState>, req: Request) -> Response 
         store = routing_payload.store,
         stream = routing_payload.stream,
         has_previous_response_id = routing_payload.previous_response_id.is_some(),
-        has_conversation_id = routing_payload.conversation_id.is_some(),
+        has_conversation_id = routing_payload.conversation.is_some(),
         has_compaction = routing_payload.input.contains_compaction(),
         has_compaction_trigger = routing_payload.input.has_compaction_trigger(),
         has_tool_search_state,

@@ -219,7 +219,7 @@ async fn run_compaction_trigger(
         incomplete_details: None,
         error: None,
         previous_response_id: ctx.original_request.previous_response_id.clone(),
-        conversation_id: ctx.conversation_id.clone(),
+        conversation: ctx.conversation_id.clone(),
         instructions,
         service_tier,
         tools: None,

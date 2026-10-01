@@ -26,7 +26,7 @@ async fn compaction_traces_distinguish_triggers_and_state_sources_without_conten
             payload.input = ResponsesInput::Text("private compaction input".into());
             let labels = if trigger == "context_management" {
                 let conversation = fixture.exec_ctx.conv_handler.create().await.unwrap();
-                payload.conversation_id = Some(conversation.conversation_id);
+                payload.conversation = Some(conversation.conversation_id);
                 payload.context_management =
                     Some(serde_json::from_value(json!([{"type":"compaction", "compact_threshold":1}])).unwrap());
                 ("conversation", "conversation")

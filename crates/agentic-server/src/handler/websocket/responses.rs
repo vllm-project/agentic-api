@@ -630,7 +630,7 @@ fn parse_ws_request(text: &str) -> Result<WsRequest, WsRequestParseError> {
         forced_stream = payload.stream,
         store = payload.store,
         has_previous_response_id = payload.previous_response_id.is_some(),
-        has_conversation_id = payload.conversation_id.is_some(),
+        has_conversation_id = payload.conversation.is_some(),
         stream_id = stream_id.as_ref().map(StreamId::as_str),
         ?generate,
         tools = payload.tools.as_ref().map_or(0, Vec::len),

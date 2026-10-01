@@ -86,7 +86,7 @@ impl ResponseAccumulator {
             incomplete_details: self.incomplete_details,
             error: self.error,
             previous_response_id: previous_response_id.map(str::to_string),
-            conversation_id: self.conversation_id,
+            conversation: self.conversation_id,
             instructions: instructions.map(str::to_string),
             service_tier: self.service_tier,
             tools: None,

@@ -844,9 +844,9 @@ fn the_boundary_check_names_what_cannot_be_split() {
     assert!(error.to_string().contains("tools"), "got: {error}");
 
     let mut conversational = request("hi", None);
-    conversational.conversation_id = Some("conv_1".into());
+    conversational.conversation = Some("conv_1".into());
     let error = ensure_splittable(&conversational).expect_err("its version cannot cross");
-    assert!(error.to_string().contains("conversation_id"), "got: {error}");
+    assert!(error.to_string().contains("conversation"), "got: {error}");
 
     let mut streaming = request("hi", None);
     streaming.stream = true;

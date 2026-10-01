@@ -982,7 +982,7 @@ fn test_accumulator_finalize() {
     let payload = acc.finalize("gpt-4o", Some("resp_prev"), Some("be helpful"));
     assert_eq!(payload.id, "resp_123");
     assert_eq!(payload.model, "gpt-4o");
-    assert_eq!(payload.conversation_id, Some("conv_456".into()));
+    assert_eq!(payload.conversation, Some("conv_456".into()));
     assert_eq!(payload.previous_response_id, Some("resp_prev".into()));
     assert_eq!(payload.instructions, Some("be helpful".into()));
     assert_eq!(payload.status, ResponseStatus::InProgress.as_str());

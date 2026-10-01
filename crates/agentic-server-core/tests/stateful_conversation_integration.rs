@@ -490,7 +490,7 @@ async fn test_multi_branch() {
     );
     assert_eq!(p4.status, "completed");
     assert_eq!(output_text(&p4), expected_text(t4));
-    assert_eq!(p4.conversation_id.as_deref(), Some(conv_id.as_str()));
+    assert_eq!(p4.conversation.as_deref(), Some(conv_id.as_str()));
 
     // Branch 2 — off turn 2
     let p5 = unwrap_blocking(

@@ -70,7 +70,7 @@ impl utoipa::PartialSchema for RequestPayload {
             .required("input")
             .property("instructions", nullable_str())
             .property("previous_response_id", nullable_str())
-            .property("conversation_id", nullable_str())
+            .property("conversation", nullable_str())
             .property("tools", nullable_array(Ref::from_schema_name("ResponsesTool").into()))
             .property("tool_choice", nullable_ref("ToolChoice"))
             .property("stream", bool_type())

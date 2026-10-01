@@ -125,7 +125,7 @@ fn record_round_history(
     if let Some(continuation) = ctx
         .continuation
         .as_mut()
-        .filter(|_| ctx.original_request.conversation_id.is_none())
+        .filter(|_| ctx.original_request.conversation.is_none())
     {
         // The canonical sequence includes reasoning and intermediate messages in
         // their original positions, followed by this round's tool call outputs.

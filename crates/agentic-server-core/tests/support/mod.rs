@@ -526,7 +526,7 @@ pub fn make_request(
         input: serde_json::from_value(serde_json::to_value(input).expect("serialize Responses input"))
             .expect("request should contain valid Responses input"),
         previous_response_id,
-        conversation_id,
+        conversation: conversation_id,
         stream,
         store,
         ..Default::default()

@@ -137,7 +137,7 @@ pub(super) fn prepare_reasoning_for_vllm(input: &mut ResponsesInput) -> Executor
 ///
 /// Dispatches based on `store` flag and which ID is present:
 /// - `previous_response_id`: rehydrate from the prior response checkpoint
-/// - `conversation_id`:      rehydrate from the conversation
+/// - `conversation`:         rehydrate from the conversation
 /// - no ids:                 forward only the new input
 ///
 /// # Errors
@@ -199,13 +199,13 @@ pub(crate) async fn rehydrate_with_continuation(
         continuation,
     };
 
-    if ctx.original_request.conversation_id.is_some() && ctx.original_request.previous_response_id.is_some() {
+    if ctx.original_request.conversation.is_some() && ctx.original_request.previous_response_id.is_some() {
         return Err(ExecutorError::InvalidRequest(
-            "provide only one of conversation_id or previous_response_id".into(),
+            "provide only one of conversation or previous_response_id".into(),
         ));
     }
 
-    if ctx.original_request.conversation_id.is_some() {
+    if ctx.original_request.conversation.is_some() {
         from_conversation(&mut ctx, exec_ctx).await?;
     } else if ctx.original_request.previous_response_id.is_some() {
         from_response(&mut ctx, exec_ctx).await?;
@@ -673,7 +673,7 @@ mod tests {
             input: ResponsesInput::Text("new input".into()),
             store: true,
             previous_response_id: previous_response_id.map(str::to_owned),
-            conversation_id: conversation_id.map(str::to_owned),
+            conversation: conversation_id.map(str::to_owned),
             ..Default::default()
         }
     }

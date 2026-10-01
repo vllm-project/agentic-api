@@ -25,7 +25,7 @@ use tracing::error;
 /// explicit conversation stays durable.
 #[must_use]
 pub(crate) fn should_persist(ctx: &RequestContext) -> bool {
-    ctx.continuation.is_some() || ctx.original_request.store || ctx.original_request.conversation_id.is_some()
+    ctx.continuation.is_some() || ctx.original_request.store || ctx.original_request.conversation.is_some()
 }
 
 pub(crate) async fn persist_if_needed(
@@ -143,7 +143,7 @@ pub async fn persist_turn(
 }
 
 #[tracing::instrument(name = "agentic.persist", skip_all, fields(
-    agentic.persist.destination = if ctx.original_request.conversation_id.is_some() { "conversation" } else { "response" }
+    agentic.persist.destination = if ctx.original_request.conversation.is_some() { "conversation" } else { "response" }
 ))]
 pub(crate) async fn persist_prepared_turn(
     mut ctx: RequestContext,
@@ -168,7 +168,7 @@ pub(crate) async fn persist_prepared_turn(
         metadata.tool_search_loaded_tools = Some(tool_search_metadata.loaded_tools);
     }
     if let Some(tree) = ctx.multi_agent_tree.take() {
-        let committed = if ctx.original_request.conversation_id.is_some() {
+        let committed = if ctx.original_request.conversation.is_some() {
             Box::pin(conv_handler.commit_tree(ctx, output_items, metadata, tree)).await?
         } else {
             Box::pin(resp_handler.commit_tree(ctx, output_items, metadata, tree)).await?
@@ -176,7 +176,7 @@ pub(crate) async fn persist_prepared_turn(
         tracing::debug!(response_id = %committed.response_id, "committed response and agent tree");
         return Ok(());
     }
-    if ctx.original_request.conversation_id.is_some() {
+    if ctx.original_request.conversation.is_some() {
         conv_handler
             .execute_turn_with_metadata(ctx, output_items, metadata)
             .await
