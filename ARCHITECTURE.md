@@ -847,10 +847,12 @@ Events that arrive before a function name is known are buffered with a 256 KiB t
 byte limit and replayed when the call resolves.
 
 Shell functions are restored to `shell_call` and command SSE events for client
-execution by default. When an application registers a shell executor, the owned
-translation context carries the resolved gateway ownership so the dispatcher
-suppresses the canonical function lifecycle. The gateway event plan then emits
-the shell call’s public added/done lifecycle.
+execution. Shell is not gateway-executed: `ShellHandler` deliberately does not
+implement `GatewayExecutor`, so the gateway never runs shell commands on the
+model's behalf. PR #264 removed the optional shell executor to keep execution on
+the client; RFC #352 proposes a gateway-executed shell backend as future work.
+The client executes each call and submits a `shell_call_output` item with the
+same `call_id`.
 
 #### `gateway_accumulator.rs` and `pipeline/delivery.rs` — continuous client SSE
 
@@ -1249,25 +1251,29 @@ the operator enables it, and Eryx runtime readiness succeeds.
   inference round. Consequently a server's list lifecycle is emitted only when no
   prior list record exists and never repeats across rounds.
 - **`executors.rs`** — `GatewayExecutors`, a shared registry built once at startup and
-  reused across requests, specifically for gateway tools that need **lazy, per-request
-  connection setup**: MCP servers (connects and caches `McpClient`s keyed by server
-  URL, falling back to connecting a fresh request-declared server) and the shared
-  `WebSearchHandler`. It also has an optional, application-provided `ShellExecutor`
-  slot. `GatewayExecutorRegistration::Shell` is an explicit execution grant; an
-  unregistered shell declaration remains client-executed. `ShellExecutor` accepts
-  a typed call with bounded action limits and cancellation and returns typed command
-  outputs. The adapter binds into the existing gateway scheduler, not a second tool loop.
-  Client-owned
-  tools (`function`, `custom`, `namespace`) never touch this file; their registry
+  reused across requests. Configured MCP servers are the only lazily connected slot:
+  clients and discovered handlers are created on demand and cached by `server_label`
+  across requests; request-declared servers connect afresh for each request, and
+  their discovered handlers are reused only within that request. The shared
+  `WebSearchHandler` and the opt-in `CodeInterpreterExecutor` are built once at
+  startup; the code interpreter is backed by an embedded Eryx sandbox, enabled
+  by configuration, and the default config is disabled. These executors bind
+  into the existing gateway scheduler, not a
+  second tool loop. Client-owned
+  tools (`function`, `custom`, `shell`, `namespace`) never touch this file; their registry
   entries are inserted with `ToolOwnership::Client` and no `GatewayExecutors`
-  involvement.
+  involvement. Shell is not gateway-executed: `ShellHandler` deliberately does
+  not implement `GatewayExecutor`, so declaring a shell tool never grants the
+  gateway permission to execute arbitrary commands (PR #264 removed the optional
+  executor; RFC #352 proposes a gateway-executed shell backend as future work).
 
 Shell item history is preserved publicly in storage. At the inference boundary,
-`ShellHandler::model_input` lowers shell calls and outputs into matching function
-history, just as declarations and explicit shell selectors are normalized. For an
-opt-in gateway executor, storage additionally retains the canonical internal function
-call/output pair; rehydration omits that pair's public shell-call projection to avoid
-replaying the invocation twice. Client-executed shell history is not omitted.
+stored shell calls lower into `shell` function calls through the standard
+output-to-input conversion, and typed input conversions lower submitted shell
+calls and outputs into their function-history forms. Call and output share one
+`call_id`, just as declarations and explicit shell selectors are normalized to
+their function representations. The client execution contract is described in
+`docs/design/shell-tool.md`.
 
 **To add a new tool type:**
 1. Implement `ToolHandler`, including its typed `ToolParams`, for it.
