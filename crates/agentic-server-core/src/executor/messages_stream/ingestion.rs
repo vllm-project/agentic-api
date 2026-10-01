@@ -37,6 +37,16 @@ impl MessagesStreamAccumulator {
         {
             return self.fail("invalid content block index in upstream Messages stream");
         }
+        let payload_field = match event["type"].as_str() {
+            Some("content_block_start") => Some("content_block"),
+            Some("content_block_delta") => Some("delta"),
+            _ => None,
+        };
+        if let Some(field) = payload_field {
+            if event[field]["type"].as_str().is_none_or(str::is_empty) {
+                return self.fail("invalid content block payload in upstream Messages stream");
+            }
+        }
         match event.get("type").and_then(Value::as_str) {
             Some("message_start") => self.on_message_start(&event),
             Some("content_block_start") => self.on_block_start(&mut event),

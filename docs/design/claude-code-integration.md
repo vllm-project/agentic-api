@@ -210,6 +210,8 @@ validation remains separate work. Block indexes must be non-negative integers an
 deltas and stops require an open block, so duplicate stops and post-stop deltas fail before dispatch or completion.
 `message_start` events require a non-empty string message ID, including in later rounds.
 Content and terminal events require a preceding `message_start` in each upstream round.
+Block starts and deltas require object payloads with non-empty string types before buffering or delivery.
+Named extension types remain accepted; this check is not complete schema validation.
 Duplicate `message_start` events within one round fail before usage updates or tool dispatch;
 a new upstream start in a later tool round remains valid. Tool-use blocks require non-empty string IDs and names.
 Invalid identifiers fail before dispatch or completion, including in hidden built-in tool blocks.

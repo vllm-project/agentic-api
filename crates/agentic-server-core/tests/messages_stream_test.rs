@@ -1124,3 +1124,66 @@ async fn messages_stream_requires_message_start_in_each_round() {
         assert_failed_stream(vec![body], 0, "before message_start").await;
     }
 }
+
+#[tokio::test]
+async fn messages_stream_rejects_malformed_block_payloads() {
+    use serde_json::json;
+    let streams = cassette_turn_streams();
+    for (round, body) in streams.iter().enumerate() {
+        for (kind, field) in [
+            ("content_block_start", "content_block"),
+            ("content_block_delta", "delta"),
+        ] {
+            let line = body
+                .lines()
+                .find(|line| line.starts_with("data: ") && line.contains(&format!("\"type\":\"{kind}\"")))
+                .expect("fixture has block events");
+            for invalid in [
+                Some(json!(42)),
+                None,
+                Some(Value::Null),
+                Some(json!([])),
+                Some(json!({})),
+                Some(json!({"type": null})),
+                Some(json!({"type": 42})),
+                Some(json!({"type": ""})),
+            ] {
+                let mut event: Value = serde_json::from_str(line.strip_prefix("data: ").unwrap()).unwrap();
+                if let Some(payload) = invalid {
+                    event[field] = payload;
+                } else {
+                    event.as_object_mut().unwrap().remove(field);
+                }
+                let mut rounds = streams[..round].to_vec();
+                rounds.push(body.replacen(line, &format!("data: {event}"), 1));
+                assert_failed_stream(rounds, round, "invalid content block payload").await;
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn messages_stream_allows_named_extension_blocks_and_deltas() {
+    use serde_json::json;
+    let mut extension = String::new();
+    for event in [
+        json!({"type":"content_block_start", "index":999,
+            "content_block":{"type":"future_block", "extension":"opaque"}}),
+        json!({"type":"content_block_delta", "index":999,
+            "delta":{"type":"future_delta", "extension":"opaque"}}),
+        json!({"type":"content_block_stop", "index":999}),
+    ] {
+        write!(extension, "data: {event}\n\n").unwrap();
+    }
+    let streams = cassette_turn_streams()
+        .into_iter()
+        .map(|body| {
+            body.replacen(
+                "event: content_block_start",
+                &format!("{extension}event: content_block_start"),
+                1,
+            )
+        })
+        .collect();
+    assert_messages_stream_presents_one_message(streams).await;
+}
