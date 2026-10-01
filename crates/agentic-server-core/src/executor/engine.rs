@@ -8,6 +8,7 @@
 mod agent_turn;
 mod execute;
 mod multi_agent;
+pub(crate) mod retained;
 mod streaming;
 mod usage;
 
@@ -928,6 +929,7 @@ mod tests {
                 .expect("event should be emitted");
             event_tx
                 .try_send(StreamEvent {
+                    flushed: None,
                     content: "event".to_owned(),
                     sequence_number: event.sequence_number().expect("event should be numbered"),
                 })

@@ -37,3 +37,7 @@ pub use tools::{
 
 pub mod agent_commands;
 pub mod agent_tree;
+
+pub mod injection;
+
+pub mod websocket;

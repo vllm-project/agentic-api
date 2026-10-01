@@ -4,6 +4,7 @@
 mod actions;
 mod compaction;
 mod context;
+mod control;
 mod delivery;
 mod guidance;
 mod rounds;
@@ -23,7 +24,7 @@ use crate::executor::{
     gateway::emit_response_start_events,
     multi_agent::{
         AgentRegistry, AgentState, CheckpointLimits, ClientCallError, CompactionResult, PendingClientCalls,
-        RegistryError, RunOwner, ValidatedTreeCheckpoint,
+        RegistryError, RunControlReceiver, RunOwner, ValidatedTreeCheckpoint,
         collaboration::{TranscriptSealer, attribution},
     },
     pipeline::{AgentFrame, AgentPipeline, AgentRoundId},
@@ -73,6 +74,7 @@ enum CompletedWork {
 }
 
 pub(super) struct MultiAgentRun {
+    control: Option<RunControlReceiver>,
     config: MultiAgentConfig,
     limit: usize,
     registry: AgentRegistry,
@@ -146,6 +148,7 @@ impl MultiAgentRun {
         // active worker. Client backpressure reaches upstream readers.
         let (frame_sender, frames) = mpsc::channel(1);
         Ok(Self {
+            control: pipeline.control.take(),
             frame_sender,
             frames,
             completed_items: BTreeMap::new(),
@@ -247,6 +250,8 @@ impl MultiAgentRun {
                     .filter_map(|context| context.stored.wait.as_ref())
                     .map(|wait| wait.deadline_ms)
                     .min();
+                // A live socket does not keep an otherwise quiescent response open.
+                // Pending client outputs are persisted for explicit continuation.
                 if self.pending.pending().next().is_some() || waiting.is_none() {
                     let waiters = self
                         .contexts
@@ -279,14 +284,10 @@ impl MultiAgentRun {
                         )
                         .await?;
                     }
+                    if let Some(control) = &mut self.control {
+                        control.finish();
+                    }
                     break;
-                }
-                if let Some(deadline) = waiting {
-                    tokio::time::sleep(Duration::from_millis(
-                        u64::try_from(deadline.saturating_sub(now_ms())).unwrap_or(0),
-                    ))
-                    .await;
-                    continue;
                 }
             }
             let deadline = self
@@ -297,7 +298,11 @@ impl MultiAgentRun {
                 .min();
             tokio::select! {
                 Some(frame) = self.frames.recv() => self.deliver_frame(frame, pipeline).await?,
-                completion = self.tasks.join_next() => {
+                command = control::receive(&mut self.control), if self.control.is_some() => {
+                    let command = command.ok_or_else(|| invalid("multi-agent run control disconnected"))?;
+                    command.apply(|input| self.accept_live_outputs(input));
+                }
+                completion = self.tasks.join_next(), if !self.tasks.is_empty() => {
                     if let Some(completion) = completion { self.complete(completion, pipeline).await?; }
                 }
                 () = wait_until(deadline), if deadline.is_some() => {}

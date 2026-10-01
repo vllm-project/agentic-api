@@ -11,7 +11,7 @@
     "crates/agentic-server-core/src/types/tools/params.rs": 537,
     "crates/agentic-server/src/agentic_process.rs": 557,
     "crates/agentic-server/src/auth.rs": 791,
-    "crates/agentic-server/src/handler/websocket/responses.rs": 784
+    "crates/agentic-server/src/handler/websocket/responses.rs": 782
   },
   "exceptions": {
     "crates/agentic-server-core/src/config.rs": {

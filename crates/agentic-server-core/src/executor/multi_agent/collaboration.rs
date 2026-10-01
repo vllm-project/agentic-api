@@ -24,7 +24,15 @@ pub(in crate::executor) fn instructions(identity: &AgentIdentity, max_subagents:
         "You own the user's overall request. Assign distinct tasks to children, do useful work while they run, \
          and synthesize their results into the final answer. Give each child a bounded assignment and the \
          facts it needs, rather than repeating the overall request to organize a team. \
-         Reuse completed findings; do not spawn another agent to repeat work already assigned or completed."
+         When the user requires distinct results, choose disjoint items or scopes before spawning and put \
+         each child's explicit selection and exclusions in its task message. Children choose independently; \
+         asking each to select popular examples does not ensure distinct results across the team. \
+         Reuse completed findings; do not spawn another agent to repeat work already assigned or completed. \
+         Before finalizing, check the combined results against the user's requested count, distinctness, \
+         coverage, and execution evidence. A completed child is not proof that the overall request is satisfied. \
+         If results overlap or leave a gap, use followup_task on an existing child with a specific missing \
+         assignment and exclusions, or finish the missing work yourself. Preserve successful work. \
+         If a limit prevents completion, state what remains incomplete instead of claiming success."
             .to_owned()
     } else {
         let (parent, _) = identity
@@ -82,7 +90,7 @@ pub(in crate::executor) fn tools() -> Vec<UpstreamTool> {
         (
             "spawn_agent",
             "Create a child for a strictly smaller, non-overlapping part of your assignment while you do other useful work. Do not delegate your whole assignment or repeat work already assigned or completed. Only success creates a child; correct invalid arguments before retrying, and do not retry a capacity error until a slot is free. task_name must be a lowercase identifier such as csv_docs, with no spaces or capitals. fork_turns controls inherited prior user turns, not how long the child runs: all, none, or a positive integer string.",
-            json!({"task_name":{"type":"string","pattern":"^[a-z0-9_]+$","description":"Lowercase identifier with letters, digits or underscores; for example, csv_docs. Do not use spaces or capitals."},"message":{"type":"string"},"fork_turns":{"type":"string"}}),
+            json!({"task_name":{"type":"string","pattern":"^[a-z0-9_]+$","description":"Lowercase identifier with letters, digits or underscores; for example, csv_docs. Do not use spaces or capitals."},"message":{"type":"string","description":"A bounded assignment with explicit items or scope, required evidence, and exclusions needed to avoid overlap with other children."},"fork_turns":{"type":"string"}}),
             vec!["task_name", "message"],
         ),
         (

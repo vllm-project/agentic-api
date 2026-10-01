@@ -185,8 +185,8 @@ building `ExecuteRequest`, preserving strict validation for in-process execution
 
 `GET /v1/responses` upgrades to a WebSocket. Structurally this is not a one-shot
 handler like the HTTP routes — `responses_ws_loop` is a long-lived session loop that
-reads `response.create` messages off the socket and drives the *same*
-`ExecuteRequest::run()` executor call the HTTP handler uses. Requests with distinct
+decodes typed `ResponseClientEvent` messages and uses `ExecuteRequest::run_retained()`
+to drive the same inference/tool loop and persistence APIs as HTTP. Requests with distinct
 `stream_id` values run concurrently, while requests in the same lane remain FIFO;
 requests without a `stream_id` share a default FIFO lane. The session admits at most
 64 active or queued requests and 12 MiB of aggregate request data. WebSocket sessions
@@ -194,12 +194,49 @@ force `stream: true` and honor the requested `store` value. Because axum's built
 doesn't wait for upgraded connections, `AppState` carries a separate
 `WebSocketTracker` so shutdown can drain in-flight sessions.
 
-Multi-agent execution is currently HTTP-only. The shared session rehydration path
-rejects enabled multi-agent configuration both before and after restoring effective
-settings. This covers ordinary WebSocket execution, `generate: false`, and requests
-that inherit configuration from a stored agent tree. The rejection occurs before
-inference or local completion; WebSocket multi-agent support and its lifecycle tests
-remain follow-up work.
+WebSocket session admission allows multi-agent configuration with `store: true`,
+including configuration inherited from a stored agent tree. The common multi-agent
+validation still runs before and after restoring effective settings. Generating responses
+register connection-local routes before their first event is relayed. Injection bypasses
+create-lane FIFO and submits typed batches to the core `RunControl`; only the coordinator
+validates call ownership and mutates agent histories.
+
+`types/websocket.rs` owns the flat create/inject client envelope; create flattens the
+shared `RequestPayload` and adds `generate` and `stream_id`. Injection accepts typed
+function, shell, custom-tool, and discovery outputs. OpenAI duplex recordings establish
+live function, shell, and discovery acceptance and preservation of custom outputs in
+late rejections. Core validates output kind and call ownership. Live discovery reuses
+the existing tool-search preparation and registry builder before the owning agent's next
+round, preserving its inference-round budget.
+Unknown and retained-completed targets return `response.inject.failed` with the documented
+`response_not_found` and `response_already_completed` codes and unchanged typed input.
+Malformed injection schema closes the connection after a generic validation error.
+An already-resolved call instead returns `response.inject.failed` with `invalid_input`
+and the submitted input, leaving the connection usable, as observed in the OpenAI capture.
+Duplicate-within-batch and unknown-call batches still need active-run characterization;
+their reference captures reached finalization first. A quiescent tree with pending client
+calls completes and persists its checkpoint for continuation rather than waiting indefinitely
+for socket input. Commands losing the finalization race return their input after commit.
+
+The connection owns control and relay `JoinSet`s, at most 32 admitted controls with
+12 MiB of aggregate serialized input, and 128 response routes. Completed routes expire
+after 60 seconds or are evicted under capacity pressure; an admitted task pins its route
+through acknowledgement relay. Control exhaustion closes the connection, with an overload
+error when the bounded outbound queue can admit it. There is no overflow buffer.
+`ResponseEventSink` retains the response's sequence owner and one-entry delivery queue
+after execution. Accepted decisions enqueue acknowledgements through that same sink;
+a flush barrier keeps terminal delivery ahead of the next create in its lane.
+An independent socket writer drains the shared 64-entry queue with a ten-second send
+deadline, so the reader never waits for a socket write. Failed acknowledgement delivery
+is a transport failure, never an instruction to retry accepted input. Disconnect cancels
+and joins response owners and admitted controls. Graceful shutdown drains ordinary active
+creates and cancels live multi-agent runs, which could otherwise wait forever for new
+client input after admission stops. Admitted acknowledgements retain their delivery leases.
+Non-generating prewarm creates retain their existing local-completion path.
+
+These are deterministic gateway guarantees. OpenAI/gateway duplex cassette recording,
+negative-case characterization, and comparative resource measurements remain follow-up work;
+this implementation does not advertise complete transport conformance.
 
 Executor streams propagate downstream backpressure through a bounded event channel.
 `[responses]` configures separate ceilings for upstream JSON bodies, upstream SSE
@@ -542,9 +579,23 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   `multi_agent/pending_calls.rs` retains each client call's originating agent, turn and
   kind. It validates output batches before mutation, retains accepted outputs until
   transfer to canonical context, and keeps resolved IDs for duplicate detection.
-  Acceptance does not resume an agent or decide visibility for superseded turns.
-  This table complements the existing single-history rehydration validator; neither
-  public error mapping nor transport-specific batch policy is defined by it.
+  Acceptance by this table does not itself resume an agent. It complements the
+  existing single-history rehydration validator; neither public error mapping nor
+  transport-specific batch policy is defined by it.
+  `multi_agent/control.rs` provides opt-in live input through `RunControl::channel`
+  and `ExecuteRequest::with_run_control`. It requires a stored, streaming multi-agent
+  inference request. Nonblocking admission bounds each batch's logical retained bytes
+  and at most 32 outstanding commands, including unread decisions. Adapters must keep
+  draining response events while awaiting decisions. The coordinator validates the
+  whole batch, transfers outputs into canonical histories, invalidates stale compaction
+  generations, and resumes a waiting owner only after all of its calls are resolved.
+  Interrupted owners retain input without being restarted. Without a control endpoint,
+  HTTP execution still completes at the client-output boundary.
+  Finalization closes admission and rejects queued commands synchronously. `Finalizing`
+  is distinct from successful persistence; a lost reply is an execution failure with
+  unknown acceptance, never permission to retry silently. This core seam does not yet
+  own WebSocket routing, wire acknowledgements, or completed-response retention;
+  those belong to the connection adapter and retained event sink described above.
   `engine/multi_agent.rs` coordinates these components for stored HTTP responses.
   Canonical histories and pending calls remain owned by the coordinator; the pipeline never
   spawns subagents. Its `context`, `actions`, `rounds`, `delivery`, and `compaction`

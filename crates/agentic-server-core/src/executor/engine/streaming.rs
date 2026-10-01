@@ -6,6 +6,7 @@ use crate::executor::gateway_accumulator::{
     GatewayStreamAccumulator, STREAM_EVENT_BUFFER, StreamEvent, error_sse_chunk,
 };
 use crate::executor::inference::{BoxStream, DONE_MARKER};
+use crate::executor::multi_agent::RunControlReceiver;
 use crate::executor::persist::persist_if_needed;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::telemetry::{ExecutionSpan, FailureCategory, InstrumentedStream};
@@ -77,6 +78,7 @@ pub(super) fn run_stream(
     auth: Option<String>,
     max_stream_event_bytes: usize,
     mut execution: ExecutionSpan,
+    control: Option<RunControlReceiver>,
 ) -> BoxStream {
     let span = execution.span().clone();
     let task_span = span.clone();
@@ -91,6 +93,7 @@ pub(super) fn run_stream(
                 Some(event_tx_for_run),
                 max_stream_event_bytes,
             );
+            agent.control = control;
             let cancellation = agent.request.enriched_request.multi_agent.as_ref()
                 .is_some_and(|config| config.enabled).then(|| agent.cancellation_token());
             let mut run_handle = AbortOnDrop::new(tokio::spawn(

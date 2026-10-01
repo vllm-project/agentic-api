@@ -359,6 +359,9 @@ async fn emit_client_frame(
         sink.send(&frame, accumulator.max_stream_event_bytes()).await?;
         return Ok(true);
     }
+    if let Some(sink) = &accumulator.response_sink {
+        return sink.emit_frame(frame, output_offset).await;
+    }
     // Only three scalar fields are cloned. Commit presentation state after
     // enqueueing, not on a cancelled wait, closed receiver, or oversized event.
     let mut published = accumulator.clone();

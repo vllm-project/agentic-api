@@ -77,6 +77,7 @@ EXCLUDED_RESPONSE_HEADERS = {
     "content-length",
     "transfer-encoding",
     "connection",
+    "set-cookie",
 }
 
 RECORDED_HEADERS = {
@@ -183,7 +184,7 @@ async def proxy_request(request: Request, path: str) -> Response:
     target_host: str = request.app.state.target_host
     output_file: Path = request.app.state.output_file
 
-    turn_num = _turn_number(output_file)
+    turn_num = getattr(request.state, "recording_turn", None) or _turn_number(output_file)
     filename = f"t{turn_num}"
 
     target_url = f"{target_host}/{path}"
@@ -683,6 +684,8 @@ class WebSocketClient:
         self.headers = headers
         self.sock: socket.socket | ssl.SSLSocket | None = None
         self._receive_buffer = bytearray()
+        self.on_frame = None
+        self.handshake_response = None
 
     def __enter__(self) -> "WebSocketClient":
         parsed = urlparse(self.url)
@@ -719,8 +722,12 @@ class WebSocketClient:
 
         response = self._read_http_response()
         status_line, _, header_text = response.partition("\r\n")
+        self.handshake_response = {
+            "status_code": int(status_line.split()[1]),
+            "headers": _filter_response_headers(_headers_from_text(header_text)),
+        }
         if " 101 " not in status_line:
-            raise RuntimeError(f"websocket upgrade failed: {status_line}\n{header_text}")
+            raise RuntimeError(f"websocket upgrade failed: {status_line}")
         accept = _headers_from_text(header_text).get("sec-websocket-accept")
         expected = base64.b64encode(
             hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()
@@ -788,6 +795,8 @@ class WebSocketClient:
         header.extend(mask)
         masked = bytes(byte ^ mask[i % 4] for i, byte in enumerate(payload))
         self.sock.sendall(bytes(header) + masked)
+        if self.on_frame is not None:
+            self.on_frame("client", opcode, payload, True)
 
     def receive_text(self) -> str | None:
         message = bytearray()
@@ -801,11 +810,15 @@ class WebSocketClient:
                 length = struct.unpack("!H", self._read_exact(2))[0]
             elif length == 127:
                 length = struct.unpack("!Q", self._read_exact(8))[0]
+            if length > 16 * 1024 * 1024:
+                raise RuntimeError("WebSocket frame exceeded the 16 MiB capture limit")
             mask = self._read_exact(4) if masked else b""
             payload = self._read_exact(length)
             if masked:
                 payload = bytes(byte ^ mask[i % 4] for i, byte in enumerate(payload))
 
+            if self.on_frame is not None:
+                self.on_frame("server", opcode, payload, fin)
             if opcode == 0x8:
                 return None
             if opcode == 0x9:
@@ -814,6 +827,8 @@ class WebSocketClient:
             if opcode == 0xA:
                 continue
             if opcode in {0x1, 0x0}:
+                if len(message) + len(payload) > 16 * 1024 * 1024:
+                    raise RuntimeError("WebSocket message exceeded the 16 MiB capture limit")
                 message.extend(payload)
                 if fin:
                     return message.decode("utf-8")
@@ -1415,6 +1430,42 @@ def run_responses(
     request_overrides: dict | None = None,
     auto_tool_continuations: int = 0,
 ) -> None:
+    if transport == "websocket" and multi_agent is not None:
+        from websocket_recorder import RecordedSession, exchange
+
+        if branches or manual_item_replay or tool_choice_sequence or request_overrides:
+            raise click.UsageError("multi-agent WebSocket capture does not support branching or request overrides")
+        if output_file is None:
+            raise ValueError("WebSocket recording needs an output file")
+        url = _websocket_url(target_base_url)
+        ws = WebSocketClient(url, headers or {})
+        handshake = {"request": {"method": "GET", "url": url, "headers": _filter_request_headers(headers or {})}}
+        output_builder = lambda calls: _build_tool_output_input(calls, tool_outputs or {}, None, tool_search_output_tools)
+        with RecordedSession(ws, output_file, handshake, HTTP_READ_TIMEOUT) as session:
+            previous_id = None
+            for prompt_turn in range(turns):
+                value = preset_input if prompt_turn == 0 and preset_input is not None else _prompt(
+                    f"Turn {prompt_turn + 1}/{turns} — enter prompt: "
+                )
+                body = {"model": model, "input": value, "store": store, "multi_agent": multi_agent}
+                if previous_id is not None:
+                    body["previous_response_id"] = previous_id
+                if max_output_tokens is not None:
+                    body["max_output_tokens"] = max_output_tokens
+                if reasoning is not None:
+                    body["reasoning"] = reasoning
+                _inject_tools(body, tools, tool_choice, parallel_tool_calls)
+                for continuation in range(auto_tool_continuations + 1):
+                    response, returned = exchange(session, body, output_builder, inject=True)
+                    previous_id = response["id"]
+                    if not returned:
+                        break
+                    if continuation == auto_tool_continuations:
+                        raise click.ClickException("completed-response fallback exceeded continuation budget")
+                    body = dict(body, previous_response_id=previous_id, input=returned)
+                click.echo(f"  [WebSocket response {previous_id}; all injection outcomes received]")
+        return
+
     response_ids: dict[int, str] = {}
     responses: dict[int, dict] = {}
     branch_map: dict[int, int] = {}
@@ -1856,18 +1907,18 @@ def main(
     """Interactive multi-turn cassette recorder (proxy embedded)."""
     global HTTP_READ_TIMEOUT
     if auto_tool_continuations and (
-        mode != "responses" or transport != "http" or no_store or not tool_outputs_file
+        mode != "responses" or no_store or not tool_outputs_file
         or branch_from or branch_turn_number or tool_choice_sequence_file or request_overrides_raw
     ):
         raise click.UsageError(
-            "--auto-tool-continuations requires stored HTTP Responses with --tool-outputs, "
+            "--auto-tool-continuations requires stored Responses with --tool-outputs, "
             "without branches, tool-choice sequences, or request overrides."
         )
-    if http_read_timeout != TIMEOUT and (mode != "responses" or transport != "http"):
-        raise click.UsageError("--http-read-timeout requires HTTP --mode responses.")
+    if http_read_timeout != TIMEOUT and mode != "responses":
+        raise click.UsageError("--http-read-timeout requires --mode responses.")
     HTTP_READ_TIMEOUT = http_read_timeout
-    if (multi_agent_raw is not None or openai_beta) and (mode != "responses" or transport != "http"):
-        raise click.UsageError("--multi-agent and --openai-beta require HTTP --mode responses.")
+    if (multi_agent_raw is not None or openai_beta) and mode != "responses":
+        raise click.UsageError("--multi-agent and --openai-beta require --mode responses.")
     for beta in openai_beta:
         if not beta.strip() or any(ord(char) < 32 or ord(char) >= 127 for char in beta):
             raise click.UsageError("--openai-beta must be a nonempty printable ASCII header value.")
@@ -2128,6 +2179,9 @@ def main(
                 preset_input=preset_input,
                 manual_item_replay=manual_item_replay,
                 parallel_tool_calls=parallel_tool_calls,
+                multi_agent=multi_agent,
+                auto_tool_continuations=auto_tool_continuations,
+                request_overrides=request_overrides,
             )
     else:
         click.echo(f"Proxy:   {proxy_url}  (requests go through here for recording)")

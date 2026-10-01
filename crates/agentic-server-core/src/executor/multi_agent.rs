@@ -6,6 +6,9 @@
 //! joined teardown. Public multi-agent execution remains gated until the tree,
 //! persistence and shared delivery are connected.
 
+pub mod control;
+pub use control::{RunControl, RunControlReceiver};
+
 mod checkpoint;
 pub(in crate::executor) mod collaboration;
 mod compaction;

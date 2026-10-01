@@ -171,7 +171,7 @@ pub(crate) async fn rehydrate_with_continuation(
     exec_ctx: &ExecutionContext,
     continuation: Option<ResponseContinuation>,
 ) -> ExecutorResult<RequestContext> {
-    validate_multi_agent_request(&request, continuation.is_some())?;
+    validate_multi_agent_request(&request)?;
     // Fail before storage work for explicitly declared tools and new content;
     // check again once stored effective settings and history are resolved.
     exec_ctx
@@ -217,21 +217,14 @@ pub(crate) async fn rehydrate_with_continuation(
         .gateway_executors
         .validate_declarations(ctx.enriched_request.tools.as_deref())?;
     validate_message_content(&ctx.enriched_request.input)?;
-    validate_multi_agent_request(&ctx.enriched_request, ctx.continuation.is_some())?;
+    validate_multi_agent_request(&ctx.enriched_request)?;
     Ok(ctx)
 }
 
-fn validate_multi_agent_request(request: &RequestPayload, in_session: bool) -> ExecutorResult<()> {
+fn validate_multi_agent_request(request: &RequestPayload) -> ExecutorResult<()> {
     let Some(config) = request.multi_agent.as_ref().filter(|config| config.enabled) else {
         return Ok(());
     };
-    // TODO: Support and test multi-agent WebSocket sessions, including generate:false
-    // and continuations that inherit an agent tree, before removing this gate.
-    if in_session {
-        return Err(ExecutorError::InvalidRequest(
-            "multi_agent is not supported with websocket response sessions; use the HTTP Responses API".into(),
-        ));
-    }
     if !request.store {
         return Err(ExecutorError::InvalidRequest(
             "multi_agent requires store: true; store: false is not supported".into(),
@@ -459,6 +452,7 @@ fn restore_agent_tree(ctx: &mut RequestContext, metadata: &ResponseMetadata, max
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroUsize;
     use std::sync::Arc;
 
     use super::*;
@@ -687,12 +681,35 @@ mod tests {
         )
     }
 
+    #[tokio::test]
+    async fn multi_agent_session_admission_requires_storage() {
+        let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
+        for store in [true, false] {
+            let session = ResponseSession::new(NonZeroUsize::new(128).unwrap(), NonZeroUsize::new(65_536).unwrap());
+            let mut request = request(None, None);
+            request.store = store;
+            request.multi_agent = Some(MultiAgentConfig {
+                enabled: true,
+                max_concurrent_subagents: Some(3),
+            });
+            let result = rehydrate_in_session(request, &exec_ctx, &session).await;
+            if store {
+                let ctx = result.unwrap();
+                assert!(ctx.enriched_request.multi_agent.unwrap().enabled);
+                assert!(ctx.continuation.is_some());
+            } else {
+                assert!(matches!(result, Err(ExecutorError::InvalidRequest(message))
+                    if message == "multi_agent requires store: true; store: false is not supported"));
+            }
+        }
+    }
+
     #[test]
     fn multi_agent_compaction_trigger_is_allowed() {
         let mut request = request(None, None);
         request.input = ResponsesInput::Items(vec![InputItem::CompactionTrigger]);
         request.multi_agent = serde_json::from_value(serde_json::json!({"enabled":true})).unwrap();
-        validate_multi_agent_request(&request, false).unwrap();
+        validate_multi_agent_request(&request).unwrap();
     }
 
     #[test]
@@ -704,11 +721,11 @@ mod tests {
             ]))
             .unwrap(),
         );
-        validate_multi_agent_request(&request, false).unwrap();
+        validate_multi_agent_request(&request).unwrap();
         request.multi_agent = serde_json::from_value(serde_json::json!({"enabled":false})).unwrap();
-        validate_multi_agent_request(&request, false).unwrap();
+        validate_multi_agent_request(&request).unwrap();
         request.multi_agent = serde_json::from_value(serde_json::json!({"enabled":true})).unwrap();
-        validate_multi_agent_request(&request, false).unwrap();
+        validate_multi_agent_request(&request).unwrap();
     }
 
     #[tokio::test]
@@ -799,13 +816,13 @@ mod tests {
                 "model": "test", "input": "hello", "multi_agent": config, "max_tool_calls": 5
             }))
             .unwrap();
-            validate_multi_agent_request(&request, false).unwrap();
+            validate_multi_agent_request(&request).unwrap();
         }
         let request: RequestPayload = serde_json::from_value(serde_json::json!({
             "model": "test", "input": "hello", "multi_agent": {"enabled": true}, "max_tool_calls": null
         }))
         .unwrap();
-        validate_multi_agent_request(&request, false).unwrap();
+        validate_multi_agent_request(&request).unwrap();
     }
 
     #[tokio::test]

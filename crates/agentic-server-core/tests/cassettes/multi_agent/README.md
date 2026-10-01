@@ -219,3 +219,325 @@ The recorder still writes ordinary YAML and logs. After re-recording review
 streaming, replace the compressed artifact with a losslessly compressed copy,
 update the size/hash above, and rerun the integration suite. Do not retain both
 the old compressed capture and a new uncompressed capture as competing fixtures.
+
+## Persistent WebSocket recordings
+
+Set `MULTI_AGENT_TRANSPORT=websocket` to use the same five prompt sections and
+tool fixtures as the HTTP suite. `record_multi_agent_cassettes.sh` still invokes
+`record_cassette.py`; its multi-agent WebSocket path uses
+`websocket_recorder.py`. No separate recording entry point is needed.
+
+From the repository root, with `OPENAI_API_KEY` already exported:
+
+```bash
+MULTI_AGENT_TRANSPORT=websocket \
+MULTI_AGENT_RECORD_SET=openai \
+MULTI_AGENT_SUITE=all \
+OPENAI_MODEL=gpt-5.6-sol \
+uv run --no-project \
+  --with click --with fastapi --with httpx --with uvicorn --with pyyaml \
+  bash crates/agentic-server-core/tests/cassettes/record_multi_agent_cassettes.sh
+```
+
+After inspecting those files, record the gateway using the same prompts:
+
+```bash
+MULTI_AGENT_TRANSPORT=websocket \
+MULTI_AGENT_RECORD_SET=gateway \
+MULTI_AGENT_SUITE=all \
+GATEWAY_URL=http://localhost:9000 \
+GATEWAY_MODEL=your-served-model \
+uv run --no-project \
+  --with click --with fastapi --with httpx --with uvicorn --with pyyaml \
+  bash crates/agentic-server-core/tests/cassettes/record_multi_agent_cassettes.sh
+```
+
+Each invocation writes five `multi-agent-<provider>-<scenario>-<model>-websocket.yaml`
+files beside the existing HTTP recordings. The HTTP files are untouched.
+`MULTI_AGENT_STREAM_MODE` applies only to HTTP; WebSocket has one duplex mode.
+Use `MULTI_AGENT_SUITE=proposals` to isolate live function-output injection, or
+append `--dry-run` to preview requests without connecting or writing files.
+Re-running a scenario replaces its WebSocket file. `MULTI_AGENT_OUTPUT_DIR`
+can preserve separate recording attempts.
+
+These captures use `format: responses-websocket-v1` and a `sessions` list,
+not HTTP `turns`. One connection remains open for the entire scenario, including
+any explicitly rejected late-output continuation. The handshake records the actual
+upgrade status and response headers; authorization is masked and Set-Cookie is
+excluded. Each observed frame retains its direction, ordinal, elapsed time, opcode,
+FIN flag, and exact UTF-8 text or base64 payload. Ping, pong, fragmentation, and close
+frames remain in order. Nothing is converted to synthesized SSE or `[DONE]`.
+
+The driver submits fixture outputs on `response.output_item.done`, continues
+reading while an injection is outstanding, and waits for both the terminal response
+and its injection outcomes. It allows one outstanding injection per response so
+acknowledgements without batch IDs can be associated unambiguously. Only input
+explicitly returned with `response_already_completed` is submitted in a create
+chained by `previous_response_id`. Transport loss never retries an uncertain batch.
+
+The proposals fixture supplies functions. Mixed-tools and client-owned-tools also
+submit shell, custom-tool, and discovery outputs as characterization probes; support
+for those injection kinds is characterized by the recordings. The initial gateway
+captures rejected shell and discovery outputs at schema decoding. The latest gateway
+captures confirm acceptance of shell, discovery, function, and custom outputs after
+typed decoding and discovery refresh were fixed. Code interpreter requires the same
+enabled gateway runtime as its HTTP scenario. The recorder never executes the simulated shell commands.
+
+Frames are flushed to disk as they arrive. Failure, interruption, or timeout retains
+the observations and records a close/failure outcome when cleanup runs; a killed
+process can leave that outcome absent. The capture budgets are 250,000 frames,
+128 MiB of frame payloads, 16 MiB per frame/message, 64 queued client outputs, and
+100 injections per create. `HTTP_READ_TIMEOUT` also controls WebSocket socket
+inactivity (default 900 seconds in the suite); close-handshake observation is bounded
+to five seconds. These limits are recorder policy, not claims about OpenAI.
+
+Live captures and their comparison are available below. Full gateway replay of this
+duplex format and race characterization remain necessary before claiming conformance.
+Existing HTTP replay tests do not consume this new format.
+
+Run the hermetic recorder tests without an API key:
+
+```bash
+uv run --no-project \
+  --with click --with fastapi --with httpx --with uvicorn --with pyyaml \
+  python -m unittest discover -s crates/agentic-server-core/tests/cassettes -p 'test_record*.py'
+```
+
+
+## WebSocket comparison with the latest gateway recordings
+
+The five OpenAI and five Qwen gateway WebSocket files use matching initial prompts.
+Per-response sequence numbers increase in all ten files. All ten close cleanly with
+no server errors or outstanding injection acknowledgements. All five gateway scenarios
+complete with a root final answer. The comparison intentionally
+distinguishes a completed response from a successfully finished delegated task.
+
+| Scenario | OpenAI capture | Gateway capture |
+| --- | --- | --- |
+| Review | Three delegated agents, one root final answer | Three delegated agents, one root final answer |
+| Proposals | Two delegated agents, two accepted function injections, root final answer | Same observed transport milestones |
+| Mixed tools | Accepted shell injection; web search and MCP work; root final answer | Accepted shell injection; web search and MCP work; root final answer |
+| Client-owned tools | Three accepted injections (discovery then two functions); two late rejections; two completed responses, **no root final answer** | Six accepted injections (three discovery, two function, one custom); one completed response and root final answer |
+| Code interpreter | Two delegated agents, web research and two interpreter calls, root final answer describing four distinct problems | Two delegated agents, five web searches, six completed interpreter calls with logs, root final answer covering **four distinct** problems |
+
+The client-owned OpenAI capture returns custom-tool outputs intact in a late
+`response_already_completed` batch; it does not prove live custom-output acceptance.
+Returned late input is carried into the second create. Neither a clean close nor the
+recorder's completed status establishes that the root produced its requested summary.
+Both existing gateway HTTP code-interpreter captures produce four distinct problems.
+The latest WebSocket capture also satisfies this requirement: one child solves Two Sum
+and Best Time to Buy and Sell Stock; the other solves Search in Rotated Sorted Array
+and Number of 1 Bits. All four have recorded execution outputs and appear in the root's
+final summary. The second child initially expects 31 set bits for 2147483645, observes
+30, independently checks the count, and reruns with the corrected expectation before
+finalizing. The six interpreter calls include this verification and corrected run.
+
+The previous WebSocket attempt duplicated both problems across children. Shared model
+guidance was strengthened to request explicit disjoint assignments and verification of
+combined count, distinctness, coverage, and execution evidence. This new capture shows
+a successful run after that change; a single recording does not guarantee model reliability.
+Token usage and generated wording also differ; these recordings do
+not isolate transport performance.
+
+The gateway schema failures motivated typed shell/custom/discovery injection support.
+A deterministic gateway test additionally exposed a tool-discovery refresh defect:
+accepting the output alone did not make the newly discovered function available in
+the next inference round. That path now reuses core tool-search preparation and registry
+construction, without resetting the agent's round budget. Deterministic live injection
+tests cover discovery followed by function execution, shell, custom, and returned late input.
+
+Read-only capture audits are reproducible with:
+
+```bash
+cargo test -p agentic-server-core --test multi_agent_websocket_cassette_test
+```
+
+The audit tests assert matching prompts, delegation, response ordering, clean close,
+acknowledgement completion, and the successful gateway injection kinds. They preserve
+the incomplete OpenAI client-owned task as an explicit observation. They do not grade
+model answers or establish full parity. Full duplex dependency replay and
+compaction/race characterization remain separate work.
+
+## WebSocket edge-case characterization
+
+Run this suite separately from `all`; it records four isolated sessions using the
+same raw `RecordedSession` recorder. The edge driver lives in `websocket_recorder.py`,
+invoked by the existing shell script. All four cases write to one YAML per provider:
+`multi-agent-<provider>-ws-edge-cases-<model>-websocket.yaml`. Its `sessions` list
+contains one connection per case, labeled by `handshake.probe.case`. Frames are flushed
+as they arrive, preserving earlier sessions if a later probe fails or is interrupted.
+Re-running the full suite replaces that combined file. No existing positive capture is replaced. Export `OPENAI_API_KEY`, then run:
+
+```bash
+MULTI_AGENT_TRANSPORT=websocket \
+MULTI_AGENT_SUITE=websocket-edge-cases \
+MULTI_AGENT_RECORD_SET=openai \
+OPENAI_MODEL=gpt-5.6-sol \
+uv run --no-project \
+  --with click --with fastapi --with httpx --with uvicorn --with pyyaml \
+  bash crates/agentic-server-core/tests/cassettes/record_multi_agent_cassettes.sh
+```
+
+For gateway, use `MULTI_AGENT_RECORD_SET=gateway`, `GATEWAY_URL`, and `GATEWAY_MODEL`
+as in the positive suite. `GATEWAY_API_KEY` is optional for authenticated gateways.
+`MULTI_AGENT_EDGE_CASE` selects one case below (default `all`); a single-case run writes
+`multi-agent-<provider>-ws-edge-<case>-<model>-websocket.yaml` to preserve the combined suite.
+`MULTI_AGENT_EDGE_TIMEOUT` defaults to 120 seconds per probe. `--dry-run` lists
+outputs without opening connections. The suite focuses on completion races, duplicate
+acceptance, and batch atomicity; basic schema and parameter validation probes are omitted.
+
+| Case | Observation sought |
+| --- | --- |
+| `late-continuation` | Withhold a real call output until terminal, inject it, then continue with exactly the input explicitly returned by `response_already_completed` |
+| `duplicate-in-batch` | Two copies of the same output inside one batch |
+| `mixed-valid-invalid` | A real output plus an unknown call; after explicit rejection, submit the real output alone to probe batch atomicity |
+| `duplicate-injection` | Deliberately send the same output twice back-to-back and observe both outcomes, including acknowledgements after terminal |
+
+The [OpenAI multi-agent guide](https://developers.openai.com/api/docs/guides/responses-multi-agent#websocket)
+documents unknown/completed response errors and schema errors with connection closure.
+These probes record exact payloads, returned input, ordering, and close frames without
+assuming undocumented error codes. Generic errors start a five-second server-close
+observation window. If no close arrives, the capture reports a driver/transport failure;
+that is an inconclusive close observation, not a fabricated provider rejection. EOF,
+timeout, and socket failures are retained and never trigger an uncertain retry. One
+failed probe does not prevent recording the others; cancellation still stops the suite.
+A captured server close ends that probe, but does not mean the intended condition was
+reached: inspect preceding frames for authentication or unrelated errors.
+
+The live-call probes use one root-owned `edge_echo` function to isolate admission
+semantics from delegation quality. If the model does not call it, the prerequisite
+failure is reported. If completion wins the race, `response_already_completed` only
+characterizes late input; it does not establish active-call validation. A timed-out
+late-continuation probe may mean the provider keeps the response open awaiting input.
+Completed recording means observations were captured, not that the provider passed
+an expected behavior assertion. Cross-connection ownership, forced compaction races,
+queue saturation, and disconnect during acceptance still need separate characterization.
+
+### Latest edge-recording comparison
+
+All four cases have matching prompts and tool declarations. Both captures have strictly
+increasing per-response sequence numbers, an acknowledgement for every injection,
+unchanged input in rejections, and clean closes. Neither contains a generic server error.
+
+| Case | OpenAI | Gateway |
+| --- | --- | --- |
+| Late continuation | Completes with a pending root function call; late injection returns `response_already_completed` and unchanged input. A second create on the same socket resumes and returns `EDGE_OK`. | Same observed behavior; the previous 120-second timeout is resolved. |
+| Duplicate within one batch | Completion wins; returns the whole batch with `response_already_completed`. | Same observed behavior. |
+| Mixed valid/invalid batch | Completion wins; returns the whole batch with `response_already_completed`. | Same observed behavior. |
+| Two identical injections | First accepted; second returns `response.inject.failed` / `invalid_input` and unchanged input. The response finishes with `EDGE_OK`. | Completion wins before either injection is accepted; both receive `response_already_completed` with unchanged input. No generic 400 or server-initiated close. |
+
+These quiescent captures confirm completion and late continuation. The duplicate
+case took different race paths, so they do not establish live duplicate-rejection parity.
+
+The separate OpenAI active recording now characterizes all three live cases:
+
+- Duplicate within a batch returns `invalid_input` with `Tool call '<id>' already has an output.`
+- Mixed valid/unknown calls return `invalid_input` with `Tool call '<id>' is not pending on response '<response_id>'.`
+- Repeated injection accepts the first output and rejects the second with `invalid_input`.
+
+Both invalid batches return their entire input unchanged. A subsequent injection of the
+valid member succeeds on the same socket before completion, establishing atomic rejection.
+Gateway maps these core decisions to the recorded errors through the existing relay.
+The deterministic `websocket_invalid_live_batches_are_atomic_and_do_not_close` test
+holds sibling inference active and verifies rejection, retry acceptance, duplicate rejection,
+continued completion, and exactly one committed output.
+
+The current paired `ws-active-text-edge-cases` recordings use identical text prompts,
+tools, token limits, and multi-agent settings. All three active cases now agree on
+acknowledgement ordering, error codes/messages (apart from generated identifiers), and
+unchanged returned input. Both invalid batches allow a successful valid-only retry on
+the same socket; repeated injection accepts once and rejects once. Late continuation
+also matches. No generic server errors occur, and response sequence numbers increase.
+
+Both providers now complete every case and acknowledge all injections. The OpenAI
+rerun used a 600-second recorder budget, resolving the earlier recording timeouts.
+Response completion counts match (two for late continuation, one for each active
+case), and both connections close cleanly after the client requests closure.
+Gateway's root answers are `EDGE_OK`; OpenAI uses `EDGE_OK.` in the mixed-batch
+case and `EDGE_OK` elsewhere. The audit retains this minor instruction-following
+difference separately from successful lifecycle parity.
+
+```bash
+cargo test -p agentic-server-core --test multi_agent_websocket_cassette_test
+```
+
+### Keep the response active for semantic validation
+
+Set `MULTI_AGENT_EDGE_ACTIVE=true` to use the `[websocket-active]` prompt from
+`prompts.txt`. The sibling writes a long guide while the root calls `edge_echo`.
+The driver waits for a fresh child-attributed `response.output_text.delta` after
+observing the pending call, and refuses injection after sibling finalization or response
+completion. This remains a timing-sensitive live probe, not a guaranteed execution barrier.
+The late-continuation case keeps its original prompt. No code interpreter is required.
+
+```bash
+MULTI_AGENT_TRANSPORT=websocket \
+MULTI_AGENT_SUITE=websocket-edge-cases \
+MULTI_AGENT_EDGE_ACTIVE=true \
+MULTI_AGENT_RECORD_SET=openai \
+OPENAI_MODEL=gpt-5.6-sol \
+uv run --no-project \
+  --with click --with fastapi --with httpx --with uvicorn --with pyyaml \
+  bash crates/agentic-server-core/tests/cassettes/record_multi_agent_cassettes.sh
+```
+
+This writes `multi-agent-openai-reference-ws-active-text-edge-cases-gpt-5.6-sol-websocket.yaml`.
+Use the usual gateway provider/model/URL variables for its paired recording. These files
+preserve the earlier quiescent and interpreter captures. Reruns skip completed conclusive
+cases and append attempts for missing or inconclusive cases to the same YAML. Selecting
+`MULTI_AGENT_EDGE_CASE` also uses that file. Historical attempts remain intact, so the file
+can contain more than four sessions. A retry starts a new response; it never resubmits an
+uncertain batch to its previous response. Archive the YAML to deliberately record every
+case again or change models/prompts for a fresh comparison. Malformed/interrupted YAML
+is rejected instead of overwritten. `close_outcome.probe` records observed sibling
+activity, control outcomes, and whether terminal had already arrived. A missing activity
+barrier is reported as an inconclusive probe; all-late acknowledgements remain inconclusive
+for active validation even when the sibling was observed streaming. No model assertion
+or latency measurement is treated as proof of compaction.
+
+### Deterministic compaction and duplex replay coverage
+
+The live-control unit tests now force injection before a summary snapshot, during an
+upstream summary blocked on an explicit barrier, and after compaction commits. They use
+`RunControl` admission, check stale-summary rejection, preserve unresolved call/output
+linkage, reject a second application, and charge summary usage. Additional barrier tests
+verify that a sibling accepts output while the root compacts, mail invalidates the root
+snapshot without being lost, and disconnect cancels control without publishing a response.
+These are gateway tests, not recordings of OpenAI's internal scheduling.
+
+```bash
+cargo test -p agentic-server-core --lib live_control
+cargo test -p agentic-server --test responses_websocket_test recorded_edge_sessions_drive_real_gateway
+```
+
+The Rust duplex test loads all four gateway edge sessions, drives their actual client
+create/inject/close frames through the real gateway, remaps generated response IDs, and
+uses ordered server milestones as barriers. It checks output content, call IDs, rejection
+input/codes, sequence monotonicity, close behavior, and inference request count. Token-delta
+chunk boundaries are not required to match. **Its model fixtures are derived from public
+server frames and are explicitly synthetic.** It covers client-transcript replay but does
+not establish full replay from independently recorded model and hosted-tool dependencies.
+
+### Capture model dependencies for full replay
+
+The existing HTTP proxy can now run as a separate mode of `websocket_recorder.py`.
+In another terminal, set `MODEL_UPSTREAM_URL` to the gateway's actual model base URL,
+then run (the output is replaced on startup):
+
+```bash
+uv run --no-project \
+  --with click --with fastapi --with httpx --with uvicorn --with pyyaml \
+  python crates/agentic-server-core/tests/cassettes/websocket_recorder.py dependencies \
+  --upstream "$MODEL_UPSTREAM_URL" --port 7071 \
+  --output /tmp/multi-agent-websocket-model-dependencies.yaml
+```
+
+Restart the gateway with `--llm-api-base http://127.0.0.1:7071` and its usual arguments,
+then run the gateway WebSocket recorder. The proxy retains actual model requests and
+JSON/SSE responses, masks authorization, and assigns unique request IDs on admission
+so concurrent completions cannot reuse IDs. Stop it after recording. This produces a
+separate model dependency sidecar; it is not a new provider reference or a replacement
+for the duplex YAML. Hosted-tool dependencies, request matching, and replay barriers
+for concurrent dependency completion still need to be added for **full dependency-backed
+replay**. The present captures alone do not supply that evidence.
+

@@ -4,6 +4,8 @@ use super::*;
 mod client_tools;
 #[path = "multi_agent_tests/explicit_compaction.rs"]
 mod explicit_compaction;
+#[path = "multi_agent_tests/live_control.rs"]
+mod live_control;
 #[path = "multi_agent_tests/root_completion.rs"]
 mod root_completion;
 #[path = "multi_agent_tests/shell_continuation.rs"]
@@ -53,14 +55,17 @@ fn message(text: &str) -> Value {
 }
 
 // Check the actual upstream request on initial execution and stored continuation.
-fn assert_child_assignment(request: &Value, child: &str) {
+fn assert_child_assignment(request: &Value, child: &str, occupied: usize) {
     let guidance = request["input"].as_array().unwrap().last().unwrap();
     assert_eq!(guidance["role"], "developer");
     let instructions = guidance["content"].as_str().unwrap();
     assert!(instructions.contains(&format!("You are `/root/{child}`")));
     assert!(instructions.contains("Your parent is `/root`"));
-    assert!(instructions.contains("2 of 2 slots are occupied; 0 are free right now"));
-    assert!(instructions.contains("call spawn_agent at most 0 times"));
+    assert!(instructions.contains(&format!(
+        "{occupied} of 2 slots are occupied; {} are free right now",
+        2 - occupied
+    )));
+    assert!(instructions.contains(&format!("call spawn_agent at most {} times", 2 - occupied)));
     assert!(instructions.contains("You have no direct children"));
     assert!(instructions.contains("Never hand your entire assignment to another agent"));
     assert!(instructions.contains("Your parent's delegation request is already fulfilled by your existence"));
@@ -110,10 +115,26 @@ async fn setup() -> (Arc<ExecutionContext>, tokio::task::JoinHandle<()>) {
 }
 
 async fn setup_with_gate(gate: Option<Arc<Semaphore>>) -> (Arc<ExecutionContext>, tokio::task::JoinHandle<()>) {
+    setup_with_options(gate, false).await
+}
+
+async fn setup_with_options(
+    gate: Option<Arc<Semaphore>>,
+    live_control: bool,
+) -> (Arc<ExecutionContext>, tokio::task::JoinHandle<()>) {
+    setup_with_compaction_gate(gate, live_control, None).await
+}
+
+async fn setup_with_compaction_gate(
+    gate: Option<Arc<Semaphore>>,
+    live_control: bool,
+    compaction_gate: Option<(Arc<tokio::sync::Notify>, Arc<Semaphore>)>,
+) -> (Arc<ExecutionContext>, tokio::task::JoinHandle<()>) {
     let barrier = Arc::new(Barrier::new(2));
     let app = Router::new().route("/v1/responses", post(move |Json(request): Json<Value>| {
         let barrier = barrier.clone();
         let gate = gate.clone();
+        let compaction_gate = compaction_gate.clone();
         async move {
             assert!(request.get("multi_agent").is_none());
             assert!(request["input"].as_array().unwrap().iter().all(|item| !matches!(
@@ -124,6 +145,10 @@ async fn setup_with_gate(gate: Option<Arc<Semaphore>>) -> (Arc<ExecutionContext>
                 else if instructions.contains("You are `/root/beta`") { Some("beta") } else { None };
             let summarizing = input.last().is_some_and(|item| item["content"].as_str().is_some_and(|text| text.starts_with("You are performing a CONTEXT CHECKPOINT COMPACTION")));
             let output = if summarizing {
+                if let Some((started, release)) = compaction_gate {
+                    started.notify_one();
+                    release.acquire().await.unwrap().forget();
+                }
                 vec![message("Context summary")]
             } else if let Some(output) = root_completion_output(&request) {
                 output
@@ -136,8 +161,10 @@ async fn setup_with_gate(gate: Option<Arc<Semaphore>>) -> (Arc<ExecutionContext>
             } else if input.iter().any(|item| item["content"] == "simple compaction test") {
                 vec![message("finished")]
             } else if let Some(child) = child {
-                assert_child_assignment(&request, child);
                 let call_id = format!("proposal_{child}");
+                let resumed = input.iter().any(|item| item["type"] == "function_call_output" && item["call_id"] == call_id);
+                // The live test completes alpha before releasing beta's output.
+                assert_child_assignment(&request, child, if live_control && child == "beta" && resumed { 1 } else { 2 });
                 if input.iter().any(|item| item["type"] == "function_call_output" && item["call_id"] == call_id) {
                     vec![message(&format!("{child} assessment"))]
                 } else {
@@ -158,7 +185,13 @@ async fn setup_with_gate(gate: Option<Arc<Semaphore>>) -> (Arc<ExecutionContext>
                 "output":output,"usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3},
                 "incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null});
             if request["stream"] == true {
-                if let Some(gate) = gate.filter(|_| child.is_some()) {
+                if let Some(gate) = gate.filter(|_| {
+                    if live_control {
+                        child.is_none() && input.iter().any(|item| item["call_id"] == "spawn_alpha")
+                    } else {
+                        child.is_some()
+                    }
+                }) {
                     let events = upstream_events(&payload);
                     let start = events.rfind("data: ").unwrap();
                     let prefix = events[..start].to_owned();

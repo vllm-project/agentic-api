@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Record guide-derived HTTP multi-agent scenarios through record_cassette.py.
+# Record guide-derived multi-agent scenarios through record_cassette.py.
 # Guide: https://developers.openai.com/api/docs/guides/responses-multi-agent
 # These are client drivers; hosted collaboration is executed by the service.
 set -euo pipefail
@@ -11,13 +11,26 @@ Usage: bash record_multi_agent_cassettes.sh [--dry-run | --help]
 Record OpenAI first, review the observations, then implement and compare gateway behavior.
 Records delegated review, proposal comparison, mixed web/MCP/shell tools,
 client-owned tool search, functions, and custom tools, and two-agent algorithm jobs,
-each over HTTP JSON and SSE.
-All scenarios enable multi-agent with store:true and the multi-agent beta header.
+each over HTTP JSON/SSE or a persistent WebSocket session.
+Set MULTI_AGENT_TRANSPORT=websocket for five separate duplex YAMLs per provider.
+The same prompts and tool fixtures are reused unchanged; existing HTTP YAMLs are untouched.
+WebSocket captures retain actual client/server frames, handshake headers (credentials
+masked), injection outcomes, and close/failure details without synthesizing SSE.
+Function, shell, custom, and discovery outputs are submitted for characterization;
+a provider may reject an injection kind. Such failures are preserved and reported,
+not retried as though accepted input were rejected.
+Positive scenarios enable multi-agent with store:true and the multi-agent beta header.
+Select MULTI_AGENT_SUITE=websocket-edge-cases separately for four state/race/atomicity probes.
+All edge cases share one YAML per provider, with a labeled session for each probe.
+MULTI_AGENT_EDGE_ACTIVE=true uses [websocket-active] sibling text generation during injection
+and writes a separate ws-active-text-edge-cases YAML. Reruns keep completed cases and append new attempts.
+MULTI_AGENT_EDGE_CASE selects one probe (default: all); MULTI_AGENT_EDGE_TIMEOUT bounds each probe (default: 120 seconds).
 Client-tool continuations use previous_response_id and matching tool outputs.
 
 Environment:
   MULTI_AGENT_RECORD_SET  openai (default), gateway, or all
-  MULTI_AGENT_SUITE       all (default), review, proposals, mixed-tools, client-owned-tools, or code-interpreter
+  MULTI_AGENT_SUITE       all (default), review, proposals, mixed-tools, client-owned-tools, code-interpreter, or websocket-edge-cases
+  MULTI_AGENT_TRANSPORT   http (default) or websocket
   MULTI_AGENT_STREAM_MODE both (default), streaming, or nonstreaming
   MULTI_AGENT_MAX_CONTINUATIONS  Extra client-tool requests per scenario (default: 10; max: 100)
   HTTP_READ_TIMEOUT      Upstream read inactivity timeout in seconds (default: 900)
@@ -96,6 +109,7 @@ RECORDER="$SCRIPTS_DIR/record_cassette.py"
 RECORD_SET="${MULTI_AGENT_RECORD_SET:-openai}"
 SUITE="${MULTI_AGENT_SUITE:-all}"
 STREAM_MODE="${MULTI_AGENT_STREAM_MODE:-both}"
+TRANSPORT="${MULTI_AGENT_TRANSPORT:-http}"
 HTTP_READ_TIMEOUT="${HTTP_READ_TIMEOUT:-900}"
 OPENAI_MODEL="${OPENAI_MODEL:-gpt-5.6-sol}"
 GATEWAY_URL="${GATEWAY_URL:-http://localhost:9000}"
@@ -113,12 +127,20 @@ if [[ -n "$MAX_CONCURRENT_SUBAGENTS" && ! "$MAX_CONCURRENT_SUBAGENTS" =~ ^[1-9][
 fi
 
 case "$SUITE" in
-  all|review|proposals|mixed-tools|client-owned-tools|code-interpreter) ;;
-  *) echo 'ERROR: MULTI_AGENT_SUITE must be all, review, proposals, mixed-tools, client-owned-tools, or code-interpreter' >&2; exit 2 ;;
+  all|review|proposals|mixed-tools|client-owned-tools|code-interpreter|websocket-edge-cases) ;;
+  *) echo 'ERROR: MULTI_AGENT_SUITE must be all, review, proposals, mixed-tools, client-owned-tools, code-interpreter, or websocket-edge-cases' >&2; exit 2 ;;
 esac
 if [[ ( "$SUITE" == all || "$SUITE" == code-interpreter ) && -n "$MAX_CONCURRENT_SUBAGENTS" ]] &&
    (( MAX_CONCURRENT_SUBAGENTS < 2 )); then
   echo 'ERROR: code-interpreter requires MAX_CONCURRENT_SUBAGENTS >= 2; omit it to use per-scenario defaults' >&2
+  exit 2
+fi
+case "$TRANSPORT" in
+  http|websocket) ;;
+  *) echo 'ERROR: MULTI_AGENT_TRANSPORT must be http or websocket' >&2; exit 2 ;;
+esac
+if [[ "$SUITE" == websocket-edge-cases && "$TRANSPORT" != websocket ]]; then
+  echo 'ERROR: websocket-edge-cases requires MULTI_AGENT_TRANSPORT=websocket' >&2
   exit 2
 fi
 case "$STREAM_MODE" in
@@ -188,9 +210,28 @@ scenario_prompts() {
 
 record_scenarios() {
   local provider="$1" endpoint_flag="$2" endpoint="$3" model="$4"
+  if [[ "$SUITE" == websocket-edge-cases ]]; then
+    local -a edge_command=("$PYTHON" -u "$SCRIPTS_DIR/websocket_recorder.py"
+      --provider "$provider" --url "$endpoint" --model "$model" --output-dir "$BASE_DIR"
+      --case "${MULTI_AGENT_EDGE_CASE:-all}" --timeout "${MULTI_AGENT_EDGE_TIMEOUT:-120}")
+    case "${MULTI_AGENT_EDGE_ACTIVE:-false}" in
+      true) edge_command+=(--active) ;;
+      false) ;;
+      *) echo 'ERROR: MULTI_AGENT_EDGE_ACTIVE must be true or false' >&2; exit 2 ;;
+    esac
+    if [[ "$DRY_RUN" == true ]]; then edge_command+=(--dry-run); fi
+    if "${edge_command[@]}"; then :; else
+      local edge_status=$?
+      if (( edge_status == 130 || edge_status == 143 )); then exit "$edge_status"; fi
+      FAILED_RECORDINGS+=("$provider websocket edge cases")
+    fi
+    return
+  fi
   local scenario mode turns output prompts model_slug status agent_limit multi_agent_config
   model_slug="$(printf '%s' "$model" | tr '/: ' '---')"
-  local -a command tool_args
+  local -a command tool_args modes
+  modes=(nonstreaming streaming)
+  if [[ "$TRANSPORT" == websocket ]]; then modes=(websocket); fi
   for scenario in review proposals mixed-tools client-owned-tools code-interpreter; do
     if [[ "$SUITE" != all && "$scenario" != "$SUITE" ]]; then continue; fi
     turns=1
@@ -216,15 +257,15 @@ record_scenarios() {
       echo "ERROR: prompts.txt must contain $turns prompt(s) in [$scenario]" >&2
       exit 2
     fi
-    for mode in nonstreaming streaming; do
-      if [[ "$STREAM_MODE" != both && "$mode" != "$STREAM_MODE" ]]; then continue; fi
+    for mode in "${modes[@]}"; do
+      if [[ "$TRANSPORT" == http && "$STREAM_MODE" != both && "$mode" != "$STREAM_MODE" ]]; then continue; fi
       output="$BASE_DIR/multi-agent-$provider-$scenario-$model_slug-$mode.yaml"
-      command=("$PYTHON" -u "$RECORDER" --mode responses --transport http --turns "$turns"
+      command=("$PYTHON" -u "$RECORDER" --mode responses --transport "$TRANSPORT" --turns "$turns"
         --model "$model" "$endpoint_flag" "$endpoint" --proxy-port "$PROXY_PORT"
         --multi-agent "$multi_agent_config" --openai-beta responses_multi_agent=v1
         --http-read-timeout "$HTTP_READ_TIMEOUT"
         --max-output-tokens "$MAX_OUTPUT_TOKENS" --output "$output" "${tool_args[@]}")
-      if [[ "$mode" == streaming ]]; then command+=(--stream); else command+=(--no-stream); fi
+      if [[ "$mode" != nonstreaming ]]; then command+=(--stream); else command+=(--no-stream); fi
       if [[ "$DRY_RUN" == true ]]; then
         printf '%q ' "${command[@]}"
         printf '<<< %q\n' "$prompts"
@@ -262,5 +303,5 @@ fi
 if [[ "$DRY_RUN" == true ]]; then
   echo 'Dry run complete; no API requests were sent.'
 else
-  echo 'Selected HTTP observations captured. Review OpenAI cassettes before implementing gateway behavior.'
+  echo "Selected $TRANSPORT observations captured. Inspect completion and errors before claiming parity."
 fi

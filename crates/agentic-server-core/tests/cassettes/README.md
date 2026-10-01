@@ -211,10 +211,20 @@ turns:
     - "data: {...}\n"
 ```
 
+## Persistent multi-agent WebSocket sessions
+
+The multi-agent recorder supports a persistent duplex capture with
+`MULTI_AGENT_TRANSPORT=websocket`. It reuses the HTTP suite's exact prompts and
+tool fixtures, records actual frames in both directions, injects client outputs
+while reading response events, and retains handshake/close/failure evidence.
+See [the multi-agent recording commands and session format](multi_agent/README.md#persistent-websocket-recordings).
+These files use `sessions`, not the HTTP `turns` schema or synthesized SSE.
+
 ## Recorder scripts
 
 | Script | Cassettes | Backend |
 |--------|-----------|---------|
+| `record_multi_agent_cassettes.sh` | Five delegated scenarios over HTTP JSON/SSE or persistent duplex WebSocket | OpenAI and gateway |
 | `record_text_only_cassettes.sh` | 10 text-only cassettes (responses + conv modes, streaming + non-streaming) | OpenAI (`OPENAI_API_KEY`) |
 | `record_conversations_api_cassettes.sh` | 18 Conversation Items API cassettes: four history scenarios in both transports and one non-streaming edge-case sequence, each for both providers | OpenAI and gateway |
 | `record_reasoning_cassettes.sh` | Matching explicit-reasoning cassettes (streaming + non-streaming) | gateway and OpenAI reference; optional direct vLLM |

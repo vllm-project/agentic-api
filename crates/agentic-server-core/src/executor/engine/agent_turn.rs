@@ -165,6 +165,17 @@ pub(super) struct AgentExecutionState {
 }
 
 impl AgentExecutionState {
+    /// Rebuild the registry after live discovery without restarting the round budget.
+    pub(super) async fn refresh_tools(
+        &mut self,
+        agent: &mut AgentPipeline,
+        exec: &ExecutionContext,
+        budget: &ExecutorResponseBudget,
+    ) -> ExecutorResult<()> {
+        self.registry = build_tool_registry(agent, exec, budget).await?;
+        Ok(())
+    }
+
     pub(super) fn take_discovery_output(&mut self) -> Vec<OutputItem> {
         let output = self
             .registry

@@ -13,8 +13,10 @@ use crate::events::{ClassifiedSseLine, EventFrame, SseLine};
 use crate::executor::accumulator::Validation;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent};
+use crate::executor::multi_agent::RunControlReceiver;
 use crate::executor::request::RequestContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
+use crate::executor::response_events::ResponseEventSink;
 use crate::executor::translate::{Translation, TranslationContext};
 use crate::tool::{ToolRegistry, ToolSearchMetadata, ToolSearchState};
 use crate::types::agent::AgentIdentity;
@@ -33,6 +35,7 @@ pub(super) struct StreamPayload {
 
 /// Lives for the response, preserving gateway event numbering across inference rounds.
 pub(super) struct AgentPipeline {
+    pub(super) control: Option<RunControlReceiver>,
     pub(super) request: RequestContext,
     tool_search_state: Option<ToolSearchState>,
     delivery: StreamDelivery,
@@ -42,6 +45,9 @@ pub(super) struct AgentPipeline {
 }
 
 impl AgentPipeline {
+    pub(super) fn set_response_event_sink(&mut self, sink: ResponseEventSink) {
+        self.delivery.accumulator.response_sink = Some(sink);
+    }
     pub(super) fn set_agent_guidance(&mut self, guidance: InputMessage) {
         self.agent_guidance = Some(guidance);
     }
@@ -85,6 +91,7 @@ impl AgentPipeline {
             round: None,
             cancellation: CancellationToken::new(),
             agent_guidance: None,
+            control: None,
         }
     }
 
@@ -101,6 +108,7 @@ impl AgentPipeline {
             round: None,
             cancellation: CancellationToken::new(),
             agent_guidance: None,
+            control: None,
         }
     }
 

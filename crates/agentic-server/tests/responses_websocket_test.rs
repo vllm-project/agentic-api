@@ -4121,3 +4121,841 @@ async fn test_websocket_unmodeled_content_part_is_rejected_not_dropped() {
         assert_eq!(count, 0, "a rejected message must not be persisted in {table}");
     }
 }
+
+#[tokio::test]
+async fn websocket_injection_unknown_and_retained_completed_use_typed_failures() {
+    let mock = MockResponsesServer::start(vec![sse_response("resp_upstream", "msg_done", "done")]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    let input = json!([{"type":"function_call_output","call_id":"call_missing","output":"preserved"}]);
+    send_json(
+        &mut ws,
+        json!({"type":"response.inject","response_id":"resp_unknown","input":input}),
+    )
+    .await;
+    let missing = recv_json(&mut ws).await;
+    assert_eq!(missing["type"], "response.inject.failed");
+    assert_eq!(missing["error"]["code"], "response_not_found");
+    assert_eq!(missing["input"], input);
+    send_json(
+        &mut ws,
+        json!({"type":"response.create","model":"test-model","input":"hello","store":true,"stream_id":"lane"}),
+    )
+    .await;
+    let events = recv_until_completed(&mut ws).await;
+    let terminal = events.last().unwrap();
+    assert_eq!(terminal["type"], "response.completed", "{events:?}");
+    let response_id = terminal["response"]["id"].as_str().unwrap();
+    send_json(
+        &mut ws,
+        json!({"type":"response.inject","response_id":response_id,"input":input}),
+    )
+    .await;
+    let completed = recv_json(&mut ws).await;
+    assert_eq!(completed["type"], "response.inject.failed");
+    assert_eq!(completed["error"]["code"], "response_already_completed");
+    assert_eq!(completed["input"], input);
+    assert_eq!(completed["stream_id"], "lane");
+    assert!(completed["sequence_number"].as_u64().unwrap() > terminal["sequence_number"].as_u64().unwrap());
+    let mut other = connect_responses_ws(&gateway_url).await;
+    send_json(
+        &mut other,
+        json!({"type":"response.inject","response_id":response_id,"input":input}),
+    )
+    .await;
+    assert_eq!(recv_json(&mut other).await["error"]["code"], "response_not_found");
+}
+
+#[tokio::test]
+async fn websocket_injection_schema_error_closes_connection() {
+    let mock = MockResponsesServer::start(vec![]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    send_json(
+        &mut ws,
+        json!({"type":"response.inject","response_id":"resp_unknown","input":[{"type":"message","content":"invalid"}]}),
+    )
+    .await;
+    assert_eq!(recv_json(&mut ws).await["type"], "error");
+    recv_close_or_end(&mut ws).await;
+}
+
+// Keep a sibling inference active so client injection tests do not depend on
+// winning the response-finalization race when all agents wait for client output.
+async fn mock_with_active_sibling(mut responses: Vec<String>) -> (MockResponsesServer, oneshot::Sender<()>) {
+    let first = responses.remove(0);
+    let mut events: Vec<Value> = first
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .filter_map(|data| serde_json::from_str(data).ok())
+        .collect();
+    let terminal = events
+        .iter()
+        .position(|event| event["type"] == "response.completed")
+        .unwrap();
+    let item = json!({"type":"function_call","id":"fc_spawn","call_id":"spawn_worker",
+        "name":"spawn_agent","arguments":"","status":"in_progress"});
+    let added = json!({"type":"response.output_item.added","output_index":1,"item":item});
+    let mut done = json!({"type":"response.output_item.done","output_index":1,"item":item});
+    done["item"]["arguments"] =
+        json!(json!({"task_name":"worker","message":"Say worker done","fork_turns":"none"}).to_string());
+    done["item"]["status"] = json!("completed");
+    events.splice(terminal..terminal, [added, done]);
+    let mut first = String::new();
+    for (sequence, mut event) in events.into_iter().enumerate() {
+        event["sequence_number"] = json!(sequence);
+        writeln!(first, "data: {event}\n").unwrap();
+    }
+    first.push_str("data: [DONE]\n\n");
+    let (arrived, _arrival) = oneshot::channel();
+    let (release, held) = oneshot::channel();
+    let mut responses_with_sibling = vec![
+        MockResponse::Static(first),
+        MockResponse::Gated {
+            response: sse_response("resp_worker", "msg_worker", "worker done"),
+            arrived,
+            release: held,
+        },
+    ];
+    responses_with_sibling.extend(responses.into_iter().map(MockResponse::Static));
+    (
+        MockResponsesServer::start_with_responses(responses_with_sibling).await,
+        release,
+    )
+}
+
+#[tokio::test]
+async fn websocket_live_injection_bypasses_create_lane_fifo() {
+    let (mock, release) = mock_with_active_sibling(vec![
+        sse_weather_function_call_response(),
+        sse_response("resp_answer", "msg_answer", "sunny"),
+        sse_response("resp_next", "msg_next", "next"),
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    send_json(
+        &mut ws,
+        json!({
+            "type":"response.create","model":"test-model","input":"weather",
+            "store":true,"stream_id":"lane","multi_agent":{"enabled":true},
+            "tools":[{"type":"function","name":"get_weather","parameters":{"type":"object"}}]
+        }),
+    )
+    .await;
+    let mut events = Vec::new();
+    let mut response_id = None;
+    loop {
+        let event = recv_json(&mut ws).await;
+        assert_ne!(event["type"], "error", "{event}");
+        if event["type"] == "response.created" {
+            response_id = event["response"]["id"].as_str().map(str::to_owned);
+        }
+        let call_done = event["type"] == "response.output_item.done" && event["item"]["call_id"] == "call_weather";
+        events.push(event);
+        if call_done {
+            break;
+        }
+    }
+    let response_id = response_id.unwrap();
+    // This create is queued behind the pending tool call. Injection must bypass it.
+    send_json(
+        &mut ws,
+        json!({"type":"response.create","model":"test-model","input":"next","store":true,"stream_id":"lane"}),
+    )
+    .await;
+    send_json(
+        &mut ws,
+        json!({
+            "type":"response.inject","response_id":response_id,
+            "input":[{"type":"function_call_output","call_id":"call_weather","output":"sunny"}]
+        }),
+    )
+    .await;
+    let mut release = Some(release);
+    let mut accepted = false;
+    let mut completed = 0;
+    while !accepted || completed < 2 {
+        let event = recv_json(&mut ws).await;
+        assert_ne!(event["type"], "error", "{event}");
+        assert_ne!(event["type"], "response.inject.failed", "{event}");
+        if event["type"] == "response.inject.created" {
+            assert_eq!(event["response_id"], response_id);
+            accepted = true;
+            release.take().unwrap().send(()).unwrap();
+        }
+        if event["type"] == "response.completed" {
+            completed += 1;
+        }
+        if completed == 0 || event["response"]["id"] == response_id || event["response_id"] == response_id {
+            events.push(event);
+        }
+    }
+    for pair in events.windows(2) {
+        assert!(
+            pair[0]["sequence_number"].as_u64().unwrap() < pair[1]["sequence_number"].as_u64().unwrap(),
+            "{pair:?}"
+        );
+    }
+    let requests = mock.request_bodies().await;
+    assert_eq!(requests.len(), 4);
+    assert!(
+        requests[2]["input"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["type"] == "function_call_output"
+                && item["call_id"] == "call_weather"
+                && item["output"] == "sunny")
+    );
+}
+
+#[tokio::test]
+async fn websocket_multi_agent_continuation_crosses_http_in_both_directions() {
+    let mock = MockResponsesServer::start(vec![
+        sse_weather_function_call_response(),
+        sse_response("resp_ws", "msg_ws", "sunny"),
+        sse_response("resp_http", "msg_http", "continued"),
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let client = reqwest::Client::new();
+    let first = client
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(&json!({
+            "model":"test-model","input":"weather","store":true,"stream":true,
+            "multi_agent":{"enabled":true},
+            "tools":[{"type":"function","name":"get_weather","parameters":{"type":"object"}}]
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    let first_events: Vec<Value> = first
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect();
+    let first_terminal = first_events
+        .iter()
+        .find(|event| event["type"] == "response.completed")
+        .unwrap();
+    let parent = first_terminal["response"]["id"].as_str().unwrap();
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    // Rejected storage settings must leave the stored parent available.
+    send_json(
+        &mut ws,
+        json!({
+            "type":"response.create","model":"test-model","previous_response_id":parent,
+            "input":[{"type":"function_call_output","call_id":"call_weather","output":"sunny"}],
+            "store":false
+        }),
+    )
+    .await;
+    assert_eq!(recv_json(&mut ws).await["type"], "error");
+    send_json(
+        &mut ws,
+        json!({
+            "type":"response.create","model":"test-model","previous_response_id":parent,
+            "input":[{"type":"function_call_output","call_id":"call_weather","output":"sunny"}],
+            "store":true
+        }),
+    )
+    .await;
+    let events = recv_until_completed(&mut ws).await;
+    let terminal = events.last().unwrap();
+    assert_eq!(terminal["type"], "response.completed", "{events:?}");
+    let parent = terminal["response"]["id"].as_str().unwrap();
+    ws.close(None).await.unwrap();
+    let final_response = client
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(
+            &json!({"model":"test-model","previous_response_id":parent,"input":"continue","store":true,"stream":true}),
+        )
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    assert!(final_response.contains("response.completed"), "{final_response}");
+    let requests = mock.request_bodies().await;
+    assert_eq!(requests.len(), 3);
+    for request in &requests[1..] {
+        assert!(
+            request["input"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item["type"] == "function_call_output"
+                    && item["call_id"] == "call_weather"
+                    && item["output"] == "sunny")
+        );
+    }
+}
+
+#[tokio::test]
+async fn websocket_disconnect_joins_multi_agent_waiting_for_client_output() {
+    assert_pending_multi_agent_teardown(false).await;
+}
+
+#[tokio::test]
+async fn websocket_shutdown_joins_multi_agent_waiting_for_client_output() {
+    assert_pending_multi_agent_teardown(true).await;
+}
+
+async fn assert_pending_multi_agent_teardown(shutdown: bool) {
+    let (mock, _release) = mock_with_active_sibling(vec![sse_weather_function_call_response()]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    send_json(
+        &mut ws,
+        json!({
+            "type":"response.create","model":"test-model","input":"weather",
+            "store":true,"multi_agent":{"enabled":true},
+            "tools":[{"type":"function","name":"get_weather","parameters":{"type":"object"}}]
+        }),
+    )
+    .await;
+    loop {
+        let event = recv_json(&mut ws).await;
+        assert_ne!(event["type"], "error", "{event}");
+        if event["type"] == "response.output_item.done"
+            && event["item"]["type"] == "multi_agent_call_output"
+            && event["item"]["call_id"] == "spawn_worker"
+        {
+            break;
+        }
+    }
+    wait_for_request_count(&mock, 2).await;
+    if shutdown {
+        fixture.state.shutdown_token.cancel();
+        recv_close_or_end(&mut ws).await;
+    }
+    drop(ws);
+    tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        fixture.state.websocket_tracker.wait_until_idle(),
+    )
+    .await
+    .expect("connection teardown must join its pending multi-agent response");
+    assert!(!mock.request_bodies().await.is_empty());
+}
+
+#[tokio::test]
+async fn websocket_live_discovery_output_loads_function_before_resuming() {
+    let (mock, release) = mock_with_active_sibling(vec![
+        sse_tool_search_call_response(),
+        sse_weather_function_call_response(),
+        sse_response("resp_answer", "msg_answer", "sunny"),
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    send_json(
+        &mut ws,
+        json!({
+            "type":"response.create","model":"test-model","input":"weather","store":true,
+            "multi_agent":{"enabled":true},"tools":[tool_search_declaration(), deferred_weather_function()]
+        }),
+    )
+    .await;
+    let mut response_id = None;
+    let mut release = Some(release);
+    let mut acks = 0;
+    let mut completed = false;
+    while !completed || acks < 2 {
+        let event = recv_json(&mut ws).await;
+        assert_ne!(event["type"], "error", "{event}");
+        assert_ne!(event["type"], "response.inject.failed", "{event}");
+        match event["type"].as_str() {
+            Some("response.created") => response_id = event["response"]["id"].as_str().map(str::to_owned),
+            Some("response.inject.created") => {
+                acks += 1;
+                if acks == 2 {
+                    release.take().unwrap().send(()).unwrap();
+                }
+            }
+            Some("response.completed") => completed = true,
+            Some("response.output_item.done") => {
+                let output = match event["item"]["type"].as_str() {
+                    Some("tool_search_call") => Some(json!({
+                        "type":"tool_search_output","call_id":event["item"]["call_id"],
+                        "execution":"client","status":"completed","tools":[deferred_weather_function()]
+                    })),
+                    Some("function_call") => Some(json!({
+                        "type":"function_call_output","call_id":event["item"]["call_id"],"output":"sunny"
+                    })),
+                    _ => None,
+                };
+                if let Some(output) = output {
+                    send_json(
+                        &mut ws,
+                        json!({"type":"response.inject","response_id":response_id,"input":[output]}),
+                    )
+                    .await;
+                }
+            }
+            _ => {}
+        }
+    }
+    let requests = mock.request_bodies().await;
+    assert_eq!(requests.len(), 4);
+    assert!(
+        requests[2]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["name"] == "get_weather"),
+        "{:?}",
+        requests[2]
+    );
+}
+
+#[tokio::test]
+async fn websocket_live_shell_and_custom_outputs_resume_their_calls() {
+    for (tool, call, output) in [
+        (
+            json!({"type":"custom","name":"apply_patch"}),
+            sse_custom_tool_call_response(),
+            json!({"type":"custom_tool_call_output","call_id":"call_custom_1","output":"applied"}),
+        ),
+        (
+            json!({"type":"shell","environment":{"type":"local"}}),
+            {
+                let created =
+                    json!({"type":"response.created","response":{"id":"upstream_shell","status":"in_progress"}});
+                let item = json!({"type":"function_call","id":"fc_shell","call_id":"call_shell",
+                    "name":"shell","arguments":"{\"commands\":[\"printf ok\"]}","status":"completed"});
+                let added = json!({"type":"response.output_item.added","output_index":0,
+                    "item":{"type":"function_call","id":"fc_shell","call_id":"call_shell",
+                        "name":"shell","arguments":"","status":"in_progress"}});
+                let done = json!({"type":"response.output_item.done","output_index":0,"item":item});
+                let terminal =
+                    json!({"type":"response.completed","response":{"id":"upstream_shell","status":"completed"}});
+                format!("data: {created}\n\ndata: {added}\n\ndata: {done}\n\ndata: {terminal}\n\ndata: [DONE]\n\n")
+            },
+            json!({"type":"shell_call_output","call_id":"call_shell","output":[
+                {"stdout":"ok","stderr":"","outcome":{"type":"exit","exit_code":0}}
+            ]}),
+        ),
+    ] {
+        let (mock, release) = mock_with_active_sibling(vec![call, sse_response("resp_done", "msg_done", "done")]).await;
+        let fixture = storage_backed_state(&mock.url).await;
+        let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+        let mut ws = connect_responses_ws(&gateway_url).await;
+        send_json(
+            &mut ws,
+            json!({"type":"response.create","model":"test-model","input":"call the tool",
+            "store":true,"multi_agent":{"enabled":true},"tools":[tool]}),
+        )
+        .await;
+        let mut response_id = None;
+        let mut release = Some(release);
+        let mut accepted = false;
+        let mut completed = false;
+        while !accepted || !completed {
+            let event = recv_json(&mut ws).await;
+            assert_ne!(event["type"], "error", "{event}");
+            assert_ne!(event["type"], "response.inject.failed", "{event}");
+            match event["type"].as_str() {
+                Some("response.created") => response_id = event["response"]["id"].as_str().map(str::to_owned),
+                Some("response.inject.created") => {
+                    accepted = true;
+                    release.take().unwrap().send(()).unwrap();
+                }
+                Some("response.completed") => completed = true,
+                Some("response.output_item.done") if event["item"]["call_id"] == output["call_id"] => {
+                    send_json(
+                        &mut ws,
+                        json!({"type":"response.inject","response_id":response_id,"input":[output]}),
+                    )
+                    .await;
+                }
+                _ => {}
+            }
+        }
+        assert_eq!(mock.request_bodies().await.len(), 3);
+        // The retained failure must return the same structured output for continuation.
+        send_json(
+            &mut ws,
+            json!({"type":"response.inject","response_id":response_id,"input":[output]}),
+        )
+        .await;
+        let failed = recv_json(&mut ws).await;
+        assert_eq!(failed["error"]["code"], "response_already_completed");
+        assert_eq!(failed["input"], json!([output]));
+    }
+}
+
+#[tokio::test]
+async fn websocket_quiescent_tool_call_completes_and_late_input_continues() {
+    let mock = MockResponsesServer::start(vec![
+        sse_weather_function_call_response(),
+        sse_response("resp_resumed", "msg_resumed", "sunny"),
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    send_json(
+        &mut ws,
+        json!({"type":"response.create","model":"test-model","input":"weather",
+            "store":true,"multi_agent":{"enabled":true},
+            "tools":[{"type":"function","name":"get_weather","parameters":{"type":"object"}}]
+        }),
+    )
+    .await;
+    let events = recv_until_completed(&mut ws).await;
+    let terminal = events.last().unwrap();
+    assert_eq!(terminal["type"], "response.completed");
+    assert_eq!(terminal["response"]["output"][0]["call_id"], "call_weather");
+    let response_id = &terminal["response"]["id"];
+    let good = json!({"type":"function_call_output","call_id":"call_weather","output":"sunny"});
+    let mut sequence = terminal["sequence_number"].as_u64().unwrap();
+    // Once committed, finalization takes precedence over batch validation.
+    for input in [
+        json!([good, good]),
+        json!([good, {"type":"function_call_output","call_id":"unknown","output":"unused"}]),
+        json!([good]),
+    ] {
+        send_json(
+            &mut ws,
+            json!({"type":"response.inject","response_id":response_id,"input":input}),
+        )
+        .await;
+        let rejected = recv_json(&mut ws).await;
+        assert_eq!(rejected["type"], "response.inject.failed");
+        assert_eq!(rejected["error"]["code"], "response_already_completed");
+        assert_eq!(rejected["input"], input);
+        assert!(rejected["sequence_number"].as_u64().unwrap() > sequence);
+        sequence = rejected["sequence_number"].as_u64().unwrap();
+        if input.as_array().unwrap().len() == 1 {
+            send_json(
+                &mut ws,
+                json!({"type":"response.create","model":"test-model","store":true,
+                "previous_response_id":response_id,"input":rejected["input"]}),
+            )
+            .await;
+        }
+    }
+    let resumed = recv_until_completed(&mut ws).await;
+    assert_eq!(resumed.last().unwrap()["type"], "response.completed");
+    assert_eq!(
+        resumed.last().unwrap()["response"]["output"][0]["content"][0]["text"],
+        "sunny"
+    );
+    assert_eq!(mock.request_bodies().await.len(), 2);
+}
+
+async fn assert_live_batch_rejections(
+    ws: &mut WebSocketStream<MaybeTlsStream<TcpStream>>,
+    response_id: &Value,
+    input: &Value,
+) {
+    // Rejected batches are atomic: the valid call remains available for the
+    // subsequent acceptance and duplicate-output check on this same socket.
+    for (batch, message) in [
+        (
+            json!([input[0], input[0]]),
+            "Tool call 'call_weather' already has an output.".to_owned(),
+        ),
+        (
+            json!([input[0], {"type":"function_call_output","call_id":"unknown","output":"unused"}]),
+            format!(
+                "Tool call 'unknown' is not pending on response '{}'.",
+                response_id.as_str().unwrap()
+            ),
+        ),
+    ] {
+        send_json(
+            ws,
+            json!({"type":"response.inject","response_id":response_id,"input":batch}),
+        )
+        .await;
+        loop {
+            let event = recv_json(ws).await;
+            assert_ne!(event["type"], "error", "{event}");
+            assert_ne!(
+                event["type"], "response.completed",
+                "sibling must keep the response active"
+            );
+            assert_ne!(event["type"], "response.inject.created", "invalid batch must be atomic");
+            if event["type"] == "response.inject.failed" {
+                assert_eq!(event["error"]["code"], "invalid_input");
+                assert_eq!(event["error"]["message"], message);
+                assert_eq!(event["input"], batch);
+                assert_eq!(event["response_id"], *response_id);
+                break;
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn websocket_invalid_live_batches_are_atomic_and_do_not_close() {
+    let (mock, release) = mock_with_active_sibling(vec![
+        sse_weather_function_call_response(),
+        sse_response("resp_answer", "msg_answer", "sunny"),
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    send_json(
+        &mut ws,
+        json!({"type":"response.create","model":"test-model","input":"weather",
+            "store":true,"stream_id":"lane","multi_agent":{"enabled":true},
+            "tools":[{"type":"function","name":"get_weather","parameters":{"type":"object"}}]
+        }),
+    )
+    .await;
+    let created = recv_json(&mut ws).await;
+    let response_id = &created["response"]["id"];
+    loop {
+        let event = recv_json(&mut ws).await;
+        assert_ne!(event["type"], "error");
+        if event["type"] == "response.output_item.done" && event["item"]["call_id"] == "call_weather" {
+            break;
+        }
+    }
+    let input = json!([{"type":"function_call_output","call_id":"call_weather","output":"sunny"}]);
+    assert_live_batch_rejections(&mut ws, response_id, &input).await;
+    let injection = json!({"type":"response.inject","response_id":response_id,"input":input});
+    send_json(&mut ws, injection.clone()).await;
+    send_json(&mut ws, injection).await;
+    let mut accepted = 0;
+    let mut rejected = 0;
+    let mut sequence = 0;
+    while accepted + rejected < 2 {
+        let event = recv_json(&mut ws).await;
+        assert_ne!(event["type"], "error", "{event}");
+        let next = event["sequence_number"].as_u64().unwrap();
+        assert!(next > sequence);
+        sequence = next;
+        match event["type"].as_str() {
+            Some("response.inject.created") => accepted += 1,
+            Some("response.inject.failed") => {
+                rejected += 1;
+                assert_eq!(event["error"]["code"], "invalid_input");
+                assert_eq!(
+                    event["error"]["message"],
+                    "Tool call 'call_weather' already has an output."
+                );
+                assert_eq!(event["input"], input);
+                assert_eq!(event["stream_id"], "lane");
+                assert_eq!(event["response_id"], *response_id);
+            }
+            _ => {}
+        }
+    }
+    assert_eq!((accepted, rejected), (1, 1));
+    release.send(()).unwrap();
+    let terminal = recv_until_completed(&mut ws).await;
+    assert_eq!(terminal.last().unwrap()["type"], "response.completed");
+    assert_eq!(
+        mock.request_bodies().await.len(),
+        3,
+        "duplicate must not trigger another inference"
+    );
+    let requests = mock.request_bodies().await;
+    assert_eq!(
+        requests[2]["input"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|item| item["type"] == "function_call_output" && item["call_id"] == "call_weather")
+            .count(),
+        1
+    );
+}
+
+mod duplex_replay {
+    //! Recorded client actions against the real gateway, with explicitly derived
+    //! synthetic inference fixtures. These are NOT recorded upstream dependencies.
+    use super::*;
+    use serde::Deserialize;
+    use std::collections::HashMap;
+
+    #[derive(Deserialize)]
+    struct Capture {
+        format: String,
+        sessions: Vec<Session>,
+    }
+
+    #[derive(Deserialize)]
+    struct Session {
+        handshake: Value,
+        frames: Vec<Frame>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "lowercase")]
+    enum Direction {
+        Client,
+        Server,
+    }
+
+    #[derive(Deserialize)]
+    struct Frame {
+        ordinal: usize,
+        direction: Direction,
+        opcode: u8,
+        fin: bool,
+        text: Option<String>,
+    }
+
+    fn inference_fixtures(session: &Session) -> Vec<String> {
+        let mut responses = Vec::new();
+        let mut response = String::new();
+        for frame in &session.frames {
+            if !matches!(frame.direction, Direction::Server) || frame.opcode != 1 {
+                continue;
+            }
+            let event: Value = serde_json::from_str(frame.text.as_deref().unwrap()).unwrap();
+            let kind = event["type"].as_str().unwrap();
+            if kind.starts_with("response.inject.") {
+                continue;
+            }
+            assert_ne!(kind, "error");
+            writeln!(response, "data: {event}\n").unwrap();
+            if kind == "response.completed" {
+                response.push_str("data: [DONE]\n\n");
+                responses.push(std::mem::take(&mut response));
+            }
+        }
+        assert!(response.is_empty());
+        responses
+    }
+
+    fn milestone(event: &Value) -> bool {
+        matches!(
+            event["type"].as_str(),
+            Some(
+                "response.created"
+                    | "response.output_item.done"
+                    | "response.completed"
+                    | "response.inject.created"
+                    | "response.inject.failed"
+                    | "error"
+            )
+        )
+    }
+
+    fn remap_request(event: &mut Value, ids: &HashMap<String, String>) {
+        for key in ["response_id", "previous_response_id"] {
+            if let Some(recorded) = event[key].as_str() {
+                event[key] = json!(
+                    ids.get(recorded)
+                        .expect("request refers to a previously observed response")
+                );
+            }
+        }
+    }
+
+    fn compare(expected: &Value, actual: &Value, ids: &mut HashMap<String, String>) {
+        assert_eq!(actual["type"], expected["type"]);
+        match expected["type"].as_str().unwrap() {
+            "response.created" => {
+                ids.insert(
+                    expected["response"]["id"].as_str().unwrap().to_owned(),
+                    actual["response"]["id"].as_str().unwrap().to_owned(),
+                );
+            }
+            "response.output_item.done" => {
+                assert_eq!(actual["item"]["type"], expected["item"]["type"]);
+                assert_eq!(actual["item"]["call_id"], expected["item"]["call_id"]);
+                assert_eq!(actual["item"]["arguments"], expected["item"]["arguments"]);
+                assert_eq!(actual["item"]["content"], expected["item"]["content"]);
+            }
+            "response.completed" => {
+                assert_eq!(actual["response"]["status"], "completed");
+                assert_eq!(
+                    actual["response"]["id"],
+                    ids[expected["response"]["id"].as_str().unwrap()]
+                );
+            }
+            "response.inject.created" | "response.inject.failed" => {
+                assert_eq!(actual["response_id"], ids[expected["response_id"].as_str().unwrap()]);
+                assert_eq!(actual["input"], expected["input"]);
+                assert_eq!(actual["error"]["code"], expected["error"]["code"]);
+            }
+            _ => panic!("unexpected recorded milestone: {expected}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn recorded_edge_sessions_drive_real_gateway_with_synthetic_inference() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "../agentic-server-core/tests/cassettes/multi_agent/multi-agent-gateway-ws-edge-cases-Qwen-Qwen3.6-35B-A3B-FP8-websocket.yaml");
+        let capture: Capture = serde_yml::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        assert_eq!(capture.format, "responses-websocket-v1");
+        for session in capture.sessions {
+            let last_ordinal = std::cell::Cell::new(0);
+            let work = async {
+                let responses = inference_fixtures(&session);
+                let expected_requests = responses.len();
+                let mock = MockResponsesServer::start(responses).await;
+                let fixture = storage_backed_state(&mock.url).await;
+                let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+                let mut ws = connect_responses_ws(&gateway_url).await;
+                let mut ids = HashMap::new();
+                let mut last_sequence = None;
+                for (ordinal, frame) in session.frames.iter().enumerate() {
+                    last_ordinal.set(ordinal);
+                    assert_eq!(frame.ordinal, ordinal);
+                    assert!(frame.fin, "this fixture contains no fragmented messages");
+                    if frame.opcode == 8 {
+                        match frame.direction {
+                            Direction::Client => ws.close(None).await.unwrap(),
+                            Direction::Server => recv_close_or_end(&mut ws).await,
+                        }
+                        continue;
+                    }
+                    assert_eq!(frame.opcode, 1, "unsupported control frame in this fixture");
+                    let mut event: Value = serde_json::from_str(frame.text.as_deref().unwrap()).unwrap();
+                    match frame.direction {
+                        Direction::Client => {
+                            remap_request(&mut event, &ids);
+                            send_json(&mut ws, event).await;
+                        }
+                        Direction::Server if milestone(&event) => {
+                            let actual = loop {
+                                let actual = recv_json(&mut ws).await;
+                                assert_ne!(actual["type"], "error", "{actual}");
+                                assert_ne!(actual["type"], "response.failed", "{actual}");
+                                if actual["type"] == "response.created" {
+                                    last_sequence = None;
+                                }
+                                let sequence = actual["sequence_number"].as_u64().unwrap();
+                                assert!(last_sequence.is_none_or(|previous| previous < sequence));
+                                last_sequence = Some(sequence);
+                                if milestone(&actual) {
+                                    break actual;
+                                }
+                            };
+                            compare(&event, &actual, &mut ids);
+                        }
+                        Direction::Server => {}
+                    }
+                }
+                assert_eq!(mock.request_bodies().await.len(), expected_requests);
+            };
+            tokio::time::timeout(std::time::Duration::from_secs(45), work)
+                .await
+                .unwrap_or_else(|_| panic!("duplex replay timed out: {}", session.handshake["probe"]["case"]));
+        }
+    }
+}

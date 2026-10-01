@@ -2,12 +2,14 @@ use crate::config::DEFAULT_MAX_STREAM_EVENT_BYTES;
 use crate::events::{EventFrame, EventPayload, SSEEventType, WireEvent, normalize_sse_line};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::pipeline::AgentFrameSink;
+use crate::executor::response_events::ResponseEventSink;
 use crate::types::request_response::ResponsePayload;
 use crate::utils::common::{serialize_to_string, serialize_to_value};
 use serde_json::Value;
 
 #[derive(Clone)]
 pub struct GatewayStreamAccumulator {
+    pub(super) response_sink: Option<ResponseEventSink>,
     pub(super) agent_sink: Option<AgentFrameSink>,
     next_sequence_number: u64,
     emitted_created: bool,
@@ -17,6 +19,7 @@ pub struct GatewayStreamAccumulator {
 
 pub(super) struct StreamEvent {
     pub(super) content: String,
+    pub(super) flushed: Option<tokio::sync::oneshot::Sender<()>>,
     pub(super) sequence_number: u64,
 }
 
@@ -36,6 +39,7 @@ impl GatewayStreamAccumulator {
     pub fn with_max_stream_event_bytes(max_stream_event_bytes: usize) -> Self {
         Self {
             agent_sink: None,
+            response_sink: None,
             next_sequence_number: 0,
             emitted_created: false,
             emitted_in_progress: false,
@@ -135,7 +139,7 @@ fn rebase_output_index(wire: &mut WireEvent, output_offset: usize) {
     }
 }
 
-fn terminal_response_frame(payload: &ResponsePayload) -> ExecutorResult<EventFrame> {
+pub(super) fn terminal_response_frame(payload: &ResponsePayload) -> ExecutorResult<EventFrame> {
     let event_type = match payload.terminal_event_type() {
         "response.incomplete" => SSEEventType::ResponseIncomplete,
         "response.failed" => SSEEventType::ResponseFailed,
@@ -151,7 +155,7 @@ fn terminal_response_frame(payload: &ResponsePayload) -> ExecutorResult<EventFra
         .ok_or_else(|| ExecutorError::StreamError("terminal response event has no wire representation".to_owned()))
 }
 
-fn executor_error_frame(error: &ExecutorError) -> EventFrame {
+pub(super) fn executor_error_frame(error: &ExecutorError) -> EventFrame {
     let mut wire = WireEvent::new("error");
     wire.rest
         .insert("status".to_owned(), serde_json::json!(error.http_status().as_u16()));
@@ -213,6 +217,7 @@ pub(super) async fn emit_sse_frame_limited(
     let content = checked_stream_event_limited(frame, max_bytes)?;
     sender
         .send(StreamEvent {
+            flushed: None,
             content,
             sequence_number,
         })

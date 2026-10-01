@@ -1,0 +1,156 @@
+//! Streaming ownership for transports that retain delivery after public completion.
+use super::run_until_gateway_tools_complete;
+use crate::executor::{
+    error::{ExecutorError, ExecutorResult},
+    gateway_accumulator::STREAM_EVENT_BUFFER,
+    inference::BoxStream,
+    multi_agent::RunControl,
+    persist::persist_if_needed,
+    request::{ExecutionContext, RequestContext},
+    response_events::ResponseEventSink,
+    telemetry::ExecutionSpan,
+    upstream::agent_pipeline_with_limits,
+};
+use crate::tool::ToolSearchState;
+use std::{num::NonZeroUsize, sync::Arc};
+use tokio::{sync::mpsc, task::JoinHandle};
+use tokio_util::sync::CancellationToken;
+use tracing::Instrument as _;
+
+pub struct RunningResponse {
+    pub response_id: String,
+    pub control: Option<RunControl>,
+    pub events: BoxStream,
+    pub sink: ResponseEventSink,
+    pub owner: ResponseRunOwner,
+}
+
+/// Drop requests cancellation; adapters explicitly cancel and join on disconnect.
+pub struct ResponseRunOwner {
+    task: JoinHandle<ExecutorResult<()>>,
+    cancellation: CancellationToken,
+    sink: ResponseEventSink,
+}
+impl ResponseRunOwner {
+    /// Connection shutdown may cancel a live response while its create task owns the join.
+    #[must_use]
+    pub fn cancellation_token(&self) -> CancellationToken {
+        self.cancellation.clone()
+    }
+
+    pub fn cancel(&self) {
+        self.cancellation.cancel();
+    }
+    /// # Errors
+    /// Propagates execution, persistence, and task failure.
+    pub async fn join(&mut self) -> ExecutorResult<()> {
+        let result = match (&mut self.task).await {
+            Ok(result) => result,
+            Err(error) => {
+                self.sink.mark_aborted();
+                return Err(ExecutorError::StreamError(format!("response task failed: {error}")));
+            }
+        };
+        if result.is_err() {
+            self.sink.mark_failed();
+        }
+        result
+    }
+}
+impl Drop for ResponseRunOwner {
+    fn drop(&mut self) {
+        self.cancellation.cancel();
+    }
+}
+
+pub(super) fn start(
+    ctx: RequestContext,
+    tools: Option<ToolSearchState>,
+    exec: Arc<ExecutionContext>,
+    auth: Option<String>,
+    max_bytes: usize,
+    mut execution: ExecutionSpan,
+) -> RunningResponse {
+    let response_id = ctx.response_id.clone();
+    let (sender, receiver) = mpsc::channel(STREAM_EVENT_BUFFER);
+    let sink = ResponseEventSink::new(sender.clone(), max_bytes);
+    let mut pipeline = agent_pipeline_with_limits(ctx, tools, Some(sender), max_bytes);
+    pipeline.set_response_event_sink(sink.clone());
+    let control = if pipeline
+        .request
+        .enriched_request
+        .multi_agent
+        .as_ref()
+        .is_some_and(|config| config.enabled)
+        && !pipeline.request.original_request.input.has_compaction_trigger()
+    {
+        let (control, receiver) = RunControl::channel(
+            NonZeroUsize::new(exec.responses_config.max_retained_bytes.max(1)).expect("positive limit"),
+        );
+        pipeline.control = Some(receiver);
+        Some(control)
+    } else {
+        None
+    };
+    let cancellation = pipeline.cancellation_token();
+    let worker_cancel = cancellation.clone();
+    let worker_sink = sink.clone();
+    let span = execution.span().clone();
+    let task = tokio::spawn(async move {
+        let result = Box::pin(async {
+            // The multi-agent coordinator handles cancellation by joining its children.
+            let multi = pipeline.request.enriched_request.multi_agent.as_ref().is_some_and(|config| config.enabled);
+            let run = run_until_gateway_tools_complete(&mut pipeline, &exec, auth.as_deref(), true);
+            let (payload, metadata) = if multi { run.await? } else {
+                tokio::select! {
+                    result = run => result?,
+                    () = worker_cancel.cancelled() => return Err(ExecutorError::StreamError("response cancelled".into())),
+                }
+            };
+            worker_sink.validate_terminal(&payload)?;
+            let status = payload.status.clone();
+            let terminal = payload.clone();
+            let (ctx, _) = pipeline.into_parts();
+            tokio::select! {
+                biased;
+                () = worker_cancel.cancelled() => return Err(ExecutorError::StreamError("response cancelled before commit".into())),
+                result = persist_if_needed(payload, ctx, metadata, exec.conv_handler.clone(), exec.resp_handler.clone()) => result?,
+            }
+            tokio::select! {
+                () = worker_cancel.cancelled() => return Err(ExecutorError::StreamError("response delivery cancelled".into())),
+                result = worker_sink.emit_terminal(&terminal) => result?,
+            }
+            execution.completed_with_status(&status);
+            execution.delivered();
+            Ok(())
+        }).await;
+        if let Err(error) = &result {
+            worker_sink.mark_failed();
+            if worker_cancel.is_cancelled() {
+                execution.cancelled();
+                execution.disconnected();
+            } else {
+                execution.failed(error);
+            }
+            tokio::select! {
+                biased;
+                () = worker_cancel.cancelled() => {},
+                _ = worker_sink.emit_error(error) => {},
+            }
+        }
+        result
+    }.instrument(span));
+    let events = ResponseEventSink::stream(receiver);
+    let owner_sink = sink.clone();
+    RunningResponse {
+        response_id,
+        control,
+        events,
+        sink,
+        owner: ResponseRunOwner {
+            task,
+            cancellation,
+            sink: owner_sink,
+        },
+    }
+}

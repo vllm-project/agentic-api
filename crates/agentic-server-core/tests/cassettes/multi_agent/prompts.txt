@@ -12,3 +12,9 @@ Use three subagents: one to find Paris weather using a discovered function tool,
 
 [code-interpreter]
 Spawn two subagents. Each should use web search to find two popular LeetCode problems, four distinct problems in total, implement its two algorithms in Python, execute them with example inputs using code interpreter, and show the actual outputs. Finish with a summary of each algorithm, its sources, and its input/output results.
+
+[websocket-edge]
+Call edge_echo exactly once yourself, without spawning subagents. After receiving its output, reply with that output.
+
+[websocket-active]
+Spawn exactly one subagent named "keeper". Give keeper this task: "Write a detailed guide to growing vegetables, with 40 numbered sections of at least 100 words each. Do not use tools or spawn subagents." Immediately after spawning keeper, call edge_echo exactly once yourself. Do not wait for keeper to finish before calling edge_echo. After receiving the edge_echo output and keeper's result, reply exactly: EDGE_OK. Do not call edge_echo again or spawn additional agents.
