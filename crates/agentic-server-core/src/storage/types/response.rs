@@ -208,7 +208,7 @@ mod tests {
             incomplete_details: None,
             error: None,
             previous_response_id: None,
-            conversation_id: None,
+            conversation: None,
             instructions: None,
             service_tier: None,
             tools: Some(vec![tool.clone()]),

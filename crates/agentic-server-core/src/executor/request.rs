@@ -46,11 +46,11 @@ pub struct RequestContext {
 }
 
 impl RequestContext {
-    /// Inject our `response_id` and `conversation_id` into a `ResponsePayload`
+    /// Inject our `response_id` and `conversation` into a `ResponsePayload`
     /// received from the LLM (which carries the upstream's own IDs).
     pub(crate) fn inject_ids(&self, payload: &mut ResponsePayload) {
         payload.id.clone_from(&self.response_id);
-        payload.conversation_id.clone_from(&self.conversation_id);
+        payload.conversation.clone_from(&self.conversation_id);
         payload
             .previous_response_id
             .clone_from(&self.original_request.previous_response_id);

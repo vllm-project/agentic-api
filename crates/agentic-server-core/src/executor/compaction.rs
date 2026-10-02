@@ -65,7 +65,7 @@ fn request_payload(model: String, input: ResponsesInput, instructions: Option<St
         input,
         instructions,
         previous_response_id: None,
-        conversation_id: None,
+        conversation: None,
         tools: None,
         tool_choice: None,
         stream: false,

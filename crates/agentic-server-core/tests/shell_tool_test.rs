@@ -275,7 +275,7 @@ async fn submitted_shell_items_preserve_public_fields_in_storage() {
         let fixture = support::TestFixture::new_with_responses(vec![model_response(false, false, "msg_1")]).await;
         let mut req = request(false);
         if conversation {
-            req.conversation_id = Some(fixture.exec_ctx.conv_handler.create().await.unwrap().conversation_id);
+            req.conversation = Some(fixture.exec_ctx.conv_handler.create().await.unwrap().conversation_id);
         }
         let mut call = shell_item("completed");
         call["extension"] = json!("call metadata");
@@ -283,11 +283,11 @@ async fn submitted_shell_items_preserve_public_fields_in_storage() {
         output["max_output_length"] = json!(128);
         output["extension"] = json!("output metadata");
         req.input = serde_json::from_value(json!([call, output])).unwrap();
-        let conversation_id = req.conversation_id.clone();
+        let conversation_id = req.conversation.clone();
         let response = run(req, fixture.exec_ctx.clone()).await;
         let mut ctx = context();
         let stored = if let Some(id) = conversation_id {
-            ctx.original_request.conversation_id = Some(id.clone());
+            ctx.original_request.conversation = Some(id.clone());
             ctx.conversation_id = Some(id);
             fixture.exec_ctx.conv_handler.rehydrate(&ctx).await.unwrap()
         } else {

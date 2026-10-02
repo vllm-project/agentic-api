@@ -125,7 +125,7 @@ fn finish_preserves_terminal_metadata_under_both_policies() {
             let payload = pipeline.finish("model", None, None).unwrap();
             assert_eq!(payload.status, if status == "failed" { "error" } else { status });
             assert_eq!(payload.id, "resp_1");
-            assert_eq!(payload.conversation_id.as_deref(), Some("conv_1"));
+            assert_eq!(payload.conversation.as_deref(), Some("conv_1"));
             assert_eq!(payload.error, Some(error));
             assert_eq!(
                 payload.incomplete_details.unwrap().reason.as_deref(),

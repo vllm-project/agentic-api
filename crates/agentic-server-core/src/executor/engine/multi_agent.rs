@@ -137,7 +137,7 @@ impl MultiAgentRun {
             incomplete_details: None,
             error: None,
             previous_response_id: pipeline.request.original_request.previous_response_id.clone(),
-            conversation_id: pipeline.request.conversation_id.clone(),
+            conversation: pipeline.request.conversation_id.clone(),
             instructions: pipeline.request.original_request.instructions.clone(),
             service_tier: None,
             tools: pipeline.request.enriched_request.tools.clone(),

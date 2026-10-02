@@ -279,7 +279,7 @@ async fn session_explicit_conversation_generated_turns_match_no_session_history(
             let session = session();
             for input in ["first question", "second question"] {
                 let mut payload = request(None, json!(input));
-                payload.conversation_id = Some(conversation.conversation_id.clone());
+                payload.conversation = Some(conversation.conversation_id.clone());
                 payload.store = store;
                 let execution = ExecuteRequest::new(payload, Arc::new(model.exec.clone()));
                 let execution = if use_session {
@@ -333,7 +333,7 @@ async fn explicit_conversation_tool_history(use_session: bool, gateway_tool: boo
     };
     for (index, input) in [json!("first question"), next_input].into_iter().enumerate() {
         let mut payload = request(None, input);
-        payload.conversation_id = Some(conversation.conversation_id.clone());
+        payload.conversation = Some(conversation.conversation_id.clone());
         payload.store = store;
         if index == 0 {
             payload.tools = Some(if gateway_tool {

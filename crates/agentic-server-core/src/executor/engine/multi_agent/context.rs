@@ -179,7 +179,7 @@ pub(super) async fn prepare_agent(
     let mut request = parent.enriched_request.clone();
     request.input = ResponsesInput::Items(stored.history.clone());
     request.previous_response_id = None;
-    request.conversation_id = None;
+    request.conversation = None;
     let management = request.context_management.get_or_insert_with(Vec::new);
     if let Some(entry) = management.iter_mut().find(|entry| entry.type_ == "compaction") {
         entry.compact_threshold.get_or_insert(DEFAULT_COMPACT_THRESHOLD);

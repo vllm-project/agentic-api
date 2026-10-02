@@ -252,10 +252,15 @@ fn response_shape(body: &Value, has_conversation: bool) -> Value {
         "output": outputs,
     });
     if has_conversation {
-        result["conversation_id"] = if body["conversation"].is_object() {
+        // Handle both conversation and conversation_id for compatibility during transition
+        result["conversation"] = if body["conversation"].is_object() {
             body["conversation"]["id"].clone()
-        } else {
+        } else if !body["conversation"].is_null() {
+            body["conversation"].clone()
+        } else if !body["conversation_id"].is_null() {
             body["conversation_id"].clone()
+        } else {
+            Value::Null
         };
     }
     result
@@ -264,7 +269,9 @@ fn response_shape(body: &Value, has_conversation: bool) -> Value {
 fn comparable_body(turn: &Turn) -> Value {
     let body = result_body(&turn.response);
     if turn.request.path == "/v1/responses" && turn.response.status_code == 200 {
-        return response_shape(&body, turn.request.body.get("conversation").is_some());
+        let has_conversation =
+            turn.request.body.get("conversation").is_some() || turn.request.body.get("conversation_id").is_some();
+        return response_shape(&body, has_conversation);
     }
     if turn.request.path.ends_with("/items") && turn.response.status_code == 200 {
         return list_shape(&body);
