@@ -150,15 +150,22 @@ impl MessagesStreamAccumulator {
             return self.fail("invalid content block transition in upstream Messages stream");
         }
         let fragment_field = match event["delta"]["type"].as_str() {
-            Some("text_delta") => Some("text"),
-            Some("thinking_delta") => Some("thinking"),
-            Some("signature_delta") => Some("signature"),
-            Some("input_json_delta") => Some("partial_json"),
+            Some("text_delta") => Some(("text", "text")),
+            Some("thinking_delta") => Some(("thinking", "thinking")),
+            Some("signature_delta") => Some(("signature", "thinking")),
+            Some("input_json_delta") => Some(("partial_json", "tool_use")),
             _ => None,
         };
-        if let Some(field) = fragment_field {
+        if let Some((field, expected_block)) = fragment_field {
             if !event["delta"][field].is_string() {
                 return self.fail("invalid content block delta in upstream Messages stream");
+            }
+            let block_kind = self
+                .blocks
+                .get(&up_index)
+                .and_then(|block| block.block["type"].as_str());
+            if matches!(block_kind, Some("text" | "thinking" | "tool_use")) && block_kind != Some(expected_block) {
+                return self.fail("incompatible content block delta in upstream Messages stream");
             }
         }
         // Accumulate the delta into the buffered block (for history — F3),

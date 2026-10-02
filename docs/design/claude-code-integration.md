@@ -212,6 +212,8 @@ deltas and stops require an open block, so duplicate stops and post-stop deltas 
 Content and terminal events require a preceding `message_start` in each upstream round.
 Block starts and deltas require object payloads with non-empty string types before buffering or delivery.
 Known text, thinking, signature, and input-JSON deltas require string fragments; empty strings remain valid.
+For known block types, text deltas require text blocks, thinking/signature deltas require thinking blocks,
+and input-JSON deltas require tool-use blocks.
 Named extension types remain accepted; these checks are not complete schema validation.
 Duplicate `message_start` events within one round fail before usage updates or tool dispatch;
 a new upstream start in a later tool round remains valid. Tool-use blocks require non-empty string IDs and names.

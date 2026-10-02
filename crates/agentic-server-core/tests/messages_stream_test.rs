@@ -1171,6 +1171,8 @@ async fn messages_stream_allows_named_extension_blocks_and_deltas() {
             "content_block":{"type":"future_block", "extension":"opaque"}}),
         json!({"type":"content_block_delta", "index":999,
             "delta":{"type":"future_delta", "extension":"opaque"}}),
+        json!({"type":"content_block_delta", "index":999,
+            "delta":{"type":"text_delta", "text":"extension text"}}),
         json!({"type":"content_block_stop", "index":999}),
     ] {
         write!(extension, "data: {event}\n\n").unwrap();
@@ -1247,4 +1249,45 @@ async fn messages_stream_allows_empty_string_fragments() {
         })
         .collect();
     assert_messages_stream_presents_one_message(streams).await;
+}
+
+#[tokio::test]
+async fn messages_stream_rejects_incompatible_known_deltas() {
+    use serde_json::json;
+    let streams = cassette_turn_streams();
+    for (round, body) in streams.iter().enumerate() {
+        let start = body
+            .lines()
+            .find(|line| line.starts_with("data: ") && line.contains("\"type\":\"content_block_start\""))
+            .expect("fixture has a block start");
+        let delta = body
+            .lines()
+            .find(|line| line.starts_with("data: ") && line.contains("\"type\":\"content_block_delta\""))
+            .expect("fixture has a delta");
+        for block_kind in ["text", "thinking", "tool_use"] {
+            for (delta_kind, field, expected_block) in [
+                ("text_delta", "text", "text"),
+                ("thinking_delta", "thinking", "thinking"),
+                ("signature_delta", "signature", "thinking"),
+                ("input_json_delta", "partial_json", "tool_use"),
+            ] {
+                if block_kind == expected_block {
+                    continue;
+                }
+                let mut bad_start: Value = serde_json::from_str(start.strip_prefix("data: ").unwrap()).unwrap();
+                bad_start["content_block"] = json!({"type":block_kind, "text":"", "thinking":"",
+                    "id":"client_call", "name":"client_function", "input":{}});
+                let mut bad_delta: Value = serde_json::from_str(delta.strip_prefix("data: ").unwrap()).unwrap();
+                bad_delta["delta"] = json!({"type":delta_kind, field:""});
+                let damaged = body.replacen(start, &format!("data: {bad_start}"), 1).replacen(
+                    delta,
+                    &format!("data: {bad_delta}"),
+                    1,
+                );
+                let mut rounds = streams[..round].to_vec();
+                rounds.push(damaged);
+                assert_failed_stream(rounds, round, "incompatible content block delta").await;
+            }
+        }
+    }
 }
