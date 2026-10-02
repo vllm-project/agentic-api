@@ -43,6 +43,9 @@ impl MessagesStreamAccumulator {
             Some("content_block_delta") => self.on_block_delta(&mut event),
             Some("content_block_stop") => self.on_block_stop(&mut event),
             Some("message_delta") => {
+                if self.blocks.values().any(|block| !block.closed) {
+                    return self.fail("invalid message_delta ordering in upstream Messages stream");
+                }
                 // Buffer as the (possibly) final terminal; suppress mid-loop.
                 self.usage.observe(event.get("usage"));
                 self.final_message_delta = Some(event);
@@ -89,6 +92,9 @@ impl MessagesStreamAccumulator {
     }
 
     fn on_block_start(&mut self, event: &mut Value) -> Vec<String> {
+        if self.final_message_delta.is_some() {
+            return self.fail("invalid message_delta ordering in upstream Messages stream");
+        }
         let up_index = event.get("index").and_then(Value::as_u64).unwrap_or(0);
         if self.blocks.contains_key(&up_index) {
             return self.fail("invalid content block transition in upstream Messages stream");
