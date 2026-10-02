@@ -17,6 +17,7 @@ use agentic_core::tool::{ToolRegistry, registry_tools};
 use super::super::common::{
     convert_response, read_bytes_with_auth, sse_response_with_headers, upstream_error_response,
 };
+use super::session_identity::scope_session_id;
 use crate::app::AppState;
 
 async fn proxy_messages(
@@ -121,7 +122,10 @@ async fn execute_messages(
     tag = "messages",
 ))]
 pub async fn messages(State(state): State<AppState>, request: Request) -> Response {
-    let (parts, body) = request.into_parts();
+    let (mut parts, body) = request.into_parts();
+    if let Err(response) = scope_session_id(&mut parts) {
+        return response;
+    }
     let bytes: Bytes = match read_bytes_with_auth(body, ProxyAuth::Anthropic, state.max_request_body_size).await {
         Ok(bytes) => bytes,
         Err(response) => return response,
@@ -159,7 +163,10 @@ pub async fn messages(State(state): State<AppState>, request: Request) -> Respon
     tag = "messages",
 ))]
 pub async fn count_tokens(State(state): State<AppState>, request: Request) -> Response {
-    let (parts, body) = request.into_parts();
+    let (mut parts, body) = request.into_parts();
+    if let Err(response) = scope_session_id(&mut parts) {
+        return response;
+    }
     let mut bytes: Bytes = match read_bytes_with_auth(body, ProxyAuth::Anthropic, state.max_request_body_size).await {
         Ok(bytes) => bytes,
         Err(response) => return response,

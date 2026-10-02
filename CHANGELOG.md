@@ -6,6 +6,11 @@ All notable changes to Agentic API are documented here.
 
 ### Added
 
+- Added one tenant-scoped session id on `/v1/messages` and `/v1/messages/count_tokens` (#159).
+  `x-claude-code-session-id` and `X-Session-ID` must agree or the request fails with HTTP 400 before any upstream
+  call. The gateway forwards `X-Session-ID`, which vLLM reads as the request's `session_id`, set to a SHA-256 of the
+  verified OIDC principal (or the default tenant) and the client's id, so a client's own `X-Session-ID` no longer
+  reaches the upstream unchanged.
 - Made the reasoning effort levels of the Codex model catalog configurable per model
   (`[models."<served-model-id>"] supported_reasoning_levels = ["low", "high", "max"]`), instead of
   hard-coding `low`/`medium`/`high` for every model (#358). The configured order is preserved,
