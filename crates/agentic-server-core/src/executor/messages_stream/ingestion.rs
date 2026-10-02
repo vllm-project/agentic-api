@@ -149,6 +149,18 @@ impl MessagesStreamAccumulator {
         if self.blocks.get(&up_index).is_none_or(|block| block.closed) {
             return self.fail("invalid content block transition in upstream Messages stream");
         }
+        let fragment_field = match event["delta"]["type"].as_str() {
+            Some("text_delta") => Some("text"),
+            Some("thinking_delta") => Some("thinking"),
+            Some("signature_delta") => Some("signature"),
+            Some("input_json_delta") => Some("partial_json"),
+            _ => None,
+        };
+        if let Some(field) = fragment_field {
+            if !event["delta"][field].is_string() {
+                return self.fail("invalid content block delta in upstream Messages stream");
+            }
+        }
         // Accumulate the delta into the buffered block (for history — F3),
         // regardless of whether it is forwarded to the client.
         if let Some(buffered) = self.blocks.get_mut(&up_index) {

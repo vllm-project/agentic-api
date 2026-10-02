@@ -1187,3 +1187,64 @@ async fn messages_stream_allows_named_extension_blocks_and_deltas() {
         .collect();
     assert_messages_stream_presents_one_message(streams).await;
 }
+
+#[tokio::test]
+async fn messages_stream_rejects_non_string_delta_content() {
+    use serde_json::json;
+    let streams = cassette_turn_streams();
+    for (round, body) in streams.iter().enumerate() {
+        let line = body
+            .lines()
+            .find(|line| line.starts_with("data: ") && line.contains("\"type\":\"content_block_delta\""))
+            .expect("fixture has a delta");
+        for (kind, field) in [
+            ("text_delta", "text"),
+            ("thinking_delta", "thinking"),
+            ("signature_delta", "signature"),
+            ("input_json_delta", "partial_json"),
+        ] {
+            for invalid in [None, Some(Value::Null), Some(json!(42)), Some(json!([]))] {
+                let mut event: Value = serde_json::from_str(line.strip_prefix("data: ").unwrap()).unwrap();
+                event["delta"] = json!({"type":kind});
+                if let Some(value) = invalid {
+                    event["delta"][field] = value;
+                }
+                let mut rounds = streams[..round].to_vec();
+                rounds.push(body.replacen(line, &format!("data: {event}"), 1));
+                assert_failed_stream(rounds, round, "invalid content block delta").await;
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn messages_stream_allows_empty_string_fragments() {
+    let streams = cassette_turn_streams()
+        .into_iter()
+        .map(|body| {
+            let mut with_empty = String::new();
+            for frame in body.split_inclusive("\n\n") {
+                for line in frame.lines().filter_map(|line| line.strip_prefix("data: ")) {
+                    let Ok(mut event) = serde_json::from_str::<Value>(line) else {
+                        continue;
+                    };
+                    if event["type"] != "content_block_delta" {
+                        continue;
+                    }
+                    let field = match event["delta"]["type"].as_str() {
+                        Some("text_delta") => "text",
+                        Some("thinking_delta") => "thinking",
+                        Some("signature_delta") => "signature",
+                        Some("input_json_delta") => "partial_json",
+                        _ => continue,
+                    };
+                    event["delta"][field] = Value::from("");
+                    write!(with_empty, "data: {event}\n\n").unwrap();
+                }
+                with_empty.push_str(frame);
+            }
+            with_empty
+        })
+        .collect();
+    assert_messages_stream_presents_one_message(streams).await;
+}
