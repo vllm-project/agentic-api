@@ -447,6 +447,9 @@ kubectl create secret generic agentic-api-secrets \
   --from-literal=tavily-api-key="$TAVILY_API_KEY"
 ```
 
+Serply works the same way with `value: serply`, a `SERPLY_API_KEY` variable read from a `serply-api-key` secret key,
+and the default endpoint `https://api.serply.io`.
+
 Do not commit API keys to the manifest or source tree.
 
 ## Optional web fetch

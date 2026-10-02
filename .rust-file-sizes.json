@@ -14,8 +14,8 @@
   },
   "exceptions": {
     "crates/agentic-server-core/src/config.rs": {
-      "limit": 637,
-      "reason": "The gateway-executed web_fetch settings join the shared tool runtime configuration beside the web-search provider and code-interpreter limits."
+      "limit": 642,
+      "reason": "The gateway-executed web_fetch settings and the Serply web-search provider arms join the shared tool runtime configuration beside the code-interpreter limits."
     },
     "crates/agentic-server-core/src/executor/accumulator/active.rs": {
       "limit": 512,

@@ -40,6 +40,8 @@ All notable changes to Agentic API are documented here.
   enablement; default builds do not register the tool (#368).
 - Added Tavily as a selectable `web_search` provider with `AGENTIC_WEB_SEARCH_PROVIDER=tavily` and `TAVILY_API_KEY`
   (#329).
+- Added Serply as a selectable `web_search` provider with `AGENTIC_WEB_SEARCH_PROVIDER=serply` and `SERPLY_API_KEY`
+  (#381).
 - Passed `/v1/chat/completions` and `/v1/completions` through to the configured upstream, including streaming
   responses and upstream status codes (#369).
 - Added execution-level OpenTelemetry spans for Responses and Messages, including inference rounds, gateway tool
