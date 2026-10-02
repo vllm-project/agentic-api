@@ -1,6 +1,5 @@
 //! URL and host admission for `web_fetch`: syntax, scheme, embedded
-//! credentials, the shape of a declared domain entry, and the address classes
-//! the gateway never contacts.
+//! credentials, and the address classes the gateway never contacts.
 //!
 //! The address policy runs on resolved addresses, not on host names, so a name
 //! that resolves to a loopback, private, link-local, or cloud-metadata address
@@ -66,36 +65,6 @@ pub(crate) fn validate_url(raw: &str) -> Result<Url, UrlRejection> {
         return Err(UrlRejection::Credentials);
     }
     Ok(url)
-}
-
-/// Why a declared `allowed_domains` / `blocked_domains` entry cannot match a
-/// host. Web fetch matches on the host only, so an entry must be a host name
-/// or address: no scheme, no path, nothing that normalizes to nothing.
-pub(crate) fn validate_domain_entry(entry: &str) -> Result<(), &'static str> {
-    let trimmed = entry.trim();
-    if trimmed.is_empty() {
-        return Err("is empty");
-    }
-    if trimmed.contains("://") || trimmed.contains('/') {
-        return Err("must be a host name without a scheme or path");
-    }
-    if trimmed.chars().any(char::is_whitespace) {
-        return Err("must not contain whitespace");
-    }
-    let host = trimmed.trim_end_matches('.');
-    // `Host::parse` applies IDNA and lowercasing but admits characters such as
-    // `*` that no host carries; a label must be letters, digits, and hyphens.
-    match Host::parse(host) {
-        Ok(Host::Ipv4(_) | Host::Ipv6(_)) => Ok(()),
-        Ok(Host::Domain(domain))
-            if domain.split('.').all(|label| {
-                !label.is_empty() && label.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-            }) =>
-        {
-            Ok(())
-        }
-        _ => Err("is not a host name"),
-    }
 }
 
 /// Whether an address is one the gateway may contact on behalf of a request.
@@ -235,32 +204,6 @@ mod tests {
             assert!(matches!(rejection, UrlRejection::Credentials), "{raw}");
             assert_eq!(rejection.code(), WebFetchErrorCode::UrlNotAllowed);
             assert_eq!(rejection.to_string(), "url carries credentials");
-        }
-    }
-
-    #[test]
-    fn domain_entries_must_be_host_names() {
-        for accepted in [
-            "example.com",
-            " Docs.Example.com. ",
-            "xn--bcher-kva.example",
-            "93.184.216.34",
-            "[2001:db8::1]",
-        ] {
-            assert_eq!(validate_domain_entry(accepted), Ok(()), "{accepted}");
-        }
-        for (rejected, reason) in [
-            ("", "is empty"),
-            ("   ", "is empty"),
-            (".", "is not a host name"),
-            ("...", "is not a host name"),
-            ("https://example.com", "must be a host name without a scheme or path"),
-            ("example.com/blog", "must be a host name without a scheme or path"),
-            ("exa mple.com", "must not contain whitespace"),
-            ("example.com:8080", "is not a host name"),
-            ("*.example.com", "is not a host name"),
-        ] {
-            assert_eq!(validate_domain_entry(rejected), Err(reason), "{rejected:?}");
         }
     }
 

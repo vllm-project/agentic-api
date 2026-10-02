@@ -411,9 +411,10 @@ access happen — those live in `tool/`, `executor/`, and `storage/` respectivel
 - **`types/request_response.rs`** — `RequestPayload` is the deserialized incoming
   request. Its `to_upstream_request(&self, stream: bool) -> Result<UpstreamRequest<'_>, ToolError>`
   is the seam between the OpenAI-shaped request and vLLM's contract. It: flattens Codex
-  namespace tool members to model-visible names, validates every declared tool
-  (`ResponsesTool::validate()`), and normalizes each supported model-visible tool to
-  `UpstreamTool::Function` (`ResponsesTool::to_function_tools()`). File search and
+  namespace tool members to model-visible names (into the tool layer's `ToolDeclaration`s),
+  validates every declared tool (`ToolDeclaration::validate()`), and normalizes each
+  supported model-visible tool to `UpstreamTool::Function`
+  (`ToolDeclaration::to_function_tools()`). File search and
   unknown typed declarations normalize to no upstream tool; a code interpreter
   declaration normalizes to a fixed function contract. The server request path
   checks runtime availability before it calls this conversion. Every
@@ -444,16 +445,16 @@ access happen — those live in `tool/`, `executor/`, and `storage/` respectivel
   `ResponsesTool` (tagged enum: `Function`, `ToolSearch`, `Mcp`, `WebSearch`, `FileSearch`,
   `CodeInterpreter`, `Namespace`, `Custom`, `Unknown`) and each variant's param struct.
   This is a good concrete example of the module boundary: `ResponsesTool` is *defined*
-  here as a pure shape, but its behavior — `validate()` and `to_function_tools()` — is
-  implemented as an `impl ResponsesTool` block physically living in
-  `tool/normalize.rs`, which delegates to per-type handlers. Types own the shape; tool
-  owns what it means.
+  here as a pure wire shape; the tool layer reads it through `tool/declaration.rs`'s
+  `DeclaredTool` view (`ToolDeclarationRef`), and its behavior — `validate()` and
+  `to_function_tools()` — is implemented on that view in `tool/normalize.rs`, which
+  delegates to per-type handlers. Types own the shape; tool owns what it means.
 - **`types/messages/`** — a separate, parallel type layer for the Anthropic Messages
   API (`MessagesRequest`, `ContentBlock`, etc.). `tool_seam.rs` is the pure, I/O-free
-  adapter that converts Anthropic tool blocks into the same internal `ResponsesTool`/
-  `FunctionToolCall` vocabulary the Responses-side `ToolRegistry` already understands,
-  so both APIs share one tool-routing mechanism without the Messages loop depending on
-  `RequestPayload`/`ResponsePayload`.
+  adapter for `tool_use`/`tool_result` blocks and the gateway-ownership map; the
+  declarations themselves are mapped by `tool::registry_tools` into the tool layer's
+  `ToolDeclaration`, so both APIs build a `ToolRegistry` through one path without the
+  Messages loop depending on `RequestPayload`/`ResponsePayload`.
 - **`types/event.rs`** — small status enums (`ResponseStatus`, `MessageStatus`).
 
 #### Output-to-input conversion for continuation rounds
@@ -1070,9 +1071,9 @@ results) before it can be fetched. The handler owns everything else — URL admi
 address policy and DNS pinning applied to every redirect hop, domain filtering,
 HTML-to-text extraction, the content limit, and the `max_concurrent_gateway_calls`
 ceiling on fetches in flight — and answers documented failures in the
-`web_fetch_tool_result_error` shape, which the loop flags `is_error`. Retrieval sits
-behind the crate-private `WebFetchBackend` trait; the built-in HTTP backend is the
-default.
+`web_fetch_tool_result_error` shape as a `ToolOutput` with a failure status, which the
+loop reports as `is_error` without reading the output. Retrieval sits behind the
+crate-private `WebFetchBackend` trait; the built-in HTTP backend is the default.
 
 Both loops take a `MessagesRequestContext` (`messages_context.rs`), the per-request
 type that replaced a bare `serde_json::Value` at that boundary. It holds two views of
@@ -1200,13 +1201,13 @@ That trait is the authority for validating a public declaration and normalizing 
 the fixed `FunctionTool` format understood by the upstream model. The outbound path is:
 
 ```text
-public ResponsesTool declaration
+public ResponsesTool declaration (read as a ToolDeclaration)
         │
         ▼
 RequestPayload::to_upstream_request
         │
-        ├─▶ ResponsesTool::validate ──────────▶ ToolHandler::validate
-        └─▶ ResponsesTool::to_function_tools ─▶ ToolHandler::normalize
+        ├─▶ ToolDeclaration::validate ──────────▶ ToolHandler::validate
+        └─▶ ToolDeclaration::to_function_tools ─▶ ToolHandler::normalize
                                                      │
                                                      ▼
                                       canonical UpstreamTool::Function
@@ -1229,9 +1230,14 @@ the operator enables it, and Eryx runtime readiness succeeds.
 | `GatewayExecutor` and `gateway.rs` | Execute gateway-owned calls and map their start, completion, failure, result, and public output lifecycle. |
 | `GatewayStreamAccumulator` | Project gateway and upstream lifecycle frames into one continuous, correctly indexed and sequenced client stream. |
 
-- **`normalize.rs`** — the `impl ResponsesTool` block with `validate()` and
-  `to_function_tools()`. These are the declaration-level validation and normalization
-  entry points used by `RequestPayload::to_upstream_request`. Each supported variant's
+- **`declaration.rs`** — the protocol-neutral `ToolDeclaration` (owned; what the Messages
+  mapping `registry_tools` produces), the borrowed `ToolDeclarationRef` view, and the
+  `DeclaredTool` trait that both it and the wire `ResponsesTool` implement, so the registry
+  and the normalization helpers read one shape for both APIs.
+- **`normalize.rs`** — `validate()`, `tool_type()`, and `to_function_tools()` on
+  `ToolDeclarationRef`, reached from `ToolDeclaration` and `ResponsesTool` alike. These are
+  the declaration-level validation and normalization entry points used by
+  `RequestPayload::to_upstream_request`. Each supported variant's
   policy belongs to its corresponding `ToolHandler`: `FunctionHandler`,
   `ToolSearchHandler`, `McpHandler`, `WebSearchHandler`, `WebFetchHandler`,
   `CodexNamespaceHandler`, `CustomHandler`, or `CodeInterpreterHandler`. Web search's fixed canonical builder
@@ -1300,7 +1306,8 @@ the operator enables it, and Eryx runtime readiness succeeds.
     by `mcp/client.rs`'s MCP protocol client and `mcp/pool.rs`'s connection pool).
     `web_fetch/mod.rs` (`WebFetchHandler`, Messages-only, backed by a `WebFetchBackend` —
     the built-in `web_fetch/http.rs` fetcher — with `web_fetch/policy.rs` for URL and
-    address admission and `web_fetch/extract.rs` for HTML-to-text extraction) follows the
+    address admission, `web_fetch/extract.rs` for HTML-to-text extraction, and the shared
+    `domain_policy.rs` for the domain lists both web tools declare) follows the
     same pattern. They have no client translator association because the gateway owns
     their execution and public lifecycle.
 - **`ownership.rs`** — `ToolOwnership::Client` versus
@@ -1319,13 +1326,14 @@ the operator enables it, and Eryx runtime readiness succeeds.
   is `Client` or `Gateway`; a gateway entry may also carry its typed
   `GatewayBinding`. Its constructor,
   ```rust
-  pub async fn build_with_handlers(
-      tools: &mut [ResponsesTool],
+  pub async fn build_with_handlers<D: DeclaredTool>(
+      tools: &mut [D],
       executors: &mut GatewayExecutors,
   ) -> Result<Self, ToolError>
   ```
-  is the stable entry point every caller (Responses and Messages) uses to build a
-  registry for a request — **its signature should not change**. It resolves namespace
+  is the stable entry point every caller uses to build a registry for a request —
+  Responses passes its `ResponsesTool`s, Messages the `ToolDeclaration`s from
+  `registry_tools` — **its signature should not change**. It resolves namespace
   members, inserts one entry per declared/discovered tool, and for `Mcp`/`WebSearch`
   pulls the actual executor from `GatewayExecutors` (discovering live MCP tools via
   `tools/list` in the process). `ToolRegistry::dispatch(call)` is the per-call routing
@@ -1396,7 +1404,7 @@ router, reusing the same core logic in-process.
 |---|---|
 | Add a new HTTP or WebSocket route | `agentic-server/src/handler/{http,websocket}/`, wire it in `app.rs`'s `build_router_with_auth` |
 | Support a new upstream SSE event | `events/types.rs` → `events/normalize.rs` → `executor/accumulator/` → `executor/translate/` when the event needs public tool-shape translation |
-| Add a new tool type | `tool/handler.rs` impl(s) → `tool/normalize.rs` → `tool/registry.rs` → `executor/translate/client.rs` for client-executed function shapes → `tool/executors.rs` for lazy gateway setup |
+| Add a new tool type | `tool/handler.rs` impl(s) → `tool/declaration.rs` (a `ToolDeclaration` kind and its view) → `tool/normalize.rs` → `tool/registry.rs` → `executor/translate/client.rs` for client-executed function shapes → `tool/executors.rs` for lazy gateway setup |
 | Change gateway-round concurrency or lifecycle ordering | `executor/gateway.rs` (`GatewayScheduler`/event plans) + `executor/engine.rs` (round decision/ordered streaming) + `tool/ownership.rs` (typed binding and same-tool safety) |
 | Change agent admission, mailbox wakeups or client continuation routing | `executor/engine/multi_agent/` + `executor/multi_agent/`; keep tree persistence in the existing mode handlers |
 | Change client streaming order, buffering, or backpressure | `executor/pipeline/delivery.rs`; keep parsing in `events/` and response assembly in `executor/accumulator/` |

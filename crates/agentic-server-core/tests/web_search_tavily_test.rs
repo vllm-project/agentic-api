@@ -14,7 +14,7 @@ use agentic_core::tool::{GatewayExecutor, WebSearchHandler};
 use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::OutputItem;
 use agentic_core::types::io::output::{FunctionToolCall, WebSearchCallStatus};
-use agentic_core::types::tools::{WebSearchFilters, WebSearchToolParam};
+use agentic_core::types::tools::{DomainFilters, WebSearchToolParam};
 use axum::body::Bytes;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
@@ -317,7 +317,7 @@ async fn tavily_handler_forwards_domain_filters_and_reapplies_them_client_side()
     .await;
     let handler = tavily_handler(&base_url, None);
     let params = WebSearchToolParam {
-        filters: Some(WebSearchFilters {
+        filters: Some(DomainFilters {
             allowed_domains: Some(vec!["rust-lang.org".to_owned()]),
             blocked_domains: None,
         }),

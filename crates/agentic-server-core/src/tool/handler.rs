@@ -6,10 +6,52 @@ use crate::types::io::output::{FunctionToolCall, GatewayCallStatus, OutputItem};
 
 pub(crate) const MAX_GATEWAY_TOOL_OUTPUT_BYTES: usize = 1024 * 1024;
 
+/// Whether a handler's output is the tool's answer or a failure the tool
+/// reports to the model in its own documented shape.
+///
+/// Set by the handler that produced the output and carried unchanged through
+/// dispatch, so a loop never has to parse an output to learn its status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolOutputStatus {
+    /// The output is the tool's answer.
+    Success,
+    /// The output reports a failure the model should treat as an error, such
+    /// as a documented `web_fetch_tool_result_error`.
+    Failure,
+}
+
 #[derive(Debug, Clone)]
 pub struct ToolOutput {
     pub call_id: String,
     pub output: String,
+    pub status: ToolOutputStatus,
+}
+
+impl ToolOutput {
+    /// An output that is the tool's answer.
+    #[must_use]
+    pub fn success(call_id: impl Into<String>, output: impl Into<String>) -> Self {
+        Self {
+            call_id: call_id.into(),
+            output: output.into(),
+            status: ToolOutputStatus::Success,
+        }
+    }
+
+    /// An output that reports a failure in the tool's own documented shape.
+    #[must_use]
+    pub fn failure(call_id: impl Into<String>, output: impl Into<String>) -> Self {
+        Self {
+            call_id: call_id.into(),
+            output: output.into(),
+            status: ToolOutputStatus::Failure,
+        }
+    }
+
+    #[must_use]
+    pub const fn is_failure(&self) -> bool {
+        matches!(self.status, ToolOutputStatus::Failure)
+    }
 }
 
 /// Tool-owned public lifecycle projection for one scheduled gateway call.
@@ -162,4 +204,17 @@ mod tests {
     // Compile-time check: a GatewayExecutor with fixed associated parameter
     // types remains dyn-compatible for typed executor slots.
     fn _assert_gateway_executor_dyn_compatible(_: Arc<dyn GatewayExecutor<ToolParams = (), ExecutionParams = ()>>) {}
+
+    #[test]
+    fn an_output_carries_the_status_its_constructor_set() {
+        let answer = ToolOutput::success("call_1", "42");
+        assert_eq!(answer.call_id, "call_1");
+        assert_eq!(answer.output, "42");
+        assert_eq!(answer.status, ToolOutputStatus::Success);
+        assert!(!answer.is_failure());
+
+        let refusal = ToolOutput::failure("call_2", r#"{"error":"refused"}"#);
+        assert_eq!(refusal.status, ToolOutputStatus::Failure);
+        assert!(refusal.is_failure());
+    }
 }

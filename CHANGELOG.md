@@ -23,6 +23,17 @@ All notable changes to Agentic API are documented here.
   `config.toml` or `AGENTIC_WEB_FETCH_ENABLED`, `AGENTIC_WEB_FETCH_ALLOW_PRIVATE_NETWORKS`,
   `AGENTIC_WEB_FETCH_MAX_RESPONSE_BYTES`, and `AGENTIC_WEB_FETCH_TIMEOUT_SECS`.
 
+### Changed
+
+- The domain lists of `web_search` and `web_fetch` declarations are one shared type, `DomainFilters` (formerly
+  `WebSearchFilters`, the same two fields), matched by one shared policy module that also validates a `web_fetch`
+  entry as a host name (`web_search` keeps its non-empty-entry rule in the Messages adapter); the request and
+  response wire shapes are unchanged, and the OpenAPI component is named `DomainFilters`.
+- `agentic_core`: `ToolOutput` carries an explicit success/failure status set by the handler, which the Messages
+  loop reports as `is_error`; the request-scoped tool registry is built from a protocol-neutral `ToolDeclaration`
+  through one path for both APIs, so the Responses `ResponsesTool` wire enum no longer carries the Messages-only
+  `web_fetch` variant, and `registry_tools` moved to `agentic_core::tool`.
+
 ## [0.9.0] - 2026-09-30
 
 ### Added

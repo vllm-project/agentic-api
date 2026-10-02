@@ -63,15 +63,15 @@ impl GatewayExecutor for TestWebSearchExecutor {
         self.calls.fetch_add(1, Ordering::Relaxed);
         let call_id = call_id.to_owned();
         Box::pin(async move {
-            Ok(ToolOutput {
+            Ok(ToolOutput::success(
                 call_id,
-                output: serde_json::json!({
+                serde_json::json!({
                     "query": "rust compaction",
                     "results": {"web": [], "news": []},
                     "metadata": {}
                 })
                 .to_string(),
-            })
+            ))
         })
     }
 }

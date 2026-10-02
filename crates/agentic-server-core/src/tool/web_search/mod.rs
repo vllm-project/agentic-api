@@ -340,10 +340,7 @@ impl WebSearchHandler {
             )));
         }
 
-        Ok(ToolOutput {
-            call_id: call_id.to_owned(),
-            output,
-        })
+        Ok(ToolOutput::success(call_id, output))
     }
 }
 

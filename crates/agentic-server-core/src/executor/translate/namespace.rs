@@ -168,6 +168,7 @@ fn restore_response_map_with_map(object: &mut Map<String, Value>, map: &Namespac
 mod tests {
     use super::*;
     use crate::tool::CodexNamespaceHandler;
+    use crate::tool::ToolDeclaration;
     use crate::tool::codex::model_visible_namespace_member_name;
     use crate::types::event::MessageStatus;
     use crate::types::io::ToolChoice;
@@ -203,7 +204,7 @@ mod tests {
             .expect("valid namespace members");
         assert!(matches!(
             resolved.as_slice(),
-            [ResponsesTool::Namespace(namespace)]
+            [ToolDeclaration::Namespace(namespace)]
                 if matches!(&namespace.tools[0], CodexNamespaceMember::Function(function)
                     if function.name.as_str() == upstream_name)
         ));
@@ -279,7 +280,7 @@ mod tests {
 
         assert!(matches!(
             resolved.as_slice(),
-            [ResponsesTool::Function(function)] if function.name.as_str() == "get_weather"
+            [ToolDeclaration::Function(function)] if function.name.as_str() == "get_weather"
         ));
         let OutputItem::FunctionCall(call) = &output[0] else {
             panic!("expected function call");

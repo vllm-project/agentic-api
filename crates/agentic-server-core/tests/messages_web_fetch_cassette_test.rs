@@ -28,8 +28,9 @@ use agentic_core::executor::{
     run_messages_loop, run_messages_stream,
 };
 use agentic_core::storage::{ConversationStore, ResponseStore};
+use agentic_core::tool::registry_tools;
 use agentic_core::tool::{GatewayExecutorRegistration, ToolRegistry, WebFetchHandler};
-use agentic_core::types::messages::{GatewayToolMap, registry_tools};
+use agentic_core::types::messages::GatewayToolMap;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;

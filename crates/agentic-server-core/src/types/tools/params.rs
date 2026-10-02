@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::web_fetch::WebFetchToolParam;
+use super::domain::DomainFilters;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -111,10 +111,6 @@ pub enum ResponsesTool {
         alias = "web_search_2025_08_26"
     )]
     WebSearch(WebSearchToolParam),
-    /// Gateway-executed page fetch declared through the Messages seam. It
-    /// has no Responses wire form and is never read from a request body.
-    #[serde(skip)]
-    WebFetch(WebFetchToolParam),
     #[serde(rename = "file_search")]
     FileSearch(FileSearchToolParam),
     #[serde(rename = "code_interpreter")]
@@ -268,13 +264,6 @@ impl WebSearchContextSize {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct WebSearchFilters {
-    pub allowed_domains: Option<Vec<String>>,
-    pub blocked_domains: Option<Vec<String>>,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct WebSearchUserLocation {
     #[serde(rename = "type")]
     pub type_: Option<String>,
@@ -289,7 +278,7 @@ pub struct WebSearchUserLocation {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct WebSearchToolParam {
     pub search_context_size: Option<WebSearchContextSize>,
-    pub filters: Option<WebSearchFilters>,
+    pub filters: Option<DomainFilters>,
     pub user_location: Option<WebSearchUserLocation>,
 }
 
@@ -564,7 +553,7 @@ impl ResponsesTool {
             Self::Shell(_) => Some("shell"),
             Self::Namespace(_) => Some("namespace"),
             Self::Custom(_) => Some("custom"),
-            Self::WebFetch(_) | Self::Unknown => None,
+            Self::Unknown => None,
         }
     }
 

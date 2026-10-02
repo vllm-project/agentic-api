@@ -317,10 +317,7 @@ pub(super) fn has_client_owned_calls(output_items: &[OutputItem], registry: &Too
 
 fn execution_error_output(call: &FunctionToolCall, message: &str) -> ExecutorResult<ToolOutput> {
     let output = serialize_to_string(&serde_json::json!({ "error": message })).map_err(ExecutorError::JsonError)?;
-    Ok(ToolOutput {
-        call_id: call.call_id.clone(),
-        output,
-    })
+    Ok(ToolOutput::failure(call.call_id.clone(), output))
 }
 
 pub(super) fn public_output_items(
@@ -795,10 +792,7 @@ mod tests {
             let call_id = call_id.to_owned();
             Box::pin(async move {
                 tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                Ok(ToolOutput {
-                    call_id,
-                    output: "unreachable".to_owned(),
-                })
+                Ok(ToolOutput::success(call_id, "unreachable"))
             })
         }
 
@@ -853,12 +847,7 @@ mod tests {
         ) -> Pin<Box<dyn Future<Output = Result<ToolOutput, ToolError>> + Send + '_>> {
             let call_id = call_id.to_owned();
             let bytes = self.bytes;
-            Box::pin(async move {
-                Ok(ToolOutput {
-                    call_id,
-                    output: "x".repeat(bytes),
-                })
-            })
+            Box::pin(async move { Ok(ToolOutput::success(call_id, "x".repeat(bytes))) })
         }
 
         fn supports_parallel_execution(&self) -> bool {
@@ -955,7 +944,7 @@ mod tests {
                     slow_call_finished.store(true, Ordering::SeqCst);
                     "ok".to_owned()
                 };
-                Ok(ToolOutput { call_id, output })
+                Ok(ToolOutput::success(call_id, output))
             })
         }
 
@@ -1015,10 +1004,7 @@ mod tests {
                     .map_err(|error| ToolError::Execution(format!("materialization probe closed: {error}")))?;
                 permit.forget();
                 active.fetch_sub(1, Ordering::SeqCst);
-                Ok(ToolOutput {
-                    call_id,
-                    output: "ok".to_owned(),
-                })
+                Ok(ToolOutput::success(call_id, "ok"))
             })
         }
 
@@ -1037,6 +1023,16 @@ mod tests {
             status: crate::types::event::MessageStatus::Completed,
             namespace: None,
         }
+    }
+
+    /// The gateway's own error output is a failure output: the status is the
+    /// signal, not the `{"error": ...}` shape of the text.
+    #[test]
+    fn an_execution_error_is_a_failure_output() {
+        let output = super::execution_error_output(&web_search_call("call_1"), "boom").expect("serializable");
+        assert_eq!(output.call_id, "call_1");
+        assert_eq!(output.output, r#"{"error":"boom"}"#);
+        assert!(output.is_failure());
     }
 
     #[tokio::test]
@@ -1412,10 +1408,7 @@ mod tests {
             let call_id = call_id.to_owned();
             Box::pin(async move {
                 tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                Ok(ToolOutput {
-                    call_id,
-                    output: "unreachable".to_owned(),
-                })
+                Ok(ToolOutput::success(call_id, "unreachable"))
             })
         }
     }
@@ -1496,10 +1489,7 @@ mod tests {
                 } else if call_id == self.observed_call_id {
                     observed_started.notify_one();
                 }
-                Ok(ToolOutput {
-                    call_id,
-                    output: "completed".to_owned(),
-                })
+                Ok(ToolOutput::success(call_id, "completed"))
             })
         }
 
@@ -1891,13 +1881,7 @@ mod tests {
         ));
         let results = vec![GatewayCallResult {
             item_index: 0,
-            input_item: InputItem::FunctionCallOutput(
-                ToolOutput {
-                    call_id: "call_1".to_owned(),
-                    output: "1".to_owned(),
-                }
-                .into(),
-            ),
+            input_item: InputItem::FunctionCallOutput(ToolOutput::success("call_1", "1").into()),
             public_output: Some(final_item),
         }];
 
@@ -1947,13 +1931,7 @@ mod tests {
         }];
         let results = vec![GatewayCallResult {
             item_index: 0,
-            input_item: InputItem::FunctionCallOutput(
-                ToolOutput {
-                    call_id: "call_1".to_owned(),
-                    output: r#"{"error":"boom"}"#.to_owned(),
-                }
-                .into(),
-            ),
+            input_item: InputItem::FunctionCallOutput(ToolOutput::failure("call_1", r#"{"error":"boom"}"#).into()),
             public_output: Some(OutputItem::McpCall(crate::types::io::McpCall::new(
                 "mcp_1",
                 "counter",

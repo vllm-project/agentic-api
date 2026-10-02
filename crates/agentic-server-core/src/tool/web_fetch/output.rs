@@ -3,15 +3,14 @@
 //! A call ends in a [`WebFetchOutcome`]: a page rendered to text, or a
 //! [`Refusal`] carrying one of the documented `web_fetch_tool_result_error`
 //! codes. Both are serialized here, once, into the two JSON shapes the model
-//! receives (`web_fetch_result` and `web_fetch_tool_result_error`); the
-//! Messages loop reads a result's `type` to mark a refusal `is_error`. A
-//! backend failure becomes a documented code in one place,
-//! [`Refusal::from_failure`], with its source chain kept in the message.
-
-use std::borrow::Cow;
+//! receives (`web_fetch_result` and `web_fetch_tool_result_error`), and the
+//! output carries its status, so the Messages loop marks a refusal `is_error`
+//! without reading the output. A backend failure becomes a documented code in
+//! one place, [`Refusal::from_failure`], with its source chain kept in the
+//! message.
 
 use chrono::{SecondsFormat, Utc};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use url::Url;
 
 use super::backend::{FetchFailure, FetchedDocument};
@@ -126,21 +125,6 @@ pub(crate) fn failure_output(error_code: WebFetchErrorCode, message: &str) -> St
     })
 }
 
-/// The `type` field of a model-facing result.
-#[derive(Deserialize)]
-struct ResultKind<'a> {
-    #[serde(rename = "type", borrow)]
-    kind: Cow<'a, str>,
-}
-
-/// Whether a handler output reports a documented failure, so the loop marks
-/// the fed-back `tool_result` as an error. Read from the result's `type`
-/// field, not from its byte layout.
-#[must_use]
-pub(crate) fn is_failure_output(output: &str) -> bool {
-    serde_json::from_str::<ResultKind<'_>>(output).is_ok_and(|result| result.kind == FAILURE_TYPE)
-}
-
 /// Model-facing `web_fetch` output; field order is the wire contract.
 #[derive(Serialize)]
 struct WebFetchToolOutput<'a> {
@@ -175,14 +159,12 @@ pub(super) enum WebFetchOutcome {
 }
 
 impl WebFetchOutcome {
+    /// The model-facing output, with its status set by the outcome: a page is
+    /// the tool's answer, a refusal a failure the loop reports as an error.
     pub(super) fn into_tool_output(self, call_id: &str) -> Result<ToolOutput, ToolError> {
-        let output = match self {
-            Self::Document(document) => serialize_document(&document)?,
-            Self::Refused(refusal) => failure_output(refusal.code, &refusal.message),
-        };
-        Ok(ToolOutput {
-            call_id: call_id.to_owned(),
-            output,
+        Ok(match self {
+            Self::Document(document) => ToolOutput::success(call_id, serialize_document(&document)?),
+            Self::Refused(refusal) => ToolOutput::failure(call_id, failure_output(refusal.code, &refusal.message)),
         })
     }
 }
@@ -256,25 +238,41 @@ mod tests {
 
     use super::super::policy::UrlRejection;
     use super::*;
+    use crate::tool::handler::ToolOutputStatus;
 
     #[test]
-    fn failure_outputs_are_recognised_by_their_type_not_their_layout() {
-        let output = failure_output(WebFetchErrorCode::UrlNotInPriorContext, "not seen");
+    fn failure_output_uses_the_documented_shape() {
         assert_eq!(
-            output,
+            failure_output(WebFetchErrorCode::UrlNotInPriorContext, "not seen"),
             r#"{"type":"web_fetch_tool_result_error","error_code":"url_not_in_prior_context","message":"not seen"}"#
         );
-        assert!(is_failure_output(&output));
-        assert!(is_failure_output(
-            r#"{"message":"x","error_code":"unavailable","type":"web_fetch_tool_result_error"}"#
-        ));
-        assert!(!is_failure_output(
-            r#"{"type":"web_fetch_result","url":"https://example.com/"}"#
-        ));
-        assert!(!is_failure_output("not json"));
-        assert!(!is_failure_output(
-            r#"{"content":"{\"type\":\"web_fetch_tool_result_error\"}"}"#
-        ));
+    }
+
+    #[test]
+    fn a_document_is_a_success_output_and_a_refusal_a_failure_output() {
+        let document = render_document(
+            FetchedDocument {
+                url: Url::parse("https://example.com/doc").unwrap(),
+                media_type: "text/plain".to_owned(),
+                body: "hello".to_owned(),
+                truncated: false,
+            },
+            &WebFetchToolParam::default(),
+        );
+        let output = WebFetchOutcome::Document(document).into_tool_output("call_1").unwrap();
+        assert_eq!(output.status, ToolOutputStatus::Success);
+        assert!(!output.is_failure());
+        assert!(
+            output.output.starts_with(r#"{"type":"web_fetch_result","#),
+            "{}",
+            output.output
+        );
+
+        let output = WebFetchOutcome::Refused(Refusal::new(WebFetchErrorCode::UrlNotAccessible, "HTTP 404"))
+            .into_tool_output("call_2")
+            .unwrap();
+        assert_eq!(output.status, ToolOutputStatus::Failure);
+        assert!(output.is_failure());
     }
 
     #[test]
@@ -299,7 +297,7 @@ mod tests {
             .into_tool_output("call_1")
             .unwrap();
         assert_eq!(output.call_id, "call_1");
-        assert!(is_failure_output(&output.output));
+        assert!(output.is_failure());
         assert_eq!(
             output.output,
             r#"{"type":"web_fetch_tool_result_error","error_code":"too_many_requests","message":"slow down"}"#

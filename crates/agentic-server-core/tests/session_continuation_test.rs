@@ -67,12 +67,7 @@ impl GatewayExecutor for LocalSearch {
     ) -> Pin<Box<dyn Future<Output = Result<ToolOutput, ToolError>> + Send + '_>> {
         self.calls.fetch_add(1, Ordering::Relaxed);
         let call_id = call_id.to_owned();
-        Box::pin(async move {
-            Ok(ToolOutput {
-                call_id,
-                output: "local search result".to_owned(),
-            })
-        })
+        Box::pin(async move { Ok(ToolOutput::success(call_id, "local search result")) })
     }
 
     fn public_output(

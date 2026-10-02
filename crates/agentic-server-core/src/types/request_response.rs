@@ -6,7 +6,7 @@ use serde_json::{Map, Value};
 
 use super::io::{FunctionTool, InputItem, MultiAgentConfig, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
 use super::tools::ResponsesTool;
-use crate::tool::{CodexNamespaceHandler, CustomHandler, ToolError};
+use crate::tool::{CodexNamespaceHandler, CustomHandler, ToolDeclaration, ToolError};
 
 mod response_stream;
 mod serde_helpers;
@@ -290,7 +290,7 @@ impl RequestPayload {
         let tools: Option<Vec<UpstreamTool>> = renamed_tools.map(|tools| {
             tools
                 .iter()
-                .flat_map(ResponsesTool::to_function_tools)
+                .flat_map(ToolDeclaration::to_function_tools)
                 .map(UpstreamTool::Function)
                 .collect()
         });

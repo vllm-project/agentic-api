@@ -4,7 +4,9 @@ use std::collections::HashMap;
 use super::handler::{ToolError, ToolHandler};
 use super::registry::{ToolEntry, ToolType};
 use crate::types::io::{FunctionTool, InputItem, ResponsesInput, ToolChoice};
-use crate::types::tools::{CodexNamespaceMember, CodexNamespaceToolParam, NonEmptyToolName, ResponsesTool};
+use crate::types::tools::{CodexNamespaceMember, CodexNamespaceToolParam, NonEmptyToolName};
+
+use super::declaration::{DeclaredTool, ToolDeclaration, ToolDeclarationRef};
 
 // Upstream Responses-compatible backends only see flat function names. Prefix
 // flattened Codex namespace members so generated names are recognizable,
@@ -193,10 +195,12 @@ impl CodexNamespaceHandler {
     /// model-visible names (see [`model_visible_namespace_member_name`]),
     /// with collision detection against sibling function-call registry keys.
     ///
-    /// Tools stay `ResponsesTool::Namespace` — only the nested members'
-    /// `name` fields change — so [`ResponsesTool::to_function_tools`] and
+    /// Tools stay `ToolDeclaration::Namespace` — only the nested members'
+    /// `name` fields change — so [`ToolDeclaration::to_function_tools`] and
     /// [`super::registry::ToolRegistry::build_with_handlers`] can read each
     /// member's already-flat name directly, with no further namespace logic.
+    /// The input may be either API's declarations ([`DeclaredTool`]); the
+    /// resolved list is the tool layer's own.
     ///
     /// Request execution must handle the result so ambiguous declarations fail
     /// instead of being normalized into an irreversible flat shape.
@@ -206,15 +210,15 @@ impl CodexNamespaceHandler {
     /// Returns [`ToolError::Config`] when a generated namespace member name
     /// collides with another declared function-call tool or with another
     /// namespace member.
-    pub fn resolve_namespace_members(&self, tools: &[ResponsesTool]) -> Result<Vec<ResponsesTool>, ToolError> {
+    pub fn resolve_namespace_members<D: DeclaredTool>(&self, tools: &[D]) -> Result<Vec<ToolDeclaration>, ToolError> {
         let mut builder = NamespaceMapBuilder::new(typed_top_level_registry_keys(tools));
         tools
             .iter()
-            .map(|tool| match tool {
-                ResponsesTool::Namespace(namespace) => {
-                    rename_namespace_members(namespace, &mut builder).map(ResponsesTool::Namespace)
+            .map(|tool| match tool.declaration() {
+                ToolDeclarationRef::Namespace(namespace) => {
+                    rename_namespace_members(namespace, &mut builder).map(ToolDeclaration::Namespace)
                 }
-                other => Ok(other.clone()),
+                other => Ok(other.to_declaration()),
             })
             .collect()
     }
@@ -227,7 +231,7 @@ impl CodexNamespaceHandler {
     /// Returns [`ToolError::Config`] when a generated namespace member name
     /// collides with another declared function-call tool or with another
     /// namespace member.
-    pub fn build_namespace_map(&self, tools: Option<&[ResponsesTool]>) -> Result<Option<NamespaceMap>, ToolError> {
+    pub fn build_namespace_map<D: DeclaredTool>(&self, tools: Option<&[D]>) -> Result<Option<NamespaceMap>, ToolError> {
         namespace_map_from_tools(tools)
     }
 
@@ -243,13 +247,13 @@ impl CodexNamespaceHandler {
     /// Returns [`ToolError::Config`] when a generated namespace member name
     /// collides with another declared function-call tool or with another
     /// namespace member.
-    pub fn validate_namespace_collisions(&self, tools: Option<&[ResponsesTool]>) -> Result<(), ToolError> {
+    pub fn validate_namespace_collisions<D: DeclaredTool>(&self, tools: Option<&[D]>) -> Result<(), ToolError> {
         let Some(tools) = tools else {
             return Ok(());
         };
         let mut builder = NamespaceMapBuilder::new(typed_top_level_registry_keys(tools));
         for tool in tools {
-            let ResponsesTool::Namespace(namespace) = tool else {
+            let ToolDeclarationRef::Namespace(namespace) = tool.declaration() else {
                 continue;
             };
             for member_name in typed_function_member_names(namespace) {
@@ -330,13 +334,13 @@ impl ToolHandler for CodexNamespaceHandler {
     }
 }
 
-fn namespace_map_from_tools(tools: Option<&[ResponsesTool]>) -> Result<Option<NamespaceMap>, ToolError> {
+fn namespace_map_from_tools<D: DeclaredTool>(tools: Option<&[D]>) -> Result<Option<NamespaceMap>, ToolError> {
     let Some(tools) = tools else {
         return Ok(None);
     };
     let mut builder = NamespaceMapBuilder::new(typed_top_level_registry_keys(tools));
     for tool in tools {
-        if let ResponsesTool::Namespace(namespace) = tool {
+        if let ToolDeclarationRef::Namespace(namespace) = tool.declaration() {
             let _ = rename_namespace_members(namespace, &mut builder)?;
         }
     }
@@ -411,24 +415,25 @@ fn rename_namespace_members(
     })
 }
 
-fn typed_top_level_registry_keys(tools: &[ResponsesTool]) -> HashMap<String, ToolType> {
+fn typed_top_level_registry_keys<D: DeclaredTool>(tools: &[D]) -> HashMap<String, ToolType> {
     tools
         .iter()
         .filter_map(|tool| {
-            let registry_key = match tool {
-                ResponsesTool::Function(function) => function.name.as_str().to_owned(),
-                ResponsesTool::WebSearch(_) => "web_search".to_owned(),
-                ResponsesTool::WebFetch(_) => "web_fetch".to_owned(),
-                ResponsesTool::FileSearch(_) => "file_search".to_owned(),
-                ResponsesTool::CodeInterpreter(_) => "code_interpreter".to_owned(),
-                ResponsesTool::ToolSearch(_)
-                | ResponsesTool::Mcp(_)
-                | ResponsesTool::Shell(_)
-                | ResponsesTool::Namespace(_)
-                | ResponsesTool::Custom(_)
-                | ResponsesTool::Unknown => return None,
+            let declaration = tool.declaration();
+            let registry_key = match declaration {
+                ToolDeclarationRef::Function(function) => function.name.as_str().to_owned(),
+                ToolDeclarationRef::WebSearch(_) => "web_search".to_owned(),
+                ToolDeclarationRef::WebFetch(_) => "web_fetch".to_owned(),
+                ToolDeclarationRef::FileSearch(_) => "file_search".to_owned(),
+                ToolDeclarationRef::CodeInterpreter(_) => "code_interpreter".to_owned(),
+                ToolDeclarationRef::ToolSearch(_)
+                | ToolDeclarationRef::Mcp(_)
+                | ToolDeclarationRef::Shell(_)
+                | ToolDeclarationRef::Namespace(_)
+                | ToolDeclarationRef::Custom(_)
+                | ToolDeclarationRef::Unsupported => return None,
             };
-            tool.tool_type().map(|tool_type| (registry_key, tool_type))
+            declaration.tool_type().map(|tool_type| (registry_key, tool_type))
         })
         .collect()
 }
@@ -470,6 +475,7 @@ fn rewrite_tool_choice_with_map(choice: &ToolChoice, map: &NamespaceMap) -> Tool
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::tools::ResponsesTool;
 
     #[test]
     fn unqualified_function_tool_choice_is_not_rewritten_to_namespace_member() {
@@ -503,7 +509,7 @@ mod tests {
             .expect("valid namespace members");
         assert!(matches!(
             resolved.as_slice(),
-            [ResponsesTool::Namespace(namespace)]
+            [ToolDeclaration::Namespace(namespace)]
                 if matches!(&namespace.tools[0], CodexNamespaceMember::Function(f) if f.name.as_str() == "agentic_ns__mcp__shell__run")
         ));
     }

@@ -1,5 +1,6 @@
 use super::{TOOL_SEARCH_NAME, ToolSearchHandler};
 use crate::tool::ToolError;
+use crate::tool::declaration::{DeclaredTool, ToolDeclarationRef};
 use crate::types::io::{InputItem, ResponsesInput};
 use crate::types::request_response::RequestPayload;
 use crate::types::tools::{CodexNamespaceMember, ResponsesTool};
@@ -67,20 +68,20 @@ pub(super) fn tool_activates_tool_search(tool: &ResponsesTool) -> bool {
 }
 
 pub(super) fn tool_has_deferred_definition(tool: &ResponsesTool) -> bool {
-    match tool {
-        ResponsesTool::Function(function) => function.defer_loading == Some(true),
-        ResponsesTool::Namespace(namespace) => namespace.tools.iter().any(
+    match tool.declaration() {
+        ToolDeclarationRef::Function(function) => function.defer_loading == Some(true),
+        ToolDeclarationRef::Namespace(namespace) => namespace.tools.iter().any(
             |member| matches!(member, CodexNamespaceMember::Function(function) if function.defer_loading == Some(true)),
         ),
-        ResponsesTool::Mcp(mcp) => mcp.defer_loading == Some(true),
-        ResponsesTool::Custom(custom) => custom.defer_loading == Some(true),
-        ResponsesTool::ToolSearch(_)
-        | ResponsesTool::WebSearch(_)
-        | ResponsesTool::WebFetch(_)
-        | ResponsesTool::FileSearch(_)
-        | ResponsesTool::CodeInterpreter(_)
-        | ResponsesTool::Shell(_)
-        | ResponsesTool::Unknown => false,
+        ToolDeclarationRef::Mcp(mcp) => mcp.defer_loading == Some(true),
+        ToolDeclarationRef::Custom(custom) => custom.defer_loading == Some(true),
+        ToolDeclarationRef::ToolSearch(_)
+        | ToolDeclarationRef::WebSearch(_)
+        | ToolDeclarationRef::WebFetch(_)
+        | ToolDeclarationRef::FileSearch(_)
+        | ToolDeclarationRef::CodeInterpreter(_)
+        | ToolDeclarationRef::Shell(_)
+        | ToolDeclarationRef::Unsupported => false,
     }
 }
 
@@ -94,17 +95,17 @@ pub(crate) fn ensure_request_prepared(request: &RequestPayload, prepared: bool) 
 }
 
 pub(super) fn has_reserved_tool_search_name(tool: &ResponsesTool) -> bool {
-    match tool {
-        ResponsesTool::Function(function) => function.name.as_str() == TOOL_SEARCH_NAME,
-        ResponsesTool::Custom(custom) => custom.name.as_str() == TOOL_SEARCH_NAME,
-        ResponsesTool::Namespace(namespace) => namespace.name == TOOL_SEARCH_NAME,
-        ResponsesTool::ToolSearch(_)
-        | ResponsesTool::Mcp(_)
-        | ResponsesTool::WebSearch(_)
-        | ResponsesTool::WebFetch(_)
-        | ResponsesTool::FileSearch(_)
-        | ResponsesTool::CodeInterpreter(_)
-        | ResponsesTool::Shell(_)
-        | ResponsesTool::Unknown => false,
+    match tool.declaration() {
+        ToolDeclarationRef::Function(function) => function.name.as_str() == TOOL_SEARCH_NAME,
+        ToolDeclarationRef::Custom(custom) => custom.name.as_str() == TOOL_SEARCH_NAME,
+        ToolDeclarationRef::Namespace(namespace) => namespace.name == TOOL_SEARCH_NAME,
+        ToolDeclarationRef::ToolSearch(_)
+        | ToolDeclarationRef::Mcp(_)
+        | ToolDeclarationRef::WebSearch(_)
+        | ToolDeclarationRef::WebFetch(_)
+        | ToolDeclarationRef::FileSearch(_)
+        | ToolDeclarationRef::CodeInterpreter(_)
+        | ToolDeclarationRef::Shell(_)
+        | ToolDeclarationRef::Unsupported => false,
     }
 }

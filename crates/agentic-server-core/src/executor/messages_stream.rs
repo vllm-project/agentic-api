@@ -858,7 +858,7 @@ mod tests {
     /// the ONLY way `execute_gateway_calls` can produce a non-"no handler" result
     /// for a malformed input is by rejecting the args before dispatch (the fix).
     async fn no_op_registry() -> ToolRegistry {
-        let mut tools = [];
+        let mut tools: [crate::tool::ToolDeclaration; 0] = [];
         let mut executors = crate::tool::GatewayExecutors::from_env(std::sync::Arc::new(reqwest::Client::new()));
         ToolRegistry::build_with_handlers(&mut tools, &mut executors)
             .await
