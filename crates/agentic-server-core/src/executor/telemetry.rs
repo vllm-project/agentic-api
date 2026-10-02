@@ -200,6 +200,7 @@ impl From<&ExecutorError> for FailureCategory {
             ExecutorError::Conflict(_) => Self::Conflict,
             ExecutorError::CompactionFailed { .. } => Self::Compaction,
             ExecutorError::Tool(_) => Self::Tool,
+            ExecutorError::StreamProducerPanicked => Self::Panic,
         }
     }
 }
@@ -463,6 +464,7 @@ mod tests {
                 ExecutorError::Persistence(Box::new(ExecutorError::Conflict("inner".to_owned()))),
                 FailureCategory::Persistence,
             ),
+            (ExecutorError::StreamProducerPanicked, FailureCategory::Panic),
         ];
         for (error, expected) in cases {
             assert_eq!(FailureCategory::from(&error), expected, "{error}");

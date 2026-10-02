@@ -156,8 +156,8 @@ impl ResponseSession {
     /// Wait until the active turn has published or dropped its continuation.
     ///
     /// This is not cancellation: callers must first drop the execution stream
-    /// or otherwise stop its worker. It prevents a subsequent serial request
-    /// racing the asynchronous disposal triggered by dropping that stream.
+    /// or cancel and join its owning task. Stream-owned producers are disposed
+    /// synchronously on drop; this also fences independently scheduled callers.
     /// The ending lease releases its parent reference before becoming idle;
     /// other sessions may still keep that shared checkpoint alive and charged.
     ///

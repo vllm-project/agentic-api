@@ -568,9 +568,11 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   applies response completion policy to its typed `RoundResult`/`RoundDecision`.
   The current single-agent path supplies `MAX_GATEWAY_TOOL_ROUNDS = 10` as a per-turn
   limit, not a future tree-wide collaboration limit. Also home to `run_compaction_trigger`,
-  `run_blocking`, and `run_stream` (spawns the loop, forwards events as SSE, persists
-  before yielding the terminal event). `engine/streaming.rs` owns the streaming task's
-  cancellation, failure delivery, and terminal validation before persistence.
+  `run_blocking`, and `run_stream` (owns and polls the loop alongside its bounded event
+  receiver, forwards events as SSE, and persists before yielding the terminal event).
+  `engine/streaming.rs` owns cancellation, failure delivery, and terminal validation
+  before persistence; `engine/streaming/producer.rs` drives the stream-owned
+  orchestration future without spawning a nested producer task.
 - **`engine/agent_turn.rs`** — execution for one agent: `AgentTurn` owns the tool
   registry and round counter and exclusively borrows its `AgentPipeline`. The response
   adapter retains the pipeline so error handling can recover its context and delivery
@@ -607,7 +609,8 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   Canonical histories and pending calls remain owned by the coordinator; the pipeline never
   spawns subagents. Its `context`, `actions`, `rounds`, `delivery`, and `compaction`
   modules separate restoration, collaboration commands, scheduling, public output and
-  explicit root compaction. The run owner cancels and joins tasks during teardown.
+  explicit root compaction. The run owner cancels and joins tasks when a run finishes or
+  its retained owner cancels it; dropping an HTTP stream aborts them without joining.
   Interruption takes effect at the current round boundary. The contracts are described below.
 - **`persist.rs`** — `persist_response`/`persist_turn`, which apply the request's
   storage policy (`should_persist`: a no-session `store: false` turn is not written) and
@@ -940,7 +943,28 @@ cancelled or disconnected flush cannot silently discard the remainder.
 When an upstream round fails, the engine releases its deferred public events through
 the same delivery path before the terminal event, without executing gateway tools.
 
-Its `GatewayStreamAccumulator` carries only cross-round presentation state: monotonic
+The Responses `BoxStream` owns its orchestration future directly. It polls that future
+and the existing bounded event receiver on the consumer's task; there is no detached
+producer, asynchronous abort reaper, or producer `JoinHandle`. When the consumer stops
+polling, the orchestration future stops with it. Dropping an unpolled or active stream
+synchronously drops its producer, active per-request tool futures, and continuation lease.
+A multi-agent run is the exception inside that future: its rounds are tasks owned by
+`RunOwner`. They progress only until the bounded frame channel is full, and dropping the
+stream drops `RunOwner`, which aborts them without joining; each stops at its next await
+point and its result is discarded. Remote services and shared HTTP/MCP connection drivers
+still have their own lifetimes; dropping a local future does not undo external side effects.
+
+Producer completion and panic both dispose of the producer future before draining
+accepted events in order and exposing one outcome. Panic isolation uses `catch_unwind`
+and a typed, static client error; it does not alter the process panic hook. On success,
+the engine still validates terminal size and persists/publishes the checkpoint before
+yielding completion. Cancellation during storage waits drops the pending persistence
+future through the same owner. WebSocket responses run through the retained owner in
+`engine/retained.rs`, which spawns execution and cancels and joins it explicitly; a
+multi-agent run cancels and joins its rounds through the coordinator's cancellation arm.
+Their `wait_until_idle` lease fences remain in place.
+
+`GatewayStreamAccumulator` carries only cross-round presentation state: monotonic
 `sequence_number`s, public `output_index` rebasing, and deduplication of response start
 events. It holds no `OutputItem` assembly state. Sending is awaited before ingestion
 continues, so sender closure or delivery failure propagates through the live pipeline.

@@ -296,6 +296,73 @@ async fn child_deltas_arrive_before_upstream_round_completion() {
     result.unwrap();
 }
 
+/// A client that drops a multi-agent stream drops the run the stream owns:
+/// `RunOwner` aborts the round tasks, their upstream bodies close, and nothing
+/// is stored.
+#[tokio::test]
+async fn dropping_multi_agent_stream_aborts_round_tasks_without_storing() {
+    let gate = Arc::new(Semaphore::new(0));
+    let (exec, server) = setup_with_gate(Some(gate.clone())).await;
+    let work = async {
+        let request = RequestPayload {
+            model: "test".into(),
+            store: true,
+            stream: true,
+            input: ResponsesInput::Text("Compare proposals".into()),
+            multi_agent: Some(MultiAgentConfig {
+                enabled: true,
+                max_concurrent_subagents: Some(2),
+            }),
+            ..Default::default()
+        };
+        let Either::Right(mut stream) = ExecuteRequest::new(request, Arc::clone(&exec)).run().await.unwrap() else {
+            panic!("expected SSE");
+        };
+        let mut response_id = None;
+        let mut seen = HashSet::new();
+        while seen.len() < 2 {
+            let chunk = stream.next().await.expect("stream ended before child deltas");
+            for line in chunk.lines().filter_map(|line| line.strip_prefix("data: ")) {
+                let frame: Value = serde_json::from_str(line).unwrap();
+                assert_ne!(frame["type"], "error", "{frame}");
+                if frame["type"] == "response.created" {
+                    response_id = frame["response"]["id"].as_str().map(str::to_owned);
+                }
+                if frame["type"] == "response.function_call_arguments.delta" {
+                    seen.insert(frame["agent"]["agent_name"].as_str().unwrap().to_owned());
+                }
+            }
+        }
+        // Drain until the run is idle on the gated bodies. A run that outlived the
+        // stream would then have nothing left to send, so only the drop closes them.
+        while let Ok(chunk) = tokio::time::timeout(Duration::from_millis(200), stream.next()).await {
+            assert!(
+                !chunk
+                    .expect("stream ended while children waited")
+                    .contains("event: error")
+            );
+        }
+        // Each child's upstream body holds a clone of `gate` until it closes.
+        let open = Arc::strong_count(&gate);
+        drop(stream);
+        let closed = tokio::time::timeout(Duration::from_secs(1), async {
+            while Arc::strong_count(&gate) > open - 2 {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        assert!(closed.is_ok(), "both child upstream bodies must close after the drop");
+        let response_id = response_id.expect("response.created");
+        assert!(
+            exec.resp_handler.retrieve(&response_id).await.is_err(),
+            "a dropped stream must not store its response"
+        );
+    };
+    let result = tokio::time::timeout(Duration::from_secs(15), work).await;
+    server.abort();
+    result.unwrap();
+}
+
 async fn response(request: RequestPayload, exec: Arc<ExecutionContext>) -> ResponsePayload {
     match ExecuteRequest::new(request, exec).run().await.unwrap() {
         Either::Left(payload) => payload,

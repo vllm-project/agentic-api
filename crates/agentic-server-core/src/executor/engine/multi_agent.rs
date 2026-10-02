@@ -176,6 +176,9 @@ impl MultiAgentRun {
         exec: &ExecutionContext,
         auth: Option<&str>,
     ) -> ExecutorResult<ResponsePayload> {
+        // A retained (WebSocket) owner cancels through the pipeline token, and the
+        // tasks are still cancelled and joined below. A dropped HTTP stream drops
+        // this future instead, and `RunOwner`'s drop aborts the tasks unjoined.
         let cancellation = pipeline.cancellation_token();
         let result = tokio::select! {
             result = tokio::time::timeout(Duration::from_secs(3600), self.drive(pipeline, exec, auth)) => {

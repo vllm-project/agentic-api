@@ -1,64 +1,24 @@
-//! Streaming execution task lifecycle, terminal validation, and failure delivery.
+//! Stream-owned execution lifecycle, terminal validation, and failure delivery.
+
+mod producer;
 
 use super::run_until_gateway_tools_complete;
 use crate::executor::error::ExecutorError;
-use crate::executor::gateway_accumulator::{
-    GatewayStreamAccumulator, STREAM_EVENT_BUFFER, StreamEvent, error_sse_chunk,
-};
+use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, STREAM_EVENT_BUFFER, StreamEvent};
 use crate::executor::inference::{BoxStream, DONE_MARKER};
 use crate::executor::multi_agent::RunControlReceiver;
 use crate::executor::persist::persist_if_needed;
 use crate::executor::request::{ExecutionContext, RequestContext};
-use crate::executor::telemetry::{ExecutionSpan, FailureCategory, InstrumentedStream};
+use crate::executor::telemetry::{ExecutionSpan, InstrumentedStream};
 use crate::executor::upstream::agent_pipeline_with_limits;
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
 use crate::types::request_response::ResponsePayload;
 use crate::utils::common::utcnow_str;
 use async_stream::stream;
+use futures::StreamExt;
+use producer::ProducerEvent;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tokio_util::sync::CancellationToken;
-use tracing::Instrument as _;
-
-pub(super) struct AbortOnDrop<T> {
-    handle: tokio::task::JoinHandle<T>,
-    cancellation: Option<CancellationToken>,
-}
-
-impl<T> AbortOnDrop<T> {
-    pub(super) fn new(handle: tokio::task::JoinHandle<T>) -> Self {
-        Self {
-            handle,
-            cancellation: None,
-        }
-    }
-}
-
-impl<T> std::ops::Deref for AbortOnDrop<T> {
-    type Target = tokio::task::JoinHandle<T>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.handle
-    }
-}
-
-impl<T> std::ops::DerefMut for AbortOnDrop<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.handle
-    }
-}
-
-impl<T> Drop for AbortOnDrop<T> {
-    fn drop(&mut self) {
-        if !self.handle.is_finished() {
-            if let Some(cancellation) = &self.cancellation {
-                cancellation.cancel();
-            } else {
-                self.handle.abort();
-            }
-        }
-    }
-}
 
 /// `max_stream_event_bytes` is the effective limit for one serialized client
 /// event on the transport that will deliver this stream. The terminal
@@ -69,8 +29,9 @@ impl<T> Drop for AbortOnDrop<T> {
 /// `execution` is the request's `agentic.execute` span guard. It is moved
 /// into the stream so the span stays open, and is entered on every poll,
 /// until the terminal frame has been yielded or the stream is dropped. The
-/// executor task is instrumented with the same span so the stages it runs
-/// are parented correctly on whichever worker thread polls them.
+/// stream owns and polls orchestration, so its stages run inside that span.
+/// Dropping the stream drops orchestration. For a multi-agent response that
+/// includes its `RunOwner`, which aborts round tasks without joining them.
 pub(super) fn run_stream(
     ctx: RequestContext,
     tool_search_state: Option<ToolSearchState>,
@@ -81,94 +42,74 @@ pub(super) fn run_stream(
     control: Option<RunControlReceiver>,
 ) -> BoxStream {
     let span = execution.span().clone();
-    let task_span = span.clone();
     let frames: BoxStream = Box::pin(stream! {
-            let failure_context = StreamFailureContext::from(&ctx);
-            let (event_tx, mut event_rx) = mpsc::channel(STREAM_EVENT_BUFFER);
-            let exec_ctx_for_run = Arc::clone(&exec_ctx);
-            let event_tx_for_run = event_tx.clone();
-            let mut agent = agent_pipeline_with_limits(
-                ctx,
-                tool_search_state,
-                Some(event_tx_for_run),
-                max_stream_event_bytes,
-            );
-            agent.control = control;
-            let cancellation = agent.request.enriched_request.multi_agent.as_ref()
-                .is_some_and(|config| config.enabled).then(|| agent.cancellation_token());
-            let mut run_handle = AbortOnDrop::new(tokio::spawn(
-                async move {
-                    let result = run_until_gateway_tools_complete(
-                        &mut agent,
-                        exec_ctx_for_run.as_ref(),
-                        auth.as_deref(),
-                        true,
-                    )
-                    .await;
-                    let (ctx, stream_accumulator) = agent.into_parts();
-                    (result.map(|(payload, metadata)| (payload, ctx, metadata)), stream_accumulator)
-                }
-                .instrument(task_span),
-            ));
-            run_handle.cancellation = cancellation;
+        let failure_context = StreamFailureContext::from(&ctx);
+        let (event_tx, event_rx) = mpsc::channel(STREAM_EVENT_BUFFER);
+        let exec_ctx_for_run = Arc::clone(&exec_ctx);
+        let mut agent = agent_pipeline_with_limits(
+            ctx,
+            tool_search_state,
+            Some(event_tx),
+            max_stream_event_bytes,
+        );
+        agent.control = control;
+        let run = async move {
+            let result = run_until_gateway_tools_complete(
+                &mut agent,
+                exec_ctx_for_run.as_ref(),
+                auth.as_deref(),
+                true,
+            )
+            .await;
+            let (ctx, stream_accumulator) = agent.into_parts();
+            (result.map(|(payload, metadata)| (payload, ctx, metadata)), stream_accumulator)
+        };
+        let events = producer::drive(run, event_rx);
+        futures::pin_mut!(events);
 
-            let mut next_sequence_number = 0;
-            loop {
-                tokio::select! {
-                    Some(event) = event_rx.recv() => {
-                        if let Some(content) = consume_stream_event(event, &mut next_sequence_number) {
-                            yield content;
+        let mut next_sequence_number = 0;
+        while let Some(event) = events.next().await {
+            match event {
+                ProducerEvent::Event(event) => {
+                    if let Some(content) = consume_stream_event(event, &mut next_sequence_number) {
+                        yield content;
+                    }
+                }
+                ProducerEvent::Finished(result) => {
+                    match result {
+                        Err(e) => {
+                            // A caught producer panic; no payload is forwarded.
+                            execution.failed(&e);
+                            yield GatewayStreamAccumulator::executor_error_chunk_at(&e, next_sequence_number);
+                            execution.delivered();
+                            yield DONE_MARKER.to_string();
+                        }
+                        Ok((Err(e), mut stream_accumulator)) => {
+                            execution.failed(&e);
+                            yield failed_stream_chunk(&e, &failure_context, &mut stream_accumulator, next_sequence_number);
+                            execution.delivered();
+                            yield DONE_MARKER.to_string();
+                        }
+                        Ok((Ok((payload, ctx, tool_search_metadata)), stream_accumulator)) => {
+                            let terminal = Box::pin(completed_stream_chunk(
+                                payload,
+                                ctx,
+                                tool_search_metadata,
+                                &stream_accumulator,
+                                &exec_ctx,
+                                next_sequence_number,
+                                &mut execution,
+                            ))
+                            .await;
+                            execution.delivered();
+                            yield terminal;
+                            yield DONE_MARKER.to_string();
                         }
                     }
-                    result = &mut run_handle.handle => {
-                        match result {
-                            Err(e) => {
-                                if e.is_panic() {
-                                    execution.failed_with(FailureCategory::Panic);
-                                } else {
-                                    execution.cancelled();
-                                }
-                                for chunk in panicked_stream_chunks(&e, &mut event_rx, &mut next_sequence_number) {
-                                    yield chunk;
-                                }
-                                execution.delivered();
-                            }
-                            Ok((Err(e), mut stream_accumulator)) => {
-                                execution.failed(&e);
-                                while let Ok(event) = event_rx.try_recv() {
-                                    if let Some(content) = consume_stream_event(event, &mut next_sequence_number) {
-                                        yield content;
-                                    }
-                                }
-                                yield failed_stream_chunk(&e, &failure_context, &mut stream_accumulator, next_sequence_number);
-                                execution.delivered();
-                                yield DONE_MARKER.to_string();
-                            }
-                            Ok((Ok((payload, ctx, tool_search_metadata)), stream_accumulator)) => {
-                                while let Ok(event) = event_rx.try_recv() {
-                                    if let Some(content) = consume_stream_event(event, &mut next_sequence_number) {
-                                        yield content;
-                                    }
-                                }
-                                let terminal = Box::pin(completed_stream_chunk(
-                                    payload,
-                                    ctx,
-                                    tool_search_metadata,
-                                    &stream_accumulator,
-                                    &exec_ctx,
-                                    next_sequence_number,
-                                    &mut execution,
-                                ))
-                                .await;
-                                execution.delivered();
-                                yield terminal;
-                                yield DONE_MARKER.to_string();
-                            }
-                        }
-                        break;
-                    }
+                    break;
                 }
             }
+        }
     });
     Box::pin(InstrumentedStream::new(frames, span))
 }
@@ -285,22 +226,4 @@ pub(super) fn consume_stream_event(event: StreamEvent, next_sequence_number: &mu
             None
         }
     }
-}
-
-pub(super) fn stream_task_failure_chunk(error: &tokio::task::JoinError, sequence_number: u64) -> String {
-    error_sse_chunk(&format!("stream task failed: {error}"), sequence_number)
-}
-
-pub(super) fn panicked_stream_chunks(
-    error: &tokio::task::JoinError,
-    event_rx: &mut mpsc::Receiver<StreamEvent>,
-    next_sequence_number: &mut u64,
-) -> Vec<String> {
-    let mut chunks = Vec::new();
-    while let Ok(event) = event_rx.try_recv() {
-        chunks.extend(consume_stream_event(event, next_sequence_number));
-    }
-    chunks.push(stream_task_failure_chunk(error, *next_sequence_number));
-    chunks.push(DONE_MARKER.to_owned());
-    chunks
 }
