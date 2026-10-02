@@ -73,28 +73,28 @@ impl MultiAgentRun {
                 context.generation += 1;
                 context.stored.history.push(mail_input(&turn.agent, &message));
             }
-            if context.compacted_generation != Some(context.generation) {
-                if let Some(plan) = CompactionPlan::prepare(
+            if context.compacted_generation != Some(context.generation)
+                && let Some(plan) = CompactionPlan::prepare(
                     &turn.agent,
                     context.generation,
                     &context.stored.history,
                     &context.request,
-                )? {
-                    context.compacting = true;
-                    let exec = exec.clone();
-                    let auth = auth.map(str::to_owned);
-                    self.tasks
-                        .spawn_turn(turn.clone(), async move {
-                            plan.execute(&exec, auth.as_deref())
-                                .await
-                                .map(CompletedWork::Compaction)
-                        })
-                        .map_err(|error| invalid(&error.to_string()))?;
-                    self.registry
-                        .set_phase(&turn, AgentPhase::Inferring)
-                        .map_err(registry_error)?;
-                    continue;
-                }
+                )?
+            {
+                context.compacting = true;
+                let exec = exec.clone();
+                let auth = auth.map(str::to_owned);
+                self.tasks
+                    .spawn_turn(turn.clone(), async move {
+                        plan.execute(&exec, auth.as_deref())
+                            .await
+                            .map(CompletedWork::Compaction)
+                    })
+                    .map_err(|error| invalid(&error.to_string()))?;
+                self.registry
+                    .set_phase(&turn, AgentPhase::Inferring)
+                    .map_err(registry_error)?;
+                continue;
             }
             self.spawn_round(&turn, exec, auth, pipeline)?;
         }
@@ -281,12 +281,12 @@ impl MultiAgentRun {
         let mut final_answer = String::new();
         let mut has_final_answer = false;
         for mut item in payload.output {
-            if let OutputItem::FunctionCall(call) = &item {
-                if let Some(action) = MultiAgentAction::from_tool_name(&call.name) {
-                    collaboration = true;
-                    self.action(turn, action, call.clone(), pipeline).await?;
-                    continue;
-                }
+            if let OutputItem::FunctionCall(call) = &item
+                && let Some(action) = MultiAgentAction::from_tool_name(&call.name)
+            {
+                collaboration = true;
+                self.action(turn, action, call.clone(), pipeline).await?;
+                continue;
             }
             if let OutputItem::Message(message) = &mut item {
                 if matches!(decision, RoundDecision::Done) && !collaboration && !has_client_calls {

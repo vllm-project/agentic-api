@@ -196,13 +196,13 @@ fn assert_upstream_rounds(rounds: &[Value], expected_request: &Value) {
         "first inference must retain the original selector"
     );
     let mut expected_choice = expected_request.get("tool_choice").cloned();
-    if let Some(choice) = &mut expected_choice {
-        if choice["type"] == "any" || choice["type"] == "tool" {
-            if choice["type"] == "tool" {
-                choice.as_object_mut().unwrap().remove("name");
-            }
-            choice["type"] = json!("auto");
+    if let Some(choice) = &mut expected_choice
+        && (choice["type"] == "any" || choice["type"] == "tool")
+    {
+        if choice["type"] == "tool" {
+            choice.as_object_mut().unwrap().remove("name");
         }
+        choice["type"] = json!("auto");
     }
     for round in &rounds[1..] {
         assert_eq!(round.get("tool_choice"), expected_choice.as_ref());

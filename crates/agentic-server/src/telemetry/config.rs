@@ -51,9 +51,8 @@ impl ExporterSelection {
 
 /// OTLP wire protocol.
 ///
-/// Only `http/protobuf` is offered: the gRPC transport requires `tonic`,
-/// whose minimum supported Rust version (1.88) is above this repository's
-/// MSRV (1.85).
+/// Only `http/protobuf` is offered: the gateway is built without the gRPC
+/// exporter and its `tonic` stack.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OtlpProtocol {
     #[default]

@@ -62,7 +62,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
-          toolchain: 1.98.0
+          toolchain: 1.98.1
           components: clippy, rustfmt
 
       - name: Cache Rust dependencies
@@ -171,6 +171,56 @@ jobs:
             cargo test --locked -p agentic-server --test code_interpreter_worker_http_test \
               --features embedded-code-interpreter -- --ignored --test-threads=1
 
+  msrv:
+    name: Minimum supported Rust version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      ERYX_PRECOMPILE_INSTALL_ROOT: ${{ github.workspace }}/.ci/eryx-precompile
+      XDG_CACHE_HOME: ${{ github.workspace }}/.ci/eryx-cache
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Read the declared MSRV
+        id: msrv
+        run: |
+          version=$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)
+          clippy=$(sed -n 's/^msrv = "\(.*\)"$/\1/p' clippy.toml)
+          if [ -z "$version" ] || [ "$version" != "$clippy" ]; then
+            echo "Cargo.toml rust-version ($version) and clippy.toml msrv ($clippy) must match" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install the MSRV toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-bin: false
+
+      # `--all-features` builds Eryx, whose build script needs the precompiled runtime.
+      - name: Cache Eryx precompiler
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v4
+        with:
+          path: ${{ env.ERYX_PRECOMPILE_INSTALL_ROOT }}
+          key: eryx-precompile-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Add Eryx precompiler to PATH
+        run: echo "${ERYX_PRECOMPILE_INSTALL_ROOT}/bin" >> "${GITHUB_PATH}"
+
+      - name: Prepare Eryx runtime
+        run: ./scripts/setup-eryx-runtime.sh
+
+      - name: Check every crate, target, and feature on the MSRV
+        run: cargo +${{ steps.msrv.outputs.version }} check --workspace --all-targets --all-features --locked
+
   postgres:
     runs-on: ubuntu-latest
     services:
@@ -195,7 +245,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
-          toolchain: 1.98.0
+          toolchain: 1.98.1
 
       - name: Cache cargo registry and build
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v4
@@ -235,7 +285,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
-          toolchain: 1.98.0
+          toolchain: 1.98.1
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
