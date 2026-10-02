@@ -4172,14 +4172,179 @@ async fn websocket_injection_schema_error_closes_connection() {
     let mock = MockResponsesServer::start(vec![]).await;
     let fixture = storage_backed_state(&mock.url).await;
     let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    for discriminator in ["response.inject", r"response.\u0069nject"] {
+        let mut ws = connect_responses_ws(&gateway_url).await;
+        let wire = format!(
+            r#"{{"type":"{discriminator}","response_id":"resp_unknown","input":[{{"type":"message","content":"invalid"}}]}}"#
+        );
+        ws.send(Message::Text(wire.into())).await.unwrap();
+        assert_eq!(recv_json(&mut ws).await["type"], "error");
+        recv_close_or_end(&mut ws).await;
+    }
+}
+
+#[tokio::test]
+async fn websocket_single_agent_injection_rejection_keeps_other_lanes_usable() {
+    let created = json!({"type":"response.created","response":{"id":"upstream","status":"in_progress"}});
+    let (mock, _dropped) = MockResponsesServer::start_hanging(format!("data: {created}\n\n")).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
     let mut ws = connect_responses_ws(&gateway_url).await;
     send_json(
         &mut ws,
-        json!({"type":"response.inject","response_id":"resp_unknown","input":[{"type":"message","content":"invalid"}]}),
+        json!({"type":"response.create","model":"test-model","input":"wait",
+        "store":true,"stream_id":"active"}),
     )
     .await;
-    assert_eq!(recv_json(&mut ws).await["type"], "error");
-    recv_close_or_end(&mut ws).await;
+    let created = recv_json(&mut ws).await;
+    assert_eq!(created["type"], "response.created");
+    let input = json!([{"type":"function_call_output","call_id":"unknown","output":"unused"}]);
+    send_json(
+        &mut ws,
+        json!({"type":"response.inject","response_id":created["response"]["id"],"input":input}),
+    )
+    .await;
+    let rejected = recv_json(&mut ws).await;
+    assert_eq!(rejected["type"], "response.inject.failed");
+    assert_eq!(rejected["error"]["code"], "invalid_input");
+    assert_eq!(rejected["input"], input);
+    assert_eq!(rejected["stream_id"], "active");
+    send_json(
+        &mut ws,
+        json!({"type":"response.create","model":"test-model","input":"warmup",
+        "generate":false,"store":true,"stream_id":"other"}),
+    )
+    .await;
+    let completed = recv_until_completed(&mut ws).await;
+    assert_eq!(completed.last().unwrap()["stream_id"], "other");
+    assert_eq!(mock.request_bodies().await.len(), 1);
+}
+
+#[tokio::test]
+async fn websocket_invalid_upstream_search_emits_failed_and_retains_injection_route() {
+    let malformed = sse_tool_search_call_response().replace(r#"{\"query\":\"weather\"}"#, "not valid JSON");
+    assert!(malformed.contains("not valid JSON"));
+    let mock = MockResponsesServer::start(vec![malformed]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    send_json(
+        &mut ws,
+        json!({"type":"response.create","model":"test-model","input":"search",
+        "store":true,"tools":[tool_search_declaration(), deferred_weather_function()]}),
+    )
+    .await;
+    let mut sequence = 0;
+    let failed = loop {
+        let event = recv_json(&mut ws).await;
+        assert_ne!(event["type"], "error", "{event}");
+        assert_ne!(event["type"], "response.completed");
+        assert_eq!(event["sequence_number"], sequence);
+        sequence += 1;
+        if event["type"] == "response.failed" {
+            break event;
+        }
+    };
+    assert_eq!(failed["response"]["status"], "failed");
+    assert_eq!(failed["response"]["error"]["code"], "tool_error");
+    let input = json!([{"type":"function_call_output","call_id":"unknown","output":"unused"}]);
+    send_json(
+        &mut ws,
+        json!({"type":"response.inject","response_id":failed["response"]["id"],"input":input}),
+    )
+    .await;
+    let rejected = recv_json(&mut ws).await;
+    assert_eq!(rejected["type"], "response.inject.failed");
+    assert_eq!(rejected["error"]["code"], "response_already_completed");
+    assert_eq!(rejected["input"], input);
+    send_json(
+        &mut ws,
+        json!({"type":"response.create","model":"test-model","input":"warmup",
+        "generate":false,"store":true}),
+    )
+    .await;
+    recv_until_completed(&mut ws).await;
+}
+
+#[tokio::test]
+async fn websocket_multi_agent_warmup_resolves_outputs_before_generated_continuation() {
+    for discovery in [false, true] {
+        let call = if discovery {
+            sse_tool_search_call_response()
+        } else {
+            sse_weather_function_call_response()
+        };
+        let answer = if discovery {
+            sse_weather_function_call_response()
+        } else {
+            sse_response("answer", "message", "sunny")
+        };
+        let mock = MockResponsesServer::start(vec![call, answer]).await;
+        let fixture = storage_backed_state(&mock.url).await;
+        let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+        let mut ws = connect_responses_ws(&gateway_url).await;
+        let tools = if discovery {
+            json!([tool_search_declaration(), deferred_weather_function()])
+        } else {
+            json!([{"type":"function","name":"get_weather","parameters":{"type":"object"}}])
+        };
+        send_json(
+            &mut ws,
+            json!({"type":"response.create","model":"test-model","input":"weather",
+            "store":true,"multi_agent":{"enabled":true},"tools":tools}),
+        )
+        .await;
+        let first = recv_until_completed(&mut ws).await;
+        let parent = &first.last().unwrap()["response"]["id"];
+        let input = if discovery {
+            json!([{"type":"tool_search_output","call_id":"call_search","execution":"client",
+                "status":"completed","tools":[deferred_weather_function()]}])
+        } else {
+            json!([{"type":"function_call_output","call_id":"call_weather","output":"sunny"}])
+        };
+        // An invalid warmup must leave the parent's pending ownership intact.
+        send_json(
+            &mut ws,
+            json!({"type":"response.create","model":"test-model","store":true,
+            "previous_response_id":parent,"generate":false,
+            "input":[{"type":"function_call_output","call_id":"unknown","output":"unused"}]}),
+        )
+        .await;
+        assert_eq!(recv_json(&mut ws).await["type"], "error");
+        send_json(
+            &mut ws,
+            json!({"type":"response.create","model":"test-model","store":true,
+            "previous_response_id":parent,"generate":false,"input":input}),
+        )
+        .await;
+        let warmup = recv_until_completed(&mut ws).await;
+        assert_eq!(mock.request_bodies().await.len(), 1, "warmup must not infer");
+        send_json(
+            &mut ws,
+            json!({"type":"response.create","model":"test-model","store":true,
+            "previous_response_id":warmup.last().unwrap()["response"]["id"],"input":[]}),
+        )
+        .await;
+        let generated = recv_until_completed(&mut ws).await;
+        let output = &generated.last().unwrap()["response"]["output"];
+        if discovery {
+            assert!(
+                output
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|item| item["call_id"] == "call_weather")
+            );
+        } else {
+            assert_eq!(output[0]["content"][0]["text"], "sunny");
+        }
+        let requests = mock.request_bodies().await;
+        assert_eq!(requests.len(), 2);
+        assert!(requests[1]["input"].as_array().unwrap().iter().any(|item| {
+            item["type"] == "function_call_output"
+                && item["call_id"] == if discovery { "call_search" } else { "call_weather" }
+        }));
+    }
 }
 
 // Keep a sibling inference active so client injection tests do not depend on
@@ -4678,6 +4843,10 @@ async fn assert_live_batch_rejections(
                 "Tool call 'unknown' is not pending on response '{}'.",
                 response_id.as_str().unwrap()
             ),
+        ),
+        (
+            json!([{"type":"custom_tool_call_output","call_id":"call_weather","output":"wrong kind"}]),
+            "output for call_weather has kind Custom; expected Function".to_owned(),
         ),
     ] {
         send_json(

@@ -175,6 +175,7 @@ impl MultiAgentRun {
             child.agent.clone(),
             AgentContext {
                 discovery: Vec::new(),
+                discovery_dirty: false,
                 generation: 0,
                 compacted_generation: None,
                 compacting: false,

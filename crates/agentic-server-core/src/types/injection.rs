@@ -33,6 +33,20 @@ impl From<InjectionInput> for ClientToolOutput {
     }
 }
 
+impl From<ClientToolOutput> for InjectionInput {
+    fn from(output: ClientToolOutput) -> Self {
+        match output {
+            ClientToolOutput::Function(output) => Self::Function(InjectionFunctionOutput {
+                call_id: output.call_id,
+                output: output.output,
+            }),
+            ClientToolOutput::Shell(output) => Self::Shell(output),
+            ClientToolOutput::Custom(output) => Self::Custom(output),
+            ClientToolOutput::ToolSearch(output) => Self::ToolSearch(output),
+        }
+    }
+}
+
 /// Reject unmodeled fields rather than silently dropping returned continuation input.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]

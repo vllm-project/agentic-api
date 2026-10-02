@@ -1,5 +1,6 @@
 //! Streaming ownership for transports that retain delivery after public completion.
 use super::run_until_gateway_tools_complete;
+use super::streaming::StreamFailureContext;
 use crate::executor::{
     error::{ExecutorError, ExecutorResult},
     gateway_accumulator::STREAM_EVENT_BUFFER,
@@ -7,7 +8,7 @@ use crate::executor::{
     multi_agent::RunControl,
     persist::persist_if_needed,
     request::{ExecutionContext, RequestContext},
-    response_events::ResponseEventSink,
+    response_events::{ResponseCommitState, ResponseEventSink},
     telemetry::ExecutionSpan,
     upstream::agent_pipeline_with_limits,
 };
@@ -17,6 +18,9 @@ use tokio::{sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument as _;
 
+/// A retained response's event stream, control handle, and execution owner.
+/// Drain events independently of waiting for execution or control decisions.
+#[must_use = "drain the response events and retain its owner until execution is joined"]
 pub struct RunningResponse {
     pub response_id: String,
     pub control: Option<RunControl>,
@@ -27,7 +31,7 @@ pub struct RunningResponse {
 
 /// Drop requests cancellation; adapters explicitly cancel and join on disconnect.
 pub struct ResponseRunOwner {
-    task: JoinHandle<ExecutorResult<()>>,
+    task: Option<JoinHandle<ExecutorResult<()>>>,
     cancellation: CancellationToken,
     sink: ResponseEventSink,
 }
@@ -38,20 +42,28 @@ impl ResponseRunOwner {
         self.cancellation.clone()
     }
 
+    /// Request cancellation without detaching execution; still call [`Self::join`].
     pub fn cancel(&self) {
         self.cancellation.cancel();
     }
     /// # Errors
-    /// Propagates execution, persistence, and task failure.
+    /// Propagates execution, persistence, and task failure. Repeated calls after
+    /// completion return an error. Cancelling this wait leaves the owner joinable.
     pub async fn join(&mut self) -> ExecutorResult<()> {
-        let result = match (&mut self.task).await {
+        let task = self
+            .task
+            .as_mut()
+            .ok_or_else(|| ExecutorError::StreamError("response task has already been joined".into()))?;
+        let outcome = task.await;
+        self.task = None;
+        let result = match outcome {
             Ok(result) => result,
             Err(error) => {
                 self.sink.mark_aborted();
                 return Err(ExecutorError::StreamError(format!("response task failed: {error}")));
             }
         };
-        if result.is_err() {
+        if result.is_err() && self.sink.commit_state() != ResponseCommitState::Aborted {
             self.sink.mark_failed();
         }
         result
@@ -72,6 +84,7 @@ pub(super) fn start(
     mut execution: ExecutionSpan,
 ) -> RunningResponse {
     let response_id = ctx.response_id.clone();
+    let failure_context = StreamFailureContext::from(&ctx);
     let (sender, receiver) = mpsc::channel(STREAM_EVENT_BUFFER);
     let sink = ResponseEventSink::new(sender.clone(), max_bytes);
     let mut pipeline = agent_pipeline_with_limits(ctx, tools, Some(sender), max_bytes);
@@ -135,7 +148,21 @@ pub(super) fn start(
             tokio::select! {
                 biased;
                 () = worker_cancel.cancelled() => {},
-                _ = worker_sink.emit_error(error) => {},
+                delivery = async {
+                    if error.is_invalid_upstream_tool_search() {
+                        worker_sink.emit_terminal(&failure_context.failed_payload(error)).await
+                    } else {
+                        worker_sink.emit_error(error).await
+                    }
+                } => {
+                    if let Err(error) = delivery {
+                        // The execution failure and delivery failure are distinct:
+                        // no terminal frame reached the relay, so the adapter must
+                        // close the transport rather than leave the client waiting.
+                        worker_sink.mark_aborted();
+                        tracing::debug!(error = ?error, "failed to deliver response failure");
+                    }
+                },
             }
         }
         result
@@ -148,7 +175,7 @@ pub(super) fn start(
         events,
         sink,
         owner: ResponseRunOwner {
-            task,
+            task: Some(task),
             cancellation,
             sink: owner_sink,
         },

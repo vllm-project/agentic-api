@@ -7,11 +7,13 @@ use tokio::sync::{mpsc, oneshot, watch};
 use crate::events::{EventFrame, EventPayload, SSEEventType, WireEvent};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::{
-    GatewayStreamAccumulator, StreamEvent, checked_stream_event_limited, executor_error_frame, terminal_response_frame,
+    GatewayStreamAccumulator, StreamEvent, StreamFrame, checked_stream_event_limited, executor_error_frame,
+    terminal_response_frame,
 };
 use crate::types::{injection::InjectionEvent, request_response::ResponsePayload};
 use crate::utils::common::serialize_to_value;
 
+/// Execution and persistence outcome, independent of event-delivery success.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ResponseCommitState {
     Running,
@@ -43,10 +45,12 @@ impl ResponseEventSink {
     pub(super) fn stream(receiver: mpsc::Receiver<StreamEvent>) -> BoxStream {
         futures::stream::unfold(receiver, |mut receiver| async move {
             while let Some(event) = receiver.recv().await {
-                if let Some(flushed) = event.flushed {
-                    let _ = flushed.send(());
-                } else {
-                    return Some((event.content, receiver));
+                match event {
+                    StreamEvent::Frame(frame) => return Some((frame.content, receiver)),
+                    StreamEvent::Flush(flushed) => {
+                        // A cancelled flush waiter does not cancel event delivery.
+                        let _ = flushed.send(());
+                    }
                 }
             }
             None
@@ -59,14 +63,7 @@ impl ResponseEventSink {
     /// A dropped relay is an explicit delivery failure.
     pub async fn flush(&self) -> ExecutorResult<()> {
         let (send, receive) = oneshot::channel();
-        self.sender
-            .send(StreamEvent {
-                content: String::new(),
-                sequence_number: 0,
-                flushed: Some(send),
-            })
-            .await
-            .map_err(|_| closed())?;
+        self.sender.send(StreamEvent::Flush(send)).await.map_err(|_| closed())?;
         receive.await.map_err(|_| closed())
     }
 
@@ -81,20 +78,24 @@ impl ResponseEventSink {
         }
     }
 
+    /// Read the latest execution state without waiting for a terminal outcome.
     #[must_use]
     pub fn commit_state(&self) -> ResponseCommitState {
         *self.commit.borrow()
     }
 
-    /// Wait for persistence, not merely closure of input admission.
+    /// Wait for persistence or terminal execution failure, rather than merely
+    /// closure of input admission. Inspect [`Self::commit_state`] to distinguish
+    /// a committed checkpoint from failed or aborted execution.
     /// # Errors
-    /// Returns an error if execution or persistence fails.
-    pub async fn wait_committed(&self) -> ExecutorResult<()> {
+    /// Returns an error if the state publisher disconnects before finishing.
+    pub async fn wait_finished(&self) -> ExecutorResult<()> {
         let mut state = self.commit.subscribe();
         loop {
             match *state.borrow_and_update() {
-                ResponseCommitState::Committed => return Ok(()),
-                ResponseCommitState::Failed | ResponseCommitState::Aborted => return Err(closed()),
+                ResponseCommitState::Committed | ResponseCommitState::Failed | ResponseCommitState::Aborted => {
+                    return Ok(());
+                }
                 ResponseCommitState::Running => {}
             }
             state.changed().await.map_err(|_| closed())?;
@@ -133,11 +134,10 @@ impl ResponseEventSink {
         }
         let content = checked_stream_event_limited(frame, self.max_bytes)?;
         let sequence_number = frame.sequence_number().expect("delivery assigned a sequence");
-        permit.send(StreamEvent {
-            flushed: None,
+        permit.send(StreamEvent::Frame(StreamFrame {
             content,
             sequence_number,
-        });
+        }));
         *state = published;
         Ok(true)
     }
@@ -151,8 +151,14 @@ impl ResponseEventSink {
     }
 
     pub(super) async fn emit_terminal(&self, payload: &ResponsePayload) -> ExecutorResult<()> {
-        self.emit_frame(&mut terminal_response_frame(payload)?, 0).await?;
-        self.commit.send_replace(ResponseCommitState::Committed);
+        let mut frame = terminal_response_frame(payload)?;
+        let state = if frame.event_type == SSEEventType::ResponseFailed {
+            ResponseCommitState::Failed
+        } else {
+            ResponseCommitState::Committed
+        };
+        self.emit_frame(&mut frame, 0).await?;
+        self.commit.send_replace(state);
         Ok(())
     }
 
@@ -182,6 +188,25 @@ mod tests {
         serde_json::from_str::<serde_json::Value>(data).unwrap()["sequence_number"]
             .as_u64()
             .unwrap()
+    }
+
+    #[tokio::test]
+    async fn terminal_wait_observes_failed_and_aborted_execution() {
+        for aborted in [false, true] {
+            let (sink, _stream) = ResponseEventSink::channel(4096);
+            let wait = sink.wait_finished();
+            tokio::pin!(wait);
+            assert!(wait.as_mut().now_or_never().is_none());
+            if aborted {
+                sink.mark_aborted();
+            } else {
+                sink.mark_failed();
+            }
+            wait.await.unwrap();
+            // Reusing the retained sink after terminal failure still observes
+            // completion immediately, rather than waiting for a nonexistent commit.
+            assert!(sink.wait_finished().now_or_never().unwrap().is_ok());
+        }
     }
 
     #[tokio::test]

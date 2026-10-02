@@ -12,7 +12,8 @@ Record OpenAI first, review the observations, then implement and compare gateway
 Records delegated review, proposal comparison, mixed web/MCP/shell tools,
 client-owned tool search, functions, and custom tools, and two-agent algorithm jobs,
 each over HTTP JSON/SSE or a persistent WebSocket session.
-Set MULTI_AGENT_TRANSPORT=websocket for five separate duplex YAMLs per provider.
+Set MULTI_AGENT_TRANSPORT=websocket with MULTI_AGENT_SUITE=all for seven duplex YAMLs
+per provider: five task scenarios, regular edge cases, and active edge cases.
 The same prompts and tool fixtures are reused unchanged; existing HTTP YAMLs are untouched.
 WebSocket captures retain actual client/server frames, handshake headers (credentials
 masked), injection outcomes, and close/failure details without synthesizing SSE.
@@ -20,10 +21,11 @@ Function, shell, custom, and discovery outputs are submitted for characterizatio
 a provider may reject an injection kind. Such failures are preserved and reported,
 not retried as though accepted input were rejected.
 Positive scenarios enable multi-agent with store:true and the multi-agent beta header.
-Select MULTI_AGENT_SUITE=websocket-edge-cases separately for four state/race/atomicity probes.
+Select MULTI_AGENT_SUITE=websocket-edge-cases to record only the four state/race/atomicity probes.
 All edge cases share one YAML per provider, with a labeled session for each probe.
-MULTI_AGENT_EDGE_ACTIVE=true uses [websocket-active] sibling text generation during injection
+For that focused suite, MULTI_AGENT_EDGE_ACTIVE=true uses [websocket-active] sibling text generation during injection
 and writes a separate ws-active-text-edge-cases YAML. Reruns keep completed cases and append new attempts.
+With WebSocket all, both regular and active probes always run.
 MULTI_AGENT_EDGE_CASE selects one probe (default: all); MULTI_AGENT_EDGE_TIMEOUT bounds each probe (default: 120 seconds).
 Client-tool continuations use previous_response_id and matching tool outputs.
 
@@ -55,7 +57,8 @@ To supply dependencies without changing your project environment:
 
 --dry-run prints commands without contacting APIs or writing any files.
 all selects review, proposals, mixed-tools, client-owned-tools, and code-interpreter:
-ten YAML files per provider with the default both mode, or five for one stream mode.
+ten HTTP YAML files per provider with the default both mode, or five for one stream mode.
+WebSocket all also includes both edge-case suites, for seven YAML files per provider.
 The former parameter-only edge-cases, failure-cases, and compaction recordings
 are not behavioral coverage and are no longer generated. Existing YAML is left alone.
 Runtime edge cases, failures, and compaction still need dedicated scenarios.
@@ -208,23 +211,32 @@ scenario_prompts() {
   ' "$FIXTURES_DIR/prompts.txt"
 }
 
+record_websocket_edges() {
+  local provider="$1" endpoint="$2" model="$3" active="$4"
+  local -a edge_command=("$PYTHON" -u "$SCRIPTS_DIR/websocket_recorder.py"
+    --provider "$provider" --url "$endpoint" --model "$model" --output-dir "$BASE_DIR"
+    --case "${MULTI_AGENT_EDGE_CASE:-all}" --timeout "${MULTI_AGENT_EDGE_TIMEOUT:-120}")
+  case "$active" in
+    true) edge_command+=(--active) ;;
+    false) ;;
+    *) echo 'ERROR: MULTI_AGENT_EDGE_ACTIVE must be true or false' >&2; exit 2 ;;
+  esac
+  if [[ "$DRY_RUN" == true ]]; then
+    printf '%q ' "${edge_command[@]}"
+    printf '\n'
+    return
+  fi
+  if "${edge_command[@]}"; then :; else
+    local edge_status=$?
+    if (( edge_status == 130 || edge_status == 143 )); then exit "$edge_status"; fi
+    FAILED_RECORDINGS+=("$provider websocket edge cases (active=$active)")
+  fi
+}
+
 record_scenarios() {
   local provider="$1" endpoint_flag="$2" endpoint="$3" model="$4"
   if [[ "$SUITE" == websocket-edge-cases ]]; then
-    local -a edge_command=("$PYTHON" -u "$SCRIPTS_DIR/websocket_recorder.py"
-      --provider "$provider" --url "$endpoint" --model "$model" --output-dir "$BASE_DIR"
-      --case "${MULTI_AGENT_EDGE_CASE:-all}" --timeout "${MULTI_AGENT_EDGE_TIMEOUT:-120}")
-    case "${MULTI_AGENT_EDGE_ACTIVE:-false}" in
-      true) edge_command+=(--active) ;;
-      false) ;;
-      *) echo 'ERROR: MULTI_AGENT_EDGE_ACTIVE must be true or false' >&2; exit 2 ;;
-    esac
-    if [[ "$DRY_RUN" == true ]]; then edge_command+=(--dry-run); fi
-    if "${edge_command[@]}"; then :; else
-      local edge_status=$?
-      if (( edge_status == 130 || edge_status == 143 )); then exit "$edge_status"; fi
-      FAILED_RECORDINGS+=("$provider websocket edge cases")
-    fi
+    record_websocket_edges "$provider" "$endpoint" "$model" "${MULTI_AGENT_EDGE_ACTIVE:-false}"
     return
   fi
   local scenario mode turns output prompts model_slug status agent_limit multi_agent_config
@@ -287,6 +299,10 @@ record_scenarios() {
       fi
     done
   done
+  if [[ "$SUITE" == all && "$TRANSPORT" == websocket ]]; then
+    record_websocket_edges "$provider" "$endpoint" "$model" false
+    record_websocket_edges "$provider" "$endpoint" "$model" true
+  fi
 }
 
 if [[ "$RECORD_SET" == openai || "$RECORD_SET" == all ]]; then

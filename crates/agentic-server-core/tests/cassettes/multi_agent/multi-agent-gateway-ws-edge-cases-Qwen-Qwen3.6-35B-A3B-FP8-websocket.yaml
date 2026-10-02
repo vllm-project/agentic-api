@@ -8,18 +8,19 @@ sessions:
           OpenAI-Beta: responses_multi_agent=v1
       probe:
         case: late-continuation
-        wall_timeout_seconds: 120.0
+        active: false
+        wall_timeout_seconds: 600.0
       response:
         status_code: 101
         headers:
           upgrade: websocket
-          sec-websocket-accept: LUjIxkqNPIKpPQlK6JjFVkdl47E=
+          sec-websocket-accept: Dx45WoJy9HdLvnS8qngNIiR6Jtg=
           vary: origin, access-control-request-method, access-control-request-headers
           access-control-allow-origin: '*'
-          date: Thu, 01 Oct 2026 08:00:53 GMT
+          date: Fri, 02 Oct 2026 05:31:47 GMT
     frames:
       - ordinal: 0
-        elapsed_ms: 1.211
+        elapsed_ms: 3.083
         direction: client
         opcode: 1
         fin: true
@@ -27,661 +28,570 @@ sessions:
           edge_echo exactly once yourself, without spawning subagents. After receiving its output, reply with that output.","tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}]}'
       - ordinal: 1
-        elapsed_ms: 2.557
+        elapsed_ms: 4.68
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.created","sequence_number":0,"response":{"id":"resp_01a0f67b-0a1f-7003-9e70-6a620ae55306","object":"response","created_at":1790841653,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
+        text: '{"type":"response.created","sequence_number":0,"response":{"id":"resp_01a0fb18-e3da-7c73-92b3-90b0bc150f61","object":"response","created_at":1790919107,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}]}}'
       - ordinal: 2
-        elapsed_ms: 3.208
+        elapsed_ms: 5.539
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a0f67b-0a1f-7003-9e70-6a620ae55306","object":"response","created_at":1790841653,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
+        text: '{"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a0fb18-e3da-7c73-92b3-90b0bc150f61","object":"response","created_at":1790919107,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}]}}'
       - ordinal: 3
-        elapsed_ms: 171.25
+        elapsed_ms: 165.972
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.output_item.added","sequence_number":2,"output_index":0,"agent":{"agent_name":"/root"},"item":{"id":"bb2a1fa0e25b5a69","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
+        text: '{"type":"response.output_item.added","sequence_number":2,"output_index":0,"agent":{"agent_name":"/root"},"item":{"id":"8a65746f510c95a8","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
       - ordinal: 4
-        elapsed_ms: 172.397
+        elapsed_ms: 167.414
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_part.added","sequence_number":3,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"bb2a1fa0e25b5a69","part":{"text":"","type":"reasoning_text"}}'
+        text: '{"type":"response.reasoning_part.added","sequence_number":3,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"8a65746f510c95a8","part":{"text":"","type":"reasoning_text"}}'
       - ordinal: 5
-        elapsed_ms: 173.025
+        elapsed_ms: 168.279
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"The","item_id":"bb2a1fa0e25b5a69"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"The","item_id":"8a65746f510c95a8"}'
       - ordinal: 6
-        elapsed_ms: 173.68
+        elapsed_ms: 169.074
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":5,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          user","item_id":"bb2a1fa0e25b5a69"}'
+          user","item_id":"8a65746f510c95a8"}'
       - ordinal: 7
-        elapsed_ms: 174.99
+        elapsed_ms: 173.488
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":6,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          wants","item_id":"bb2a1fa0e25b5a69"}'
+          wants","item_id":"8a65746f510c95a8"}'
       - ordinal: 8
-        elapsed_ms: 181.585
+        elapsed_ms: 180.495
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":7,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          me","item_id":"bb2a1fa0e25b5a69"}'
+          me","item_id":"8a65746f510c95a8"}'
       - ordinal: 9
-        elapsed_ms: 188.225
+        elapsed_ms: 187.409
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":8,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          to","item_id":"bb2a1fa0e25b5a69"}'
+          to","item_id":"8a65746f510c95a8"}'
       - ordinal: 10
-        elapsed_ms: 194.563
+        elapsed_ms: 193.286
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":9,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          call","item_id":"bb2a1fa0e25b5a69"}'
+          call","item_id":"8a65746f510c95a8"}'
       - ordinal: 11
-        elapsed_ms: 201.143
+        elapsed_ms: 199.917
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":10,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          edge","item_id":"bb2a1fa0e25b5a69"}'
+          edge","item_id":"8a65746f510c95a8"}'
       - ordinal: 12
-        elapsed_ms: 207.278
+        elapsed_ms: 206.318
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_echo","item_id":"bb2a1fa0e25b5a69"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_echo","item_id":"8a65746f510c95a8"}'
       - ordinal: 13
-        elapsed_ms: 213.646
+        elapsed_ms: 212.701
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          exactly","item_id":"bb2a1fa0e25b5a69"}'
+          exactly","item_id":"8a65746f510c95a8"}'
       - ordinal: 14
-        elapsed_ms: 220.255
+        elapsed_ms: 219.089
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":13,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          once","item_id":"bb2a1fa0e25b5a69"}'
+          once","item_id":"8a65746f510c95a8"}'
       - ordinal: 15
-        elapsed_ms: 226.304
+        elapsed_ms: 225.221
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":14,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          myself","item_id":"bb2a1fa0e25b5a69"}'
+          myself","item_id":"8a65746f510c95a8"}'
       - ordinal: 16
-        elapsed_ms: 232.933
+        elapsed_ms: 231.507
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":",","item_id":"bb2a1fa0e25b5a69"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":",","item_id":"8a65746f510c95a8"}'
       - ordinal: 17
-        elapsed_ms: 239.256
+        elapsed_ms: 238.031
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":16,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          without","item_id":"bb2a1fa0e25b5a69"}'
+          without","item_id":"8a65746f510c95a8"}'
       - ordinal: 18
-        elapsed_ms: 245.489
+        elapsed_ms: 244.19
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":17,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          spawning","item_id":"bb2a1fa0e25b5a69"}'
+          spawning","item_id":"8a65746f510c95a8"}'
       - ordinal: 19
-        elapsed_ms: 252.156
+        elapsed_ms: 250.619
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":18,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          sub","item_id":"bb2a1fa0e25b5a69"}'
+          sub","item_id":"8a65746f510c95a8"}'
       - ordinal: 20
-        elapsed_ms: 258.275
+        elapsed_ms: 257.548
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"agents","item_id":"bb2a1fa0e25b5a69"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"agents","item_id":"8a65746f510c95a8"}'
       - ordinal: 21
-        elapsed_ms: 264.471
+        elapsed_ms: 263.169
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":20,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"bb2a1fa0e25b5a69"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":20,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":",","item_id":"8a65746f510c95a8"}'
       - ordinal: 22
-        elapsed_ms: 271.626
+        elapsed_ms: 269.728
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":21,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          After","item_id":"bb2a1fa0e25b5a69"}'
+          and","item_id":"8a65746f510c95a8"}'
       - ordinal: 23
-        elapsed_ms: 277.376
+        elapsed_ms: 275.98
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":22,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          receiving","item_id":"bb2a1fa0e25b5a69"}'
+          then","item_id":"8a65746f510c95a8"}'
       - ordinal: 24
-        elapsed_ms: 283.46
+        elapsed_ms: 282.172
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":23,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          its","item_id":"bb2a1fa0e25b5a69"}'
+          reply","item_id":"8a65746f510c95a8"}'
       - ordinal: 25
-        elapsed_ms: 289.742
+        elapsed_ms: 288.617
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":24,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          output","item_id":"bb2a1fa0e25b5a69"}'
+          with","item_id":"8a65746f510c95a8"}'
       - ordinal: 26
-        elapsed_ms: 296.4
+        elapsed_ms: 295.396
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":25,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":",","item_id":"bb2a1fa0e25b5a69"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":25,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          the","item_id":"8a65746f510c95a8"}'
       - ordinal: 27
-        elapsed_ms: 302.51
+        elapsed_ms: 301.379
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":26,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          I","item_id":"bb2a1fa0e25b5a69"}'
+          output","item_id":"8a65746f510c95a8"}'
       - ordinal: 28
-        elapsed_ms: 308.85
+        elapsed_ms: 307.97
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":27,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          need","item_id":"bb2a1fa0e25b5a69"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":27,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"8a65746f510c95a8"}'
       - ordinal: 29
-        elapsed_ms: 315.041
+        elapsed_ms: 314.324
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":28,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          to","item_id":"bb2a1fa0e25b5a69"}'
+          Let","item_id":"8a65746f510c95a8"}'
       - ordinal: 30
-        elapsed_ms: 321.591
+        elapsed_ms: 320.428
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":29,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          reply","item_id":"bb2a1fa0e25b5a69"}'
+          me","item_id":"8a65746f510c95a8"}'
       - ordinal: 31
-        elapsed_ms: 327.662
+        elapsed_ms: 326.565
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":30,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          with","item_id":"bb2a1fa0e25b5a69"}'
+          do","item_id":"8a65746f510c95a8"}'
       - ordinal: 32
-        elapsed_ms: 333.958
+        elapsed_ms: 332.618
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":31,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          that","item_id":"bb2a1fa0e25b5a69"}'
+          that","item_id":"8a65746f510c95a8"}'
       - ordinal: 33
-        elapsed_ms: 340.65
+        elapsed_ms: 338.889
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":32,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          output","item_id":"bb2a1fa0e25b5a69"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":32,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"8a65746f510c95a8"}'
       - ordinal: 34
-        elapsed_ms: 347.278
+        elapsed_ms: 345.334
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":33,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"bb2a1fa0e25b5a69"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":33,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"\n","item_id":"8a65746f510c95a8"}'
       - ordinal: 35
-        elapsed_ms: 352.67
+        elapsed_ms: 409.769
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":34,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          This","item_id":"bb2a1fa0e25b5a69"}'
+        text: '{"type":"response.reasoning_text.done","sequence_number":34,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"8a65746f510c95a8","text":"The
+          user wants me to call edge_echo exactly once myself, without spawning subagents, and then reply with the output. Let me
+          do that.\n"}'
       - ordinal: 36
-        elapsed_ms: 358.853
+        elapsed_ms: 411.349
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":35,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          is","item_id":"bb2a1fa0e25b5a69"}'
+        text: '{"type":"response.reasoning_part.done","sequence_number":35,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"8a65746f510c95a8","part":{"text":"The
+          user wants me to call edge_echo exactly once myself, without spawning subagents, and then reply with the output. Let me
+          do that.\n","type":"reasoning_text"}}'
       - ordinal: 37
-        elapsed_ms: 365.22
+        elapsed_ms: 412.557
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":36,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          a","item_id":"bb2a1fa0e25b5a69"}'
+        text: '{"type":"response.output_item.added","sequence_number":36,"output_index":1,"agent":{"agent_name":"/root"},"item":{"arguments":"","call_id":"call_9c975905223cdd03","name":"edge_echo","type":"function_call","id":"86227dfab5a019f2","caller":null,"namespace":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
       - ordinal: 38
-        elapsed_ms: 371.237
+        elapsed_ms: 428.228
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":37,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          simple","item_id":"bb2a1fa0e25b5a69"}'
+        text: '{"type":"response.function_call_arguments.delta","sequence_number":37,"output_index":1,"agent":{"agent_name":"/root"},"delta":"{}","item_id":"86227dfab5a019f2"}'
       - ordinal: 39
-        elapsed_ms: 377.869
+        elapsed_ms: 448.444
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":38,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          direct","item_id":"bb2a1fa0e25b5a69"}'
+        text: '{"type":"response.function_call_arguments.done","sequence_number":38,"output_index":1,"agent":{"agent_name":"/root"},"arguments":"{}","item_id":"86227dfab5a019f2","name":"edge_echo"}'
       - ordinal: 40
-        elapsed_ms: 383.973
+        elapsed_ms: 449.086
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":39,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          task","item_id":"bb2a1fa0e25b5a69"}'
+        text: '{"type":"response.output_item.done","sequence_number":39,"output_index":0,"agent":{"agent_name":"/root"},"item":{"type":"reasoning","agent":{"agent_name":"/root"},"id":"8a65746f510c95a8","content":[{"type":"reasoning_text","text":"The
+          user wants me to call edge_echo exactly once myself, without spawning subagents, and then reply with the output. Let me
+          do that.\n"}],"summary":[],"encrypted_content":null,"status":"completed"}}'
       - ordinal: 41
-        elapsed_ms: 390.217
+        elapsed_ms: 450.01
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":40,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"bb2a1fa0e25b5a69"}'
+        text: '{"type":"response.output_item.done","sequence_number":40,"output_index":1,"agent":{"agent_name":"/root"},"item":{"type":"function_call","agent":{"agent_name":"/root"},"id":"86227dfab5a019f2","call_id":"call_9c975905223cdd03","name":"edge_echo","arguments":"{}","status":"completed"}}'
       - ordinal: 42
-        elapsed_ms: 396.499
+        elapsed_ms: 451.286
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":41,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"\n\n","item_id":"bb2a1fa0e25b5a69"}'
-      - ordinal: 43
-        elapsed_ms: 403.035
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":42,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"Let","item_id":"bb2a1fa0e25b5a69"}'
-      - ordinal: 44
-        elapsed_ms: 409.455
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":43,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          me","item_id":"bb2a1fa0e25b5a69"}'
-      - ordinal: 45
-        elapsed_ms: 415.507
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":44,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          call","item_id":"bb2a1fa0e25b5a69"}'
-      - ordinal: 46
-        elapsed_ms: 422.272
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":45,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          edge","item_id":"bb2a1fa0e25b5a69"}'
-      - ordinal: 47
-        elapsed_ms: 428.154
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":46,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_echo","item_id":"bb2a1fa0e25b5a69"}'
-      - ordinal: 48
-        elapsed_ms: 434.322
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":47,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          now","item_id":"bb2a1fa0e25b5a69"}'
-      - ordinal: 49
-        elapsed_ms: 440.453
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":48,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"bb2a1fa0e25b5a69"}'
-      - ordinal: 50
-        elapsed_ms: 447.087
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":49,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"\n","item_id":"bb2a1fa0e25b5a69"}'
-      - ordinal: 51
-        elapsed_ms: 511.042
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.reasoning_text.done","sequence_number":50,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"bb2a1fa0e25b5a69","text":"The
-          user wants me to call edge_echo exactly once myself, without spawning subagents. After receiving its output, I need to
-          reply with that output. This is a simple direct task.\n\nLet me call edge_echo now.\n"}'
-      - ordinal: 52
-        elapsed_ms: 512.181
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.reasoning_part.done","sequence_number":51,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"bb2a1fa0e25b5a69","part":{"text":"The
-          user wants me to call edge_echo exactly once myself, without spawning subagents. After receiving its output, I need to
-          reply with that output. This is a simple direct task.\n\nLet me call edge_echo now.\n","type":"reasoning_text"}}'
-      - ordinal: 53
-        elapsed_ms: 513.142
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.output_item.added","sequence_number":52,"output_index":1,"agent":{"agent_name":"/root"},"item":{"arguments":"","call_id":"call_ba254adc350d05f0","name":"edge_echo","type":"function_call","id":"94b40922660cb05c","caller":null,"namespace":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
-      - ordinal: 54
-        elapsed_ms: 529.265
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.function_call_arguments.delta","sequence_number":53,"output_index":1,"agent":{"agent_name":"/root"},"delta":"{}","item_id":"94b40922660cb05c"}'
-      - ordinal: 55
-        elapsed_ms: 551.146
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.function_call_arguments.done","sequence_number":54,"output_index":1,"agent":{"agent_name":"/root"},"arguments":"{}","item_id":"94b40922660cb05c","name":"edge_echo"}'
-      - ordinal: 56
-        elapsed_ms: 552.382
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.output_item.done","sequence_number":55,"output_index":0,"agent":{"agent_name":"/root"},"item":{"type":"reasoning","agent":{"agent_name":"/root"},"id":"bb2a1fa0e25b5a69","content":[{"type":"reasoning_text","text":"The
-          user wants me to call edge_echo exactly once myself, without spawning subagents. After receiving its output, I need to
-          reply with that output. This is a simple direct task.\n\nLet me call edge_echo now.\n"}],"summary":[],"encrypted_content":null,"status":"completed"}}'
-      - ordinal: 57
-        elapsed_ms: 553.928
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.output_item.done","sequence_number":56,"output_index":1,"agent":{"agent_name":"/root"},"item":{"type":"function_call","agent":{"agent_name":"/root"},"id":"94b40922660cb05c","call_id":"call_ba254adc350d05f0","name":"edge_echo","arguments":"{}","status":"completed"}}'
-      - ordinal: 58
-        elapsed_ms: 560.821
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.completed","sequence_number":57,"response":{"id":"resp_01a0f67b-0a1f-7003-9e70-6a620ae55306","object":"response","created_at":1790841653,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"completed","output":[{"type":"reasoning","agent":{"agent_name":"/root"},"id":"bb2a1fa0e25b5a69","content":[{"type":"reasoning_text","text":"The
-          user wants me to call edge_echo exactly once myself, without spawning subagents. After receiving its output, I need to
-          reply with that output. This is a simple direct task.\n\nLet me call edge_echo now.\n"}],"summary":[],"encrypted_content":null,"status":"completed"},{"type":"function_call","agent":{"agent_name":"/root"},"id":"94b40922660cb05c","call_id":"call_ba254adc350d05f0","name":"edge_echo","arguments":"{}","status":"completed"}],"usage":{"input_tokens":1941,"output_tokens":62,"total_tokens":2003,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
+        text: '{"type":"response.completed","sequence_number":41,"response":{"id":"resp_01a0fb18-e3da-7c73-92b3-90b0bc150f61","object":"response","created_at":1790919107,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"completed","output":[{"type":"reasoning","agent":{"agent_name":"/root"},"id":"8a65746f510c95a8","content":[{"type":"reasoning_text","text":"The
+          user wants me to call edge_echo exactly once myself, without spawning subagents, and then reply with the output. Let me
+          do that.\n"}],"summary":[],"encrypted_content":null,"status":"completed"},{"type":"function_call","agent":{"agent_name":"/root"},"id":"86227dfab5a019f2","call_id":"call_9c975905223cdd03","name":"edge_echo","arguments":"{}","status":"completed"}],"usage":{"input_tokens":1941,"output_tokens":46,"total_tokens":1987,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}]}}'
-      - ordinal: 59
-        elapsed_ms: 564.093
+      - ordinal: 43
+        elapsed_ms: 452.536
         direction: client
         opcode: 1
         fin: true
-        text: '{"type":"response.inject","response_id":"resp_01a0f67b-0a1f-7003-9e70-6a620ae55306","input":[{"type":"function_call_output","call_id":"call_ba254adc350d05f0","output":"EDGE_OK"}]}'
-      - ordinal: 60
-        elapsed_ms: 565.047
+        text: '{"type":"response.inject","response_id":"resp_01a0fb18-e3da-7c73-92b3-90b0bc150f61","input":[{"type":"function_call_output","call_id":"call_9c975905223cdd03","output":"EDGE_OK"}]}'
+      - ordinal: 44
+        elapsed_ms: 452.897
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.inject.failed","sequence_number":58,"response_id":"resp_01a0f67b-0a1f-7003-9e70-6a620ae55306","input":[{"type":"function_call_output","call_id":"call_ba254adc350d05f0","output":"EDGE_OK"}],"error":{"code":"response_already_completed","message":"Response
-          ''resp_01a0f67b-0a1f-7003-9e70-6a620ae55306'' has already completed."}}'
-      - ordinal: 61
-        elapsed_ms: 565.708
+        text: '{"type":"response.inject.failed","sequence_number":42,"response_id":"resp_01a0fb18-e3da-7c73-92b3-90b0bc150f61","input":[{"type":"function_call_output","call_id":"call_9c975905223cdd03","output":"EDGE_OK"}],"error":{"code":"response_already_completed","message":"Response
+          ''resp_01a0fb18-e3da-7c73-92b3-90b0bc150f61'' has already completed."}}'
+      - ordinal: 45
+        elapsed_ms: 453.709
         direction: client
         opcode: 1
         fin: true
-        text: '{"type":"response.create","model":"Qwen/Qwen3.6-35B-A3B-FP8","store":true,"multi_agent":{"enabled":true,"max_concurrent_subagents":1},"max_output_tokens":2048,"input":[{"type":"function_call_output","call_id":"call_ba254adc350d05f0","output":"EDGE_OK"}],"tools":[{"type":"function","name":"edge_echo","description":"Return
-          the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}],"previous_response_id":"resp_01a0f67b-0a1f-7003-9e70-6a620ae55306"}'
-      - ordinal: 62
-        elapsed_ms: 566.332
+        text: '{"type":"response.create","model":"Qwen/Qwen3.6-35B-A3B-FP8","store":true,"multi_agent":{"enabled":true,"max_concurrent_subagents":1},"max_output_tokens":2048,"input":[{"type":"function_call_output","call_id":"call_9c975905223cdd03","output":"EDGE_OK"}],"tools":[{"type":"function","name":"edge_echo","description":"Return
+          the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}],"previous_response_id":"resp_01a0fb18-e3da-7c73-92b3-90b0bc150f61"}'
+      - ordinal: 46
+        elapsed_ms: 454.377
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.created","sequence_number":0,"response":{"id":"resp_01a0f67b-0c54-7d90-b53a-4558951297c2","object":"response","created_at":1790841654,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":"resp_01a0f67b-0a1f-7003-9e70-6a620ae55306","conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
+        text: '{"type":"response.created","sequence_number":0,"response":{"id":"resp_01a0fb18-e59d-74d2-b49c-6ae982062c35","object":"response","created_at":1790919107,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":"resp_01a0fb18-e3da-7c73-92b3-90b0bc150f61","conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}],"tool_choice":"auto"}}'
-      - ordinal: 63
-        elapsed_ms: 566.993
+      - ordinal: 47
+        elapsed_ms: 455.073
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a0f67b-0c54-7d90-b53a-4558951297c2","object":"response","created_at":1790841654,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":"resp_01a0f67b-0a1f-7003-9e70-6a620ae55306","conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
+        text: '{"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a0fb18-e59d-74d2-b49c-6ae982062c35","object":"response","created_at":1790919107,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":"resp_01a0fb18-e3da-7c73-92b3-90b0bc150f61","conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}],"tool_choice":"auto"}}'
-      - ordinal: 64
-        elapsed_ms: 721.678
+      - ordinal: 48
+        elapsed_ms: 608.072
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.output_item.added","sequence_number":2,"output_index":0,"agent":{"agent_name":"/root"},"item":{"id":"a07fe2973029075c","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
-      - ordinal: 65
-        elapsed_ms: 722.705
+        text: '{"type":"response.output_item.added","sequence_number":2,"output_index":0,"agent":{"agent_name":"/root"},"item":{"id":"8b177eb7fae52431","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
+      - ordinal: 49
+        elapsed_ms: 609.103
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_part.added","sequence_number":3,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"a07fe2973029075c","part":{"text":"","type":"reasoning_text"}}'
-      - ordinal: 66
-        elapsed_ms: 723.382
+        text: '{"type":"response.reasoning_part.added","sequence_number":3,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"8b177eb7fae52431","part":{"text":"","type":"reasoning_text"}}'
+      - ordinal: 50
+        elapsed_ms: 609.842
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"The","item_id":"a07fe2973029075c"}'
-      - ordinal: 67
-        elapsed_ms: 725.272
+        text: '{"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"The","item_id":"8b177eb7fae52431"}'
+      - ordinal: 51
+        elapsed_ms: 610.394
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":5,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          edge","item_id":"a07fe2973029075c"}'
-      - ordinal: 68
-        elapsed_ms: 732.821
+          edge","item_id":"8b177eb7fae52431"}'
+      - ordinal: 52
+        elapsed_ms: 617.644
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":6,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_echo","item_id":"a07fe2973029075c"}'
-      - ordinal: 69
-        elapsed_ms: 738.936
+        text: '{"type":"response.reasoning_text.delta","sequence_number":6,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_echo","item_id":"8b177eb7fae52431"}'
+      - ordinal: 53
+        elapsed_ms: 623.89
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":7,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          function","item_id":"a07fe2973029075c"}'
-      - ordinal: 70
-        elapsed_ms: 744.975
+          function","item_id":"8b177eb7fae52431"}'
+      - ordinal: 54
+        elapsed_ms: 630.478
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":8,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          returned","item_id":"a07fe2973029075c"}'
-      - ordinal: 71
-        elapsed_ms: 751.688
+          returned","item_id":"8b177eb7fae52431"}'
+      - ordinal: 55
+        elapsed_ms: 636.855
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":9,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          \"","item_id":"a07fe2973029075c"}'
-      - ordinal: 72
-        elapsed_ms: 758.105
+          \"","item_id":"8b177eb7fae52431"}'
+      - ordinal: 56
+        elapsed_ms: 643.293
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":10,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"EDGE","item_id":"a07fe2973029075c"}'
-      - ordinal: 73
-        elapsed_ms: 764.275
+        text: '{"type":"response.reasoning_text.delta","sequence_number":10,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"EDGE","item_id":"8b177eb7fae52431"}'
+      - ordinal: 57
+        elapsed_ms: 650.21
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_OK","item_id":"a07fe2973029075c"}'
-      - ordinal: 74
-        elapsed_ms: 770.845
+        text: '{"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_OK","item_id":"8b177eb7fae52431"}'
+      - ordinal: 58
+        elapsed_ms: 656.416
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"\".","item_id":"a07fe2973029075c"}'
-      - ordinal: 75
-        elapsed_ms: 777.005
+        text: '{"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"\".","item_id":"8b177eb7fae52431"}'
+      - ordinal: 59
+        elapsed_ms: 662.5
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":13,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          I","item_id":"a07fe2973029075c"}'
-      - ordinal: 76
-        elapsed_ms: 783.841
+          Now","item_id":"8b177eb7fae52431"}'
+      - ordinal: 60
+        elapsed_ms: 669.118
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":14,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          should","item_id":"a07fe2973029075c"}'
-      - ordinal: 77
-        elapsed_ms: 789.793
+          I","item_id":"8b177eb7fae52431"}'
+      - ordinal: 61
+        elapsed_ms: 675.27
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          now","item_id":"a07fe2973029075c"}'
-      - ordinal: 78
-        elapsed_ms: 796.216
+          need","item_id":"8b177eb7fae52431"}'
+      - ordinal: 62
+        elapsed_ms: 681.807
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":16,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          reply","item_id":"a07fe2973029075c"}'
-      - ordinal: 79
-        elapsed_ms: 802.301
+          to","item_id":"8b177eb7fae52431"}'
+      - ordinal: 63
+        elapsed_ms: 687.956
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":17,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          with","item_id":"a07fe2973029075c"}'
-      - ordinal: 80
-        elapsed_ms: 808.581
+          reply","item_id":"8b177eb7fae52431"}'
+      - ordinal: 64
+        elapsed_ms: 694.248
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":18,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          that","item_id":"a07fe2973029075c"}'
-      - ordinal: 81
-        elapsed_ms: 815.862
+          with","item_id":"8b177eb7fae52431"}'
+      - ordinal: 65
+        elapsed_ms: 700.414
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          output","item_id":"a07fe2973029075c"}'
-      - ordinal: 82
-        elapsed_ms: 821.739
+          that","item_id":"8b177eb7fae52431"}'
+      - ordinal: 66
+        elapsed_ms: 707.08
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":20,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          as","item_id":"a07fe2973029075c"}'
-      - ordinal: 83
-        elapsed_ms: 827.582
+          output","item_id":"8b177eb7fae52431"}'
+      - ordinal: 67
+        elapsed_ms: 713.291
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":21,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          requested","item_id":"a07fe2973029075c"}'
-      - ordinal: 84
-        elapsed_ms: 834.376
+          as","item_id":"8b177eb7fae52431"}'
+      - ordinal: 68
+        elapsed_ms: 719.619
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":22,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"a07fe2973029075c"}'
-      - ordinal: 85
-        elapsed_ms: 840.731
+        text: '{"type":"response.reasoning_text.delta","sequence_number":22,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          requested","item_id":"8b177eb7fae52431"}'
+      - ordinal: 69
+        elapsed_ms: 725.904
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":23,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"\n","item_id":"a07fe2973029075c"}'
-      - ordinal: 86
-        elapsed_ms: 859.682
+        text: '{"type":"response.reasoning_text.delta","sequence_number":23,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"8b177eb7fae52431"}'
+      - ordinal: 70
+        elapsed_ms: 732.24
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.done","sequence_number":24,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"a07fe2973029075c","text":"The
-          edge_echo function returned \"EDGE_OK\". I should now reply with that output as requested.\n"}'
-      - ordinal: 87
-        elapsed_ms: 860.309
+        text: '{"type":"response.reasoning_text.delta","sequence_number":24,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"\n","item_id":"8b177eb7fae52431"}'
+      - ordinal: 71
+        elapsed_ms: 751.98
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_part.done","sequence_number":25,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"a07fe2973029075c","part":{"text":"The
-          edge_echo function returned \"EDGE_OK\". I should now reply with that output as requested.\n","type":"reasoning_text"}}'
-      - ordinal: 88
-        elapsed_ms: 860.783
+        text: '{"type":"response.reasoning_text.done","sequence_number":25,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"8b177eb7fae52431","text":"The
+          edge_echo function returned \"EDGE_OK\". Now I need to reply with that output as requested.\n"}'
+      - ordinal: 72
+        elapsed_ms: 753.049
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.output_item.added","sequence_number":26,"output_index":1,"agent":{"agent_name":"/root"},"item":{"id":"ae4084a98b5691d8","content":[],"role":"assistant","status":"in_progress","type":"message","phase":null,"agent":{"agent_name":"/root"}}}'
-      - ordinal: 89
-        elapsed_ms: 861.22
+        text: '{"type":"response.reasoning_part.done","sequence_number":26,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"8b177eb7fae52431","part":{"text":"The
+          edge_echo function returned \"EDGE_OK\". Now I need to reply with that output as requested.\n","type":"reasoning_text"}}'
+      - ordinal: 73
+        elapsed_ms: 754.052
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.content_part.added","sequence_number":27,"output_index":1,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"ae4084a98b5691d8","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}'
-      - ordinal: 90
-        elapsed_ms: 861.614
+        text: '{"type":"response.output_item.added","sequence_number":27,"output_index":1,"agent":{"agent_name":"/root"},"item":{"id":"a8cf960097fe957d","content":[],"role":"assistant","status":"in_progress","type":"message","phase":null,"agent":{"agent_name":"/root"}}}'
+      - ordinal: 74
+        elapsed_ms: 754.926
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.output_text.delta","sequence_number":28,"output_index":1,"agent":{"agent_name":"/root"},"content_index":0,"delta":"\n\nEDGE","item_id":"ae4084a98b5691d8","logprobs":[]}'
-      - ordinal: 91
-        elapsed_ms: 865.628
+        text: '{"type":"response.content_part.added","sequence_number":28,"output_index":1,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"a8cf960097fe957d","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}'
+      - ordinal: 75
+        elapsed_ms: 755.846
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.output_text.delta","sequence_number":29,"output_index":1,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_OK","item_id":"ae4084a98b5691d8","logprobs":[]}'
-      - ordinal: 92
-        elapsed_ms: 873.569
+        text: '{"type":"response.output_text.delta","sequence_number":29,"output_index":1,"agent":{"agent_name":"/root"},"content_index":0,"delta":"\n\nEDGE","item_id":"a8cf960097fe957d","logprobs":[]}'
+      - ordinal: 76
+        elapsed_ms: 757.896
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.output_text.done","sequence_number":30,"output_index":1,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"ae4084a98b5691d8","logprobs":[],"text":"\n\nEDGE_OK"}'
-      - ordinal: 93
-        elapsed_ms: 874.898
+        text: '{"type":"response.output_text.delta","sequence_number":30,"output_index":1,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_OK","item_id":"a8cf960097fe957d","logprobs":[]}'
+      - ordinal: 77
+        elapsed_ms: 765.844
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.content_part.done","sequence_number":31,"output_index":1,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"ae4084a98b5691d8","part":{"annotations":[],"text":"\n\nEDGE_OK","type":"output_text","logprobs":null}}'
-      - ordinal: 94
-        elapsed_ms: 875.893
+        text: '{"type":"response.output_text.done","sequence_number":31,"output_index":1,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"a8cf960097fe957d","logprobs":[],"text":"\n\nEDGE_OK"}'
+      - ordinal: 78
+        elapsed_ms: 766.573
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.output_item.done","sequence_number":32,"output_index":0,"agent":{"agent_name":"/root"},"item":{"type":"reasoning","agent":{"agent_name":"/root"},"id":"a07fe2973029075c","content":[{"type":"reasoning_text","text":"The
-          edge_echo function returned \"EDGE_OK\". I should now reply with that output as requested.\n"}],"summary":[],"encrypted_content":null,"status":"completed"}}'
-      - ordinal: 95
-        elapsed_ms: 877.166
+        text: '{"type":"response.content_part.done","sequence_number":32,"output_index":1,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"a8cf960097fe957d","part":{"annotations":[],"text":"\n\nEDGE_OK","type":"output_text","logprobs":null}}'
+      - ordinal: 79
+        elapsed_ms: 767.333
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.output_item.done","sequence_number":33,"output_index":1,"agent":{"agent_name":"/root"},"item":{"type":"message","agent":{"agent_name":"/root"},"id":"ae4084a98b5691d8","role":"assistant","phase":"final_answer","status":"completed","content":[{"type":"output_text","text":"\n\nEDGE_OK","annotations":[]}]}}'
-      - ordinal: 96
-        elapsed_ms: 877.639
+        text: '{"type":"response.output_item.done","sequence_number":33,"output_index":0,"agent":{"agent_name":"/root"},"item":{"type":"reasoning","agent":{"agent_name":"/root"},"id":"8b177eb7fae52431","content":[{"type":"reasoning_text","text":"The
+          edge_echo function returned \"EDGE_OK\". Now I need to reply with that output as requested.\n"}],"summary":[],"encrypted_content":null,"status":"completed"}}'
+      - ordinal: 80
+        elapsed_ms: 768.392
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.completed","sequence_number":34,"response":{"id":"resp_01a0f67b-0c54-7d90-b53a-4558951297c2","object":"response","created_at":1790841654,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"completed","output":[{"type":"reasoning","agent":{"agent_name":"/root"},"id":"a07fe2973029075c","content":[{"type":"reasoning_text","text":"The
-          edge_echo function returned \"EDGE_OK\". I should now reply with that output as requested.\n"}],"summary":[],"encrypted_content":null,"status":"completed"},{"type":"message","agent":{"agent_name":"/root"},"id":"ae4084a98b5691d8","role":"assistant","phase":"final_answer","status":"completed","content":[{"type":"output_text","text":"\n\nEDGE_OK","annotations":[]}]}],"usage":{"input_tokens":2020,"output_tokens":25,"total_tokens":2045,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":"resp_01a0f67b-0a1f-7003-9e70-6a620ae55306","conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
+        text: '{"type":"response.output_item.done","sequence_number":34,"output_index":1,"agent":{"agent_name":"/root"},"item":{"type":"message","agent":{"agent_name":"/root"},"id":"a8cf960097fe957d","role":"assistant","phase":"final_answer","status":"completed","content":[{"type":"output_text","text":"\n\nEDGE_OK","annotations":[]}]}}'
+      - ordinal: 81
+        elapsed_ms: 771.297
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.completed","sequence_number":35,"response":{"id":"resp_01a0fb18-e59d-74d2-b49c-6ae982062c35","object":"response","created_at":1790919107,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"completed","output":[{"type":"reasoning","agent":{"agent_name":"/root"},"id":"8b177eb7fae52431","content":[{"type":"reasoning_text","text":"The
+          edge_echo function returned \"EDGE_OK\". Now I need to reply with that output as requested.\n"}],"summary":[],"encrypted_content":null,"status":"completed"},{"type":"message","agent":{"agent_name":"/root"},"id":"a8cf960097fe957d","role":"assistant","phase":"final_answer","status":"completed","content":[{"type":"output_text","text":"\n\nEDGE_OK","annotations":[]}]}],"usage":{"input_tokens":2004,"output_tokens":26,"total_tokens":2030,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":"resp_01a0fb18-e3da-7c73-92b3-90b0bc150f61","conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}],"tool_choice":"auto"}}'
-      - ordinal: 97
-        elapsed_ms: 878.753
+      - ordinal: 82
+        elapsed_ms: 774.318
         direction: client
         opcode: 8
         fin: true
         payload_base64: ''
-      - ordinal: 98
-        elapsed_ms: 879.065
+      - ordinal: 83
+        elapsed_ms: 774.938
         direction: server
         opcode: 8
         fin: true
         payload_base64: ''
     close_outcome:
       kind: completed
+      probe:
+        active_requested: false
+        sibling_streaming_observed: false
+        injected_during_sibling_execution: false
+        control_outcomes:
+        - type: response.inject.failed
+          code: response_already_completed
+          terminal_already_observed: true
+        active_validation_observed: false
       peer_close_received: true
   - handshake:
       request:
@@ -691,18 +601,19 @@ sessions:
           OpenAI-Beta: responses_multi_agent=v1
       probe:
         case: duplicate-in-batch
-        wall_timeout_seconds: 120.0
+        active: false
+        wall_timeout_seconds: 600.0
       response:
         status_code: 101
         headers:
           upgrade: websocket
-          sec-websocket-accept: LIYHQqUYrcUkiVXPD0vPB1ByZVE=
+          sec-websocket-accept: 7iA07zbvcGbCv6Hbck3dlW+wAkU=
           vary: origin, access-control-request-method, access-control-request-headers
           access-control-allow-origin: '*'
-          date: Thu, 01 Oct 2026 08:00:54 GMT
+          date: Fri, 02 Oct 2026 05:31:48 GMT
     frames:
       - ordinal: 0
-        elapsed_ms: 1.555
+        elapsed_ms: 2.267
         direction: client
         opcode: 1
         fin: true
@@ -710,344 +621,341 @@ sessions:
           edge_echo exactly once yourself, without spawning subagents. After receiving its output, reply with that output.","tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}]}'
       - ordinal: 1
-        elapsed_ms: 2.613
+        elapsed_ms: 3.564
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.created","sequence_number":0,"response":{"id":"resp_01a0f67b-0d91-7d02-ab8a-b386d9a2085a","object":"response","created_at":1790841654,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
+        text: '{"type":"response.created","sequence_number":0,"response":{"id":"resp_01a0fb18-e6e3-73e1-955b-52195bb8c34a","object":"response","created_at":1790919108,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}]}}'
       - ordinal: 2
-        elapsed_ms: 3.686
+        elapsed_ms: 4.496
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a0f67b-0d91-7d02-ab8a-b386d9a2085a","object":"response","created_at":1790841654,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
+        text: '{"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a0fb18-e6e3-73e1-955b-52195bb8c34a","object":"response","created_at":1790919108,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}]}}'
       - ordinal: 3
-        elapsed_ms: 150.928
+        elapsed_ms: 152.807
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.output_item.added","sequence_number":2,"output_index":0,"agent":{"agent_name":"/root"},"item":{"id":"8789ebe34f409fc5","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
+        text: '{"type":"response.output_item.added","sequence_number":2,"output_index":0,"agent":{"agent_name":"/root"},"item":{"id":"bb0acf112d003930","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
       - ordinal: 4
-        elapsed_ms: 152.113
+        elapsed_ms: 154.132
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_part.added","sequence_number":3,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"8789ebe34f409fc5","part":{"text":"","type":"reasoning_text"}}'
+        text: '{"type":"response.reasoning_part.added","sequence_number":3,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"bb0acf112d003930","part":{"text":"","type":"reasoning_text"}}'
       - ordinal: 5
-        elapsed_ms: 152.751
+        elapsed_ms: 154.907
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"The","item_id":"8789ebe34f409fc5"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"The","item_id":"bb0acf112d003930"}'
       - ordinal: 6
-        elapsed_ms: 153.528
+        elapsed_ms: 155.848
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":5,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          user","item_id":"8789ebe34f409fc5"}'
+          user","item_id":"bb0acf112d003930"}'
       - ordinal: 7
-        elapsed_ms: 160.557
+        elapsed_ms: 162.515
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":6,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          wants","item_id":"8789ebe34f409fc5"}'
+          wants","item_id":"bb0acf112d003930"}'
       - ordinal: 8
-        elapsed_ms: 167.021
+        elapsed_ms: 168.763
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":7,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          me","item_id":"8789ebe34f409fc5"}'
+          me","item_id":"bb0acf112d003930"}'
       - ordinal: 9
-        elapsed_ms: 173.484
+        elapsed_ms: 175.696
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":8,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          to","item_id":"8789ebe34f409fc5"}'
+          to","item_id":"bb0acf112d003930"}'
       - ordinal: 10
-        elapsed_ms: 179.645
+        elapsed_ms: 182.169
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":9,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          call","item_id":"8789ebe34f409fc5"}'
+          call","item_id":"bb0acf112d003930"}'
       - ordinal: 11
-        elapsed_ms: 186.073
+        elapsed_ms: 188.448
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":10,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          edge","item_id":"8789ebe34f409fc5"}'
+          edge","item_id":"bb0acf112d003930"}'
       - ordinal: 12
-        elapsed_ms: 192.715
+        elapsed_ms: 194.852
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_echo","item_id":"8789ebe34f409fc5"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_echo","item_id":"bb0acf112d003930"}'
       - ordinal: 13
-        elapsed_ms: 198.869
+        elapsed_ms: 201.056
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          exactly","item_id":"8789ebe34f409fc5"}'
+          exactly","item_id":"bb0acf112d003930"}'
       - ordinal: 14
-        elapsed_ms: 205.255
+        elapsed_ms: 207.59
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":13,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          once","item_id":"8789ebe34f409fc5"}'
+          once","item_id":"bb0acf112d003930"}'
       - ordinal: 15
-        elapsed_ms: 211.386
+        elapsed_ms: 214.062
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":14,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          myself","item_id":"8789ebe34f409fc5"}'
+          myself","item_id":"bb0acf112d003930"}'
       - ordinal: 16
-        elapsed_ms: 217.659
+        elapsed_ms: 220.462
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":",","item_id":"8789ebe34f409fc5"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":",","item_id":"bb0acf112d003930"}'
       - ordinal: 17
-        elapsed_ms: 224.186
+        elapsed_ms: 226.965
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":16,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          without","item_id":"8789ebe34f409fc5"}'
+          without","item_id":"bb0acf112d003930"}'
       - ordinal: 18
-        elapsed_ms: 230.279
+        elapsed_ms: 233.779
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":17,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          spawning","item_id":"8789ebe34f409fc5"}'
+          spawning","item_id":"bb0acf112d003930"}'
       - ordinal: 19
-        elapsed_ms: 236.674
+        elapsed_ms: 240.409
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":18,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          sub","item_id":"8789ebe34f409fc5"}'
+          sub","item_id":"bb0acf112d003930"}'
       - ordinal: 20
-        elapsed_ms: 243.109
+        elapsed_ms: 245.527
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"agents","item_id":"8789ebe34f409fc5"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"agents","item_id":"bb0acf112d003930"}'
       - ordinal: 21
-        elapsed_ms: 249.872
+        elapsed_ms: 251.8
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":20,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":",","item_id":"8789ebe34f409fc5"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":20,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"bb0acf112d003930"}'
       - ordinal: 22
-        elapsed_ms: 255.786
+        elapsed_ms: 258.796
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":21,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          and","item_id":"8789ebe34f409fc5"}'
+          I","item_id":"bb0acf112d003930"}'
       - ordinal: 23
-        elapsed_ms: 262.042
+        elapsed_ms: 264.852
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":22,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          then","item_id":"8789ebe34f409fc5"}'
+          need","item_id":"bb0acf112d003930"}'
       - ordinal: 24
-        elapsed_ms: 268.466
+        elapsed_ms: 271.223
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":23,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          reply","item_id":"8789ebe34f409fc5"}'
+          to","item_id":"bb0acf112d003930"}'
       - ordinal: 25
-        elapsed_ms: 274.863
+        elapsed_ms: 277.809
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":24,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          with","item_id":"8789ebe34f409fc5"}'
+          make","item_id":"bb0acf112d003930"}'
       - ordinal: 26
-        elapsed_ms: 281.193
+        elapsed_ms: 283.954
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":25,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          its","item_id":"8789ebe34f409fc5"}'
+          the","item_id":"bb0acf112d003930"}'
       - ordinal: 27
-        elapsed_ms: 287.525
+        elapsed_ms: 290.238
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":26,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          output","item_id":"8789ebe34f409fc5"}'
+          function","item_id":"bb0acf112d003930"}'
       - ordinal: 28
-        elapsed_ms: 293.542
+        elapsed_ms: 296.813
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":27,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"8789ebe34f409fc5"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":27,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          call","item_id":"bb0acf112d003930"}'
       - ordinal: 29
-        elapsed_ms: 299.693
+        elapsed_ms: 302.941
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":28,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          I","item_id":"8789ebe34f409fc5"}'
+          and","item_id":"bb0acf112d003930"}'
       - ordinal: 30
-        elapsed_ms: 306.113
+        elapsed_ms: 309.222
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":29,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          should","item_id":"8789ebe34f409fc5"}'
+          then","item_id":"bb0acf112d003930"}'
       - ordinal: 31
-        elapsed_ms: 312.472
+        elapsed_ms: 315.495
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":30,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          directly","item_id":"8789ebe34f409fc5"}'
+          reply","item_id":"bb0acf112d003930"}'
       - ordinal: 32
-        elapsed_ms: 318.789
+        elapsed_ms: 321.769
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":31,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          call","item_id":"8789ebe34f409fc5"}'
+          with","item_id":"bb0acf112d003930"}'
       - ordinal: 33
-        elapsed_ms: 325.577
+        elapsed_ms: 328.906
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":32,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          the","item_id":"8789ebe34f409fc5"}'
+          its","item_id":"bb0acf112d003930"}'
       - ordinal: 34
-        elapsed_ms: 331.647
+        elapsed_ms: 334.379
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":33,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          edge","item_id":"8789ebe34f409fc5"}'
+          output","item_id":"bb0acf112d003930"}'
       - ordinal: 35
-        elapsed_ms: 337.631
+        elapsed_ms: 340.789
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":34,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_echo","item_id":"8789ebe34f409fc5"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":34,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"bb0acf112d003930"}'
       - ordinal: 36
-        elapsed_ms: 344.086
+        elapsed_ms: 347.036
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":35,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          function","item_id":"8789ebe34f409fc5"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":35,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"\n","item_id":"bb0acf112d003930"}'
       - ordinal: 37
-        elapsed_ms: 350.512
+        elapsed_ms: 410.969
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":36,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"8789ebe34f409fc5"}'
+        text: '{"type":"response.reasoning_text.done","sequence_number":36,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"bb0acf112d003930","text":"The
+          user wants me to call edge_echo exactly once myself, without spawning subagents. I need to make the function call and
+          then reply with its output.\n"}'
       - ordinal: 38
-        elapsed_ms: 357.204
+        elapsed_ms: 412.313
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":37,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"\n","item_id":"8789ebe34f409fc5"}'
+        text: '{"type":"response.reasoning_part.done","sequence_number":37,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"bb0acf112d003930","part":{"text":"The
+          user wants me to call edge_echo exactly once myself, without spawning subagents. I need to make the function call and
+          then reply with its output.\n","type":"reasoning_text"}}'
       - ordinal: 39
-        elapsed_ms: 426.571
+        elapsed_ms: 413.544
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.done","sequence_number":38,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"8789ebe34f409fc5","text":"The
-          user wants me to call edge_echo exactly once myself, without spawning subagents, and then reply with its output. I should
-          directly call the edge_echo function.\n"}'
+        text: '{"type":"response.output_item.added","sequence_number":38,"output_index":1,"agent":{"agent_name":"/root"},"item":{"arguments":"","call_id":"call_a9f5d7502cdfcb47","name":"edge_echo","type":"function_call","id":"97ccb48a324dc3f3","caller":null,"namespace":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
       - ordinal: 40
-        elapsed_ms: 427.904
+        elapsed_ms: 429.988
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_part.done","sequence_number":39,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"8789ebe34f409fc5","part":{"text":"The
-          user wants me to call edge_echo exactly once myself, without spawning subagents, and then reply with its output. I should
-          directly call the edge_echo function.\n","type":"reasoning_text"}}'
+        text: '{"type":"response.function_call_arguments.delta","sequence_number":39,"output_index":1,"agent":{"agent_name":"/root"},"delta":"{}","item_id":"97ccb48a324dc3f3"}'
       - ordinal: 41
-        elapsed_ms: 428.908
+        elapsed_ms: 449.995
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.output_item.added","sequence_number":40,"output_index":1,"agent":{"agent_name":"/root"},"item":{"arguments":"","call_id":"call_b489182bdfbdb624","name":"edge_echo","type":"function_call","id":"83bab22511b78293","caller":null,"namespace":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
+        text: '{"type":"response.function_call_arguments.done","sequence_number":40,"output_index":1,"agent":{"agent_name":"/root"},"arguments":"{}","item_id":"97ccb48a324dc3f3","name":"edge_echo"}'
       - ordinal: 42
-        elapsed_ms: 444.77
+        elapsed_ms: 450.942
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.function_call_arguments.delta","sequence_number":41,"output_index":1,"agent":{"agent_name":"/root"},"delta":"{}","item_id":"83bab22511b78293"}'
+        text: '{"type":"response.output_item.done","sequence_number":41,"output_index":0,"agent":{"agent_name":"/root"},"item":{"type":"reasoning","agent":{"agent_name":"/root"},"id":"bb0acf112d003930","content":[{"type":"reasoning_text","text":"The
+          user wants me to call edge_echo exactly once myself, without spawning subagents. I need to make the function call and
+          then reply with its output.\n"}],"summary":[],"encrypted_content":null,"status":"completed"}}'
       - ordinal: 43
-        elapsed_ms: 466.175
+        elapsed_ms: 451.937
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.function_call_arguments.done","sequence_number":42,"output_index":1,"agent":{"agent_name":"/root"},"arguments":"{}","item_id":"83bab22511b78293","name":"edge_echo"}'
+        text: '{"type":"response.output_item.done","sequence_number":42,"output_index":1,"agent":{"agent_name":"/root"},"item":{"type":"function_call","agent":{"agent_name":"/root"},"id":"97ccb48a324dc3f3","call_id":"call_a9f5d7502cdfcb47","name":"edge_echo","arguments":"{}","status":"completed"}}'
       - ordinal: 44
-        elapsed_ms: 466.942
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.output_item.done","sequence_number":43,"output_index":0,"agent":{"agent_name":"/root"},"item":{"type":"reasoning","agent":{"agent_name":"/root"},"id":"8789ebe34f409fc5","content":[{"type":"reasoning_text","text":"The
-          user wants me to call edge_echo exactly once myself, without spawning subagents, and then reply with its output. I should
-          directly call the edge_echo function.\n"}],"summary":[],"encrypted_content":null,"status":"completed"}}'
-      - ordinal: 45
-        elapsed_ms: 467.589
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.output_item.done","sequence_number":44,"output_index":1,"agent":{"agent_name":"/root"},"item":{"type":"function_call","agent":{"agent_name":"/root"},"id":"83bab22511b78293","call_id":"call_b489182bdfbdb624","name":"edge_echo","arguments":"{}","status":"completed"}}'
-      - ordinal: 46
-        elapsed_ms: 468.123
+        elapsed_ms: 452.834
         direction: client
         opcode: 1
         fin: true
-        text: '{"type":"response.inject","response_id":"resp_01a0f67b-0d91-7d02-ab8a-b386d9a2085a","input":[{"type":"function_call_output","call_id":"call_b489182bdfbdb624","output":"EDGE_OK"},{"type":"function_call_output","call_id":"call_b489182bdfbdb624","output":"EDGE_OK"}]}'
-      - ordinal: 47
-        elapsed_ms: 469.532
+        text: '{"type":"response.inject","response_id":"resp_01a0fb18-e6e3-73e1-955b-52195bb8c34a","input":[{"type":"function_call_output","call_id":"call_a9f5d7502cdfcb47","output":"EDGE_OK"},{"type":"function_call_output","call_id":"call_a9f5d7502cdfcb47","output":"EDGE_OK"}]}'
+      - ordinal: 45
+        elapsed_ms: 453.604
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.completed","sequence_number":45,"response":{"id":"resp_01a0f67b-0d91-7d02-ab8a-b386d9a2085a","object":"response","created_at":1790841654,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"completed","output":[{"type":"reasoning","agent":{"agent_name":"/root"},"id":"8789ebe34f409fc5","content":[{"type":"reasoning_text","text":"The
-          user wants me to call edge_echo exactly once myself, without spawning subagents, and then reply with its output. I should
-          directly call the edge_echo function.\n"}],"summary":[],"encrypted_content":null,"status":"completed"},{"type":"function_call","agent":{"agent_name":"/root"},"id":"83bab22511b78293","call_id":"call_b489182bdfbdb624","name":"edge_echo","arguments":"{}","status":"completed"}],"usage":{"input_tokens":1941,"output_tokens":51,"total_tokens":1992,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
+        text: '{"type":"response.completed","sequence_number":43,"response":{"id":"resp_01a0fb18-e6e3-73e1-955b-52195bb8c34a","object":"response","created_at":1790919108,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"completed","output":[{"type":"reasoning","agent":{"agent_name":"/root"},"id":"bb0acf112d003930","content":[{"type":"reasoning_text","text":"The
+          user wants me to call edge_echo exactly once myself, without spawning subagents. I need to make the function call and
+          then reply with its output.\n"}],"summary":[],"encrypted_content":null,"status":"completed"},{"type":"function_call","agent":{"agent_name":"/root"},"id":"97ccb48a324dc3f3","call_id":"call_a9f5d7502cdfcb47","name":"edge_echo","arguments":"{}","status":"completed"}],"usage":{"input_tokens":1941,"output_tokens":48,"total_tokens":1989,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}]}}'
-      - ordinal: 48
-        elapsed_ms: 471.506
+      - ordinal: 46
+        elapsed_ms: 454.796
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.inject.failed","sequence_number":46,"response_id":"resp_01a0f67b-0d91-7d02-ab8a-b386d9a2085a","input":[{"type":"function_call_output","call_id":"call_b489182bdfbdb624","output":"EDGE_OK"},{"type":"function_call_output","call_id":"call_b489182bdfbdb624","output":"EDGE_OK"}],"error":{"code":"response_already_completed","message":"Response
-          ''resp_01a0f67b-0d91-7d02-ab8a-b386d9a2085a'' has already completed."}}'
-      - ordinal: 49
-        elapsed_ms: 472.522
+        text: '{"type":"response.inject.failed","sequence_number":44,"response_id":"resp_01a0fb18-e6e3-73e1-955b-52195bb8c34a","input":[{"type":"function_call_output","call_id":"call_a9f5d7502cdfcb47","output":"EDGE_OK"},{"type":"function_call_output","call_id":"call_a9f5d7502cdfcb47","output":"EDGE_OK"}],"error":{"code":"response_already_completed","message":"Response
+          ''resp_01a0fb18-e6e3-73e1-955b-52195bb8c34a'' has already completed."}}'
+      - ordinal: 47
+        elapsed_ms: 455.368
         direction: client
         opcode: 8
         fin: true
         payload_base64: ''
-      - ordinal: 50
-        elapsed_ms: 472.986
+      - ordinal: 48
+        elapsed_ms: 455.659
         direction: server
         opcode: 8
         fin: true
         payload_base64: ''
     close_outcome:
       kind: completed
+      probe:
+        active_requested: false
+        sibling_streaming_observed: false
+        injected_during_sibling_execution: false
+        control_outcomes:
+        - type: response.inject.failed
+          code: response_already_completed
+          terminal_already_observed: true
+        active_validation_observed: false
       peer_close_received: true
   - handshake:
       request:
@@ -1057,18 +965,19 @@ sessions:
           OpenAI-Beta: responses_multi_agent=v1
       probe:
         case: mixed-valid-invalid
-        wall_timeout_seconds: 120.0
+        active: false
+        wall_timeout_seconds: 600.0
       response:
         status_code: 101
         headers:
           upgrade: websocket
-          sec-websocket-accept: S+JQ8NboYrY3O1KEqTodZvQzon4=
+          sec-websocket-accept: v7veSvBxHTwG8DyLuFj3pkes4sY=
           vary: origin, access-control-request-method, access-control-request-headers
           access-control-allow-origin: '*'
-          date: Thu, 01 Oct 2026 08:00:55 GMT
+          date: Fri, 02 Oct 2026 05:31:48 GMT
     frames:
       - ordinal: 0
-        elapsed_ms: 0.776
+        elapsed_ms: 1.805
         direction: client
         opcode: 1
         fin: true
@@ -1076,379 +985,416 @@ sessions:
           edge_echo exactly once yourself, without spawning subagents. After receiving its output, reply with that output.","tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}]}'
       - ordinal: 1
-        elapsed_ms: 1.453
+        elapsed_ms: 3.226
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.created","sequence_number":0,"response":{"id":"resp_01a0f67b-0f6b-7e02-bde5-25afa6809e1a","object":"response","created_at":1790841655,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
+        text: '{"type":"response.created","sequence_number":0,"response":{"id":"resp_01a0fb18-e8ac-7d92-a876-4e9525c93076","object":"response","created_at":1790919108,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}]}}'
       - ordinal: 2
-        elapsed_ms: 2.072
+        elapsed_ms: 4.62
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a0f67b-0f6b-7e02-bde5-25afa6809e1a","object":"response","created_at":1790841655,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
+        text: '{"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a0fb18-e8ac-7d92-a876-4e9525c93076","object":"response","created_at":1790919108,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}]}}'
       - ordinal: 3
-        elapsed_ms: 153.704
+        elapsed_ms: 156.635
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.output_item.added","sequence_number":2,"output_index":0,"agent":{"agent_name":"/root"},"item":{"id":"810b5a24af2a6d46","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
+        text: '{"type":"response.output_item.added","sequence_number":2,"output_index":0,"agent":{"agent_name":"/root"},"item":{"id":"9a4b15a45ecc5b3f","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
       - ordinal: 4
-        elapsed_ms: 155.19
+        elapsed_ms: 157.841
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_part.added","sequence_number":3,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"810b5a24af2a6d46","part":{"text":"","type":"reasoning_text"}}'
+        text: '{"type":"response.reasoning_part.added","sequence_number":3,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"9a4b15a45ecc5b3f","part":{"text":"","type":"reasoning_text"}}'
       - ordinal: 5
-        elapsed_ms: 156.129
+        elapsed_ms: 158.67
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"The","item_id":"810b5a24af2a6d46"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"The","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 6
-        elapsed_ms: 156.881
+        elapsed_ms: 159.685
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":5,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          user","item_id":"810b5a24af2a6d46"}'
+          user","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 7
-        elapsed_ms: 163.552
+        elapsed_ms: 166.642
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":6,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          wants","item_id":"810b5a24af2a6d46"}'
+          wants","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 8
-        elapsed_ms: 169.945
+        elapsed_ms: 172.837
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":7,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          me","item_id":"810b5a24af2a6d46"}'
+          me","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 9
-        elapsed_ms: 176.427
+        elapsed_ms: 179.818
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":8,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          to","item_id":"810b5a24af2a6d46"}'
+          to","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 10
-        elapsed_ms: 182.753
+        elapsed_ms: 186.289
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":9,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          call","item_id":"810b5a24af2a6d46"}'
+          call","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 11
-        elapsed_ms: 189.271
+        elapsed_ms: 192.37
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":10,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          edge","item_id":"810b5a24af2a6d46"}'
+          edge","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 12
-        elapsed_ms: 195.808
+        elapsed_ms: 198.848
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_echo","item_id":"810b5a24af2a6d46"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_echo","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 13
-        elapsed_ms: 202.073
+        elapsed_ms: 205.478
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          exactly","item_id":"810b5a24af2a6d46"}'
+          exactly","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 14
-        elapsed_ms: 208.629
+        elapsed_ms: 211.648
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":13,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          once","item_id":"810b5a24af2a6d46"}'
+          once","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 15
-        elapsed_ms: 214.68
+        elapsed_ms: 218.035
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":14,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          myself","item_id":"810b5a24af2a6d46"}'
+          myself","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 16
-        elapsed_ms: 221.022
+        elapsed_ms: 224.45
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":",","item_id":"810b5a24af2a6d46"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":",","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 17
-        elapsed_ms: 227.378
+        elapsed_ms: 230.771
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":16,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          without","item_id":"810b5a24af2a6d46"}'
+          without","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 18
-        elapsed_ms: 233.66
+        elapsed_ms: 237.679
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":17,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          spawning","item_id":"810b5a24af2a6d46"}'
+          spawning","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 19
-        elapsed_ms: 239.88
+        elapsed_ms: 243.966
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":18,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          sub","item_id":"810b5a24af2a6d46"}'
+          sub","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 20
-        elapsed_ms: 246.739
+        elapsed_ms: 250.001
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"agents","item_id":"810b5a24af2a6d46"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"agents","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 21
-        elapsed_ms: 252.566
+        elapsed_ms: 256.745
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":20,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":",","item_id":"810b5a24af2a6d46"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":20,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":",","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 22
-        elapsed_ms: 259.165
+        elapsed_ms: 262.531
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":21,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          and","item_id":"810b5a24af2a6d46"}'
+          and","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 23
-        elapsed_ms: 265.441
+        elapsed_ms: 268.675
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":22,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          then","item_id":"810b5a24af2a6d46"}'
+          then","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 24
-        elapsed_ms: 271.661
+        elapsed_ms: 275.49
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":23,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          reply","item_id":"810b5a24af2a6d46"}'
+          reply","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 25
-        elapsed_ms: 277.879
+        elapsed_ms: 281.518
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":24,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          with","item_id":"810b5a24af2a6d46"}'
+          with","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 26
-        elapsed_ms: 284.232
+        elapsed_ms: 287.819
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":25,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          its","item_id":"810b5a24af2a6d46"}'
+          its","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 27
-        elapsed_ms: 290.549
+        elapsed_ms: 294.146
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":26,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          output","item_id":"810b5a24af2a6d46"}'
+          output","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 28
-        elapsed_ms: 297.004
+        elapsed_ms: 301.288
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":27,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"810b5a24af2a6d46"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":27,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 29
-        elapsed_ms: 303.249
+        elapsed_ms: 306.857
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":28,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          This","item_id":"810b5a24af2a6d46"}'
+          This","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 30
-        elapsed_ms: 309.543
+        elapsed_ms: 312.933
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":29,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          is","item_id":"810b5a24af2a6d46"}'
+          is","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 31
-        elapsed_ms: 315.833
+        elapsed_ms: 319.275
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":30,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          straightforward","item_id":"810b5a24af2a6d46"}'
+          straightforward","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 32
-        elapsed_ms: 321.983
+        elapsed_ms: 325.477
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":31,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          -","item_id":"810b5a24af2a6d46"}'
+          -","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 33
-        elapsed_ms: 328.646
+        elapsed_ms: 332.401
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":32,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          I","item_id":"810b5a24af2a6d46"}'
+          I","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 34
-        elapsed_ms: 334.763
+        elapsed_ms: 338.237
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":33,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          just","item_id":"810b5a24af2a6d46"}'
+          just","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 35
-        elapsed_ms: 340.696
+        elapsed_ms: 344.705
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":34,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          need","item_id":"810b5a24af2a6d46"}'
+          need","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 36
-        elapsed_ms: 346.906
+        elapsed_ms: 351.0
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":35,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          to","item_id":"810b5a24af2a6d46"}'
+          to","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 37
-        elapsed_ms: 353.24
+        elapsed_ms: 357.503
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":36,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          call","item_id":"810b5a24af2a6d46"}'
+          call","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 38
-        elapsed_ms: 359.84
+        elapsed_ms: 363.567
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":37,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          the","item_id":"810b5a24af2a6d46"}'
+          the","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 39
-        elapsed_ms: 366.442
+        elapsed_ms: 369.876
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":38,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          edge","item_id":"810b5a24af2a6d46"}'
+          edge","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 40
-        elapsed_ms: 372.221
+        elapsed_ms: 376.292
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":39,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_echo","item_id":"810b5a24af2a6d46"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":39,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_echo","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 41
-        elapsed_ms: 379.014
+        elapsed_ms: 382.435
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":40,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          function","item_id":"810b5a24af2a6d46"}'
+          function","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 42
-        elapsed_ms: 384.921
+        elapsed_ms: 388.955
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":41,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"810b5a24af2a6d46"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":41,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          and","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 43
-        elapsed_ms: 391.06
+        elapsed_ms: 395.167
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":42,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"\n","item_id":"810b5a24af2a6d46"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":42,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          return","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 44
-        elapsed_ms: 454.794
+        elapsed_ms: 401.393
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.done","sequence_number":43,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"810b5a24af2a6d46","text":"The
-          user wants me to call edge_echo exactly once myself, without spawning subagents, and then reply with its output. This
-          is straightforward - I just need to call the edge_echo function.\n"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":43,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          its","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 45
-        elapsed_ms: 456.499
+        elapsed_ms: 407.522
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_part.done","sequence_number":44,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"810b5a24af2a6d46","part":{"text":"The
-          user wants me to call edge_echo exactly once myself, without spawning subagents, and then reply with its output. This
-          is straightforward - I just need to call the edge_echo function.\n","type":"reasoning_text"}}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":44,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          result","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 46
-        elapsed_ms: 457.646
+        elapsed_ms: 414.066
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.output_item.added","sequence_number":45,"output_index":1,"agent":{"agent_name":"/root"},"item":{"arguments":"","call_id":"call_8ba1b83e019e0515","name":"edge_echo","type":"function_call","id":"819983f1f7d6806a","caller":null,"namespace":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":45,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 47
-        elapsed_ms: 473.638
+        elapsed_ms: 420.335
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.function_call_arguments.delta","sequence_number":46,"output_index":1,"agent":{"agent_name":"/root"},"delta":"{}","item_id":"819983f1f7d6806a"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":46,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"\n","item_id":"9a4b15a45ecc5b3f"}'
       - ordinal: 48
-        elapsed_ms: 493.913
+        elapsed_ms: 484.247
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.function_call_arguments.done","sequence_number":47,"output_index":1,"agent":{"agent_name":"/root"},"arguments":"{}","item_id":"819983f1f7d6806a","name":"edge_echo"}'
-      - ordinal: 49
-        elapsed_ms: 494.942
-        direction: server
-        opcode: 1
-        fin: true
-        text: '{"type":"response.output_item.done","sequence_number":48,"output_index":0,"agent":{"agent_name":"/root"},"item":{"type":"reasoning","agent":{"agent_name":"/root"},"id":"810b5a24af2a6d46","content":[{"type":"reasoning_text","text":"The
+        text: '{"type":"response.reasoning_text.done","sequence_number":47,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"9a4b15a45ecc5b3f","text":"The
           user wants me to call edge_echo exactly once myself, without spawning subagents, and then reply with its output. This
-          is straightforward - I just need to call the edge_echo function.\n"}],"summary":[],"encrypted_content":null,"status":"completed"}}'
-      - ordinal: 50
-        elapsed_ms: 496.012
+          is straightforward - I just need to call the edge_echo function and return its result.\n"}'
+      - ordinal: 49
+        elapsed_ms: 485.112
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.output_item.done","sequence_number":49,"output_index":1,"agent":{"agent_name":"/root"},"item":{"type":"function_call","agent":{"agent_name":"/root"},"id":"819983f1f7d6806a","call_id":"call_8ba1b83e019e0515","name":"edge_echo","arguments":"{}","status":"completed"}}'
+        text: '{"type":"response.reasoning_part.done","sequence_number":48,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"9a4b15a45ecc5b3f","part":{"text":"The
+          user wants me to call edge_echo exactly once myself, without spawning subagents, and then reply with its output. This
+          is straightforward - I just need to call the edge_echo function and return its result.\n","type":"reasoning_text"}}'
+      - ordinal: 50
+        elapsed_ms: 485.659
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.added","sequence_number":49,"output_index":1,"agent":{"agent_name":"/root"},"item":{"arguments":"","call_id":"call_8c9edde84c933242","name":"edge_echo","type":"function_call","id":"bce2d526001e46ea","caller":null,"namespace":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
       - ordinal: 51
-        elapsed_ms: 496.889
+        elapsed_ms: 502.714
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.function_call_arguments.delta","sequence_number":50,"output_index":1,"agent":{"agent_name":"/root"},"delta":"{}","item_id":"bce2d526001e46ea"}'
+      - ordinal: 52
+        elapsed_ms: 524.013
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.function_call_arguments.done","sequence_number":51,"output_index":1,"agent":{"agent_name":"/root"},"arguments":"{}","item_id":"bce2d526001e46ea","name":"edge_echo"}'
+      - ordinal: 53
+        elapsed_ms: 525.122
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.done","sequence_number":52,"output_index":0,"agent":{"agent_name":"/root"},"item":{"type":"reasoning","agent":{"agent_name":"/root"},"id":"9a4b15a45ecc5b3f","content":[{"type":"reasoning_text","text":"The
+          user wants me to call edge_echo exactly once myself, without spawning subagents, and then reply with its output. This
+          is straightforward - I just need to call the edge_echo function and return its result.\n"}],"summary":[],"encrypted_content":null,"status":"completed"}}'
+      - ordinal: 54
+        elapsed_ms: 526.501
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.done","sequence_number":53,"output_index":1,"agent":{"agent_name":"/root"},"item":{"type":"function_call","agent":{"agent_name":"/root"},"id":"bce2d526001e46ea","call_id":"call_8c9edde84c933242","name":"edge_echo","arguments":"{}","status":"completed"}}'
+      - ordinal: 55
+        elapsed_ms: 527.684
         direction: client
         opcode: 1
         fin: true
-        text: '{"type":"response.inject","response_id":"resp_01a0f67b-0f6b-7e02-bde5-25afa6809e1a","input":[{"type":"function_call_output","call_id":"call_8ba1b83e019e0515","output":"EDGE_OK"},{"type":"function_call_output","call_id":"call_edge_unknown","output":"EDGE_OK"}]}'
-      - ordinal: 52
-        elapsed_ms: 497.591
+        text: '{"type":"response.inject","response_id":"resp_01a0fb18-e8ac-7d92-a876-4e9525c93076","input":[{"type":"function_call_output","call_id":"call_8c9edde84c933242","output":"EDGE_OK"},{"type":"function_call_output","call_id":"call_edge_unknown","output":"EDGE_OK"}]}'
+      - ordinal: 56
+        elapsed_ms: 528.605
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.completed","sequence_number":50,"response":{"id":"resp_01a0f67b-0f6b-7e02-bde5-25afa6809e1a","object":"response","created_at":1790841655,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"completed","output":[{"type":"reasoning","agent":{"agent_name":"/root"},"id":"810b5a24af2a6d46","content":[{"type":"reasoning_text","text":"The
+        text: '{"type":"response.completed","sequence_number":54,"response":{"id":"resp_01a0fb18-e8ac-7d92-a876-4e9525c93076","object":"response","created_at":1790919108,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"completed","output":[{"type":"reasoning","agent":{"agent_name":"/root"},"id":"9a4b15a45ecc5b3f","content":[{"type":"reasoning_text","text":"The
           user wants me to call edge_echo exactly once myself, without spawning subagents, and then reply with its output. This
-          is straightforward - I just need to call the edge_echo function.\n"}],"summary":[],"encrypted_content":null,"status":"completed"},{"type":"function_call","agent":{"agent_name":"/root"},"id":"819983f1f7d6806a","call_id":"call_8ba1b83e019e0515","name":"edge_echo","arguments":"{}","status":"completed"}],"usage":{"input_tokens":1941,"output_tokens":55,"total_tokens":1996,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
+          is straightforward - I just need to call the edge_echo function and return its result.\n"}],"summary":[],"encrypted_content":null,"status":"completed"},{"type":"function_call","agent":{"agent_name":"/root"},"id":"bce2d526001e46ea","call_id":"call_8c9edde84c933242","name":"edge_echo","arguments":"{}","status":"completed"}],"usage":{"input_tokens":1941,"output_tokens":59,"total_tokens":2000,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}]}}'
-      - ordinal: 53
-        elapsed_ms: 499.329
+      - ordinal: 57
+        elapsed_ms: 531.021
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.inject.failed","sequence_number":51,"response_id":"resp_01a0f67b-0f6b-7e02-bde5-25afa6809e1a","input":[{"type":"function_call_output","call_id":"call_8ba1b83e019e0515","output":"EDGE_OK"},{"type":"function_call_output","call_id":"call_edge_unknown","output":"EDGE_OK"}],"error":{"code":"response_already_completed","message":"Response
-          ''resp_01a0f67b-0f6b-7e02-bde5-25afa6809e1a'' has already completed."}}'
-      - ordinal: 54
-        elapsed_ms: 500.261
+        text: '{"type":"response.inject.failed","sequence_number":55,"response_id":"resp_01a0fb18-e8ac-7d92-a876-4e9525c93076","input":[{"type":"function_call_output","call_id":"call_8c9edde84c933242","output":"EDGE_OK"},{"type":"function_call_output","call_id":"call_edge_unknown","output":"EDGE_OK"}],"error":{"code":"response_already_completed","message":"Response
+          ''resp_01a0fb18-e8ac-7d92-a876-4e9525c93076'' has already completed."}}'
+      - ordinal: 58
+        elapsed_ms: 531.888
         direction: client
         opcode: 8
         fin: true
         payload_base64: ''
-      - ordinal: 55
-        elapsed_ms: 500.744
+      - ordinal: 59
+        elapsed_ms: 532.181
         direction: server
         opcode: 8
         fin: true
         payload_base64: ''
     close_outcome:
       kind: completed
+      probe:
+        active_requested: false
+        sibling_streaming_observed: false
+        injected_during_sibling_execution: false
+        control_outcomes:
+        - type: response.inject.failed
+          code: response_already_completed
+          terminal_already_observed: true
+        active_validation_observed: false
       peer_close_received: true
   - handshake:
       request:
@@ -1458,18 +1404,19 @@ sessions:
           OpenAI-Beta: responses_multi_agent=v1
       probe:
         case: duplicate-injection
-        wall_timeout_seconds: 120.0
+        active: false
+        wall_timeout_seconds: 600.0
       response:
         status_code: 101
         headers:
           upgrade: websocket
-          sec-websocket-accept: dWMhpT2LraTqMMyCZiGEQ9LMync=
+          sec-websocket-accept: fLmXZ1ziSDs4ha/HPuwNGU5LVls=
           vary: origin, access-control-request-method, access-control-request-headers
           access-control-allow-origin: '*'
-          date: Thu, 01 Oct 2026 08:00:55 GMT
+          date: Fri, 02 Oct 2026 05:31:49 GMT
     frames:
       - ordinal: 0
-        elapsed_ms: 1.518
+        elapsed_ms: 1.831
         direction: client
         opcode: 1
         fin: true
@@ -1477,343 +1424,553 @@ sessions:
           edge_echo exactly once yourself, without spawning subagents. After receiving its output, reply with that output.","tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}]}'
       - ordinal: 1
-        elapsed_ms: 2.339
+        elapsed_ms: 2.897
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.created","sequence_number":0,"response":{"id":"resp_01a0f67b-1162-7be2-8bee-26e3e8a20de4","object":"response","created_at":1790841655,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
+        text: '{"type":"response.created","sequence_number":0,"response":{"id":"resp_01a0fb18-eac3-7592-9272-f2e963c246d1","object":"response","created_at":1790919109,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}]}}'
       - ordinal: 2
-        elapsed_ms: 3.184
+        elapsed_ms: 3.54
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a0f67b-1162-7be2-8bee-26e3e8a20de4","object":"response","created_at":1790841655,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
+        text: '{"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a0fb18-eac3-7592-9272-f2e963c246d1","object":"response","created_at":1790919109,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"in_progress","output":[],"usage":null,"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}]}}'
       - ordinal: 3
-        elapsed_ms: 150.858
+        elapsed_ms: 149.673
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.output_item.added","sequence_number":2,"output_index":0,"agent":{"agent_name":"/root"},"item":{"id":"a5fc238c78d70a2c","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
+        text: '{"type":"response.output_item.added","sequence_number":2,"output_index":0,"agent":{"agent_name":"/root"},"item":{"id":"b3b2e9b154bd34d5","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
       - ordinal: 4
-        elapsed_ms: 151.667
+        elapsed_ms: 150.958
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_part.added","sequence_number":3,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"a5fc238c78d70a2c","part":{"text":"","type":"reasoning_text"}}'
+        text: '{"type":"response.reasoning_part.added","sequence_number":3,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"b3b2e9b154bd34d5","part":{"text":"","type":"reasoning_text"}}'
       - ordinal: 5
-        elapsed_ms: 152.046
+        elapsed_ms: 151.9
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"The","item_id":"a5fc238c78d70a2c"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"The","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 6
-        elapsed_ms: 154.378
+        elapsed_ms: 152.992
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":5,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          user","item_id":"a5fc238c78d70a2c"}'
+          user","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 7
-        elapsed_ms: 161.346
+        elapsed_ms: 159.486
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":6,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          wants","item_id":"a5fc238c78d70a2c"}'
+          wants","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 8
-        elapsed_ms: 168.144
+        elapsed_ms: 165.862
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":7,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          me","item_id":"a5fc238c78d70a2c"}'
+          me","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 9
-        elapsed_ms: 173.984
+        elapsed_ms: 172.536
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":8,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          to","item_id":"a5fc238c78d70a2c"}'
+          to","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 10
-        elapsed_ms: 180.516
+        elapsed_ms: 179.037
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":9,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          call","item_id":"a5fc238c78d70a2c"}'
+          call","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 11
-        elapsed_ms: 186.879
+        elapsed_ms: 185.691
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":10,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          edge","item_id":"a5fc238c78d70a2c"}'
+          edge","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 12
-        elapsed_ms: 193.294
+        elapsed_ms: 192.33
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_echo","item_id":"a5fc238c78d70a2c"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_echo","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 13
-        elapsed_ms: 199.688
+        elapsed_ms: 199.461
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          exactly","item_id":"a5fc238c78d70a2c"}'
+          exactly","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 14
-        elapsed_ms: 206.055
+        elapsed_ms: 205.74
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":13,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          once","item_id":"a5fc238c78d70a2c"}'
+          once","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 15
-        elapsed_ms: 212.454
+        elapsed_ms: 212.347
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":14,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          myself","item_id":"a5fc238c78d70a2c"}'
+          myself","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 16
-        elapsed_ms: 219.041
+        elapsed_ms: 218.414
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":",","item_id":"a5fc238c78d70a2c"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":",","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 17
-        elapsed_ms: 225.274
+        elapsed_ms: 224.904
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":16,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          without","item_id":"a5fc238c78d70a2c"}'
+          without","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 18
-        elapsed_ms: 231.559
+        elapsed_ms: 231.064
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":17,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          spawning","item_id":"a5fc238c78d70a2c"}'
+          spawning","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 19
-        elapsed_ms: 238.478
+        elapsed_ms: 237.253
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":18,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          sub","item_id":"a5fc238c78d70a2c"}'
+          sub","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 20
-        elapsed_ms: 244.496
+        elapsed_ms: 244.199
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"agents","item_id":"a5fc238c78d70a2c"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"agents","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 21
-        elapsed_ms: 250.865
+        elapsed_ms: 249.997
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":20,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"a5fc238c78d70a2c"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":20,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 22
-        elapsed_ms: 257.406
+        elapsed_ms: 256.752
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":21,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          I","item_id":"a5fc238c78d70a2c"}'
+          I","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 23
-        elapsed_ms: 263.348
+        elapsed_ms: 263.254
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":22,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          need","item_id":"a5fc238c78d70a2c"}'
+          need","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 24
-        elapsed_ms: 269.667
+        elapsed_ms: 269.36
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":23,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          to","item_id":"a5fc238c78d70a2c"}'
+          to","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 25
-        elapsed_ms: 276.14
+        elapsed_ms: 275.799
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":24,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          make","item_id":"a5fc238c78d70a2c"}'
+          call","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 26
-        elapsed_ms: 282.982
+        elapsed_ms: 281.982
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":25,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          the","item_id":"a5fc238c78d70a2c"}'
+          the","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 27
-        elapsed_ms: 288.698
+        elapsed_ms: 288.306
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":26,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          function","item_id":"a5fc238c78d70a2c"}'
+          edge","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 28
-        elapsed_ms: 295.131
+        elapsed_ms: 294.548
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":27,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          call","item_id":"a5fc238c78d70a2c"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":27,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_echo","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 29
-        elapsed_ms: 301.185
+        elapsed_ms: 301.115
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":28,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          and","item_id":"a5fc238c78d70a2c"}'
+          tool","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 30
-        elapsed_ms: 307.561
+        elapsed_ms: 307.48
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":29,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          then","item_id":"a5fc238c78d70a2c"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":29,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":",","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 31
-        elapsed_ms: 313.97
+        elapsed_ms: 313.405
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":30,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          reply","item_id":"a5fc238c78d70a2c"}'
+          which","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 32
-        elapsed_ms: 320.263
+        elapsed_ms: 319.638
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":31,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          with","item_id":"a5fc238c78d70a2c"}'
+          according","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 33
-        elapsed_ms: 326.635
+        elapsed_ms: 325.948
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":32,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          the","item_id":"a5fc238c78d70a2c"}'
+          to","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 34
-        elapsed_ms: 333.438
+        elapsed_ms: 331.958
         direction: server
         opcode: 1
         fin: true
         text: '{"type":"response.reasoning_text.delta","sequence_number":33,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
-          output","item_id":"a5fc238c78d70a2c"}'
+          its","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 35
-        elapsed_ms: 338.933
+        elapsed_ms: 338.31
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":34,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"a5fc238c78d70a2c"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":34,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          description","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 36
-        elapsed_ms: 345.207
+        elapsed_ms: 344.798
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.delta","sequence_number":35,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"\n","item_id":"a5fc238c78d70a2c"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":35,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          \"","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 37
-        elapsed_ms: 409.4
+        elapsed_ms: 351.094
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_text.done","sequence_number":36,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"a5fc238c78d70a2c","text":"The
-          user wants me to call edge_echo exactly once myself, without spawning subagents. I need to make the function call and
-          then reply with the output.\n"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":36,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"Return","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 38
-        elapsed_ms: 411.049
+        elapsed_ms: 357.387
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.reasoning_part.done","sequence_number":37,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"a5fc238c78d70a2c","part":{"text":"The
-          user wants me to call edge_echo exactly once myself, without spawning subagents. I need to make the function call and
-          then reply with the output.\n","type":"reasoning_text"}}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":37,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          the","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 39
-        elapsed_ms: 412.335
+        elapsed_ms: 363.484
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.output_item.added","sequence_number":38,"output_index":1,"agent":{"agent_name":"/root"},"item":{"arguments":"","call_id":"call_aa1372a64edc456a","name":"edge_echo","type":"function_call","id":"92135fb8b79160d1","caller":null,"namespace":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":38,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          fixture","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 40
-        elapsed_ms: 427.229
+        elapsed_ms: 369.738
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.function_call_arguments.delta","sequence_number":39,"output_index":1,"agent":{"agent_name":"/root"},"delta":"{}","item_id":"92135fb8b79160d1"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":39,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          marker","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 41
-        elapsed_ms: 448.577
+        elapsed_ms: 376.157
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.function_call_arguments.done","sequence_number":40,"output_index":1,"agent":{"agent_name":"/root"},"arguments":"{}","item_id":"92135fb8b79160d1","name":"edge_echo"}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":40,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".\"","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 42
-        elapsed_ms: 449.348
+        elapsed_ms: 382.389
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.output_item.done","sequence_number":41,"output_index":0,"agent":{"agent_name":"/root"},"item":{"type":"reasoning","agent":{"agent_name":"/root"},"id":"a5fc238c78d70a2c","content":[{"type":"reasoning_text","text":"The
-          user wants me to call edge_echo exactly once myself, without spawning subagents. I need to make the function call and
-          then reply with the output.\n"}],"summary":[],"encrypted_content":null,"status":"completed"}}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":41,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          and","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 43
-        elapsed_ms: 450.378
+        elapsed_ms: 388.66
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.output_item.done","sequence_number":42,"output_index":1,"agent":{"agent_name":"/root"},"item":{"type":"function_call","agent":{"agent_name":"/root"},"id":"92135fb8b79160d1","call_id":"call_aa1372a64edc456a","name":"edge_echo","arguments":"{}","status":"completed"}}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":42,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          has","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 44
-        elapsed_ms: 451.26
-        direction: client
+        elapsed_ms: 395.099
+        direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.inject","response_id":"resp_01a0f67b-1162-7be2-8bee-26e3e8a20de4","input":[{"type":"function_call_output","call_id":"call_aa1372a64edc456a","output":"EDGE_OK"}]}'
+        text: '{"type":"response.reasoning_text.delta","sequence_number":43,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          no","item_id":"b3b2e9b154bd34d5"}'
       - ordinal: 45
-        elapsed_ms: 451.994
+        elapsed_ms: 402.208
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":44,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          required","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 46
+        elapsed_ms: 407.544
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":45,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          parameters","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 47
+        elapsed_ms: 413.971
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":46,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 48
+        elapsed_ms: 420.465
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":47,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          Then","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 49
+        elapsed_ms: 427.116
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":48,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          I","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 50
+        elapsed_ms: 433.015
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":49,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          need","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 51
+        elapsed_ms: 439.625
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":50,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          to","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 52
+        elapsed_ms: 445.38
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":51,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          reply","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 53
+        elapsed_ms: 451.899
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":52,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          with","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 54
+        elapsed_ms: 458.232
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":53,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          that","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 55
+        elapsed_ms: 464.449
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":54,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          output","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 56
+        elapsed_ms: 470.868
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":55,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 57
+        elapsed_ms: 477.132
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":56,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"\n\n","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 58
+        elapsed_ms: 483.277
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":57,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"Let","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 59
+        elapsed_ms: 489.929
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":58,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          me","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 60
+        elapsed_ms: 495.908
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":59,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          call","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 61
+        elapsed_ms: 502.444
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":60,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          edge","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 62
+        elapsed_ms: 508.645
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":61,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"_echo","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 63
+        elapsed_ms: 515.032
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":62,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"
+          now","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 64
+        elapsed_ms: 521.19
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":63,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":".","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 65
+        elapsed_ms: 527.471
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.delta","sequence_number":64,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"delta":"\n","item_id":"b3b2e9b154bd34d5"}'
+      - ordinal: 66
+        elapsed_ms: 597.548
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_text.done","sequence_number":65,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"b3b2e9b154bd34d5","text":"The
+          user wants me to call edge_echo exactly once myself, without spawning subagents. I need to call the edge_echo tool, which
+          according to its description \"Return the fixture marker.\" and has no required parameters. Then I need to reply with
+          that output.\n\nLet me call edge_echo now.\n"}'
+      - ordinal: 67
+        elapsed_ms: 598.683
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.reasoning_part.done","sequence_number":66,"output_index":0,"agent":{"agent_name":"/root"},"content_index":0,"item_id":"b3b2e9b154bd34d5","part":{"text":"The
+          user wants me to call edge_echo exactly once myself, without spawning subagents. I need to call the edge_echo tool, which
+          according to its description \"Return the fixture marker.\" and has no required parameters. Then I need to reply with
+          that output.\n\nLet me call edge_echo now.\n","type":"reasoning_text"}}'
+      - ordinal: 68
+        elapsed_ms: 599.768
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.added","sequence_number":67,"output_index":1,"agent":{"agent_name":"/root"},"item":{"arguments":"","call_id":"call_ae2cc874380518e0","name":"edge_echo","type":"function_call","id":"a6a234a51438b964","caller":null,"namespace":null,"status":"in_progress","agent":{"agent_name":"/root"}}}'
+      - ordinal: 69
+        elapsed_ms: 615.957
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.function_call_arguments.delta","sequence_number":68,"output_index":1,"agent":{"agent_name":"/root"},"delta":"{}","item_id":"a6a234a51438b964"}'
+      - ordinal: 70
+        elapsed_ms: 637.252
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.function_call_arguments.done","sequence_number":69,"output_index":1,"agent":{"agent_name":"/root"},"arguments":"{}","item_id":"a6a234a51438b964","name":"edge_echo"}'
+      - ordinal: 71
+        elapsed_ms: 638.28
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.done","sequence_number":70,"output_index":0,"agent":{"agent_name":"/root"},"item":{"type":"reasoning","agent":{"agent_name":"/root"},"id":"b3b2e9b154bd34d5","content":[{"type":"reasoning_text","text":"The
+          user wants me to call edge_echo exactly once myself, without spawning subagents. I need to call the edge_echo tool, which
+          according to its description \"Return the fixture marker.\" and has no required parameters. Then I need to reply with
+          that output.\n\nLet me call edge_echo now.\n"}],"summary":[],"encrypted_content":null,"status":"completed"}}'
+      - ordinal: 72
+        elapsed_ms: 639.764
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.done","sequence_number":71,"output_index":1,"agent":{"agent_name":"/root"},"item":{"type":"function_call","agent":{"agent_name":"/root"},"id":"a6a234a51438b964","call_id":"call_ae2cc874380518e0","name":"edge_echo","arguments":"{}","status":"completed"}}'
+      - ordinal: 73
+        elapsed_ms: 640.943
         direction: client
         opcode: 1
         fin: true
-        text: '{"type":"response.inject","response_id":"resp_01a0f67b-1162-7be2-8bee-26e3e8a20de4","input":[{"type":"function_call_output","call_id":"call_aa1372a64edc456a","output":"EDGE_OK"}]}'
-      - ordinal: 46
-        elapsed_ms: 452.593
+        text: '{"type":"response.inject","response_id":"resp_01a0fb18-eac3-7592-9272-f2e963c246d1","input":[{"type":"function_call_output","call_id":"call_ae2cc874380518e0","output":"EDGE_OK"}]}'
+      - ordinal: 74
+        elapsed_ms: 641.937
+        direction: client
+        opcode: 1
+        fin: true
+        text: '{"type":"response.inject","response_id":"resp_01a0fb18-eac3-7592-9272-f2e963c246d1","input":[{"type":"function_call_output","call_id":"call_ae2cc874380518e0","output":"EDGE_OK"}]}'
+      - ordinal: 75
+        elapsed_ms: 642.806
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.completed","sequence_number":43,"response":{"id":"resp_01a0f67b-1162-7be2-8bee-26e3e8a20de4","object":"response","created_at":1790841655,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"completed","output":[{"type":"reasoning","agent":{"agent_name":"/root"},"id":"a5fc238c78d70a2c","content":[{"type":"reasoning_text","text":"The
-          user wants me to call edge_echo exactly once myself, without spawning subagents. I need to make the function call and
-          then reply with the output.\n"}],"summary":[],"encrypted_content":null,"status":"completed"},{"type":"function_call","agent":{"agent_name":"/root"},"id":"92135fb8b79160d1","call_id":"call_aa1372a64edc456a","name":"edge_echo","arguments":"{}","status":"completed"}],"usage":{"input_tokens":1941,"output_tokens":48,"total_tokens":1989,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
+        text: '{"type":"response.completed","sequence_number":72,"response":{"id":"resp_01a0fb18-eac3-7592-9272-f2e963c246d1","object":"response","created_at":1790919109,"model":"Qwen/Qwen3.6-35B-A3B-FP8","status":"completed","output":[{"type":"reasoning","agent":{"agent_name":"/root"},"id":"b3b2e9b154bd34d5","content":[{"type":"reasoning_text","text":"The
+          user wants me to call edge_echo exactly once myself, without spawning subagents. I need to call the edge_echo tool, which
+          according to its description \"Return the fixture marker.\" and has no required parameters. Then I need to reply with
+          that output.\n\nLet me call edge_echo now.\n"}],"summary":[],"encrypted_content":null,"status":"completed"},{"type":"function_call","agent":{"agent_name":"/root"},"id":"a6a234a51438b964","call_id":"call_ae2cc874380518e0","name":"edge_echo","arguments":"{}","status":"completed"}],"usage":{"input_tokens":1941,"output_tokens":78,"total_tokens":2019,"input_tokens_details":{"cached_tokens":0},"output_tokens_details":{"reasoning_tokens":0}},"incomplete_details":null,"error":null,"previous_response_id":null,"conversation_id":null,"instructions":null,"tools":[{"type":"function","name":"edge_echo","description":"Return
           the fixture marker.","parameters":{"type":"object","properties":{},"required":[],"additionalProperties":false}}]}}'
-      - ordinal: 47
-        elapsed_ms: 454.038
+      - ordinal: 76
+        elapsed_ms: 644.093
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.inject.failed","sequence_number":44,"response_id":"resp_01a0f67b-1162-7be2-8bee-26e3e8a20de4","input":[{"type":"function_call_output","call_id":"call_aa1372a64edc456a","output":"EDGE_OK"}],"error":{"code":"response_already_completed","message":"Response
-          ''resp_01a0f67b-1162-7be2-8bee-26e3e8a20de4'' has already completed."}}'
-      - ordinal: 48
-        elapsed_ms: 454.53
+        text: '{"type":"response.inject.failed","sequence_number":73,"response_id":"resp_01a0fb18-eac3-7592-9272-f2e963c246d1","input":[{"type":"function_call_output","call_id":"call_ae2cc874380518e0","output":"EDGE_OK"}],"error":{"code":"response_already_completed","message":"Response
+          ''resp_01a0fb18-eac3-7592-9272-f2e963c246d1'' has already completed."}}'
+      - ordinal: 77
+        elapsed_ms: 644.571
         direction: server
         opcode: 1
         fin: true
-        text: '{"type":"response.inject.failed","sequence_number":45,"response_id":"resp_01a0f67b-1162-7be2-8bee-26e3e8a20de4","input":[{"type":"function_call_output","call_id":"call_aa1372a64edc456a","output":"EDGE_OK"}],"error":{"code":"response_already_completed","message":"Response
-          ''resp_01a0f67b-1162-7be2-8bee-26e3e8a20de4'' has already completed."}}'
-      - ordinal: 49
-        elapsed_ms: 455.042
+        text: '{"type":"response.inject.failed","sequence_number":74,"response_id":"resp_01a0fb18-eac3-7592-9272-f2e963c246d1","input":[{"type":"function_call_output","call_id":"call_ae2cc874380518e0","output":"EDGE_OK"}],"error":{"code":"response_already_completed","message":"Response
+          ''resp_01a0fb18-eac3-7592-9272-f2e963c246d1'' has already completed."}}'
+      - ordinal: 78
+        elapsed_ms: 645.09
         direction: client
         opcode: 8
         fin: true
         payload_base64: ''
-      - ordinal: 50
-        elapsed_ms: 455.314
+      - ordinal: 79
+        elapsed_ms: 645.361
         direction: server
         opcode: 8
         fin: true
         payload_base64: ''
     close_outcome:
       kind: completed
+      probe:
+        active_requested: false
+        sibling_streaming_observed: false
+        injected_during_sibling_execution: false
+        control_outcomes:
+        - type: response.inject.failed
+          code: response_already_completed
+          terminal_already_observed: true
+        - type: response.inject.failed
+          code: response_already_completed
+          terminal_already_observed: true
+        active_validation_observed: false
       peer_close_received: true

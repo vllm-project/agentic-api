@@ -3,7 +3,10 @@ use std::{collections::HashSet, num::NonZeroUsize};
 use super::super::agent_turn::AgentTurn;
 use crate::executor::{
     error::{ExecutorError, ExecutorResult},
-    multi_agent::{AgentPhase, AgentRegistry, AgentState, PendingClientCalls, RegistryLimits, ValidatedTreeCheckpoint},
+    multi_agent::{
+        AgentPhase, AgentRegistry, AgentState, CheckpointLimits, PendingClientCalls, RegistryLimits,
+        ValidatedTreeCheckpoint,
+    },
     pipeline::AgentPipeline,
     request::{ExecutionContext, RequestContext},
     response_budget::ExecutorResponseBudget,
@@ -11,7 +14,7 @@ use crate::executor::{
 use crate::tool::ToolSearchHandler;
 use crate::types::{
     agent::{AgentCompletion, AgentIdentity, AgentMail, AgentMailContent, AgentTurnKey},
-    agent_tree::StoredAgent,
+    agent_tree::{StoredAgent, StoredTreeSnapshot},
     client_calls::{ClientToolOutput, ClientToolOutputBatch},
     io::{InputItem, InputMessage, InputMessageContent, OutputItem, ResponsesInput},
     request_response::ContextManagement,
@@ -22,6 +25,58 @@ use super::{
     AgentContext, DEFAULT_COMPACT_THRESHOLD, MAX_AGENTS, MAX_CALLS, MAX_MAIL, MAX_ROUNDS, call_error, invalid,
     registry_error,
 };
+
+/// Apply a warmup turn through the same ownership validation as a generated
+/// continuation, without building registries or starting inference tasks.
+pub(in crate::executor::engine) fn prepare_without_inference(
+    request: &mut RequestContext,
+    exec: &ExecutionContext,
+) -> ExecutorResult<()> {
+    let Some(config) = request
+        .enriched_request
+        .multi_agent
+        .clone()
+        .filter(|config| config.enabled)
+    else {
+        return Ok(());
+    };
+    let budget = ExecutorResponseBudget::with_limit(exec.responses_config.max_retained_bytes);
+    let mut restored = restore_agents(request, exec, &budget)?;
+    if restored.continuing_tree {
+        restored.continue_input(&request.response_id, &request.new_input_items)?;
+    }
+    // Keep only shared settings in the template; canonical agent histories are
+    // moved into preparation and back instead of copying them for every agent.
+    let mut settings = request.enriched_request.clone();
+    settings.input = ResponsesInput::Items(Vec::new());
+    for agent in &mut restored.agents {
+        let mut effective = settings.clone();
+        effective.input = ResponsesInput::Items(std::mem::take(&mut agent.history));
+        let search = ToolSearchHandler::prepare_request(
+            &mut effective,
+            &agent.loaded_tools,
+            request.original_request.tools.is_some(),
+        )?;
+        agent.history = match effective.input {
+            ResponsesInput::Items(history) => history,
+            input @ ResponsesInput::Text(_) => Vec::from(&input),
+        };
+        if let Some(search) = search {
+            agent.loaded_tools = search.into_public_metadata().loaded_tools;
+        }
+        restored.registry.checkpoint_agent(agent).map_err(registry_error)?;
+    }
+    request.multi_agent_tree = Some(ValidatedTreeCheckpoint::from_stored(
+        StoredTreeSnapshot {
+            version: 1,
+            config,
+            agents: restored.agents,
+            client_calls: restored.pending.checkpoint(),
+        },
+        &CheckpointLimits::for_response(exec.responses_config.max_retained_bytes),
+    )?);
+    Ok(())
+}
 
 impl RestoredAgents {
     pub(super) fn continue_input(&mut self, response_id: &str, input: &[InputItem]) -> ExecutorResult<()> {
@@ -220,6 +275,7 @@ pub(super) async fn prepare_agent(
     let (ctx, _) = pipeline.into_parts();
     Ok(AgentContext {
         discovery,
+        discovery_dirty: false,
         generation: 0,
         compacted_generation: None,
         compacting: false,

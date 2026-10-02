@@ -111,11 +111,7 @@ impl MultiAgentRun {
         let context = &self.contexts[&turn.agent];
         let mut request = context.request.clone();
         request.input = ResponsesInput::Items(context.stored.history.clone());
-        let refresh_tools = context
-            .stored
-            .history
-            .iter()
-            .any(|item| matches!(item, InputItem::ToolSearchOutput(_)));
+        let refresh_tools = context.discovery_dirty;
         let tool_search = if refresh_tools {
             // Live client discovery adds public outputs to only the owner's history.
             // Reuse HTTP restoration's preparation before exposing the next inference.
@@ -272,6 +268,7 @@ impl MultiAgentRun {
         context.generation += 1;
         context.request = request;
         context.tool_search = tool_search;
+        context.discovery_dirty = false;
         if let Some(state) = context.tool_search.clone() {
             context.stored.loaded_tools = state.into_public_metadata().loaded_tools;
         }

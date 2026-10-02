@@ -486,6 +486,7 @@ pub(super) mod tests {
         assert!(collected.deferred_events.is_empty());
         let mut emitted = String::new();
         while let Ok(event) = receiver.try_recv() {
+            let event = event.into_frame();
             emitted.push_str(&event.content);
         }
         assert!(emitted.contains("custom_tool_call"));
@@ -820,6 +821,7 @@ pub(super) mod tests {
         assert_eq!(result.payload.output.len(), 1);
         let mut saw_output_item_done = false;
         while let Ok(event) = receiver.try_recv() {
+            let event = event.into_frame();
             if event.content.contains("response.output_item.done") {
                 saw_output_item_done = true;
             }

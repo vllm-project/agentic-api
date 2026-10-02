@@ -1,41 +1,43 @@
-use std::collections::{HashMap, VecDeque};
-use std::num::NonZeroUsize;
 use std::sync::Arc;
 
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::ws::{Message, WebSocketUpgrade};
 use axum::extract::{Extension, State};
 use axum::http::HeaderMap;
 use axum::response::Response;
 #[cfg(test)]
+use futures::SinkExt;
+use futures::StreamExt;
+#[cfg(test)]
 use futures::{Sink, Stream};
-use futures::{SinkExt, StreamExt};
-use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
-use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::{Instrument as _, debug, warn};
 
 use agentic_core::executor::response_events::ResponseCommitState;
-use agentic_core::executor::{BoxStream, ExecuteRequest, ExecutorError, ResponseSession, ResponseSessionGroup};
+use agentic_core::executor::{BoxStream, ExecuteRequest, ExecutorError, ResponseSession};
+use agentic_core::types::injection::ResponseInjectRequest;
 
-use super::super::common::extract_bearer;
 use super::error::WsError;
 use crate::app::AppState;
 use crate::auth::AuthenticatedPrincipal;
 
+mod connection;
 mod control;
 mod event;
-use agentic_core::types::websocket::ResponseClientEvent;
-use control::{Controls, Registration};
 mod local;
-use local::complete_without_inference;
+mod multiplexer;
 mod request;
 mod telemetry;
+
+use connection::{begin_ws_draining, responses_ws_loop};
+use control::Registration;
 use event::{StreamId, WsEventLimit, WsOutboundEvent};
 #[cfg(test)]
 use event::{WS_MAX_STREAM_ID_CHARS, WS_ROUTING_SLACK_BYTES, attach_stream_id, ws_routing_overhead};
-use request::{WsRequest, WsRequestParseError, parse_ws_request, stream_id_from_text};
+use local::complete_without_inference;
+use multiplexer::{WsMultiplexer, WsWorkItem};
+use request::{WsRequest, WsRequestParseError, is_injection, parse_ws_request, stream_id_from_text};
 
 type WsSender = mpsc::Sender<WsOutboundEvent>;
 
@@ -43,287 +45,6 @@ type WsSender = mpsc::Sender<WsOutboundEvent>;
 /// the configured `max_stream_event_bytes`, so the queue holds at most
 /// `WS_OUTBOUND_BUFFER * max_stream_event_bytes` serialized bytes.
 const WS_OUTBOUND_BUFFER: usize = 64;
-const WS_MAX_OUTSTANDING_REQUESTS: usize = 64;
-const WS_MAX_OUTSTANDING_BYTES: usize = 12 * 1024 * 1024;
-// Retained state is bounded separately from queued requests and outbound events.
-// Limits cover serialized checkpoints, including pinned parents and replacements.
-const WS_MAX_SESSION_LANES: usize = 128;
-const WS_MAX_CHECKPOINT_ITEMS: usize = 32_768;
-const WS_MAX_CHECKPOINT_BYTES: usize = 16 * 1024 * 1024;
-const WS_MAX_RETAINED_BYTES: usize = 32 * 1024 * 1024;
-
-enum WsWorkItem {
-    Execute {
-        request: Box<WsRequest>,
-        input_bytes: usize,
-    },
-    Reject {
-        error: WsRequestParseError,
-        input_bytes: usize,
-    },
-}
-
-impl WsWorkItem {
-    fn stream_id(&self) -> Option<&StreamId> {
-        match self {
-            Self::Execute { request, .. } => request.stream_id.as_ref(),
-            Self::Reject { error, .. } => error.stream_id.as_ref(),
-        }
-    }
-
-    fn lane(&self) -> Option<StreamId> {
-        self.stream_id().cloned()
-    }
-
-    fn input_bytes(&self) -> usize {
-        match self {
-            Self::Execute { input_bytes, .. } | Self::Reject { input_bytes, .. } => *input_bytes,
-        }
-    }
-}
-
-struct WsAdmissionError {
-    error: WsError,
-    stream_id: Option<StreamId>,
-}
-
-struct RequestCompletion {
-    lane: Option<StreamId>,
-    input_bytes: usize,
-    result: Result<(), WsError>,
-}
-
-#[derive(Default)]
-struct WsByteBudget {
-    used: usize,
-}
-
-impl WsByteBudget {
-    fn can_reserve(&self, input_bytes: usize) -> bool {
-        input_bytes <= WS_MAX_OUTSTANDING_BYTES.saturating_sub(self.used)
-    }
-
-    fn reserve(&mut self, input_bytes: usize) {
-        debug_assert!(self.can_reserve(input_bytes));
-        self.used += input_bytes;
-    }
-
-    fn release(&mut self, input_bytes: usize) {
-        self.used = self.used.saturating_sub(input_bytes);
-    }
-}
-
-struct WsMultiplexer {
-    controls: Controls,
-    disposal: CancellationToken,
-    state: Arc<AppState>,
-    auth: Option<String>,
-    principal: Option<Arc<AuthenticatedPrincipal>>,
-    outbound_tx: mpsc::Sender<WsOutboundEvent>,
-    lanes: HashMap<Option<StreamId>, VecDeque<WsWorkItem>>,
-    // Idle lanes retain their latest checkpoint until the connection closes.
-    sessions: HashMap<Option<StreamId>, Arc<ResponseSession>>,
-    session_group: ResponseSessionGroup,
-    request_tasks: JoinSet<RequestCompletion>,
-    queued_requests: usize,
-    byte_budget: WsByteBudget,
-    shutdown_token: CancellationToken,
-}
-
-impl WsMultiplexer {
-    fn new(
-        state: Arc<AppState>,
-        auth: Option<String>,
-        principal: Option<AuthenticatedPrincipal>,
-        outbound_tx: mpsc::Sender<WsOutboundEvent>,
-        shutdown_token: CancellationToken,
-    ) -> Self {
-        Self {
-            disposal: CancellationToken::new(),
-            controls: Controls::new(outbound_tx.clone(), WsEventLimit::from_state(&state)),
-            state,
-            auth,
-            principal: principal.map(Arc::new),
-            outbound_tx,
-            lanes: HashMap::new(),
-            sessions: HashMap::new(),
-            session_group: ResponseSessionGroup::new(
-                NonZeroUsize::new(WS_MAX_SESSION_LANES).expect("positive session limit"),
-                NonZeroUsize::new(WS_MAX_CHECKPOINT_ITEMS).expect("positive item limit"),
-                NonZeroUsize::new(WS_MAX_CHECKPOINT_BYTES).expect("positive checkpoint limit"),
-                NonZeroUsize::new(WS_MAX_RETAINED_BYTES).expect("positive retention limit"),
-            ),
-            request_tasks: JoinSet::new(),
-            queued_requests: 0,
-            byte_budget: WsByteBudget::default(),
-            shutdown_token,
-        }
-    }
-
-    fn event_limit(&self) -> WsEventLimit {
-        WsEventLimit::from_state(&self.state)
-    }
-
-    fn has_capacity_for(&self, input_bytes: usize) -> bool {
-        self.request_tasks.len() + self.queued_requests < WS_MAX_OUTSTANDING_REQUESTS
-            && self.byte_budget.can_reserve(input_bytes)
-    }
-
-    fn schedule(&mut self, mut work: WsWorkItem) -> Result<(), WsAdmissionError> {
-        if !self.has_capacity_for(work.input_bytes()) {
-            return Err(WsAdmissionError {
-                error: WsError::TooManyRequests,
-                stream_id: work.stream_id().cloned(),
-            });
-        }
-
-        let lane = work.lane();
-        if !self.sessions.contains_key(&lane) {
-            if self.sessions.len() >= WS_MAX_SESSION_LANES {
-                return Err(WsAdmissionError {
-                    error: WsError::TooManyRequests,
-                    stream_id: lane,
-                });
-            }
-            let session = self.session_group.new_session().map_err(|error| WsAdmissionError {
-                error: WsError::from(error),
-                stream_id: lane.clone(),
-            })?;
-            self.sessions.insert(lane.clone(), Arc::new(session));
-        }
-        if let WsWorkItem::Execute { request, .. } = &mut work {
-            request.execution = Some(telemetry::QueuedExecution::new());
-        }
-        self.byte_budget.reserve(work.input_bytes());
-        if let Some(queue) = self.lanes.get_mut(&lane) {
-            queue.push_back(work);
-            self.queued_requests += 1;
-            debug!(stream_id = ?lane, queued_requests = queue.len(), "queued websocket request on active lane");
-            return Ok(());
-        }
-
-        self.lanes.insert(lane.clone(), VecDeque::new());
-        self.spawn(lane, work);
-        Ok(())
-    }
-
-    fn schedule_next(&mut self, lane: Option<StreamId>) {
-        let next = self.lanes.get_mut(&lane).and_then(VecDeque::pop_front);
-        if let Some(work) = next {
-            self.queued_requests -= 1;
-            self.spawn(lane, work);
-        } else {
-            self.lanes.remove(&lane);
-        }
-    }
-
-    fn discard_queued(&mut self) {
-        let discarded_bytes = self
-            .lanes
-            .values()
-            .flat_map(|queue| queue.iter())
-            .map(WsWorkItem::input_bytes)
-            .sum::<usize>();
-        self.byte_budget.release(discarded_bytes);
-        self.lanes.clear();
-        self.queued_requests = 0;
-    }
-
-    fn finish(&mut self, completion: Result<RequestCompletion, tokio::task::JoinError>, draining: bool) -> bool {
-        let completion = match completion {
-            Ok(completion) => completion,
-            Err(error) => {
-                warn!(%error, "responses websocket request task failed");
-                return false;
-            }
-        };
-        self.byte_budget.release(completion.input_bytes);
-        if let Err(error) = completion.result {
-            warn!(%error, "responses websocket request failed without a client-visible event");
-            return false;
-        }
-        if !draining && !self.shutdown_token.is_cancelled() {
-            self.schedule_next(completion.lane);
-        }
-        true
-    }
-
-    fn reap_ready(&mut self, draining: bool) -> bool {
-        while let Some(completion) = self.request_tasks.try_join_next() {
-            if !self.finish(completion, draining) {
-                return false;
-            }
-        }
-        true
-    }
-
-    fn spawn(&mut self, lane: Option<StreamId>, work: WsWorkItem) {
-        let register = self.controls.register.clone();
-        let disposal = self.disposal.clone();
-        let state = Arc::clone(&self.state);
-        let auth = self.auth.clone();
-        let principal = self.principal.clone();
-        let outbound_tx = self.outbound_tx.clone();
-        let stream_id = work.stream_id().cloned();
-        let input_bytes = work.input_bytes();
-        let event_limit = self.event_limit();
-        // schedule creates a session before admitting work; idle sessions survive schedule_next.
-        let session = Arc::clone(self.sessions.get(&lane).expect("admitted lane has a session"));
-        self.request_tasks.spawn(async move {
-            // Admission may precede dispatch by an entire inference/tool round.
-            // Recheck here for both new lanes and work dequeued by schedule_next.
-            if let Some(event) = websocket_identity_error_event(principal.as_deref()) {
-                return RequestCompletion {
-                    lane,
-                    input_bytes,
-                    result: queue_ws_json(&outbound_tx, event, stream_id.as_ref(), event_limit).await,
-                };
-            }
-            let result = match work {
-                WsWorkItem::Execute { request, .. } => {
-                    handle_ws_request(
-                        *request,
-                        RequestExecution {
-                            state: &state,
-                            auth,
-                            outbound_tx: &outbound_tx,
-                            disposal: &disposal,
-                            session: &session,
-                            event_limit,
-                            register: &register,
-                        },
-                    )
-                    .await
-                }
-                WsWorkItem::Reject { error, .. } => {
-                    if let Some(parent) = error.previous_response_id.as_deref() {
-                        session
-                            .discard_cached_response(parent)
-                            .map_err(WsError::from)
-                            .and(Err(error.error))
-                    } else {
-                        Err(error.error)
-                    }
-                }
-            };
-            // Dropping a failed executor stream aborts its worker asynchronously.
-            // Do not dispatch the next turn until its lease has been released.
-            let result = match session.wait_until_idle().await {
-                Ok(()) => result,
-                Err(error) => Err(WsError::from(error)),
-            };
-            let result = match result {
-                Ok(()) => Ok(()),
-                Err(error) => queue_ws_error(&outbound_tx, error, stream_id.as_ref(), event_limit).await,
-            };
-            RequestCompletion {
-                lane,
-                input_bytes,
-                result,
-            }
-        });
-    }
-}
 
 pub async fn responses_ws(State(state): State<AppState>, headers: HeaderMap, ws: WebSocketUpgrade) -> Response {
     upgrade_responses_ws(state, headers, ws, None)
@@ -355,156 +76,6 @@ fn upgrade_responses_ws(
             let _websocket_guard = websocket_guard;
             Box::pin(responses_ws_loop(socket, state, headers, principal)).await;
         })
-}
-
-fn begin_ws_draining(multiplexer: &mut WsMultiplexer, draining: &mut bool) {
-    *draining = true;
-    multiplexer.discard_queued();
-    multiplexer.controls.cancel_live_controls();
-    debug!(
-        active_streams = multiplexer.request_tasks.len(),
-        "draining responses websocket session"
-    );
-}
-
-#[tracing::instrument(name = "agentic.websocket.session", skip_all, parent = None)]
-async fn responses_ws_loop(
-    socket: WebSocket,
-    state: AppState,
-    headers: HeaderMap,
-    principal: Option<AuthenticatedPrincipal>,
-) {
-    let shutdown_token = state.shutdown_token.clone();
-    let state = Arc::new(state);
-    let (mut socket_sender, mut receiver) = socket.split();
-    let auth = extract_bearer(&headers, state.openai_api_key.as_deref());
-    let (outbound_tx, mut outbound_rx) = mpsc::channel(WS_OUTBOUND_BUFFER);
-    let mut sender = outbound_tx.clone();
-    let mut writer = tokio::spawn(async move {
-        while let Some(event) = outbound_rx.recv().await {
-            let event: WsOutboundEvent = event;
-            let message = Message::Text(event.0.into());
-            tokio::time::timeout(std::time::Duration::from_secs(10), socket_sender.send(message))
-                .await
-                .map_err(|_| WsError::SendFailed)?
-                .map_err(|_| WsError::SendFailed)?;
-        }
-        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), socket_sender.close()).await;
-        Ok::<_, WsError>(())
-    });
-    let mut writer_finished = false;
-    let mut expiry = tokio::time::interval(std::time::Duration::from_secs(1));
-    let mut multiplexer = WsMultiplexer::new(state, auth, principal, outbound_tx, shutdown_token.clone());
-    let mut draining = false;
-    let mut client_disconnected = false;
-
-    loop {
-        if shutdown_token.is_cancelled() && !draining {
-            begin_ws_draining(&mut multiplexer, &mut draining);
-        }
-        if draining && multiplexer.request_tasks.is_empty() && multiplexer.controls.tasks.is_empty() {
-            break;
-        }
-
-        tokio::select! {
-            () = shutdown_token.cancelled(), if !draining => {
-                begin_ws_draining(&mut multiplexer, &mut draining);
-            }
-            _ = &mut writer => {
-                writer_finished = true;
-                client_disconnected = true;
-                break;
-            }
-            _ = expiry.tick() => multiplexer.controls.expire(),
-            registration = multiplexer.controls.registrations.recv() => {
-                if let Some(registration) = registration {
-                    if multiplexer.controls.register(registration).is_err() { client_disconnected = true; break; }
-                    if draining { multiplexer.controls.cancel_live_controls(); }
-                }
-            }
-            completion = multiplexer.controls.tasks.join_next(), if !multiplexer.controls.tasks.is_empty() => {
-                if let Some(completion) = completion {
-                    if !multiplexer.controls.finish(completion) { client_disconnected = true; break; }
-                }
-            }
-            relay = multiplexer.controls.relays.join_next(), if !multiplexer.controls.relays.is_empty() => {
-                if !matches!(relay, Some(Ok(Ok(())))) { client_disconnected = true; break; }
-            }
-            completion = multiplexer.request_tasks.join_next(), if !multiplexer.request_tasks.is_empty() => {
-                let Some(completion) = completion else {
-                    continue;
-                };
-                if !multiplexer.finish(completion, draining) {
-                    client_disconnected = true;
-                    break;
-                }
-            }
-            message = receiver.next() => {
-                if shutdown_token.is_cancelled() && !draining {
-                    begin_ws_draining(&mut multiplexer, &mut draining);
-                    debug!("discarded websocket message received during shutdown");
-                    continue;
-                }
-                let Some(message) = message else {
-                    client_disconnected = true;
-                    break;
-                };
-                match message {
-                    Ok(message) => {
-                        if !handle_ws_client_message(
-                            message,
-                            &mut sender,
-                            &mut multiplexer,
-                            &mut draining,
-                        )
-                        {
-                            client_disconnected = true;
-                            break;
-                        }
-                    }
-                    Err(error) => {
-                        warn!(%error, "responses websocket receive error");
-                        client_disconnected = true;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    finish_ws_connection(multiplexer, sender, writer, writer_finished, client_disconnected).await;
-}
-
-async fn finish_ws_connection(
-    mut multiplexer: WsMultiplexer,
-    sender: WsSender,
-    mut writer: tokio::task::JoinHandle<Result<(), WsError>>,
-    writer_finished: bool,
-    client_disconnected: bool,
-) {
-    multiplexer.disposal.cancel();
-    multiplexer.controls.shutdown().await;
-    if client_disconnected {
-        while multiplexer.request_tasks.join_next().await.is_some() {}
-        // Executor stream disposal aborts its nested inference worker. Wait for
-        // every lease to release its pinned state before ending this connection.
-        for session in multiplexer.sessions.values() {
-            if let Err(error) = session.wait_until_idle().await {
-                warn!(%error, "failed to await websocket continuation disposal");
-            }
-        }
-    }
-    drop(multiplexer);
-    drop(sender);
-    if !writer_finished
-        && tokio::time::timeout(std::time::Duration::from_secs(15), &mut writer)
-            .await
-            .is_err()
-    {
-        writer.abort();
-        let _ = writer.await;
-    }
-    debug!("responses websocket session closed");
 }
 
 fn handle_ws_client_message(
@@ -539,28 +110,22 @@ fn handle_ws_client_message(
                 debug!("discarded websocket response.create during shutdown");
                 return true;
             }
-            match serde_json::from_str::<ResponseClientEvent>(&text) {
-                Ok(ResponseClientEvent::Inject(request)) => {
-                    if let Err(error) =
-                        multiplexer
-                            .controls
-                            .dispatch(request, text.len(), multiplexer.principal.clone())
-                    {
-                        let _ = handle_ws_error(sender, error, None, multiplexer.event_limit());
-                        return false;
+            if is_injection(&text) {
+                match serde_json::from_str::<ResponseInjectRequest>(&text) {
+                    Ok(request) => {
+                        if let Err(error) =
+                            multiplexer
+                                .controls
+                                .dispatch(request, text.len(), multiplexer.principal.clone())
+                        {
+                            let _ = handle_ws_error(sender, error, None, multiplexer.event_limit());
+                            return false;
+                        }
+                        return true;
                     }
-                    return true;
-                }
-                Ok(ResponseClientEvent::Create(_)) => {}
-                Err(error) => {
-                    // Injection schema errors are connection-fatal. Create
-                    // validation retains the existing lane-ordered error behavior.
-                    #[derive(Deserialize)]
-                    struct Kind {
-                        #[serde(rename = "type")]
-                        kind: String,
-                    }
-                    if serde_json::from_str::<Kind>(&text).is_ok_and(|kind| kind.kind == "response.inject") {
+                    Err(error) => {
+                        // Injection schema errors are connection-fatal. Create
+                        // validation retains the existing lane-ordered error behavior.
                         let _ = handle_ws_error(sender, WsError::InvalidJson(error), None, multiplexer.event_limit());
                         return false;
                     }
@@ -823,10 +388,9 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use super::{
-        StreamId, WS_MAX_OUTSTANDING_BYTES, WS_MAX_OUTSTANDING_REQUESTS, WS_MAX_STREAM_ID_CHARS,
-        WS_ROUTING_SLACK_BYTES, WsByteBudget, WsError, WsEventLimit, WsOutboundEvent, attach_stream_id, close_ws,
-        forward_ws_stream_chunk, keep_if_running, parse_ws_request, queue_ws_json, sse_json_data_lines,
-        websocket_identity_error_event, ws_routing_overhead,
+        StreamId, WS_MAX_STREAM_ID_CHARS, WS_ROUTING_SLACK_BYTES, WsError, WsEventLimit, WsOutboundEvent,
+        attach_stream_id, close_ws, forward_ws_stream_chunk, keep_if_running, parse_ws_request, queue_ws_json,
+        sse_json_data_lines, websocket_identity_error_event, ws_routing_overhead,
     };
     use crate::auth::AuthenticatedPrincipal;
 
@@ -928,18 +492,6 @@ mod tests {
         });
         let parsed = parse_ws_request(&request.to_string()).expect("256-character stream_id should be valid");
         assert_eq!(parsed.stream_id.expect("stream_id").as_str(), maximum);
-    }
-
-    #[test]
-    fn websocket_capacity_is_bounded_by_count_and_input_bytes() {
-        assert_eq!(WS_MAX_OUTSTANDING_REQUESTS, 64);
-        let mut budget = WsByteBudget::default();
-        budget.reserve(WS_MAX_OUTSTANDING_BYTES - 1);
-        assert!(budget.can_reserve(1));
-        budget.reserve(1);
-        assert!(!budget.can_reserve(1));
-        budget.release(WS_MAX_OUTSTANDING_BYTES);
-        assert!(budget.can_reserve(WS_MAX_OUTSTANDING_BYTES));
     }
 
     #[test]

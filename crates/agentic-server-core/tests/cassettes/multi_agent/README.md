@@ -2,11 +2,12 @@
 
 Run `../record_multi_agent_cassettes.sh` to record OpenAI before implementing the
 gateway contract. `MULTI_AGENT_RECORD_SET=openai` is the default. Set
-`MULTI_AGENT_SUITE=all` (default) or `workflows` to select all task scenarios.
-Select `review`, `proposals`, or `mixed-tools` to record just one scenario in JSON and SSE.
+`MULTI_AGENT_SUITE=all` (default) to select all task scenarios, plus both edge-case suites
+when using WebSocket transport. Select `review`, `proposals`, `mixed-tools`,
+`client-owned-tools`, or `code-interpreter` to record just one task scenario.
 
-The suite writes six YAML files per provider/model: one JSON and one SSE
-cassette for each of `review`, `proposals`, and `mixed-tools`.
+The HTTP suite writes ten YAML files per provider/model: one JSON and one SSE
+cassette for each task scenario. WebSocket `all` writes seven files per provider/model.
 Filenames include the provider, scenario, model, and transport mode.
 
 The proposal and mixed-tools workflows continue pending client tool calls using
@@ -252,8 +253,10 @@ uv run --no-project \
   bash crates/agentic-server-core/tests/cassettes/record_multi_agent_cassettes.sh
 ```
 
-Each invocation writes five `multi-agent-<provider>-<scenario>-<model>-websocket.yaml`
-files beside the existing HTTP recordings. The HTTP files are untouched.
+With `MULTI_AGENT_SUITE=all`, each invocation writes five
+`multi-agent-<provider>-<scenario>-<model>-websocket.yaml` task files plus the
+`ws-edge-cases` and `ws-active-text-edge-cases` files, for seven YAMLs per provider.
+`MULTI_AGENT_EDGE_TIMEOUT` applies to both edge-case suites. The HTTP files are untouched.
 `MULTI_AGENT_STREAM_MODE` applies only to HTTP; WebSocket has one duplex mode.
 Use `MULTI_AGENT_SUITE=proposals` to isolate live function-output injection, or
 append `--dry-run` to preview requests without connecting or writing files.
@@ -317,20 +320,25 @@ distinguishes a completed response from a successfully finished delegated task.
 | Review | Three delegated agents, one root final answer | Three delegated agents, one root final answer |
 | Proposals | Two delegated agents, two accepted function injections, root final answer | Same observed transport milestones |
 | Mixed tools | Accepted shell injection; web search and MCP work; root final answer | Accepted shell injection; web search and MCP work; root final answer |
-| Client-owned tools | Three accepted injections (discovery then two functions); two late rejections; two completed responses, **no root final answer** | Six accepted injections (three discovery, two function, one custom); one completed response and root final answer |
-| Code interpreter | Two delegated agents, web research and two interpreter calls, root final answer describing four distinct problems | Two delegated agents, five web searches, six completed interpreter calls with logs, root final answer covering **four distinct** problems |
+| Client-owned tools | Three accepted injections (discovery then two functions); two late rejections; two completed responses, **no root final answer** | Two late discovery rejections with unchanged input carried into a continuation; three accepted injections (two function, one custom); two completed responses and one root final answer |
+| Code interpreter | Two delegated agents, web research and two interpreter calls, root final answer describing four distinct problems | Two delegated agents, five web searches, five completed interpreter calls with logs, root final answer covering **four distinct** problems |
 
 The client-owned OpenAI capture returns custom-tool outputs intact in a late
 `response_already_completed` batch; it does not prove live custom-output acceptance.
 Returned late input is carried into the second create. Neither a clean close nor the
 recorder's completed status establishes that the root produced its requested summary.
+The latest gateway capture also takes the late discovery path: its root requests two
+discovery calls before delegating, and the response completes before either injection
+is accepted. Both rejected outputs are returned unchanged and submitted together with
+`previous_response_id` on the same socket. That continuation discovers the functions,
+delegates all three tasks, accepts their function/custom outputs, and produces the
+requested weather, time zone, and custom marker in its final answer. This differs from
+the previous capture's live discovery path; deterministic tests still cover live discovery.
 Both existing gateway HTTP code-interpreter captures produce four distinct problems.
 The latest WebSocket capture also satisfies this requirement: one child solves Two Sum
-and Best Time to Buy and Sell Stock; the other solves Search in Rotated Sorted Array
-and Number of 1 Bits. All four have recorded execution outputs and appear in the root's
-final summary. The second child initially expects 31 set bits for 2147483645, observes
-30, independently checks the count, and reruns with the corrected expectation before
-finalizing. The six interpreter calls include this verification and corrected run.
+and Merge Two Sorted Lists; the other solves Valid Parentheses and Longest Palindromic
+Substring. All four have recorded execution outputs and appear in the root's final
+summary. The fifth interpreter call produces the second child's consolidated report.
 
 The previous WebSocket attempt duplicated both problems across children. Shared model
 guidance was strengthened to request explicit disjoint assignments and verification of
@@ -360,7 +368,8 @@ compaction/race characterization remain separate work.
 
 ## WebSocket edge-case characterization
 
-Run this suite separately from `all`; it records four isolated sessions using the
+WebSocket `all` includes this suite and its active variant. To record only edge cases,
+select `MULTI_AGENT_SUITE=websocket-edge-cases`; it records four isolated sessions using the
 same raw `RecordedSession` recorder. The edge driver lives in `websocket_recorder.py`,
 invoked by the existing shell script. All four cases write to one YAML per provider:
 `multi-agent-<provider>-ws-edge-cases-<model>-websocket.yaml`. Its `sessions` list
@@ -540,4 +549,3 @@ separate model dependency sidecar; it is not a new provider reference or a repla
 for the duplex YAML. Hosted-tool dependencies, request matching, and replay barriers
 for concurrent dependency completion still need to be added for **full dependency-backed
 replay**. The present captures alone do not supply that evidence.
-

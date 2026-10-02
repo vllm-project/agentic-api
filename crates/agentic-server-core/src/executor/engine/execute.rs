@@ -100,9 +100,10 @@ impl ExecuteRequest {
         Ok(self)
     }
 
-    /// Keep a streaming multi-agent run alive for client tool outputs. The
+    /// Allow a streaming multi-agent run to receive live client tool outputs. The
     /// coordinator consumes this endpoint; adapters retain the paired handle.
     /// Admission still requires effective multi-agent configuration and storage.
+    /// Use with [`Self::run`]; [`Self::run_retained`] creates its own control pair.
     #[must_use]
     pub fn with_run_control(mut self, control: RunControlReceiver) -> Self {
         self.control = Some(control);
@@ -112,14 +113,21 @@ impl ExecuteRequest {
     /// Start a response with delivery retained until all event-sink handles are dropped.
     /// The adapter must drain events independently and join the owner on every exit.
     /// # Errors
-    /// Returns request preparation errors before spawning response work.
+    /// Returns request preparation errors or rejects an externally supplied
+    /// control endpoint before spawning response work.
     pub async fn run_retained(mut self) -> ExecutorResult<RunningResponse> {
         let mut execution = self
             .execution
             .take()
             .unwrap_or_else(|| ExecutionSpan::start(Api::Responses, Route::Executor, true));
         let limit = self.effective_max_stream_event_bytes();
-        let prepared = prepare(self.payload, &self.exec_ctx, self.continuation, false).await;
+        let prepared = if self.control.is_some() {
+            Err(ExecutorError::InvalidRequest(
+                "retained execution creates its own run control; use run for an external control".into(),
+            ))
+        } else {
+            prepare(self.payload, &self.exec_ctx, self.continuation, false).await
+        };
         let (ctx, tools) = match prepared {
             Ok(prepared) => prepared,
             Err(error) => {
@@ -225,6 +233,18 @@ pub async fn execute(
     exec_ctx: Arc<ExecutionContext>,
 ) -> ExecutorResult<Either<ResponsePayload, BoxStream>> {
     ExecuteRequest::new(request, exec_ctx).run().await
+}
+
+/// Prepare a rehydrated turn for local completion without model generation.
+/// Consumes the context so rejected input cannot expose a partially prepared
+/// agent tree. The returned context is ready for [`crate::executor::persist_turn`].
+///
+/// # Errors
+/// Rejects invalid multi-agent continuation input or checkpoint retention limits
+/// before publishing a checkpoint.
+pub fn prepare_non_generating_turn(mut ctx: RequestContext, exec: &ExecutionContext) -> ExecutorResult<RequestContext> {
+    super::multi_agent::prepare_without_inference(&mut ctx, exec)?;
+    Ok(ctx)
 }
 
 async fn prepare(

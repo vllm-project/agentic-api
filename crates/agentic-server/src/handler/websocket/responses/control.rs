@@ -3,7 +3,7 @@ use super::{StreamId, WsError, WsEventLimit, WsOutboundEvent, stream_ws_response
 use crate::auth::AuthenticatedPrincipal;
 use agentic_core::{
     executor::{
-        BoxStream, ExecutorError, ResponseRunOwner, RunningResponse,
+        BoxStream, ResponseRunOwner, RunningResponse,
         multi_agent::{
             ClientCallError, RunControl,
             control::{ControlAdmissionError, OutputDecision},
@@ -11,8 +11,8 @@ use agentic_core::{
         response_events::{ResponseCommitState, ResponseEventSink},
     },
     types::{
-        client_calls::{ClientToolOutput, ClientToolOutputBatch},
-        injection::{InjectionEvent, InjectionFailure, InjectionFailureCode, ResponseInjectRequest},
+        client_calls::ClientToolOutputBatch,
+        injection::{InjectionEvent, InjectionFailure, InjectionFailureCode, InjectionInput, ResponseInjectRequest},
     },
 };
 use std::{
@@ -32,9 +32,9 @@ const MAX_ROUTES: usize = 128;
 const RETAIN_COMPLETED: Duration = Duration::from_secs(60);
 
 pub(super) struct Registration {
-    pub response: RunningResponse,
-    pub lane: Option<StreamId>,
-    pub reply: oneshot::Sender<ResponseRunOwner>,
+    pub(super) response: RunningResponse,
+    pub(super) lane: Option<StreamId>,
+    pub(super) reply: oneshot::Sender<ResponseRunOwner>,
 }
 struct Route {
     cancellation: CancellationToken,
@@ -48,15 +48,15 @@ struct RetainedRoute {
 }
 pub(super) struct ControlCompletion {
     bytes: usize,
-    pub result: Result<(), WsError>,
+    pub(super) result: Result<(), WsError>,
 }
 
 pub(super) struct Controls {
     routes: HashMap<String, RetainedRoute>,
-    pub registrations: mpsc::Receiver<Registration>,
-    pub register: mpsc::Sender<Registration>,
-    pub tasks: JoinSet<ControlCompletion>,
-    pub relays: JoinSet<Result<(), WsError>>,
+    pub(super) registrations: mpsc::Receiver<Registration>,
+    pub(super) register: mpsc::Sender<Registration>,
+    pub(super) tasks: JoinSet<ControlCompletion>,
+    pub(super) relays: JoinSet<Result<(), WsError>>,
     bytes: usize,
     rejected_owner: Option<ResponseRunOwner>,
     outbound: mpsc::Sender<WsOutboundEvent>,
@@ -66,7 +66,7 @@ pub(super) struct Controls {
     unrouted: ResponseEventSink,
 }
 impl Controls {
-    pub fn new(outbound: mpsc::Sender<WsOutboundEvent>, limit: WsEventLimit) -> Self {
+    pub(super) fn new(outbound: mpsc::Sender<WsOutboundEvent>, limit: WsEventLimit) -> Self {
         let (register, registrations) = mpsc::channel(64);
         let (unrouted, events) = ResponseEventSink::channel(limit.executor_limit(None));
         let mut result = Self {
@@ -90,7 +90,7 @@ impl Controls {
         self.relays
             .spawn(async move { stream_ws_response(&outbound, events, lane.as_ref(), limit).await });
     }
-    pub fn cancel_live_controls(&self) {
+    pub(super) fn cancel_live_controls(&self) {
         for entry in self.routes.values() {
             if entry.route.control.is_some() {
                 entry.route.cancellation.cancel();
@@ -98,7 +98,7 @@ impl Controls {
         }
     }
 
-    pub fn expire(&mut self) {
+    pub(super) fn expire(&mut self) {
         let now = Instant::now();
         self.routes.retain(|_, entry| {
             if entry.route.sink.commit_state() != ResponseCommitState::Running {
@@ -108,7 +108,7 @@ impl Controls {
             true
         });
     }
-    pub fn register(&mut self, registration: Registration) -> Result<(), WsError> {
+    pub(super) fn register(&mut self, registration: Registration) -> Result<(), WsError> {
         self.expire();
         if self.routes.len() == MAX_ROUTES {
             let oldest = self
@@ -156,7 +156,7 @@ impl Controls {
         }
         Ok(())
     }
-    pub fn dispatch(
+    pub(super) fn dispatch(
         &mut self,
         request: ResponseInjectRequest,
         bytes: usize,
@@ -202,30 +202,56 @@ impl Controls {
         });
         Ok(())
     }
-    pub fn finish(&mut self, completion: Result<ControlCompletion, tokio::task::JoinError>) -> bool {
+    pub(super) fn finish(&mut self, completion: Result<ControlCompletion, tokio::task::JoinError>) -> bool {
         match completion {
             Ok(completion) => {
                 self.bytes -= completion.bytes;
-                completion.result.is_ok()
+                match completion.result {
+                    Ok(()) => true,
+                    Err(error) => {
+                        tracing::debug!(%error, "responses websocket control ended with a transport failure");
+                        false
+                    }
+                }
             }
-            Err(_) => false,
+            Err(error) => {
+                tracing::warn!(%error, "responses websocket control task failed");
+                false
+            }
         }
     }
-    pub async fn shutdown(&mut self) {
+    pub(super) async fn shutdown(&mut self) {
         self.registrations.close();
         if let Some(mut owner) = self.rejected_owner.take() {
-            let _ = owner.join().await;
+            if let Err(error) = owner.join().await {
+                tracing::debug!(%error, "responses websocket execution ended during disposal");
+            }
         }
         while let Ok(registration) = self.registrations.try_recv() {
             let mut owner = registration.response.owner;
             owner.cancel();
-            let _ = owner.join().await;
+            if let Err(error) = owner.join().await {
+                tracing::debug!(%error, "responses websocket execution ended during disposal");
+            }
         }
         self.tasks.abort_all();
-        while self.tasks.join_next().await.is_some() {}
+        while let Some(completion) = self.tasks.join_next().await {
+            if let Err(error) = completion {
+                if !error.is_cancelled() {
+                    tracing::warn!(%error, "responses websocket control task failed during disposal");
+                }
+            }
+        }
         self.routes.clear();
         self.relays.abort_all();
-        while self.relays.join_next().await.is_some() {}
+        while let Some(completion) = self.relays.join_next().await {
+            match completion {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => tracing::debug!(%error, "responses websocket relay failed during disposal"),
+                Err(error) if error.is_cancelled() => {}
+                Err(error) => tracing::warn!(%error, "responses websocket relay task failed during disposal"),
+            }
+        }
     }
 }
 
@@ -255,54 +281,61 @@ async fn inject(
             .await
             .map_err(WsError::from);
     };
-    if route.sink.commit_state() == ResponseCommitState::Committed {
-        return route
-            .sink
-            .emit_local(failed(request, InjectionFailureCode::ResponseAlreadyCompleted))
-            .await
-            .map_err(WsError::from);
+    match route.sink.commit_state() {
+        ResponseCommitState::Running => {}
+        ResponseCommitState::Committed | ResponseCommitState::Failed | ResponseCommitState::Aborted => {
+            return route
+                .sink
+                .emit_local(failed(request, InjectionFailureCode::ResponseAlreadyCompleted))
+                .await
+                .map_err(WsError::from);
+        }
     }
     let Some(control) = &route.control else {
-        return Err(WsError::from(ExecutorError::InvalidRequest(
-            "response does not accept multi-agent injection".into(),
-        )));
+        return route
+            .sink
+            .emit_local(failed(request, InjectionFailureCode::InvalidInput))
+            .await
+            .map_err(WsError::from);
     };
     let batch = ClientToolOutputBatch {
-        response_id: request.response_id.clone(),
-        outputs: request.input.iter().cloned().map(ClientToolOutput::from).collect(),
+        response_id: request.response_id,
+        outputs: request.input.into_iter().map(Into::into).collect(),
     };
+    let response_id = batch.response_id.clone();
     let decision = match control.try_submit_outputs(batch) {
-        Ok(submission) => Some(submission.decision().await.map_err(|_| WsError::SendFailed)?),
-        Err(rejected) if rejected.reason == ControlAdmissionError::Closed => None,
-        Err(_) => return Err(WsError::TooManyRequests),
+        Ok(submission) => submission.decision().await.map_err(|_| WsError::SendFailed)?,
+        Err(rejected) => match rejected.reason {
+            ControlAdmissionError::Closed => OutputDecision::Finalizing(rejected.input),
+            ControlAdmissionError::Full | ControlAdmissionError::TooLarge => return Err(WsError::TooManyRequests),
+        },
     };
     match decision {
-        Some(OutputDecision::Accepted) => {
-            route
-                .sink
-                .emit_local(InjectionEvent::Created {
-                    response_id: request.response_id,
-                })
-                .await?;
+        OutputDecision::Accepted => {
+            route.sink.emit_local(InjectionEvent::Created { response_id }).await?;
         }
-        Some(OutputDecision::Rejected(rejected)) => {
+        OutputDecision::Rejected(rejected) => {
             let message = match rejected.reason {
                 ClientCallError::AlreadyResolved(call_id) | ClientCallError::DuplicateCall(call_id) => {
                     format!("Tool call '{call_id}' already has an output.")
                 }
                 ClientCallError::UnknownCall(call_id) => {
-                    format!(
-                        "Tool call '{call_id}' is not pending on response '{}'.",
-                        request.response_id
-                    )
+                    format!("Tool call '{call_id}' is not pending on response '{response_id}'.")
                 }
-                reason => return Err(WsError::from(ExecutorError::InvalidRequest(reason.to_string()))),
+                reason @ (ClientCallError::EmptyResponseId
+                | ClientCallError::WrongResponse
+                | ClientCallError::EmptyCallId
+                | ClientCallError::CallLimit
+                | ClientCallError::BatchLimit
+                | ClientCallError::InvalidOwner
+                | ClientCallError::KindMismatch { .. }
+                | ClientCallError::Budget(_)) => reason.to_string(),
             };
             route
                 .sink
                 .emit_local(InjectionEvent::Failed {
-                    response_id: request.response_id,
-                    input: request.input,
+                    response_id: rejected.input.response_id,
+                    input: rejected.input.outputs.into_iter().map(InjectionInput::from).collect(),
                     error: InjectionFailure {
                         code: InjectionFailureCode::InvalidInput,
                         message,
@@ -310,11 +343,19 @@ async fn inject(
                 })
                 .await?;
         }
-        Some(OutputDecision::Finalizing(_)) | None => {
-            route.sink.wait_committed().await?;
+        OutputDecision::Finalizing(input) => {
+            // Failed/aborted execution also terminates input admission. The
+            // acknowledgement still uses the retained response relay.
+            route.sink.wait_finished().await?;
             route
                 .sink
-                .emit_local(failed(request, InjectionFailureCode::ResponseAlreadyCompleted))
+                .emit_local(failed(
+                    ResponseInjectRequest {
+                        response_id: input.response_id,
+                        input: input.outputs.into_iter().map(InjectionInput::from).collect(),
+                    },
+                    InjectionFailureCode::ResponseAlreadyCompleted,
+                ))
                 .await?;
         }
     }

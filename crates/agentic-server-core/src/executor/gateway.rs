@@ -725,6 +725,7 @@ pub(super) async fn execute_and_emit_output_calls(
 mod tests {
     use super::GatewayCallResult;
     use crate::executor::accumulator::ResponseAccumulator;
+    use crate::executor::gateway_accumulator::StreamEvent;
     use crate::types::io::output::{FunctionToolCall, McpListTool, McpListTools};
     use crate::types::io::{
         CodeInterpreterCall, CodeInterpreterCallOutput, CodeInterpreterCallStatus, CompactionItem, InputItem,
@@ -1301,7 +1302,7 @@ mod tests {
             .await
             .expect("completed events");
 
-        let events = std::iter::from_fn(|| receiver.try_recv().ok())
+        let events = std::iter::from_fn(|| receiver.try_recv().ok().map(StreamEvent::into_frame))
             .map(|event| parse_named_sse_event(&event.content))
             .collect::<Vec<_>>();
         assert!(!events.is_empty());
@@ -1649,7 +1650,7 @@ mod tests {
             .await
             .expect("completed events");
 
-        let events = std::iter::from_fn(|| receiver.try_recv().ok())
+        let events = std::iter::from_fn(|| receiver.try_recv().ok().map(StreamEvent::into_frame))
             .map(|event| parse_named_sse_event(&event.content))
             .collect::<Vec<_>>();
         assert_eq!(
@@ -1693,7 +1694,7 @@ mod tests {
             .await
             .expect("completed events");
 
-        let chunks = std::iter::from_fn(|| receiver.try_recv().ok())
+        let chunks = std::iter::from_fn(|| receiver.try_recv().ok().map(StreamEvent::into_frame))
             .map(|event| event.content)
             .collect::<Vec<_>>();
         let events = chunks
@@ -1761,7 +1762,7 @@ mod tests {
         .await
         .expect("completed events");
 
-        let events = std::iter::from_fn(|| receiver.try_recv().ok())
+        let events = std::iter::from_fn(|| receiver.try_recv().ok().map(StreamEvent::into_frame))
             .map(|event| parse_named_sse_event(&event.content))
             .collect::<Vec<_>>();
         assert_eq!(
@@ -1852,6 +1853,7 @@ mod tests {
 
         let mut start_events = Vec::new();
         while let Ok(event) = receiver.try_recv() {
+            let event = event.into_frame();
             start_events.push(parse_named_sse_event(&event.content));
         }
         assert_eq!(
@@ -1904,13 +1906,13 @@ mod tests {
             .await
             .expect("completed events");
 
-        let completed = receiver.try_recv().expect("mcp_call.completed");
+        let completed = receiver.try_recv().expect("mcp_call.completed").into_frame();
         let completed = parse_named_sse_event(&completed.content);
         assert_eq!(completed["type"], "response.mcp_call.completed");
         assert_eq!(completed["sequence_number"], 4);
         assert!(completed.get("item").is_none());
 
-        let done = receiver.try_recv().expect("output_item.done");
+        let done = receiver.try_recv().expect("output_item.done").into_frame();
         let done = parse_named_sse_event(&done.content);
         assert_eq!(done["type"], "response.output_item.done");
         assert_eq!(done["sequence_number"], 5);
@@ -1973,7 +1975,7 @@ mod tests {
             .await
             .expect("failed events");
 
-        let events = std::iter::from_fn(|| receiver.try_recv().ok())
+        let events = std::iter::from_fn(|| receiver.try_recv().ok().map(StreamEvent::into_frame))
             .map(|event| parse_named_sse_event(&event.content))
             .collect::<Vec<_>>();
         assert_eq!(

@@ -5,7 +5,10 @@ use crate::executor::multi_agent::{
     AgentPhase, AgentState, RunControlReceiver,
     control::{OutputCommand, OutputDecision},
 };
-use crate::types::{agent::AgentTurnKey, client_calls::ClientToolOutputBatch};
+use crate::types::{
+    agent::AgentTurnKey,
+    client_calls::{ClientToolOutput, ClientToolOutputBatch},
+};
 
 pub(super) async fn receive(control: &mut Option<RunControlReceiver>) -> Option<OutputCommand> {
     match control {
@@ -34,6 +37,7 @@ impl MultiAgentRun {
                 .contexts
                 .get_mut(&identity)
                 .expect("registered call owner has context");
+            context.discovery_dirty |= matches!(routed.output, ClientToolOutput::ToolSearch(_));
             context.stored.history.push(routed.output.into());
             // Invalidate an in-flight summary snapshot; never overwrite new input.
             context.generation += 1;

@@ -32,6 +32,18 @@ pub(super) fn stream_id_from_text(text: &str) -> Option<StreamId> {
     serde_json::from_str::<StreamIdEnvelope>(text).ok()?.stream_id
 }
 
+/// Inspect only the discriminator; response.create is decoded by its lane-aware
+/// parser so a large creation payload is not allocated and discarded twice.
+pub(super) fn is_injection(text: &str) -> bool {
+    #[derive(Deserialize)]
+    struct Envelope {
+        #[serde(rename = "type")]
+        kind: Option<String>,
+    }
+
+    serde_json::from_str::<Envelope>(text).is_ok_and(|event| event.kind.as_deref() == Some("response.inject"))
+}
+
 pub(super) fn parse_ws_request(text: &str) -> Result<WsRequest, WsRequestParseError> {
     let value = serde_json::from_str::<Value>(text).map_err(|error| WsRequestParseError {
         error: WsError::InvalidJson(error),

@@ -12,7 +12,7 @@ pub(crate) mod retained;
 mod streaming;
 mod usage;
 
-pub use execute::{ExecuteRequest, execute};
+pub use execute::{ExecuteRequest, execute, prepare_non_generating_turn};
 #[cfg(test)]
 use streaming::panicked_stream_chunks;
 use usage::accumulate_usage;
@@ -29,7 +29,7 @@ use super::gateway::{
     compaction_event_plans, emit_gateway_completed_events, emit_gateway_start_events, emit_response_start_events,
 };
 #[cfg(test)]
-use super::gateway_accumulator::{GatewayStreamAccumulator, STREAM_EVENT_BUFFER, StreamEvent};
+use super::gateway_accumulator::{GatewayStreamAccumulator, STREAM_EVENT_BUFFER, StreamEvent, StreamFrame};
 use crate::executor::error::ExecutorResult;
 #[cfg(test)]
 use crate::executor::inference::DONE_MARKER;
@@ -928,11 +928,10 @@ mod tests {
                 .process_sse_line(r#"data: {"type":"response.created"}"#, 0)
                 .expect("event should be emitted");
             event_tx
-                .try_send(StreamEvent {
-                    flushed: None,
+                .try_send(StreamEvent::Frame(StreamFrame {
                     content: "event".to_owned(),
                     sequence_number: event.sequence_number().expect("event should be numbered"),
-                })
+                }))
                 .expect("test receiver should remain open");
             panic!("test task panic");
         });

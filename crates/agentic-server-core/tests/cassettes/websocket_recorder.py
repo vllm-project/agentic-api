@@ -432,6 +432,8 @@ def main():
     slug = args.model.translate(str.maketrans("/: ", "---"))
     failed = []
     selection = "active-text-edge-cases" if args.active else "edge-cases"
+    if not args.active and args.case != "all":
+        selection = f"edge-{args.case}"
     output = args.output_dir / f"multi-agent-{args.provider}-ws-{selection}-{slug}-websocket.yaml"
     done = completed_cases(output) if args.active else set()
     capture = SessionRecorder(output)

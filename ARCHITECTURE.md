@@ -185,14 +185,16 @@ building `ExecuteRequest`, preserving strict validation for in-process execution
 
 `GET /v1/responses` upgrades to a WebSocket. Structurally this is not a one-shot
 handler like the HTTP routes — `responses_ws_loop` is a long-lived session loop that
-decodes typed `ResponseClientEvent` messages and uses `ExecuteRequest::run_retained()`
+decodes typed create and injection messages and uses `ExecuteRequest::run_retained()`
 to drive the same inference/tool loop and persistence APIs as HTTP. Requests with distinct
 `stream_id` values run concurrently, while requests in the same lane remain FIFO;
 requests without a `stream_id` share a default FIFO lane. The session admits at most
 64 active or queued requests and 12 MiB of aggregate request data. WebSocket sessions
 force `stream: true` and honor the requested `store` value. Because axum's built-in graceful shutdown
 doesn't wait for upgraded connections, `AppState` carries a separate
-`WebSocketTracker` so shutdown can drain in-flight sessions.
+`WebSocketTracker` so shutdown can drain in-flight sessions. `connection.rs` owns socket
+reading, writing, and shutdown; `multiplexer.rs` owns bounded create admission and lane FIFO;
+`control.rs` owns retained response routes and injection tasks.
 
 WebSocket session admission allows multi-agent configuration with `store: true`,
 including configuration inherited from a stored agent tree. The common multi-agent
@@ -213,8 +215,9 @@ Unknown and retained-completed targets return `response.inject.failed` with the 
 Malformed injection schema closes the connection after a generic validation error.
 An already-resolved call instead returns `response.inject.failed` with `invalid_input`
 and the submitted input, leaving the connection usable, as observed in the OpenAI capture.
-Duplicate-within-batch and unknown-call batches still need active-run characterization;
-their reference captures reached finalization first. A quiescent tree with pending client
+Paired active recordings confirm atomic rejection of duplicate-within-batch and mixed
+valid/unknown-call batches, successful valid-only resubmission, and live duplicate rejection.
+Deterministic core and transport tests exercise the same decisions. A quiescent tree with pending client
 calls completes and persists its checkpoint for continuation rather than waiting indefinitely
 for socket input. Commands losing the finalization race return their input after commit.
 
@@ -225,18 +228,21 @@ through acknowledgement relay. Control exhaustion closes the connection, with an
 error when the bounded outbound queue can admit it. There is no overflow buffer.
 `ResponseEventSink` retains the response's sequence owner and one-entry delivery queue
 after execution. Accepted decisions enqueue acknowledgements through that same sink;
-a flush barrier keeps terminal delivery ahead of the next create in its lane.
+a typed flush barrier keeps terminal delivery ahead of the next create in its lane without
+carrying dummy frame data or advancing the public sequence.
 An independent socket writer drains the shared 64-entry queue with a ten-second send
 deadline, so the reader never waits for a socket write. Failed acknowledgement delivery
 is a transport failure, never an instruction to retry accepted input. Disconnect cancels
 and joins response owners and admitted controls. Graceful shutdown drains ordinary active
 creates and cancels live multi-agent runs, which could otherwise wait forever for new
 client input after admission stops. Admitted acknowledgements retain their delivery leases.
-Non-generating prewarm creates retain their existing local-completion path.
+Non-generating prewarm creates use local completion and apply continuation input through
+the core's agent ownership validation before committing the updated tree, without inference.
 
-These are deterministic gateway guarantees. OpenAI/gateway duplex cassette recording,
-negative-case characterization, and comparative resource measurements remain follow-up work;
-this implementation does not advertise complete transport conformance.
+OpenAI/gateway duplex recordings and deterministic tests cover the workflows and active
+edge cases above. Full replay of independently recorded model and hosted-tool dependencies
+and comparative resource measurements remain follow-up work; this implementation does
+not advertise complete transport conformance.
 
 Executor streams propagate downstream backpressure through a bounded event channel.
 `[responses]` configures separate ceilings for upstream JSON bodies, upstream SSE

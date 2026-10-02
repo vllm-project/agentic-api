@@ -17,10 +17,25 @@ pub struct GatewayStreamAccumulator {
     max_stream_event_bytes: usize,
 }
 
-pub(super) struct StreamEvent {
+/// Ordered delivery messages. Flush barriers carry no wire data or sequence.
+pub(super) enum StreamEvent {
+    Frame(StreamFrame),
+    Flush(tokio::sync::oneshot::Sender<()>),
+}
+
+pub(super) struct StreamFrame {
     pub(super) content: String,
-    pub(super) flushed: Option<tokio::sync::oneshot::Sender<()>>,
     pub(super) sequence_number: u64,
+}
+
+#[cfg(test)]
+impl StreamEvent {
+    pub(super) fn into_frame(self) -> StreamFrame {
+        match self {
+            Self::Frame(frame) => frame,
+            Self::Flush(_) => panic!("expected a wire frame, received a flush barrier"),
+        }
+    }
 }
 
 /// Executor streams keep only a small number of bounded-size events ahead of
@@ -216,11 +231,10 @@ pub(super) async fn emit_sse_frame_limited(
         .ok_or_else(|| ExecutorError::StreamError("stream event has no sequence number".to_owned()))?;
     let content = checked_stream_event_limited(frame, max_bytes)?;
     sender
-        .send(StreamEvent {
-            flushed: None,
+        .send(StreamEvent::Frame(StreamFrame {
             content,
             sequence_number,
-        })
+        }))
         .await
         .map_err(|_| ExecutorError::StreamError("stream receiver closed while emitting gateway event".to_owned()))
 }
@@ -355,7 +369,11 @@ mod tests {
         });
 
         for expected_sequence_number in 0..300 {
-            let event = receiver.recv().await.expect("all burst events should arrive");
+            let event = receiver
+                .recv()
+                .await
+                .expect("all burst events should arrive")
+                .into_frame();
             assert_eq!(event.sequence_number, expected_sequence_number);
         }
         producer.await.expect("producer should not panic");

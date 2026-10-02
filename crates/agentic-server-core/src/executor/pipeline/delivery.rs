@@ -489,7 +489,7 @@ mod tests {
             )
             .unwrap();
             delivery.accept_agent_frame(&source, frame).await.unwrap();
-            let event = receiver.try_recv().unwrap();
+            let event = receiver.try_recv().unwrap().into_frame();
             let frame = event
                 .content
                 .lines()
@@ -510,7 +510,7 @@ mod tests {
             )
             .unwrap();
             delivery.accept_agent_frame(&source, frame).await.unwrap();
-            let event = receiver.try_recv().unwrap();
+            let event = receiver.try_recv().unwrap().into_frame();
             let frame = event
                 .content
                 .lines()
@@ -559,7 +559,11 @@ mod tests {
             .expect("flush succeeds");
         assert_eq!(deferred_bytes, 0);
 
-        let indices = [receiver.try_recv().unwrap(), receiver.try_recv().unwrap()].map(|event| {
+        let indices = [
+            receiver.try_recv().unwrap().into_frame(),
+            receiver.try_recv().unwrap().into_frame(),
+        ]
+        .map(|event| {
             let data_line = event
                 .content
                 .lines()
@@ -617,10 +621,13 @@ mod tests {
         let mut pending = Box::pin(emit_stream_frame(&mut pending_frame, &mut emit_ctx));
         assert!(futures::poll!(pending.as_mut()).is_pending());
         drop(pending);
-        assert_eq!(receiver.try_recv().unwrap().sequence_number, 0);
+        assert_eq!(receiver.try_recv().unwrap().into_frame().sequence_number, 0);
 
         assert!(emit_stream_frame(&mut created(), &mut emit_ctx).await.unwrap());
-        let delivered = receiver.try_recv().expect("cancelled creation was not delivered");
+        let delivered = receiver
+            .try_recv()
+            .expect("cancelled creation was not delivered")
+            .into_frame();
         assert_eq!(delivered.sequence_number, 1);
         assert!(delivered.content.contains("resp_test"));
     }
@@ -644,7 +651,7 @@ mod tests {
         emit_stream_frame(&mut frame(0, serde_json::json!({"id":"msg_0"})), &mut emit_ctx)
             .await
             .unwrap();
-        assert_eq!(receiver.try_recv().unwrap().sequence_number, 0);
+        assert_eq!(receiver.try_recv().unwrap().into_frame().sequence_number, 0);
     }
 
     #[tokio::test]
@@ -701,7 +708,7 @@ mod tests {
         ));
         drop(duplicate);
 
-        let frames = std::iter::from_fn(|| receiver.try_recv().ok())
+        let frames = std::iter::from_fn(|| receiver.try_recv().ok().map(StreamEvent::into_frame))
             .map(|event| {
                 event
                     .content
@@ -739,7 +746,7 @@ mod tests {
         emit_gateway_event(&mut created(), &mut accumulator, &sender)
             .await
             .unwrap();
-        assert_eq!(receiver.try_recv().unwrap().sequence_number, 0);
+        assert_eq!(receiver.try_recv().unwrap().into_frame().sequence_number, 0);
     }
 
     #[tokio::test]
@@ -768,18 +775,18 @@ mod tests {
             &mut bytes,
         ));
         assert!(futures::poll!(flush.as_mut()).is_pending());
-        let first = receiver.try_recv().unwrap();
+        let first = receiver.try_recv().unwrap().into_frame();
         assert_eq!(first.sequence_number, 0);
         assert!(matches!(futures::poll!(flush.as_mut()), std::task::Poll::Ready(Ok(()))));
         drop(flush);
-        assert_eq!(receiver.try_recv().unwrap().sequence_number, 1);
+        assert_eq!(receiver.try_recv().unwrap().into_frame().sequence_number, 1);
         assert_eq!(deferred.len(), 1);
         assert_eq!(deferred[0].wire.output_index, Some(3));
         assert_eq!(bytes, retained_bytes);
         flush_released_stream_frames(&mut emit_ctx, None, &mut deferred, &mut bytes)
             .await
             .unwrap();
-        let last = receiver.try_recv().unwrap();
+        let last = receiver.try_recv().unwrap().into_frame();
         let last = last
             .content
             .lines()
@@ -870,8 +877,8 @@ mod tests {
         flush_released_stream_frames(&mut emit_ctx, None, &mut deferred, &mut bytes)
             .await
             .unwrap();
-        let first = receiver.try_recv().unwrap();
-        let second = receiver.try_recv().unwrap();
+        let first = receiver.try_recv().unwrap().into_frame();
+        let second = receiver.try_recv().unwrap().into_frame();
         assert!(first.content.contains("msg_2"));
         assert!(second.content.contains("indexless"));
         assert!(deferred.is_empty());
@@ -905,7 +912,7 @@ mod tests {
             &mut bytes,
         ));
         assert!(futures::poll!(flush.as_mut()).is_pending());
-        assert_eq!(receiver.try_recv().unwrap().sequence_number, 0);
+        assert_eq!(receiver.try_recv().unwrap().into_frame().sequence_number, 0);
         drop(flush);
         assert_eq!(deferred.len(), 1);
         assert_eq!(deferred[0].wire.output_index, Some(2));
@@ -942,9 +949,9 @@ mod tests {
         .unwrap();
 
         let events = [
-            receiver.try_recv().unwrap(),
-            receiver.try_recv().unwrap(),
-            receiver.try_recv().unwrap(),
+            receiver.try_recv().unwrap().into_frame(),
+            receiver.try_recv().unwrap().into_frame(),
+            receiver.try_recv().unwrap().into_frame(),
         ];
         assert!(events[0].content.contains("msg_1"));
         assert!(events[1].content.contains("msg_3"));

@@ -49,7 +49,10 @@ async fn live_delivery_applies_backpressure_and_disconnect_stops_input() {
         2,
         "full sender blocks further upstream reads"
     );
-    let first = receiver.try_recv().expect("created is delivered before upstream EOF");
+    let first = receiver
+        .try_recv()
+        .expect("created is delivered before upstream EOF")
+        .into_frame();
     assert!(first.content.contains("resp_test"));
     drop(receiver);
     let error = run.await.expect_err("disconnect fails the runner");
@@ -89,6 +92,7 @@ async fn gateway_sequence_and_lifecycle_survive_rounds_while_items_start_fresh()
     }
     let mut events = Vec::new();
     while let Ok(event) = receiver.try_recv() {
+        let event = event.into_frame();
         events.push(event);
     }
     assert_eq!(

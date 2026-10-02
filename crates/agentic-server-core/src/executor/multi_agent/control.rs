@@ -52,6 +52,7 @@ struct Reply {
 
 /// An admitted command's outcome. Dropping this receipt does not revoke the command.
 /// Continue draining response events independently while awaiting the decision.
+#[must_use = "await the decision; dropping the receipt does not revoke an admitted command"]
 pub struct OutputSubmission(oneshot::Receiver<Reply>);
 
 impl OutputSubmission {

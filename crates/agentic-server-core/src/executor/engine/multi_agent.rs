@@ -8,6 +8,7 @@ mod control;
 mod delivery;
 mod guidance;
 mod rounds;
+pub(super) use context::prepare_without_inference;
 use context::{RestoredAgents, fork_history, mail_input, prepare_agent, restore_agents};
 
 use indexmap::IndexMap;
@@ -51,6 +52,7 @@ const DEFAULT_COMPACT_THRESHOLD: u64 = 100_000;
 
 struct AgentContext {
     discovery: Vec<OutputItem>,
+    discovery_dirty: bool,
     generation: u64,
     compacted_generation: Option<u64>,
     compacting: bool,

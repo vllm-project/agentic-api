@@ -2,13 +2,146 @@
 #![cfg(test)]
 
 use super::*;
-use crate::executor::BoxStream;
 use crate::executor::engine::streaming::AbortOnDrop;
 use crate::executor::multi_agent::{
     AgentPhase, RunControl,
     control::{ControlAdmissionError, OutputDecision},
 };
+use crate::executor::rehydrate::rehydrate_conversation;
+use crate::executor::response_events::ResponseCommitState;
+use crate::executor::{BoxStream, RunningResponse};
+use crate::tool::{GatewayExecutorRegistration, McpDiscoveredHandler, McpHandler};
+use crate::types::client_calls::{ClientCallId, ClientCallKind, ClientCallOwner, ClientCallRegistration};
 use crate::types::client_calls::{ClientToolOutput, ClientToolOutputBatch};
+use crate::types::tools::McpDiscoveredToolParam;
+
+#[tokio::test]
+async fn retained_execution_rejects_external_control_before_starting_work() {
+    let (exec, server) = setup().await;
+    let (control, receiver) = RunControl::channel(NonZeroUsize::new(4096).unwrap());
+    let input = ClientToolOutputBatch {
+        response_id: "resp_test".into(),
+        outputs: Vec::new(),
+    };
+    let submission = control.try_submit_outputs(input).unwrap();
+    let result = ExecuteRequest::new(request(), exec)
+        .with_run_control(receiver)
+        .run_retained()
+        .await;
+    assert!(matches!(result, Err(ExecutorError::InvalidRequest(_))));
+    assert!(submission.decision().await.is_err());
+    server.abort();
+}
+
+#[tokio::test]
+async fn retained_execution_failure_with_closed_relay_remains_aborted_after_join() {
+    let (exec, server) = setup().await;
+    let RunningResponse {
+        events,
+        sink,
+        mut owner,
+        ..
+    } = ExecuteRequest::new(request(), exec).run_retained().await.unwrap();
+    drop(events);
+    assert!(
+        tokio::time::timeout(Duration::from_secs(5), owner.join())
+            .await
+            .unwrap()
+            .is_err()
+    );
+    assert_eq!(
+        sink.commit_state(),
+        ResponseCommitState::Aborted,
+        "joining the execution must preserve the transport failure"
+    );
+    assert!(
+        owner.join().await.is_err(),
+        "repeated joining must return an error without panicking"
+    );
+    server.abort();
+}
+
+#[tokio::test]
+async fn live_discovery_does_not_recharge_mcp_metadata_on_ordinary_rounds() {
+    let (exec, server) = setup().await;
+    let mut exec = (*exec).clone();
+    let metadata_bytes = 32_000;
+    exec.gateway_executors.insert(GatewayExecutorRegistration::Mcp {
+        server_label: "catalog".into(),
+        handlers: vec![McpDiscoveredHandler {
+            param: McpDiscoveredToolParam {
+                server_label: "catalog".into(),
+                tool_name: "lookup".into(),
+                internal_name: "mcp__catalog__lookup".into(),
+                tool: serde_json::from_value(json!({"name":"lookup", "description":"x".repeat(metadata_bytes),
+                    "inputSchema":{"type":"object"}}))
+                .unwrap(),
+            },
+            handler: Arc::new(McpHandler::discovered_tool_spec_only()),
+        }],
+    });
+    let mut request = request();
+    request.input = ResponsesInput::Text("simple compaction test".into());
+    let weather = json!({"type":"function","name":"weather","defer_loading":true,"parameters":{"type":"object"}});
+    request.tools = Some(
+        serde_json::from_value(json!([
+            {"type":"mcp","server_label":"catalog"},
+            {"type":"tool_search","execution":"client","description":"Find tools","parameters":{"type":"object"}},
+            weather
+        ]))
+        .unwrap(),
+    );
+    let ctx = rehydrate_conversation(request, &exec).await.unwrap();
+    let mut pipeline = AgentPipeline::new(ctx, None, None);
+    let mut run = MultiAgentRun::new(&mut pipeline, &exec).await.unwrap();
+    let root = AgentIdentity::root();
+    let turn = AgentTurnKey {
+        agent: root.clone(),
+        turn: run.registry.get(&root).unwrap().turn,
+    };
+    run.pending
+        .register_calls(
+            &run.registry,
+            &[ClientCallRegistration {
+                call_id: ClientCallId::try_from("search".to_owned()).unwrap(),
+                owner: ClientCallOwner {
+                    agent_turn: turn.clone(),
+                    kind: ClientCallKind::ToolSearch,
+                },
+            }],
+        )
+        .unwrap();
+    run.contexts.get_mut(&root).unwrap().stored.history.push(
+        serde_json::from_value(json!({
+            "type":"tool_search_call","id":"tsc_search","call_id":"search","execution":"client",
+            "status":"completed","arguments":{}
+        }))
+        .unwrap(),
+    );
+    let output = serde_json::from_value(json!({"type":"tool_search_output","call_id":"search",
+        "execution":"client","status":"completed","tools":[weather]}))
+    .unwrap();
+    assert!(matches!(
+        run.accept_live_outputs(ClientToolOutputBatch {
+            response_id: run.payload.id.clone(),
+            outputs: vec![ClientToolOutput::ToolSearch(output)]
+        }),
+        OutputDecision::Accepted
+    ));
+    run.spawn_round(&turn, &exec, None, &pipeline).unwrap();
+    let completion = run.tasks.join_next().await.unwrap();
+    run.complete(completion, &mut pipeline).await.unwrap();
+    let after_discovery = run.budget.used();
+    let next = run.registry.resume_root();
+    run.spawn_round(&next, &exec, None, &pipeline).unwrap();
+    let completion = run.tasks.join_next().await.unwrap();
+    run.complete(completion, &mut pipeline).await.unwrap();
+    assert!(
+        run.budget.used() - after_discovery < metadata_bytes,
+        "an ordinary inference round must not charge MCP discovery metadata again"
+    );
+    server.abort();
+}
 
 fn request() -> RequestPayload {
     serde_json::from_value(json!({

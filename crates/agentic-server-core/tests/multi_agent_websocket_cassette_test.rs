@@ -29,14 +29,43 @@ struct Frame {
     text: Option<String>,
 }
 
+#[derive(Default)]
 struct Audit {
     prompt: Value,
     agents: HashSet<String>,
     root_final: usize,
+    root_final_text: Vec<String>,
     completed: usize,
     accepted: Vec<String>,
     late_rejected: usize,
+    returned_input: Vec<Value>,
+    continued_input: Vec<Value>,
     errors: Vec<String>,
+}
+
+impl Audit {
+    fn record_client_event(&mut self, event: &Value, response_id: &str, pending: &mut Option<Value>) {
+        match event["type"].as_str() {
+            Some("response.create") => {
+                if self.prompt.is_null() {
+                    self.prompt = event["input"].clone();
+                    assert_eq!(event["store"], true);
+                }
+                if event["previous_response_id"].is_string() {
+                    assert_eq!(event["previous_response_id"], response_id);
+                    self.continued_input
+                        .extend(event["input"].as_array().unwrap().iter().cloned());
+                }
+            }
+            Some("response.inject") => {
+                let typed: ResponseInjectRequest = serde_json::from_value(event.clone()).unwrap();
+                assert_eq!(serde_json::to_value(&typed.input).unwrap(), event["input"]);
+                assert!(pending.is_none(), "recorder admits only one unacknowledged injection");
+                *pending = Some(event["input"].clone());
+            }
+            _ => {}
+        }
+    }
 }
 
 fn audit(provider: &str, scenario: &str) -> Audit {
@@ -50,21 +79,13 @@ fn audit(provider: &str, scenario: &str) -> Audit {
     ));
     let capture: Capture = serde_yaml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
     assert_eq!(capture.format, "responses-websocket-v1");
-    let mut result = Audit {
-        prompt: Value::Null,
-        agents: HashSet::new(),
-        root_final: 0,
-        completed: 0,
-        accepted: Vec::new(),
-        late_rejected: 0,
-        errors: Vec::new(),
-    };
+    let mut result = Audit::default();
     for session in capture.sessions {
         assert_eq!(session.close_outcome.kind, "completed");
         assert!(session.close_outcome.peer_close_received);
         let mut response_id = String::new();
         let mut sequences = HashMap::new();
-        let mut pending: Option<Vec<String>> = None;
+        let mut pending: Option<Value> = None;
         for frame in session.frames {
             if frame.opcode != 1 {
                 continue;
@@ -74,23 +95,7 @@ fn audit(provider: &str, scenario: &str) -> Audit {
             let event: Value = serde_json::from_str(frame.text.as_deref().unwrap()).unwrap();
             let kind = event["type"].as_str().unwrap();
             if frame.direction == "client" {
-                if kind == "response.create" && result.prompt.is_null() {
-                    result.prompt = event["input"].clone();
-                    assert_eq!(event["store"], true);
-                }
-                if kind == "response.inject" {
-                    let typed: ResponseInjectRequest = serde_json::from_value(event.clone()).unwrap();
-                    assert_eq!(serde_json::to_value(&typed.input).unwrap(), event["input"]);
-                    assert!(pending.is_none(), "recorder admits only one unacknowledged injection");
-                    pending = Some(
-                        event["input"]
-                            .as_array()
-                            .unwrap()
-                            .iter()
-                            .map(|item| item["type"].as_str().unwrap().to_owned())
-                            .collect(),
-                    );
-                }
+                result.record_client_event(&event, &response_id, &mut pending);
                 continue;
             }
             if kind == "response.created" {
@@ -103,16 +108,30 @@ fn audit(provider: &str, scenario: &str) -> Audit {
                 }
             }
             match kind {
-                "response.inject.created" => result.accepted.extend(pending.take().unwrap()),
+                "response.inject.created" => result.accepted.extend(
+                    pending
+                        .take()
+                        .unwrap()
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|item| item["type"].as_str().unwrap().to_owned()),
+                ),
                 "response.inject.failed" => {
-                    assert!(pending.take().is_some());
+                    assert_eq!(pending.take().unwrap(), event["input"]);
                     assert_eq!(event["error"]["code"], "response_already_completed");
                     result.late_rejected += 1;
+                    result
+                        .returned_input
+                        .extend(event["input"].as_array().unwrap().iter().cloned());
                 }
                 "error" => result
                     .errors
                     .push(event["error"]["message"].as_str().unwrap().to_owned()),
-                "response.completed" => result.completed += 1,
+                "response.completed" => {
+                    assert_eq!(event["response"]["status"], "completed");
+                    result.completed += 1;
+                }
                 "response.output_item.done" => {
                     let item = &event["item"];
                     if let Some(agent) = item["agent"]["agent_name"].as_str() {
@@ -125,6 +144,14 @@ fn audit(provider: &str, scenario: &str) -> Audit {
                             && item["phase"] == "final_answer"
                         {
                             result.root_final += 1;
+                            result.root_final_text.push(
+                                item["content"]
+                                    .as_array()
+                                    .unwrap()
+                                    .iter()
+                                    .filter_map(|part| part["text"].as_str())
+                                    .collect(),
+                            );
                         }
                     }
                 }
@@ -188,23 +215,30 @@ fn discovery_and_custom_injections_complete_gateway_task() {
         "recording completion is not root task completion"
     );
     assert!(gateway.errors.is_empty());
-    assert_eq!(gateway.completed, 1);
+    assert_eq!(gateway.completed, 2);
     assert_eq!(gateway.root_final, 1);
     assert_eq!(gateway.agents.len(), 3);
-    assert_eq!(gateway.late_rejected, 0);
-    assert_eq!(gateway.accepted.len(), 6);
-    for (kind, expected) in [
-        ("tool_search_output", 3),
-        ("function_call_output", 2),
-        ("custom_tool_call_output", 1),
-    ] {
+    assert_eq!(gateway.late_rejected, 2);
+    assert_eq!(gateway.returned_input, gateway.continued_input);
+    assert_eq!(gateway.returned_input.len(), 2);
+    assert!(
+        gateway
+            .returned_input
+            .iter()
+            .all(|item| item["type"] == "tool_search_output")
+    );
+    assert_eq!(gateway.accepted.len(), 3);
+    for (kind, expected) in [("function_call_output", 2), ("custom_tool_call_output", 1)] {
         assert_eq!(gateway.accepted.iter().filter(|value| *value == kind).count(), expected);
+    }
+    for output in ["21", "Europe/Paris", "CUSTOM_CASSETTE_OUTPUT_OK"] {
+        assert!(gateway.root_final_text[0].contains(output));
     }
 }
 
 mod edge_cases {
     //! Characterization of recorded behavior, including observed gateway differences.
-    use std::collections::{HashSet, VecDeque};
+    use std::collections::{BTreeMap, HashSet, VecDeque};
     use std::path::Path;
 
     use serde::Deserialize;
@@ -240,8 +274,67 @@ mod edge_cases {
         ));
         let capture: Capture = serde_yaml::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         assert_eq!(capture.format, "responses-websocket-v1");
-        assert_eq!(capture.sessions.len(), 4);
         capture
+    }
+
+    fn sessions_by_case(capture: &Capture, active: bool) -> BTreeMap<&str, &Session> {
+        let mut selected = BTreeMap::new();
+        for session in &capture.sessions {
+            let case = session.handshake["probe"]["case"].as_str().unwrap();
+            if session.close_outcome["kind"] == "completed"
+                && session.close_outcome["peer_close_received"] == true
+                && (!active
+                    || case == "late-continuation"
+                    || session.close_outcome["probe"]["active_validation_observed"] == true)
+            {
+                // Retries append sessions; retain the latest conclusive attempt.
+                selected.insert(case, session);
+            }
+        }
+        for case in [
+            "late-continuation",
+            "duplicate-in-batch",
+            "mixed-valid-invalid",
+            "duplicate-injection",
+        ] {
+            assert!(selected.contains_key(case), "missing conclusive capture for {case}");
+        }
+        selected
+    }
+
+    #[test]
+    fn retries_select_latest_conclusive_attempt_by_case() {
+        let mut sessions = Vec::new();
+        for case in [
+            "duplicate-injection",
+            "mixed-valid-invalid",
+            "late-continuation",
+            "duplicate-in-batch",
+        ] {
+            for (attempt, conclusive) in [(0, false), (1, true), (2, true), (3, false)] {
+                sessions.push(
+                    serde_json::from_value(serde_json::json!({
+                        "handshake": {"probe": {"case": case, "attempt": attempt}},
+                        "frames": [],
+                        "close_outcome": {"kind": "completed", "peer_close_received": true,
+                            "probe": {"active_validation_observed": conclusive}}
+                    }))
+                    .unwrap(),
+                );
+            }
+        }
+        let capture = Capture {
+            format: "responses-websocket-v1".into(),
+            sessions,
+        };
+        let selected = sessions_by_case(&capture, true);
+        assert_eq!(selected.len(), 4);
+        for (case, session) in selected {
+            assert_eq!(
+                session.handshake["probe"]["attempt"],
+                if case == "late-continuation" { 3 } else { 2 }
+            );
+        }
     }
 
     fn events(session: &Session) -> Vec<Value> {
@@ -338,13 +431,10 @@ mod edge_cases {
     fn edge_recordings_confirm_late_continuation_and_distinguish_duplicate_races() {
         let reference = capture("openai-reference", "gpt-5.6-sol");
         let gateway = capture("gateway", "Qwen-Qwen3.6-35B-A3B-FP8");
-        let cases = [
-            "late-continuation",
-            "duplicate-in-batch",
-            "mixed-valid-invalid",
-            "duplicate-injection",
-        ];
-        for ((reference, gateway), case) in reference.sessions.iter().zip(&gateway.sessions).zip(cases) {
+        let reference = sessions_by_case(&reference, false);
+        let gateway = sessions_by_case(&gateway, false);
+        for (case, reference) in reference {
+            let gateway = gateway[case];
             assert_eq!(case, reference.handshake["probe"]["case"]);
             assert_eq!(case, gateway.handshake["probe"]["case"]);
             let reference_events = events(reference);
@@ -386,7 +476,7 @@ mod edge_cases {
     #[test]
     fn active_reference_acknowledgements_and_responses_complete() {
         let reference = capture_scenario("openai-reference", "gpt-5.6-sol", "ws-active-text-edge-cases");
-        for session in &reference.sessions {
+        for session in sessions_by_case(&reference, true).into_values() {
             assert_active_session(session);
             // Preserve the observed punctuation difference as model output, not
             // a transport failure or a silently normalized exact-marker match.
@@ -408,7 +498,10 @@ mod edge_cases {
     fn active_gateway_matches_reference_injection_decisions_and_completes() {
         let reference = capture_scenario("openai-reference", "gpt-5.6-sol", "ws-active-text-edge-cases");
         let gateway = capture_scenario("gateway", "Qwen-Qwen3.6-35B-A3B-FP8", "ws-active-text-edge-cases");
-        for (reference, gateway) in reference.sessions.iter().zip(&gateway.sessions) {
+        let reference = sessions_by_case(&reference, true);
+        let gateway = sessions_by_case(&gateway, true);
+        for (case, reference) in reference {
+            let gateway = gateway[case];
             assert_eq!(reference.handshake["probe"]["case"], gateway.handshake["probe"]["case"]);
             let reference_events = events(reference);
             let gateway_events = events(gateway);

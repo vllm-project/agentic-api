@@ -1,7 +1,9 @@
 //! Local completion of a non-generating WebSocket request.
 
 use agentic_core::ResponseUsage;
-use agentic_core::executor::{RequestContext, ResponseSession, persist_turn, rehydrate_in_session};
+use agentic_core::executor::{
+    RequestContext, ResponseSession, persist_turn, prepare_non_generating_turn, rehydrate_in_session,
+};
 use agentic_core::types::request_response::RequestPayload;
 use agentic_core::utils::common::utcnow_str;
 use serde_json::Value;
@@ -19,6 +21,7 @@ pub(super) async fn complete_without_inference(
     event_limit: WsEventLimit,
 ) -> Result<(), WsError> {
     let ctx = rehydrate_in_session(payload, &state.exec_ctx, session).await?;
+    let ctx = prepare_non_generating_turn(ctx, &state.exec_ctx)?;
     let created_at = utcnow_str();
     let created_event = empty_response_event(&ctx, created_at, "response.created", "in_progress", 0, None);
     let completed_event = empty_response_event(
