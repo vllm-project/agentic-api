@@ -114,6 +114,36 @@ retry with another one. In multi-agent execution, the last root-agent inference
 round determines the returned tier; child-agent tiers do not override it, and a
 missing final root tier clears any earlier value.
 
+#### Prompt-cache usage compatibility
+
+Cache-read usage is reported in `usage.input_tokens_details.cached_tokens`;
+cache-write usage, when supplied by the upstream, is reported in
+`usage.input_tokens_details.cache_write_tokens`. The wire names follow the
+[OpenAI Responses usage contract](https://github.com/openai/openai-python/blob/becc1d20eed83c1b8d85e15dc131a372d9dc7813/src/openai/types/responses/response_usage.py),
+checked on October 2, 2026. Availability of these counters depends on the upstream.
+
+| Path | Cache reads | Cache writes |
+| --- | --- | --- |
+| Direct HTTP JSON/SSE | Upstream value passes through | Upstream value and field presence pass through, including `null` |
+| Typed HTTP JSON/SSE | Preserved for a single inference; accumulated across inference rounds | Accumulated when reported; explicit `0` is retained |
+| WebSocket | Same typed accounting, scoped to the current response | Same typed accounting; a continuation does not carry over its parent's usage |
+| Stored response retrieval | Returns the terminal response snapshot without inference | Preserves the terminal value or omission |
+
+Typed execution treats an absent or `null` cache-write counter as unreported and
+omits it when every round leaves it unreported. A round that reports the counter
+contributes its value even when another round does not report it. The gateway
+never derives cache writes from cache reads. Repeated usage snapshots within one
+upstream SSE response are counted once; separate tool inference rounds contribute
+separately. Reported `total_tokens` is preserved independently rather than
+recomputed from the other counters. These counts do not establish a cache hit
+rate or billing amount.
+
+This matrix covers usage preservation under
+[#330](https://github.com/vllm-project/agentic-api/issues/330) and
+[#314](https://github.com/vllm-project/agentic-api/issues/314).
+Cache mode, TTL, breakpoint qualification, and backend capability enforcement
+remain separate acceptance items; this matrix does not claim support for them.
+
 ### `GET /v1/responses/{response_id}`
 
 Returns the terminal snapshot of a response created with `store: true`, including

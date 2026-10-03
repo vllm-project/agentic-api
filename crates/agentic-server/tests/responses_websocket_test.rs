@@ -5179,3 +5179,56 @@ mod duplex_replay {
         }
     }
 }
+
+#[tokio::test]
+async fn cache_usage_survives_websocket_storage_without_carrying_into_next_turn() {
+    for writes in [None, Some(Value::Null), Some(json!(0)), Some(json!(7))] {
+        let mut usage = json!({"input_tokens":30,"output_tokens":4,"total_tokens":37,
+            "input_tokens_details":{"cached_tokens":9},"output_tokens_details":{"reasoning_tokens":2}});
+        if let Some(writes) = &writes {
+            usage["input_tokens_details"]["cache_write_tokens"] = writes.clone();
+        }
+        let next_usage = json!({"input_tokens":12,"output_tokens":1,"total_tokens":13,
+            "input_tokens_details":{"cached_tokens":2},"output_tokens_details":{"reasoning_tokens":0}});
+        let first =
+            sse_response("up_first", "msg_first", "first").replace("\"usage\":null", &format!("\"usage\":{usage}"));
+        let second =
+            sse_response("up_next", "msg_next", "next").replace("\"usage\":null", &format!("\"usage\":{next_usage}"));
+        let mock = MockResponsesServer::start(vec![first, second]).await;
+        let fixture = storage_backed_state(&mock.url).await;
+        let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+        let mut ws = connect_responses_ws(&gateway_url).await;
+        let mut previous = None;
+        if writes.as_ref().is_some_and(Value::is_null) {
+            usage["input_tokens_details"]
+                .as_object_mut()
+                .unwrap()
+                .remove("cache_write_tokens");
+        }
+        for expected in [usage, next_usage] {
+            send_json(
+                &mut ws,
+                json!({"type":"response.create","model":"test-model","input":"hi",
+                "previous_response_id":previous,"store":true,"stream":true}),
+            )
+            .await;
+            let events = recv_until_completed(&mut ws).await;
+            let terminal = events.last().unwrap();
+            assert_eq!(terminal["type"], "response.completed");
+            assert_eq!(terminal["response"]["usage"], expected);
+            let id = terminal["response"]["id"].as_str().unwrap();
+            let stored: Value = reqwest::Client::new()
+                .get(format!("{gateway_url}/v1/responses/{id}"))
+                .bearer_auth("test-key")
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            assert_eq!(stored["usage"], expected);
+            previous = Some(id.to_owned());
+        }
+        assert_eq!(mock.request_bodies().await.len(), 2);
+    }
+}
