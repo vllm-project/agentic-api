@@ -30,6 +30,9 @@ pub struct Item {
     /// Original public item identity when this row references an existing item.
     pub reference_id: Option<String>,
 
+    /// Public item ID for an independent response history row.
+    pub public_id: Option<String>,
+
     /// Item data stored as JSON text.
     /// Deserialized based on context (`message`, `tool_call`, etc.)
     pub data: String,
@@ -51,7 +54,10 @@ impl Item {
     /// Public identity, shared by every reference to the original item.
     #[must_use]
     pub fn public_id(&self) -> &str {
-        self.reference_id.as_deref().unwrap_or(&self.id)
+        self.public_id
+            .as_deref()
+            .or(self.reference_id.as_deref())
+            .unwrap_or(&self.id)
     }
 
     fn data_without_storage_marker(&self) -> Option<(Value, bool)> {
@@ -728,6 +734,7 @@ mod tests {
             seq: Some(1),
             tenant_id: None,
             reference_id: None,
+            public_id: None,
         };
 
         assert_eq!(item.id, "item_123");
@@ -745,6 +752,7 @@ mod tests {
             seq: None,
             tenant_id: None,
             reference_id: None,
+            public_id: None,
         };
 
         assert!(item.conversation_id.is_none());
@@ -774,6 +782,7 @@ mod tests {
             seq: None,
             tenant_id: None,
             reference_id: None,
+            public_id: None,
         };
 
         let Some(InOutItem::Output(OutputItem::Reasoning(reasoning))) = item.as_inout() else {
@@ -812,6 +821,7 @@ mod tests {
             seq: None,
             tenant_id: None,
             reference_id: None,
+            public_id: None,
         };
 
         let stored = item.as_inout().expect("stored item");
@@ -840,6 +850,7 @@ mod tests {
             seq: None,
             tenant_id: None,
             reference_id: None,
+            public_id: None,
         };
 
         let inputs = InOutItem::into_input_items(vec![item.as_inout().expect("stored item")]);
@@ -877,6 +888,7 @@ mod tests {
             seq: None,
             tenant_id: None,
             reference_id: None,
+            public_id: None,
         };
 
         let inputs = InOutItem::into_input_items(vec![item.as_inout().expect("stored shell item")]);
@@ -923,6 +935,7 @@ mod tests {
                 seq: Some(idx.try_into().expect("seq")),
                 tenant_id: None,
                 reference_id: None,
+                public_id: None,
             })
             .map(|item| item.as_inout().expect("stored item"))
             .collect();
@@ -958,6 +971,7 @@ mod tests {
             seq: None,
             tenant_id: None,
             reference_id: None,
+            public_id: None,
         };
 
         let inputs = InOutItem::into_input_items(vec![item.as_inout().expect("stored item")]);

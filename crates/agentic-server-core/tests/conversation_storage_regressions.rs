@@ -490,3 +490,92 @@ async fn regression_concurrent_insert_checks_membership_under_the_conversation_l
 
 #[path = "conversations/item_references.rs"]
 mod item_references;
+
+#[tokio::test]
+async fn response_history_keeps_each_occurrence_of_a_public_id() {
+    let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
+    let store = ResponseStore::new(Arc::clone(&pool));
+    let original = message_with_id("msg_reused", "original");
+    let updated = message_with_id("msg_reused", "updated");
+    let metadata = ResponseMetadata::default();
+    store
+        .persist("resp_first", None, vec![original.clone()], &metadata)
+        .await
+        .unwrap();
+
+    let replay = vec![original.clone(), updated.clone(), original.clone()];
+    store
+        .persist("resp_replay", None, replay.clone(), &metadata)
+        .await
+        .unwrap();
+    assert_eq!(store.rehydrate("resp_replay").await.unwrap(), replay);
+    assert_eq!(store.rehydrate("resp_first").await.unwrap(), vec![original.clone()]);
+
+    store
+        .persist("resp_next", Some("resp_replay"), vec![updated.clone()], &metadata)
+        .await
+        .unwrap();
+    let mut expected = replay;
+    expected.push(updated);
+    assert_eq!(store.rehydrate("resp_next").await.unwrap(), expected);
+    let ids = store.get("resp_next").await.unwrap().history_item_ids;
+    assert_eq!(ids.iter().collect::<std::collections::HashSet<_>>().len(), 4);
+    let rows = item_model::get_items(&pool, &ids).await.unwrap();
+    assert_eq!(rows.len(), 4);
+    assert!(rows.iter().all(|row| row.public_id() == "msg_reused"));
+}
+
+#[tokio::test]
+async fn response_history_does_not_reuse_another_tenants_item() {
+    let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
+    let conversations = ConversationStore::new(Arc::clone(&pool));
+    let original = message_with_id("msg_shared", "private content");
+    let conversation = conversations
+        .create_with_metadata_and_items(Some("other_tenant"), None, vec![original.clone()])
+        .await
+        .unwrap();
+    let store = ResponseStore::new(Arc::clone(&pool));
+    let supplied = message_with_id("msg_shared", "supplied content");
+    store
+        .persist(
+            "resp_shared",
+            None,
+            vec![supplied.clone()],
+            &ResponseMetadata::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(store.rehydrate("resp_shared").await.unwrap(), vec![supplied]);
+    assert_eq!(
+        conversations.rehydrate(&conversation.conversation_id).await.unwrap(),
+        vec![original]
+    );
+    let ids = store.get("resp_shared").await.unwrap().history_item_ids;
+    let rows = item_model::get_items(&pool, &ids).await.unwrap();
+    assert_eq!(rows[0].public_id(), "msg_shared");
+    assert_eq!(rows[0].tenant_id.as_deref(), Some("default_tenant"));
+    assert!(rows[0].reference_id.is_none());
+}
+
+#[tokio::test]
+async fn response_history_keeps_order_across_batches_and_rolls_back_on_error() {
+    let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
+    let store = ResponseStore::new(Arc::clone(&pool));
+    let items: Vec<_> = (0..350)
+        .map(|index| message_with_id("msg_repeated", &format!("position {index}")))
+        .collect();
+    let metadata = ResponseMetadata::default();
+    store
+        .persist("resp_batches", None, items.clone(), &metadata)
+        .await
+        .unwrap();
+    assert_eq!(store.rehydrate("resp_batches").await.unwrap(), items);
+
+    let error = store.persist("resp_batches", None, items, &metadata).await.unwrap_err();
+    assert!(error.is_unique_violation());
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM items")
+        .fetch_one(pool.as_ref())
+        .await
+        .unwrap();
+    assert_eq!(count, 350, "a failed response insert must roll back every item batch");
+}
