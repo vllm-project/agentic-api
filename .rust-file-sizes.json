@@ -14,8 +14,8 @@
   },
   "exceptions": {
     "crates/agentic-server-core/src/config.rs": {
-      "limit": 637,
-      "reason": "The gateway-executed web_fetch settings join the shared tool runtime configuration beside the web-search provider and code-interpreter limits."
+      "limit": 643,
+      "reason": "The gateway-executed web_fetch settings join the shared tool runtime configuration beside the web-search provider and code-interpreter limits, and the web_search provider enum now also selects SearXNG."
     },
     "crates/agentic-server-core/src/executor/accumulator/active.rs": {
       "limit": 512,
