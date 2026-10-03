@@ -82,6 +82,7 @@ fn request_payload(model: String, input: ResponsesInput, instructions: Option<St
         metadata: None,
         parallel_tool_calls: None,
         prompt_cache_key: None,
+        prompt_cache_retention: None,
         service_tier: None,
         cache_salt: None,
         multi_agent: None,
@@ -143,6 +144,7 @@ async fn compact_items_with_trigger(
         instructions,
     );
     enriched_request.prompt_cache_key.clone_from(&request.prompt_cache_key);
+    enriched_request.prompt_cache_retention = request.prompt_cache_retention;
     enriched_request.service_tier.clone_from(&request.service_tier);
     let ctx = RequestContext {
         multi_agent_tree: None,
@@ -265,6 +267,7 @@ pub async fn compact_response(
     );
     payload.previous_response_id = request.previous_response_id;
     payload.service_tier = request.service_tier;
+    payload.prompt_cache_retention = request.prompt_cache_retention;
     payload.prompt_cache_key = request.prompt_cache_key;
     let ctx = rehydrate_conversation(payload, exec_ctx).await?;
     let (mut ctx, tool_search_state) =
@@ -880,6 +883,8 @@ mod tests {
         let mut text_context = context_with_threshold(text_input, threshold);
         text_context.enriched_request.prompt_cache_key = Some("workspace-a".to_owned());
         text_context.enriched_request.service_tier = Some("priority".to_owned());
+        text_context.enriched_request.prompt_cache_retention =
+            Some(crate::types::request_response::PromptCacheRetention::TwentyFourHours);
 
         assert!(
             maybe_compact_context(&mut text_context, &exec_ctx, None)
@@ -907,6 +912,28 @@ mod tests {
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0]["prompt_cache_key"], "workspace-a");
         assert_eq!(requests[0]["service_tier"], "priority");
+        assert_eq!(requests[0]["prompt_cache_retention"], "24h");
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn multi_agent_compaction_snapshot_preserves_prompt_cache_retention() {
+        use crate::executor::multi_agent::CompactionPlan;
+        use crate::types::agent::AgentIdentity;
+        use crate::types::request_response::PromptCacheRetention;
+
+        let (exec, requests, server) = mock_execution_context(ResponseStore::disabled()).await;
+        let mut request = request_payload("test-model".into(), ResponsesInput::default(), None);
+        request.prompt_cache_retention = Some(PromptCacheRetention::TwentyFourHours);
+        let plan =
+            CompactionPlan::prepare_explicit(&AgentIdentity::root(), 0, &[user_message("remember context")], &request)
+                .unwrap()
+                .unwrap();
+        request.prompt_cache_retention = Some(PromptCacheRetention::InMemory);
+        plan.execute(&exec, None).await.unwrap();
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0]["prompt_cache_retention"], "24h");
         server.abort();
     }
 

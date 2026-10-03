@@ -1,4 +1,4 @@
-use super::{MultiAgentConfig, RequestPayload, ResponseTextFormat};
+use super::{MultiAgentConfig, PromptCacheRetention, RequestPayload, ResponseTextFormat};
 use utoipa::openapi::schema::{AllOfBuilder, ArrayBuilder, ObjectBuilder, OneOfBuilder, SchemaType, Type};
 use utoipa::openapi::{Ref, RefOr};
 
@@ -90,6 +90,12 @@ impl utoipa::PartialSchema for RequestPayload {
             )
             .property("parallel_tool_calls", nullable_bool())
             .property("prompt_cache_key", nullable_str())
+            .property(
+                "prompt_cache_retention",
+                OneOfBuilder::new()
+                    .item(<PromptCacheRetention as utoipa::PartialSchema>::schema())
+                    .item(null_type()),
+            )
             .property("service_tier", nullable_str())
             .property(
                 "multi_agent",

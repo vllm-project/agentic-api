@@ -1204,6 +1204,11 @@ fn assert_request_config_is_preserved(request_bodies: &[serde_json::Value]) {
     assert_eq!(request_bodies[0]["prompt_cache_key"], "workspace-a");
     assert_eq!(request_bodies[1]["prompt_cache_key"], "workspace-a");
     assert!(request_bodies.iter().all(|body| body["service_tier"] == "priority"));
+    assert!(
+        request_bodies
+            .iter()
+            .all(|body| body["prompt_cache_retention"] == "24h")
+    );
     assert_eq!(request_bodies[0]["reasoning"], serde_json::json!({"effort": "high"}));
     assert_eq!(request_bodies[1]["reasoning"], request_bodies[0]["reasoning"]);
     assert_eq!(
@@ -1234,6 +1239,7 @@ async fn execute_runs_web_search_and_sends_tool_output_back_to_model() {
         text: Some(Box::new(json_object_text_config())),
         max_output_tokens: Some(1024),
         prompt_cache_key: Some("workspace-a".to_owned()),
+        prompt_cache_retention: Some(agentic_core::types::request_response::PromptCacheRetention::TwentyFourHours),
         service_tier: Some("priority".to_owned()),
         ..Default::default()
     };
@@ -1612,6 +1618,7 @@ async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence()
         stream: true,
         max_output_tokens: Some(1024),
         prompt_cache_key: Some("workspace-a".to_owned()),
+        prompt_cache_retention: Some(agentic_core::types::request_response::PromptCacheRetention::TwentyFourHours),
         service_tier: Some("priority".to_owned()),
         ..Default::default()
     };
@@ -1636,6 +1643,11 @@ async fn multi_round_stream_has_single_lifecycle_and_monotonic_public_sequence()
     );
 
     assert!(request_bodies.iter().all(|body| body["service_tier"] == "priority"));
+    assert!(
+        request_bodies
+            .iter()
+            .all(|body| body["prompt_cache_retention"] == "24h")
+    );
     let json_events = streamed_sse_events(&chunks);
     assert_single_logical_lifecycle(&json_events);
     assert_contiguous_sequence_numbers(

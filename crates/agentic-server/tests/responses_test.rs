@@ -2548,3 +2548,149 @@ async fn test_http_message_with_empty_content_is_rejected() {
     )
     .await;
 }
+
+#[tokio::test]
+async fn test_prompt_cache_retention_matches_pass_through_and_typed_sse_execution() {
+    let (llm_url, requests, llm) = spawn_tool_search_sse_sequence(vec![final_message_sse(); 2]).await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
+    for store in [false, true] {
+        let response = reqwest::Client::new()
+            .post(format!("{gateway_url}/v1/responses"))
+            .json(&serde_json::json!({
+                "model": "test", "input": "hi", "prompt_cache_retention": "24h",
+                "store": store, "stream": true
+            }))
+            .send()
+            .await
+            .expect("streaming response");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            response.headers()[header::CONTENT_TYPE]
+                .to_str()
+                .unwrap()
+                .starts_with("text/event-stream")
+        );
+        let body = response.text().await.expect("complete SSE body");
+        let events: Vec<serde_json::Value> = body
+            .lines()
+            .filter_map(|line| line.strip_prefix("data:"))
+            .map(str::trim)
+            .filter(|data| *data != "[DONE]")
+            .map(|data| serde_json::from_str(data).expect("SSE JSON event"))
+            .collect();
+        assert_eq!(events.last().expect("terminal event")["type"], "response.completed");
+    }
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 2);
+    for request in requests.iter() {
+        assert_eq!(request["prompt_cache_retention"], "24h");
+        assert_eq!(request["stream"], true);
+    }
+    gateway.abort();
+    llm.abort();
+}
+
+#[tokio::test]
+async fn test_prompt_cache_retention_matches_pass_through_and_typed_continuation() {
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let client = reqwest::Client::new();
+    let mut parent = None;
+    for retention in ["in_memory", "24h"] {
+        for store in [false, true] {
+            let response = client
+                .post(format!("{gateway_url}/v1/responses"))
+                .json(&serde_json::json!({"model":"test","input":"parent context",
+                    "prompt_cache_retention":retention,"store":store}))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body: serde_json::Value = response.json().await.unwrap();
+            if store {
+                parent = Some(body["id"].as_str().unwrap().to_owned());
+            }
+        }
+    }
+    for retention in [
+        None,
+        Some(serde_json::Value::Null),
+        Some(serde_json::json!("in_memory")),
+    ] {
+        let mut request = serde_json::json!({"model":"test","input":"continue",
+            "previous_response_id":parent,"store":true});
+        if let Some(retention) = retention {
+            request["prompt_cache_retention"] = retention;
+        }
+        let response = client
+            .post(format!("{gateway_url}/v1/responses"))
+            .json(&request)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let _: serde_json::Value = response.json().await.unwrap();
+    }
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 7);
+    for (i, retention) in ["in_memory", "in_memory", "24h", "24h"].iter().enumerate() {
+        assert_eq!(requests[i]["prompt_cache_retention"], *retention);
+    }
+    assert!(requests[4].get("prompt_cache_retention").is_none());
+    assert!(requests[5].get("prompt_cache_retention").is_none());
+    assert_eq!(requests[6]["prompt_cache_retention"], "in_memory");
+    for request in &requests[4..] {
+        assert_eq!(request["input"][0]["content"], "parent context");
+        assert!(request.get("previous_response_id").is_none());
+    }
+}
+
+#[tokio::test]
+async fn test_prompt_cache_retention_validates_before_proxy_or_execution() {
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let client = reqwest::Client::new();
+    for store in [false, true] {
+        for value in [
+            serde_json::json!("30m"),
+            serde_json::json!(""),
+            serde_json::json!(1),
+            serde_json::json!(true),
+            serde_json::json!([]),
+            serde_json::json!({}),
+        ] {
+            let response = client
+                .post(format!("{gateway_url}/v1/responses"))
+                .json(&serde_json::json!({"model":"test","input":"hi",
+                    "prompt_cache_retention":value,"store":store}))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            let body: serde_json::Value = response.json().await.unwrap();
+            assert!(body["error"]["message"].as_str().unwrap().contains("expected"));
+        }
+    }
+    assert!(requests.lock().await.is_empty());
+    for store in [false, true] {
+        let response = client
+            .post(format!("{gateway_url}/v1/responses"))
+            .json(&serde_json::json!({"model":"test","input":"hi",
+                "prompt_cache_retention":null,"store":store}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let _: serde_json::Value = response.json().await.unwrap();
+    }
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 2);
+    assert_eq!(
+        requests[0].get("prompt_cache_retention"),
+        Some(&serde_json::Value::Null)
+    );
+    assert!(requests[1].get("prompt_cache_retention").is_none());
+}

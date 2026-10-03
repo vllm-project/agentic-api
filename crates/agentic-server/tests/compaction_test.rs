@@ -701,3 +701,91 @@ async fn compact_endpoint_cache_key_is_request_scoped_with_previous_response() {
     model.abort();
     gateway.abort();
 }
+
+#[tokio::test]
+async fn compact_endpoint_preserves_request_scoped_prompt_cache_retention() {
+    let (model_url, requests, _model) = spawn_compaction_model().await;
+    let pool = agentic_core::storage::create_pool_with_schema(Some("sqlite::memory:"))
+        .await
+        .unwrap();
+    let mut state = test_state(&test_config(&model_url));
+    state.exec_ctx = Arc::new(agentic_core::executor::ExecutionContext::new(
+        agentic_core::executor::ConversationHandler::new(agentic_core::storage::ConversationStore::new(pool.clone())),
+        agentic_core::executor::ResponseHandler::new(agentic_core::storage::ResponseStore::new(pool)),
+        Arc::new(reqwest::Client::new()),
+        model_url,
+    ));
+    let (gateway_url, _gateway) = spawn_gateway(state).await;
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("{gateway_url}/v1/responses"))
+        .json(
+            &serde_json::json!({"model":"test-model","input":"stored parent context",
+            "prompt_cache_retention":"24h","store":true}),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    let parent: serde_json::Value = response.json().await.unwrap();
+    for retention in [
+        None,
+        Some(serde_json::Value::Null),
+        Some(serde_json::json!("in_memory")),
+        Some(serde_json::json!("24h")),
+    ] {
+        let mut request = serde_json::json!({"model":"test-model","previous_response_id":parent["id"]});
+        if let Some(retention) = retention {
+            request["prompt_cache_retention"] = retention;
+        }
+        let response = client
+            .post(format!("{gateway_url}/v1/responses/compact"))
+            .json(&request)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["object"], "response.compaction");
+        assert!(body.get("prompt_cache_retention").is_none());
+    }
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 5);
+    assert_eq!(requests[0]["prompt_cache_retention"], "24h");
+    assert!(requests[1].get("prompt_cache_retention").is_none());
+    assert!(requests[2].get("prompt_cache_retention").is_none());
+    assert_eq!(requests[3]["prompt_cache_retention"], "in_memory");
+    assert_eq!(requests[4]["prompt_cache_retention"], "24h");
+    for request in &requests[1..] {
+        assert_eq!(request["input"][0]["content"], "stored parent context");
+        assert!(request["input"].as_array().unwrap().iter().any(|item| {
+            item["content"]
+                .as_array()
+                .is_some_and(|parts| parts.iter().any(|part| part["text"] == "preserved checkpoint summary"))
+        }));
+    }
+}
+
+#[tokio::test]
+async fn compact_endpoint_rejects_invalid_prompt_cache_retention_before_inference() {
+    let (model_url, requests, _model) = spawn_compaction_model().await;
+    let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&model_url))).await;
+    for retention in [
+        serde_json::json!("30m"),
+        serde_json::json!(""),
+        serde_json::json!(true),
+        serde_json::json!(1),
+        serde_json::json!([]),
+        serde_json::json!({}),
+    ] {
+        let response = reqwest::Client::new()
+            .post(format!("{gateway_url}/v1/responses/compact"))
+            .json(&serde_json::json!({"model":"test-model","input":"context",
+                "prompt_cache_retention":retention}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::BAD_REQUEST);
+    }
+    assert!(requests.lock().await.is_empty());
+}

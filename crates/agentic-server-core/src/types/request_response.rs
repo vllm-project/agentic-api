@@ -75,6 +75,16 @@ pub enum ResponseTextFormat {
     },
 }
 
+/// Legacy upstream prompt-cache retention policy. Cache lifetime remains upstream-owned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum PromptCacheRetention {
+    #[serde(rename = "in_memory")]
+    InMemory,
+    #[serde(rename = "24h")]
+    TwentyFourHours,
+}
+
 /// A Responses request. Rust's derived default uses `store: false`; JSON deserialization
 /// uses `store: true` when storage is not specified. Set `store` explicitly when constructing
 /// a stored request with struct update syntax.
@@ -117,6 +127,8 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig> {
     pub multi_agent: Option<MultiAgentConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_retention: Option<PromptCacheRetention>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -164,6 +176,8 @@ pub struct UpstreamRequest<'a> {
     pub parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_retention: Option<PromptCacheRetention>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -245,6 +259,7 @@ impl<T: ?Sized> RequestPayload<T> {
             metadata: self.metadata,
             parallel_tool_calls: self.parallel_tool_calls,
             prompt_cache_key: self.prompt_cache_key,
+            prompt_cache_retention: self.prompt_cache_retention,
             service_tier: self.service_tier,
             multi_agent: self.multi_agent,
             cache_salt: self.cache_salt,
@@ -317,6 +332,7 @@ impl RequestPayload {
             metadata: self.metadata.as_ref(),
             parallel_tool_calls,
             prompt_cache_key: self.prompt_cache_key.as_deref(),
+            prompt_cache_retention: self.prompt_cache_retention,
             service_tier: self.service_tier.as_deref(),
             cache_salt: self.cache_salt.as_deref(),
         })
@@ -346,6 +362,8 @@ pub struct CompactRequest {
     pub previous_response_id: Option<String>,
     #[serde(default)]
     pub service_tier: Option<String>,
+    #[serde(default)]
+    pub prompt_cache_retention: Option<PromptCacheRetention>,
     #[serde(default)]
     pub prompt_cache_key: Option<String>,
     /// Compatibility fields sent by current SDK and Codex clients.
@@ -399,6 +417,37 @@ pub struct ResponsePayload {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prompt_cache_retention_survives_text_mapping_and_request_round_trip() {
+        for value in [
+            None,
+            Some(serde_json::Value::Null),
+            Some(serde_json::json!("in_memory")),
+            Some(serde_json::json!("24h")),
+        ] {
+            let mut wire = serde_json::json!({"model":"test-model", "input":"hello"});
+            if let Some(value) = value {
+                wire["prompt_cache_retention"] = value;
+            }
+            let routing: RequestPayload<serde_json::value::RawValue> = serde_json::from_value(wire).unwrap();
+            let request = routing
+                .try_map_text(|text| serde_json::from_str::<ResponseTextConfig>(text.get()).map(Box::new))
+                .unwrap();
+            let stored: RequestPayload = serde_json::from_value(serde_json::to_value(&request).unwrap()).unwrap();
+            assert_eq!(stored.prompt_cache_retention, request.prompt_cache_retention);
+            for stream in [false, true] {
+                let upstream = serde_json::to_value(stored.to_upstream_request(stream).unwrap()).unwrap();
+                assert_eq!(
+                    upstream.get("prompt_cache_retention"),
+                    request
+                        .prompt_cache_retention
+                        .map(|value| serde_json::to_value(value).unwrap())
+                        .as_ref()
+                );
+            }
+        }
+    }
 
     #[test]
     fn stored_struct_defaults_match_minimal_wire_request() {

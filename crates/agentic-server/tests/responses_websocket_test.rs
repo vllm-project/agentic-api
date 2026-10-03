@@ -2987,6 +2987,7 @@ async fn test_websocket_continuation_rehydrates_previous_response() {
             "input": [{"type": "message", "role": "user", "content": "hi"}],
             "text": {"verbosity": "low"},
             "prompt_cache_key": "workspace-a",
+            "prompt_cache_retention": "in_memory",
             "store": true,
             "stream": true
         }),
@@ -3040,6 +3041,7 @@ async fn test_websocket_continuation_rehydrates_previous_response() {
             "previous_response_id": second_response_id,
             "input": [{"type": "message", "role": "user", "content": "again"}],
             "prompt_cache_key": "workspace-b",
+            "prompt_cache_retention": "24h",
             "store": true,
             "stream": true
         }),
@@ -3057,6 +3059,9 @@ async fn test_websocket_continuation_rehydrates_previous_response() {
     assert_eq!(requests[1]["text"], json!({"verbosity": "high"}));
     assert!(requests[2].get("text").is_none());
     assert_eq!(requests[0]["prompt_cache_key"], "workspace-a");
+    assert_eq!(requests[0]["prompt_cache_retention"], "in_memory");
+    assert!(requests[1].get("prompt_cache_retention").is_none());
+    assert_eq!(requests[2]["prompt_cache_retention"], "24h");
     assert!(requests[1].get("prompt_cache_key").is_none());
     assert_eq!(requests[2]["prompt_cache_key"], "workspace-b");
     assert!(requests[1].get("previous_response_id").is_none());
@@ -5178,4 +5183,24 @@ mod duplex_replay {
                 .unwrap_or_else(|_| panic!("duplex replay timed out: {}", session.handshake["probe"]["case"]));
         }
     }
+}
+
+#[tokio::test]
+async fn test_websocket_rejects_invalid_prompt_cache_retention_before_inference() {
+    let mock = MockResponsesServer::start(vec![]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    for value in [json!("30m"), json!(1), json!(true), json!([]), json!({})] {
+        send_json(
+            &mut ws,
+            json!({"type":"response.create","model":"test-model",
+            "input":"hi","prompt_cache_retention":value,"store":true,"stream":true}),
+        )
+        .await;
+        let error = recv_json(&mut ws).await;
+        assert_eq!(error["type"], "error");
+        assert_eq!(error["status"], StatusCode::BAD_REQUEST.as_u16());
+    }
+    assert!(mock.request_bodies().await.is_empty());
 }

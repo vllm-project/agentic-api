@@ -103,6 +103,27 @@ a `compaction_trigger` input item.
 
 The configured upstream decides whether a request receives a cache hit.
 
+`prompt_cache_retention` accepts the legacy `"in_memory"` and `"24h"` values.
+An explicit value is forwarded through HTTP JSON/SSE, WebSocket execution,
+gateway tool rounds, multi-agent execution, automatic compaction,
+`compaction_trigger` summary inference, and `/v1/responses/compact`.
+Continuations restore item history but do not inherit a previous request's
+retention policy: send it again when needed. Missing or `null` values are omitted
+by typed execution; direct HTTP preserves an explicit `null`. Invalid values
+return `400` before inference. This is request forwarding; response-object
+retention echoing is outside its scope.
+
+Retention support depends on the configured upstream and model. The gateway
+sets no retention default, manages no KV-cache lifetime, and does not translate
+retention into `cache_salt` or `prompt_cache_options.ttl`. See the
+[OpenAI prompt caching guide](https://developers.openai.com/api/docs/guides/prompt-caching).
+Forwarding is not a capability guarantee: the
+[vLLM Responses request contract](https://github.com/vllm-project/vllm/blob/840c7c2f4bc72c7c55edb2dea6d23f9a9c9734e0/vllm/entrypoints/openai/responses/protocol.py)
+checked on October 1, 2026 does not define `prompt_cache_retention`, so this field should not be
+used to configure vLLM cache lifetime. Backend capability enforcement and
+`prompt_cache_options` remain follow-ups in
+[#330](https://github.com/vllm-project/agentic-api/issues/330).
+
 `service_tier` is also request-scoped. Direct and executor-backed HTTP requests,
 WebSocket requests, gateway tool rounds, automatic compaction, standalone
 `/v1/responses/compact` requests, and `compaction_trigger` summary inference
