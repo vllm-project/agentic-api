@@ -37,6 +37,16 @@ impl MessagesStreamAccumulator {
         {
             return self.fail("invalid content block index in upstream Messages stream");
         }
+        let payload_field = match event["type"].as_str() {
+            Some("content_block_start") => Some("content_block"),
+            Some("content_block_delta") => Some("delta"),
+            _ => None,
+        };
+        if let Some(field) = payload_field {
+            if event[field]["type"].as_str().is_none_or(str::is_empty) {
+                return self.fail("invalid content block payload in upstream Messages stream");
+            }
+        }
         match event.get("type").and_then(Value::as_str) {
             Some("message_start") => self.on_message_start(&event),
             Some("content_block_start") => self.on_block_start(&mut event),
@@ -138,6 +148,25 @@ impl MessagesStreamAccumulator {
         let up_index = event.get("index").and_then(Value::as_u64).unwrap_or(0);
         if self.blocks.get(&up_index).is_none_or(|block| block.closed) {
             return self.fail("invalid content block transition in upstream Messages stream");
+        }
+        let fragment_field = match event["delta"]["type"].as_str() {
+            Some("text_delta") => Some(("text", "text")),
+            Some("thinking_delta") => Some(("thinking", "thinking")),
+            Some("signature_delta") => Some(("signature", "thinking")),
+            Some("input_json_delta") => Some(("partial_json", "tool_use")),
+            _ => None,
+        };
+        if let Some((field, expected_block)) = fragment_field {
+            if !event["delta"][field].is_string() {
+                return self.fail("invalid content block delta in upstream Messages stream");
+            }
+            let block_kind = self
+                .blocks
+                .get(&up_index)
+                .and_then(|block| block.block["type"].as_str());
+            if matches!(block_kind, Some("text" | "thinking" | "tool_use")) && block_kind != Some(expected_block) {
+                return self.fail("incompatible content block delta in upstream Messages stream");
+            }
         }
         // Accumulate the delta into the buffered block (for history — F3),
         // regardless of whether it is forwarded to the client.
