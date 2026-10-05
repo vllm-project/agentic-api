@@ -3,11 +3,13 @@
 //! `mod.rs` owns the OpenAI-facing adapter: the [`WebSearchHandler`], the
 //! mapping to public `web_search_call` output items. [`provider`] defines the
 //! private provider contract, normalized result types, and the response helpers every provider shares. [`args`]
-//! parses the model's arguments; provider modules ([`you`], [`brave`], [`tavily`]) shape requests and map responses.
+//! parses the model's arguments; provider modules ([`you`], [`brave`], [`tavily`], [`searxng`]) shape requests and
+//! map responses.
 
 pub(crate) mod args;
 pub(crate) mod brave;
 mod provider;
+pub(crate) mod searxng;
 pub(crate) mod tavily;
 pub(crate) mod you;
 
@@ -29,6 +31,7 @@ use self::provider::{
     ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, clean_base_url,
     null_as_default, read_response_limited,
 };
+use self::searxng::SearxngSearchProvider;
 use self::tavily::TavilySearchProvider;
 use self::you::{YOU_API_BASE_URL, YOU_API_KEY, YouSearchProvider};
 use super::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
@@ -237,6 +240,16 @@ impl WebSearchHandler {
                 config
                     .max_concurrent_queries
                     .or(WebSearchProviderKind::Tavily.default_max_concurrent_queries())
+                    .unwrap_or(max_concurrent_gateway_calls),
+            )),
+            // SearXNG deliberately does not take `client`: it builds its own
+            // client with redirects disabled (see `redirect_free_client`).
+            WebSearchProviderKind::Searxng => Arc::new(SearxngSearchProvider::from_values(
+                config.api_key.clone(),
+                config.base_url.clone(),
+                config
+                    .max_concurrent_queries
+                    .or(WebSearchProviderKind::Searxng.default_max_concurrent_queries())
                     .unwrap_or(max_concurrent_gateway_calls),
             )),
         };
@@ -784,8 +797,18 @@ mod tests {
         assert_eq!(handler.max_concurrent_queries.get(), 1);
         assert_eq!(handler.query_permits.available_permits(), 1);
         let raised = brave.with_max_concurrent_queries(NonZeroUsize::new(3));
-        let handler = WebSearchHandler::from_config(client, &raised, gateway_limit);
+        let handler = WebSearchHandler::from_config(Arc::clone(&client), &raised, gateway_limit);
         assert_eq!(handler.max_concurrent_queries.get(), 3);
+
+        // SearXNG is keyless and inherits the gateway limit unless the operator lowers it.
+        let searxng = WebSearchProviderConfig::new(None, Some("http://searxng:8080".to_owned()))
+            .with_provider(WebSearchProviderKind::Searxng);
+        let handler = WebSearchHandler::from_config(Arc::clone(&client), &searxng, gateway_limit);
+        assert!(format!("{handler:?}").contains("SearxngSearchProvider"));
+        assert_eq!(handler.max_concurrent_queries.get(), 5);
+        let lowered = searxng.with_max_concurrent_queries(NonZeroUsize::new(2));
+        let handler = WebSearchHandler::from_config(client, &lowered, gateway_limit);
+        assert_eq!(handler.max_concurrent_queries.get(), 2);
     }
 
     #[test]

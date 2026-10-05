@@ -6,6 +6,23 @@ All notable changes to Agentic API are documented here.
 
 ### Added
 
+- Added SearXNG as a selectable backend for the gateway-owned `web_search` tool (#326, part of #291). Select it
+  with `AGENTIC_WEB_SEARCH_PROVIDER=searxng` or `[web_search] provider = "searxng"` and point
+  `AGENTIC_WEB_SEARCH_BASE_URL` or `[web_search] base_url` at a self-hosted instance; the endpoint is mandatory
+  (an absolute `http(s)` URL without a query or fragment, sub-path mounts allowed) and the server refuses to start
+  without it. No API key is needed; `SEARXNG_API_KEY` (or the variable named by `api_key_env`) is sent as a `Bearer`
+  token only when set. Web and news results come from one `format=json&categories=general,news` request per query,
+  split by category. The gateway adapts the shared tool contract: `allowed_domains` / `blocked_domains` and the
+  model's `include_domains` / `exclude_domains` are enforced client-side on a label boundary, `count` is applied
+  client-side after filtering, `freshness` maps to `time_range` (date ranges are ignored), `language` is normalized
+  to SearXNG's `xx` / `xx-YY` form, `safesearch` maps to `0` / `1` / `2`, and `country` plus the You.com-specific
+  arguments are ignored. A `403` is reported as the JSON format being disabled, and a `429` explains SearXNG's
+  bot-detection limiter, which rejects the gateway's `Accept-Encoding`-free requests unless its address is on
+  `pass_ip`; neither is retried. The SearXNG provider uses a dedicated client with redirects disabled: a "bang"
+  query (`!!g`, `!ddg`, ...) makes SearXNG redirect to the named external engine before it looks at `format=json`,
+  and the gateway reports that 3xx as a failed `web_search_call` rather than following it out of the configured
+  instance. Each SearXNG `metadata[]` entry carries `"provider": "searxng"`. Concurrency inherits
+  `max_concurrent_gateway_calls`.
 - Added Claude's native `web_fetch_20250910` server tool as a gateway-executed tool on `/v1/messages` and
   `/v1/messages/count_tokens` (#408). The declaration is rewritten into an ordinary `web_fetch` function tool for the
   upstream, the gateway fetches the page the model names and feeds the text back as a hidden `tool_result`, and the
@@ -22,6 +39,15 @@ All notable changes to Agentic API are documented here.
   function named `web_fetch` stays client-owned. Operators tune or disable the fetcher with `[web_fetch]` in
   `config.toml` or `AGENTIC_WEB_FETCH_ENABLED`, `AGENTIC_WEB_FETCH_ALLOW_PRIVATE_NETWORKS`,
   `AGENTIC_WEB_FETCH_MAX_RESPONSE_BYTES`, and `AGENTIC_WEB_FETCH_TIMEOUT_SECS`.
+
+### Changed
+
+- `WebSearchProviderKind` gains a `Searxng` variant (`"searxng"`) with no default endpoint, `SEARXNG_API_KEY` as its
+  conventional key variable, and no provider concurrency ceiling; `WebSearchProviderKind::ALL` lists it after
+  `Tavily`, so the operator-facing "expected one of" message is now `you, brave, tavily, searxng`.
+  `agentic_core::tool::SEARXNG_BASE_URL_HINT` and `validate_searxng_base_url` carry the operator-facing rules for
+  the mandatory endpoint (absolute `http(s)` URL with a host and no query or fragment), shared by the startup check
+  and the provider.
 
 ## [0.9.0] - 2026-09-30
 

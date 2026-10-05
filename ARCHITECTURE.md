@@ -1320,8 +1320,8 @@ the operator enables it, and Eryx runtime readiness succeeds.
     are returned for the client to resolve; the gateway does not execute them.
   - **Gateway-owned / built-in** tools implement both traits: see `web_search/mod.rs`
     (`WebSearchHandler`, backed by the configured `WebSearchProvider` in `web_search/you.rs`,
-    `web_search/brave.rs`, or `web_search/tavily.rs`) and `mcp/handler.rs` (`McpHandler`, backed
-    by `mcp/client.rs`'s MCP protocol client and `mcp/pool.rs`'s connection pool).
+    `web_search/brave.rs`, `web_search/tavily.rs`, or `web_search/searxng.rs`) and `mcp/handler.rs`
+    (`McpHandler`, backed by `mcp/client.rs`'s MCP protocol client and `mcp/pool.rs`'s connection pool).
     `web_fetch/mod.rs` (`WebFetchHandler`, Messages-only, backed by a `WebFetchBackend` —
     the built-in `web_fetch/http.rs` fetcher — with `web_fetch/policy.rs` for URL and
     address admission and `web_fetch/extract.rs` for HTML-to-text extraction) follows the
