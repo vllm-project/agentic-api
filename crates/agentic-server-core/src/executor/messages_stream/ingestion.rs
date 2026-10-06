@@ -112,6 +112,13 @@ impl MessagesStreamAccumulator {
             return self.fail("invalid identifier in upstream Messages stream");
         }
 
+        if block_type == "tool_use" {
+            let id = event["content_block"]["id"].as_str().unwrap_or_default();
+            if !self.tool_ids.insert(id.to_owned()) {
+                return self.fail("duplicate tool identifier in upstream Messages stream");
+            }
+        }
+
         // Buffer every block for history reconstruction (F3), preserving order.
         let is_gateway_tool = block_type == "tool_use" && self.gateway_map.is_gateway_owned(name);
         self.blocks.insert(
@@ -201,5 +208,25 @@ impl MessagesStreamAccumulator {
         };
         event["index"] = Value::from(client_index);
         vec![sse("content_block_stop", event)]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tool_identifiers_are_scoped_to_each_round() {
+        let mut acc = MessagesStreamAccumulator::default();
+        for _ in 0..2 {
+            acc.begin_round();
+            acc.push(r#"data: {"type":"message_start","message":{"id":"m"}}"#);
+            let events = acc.push(
+                r#"data: {"type":"content_block_start","index":0,
+                "content_block":{"type":"tool_use","id":"call","name":"client_function","input":{}}}"#,
+            );
+            assert_eq!(events.len(), 1);
+            assert!(events[0].starts_with("event: content_block_start"));
+        }
     }
 }

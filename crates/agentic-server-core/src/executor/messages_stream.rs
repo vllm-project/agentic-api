@@ -251,6 +251,8 @@ struct MessagesStreamAccumulator {
     index_map: HashMap<u64, u32>,
     /// Upstream indices belonging to a suppressed gateway `tool_use` this round.
     suppressed_indices: HashSet<u64>,
+    /// Tool-use IDs admitted in this upstream round, including client-executed tools.
+    tool_ids: HashSet<String>,
     /// Every assistant block this round, keyed by upstream index (ordered), so
     /// the full turn — `thinking`/`text`/`signature` + gateway `tool_use` — can
     /// be reconstructed for the next round's history (F3). Cleared each round.
@@ -275,6 +277,7 @@ impl MessagesStreamAccumulator {
     fn begin_round(&mut self) {
         self.index_map.clear();
         self.suppressed_indices.clear();
+        self.tool_ids.clear();
         self.blocks.clear();
         self.has_client_tool_use = false;
         self.round_state = RoundState::Active;

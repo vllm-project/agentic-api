@@ -218,6 +218,7 @@ Named extension types remain accepted; these checks are not complete schema vali
 Duplicate `message_start` events within one round fail before usage updates or tool dispatch;
 a new upstream start in a later tool round remains valid. Tool-use blocks require non-empty string IDs and names.
 Invalid identifiers fail before dispatch or completion, including in hidden built-in tool blocks.
+Tool-use IDs must be unique within each upstream round, across built-in and client-executed tools.
 Already-streamed content remains partial. A valid `message_stop` still releases the upstream body immediately,
 without waiting for HTTP EOF. This completion gate does not yet validate every content-block transition;
 full lifecycle validation and aggregate resource limits remain tracked in #313. Pass-through requests are unchanged.

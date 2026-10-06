@@ -1291,3 +1291,32 @@ async fn messages_stream_rejects_incompatible_known_deltas() {
         }
     }
 }
+
+#[tokio::test]
+async fn messages_stream_rejects_duplicate_tool_ids() {
+    use serde_json::json;
+    for second_name in ["web_search", "client_function"] {
+        let mut body = String::new();
+        for event in [
+            json!({"type":"message_start", "message":{"id":"m"}}),
+            json!({"type":"content_block_start", "index":0, "content_block":{
+                "type":"tool_use", "id":"call", "name":"web_search", "input":{}}}),
+            json!({"type":"content_block_delta", "index":0, "delta":{
+                "type":"input_json_delta", "partial_json":"{\"query\":\"rust\"}"}}),
+            json!({"type":"content_block_stop", "index":0}),
+            json!({"type":"content_block_start", "index":1, "content_block":{
+                "type":"tool_use", "id":"call", "name":second_name, "input":{}}}),
+            json!({"type":"content_block_delta", "index":1, "delta":{
+                "type":"input_json_delta", "partial_json":"{\"query\":\"rust\"}"}}),
+            json!({"type":"content_block_stop", "index":1}),
+            json!({"type":"message_delta", "delta":{"stop_reason":"tool_use"}}),
+            json!({"type":"message_stop"}),
+        ] {
+            write!(body, "data: {event}\n\n").unwrap();
+        }
+        assert_failed_stream(vec![body.clone()], 0, "duplicate tool identifier").await;
+        let mut rounds = vec![cassette_turn_streams().remove(0)];
+        rounds.push(body);
+        assert_failed_stream(rounds, 1, "duplicate tool identifier").await;
+    }
+}
