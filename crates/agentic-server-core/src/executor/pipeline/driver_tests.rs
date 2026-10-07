@@ -85,9 +85,9 @@ async fn gateway_sequence_and_lifecycle_survive_rounds_while_items_start_fresh()
             )
             .await
             .unwrap();
-        assert_eq!(result.payload.id, "resp_test");
-        assert_eq!(result.payload.output.len(), 1, "each round owns fresh item slots");
-        assert!(result.deferred_events.is_empty());
+        assert_eq!(result.id, "resp_test");
+        assert_eq!(result.output.len(), 1, "each round owns fresh item slots");
+        assert!(!agent.relay.has_deferred());
         assert!(agent.round.is_none());
     }
     let mut events = Vec::new();
@@ -143,7 +143,7 @@ async fn json_and_sse_preserve_the_same_terminal_metadata_and_request_ids() {
             )
             .await
             .unwrap();
-        let mut from_sse = serde_json::to_value(result.payload).unwrap();
+        let mut from_sse = serde_json::to_value(result).unwrap();
         from_json.as_object_mut().unwrap().remove("created_at");
         from_sse.as_object_mut().unwrap().remove("created_at");
         assert_eq!(from_json, from_sse);

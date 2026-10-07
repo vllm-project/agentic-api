@@ -2,13 +2,13 @@
 //!
 //! Each scheduler slot keeps a typed [`GatewayEventPlan`]; these functions turn
 //! those plans and the calls' public outputs into synthetic events. Indexes come
-//! from the plans, and sequence numbers from [`GatewayStreamAccumulator`].
+//! from the plans, and sequence numbers from the [`StreamRelay`] that presents them.
 
 use super::{GatewayCallResult, GatewayEventPlan, GatewayPublicOutputSource, GatewayScheduler};
 use crate::events::{EventFrame, EventPayload, SSEEventType};
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent, synthetic_event};
-use crate::executor::pipeline::{emit_deferred_stream_events, emit_gateway_event};
+use crate::executor::gateway_accumulator::synthetic_event;
+use crate::executor::relay::{Release, StreamRelay};
 use crate::executor::request::RequestContext;
 use crate::types::io::output::{McpCallStatus, WebSearchCallStatus};
 use crate::types::io::{CodeInterpreterCallStatus, CodeInterpreterCallStreamEvent, OutputItem};
@@ -38,60 +38,55 @@ fn code_interpreter_event_frame(event: &CodeInterpreterCallStreamEvent) -> Execu
 
 async fn emit_code_interpreter_event(
     event: &CodeInterpreterCallStreamEvent,
-    stream_accumulator: &mut GatewayStreamAccumulator,
-    stream_sender: &tokio::sync::mpsc::Sender<StreamEvent>,
+    relay: &mut StreamRelay,
 ) -> ExecutorResult<()> {
     let mut frame = code_interpreter_event_frame(event)?;
-    emit_gateway_event(&mut frame, stream_accumulator, stream_sender).await
+    relay.emit_local(&mut frame).await?;
+    Ok(())
 }
 
 async fn emit_code_interpreter_start_events(
     call: &crate::types::io::CodeInterpreterCall,
     output_index: u32,
-    stream_accumulator: &mut GatewayStreamAccumulator,
-    stream_sender: &tokio::sync::mpsc::Sender<StreamEvent>,
+    relay: &mut StreamRelay,
 ) -> ExecutorResult<()> {
     let item_id = call.id.clone();
     emit_code_interpreter_event(
         &CodeInterpreterCallStreamEvent::InProgress {
             item_id: item_id.clone(),
             output_index,
-            sequence_number: stream_accumulator.upcoming_sequence_number(),
+            sequence_number: relay.upcoming_sequence_number(),
         },
-        stream_accumulator,
-        stream_sender,
+        relay,
     )
     .await?;
     emit_code_interpreter_event(
         &CodeInterpreterCallStreamEvent::CodeDelta {
             item_id: item_id.clone(),
             output_index,
-            sequence_number: stream_accumulator.upcoming_sequence_number(),
+            sequence_number: relay.upcoming_sequence_number(),
             delta: call.code.clone(),
         },
-        stream_accumulator,
-        stream_sender,
+        relay,
     )
     .await?;
     emit_code_interpreter_event(
         &CodeInterpreterCallStreamEvent::CodeDone {
             item_id: item_id.clone(),
             output_index,
-            sequence_number: stream_accumulator.upcoming_sequence_number(),
+            sequence_number: relay.upcoming_sequence_number(),
             code: call.code.clone(),
         },
-        stream_accumulator,
-        stream_sender,
+        relay,
     )
     .await?;
     emit_code_interpreter_event(
         &CodeInterpreterCallStreamEvent::Interpreting {
             item_id,
             output_index,
-            sequence_number: stream_accumulator.upcoming_sequence_number(),
+            sequence_number: relay.upcoming_sequence_number(),
         },
-        stream_accumulator,
-        stream_sender,
+        relay,
     )
     .await?;
     Ok(())
@@ -99,9 +94,12 @@ async fn emit_code_interpreter_start_events(
 
 pub(in crate::executor) async fn emit_response_start_events(
     payload: &ResponsePayload,
-    stream_accumulator: &mut GatewayStreamAccumulator,
-    stream_sender: &tokio::sync::mpsc::Sender<StreamEvent>,
+    relay: &mut StreamRelay,
 ) -> ExecutorResult<()> {
+    // A detached relay presents nothing, so skip building its events.
+    if !relay.is_live() {
+        return Ok(());
+    }
     let mut response = payload.clone();
     "in_progress".clone_into(&mut response.status);
     response.output.clear();
@@ -109,7 +107,7 @@ pub(in crate::executor) async fn emit_response_start_events(
     let response = serialize_to_value(&response).map_err(ExecutorError::JsonError)?;
     for event_type in [SSEEventType::ResponseCreated, SSEEventType::ResponseInProgress] {
         let mut event = synthetic_event(event_type, [("response".to_owned(), response.clone())])?;
-        emit_gateway_event(&mut event, stream_accumulator, stream_sender).await?;
+        relay.emit_local(&mut event).await?;
     }
     Ok(())
 }
@@ -117,8 +115,7 @@ pub(in crate::executor) async fn emit_response_start_events(
 async fn emit_gateway_added_event(
     output_index: u32,
     output_item: &OutputItem,
-    stream_accumulator: &mut GatewayStreamAccumulator,
-    stream_sender: &tokio::sync::mpsc::Sender<StreamEvent>,
+    relay: &mut StreamRelay,
 ) -> ExecutorResult<()> {
     let item = match output_item {
         OutputItem::CodeInterpreterCall(call) => {
@@ -135,20 +132,22 @@ async fn emit_gateway_added_event(
             ("item".to_owned(), item),
         ],
     )?;
-    emit_gateway_event(&mut added_event, stream_accumulator, stream_sender).await?;
+    relay.emit_local(&mut added_event).await?;
     Ok(())
 }
 
 pub(in crate::executor) async fn emit_gateway_start_events<'a>(
     plans: impl IntoIterator<Item = &'a GatewayEventPlan>,
-    stream_accumulator: &mut GatewayStreamAccumulator,
-    stream_sender: &tokio::sync::mpsc::Sender<StreamEvent>,
+    relay: &mut StreamRelay,
 ) -> ExecutorResult<()> {
+    if !relay.is_live() {
+        return Ok(());
+    }
     for plan in plans {
         let Some(output_item) = &plan.started_output else {
             continue;
         };
-        emit_gateway_added_event(plan.output_index, output_item, stream_accumulator, stream_sender).await?;
+        emit_gateway_added_event(plan.output_index, output_item, relay).await?;
         match output_item {
             OutputItem::WebSearchCall(web_search_call) => {
                 let mut in_progress_event = synthetic_event(
@@ -158,7 +157,7 @@ pub(in crate::executor) async fn emit_gateway_start_events<'a>(
                         ("output_index".to_owned(), serde_json::json!(plan.output_index)),
                     ],
                 )?;
-                emit_gateway_event(&mut in_progress_event, stream_accumulator, stream_sender).await?;
+                relay.emit_local(&mut in_progress_event).await?;
                 let mut searching_event = synthetic_event(
                     SSEEventType::WebSearchCallSearching,
                     [
@@ -166,7 +165,7 @@ pub(in crate::executor) async fn emit_gateway_start_events<'a>(
                         ("output_index".to_owned(), serde_json::json!(plan.output_index)),
                     ],
                 )?;
-                emit_gateway_event(&mut searching_event, stream_accumulator, stream_sender).await?;
+                relay.emit_local(&mut searching_event).await?;
             }
             OutputItem::McpCall(mcp_call) => {
                 let mut in_progress_event = synthetic_event(
@@ -176,7 +175,7 @@ pub(in crate::executor) async fn emit_gateway_start_events<'a>(
                         ("output_index".to_owned(), serde_json::json!(plan.output_index)),
                     ],
                 )?;
-                emit_gateway_event(&mut in_progress_event, stream_accumulator, stream_sender).await?;
+                relay.emit_local(&mut in_progress_event).await?;
                 let arguments = plan.arguments.as_deref().unwrap_or_default();
                 let mut arguments_delta_event = synthetic_event(
                     SSEEventType::McpCallArgumentsDelta,
@@ -186,7 +185,7 @@ pub(in crate::executor) async fn emit_gateway_start_events<'a>(
                         ("output_index".to_owned(), serde_json::json!(plan.output_index)),
                     ],
                 )?;
-                emit_gateway_event(&mut arguments_delta_event, stream_accumulator, stream_sender).await?;
+                relay.emit_local(&mut arguments_delta_event).await?;
                 let mut arguments_done_event = synthetic_event(
                     SSEEventType::McpCallArgumentsDone,
                     [
@@ -195,7 +194,7 @@ pub(in crate::executor) async fn emit_gateway_start_events<'a>(
                         ("output_index".to_owned(), serde_json::json!(plan.output_index)),
                     ],
                 )?;
-                emit_gateway_event(&mut arguments_done_event, stream_accumulator, stream_sender).await?;
+                relay.emit_local(&mut arguments_done_event).await?;
             }
             OutputItem::McpListTools(list_tools) => {
                 let mut in_progress_event = synthetic_event(
@@ -205,16 +204,10 @@ pub(in crate::executor) async fn emit_gateway_start_events<'a>(
                         ("output_index".to_owned(), serde_json::json!(plan.output_index)),
                     ],
                 )?;
-                emit_gateway_event(&mut in_progress_event, stream_accumulator, stream_sender).await?;
+                relay.emit_local(&mut in_progress_event).await?;
             }
             OutputItem::CodeInterpreterCall(code_interpreter_call) => {
-                emit_code_interpreter_start_events(
-                    code_interpreter_call,
-                    plan.output_index,
-                    stream_accumulator,
-                    stream_sender,
-                )
-                .await?;
+                emit_code_interpreter_start_events(code_interpreter_call, plan.output_index, relay).await?;
             }
             OutputItem::Message(_)
             | OutputItem::FunctionCall(_)
@@ -235,9 +228,11 @@ pub(in crate::executor) async fn emit_gateway_start_events<'a>(
 pub(in crate::executor) async fn emit_gateway_completed_events<'a, T: GatewayPublicOutputSource>(
     results: &[T],
     plans: impl IntoIterator<Item = &'a GatewayEventPlan>,
-    stream_accumulator: &mut GatewayStreamAccumulator,
-    stream_sender: &tokio::sync::mpsc::Sender<StreamEvent>,
+    relay: &mut StreamRelay,
 ) -> ExecutorResult<()> {
+    if !relay.is_live() {
+        return Ok(());
+    }
     for (index, plan) in plans.into_iter().enumerate() {
         let Some(public_output) = plan
             .completed_output
@@ -285,10 +280,9 @@ pub(in crate::executor) async fn emit_gateway_completed_events<'a, T: GatewayPub
                 &CodeInterpreterCallStreamEvent::Completed {
                     item_id: code_interpreter_call.id.clone(),
                     output_index,
-                    sequence_number: stream_accumulator.upcoming_sequence_number(),
+                    sequence_number: relay.upcoming_sequence_number(),
                 },
-                stream_accumulator,
-                stream_sender,
+                relay,
             )
             .await?;
         }
@@ -301,7 +295,7 @@ pub(in crate::executor) async fn emit_gateway_completed_events<'a, T: GatewayPub
                 completed_fields.insert("item".to_owned(), item.clone());
             }
             let mut completed_event = synthetic_event(event_type, completed_fields)?;
-            emit_gateway_event(&mut completed_event, stream_accumulator, stream_sender).await?;
+            relay.emit_local(&mut completed_event).await?;
         }
         let mut done_event = synthetic_event(
             SSEEventType::OutputItemDone,
@@ -310,74 +304,44 @@ pub(in crate::executor) async fn emit_gateway_completed_events<'a, T: GatewayPub
                 ("item".to_owned(), item),
             ],
         )?;
-        emit_gateway_event(&mut done_event, stream_accumulator, stream_sender).await?;
+        relay.emit_local(&mut done_event).await?;
     }
     Ok(())
 }
 
-/// One round's deferred upstream frames, bucketed by the model's output index.
-pub(in crate::executor) struct DeferredRoundEvents {
-    by_output: Vec<Vec<EventFrame>>,
-    /// Frames without a usable output index are relayed after every item.
-    remaining: Vec<EventFrame>,
-}
-
-impl DeferredRoundEvents {
-    pub(in crate::executor) fn bucket(deferred: Vec<EventFrame>, item_count: usize) -> Self {
-        let mut by_output = Vec::with_capacity(item_count);
-        by_output.resize_with(item_count, Vec::new);
-        let mut remaining = Vec::new();
-        for frame in deferred {
-            let Some(output_index) = frame
-                .wire
-                .output_index
-                .and_then(|index| usize::try_from(index).ok())
-                .filter(|index| *index < item_count)
-            else {
-                remaining.push(frame);
-                continue;
-            };
-            by_output[output_index].push(frame);
-        }
-        Self { by_output, remaining }
-    }
-}
-
-/// Relays one round's deferred frames in output order, emitting each gateway
-/// call's lifecycle at its public index. Omitted refused calls have no public
-/// item (ingestion suppresses gateway call frames) and shift later items so
-/// public indexes stay contiguous. The first `initial_event_run_len` calls had
+/// Releases one round's deferred upstream frames in output order, emitting each
+/// gateway call's lifecycle at its public index first. Omitted refused calls have
+/// no public item (ingestion suppresses gateway call frames) and shift later items
+/// so public indexes stay contiguous. The first `initial_event_run_len` calls had
 /// their start events emitted before execution.
 pub(in crate::executor) async fn relay_round_events(
     scheduler: &GatewayScheduler,
     results: &[GatewayCallResult],
-    deferred: DeferredRoundEvents,
+    item_count: usize,
+    relay: &mut StreamRelay,
     request: &RequestContext,
-    stream: (&mut GatewayStreamAccumulator, &tokio::sync::mpsc::Sender<StreamEvent>),
-    output_offset: usize,
     initial_event_run_len: usize,
 ) -> ExecutorResult<()> {
-    let (stream_accumulator, stream_sender) = stream;
-    let DeferredRoundEvents { by_output, remaining } = deferred;
-    for (index, mut output_events) in by_output.into_iter().enumerate() {
+    for index in 0..item_count {
         let Some(public_index) = scheduler.public_item_index(index) else {
-            debug_assert!(output_events.is_empty(), "omitted call has frames");
             continue;
         };
-        for frame in &mut output_events {
-            frame.wire.output_index = u64::try_from(public_index).ok();
-        }
         if let Some(call_index) = scheduler.call_index_for_item(index) {
             let plan = scheduler
                 .event_plan(call_index)
                 .expect("scheduled call index always has an event plan");
             let result = std::slice::from_ref(&results[call_index]);
             if call_index >= initial_event_run_len {
-                emit_gateway_start_events(std::iter::once(plan), stream_accumulator, stream_sender).await?;
+                emit_gateway_start_events(std::iter::once(plan), relay).await?;
             }
-            emit_gateway_completed_events(result, std::iter::once(plan), stream_accumulator, stream_sender).await?;
+            emit_gateway_completed_events(result, std::iter::once(plan), relay).await?;
         }
-        emit_deferred_stream_events(output_events, request, stream_accumulator, stream_sender, output_offset).await?;
+        let release = Release::Item {
+            index: index as u64,
+            public_index: public_index as u64,
+        };
+        relay.release_deferred(release, request).await?;
     }
-    emit_deferred_stream_events(remaining, request, stream_accumulator, stream_sender, output_offset).await
+    // Frames without an index, or past this round's items, follow every item.
+    relay.release_deferred(Release::All, request).await
 }

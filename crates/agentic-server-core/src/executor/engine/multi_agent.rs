@@ -28,7 +28,8 @@ use crate::executor::{
         RegistryError, RunControlReceiver, RunOwner, ValidatedTreeCheckpoint,
         collaboration::{TranscriptSealer, attribution},
     },
-    pipeline::{AgentFrame, AgentPipeline, AgentRoundId},
+    pipeline::AgentPipeline,
+    relay::{AgentFrame, AgentRoundId},
     request::ExecutionContext,
     response_budget::ExecutorResponseBudget,
 };
@@ -225,9 +226,7 @@ impl MultiAgentRun {
         exec: &ExecutionContext,
         auth: Option<&str>,
     ) -> ExecutorResult<()> {
-        if let (_, Some((accumulator, sender))) = pipeline.parts_mut() {
-            emit_response_start_events(&self.payload, accumulator, sender).await?;
-        }
+        emit_response_start_events(&self.payload, pipeline.relay_mut()).await?;
         let discovery = self
             .contexts
             .iter_mut()

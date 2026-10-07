@@ -4,7 +4,7 @@ use crate::executor::gateway::history::append_input_item;
 use crate::executor::gateway_accumulator::StreamEvent;
 use crate::executor::inference::{call_inference_limited, fetch_response_json_limited};
 use crate::executor::multi_agent::collaboration;
-use crate::executor::pipeline::{AgentPipeline, StreamPayload};
+use crate::executor::pipeline::AgentPipeline;
 use crate::executor::rehydrate::validate_message_content;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::response_budget::ExecutorResponseBudget;
@@ -190,7 +190,6 @@ pub async fn decode_upstream(
                     None,
                 )
                 .await?
-                .payload
         }
     };
     let (ctx, _) = agent.into_parts();
@@ -204,7 +203,7 @@ pub(super) async fn fetch_stream_payload(
     registry: &ToolRegistry,
     output_offset: usize,
     response_budget: &ExecutorResponseBudget,
-) -> ExecutorResult<StreamPayload> {
+) -> ExecutorResult<ResponsePayload> {
     agent.ensure_request_prepared()?;
     let withheld = agent.builtin_tools_withheld().then_some(registry);
     let upstream_json = upstream_request_with_guidance(&agent.request, true, agent.agent_guidance(), withheld)?;
@@ -462,9 +461,9 @@ pub(super) mod tests {
             crate::tool::ToolType::Custom,
         )]));
         let (sender, mut receiver) = tokio::sync::mpsc::channel(16);
-        let mut agent = agent_pipeline(request_context(), None, Some(sender));
+        let mut live_agent = agent_pipeline(request_context(), None, Some(sender));
         let live = fetch_stream_payload(
-            &mut agent,
+            &mut live_agent,
             &exec_ctx,
             None,
             &registry,
@@ -485,15 +484,14 @@ pub(super) mod tests {
         .await
         .unwrap();
         server.abort();
-        let mut live_payload = serde_json::to_value(live.payload).unwrap();
-        let mut collected_payload = serde_json::to_value(collected.payload).unwrap();
+        let mut live_payload = serde_json::to_value(live).unwrap();
+        let mut collected_payload = serde_json::to_value(collected).unwrap();
         live_payload.as_object_mut().unwrap().remove("created_at");
         collected_payload.as_object_mut().unwrap().remove("created_at");
         assert_eq!(live_payload, collected_payload);
         assert_eq!(live_payload["id"], agent.request.response_id);
         assert_eq!(live_payload["usage"]["total_tokens"], 5);
-        assert!(live.deferred_events.is_empty());
-        assert!(collected.deferred_events.is_empty());
+        assert!(!live_agent.relay_mut().has_deferred());
         let mut emitted = String::new();
         while let Ok(event) = receiver.try_recv() {
             let event = event.into_frame();
@@ -771,11 +769,11 @@ pub(super) mod tests {
         assert_eq!(budget_1byte.used(), budget_json.used());
         // Verify payload equivalence
         assert_eq!(
-            serde_json::to_value(&result_1byte.payload.output).unwrap(),
-            serde_json::to_value(&result_1024byte.payload.output).unwrap()
+            serde_json::to_value(&result_1byte.output).unwrap(),
+            serde_json::to_value(&result_1024byte.output).unwrap()
         );
         assert_eq!(
-            serde_json::to_value(&result_1byte.payload.output).unwrap(),
+            serde_json::to_value(&result_1byte.output).unwrap(),
             serde_json::to_value(&result_json.output).unwrap()
         );
     }
@@ -803,7 +801,7 @@ pub(super) mod tests {
             .unwrap();
 
         assert_eq!(budget.used(), budget_json.used());
-        assert_eq!(result.payload.output.len(), 1);
+        assert_eq!(result.output.len(), 1);
     }
 
     #[tokio::test]
@@ -828,7 +826,7 @@ pub(super) mod tests {
         .await
         .expect("2 MiB stream should succeed under default config");
         server.abort();
-        assert_eq!(result.payload.output.len(), 1);
+        assert_eq!(result.output.len(), 1);
         let mut saw_output_item_done = false;
         while let Ok(event) = receiver.try_recv() {
             let event = event.into_frame();
@@ -839,7 +837,7 @@ pub(super) mod tests {
         assert!(saw_output_item_done, "stream must emit response.output_item.done");
         let (_, mut accumulator) = agent.into_parts();
         let terminal_chunk = accumulator
-            .terminal_response_chunk(&result.payload)
+            .terminal_response_chunk(&result)
             .expect("terminal response chunk of 2 MiB succeeds under default limit");
         assert!(terminal_chunk.contains("response.completed"));
     }
@@ -882,7 +880,7 @@ pub(super) mod tests {
             .await
             .expect("lenient stream with done-only text should reconcile and succeed");
         server.abort();
-        assert_eq!(result.payload.output.len(), 1);
+        assert_eq!(result.output.len(), 1);
         assert!(budget.used() >= 5000);
     }
 
@@ -993,8 +991,8 @@ pub(super) mod tests {
             .await
             .expect("two-part done-only stream must succeed");
         server.abort();
-        assert_eq!(result.payload.output.len(), 1);
-        if let OutputItem::Message(msg) = &result.payload.output[0] {
+        assert_eq!(result.output.len(), 1);
+        if let OutputItem::Message(msg) = &result.output[0] {
             assert_eq!(msg.content.len(), 2);
             assert_eq!(msg.content[0].text(), "part 0 text ");
             assert_eq!(msg.content[1].text(), "part 1 text");
@@ -1021,8 +1019,8 @@ pub(super) mod tests {
 
         assert_eq!(budget.used(), delta_budget.used());
         assert_eq!(
-            serde_json::to_value(&result.payload.output).unwrap(),
-            serde_json::to_value(&result_delta.payload.output).unwrap()
+            serde_json::to_value(&result.output).unwrap(),
+            serde_json::to_value(&result_delta.output).unwrap()
         );
     }
 

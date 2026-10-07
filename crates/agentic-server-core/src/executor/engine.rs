@@ -58,12 +58,11 @@ async fn run_until_gateway_tools_complete(
     if agent.request.original_request.input.has_compaction_trigger() {
         let tool_search_metadata = agent.take_tool_search_metadata();
         let payload = run_compaction_trigger(&mut agent.request, exec_ctx, auth).await?;
-        if let (_, Some((stream_accumulator, stream_sender))) = agent.parts_mut() {
-            emit_response_start_events(&payload, stream_accumulator, stream_sender).await?;
-            let event_plans = compaction_event_plans(&payload.output, 0);
-            emit_gateway_start_events(&event_plans, stream_accumulator, stream_sender).await?;
-            emit_gateway_completed_events(&payload.output, &event_plans, stream_accumulator, stream_sender).await?;
-        }
+        let relay = agent.relay_mut();
+        emit_response_start_events(&payload, relay).await?;
+        let event_plans = compaction_event_plans(&payload.output, 0);
+        emit_gateway_start_events(&event_plans, relay).await?;
+        emit_gateway_completed_events(&payload.output, &event_plans, relay).await?;
         return Ok((payload, tool_search_metadata));
     }
     EngineOrchestration::new(agent, exec_ctx)

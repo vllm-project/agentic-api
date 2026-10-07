@@ -9,8 +9,7 @@ mod policy;
 pub(crate) use admission::BuiltInToolCallBudget;
 pub(super) use history::{append_gateway_calls_to_new_input, append_output_items_to_input, append_tool_outputs};
 pub(super) use lifecycle::{
-    DeferredRoundEvents, emit_gateway_completed_events, emit_gateway_start_events, emit_response_start_events,
-    relay_round_events,
+    emit_gateway_completed_events, emit_gateway_start_events, emit_response_start_events, relay_round_events,
 };
 pub(crate) use policy::GatewaySchedulerPolicy;
 #[cfg(test)]
@@ -23,7 +22,7 @@ use futures::future::join_all;
 use tokio::sync::Semaphore;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent};
+use crate::executor::relay::StreamRelay;
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::tool::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
 use crate::tool::{GatewayBinding, ToolError, ToolOutput, ToolOwnership, ToolRegistry};
@@ -513,23 +512,13 @@ pub(super) async fn execute_and_emit_output_calls(
     policy: GatewaySchedulerPolicy,
     response_budget: &ExecutorResponseBudget,
     tool_call_budget: &mut BuiltInToolCallBudget,
-    mut stream: Option<(&mut GatewayStreamAccumulator, &tokio::sync::mpsc::Sender<StreamEvent>)>,
+    relay: &mut StreamRelay,
 ) -> ExecutorResult<Vec<GatewayCallResult>> {
     let mut scheduler =
         GatewayScheduler::plan_with_budget(output_items, registry, output_offset, policy, tool_call_budget);
-    if let Some((stream_accumulator, stream_sender)) = stream.as_mut() {
-        emit_gateway_start_events(scheduler.event_plans(), stream_accumulator, stream_sender).await?;
-    }
+    emit_gateway_start_events(scheduler.event_plans(), relay).await?;
     let gateway_results = scheduler.execute_with_budget(response_budget).await?;
-    if let Some((stream_accumulator, stream_sender)) = stream.as_mut() {
-        emit_gateway_completed_events(
-            &gateway_results,
-            scheduler.event_plans(),
-            stream_accumulator,
-            stream_sender,
-        )
-        .await?;
-    }
+    emit_gateway_completed_events(&gateway_results, scheduler.event_plans(), relay).await?;
     Ok(gateway_results)
 }
 
@@ -538,6 +527,7 @@ mod tests {
     use super::GatewayCallResult;
     use crate::executor::accumulator::ResponseAccumulator;
     use crate::executor::gateway_accumulator::StreamEvent;
+    use crate::executor::relay::{RelayLimits, StreamRelay};
     use crate::types::io::output::{FunctionToolCall, McpListTool, McpListTools};
     use crate::types::io::{
         CodeInterpreterCall, CodeInterpreterCallOutput, CodeInterpreterCallStatus, CompactionItem, InputItem,
@@ -1106,11 +1096,11 @@ mod tests {
         assert!(matches!(results[1].public_output, Some(OutputItem::WebSearchCall(_))));
 
         let (sender, mut receiver) = mpsc::channel(32);
-        let mut stream_accumulator = crate::executor::gateway_accumulator::GatewayStreamAccumulator::new();
-        super::emit_gateway_start_events(scheduler.event_plans(), &mut stream_accumulator, &sender)
+        let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+        super::emit_gateway_start_events(scheduler.event_plans(), &mut relay)
             .await
             .expect("start events");
-        super::emit_gateway_completed_events(&results, scheduler.event_plans(), &mut stream_accumulator, &sender)
+        super::emit_gateway_completed_events(&results, scheduler.event_plans(), &mut relay)
             .await
             .expect("completed events");
 
@@ -1444,18 +1434,20 @@ mod tests {
             super::public_output_items(&[discovered_output], &ToolRegistry::default(), &[]).expect("public output");
         let plans = super::mcp_list_tools_event_plans(&public_output, 0);
         let (sender, mut receiver) = mpsc::channel(32);
-        let mut stream_accumulator = crate::executor::gateway_accumulator::GatewayStreamAccumulator::new();
-        stream_accumulator
-            .process_sse_line(r#"data: {"type":"response.created"}"#, 0)
-            .expect("response.created");
-        stream_accumulator
-            .process_sse_line(r#"data: {"type":"response.in_progress"}"#, 0)
-            .expect("response.in_progress");
+        let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+        for line in [
+            r#"data: {"type":"response.created"}"#,
+            r#"data: {"type":"response.in_progress"}"#,
+        ] {
+            let mut lifecycle = crate::events::normalize_sse_line(line).expect("lifecycle event");
+            relay.emit_local(&mut lifecycle).await.expect("lifecycle event");
+            receiver.try_recv().expect("lifecycle event is delivered");
+        }
 
-        super::emit_gateway_start_events(&plans, &mut stream_accumulator, &sender)
+        super::emit_gateway_start_events(&plans, &mut relay)
             .await
             .expect("start events");
-        super::emit_gateway_completed_events(&public_output, &plans, &mut stream_accumulator, &sender)
+        super::emit_gateway_completed_events(&public_output, &plans, &mut relay)
             .await
             .expect("completed events");
 
@@ -1494,12 +1486,12 @@ mod tests {
         })];
         let plans = super::compaction_event_plans(&public_output, 0);
         let (sender, mut receiver) = mpsc::channel(32);
-        let mut stream_accumulator = crate::executor::gateway_accumulator::GatewayStreamAccumulator::new();
+        let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
 
-        super::emit_gateway_start_events(&plans, &mut stream_accumulator, &sender)
+        super::emit_gateway_start_events(&plans, &mut relay)
             .await
             .expect("start events");
-        super::emit_gateway_completed_events(&public_output, &plans, &mut stream_accumulator, &sender)
+        super::emit_gateway_completed_events(&public_output, &plans, &mut relay)
             .await
             .expect("completed events");
 
@@ -1556,20 +1548,15 @@ mod tests {
             origin: crate::types::io::code_interpreter::CodeInterpreterCallOrigin::Gateway,
         });
         let (sender, mut receiver) = mpsc::channel(16);
-        let mut stream_accumulator = crate::executor::gateway_accumulator::GatewayStreamAccumulator::new();
+        let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
 
-        super::emit_gateway_start_events(&plans, &mut stream_accumulator, &sender)
+        super::emit_gateway_start_events(&plans, &mut relay)
             .await
             .expect("start events");
         super::complete_gateway_event_plans(&mut plans, std::slice::from_ref(&final_item));
-        super::emit_gateway_completed_events(
-            std::slice::from_ref(&final_item),
-            &plans,
-            &mut stream_accumulator,
-            &sender,
-        )
-        .await
-        .expect("completed events");
+        super::emit_gateway_completed_events(std::slice::from_ref(&final_item), &plans, &mut relay)
+            .await
+            .expect("completed events");
 
         let events = std::iter::from_fn(|| receiver.try_recv().ok().map(StreamEvent::into_frame))
             .map(|event| parse_named_sse_event(&event.content))
@@ -1654,9 +1641,9 @@ mod tests {
             arguments: Some(call.arguments.clone()),
         }];
         let (sender, mut receiver) = mpsc::channel(32);
-        let mut stream_accumulator = crate::executor::gateway_accumulator::GatewayStreamAccumulator::new();
+        let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
 
-        super::emit_gateway_start_events(&plans, &mut stream_accumulator, &sender)
+        super::emit_gateway_start_events(&plans, &mut relay)
             .await
             .expect("start events");
 
@@ -1706,7 +1693,7 @@ mod tests {
         }];
 
         super::complete_gateway_event_plans(&mut plans, &results);
-        super::emit_gateway_completed_events(&results, &plans, &mut stream_accumulator, &sender)
+        super::emit_gateway_completed_events(&results, &plans, &mut relay)
             .await
             .expect("completed events");
 
@@ -1764,13 +1751,13 @@ mod tests {
             omitted: false,
         }];
         let (sender, mut receiver) = mpsc::channel(32);
-        let mut stream_accumulator = crate::executor::gateway_accumulator::GatewayStreamAccumulator::new();
+        let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
 
-        super::emit_gateway_start_events(&plans, &mut stream_accumulator, &sender)
+        super::emit_gateway_start_events(&plans, &mut relay)
             .await
             .expect("start events");
         super::complete_gateway_event_plans(&mut plans, &results);
-        super::emit_gateway_completed_events(&results, &plans, &mut stream_accumulator, &sender)
+        super::emit_gateway_completed_events(&results, &plans, &mut relay)
             .await
             .expect("failed events");
 

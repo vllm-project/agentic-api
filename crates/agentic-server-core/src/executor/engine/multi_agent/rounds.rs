@@ -8,7 +8,8 @@ use crate::executor::{
         AgentPhase, AgentState, AgentTaskCompletion, AgentTaskOutcome, CompactionCommit, CompactionPlan,
         CompactionResult, collaboration::attribution,
     },
-    pipeline::{AgentFrameSink, AgentPipeline, AgentRoundId},
+    pipeline::AgentPipeline,
+    relay::{AgentFrameSink, AgentRoundId},
     request::{ExecutionContext, RequestContext},
 };
 use crate::tool::ToolSearchHandler;
@@ -132,10 +133,10 @@ impl MultiAgentRun {
             conversation_version: None,
             continuation: None,
         };
-        let sender = pipeline.stream_sender();
-        let streaming = sender.is_some();
+        // Round tasks present through the response owner's relay, never the client queue.
+        let streaming = pipeline.is_streaming();
         let mut agent =
-            AgentPipeline::with_limits(ctx, tool_search, sender, exec.responses_config.max_stream_event_bytes);
+            AgentPipeline::with_limits(ctx, tool_search, None, exec.responses_config.max_stream_event_bytes);
         agent.set_agent_guidance(self.round_guidance(turn));
         if streaming {
             agent.set_agent_frame_sink(AgentFrameSink {
