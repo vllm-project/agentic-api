@@ -4,6 +4,7 @@
   "printWidth": 80,
   "sortPackageJson": false,
   "ignorePatterns": [
+    "content/docs/**",
     "package-lock.json",
     "pnpm-lock.yaml",
     "yarn.lock",

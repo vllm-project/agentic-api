@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { rewritePublishedLinks } from './refresh-site-docs.mjs';
 const output = resolve(process.env.STATIC_OUTPUT_DIR || 'dist/client');
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
 
 const docs = JSON.parse(readFileSync('lib/data/docs-versions.json', 'utf8'));
+const siteDocs = JSON.parse(readFileSync('lib/data/site-docs.json', 'utf8'));
+assert.ok(Array.isArray(siteDocs.documents) && siteDocs.documents.length > 0);
+const siteDocPages = new Map(
+  siteDocs.documents.map((entry) => [`docs/latest/${entry.slug}.html`, entry]),
+);
 assert.ok(docs.versions.some((version) => version.id === docs.defaultVersion));
 assert.equal(
   new Set(docs.versions.map((version) => version.id)).size,
@@ -36,6 +42,10 @@ const pages = [
   ...docs.versions.map((version) => [
     `docs/${version.id}.html`,
     'Your version.',
+  ]),
+  ...[...siteDocPages].map(([file, entry]) => [
+    file,
+    entry.title.split('`')[0],
   ]),
 ];
 const errors = [];
@@ -197,7 +207,7 @@ for (const [file, heading] of pages) {
         document.includes(command),
         `${kind} CLI reference includes ${command}`,
       );
-  } else if (file.startsWith('docs')) {
+  } else if (file === 'docs.html' || /^docs\/[^/]+\.html$/.test(file)) {
     const versionId =
       file === 'docs.html' ? docs.defaultVersion : file.slice(5, -5);
     const version = docs.versions.find((item) => item.id === versionId);
@@ -215,12 +225,24 @@ for (const [file, heading] of pages) {
         `${file}: every guide stays in the selected version`,
       );
     }
-    assert.equal(
-      document.includes('/docs/guides/codex-desktop.md'),
-      version.sections.includes('codex-desktop') && !version.hostedBaseUrl,
-      `${file}: desktop guide follows the selected version's availability`,
-    );
-    if (!version.sections.includes('sglang'))
+    if (version.id === 'latest') {
+      for (const entry of siteDocs.documents)
+        if (version.sections.includes(entry.id))
+          assert.ok(
+            document.includes(`href="${basePath}/docs/latest/${entry.slug}"`),
+            `${file}: ${entry.slug} opens its native latest page`,
+          );
+    } else {
+      assert.equal(
+        document.includes('/docs/guides/codex-desktop.md'),
+        version.sections.includes('codex-desktop') && !version.hostedBaseUrl,
+        `${file}: desktop guide follows the selected version's availability`,
+      );
+    }
+    if (
+      !version.sections.includes('sglang') &&
+      !version.sections.includes('sglang-upstream')
+    )
       assert.ok(
         !document.includes('SGLang upstream'),
         `${file}: unreleased guide is not advertised`,
@@ -230,6 +252,25 @@ for (const [file, heading] of pages) {
         document.includes('Development documentation'),
         `${file}: development warning`,
       );
+  }
+  const siteDocument = siteDocPages.get(file);
+  if (siteDocument) {
+    assert.ok(
+      document.includes('Development documentation'),
+      `${file}: development warning`,
+    );
+    assert.ok(document.includes('Read as Markdown'), `${file}: Markdown link`);
+    assert.ok(document.includes('View source'), `${file}: source link`);
+    assert.ok(
+      document.includes('class="roadmap-body"'),
+      `${file}: rendered Markdown`,
+    );
+    assert.ok(
+      document.includes(
+        `href="${basePath}/docs/latest/${siteDocument.slug}.md"`,
+      ),
+      `${file}: Markdown export link`,
+    );
   }
   for (const match of document.matchAll(
     /(?:href|src)="(\/[^"?#]*)(?:[?#][^"]*)?"/g,
@@ -245,6 +286,20 @@ for (const kind of ['python', 'rust']) {
     `${kind} CLI Markdown export matches the rendered reference`,
   );
 }
+for (const entry of siteDocs.documents) {
+  const snapshot = readFileSync(`content/docs/${entry.sourcePath}`, 'utf8');
+  const expected = rewritePublishedLinks(
+    entry,
+    snapshot,
+    siteDocs.documents,
+    siteUrl,
+  );
+  assert.equal(
+    readFileSync(resolve(output, `docs/latest/${entry.slug}.md`), 'utf8'),
+    expected,
+    `${entry.slug}: published Markdown has current content and resolved links`,
+  );
+}
 const llms = readFileSync(resolve(output, 'llms.txt'), 'utf8');
 assert.equal(
   readFileSync(resolve(output, 'roadmap.md'), 'utf8'),
@@ -252,11 +307,13 @@ assert.equal(
   'The published Markdown roadmap matches the source used to render the page',
 );
 assert.ok(llms.startsWith('# vLLM Agentic API\n\n> '), 'llms.txt overview');
-assert.match(
-  llms,
-  /^- \[[^\]]+\]\(https:\/\/raw\.githubusercontent\.com\/vllm-project\/agentic-api\/main\/docs\/api\/index\.md\): .+$/m,
-  'llms.txt links to the Markdown API reference',
-);
+for (const entry of siteDocs.documents)
+  assert.ok(
+    llms.includes(
+      `https://vllm-project.github.io/agentic-api/docs/latest/${entry.slug}.md`,
+    ),
+    `llms.txt links to the ${entry.slug} Markdown export`,
+  );
 const manifest = JSON.parse(
   readFileSync('dist/server/vinext-prerender.json', 'utf8'),
 );

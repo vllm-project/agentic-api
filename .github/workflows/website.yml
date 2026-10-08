@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'ROADMAP.md'
+      - 'docs/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'crates/agentic-cli-docs/**'
@@ -25,6 +26,7 @@ on:
     branches: [main]
     paths:
       - 'ROADMAP.md'
+      - 'docs/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'crates/agentic-cli-docs/**'

@@ -1488,6 +1488,32 @@ h2 {
 .roadmap-body img {
   max-width: 100%;
 }
+.roadmap-body table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin-block: 24px 32px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.roadmap-body th,
+.roadmap-body td {
+  border: 1px solid var(--border);
+  padding: 9px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.roadmap-body th {
+  color: var(--foreground);
+  background: light-dark(#edf2f7, #181d25);
+  font-weight: 600;
+}
+.roadmap-body blockquote {
+  border-left: 3px solid var(--brand-blue);
+  margin: 24px 0;
+  padding-left: 18px;
+}
 .community-visual {
   text-align: center;
 }

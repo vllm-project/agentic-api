@@ -1,4 +1,4 @@
-import { REPO } from './site';
+import { SITE_URL } from './site';
 
 export const PUBLISHED_VERSION = '0.9.0';
 const PYPI_EXECUTABLE = `uvx --from agentic-api==${PUBLISHED_VERSION} agentic`;
@@ -79,6 +79,6 @@ export function getLaunchInstructions(input: unknown) {
     install: INSTALL_METHODS[installation].command,
     launch: getLaunchCommands(installation)[input.harness],
     serve: getServeCommand(installation),
-    guide: REPO + '#agentic-api-cli',
+    guide: SITE_URL + '/docs/latest/guides/quickstart',
   };
 }

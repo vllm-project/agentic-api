@@ -1,6 +1,6 @@
 {
   "checkedAt": "2026-09-30",
-  "defaultVersion": "v0.9.0",
+  "defaultVersion": "latest",
   "versions": [
     {
       "id": "latest",
@@ -10,14 +10,23 @@
       "sourceRef": "main",
       "hostedBaseUrl": null,
       "sections": [
-        "overview",
+        "quickstart",
+        "python-installation",
+        "harness-cli-testing",
+        "responses-compaction",
+        "sglang-upstream",
+        "dynamo-upstream",
+        "container",
+        "observability",
+        "getting-started",
         "api",
         "codex-desktop",
-        "developing",
         "community",
-        "sglang",
-        "dynamo",
-        "llmd"
+        "llmd",
+        "kubernetes",
+        "kind",
+        "github-oidc",
+        "releases"
       ]
     },
     {

@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
@@ -19,7 +20,6 @@ import {
   getServeCommand,
   getLaunchInstructions,
 } from '@/lib/quickstart';
-import { REPO } from '@/lib/site';
 type ModelContext = {
   registerTool: (
     tool: {
@@ -154,9 +154,9 @@ export function Quickstart() {
               </div>
             </li>
           </ol>
-          <a className="text-link" href={`${REPO}#agentic-api-cli`}>
+          <Link className="text-link" href="/docs/latest/guides/quickstart">
             Read the full setup guide <ArrowUpRight size={16} />
-          </a>
+          </Link>
         </div>
         <div className="terminal-card">
           <div className="terminal-top">
@@ -243,12 +243,12 @@ export function Quickstart() {
                 uses shell commands.
               </p>
               <p>
-                <a
+                <Link
                   className="text-link"
-                  href={`${REPO}/blob/main/docs/guides/codex-desktop.md`}
+                  href="/docs/latest/guides/codex-desktop"
                 >
                   Set up Codex Desktop <ArrowUpRight size={16} />
-                </a>
+                </Link>
               </p>
             </TabsContent>
             <TabsContent value="claude">

@@ -1,0 +1,139 @@
+# Responses compaction
+
+Compaction turns a long Responses item history into a smaller, reusable context checkpoint. vLLM Agentic API supports
+both the standalone `POST /v1/responses/compact` endpoint and automatic compaction on `POST /v1/responses`.
+
+## Standalone compaction
+
+Send direct input, a stored previous response ID, or both:
+
+```bash
+curl http://localhost:8000/v1/responses/compact \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "served-model",
+    "input": [
+      {"role": "user", "content": "Remember the deployment constraints."},
+      {"role": "assistant", "content": "I will preserve them."}
+    ]
+  }'
+```
+
+The endpoint makes a non-streaming inference call to summarize the resolved item history. Its response has
+`object: "response.compaction"`; `usage` describes that summary call. The `output` array is the canonical compacted
+window: normalized user messages followed by exactly one `compaction` item.
+
+```json
+{
+  "id": "resp_...",
+  "object": "response.compaction",
+  "created_at": 1784740000,
+  "output": [
+    {
+      "type": "message",
+      "id": "msg_...",
+      "role": "user",
+      "status": "completed",
+      "content": "Remember the deployment constraints."
+    },
+    {
+      "type": "compaction",
+      "id": "cmp_...",
+      "encrypted_content": "The user asked that the deployment constraints be preserved..."
+    }
+  ],
+  "usage": {
+    "input_tokens": 1200,
+    "output_tokens": 180,
+    "total_tokens": 1380,
+    "input_tokens_details": {"cached_tokens": 0},
+    "output_tokens_details": {"reasoning_tokens": 0}
+  }
+}
+```
+
+Pass the complete `output` array back as later Responses input. You may append new input items after it:
+
+```json
+{
+  "model": "served-model",
+  "input": [
+    {"type": "message", "id": "msg_...", "role": "user", "status": "completed", "content": "..."},
+    {"type": "compaction", "id": "cmp_...", "encrypted_content": "..."},
+    {"role": "user", "content": "Continue the task."}
+  ],
+  "store": false
+}
+```
+
+When response storage is configured, the returned response ID is also a continuation checkpoint and can be supplied
+as `previous_response_id`. Compatibility fields such as `tools`, `parallel_tool_calls`, `reasoning`, and `text` are
+accepted by the compact endpoint but are not used by the summary call.
+
+## Automatic context management
+
+Add a compaction policy to an ordinary Responses request:
+
+```json
+{
+  "model": "served-model",
+  "input": [{"role": "user", "content": "Long-running task context"}],
+  "context_management": [
+    {"type": "compaction", "compact_threshold": 120000}
+  ]
+}
+```
+
+The gateway first rehydrates any conversation or previous-response history. Before every inference round, including
+rounds after gateway-managed tool output, it estimates the model-facing input size and compacts when that estimate is
+greater than `compact_threshold`. Inference then continues using the compacted window. `context_management` is local
+executor configuration and is not sent to vLLM. If compaction runs, the response usage is the saturating sum of every
+summary call and all answer/tool-loop inference rounds.
+
+The estimate is deterministic but is not a model-specific tokenizer. Textual fields are aggregated as UTF-8 bytes,
+divided by four and rounded up, with fixed allowances for Responses item and content-part framing. Each image receives
+a fixed 1,024-token allowance, independent of its URL, inline base64 size, dimensions, or `detail` setting. Actual
+vision-token usage depends on the model and image processor, so choose a threshold with headroom. An entry without
+`compact_threshold` is ignored because this server has no global default threshold.
+
+## File inputs
+
+Message content parts with `type: "input_file"` are parsed without dropping `file_data`, `file_id`, `file_url`,
+or `filename`, but the typed Responses executor does not support resolving or reading those files. It returns an
+HTTP 400 `invalid_request_error` (or the equivalent WebSocket error) before inference. The same validation applies
+to files restored from response/conversation history, explicit and automatic compaction, `compaction_trigger`,
+and WebSocket `generate: false` requests. Use supported `input_text` or `input_image` content instead.
+
+Eligible raw `store: false` proxy requests remain byte-transparent and leave file support to the upstream. Merely
+setting `store: false` does not select that path when history or an in-process feature requires typed execution.
+Structured function/custom tool call outputs containing files retain their existing pass-through behavior.
+
+API `input_file` content is distinct from mentioning a local filename in Codex or asking a client-executed read tool
+to read a file. A local file mention is not a file upload, and this gateway does not resolve local paths or implement
+a file-ID resolver, OCR, or document parser.
+
+## File inputs
+
+Message content parts with `type: "input_file"` are parsed without dropping `file_data`, `file_id`, `file_url`,
+or `filename`, but the typed Responses executor does not support resolving or reading those files. It returns an
+HTTP 400 `invalid_request_error` (or the equivalent WebSocket error) before inference. The same validation applies
+to files restored from response/conversation history, explicit and automatic compaction, `compaction_trigger`,
+and WebSocket `generate: false` requests. Use supported `input_text` or `input_image` content instead.
+
+Eligible raw `store: false` proxy requests remain byte-transparent and leave file support to the upstream. Merely
+setting `store: false` does not select that path when history or an in-process feature requires typed execution.
+Structured function/custom tool call outputs containing files retain their existing pass-through behavior.
+
+API `input_file` content is distinct from mentioning a local filename in Codex or asking a client-executed read tool
+to read a file. A local file mention is not a file upload, and this gateway does not resolve local paths or implement
+a file-ID resolver, OCR, or document parser.
+
+## Local plaintext limitation
+
+The wire field is named `encrypted_content` for Responses compatibility, but summaries generated by this local
+implementation are **plaintext and are not encrypted**. Treat the field as conversation content when logging,
+storing, transmitting, or applying data-retention controls. The gateway converts it to assistant context only for the
+model-facing vLLM request; the public and stored item remains a `compaction` item.
+
+OpenAI-generated encrypted compaction items are not decryptable or interoperable with this implementation. If one is
+submitted, its `encrypted_content` bytes are treated literally as plaintext assistant context.

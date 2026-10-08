@@ -14,34 +14,36 @@ The Markdown guides below track the development branch (`main`). For a released 
 
 - [Roadmap](https://raw.githubusercontent.com/vllm-project/agentic-api/main/ROADMAP.md): Project goals, near-term priorities, longer-term direction, and non-goals.
 
-- [Project overview and quickstart](https://raw.githubusercontent.com/vllm-project/agentic-api/main/README.md): Architecture, installation, agentic CLI commands, and configuration examples.
+- [Quickstart](https://vllm-project.github.io/agentic-api/docs/latest/guides/quickstart.md): Install Agentic API, connect a running vLLM endpoint, and send a first Responses API request.
+- [Project overview](https://raw.githubusercontent.com/vllm-project/agentic-api/main/README.md): Architecture, agentic CLI commands, and configuration examples.
 - [Rust CLI reference](https://vllm-project.github.io/agentic-api/docs/latest/rust-cli.md): Generated commands, options, and defaults for `agentic ...`: run a harness, attach to an existing gateway, serve, and validate. Installed by both Cargo and PyPI.
 - [Python CLI reference](https://vllm-project.github.io/agentic-api/docs/latest/python-cli.md): Generated command-line reference for the Python launcher, `agentic-api ...` (or `python -m agentic_api ...`). The Rust CLI uses `agentic ...` and has separate commands and flags.
-- [Python installation and workflows](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/guides/python-installation.md): PyPI installation, remote and managed-vLLM modes, and diagnostics.
-- [Development setup](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/developing/getting-started.md): Build from source and run the development checks.
+- [Python installation and workflows](https://vllm-project.github.io/agentic-api/docs/latest/guides/python-installation.md): PyPI installation, remote and managed-vLLM modes, and diagnostics.
+- [Development setup](https://vllm-project.github.io/agentic-api/docs/latest/developing/getting-started.md): Build from source and run the development checks.
 
 ## APIs and state
 
-- [API reference](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/api/index.md): Endpoints, request and response examples, and API behavior.
+- [API reference](https://vllm-project.github.io/agentic-api/docs/latest/api/index.md): Endpoints, request and response examples, and API behavior.
 - [Architecture](https://raw.githubusercontent.com/vllm-project/agentic-api/main/ARCHITECTURE.md): Crate responsibilities, request lifecycle, tool execution, and storage.
-- [Responses compaction](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/guides/responses-compaction.md): Compact conversation context and continue Responses requests.
+- [Responses compaction](https://vllm-project.github.io/agentic-api/docs/latest/guides/responses-compaction.md): Compact conversation context and continue Responses requests.
 - [Terminology](https://raw.githubusercontent.com/vllm-project/agentic-api/main/TERMINOLOGY.md): Definitions for Responses items, conversation state, tools, streaming events, and inference rounds.
 
 ## Harnesses and integrations
 
-- [Codex Desktop](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/guides/codex-desktop.md): Tested Linux desktop setup with a separate app profile, local model catalog, shell editing, and the freeform apply_patch limitation.
+- [Coding-client testing](https://vllm-project.github.io/agentic-api/docs/latest/guides/harness-cli-testing.md): Connect Codex or Claude Code and verify the gateway setup.
+- [Codex Desktop](https://vllm-project.github.io/agentic-api/docs/latest/guides/codex-desktop.md): Tested Linux desktop setup with a separate app profile, local model catalog, shell editing, and the freeform apply_patch limitation.
 - [Codex integration](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/design/codex-integration.md): Codex integration design and configuration.
 - [Claude Code integration](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/design/claude-code-integration.md): Claude Code integration design and configuration.
 - [MCP gateway integration](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/design/mcp-gateway-integration.md): MCP tool discovery, execution, and gateway integration design.
-- [SGLang upstream](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/guides/sglang-upstream.md): Supported configuration and recorded integration coverage.
-- [NVIDIA Dynamo upstream](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/guides/dynamo-upstream.md): Dynamo with a vLLM worker and the tested configuration.
+- [SGLang upstream](https://vllm-project.github.io/agentic-api/docs/latest/guides/sglang-upstream.md): Supported configuration and recorded integration coverage.
+- [NVIDIA Dynamo upstream](https://vllm-project.github.io/agentic-api/docs/latest/guides/dynamo-upstream.md): Dynamo with a vLLM worker and the tested configuration.
 - [agentic-llm-d](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/design/agentic-llm-d.md): The v1alpha response hydration and persistence service for llm-d.
 
 ## Deployment
 
-- [Containers](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/deploying/container.md): Build and run a container deployment.
+- [Containers](https://vllm-project.github.io/agentic-api/docs/latest/deploying/container.md): Build and run a container deployment.
 - [Kubernetes](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/deploying/kubernetes.md): Kubernetes deployment and configuration.
-- [Observability](https://raw.githubusercontent.com/vllm-project/agentic-api/main/docs/deploying/observability.md): Opt-in OpenTelemetry traces, metrics, and log correlation.
+- [Observability](https://vllm-project.github.io/agentic-api/docs/latest/deploying/observability.md): Opt-in OpenTelemetry traces, metrics, and log correlation.
 
 ## Optional
 
