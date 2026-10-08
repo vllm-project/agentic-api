@@ -107,6 +107,7 @@ nav:
     - Rust CLI (agentic): reference/rust-cli.md
     - Python Launcher (agentic-api): reference/python-cli.md
   - Guides:
+    - Quickstart: guides/quickstart.md
     - Python Installation: guides/python-installation.md
     - Claude Code with self-hosted models: guides/harness-cli-testing.md
     - Responses Compaction: guides/responses-compaction.md
