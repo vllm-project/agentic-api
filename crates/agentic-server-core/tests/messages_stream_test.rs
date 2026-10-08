@@ -211,7 +211,7 @@ async fn messages_stream_accepts_unspaced_sse_data_through_gateway_tool_rounds()
     assert_messages_stream_presents_one_message(streams).await;
 }
 
-async fn assert_messages_stream_presents_one_message(streams: Vec<String>) {
+async fn assert_messages_stream_presents_one_message(streams: Vec<String>) -> String {
     let (vllm_url, upstream, vllm) = spawn_mock_vllm_stream(streams).await;
     let (search_url, search) = spawn_mock_search().await;
     let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
@@ -297,6 +297,7 @@ async fn assert_messages_stream_presents_one_message(streams: Vec<String>) {
         (0..indices.len() as u64).collect::<Vec<_>>(),
         "surfaced block indices contiguous across rounds: {indices:?}"
     );
+    sse
 }
 
 #[tokio::test]
@@ -1187,7 +1188,39 @@ async fn messages_stream_allows_named_extension_blocks_and_deltas() {
             )
         })
         .collect();
-    assert_messages_stream_presents_one_message(streams).await;
+    let sse = assert_messages_stream_presents_one_message(streams).await;
+    let events: Vec<Value> = sse
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .map(|data| serde_json::from_str(data).unwrap())
+        .collect();
+    let extension_indices: Vec<_> = events
+        .iter()
+        .filter(|event| event["type"] == "content_block_start" && event["content_block"]["type"] == "future_block")
+        .map(|event| event["index"].as_u64().unwrap())
+        .collect();
+    assert_eq!(extension_indices.len(), 2, "one extension block from each round");
+    assert_ne!(extension_indices[0], extension_indices[1]);
+    for index in extension_indices {
+        assert_ne!(index, 999, "upstream index must be rebased");
+        let actual: Vec<_> = events
+            .iter()
+            .filter(|event| event["index"].as_u64() == Some(index))
+            .cloned()
+            .collect();
+        assert_eq!(
+            actual,
+            vec![
+                json!({"type":"content_block_start", "index":index,
+                "content_block":{"type":"future_block", "extension":"opaque"}}),
+                json!({"type":"content_block_delta", "index":index,
+                "delta":{"type":"future_delta", "extension":"opaque"}}),
+                json!({"type":"content_block_delta", "index":index,
+                "delta":{"type":"text_delta", "text":"extension text"}}),
+                json!({"type":"content_block_stop", "index":index}),
+            ]
+        );
+    }
 }
 
 #[tokio::test]
