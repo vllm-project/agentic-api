@@ -1096,7 +1096,7 @@ mod tests {
         assert!(matches!(results[1].public_output, Some(OutputItem::WebSearchCall(_))));
 
         let (sender, mut receiver) = mpsc::channel(32);
-        let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+        let mut relay = StreamRelay::client(sender, RelayLimits::default());
         super::emit_gateway_start_events(scheduler.event_plans(), &mut relay)
             .await
             .expect("start events");
@@ -1434,7 +1434,7 @@ mod tests {
             super::public_output_items(&[discovered_output], &ToolRegistry::default(), &[]).expect("public output");
         let plans = super::mcp_list_tools_event_plans(&public_output, 0);
         let (sender, mut receiver) = mpsc::channel(32);
-        let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+        let mut relay = StreamRelay::client(sender, RelayLimits::default());
         for line in [
             r#"data: {"type":"response.created"}"#,
             r#"data: {"type":"response.in_progress"}"#,
@@ -1486,7 +1486,7 @@ mod tests {
         })];
         let plans = super::compaction_event_plans(&public_output, 0);
         let (sender, mut receiver) = mpsc::channel(32);
-        let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+        let mut relay = StreamRelay::client(sender, RelayLimits::default());
 
         super::emit_gateway_start_events(&plans, &mut relay)
             .await
@@ -1548,7 +1548,7 @@ mod tests {
             origin: crate::types::io::code_interpreter::CodeInterpreterCallOrigin::Gateway,
         });
         let (sender, mut receiver) = mpsc::channel(16);
-        let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+        let mut relay = StreamRelay::client(sender, RelayLimits::default());
 
         super::emit_gateway_start_events(&plans, &mut relay)
             .await
@@ -1641,7 +1641,7 @@ mod tests {
             arguments: Some(call.arguments.clone()),
         }];
         let (sender, mut receiver) = mpsc::channel(32);
-        let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+        let mut relay = StreamRelay::client(sender, RelayLimits::default());
 
         super::emit_gateway_start_events(&plans, &mut relay)
             .await
@@ -1751,7 +1751,7 @@ mod tests {
             omitted: false,
         }];
         let (sender, mut receiver) = mpsc::channel(32);
-        let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+        let mut relay = StreamRelay::client(sender, RelayLimits::default());
 
         super::emit_gateway_start_events(&plans, &mut relay)
             .await

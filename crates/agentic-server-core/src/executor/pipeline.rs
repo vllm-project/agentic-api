@@ -6,19 +6,17 @@ pub(super) use ingest::RoundIngestion;
 use crate::events::{ClassifiedSseLine, EventFrame, SseLine};
 use crate::executor::accumulator::Validation;
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, StreamEvent};
+use crate::executor::gateway_accumulator::GatewayStreamAccumulator;
 use crate::executor::multi_agent::RunControlReceiver;
-use crate::executor::relay::{AgentFrameSink, AgentRoundId, RelayLimits, StreamRelay};
+use crate::executor::relay::{AgentRoundId, StreamRelay};
 use crate::executor::request::RequestContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
-use crate::executor::response_events::ResponseEventSink;
 use crate::executor::translate::{Translation, TranslationContext};
 use crate::tool::{ToolRegistry, ToolSearchMetadata, ToolSearchState};
 use crate::types::agent::AgentIdentity;
 use crate::types::io::{InputMessage, OutputItem};
 use crate::types::request_response::ResponsePayload;
 use futures::{Stream, StreamExt};
-use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 
 /// Lives for the response, preserving gateway event numbering across inference rounds.
@@ -35,9 +33,6 @@ pub(super) struct AgentPipeline {
 }
 
 impl AgentPipeline {
-    pub(super) fn set_response_event_sink(&mut self, sink: ResponseEventSink) {
-        self.relay.attach_response_sink(sink);
-    }
     pub(super) fn set_agent_guidance(&mut self, guidance: InputMessage) {
         self.agent_guidance = Some(guidance);
     }
@@ -68,9 +63,6 @@ impl AgentPipeline {
     pub(super) fn finish_agent_source(&mut self, source: &AgentRoundId) {
         self.relay.finish_agent_source(source);
     }
-    pub(super) fn set_agent_frame_sink(&mut self, sink: AgentFrameSink) {
-        self.relay.attach_agent_sink(sink);
-    }
     pub(super) fn is_streaming(&self) -> bool {
         self.relay.is_live()
     }
@@ -80,33 +72,13 @@ impl AgentPipeline {
     pub(super) fn cancellation_token(&self) -> CancellationToken {
         self.cancellation.clone()
     }
-    pub(super) fn new(
-        request: RequestContext,
-        tool_search_state: Option<ToolSearchState>,
-        sender: Option<Sender<StreamEvent>>,
-    ) -> Self {
+    /// One pipeline per response or agent round. The relay's sink decides whether
+    /// and where its frames are presented.
+    pub(super) fn new(request: RequestContext, tool_search_state: Option<ToolSearchState>, relay: StreamRelay) -> Self {
         Self {
             request,
             tool_search_state,
-            relay: StreamRelay::new(sender, RelayLimits::default()),
-            round: None,
-            cancellation: CancellationToken::new(),
-            agent_guidance: None,
-            control: None,
-            builtin_tools_withheld: false,
-        }
-    }
-
-    pub(super) fn with_limits(
-        request: RequestContext,
-        tool_search_state: Option<ToolSearchState>,
-        sender: Option<Sender<StreamEvent>>,
-        max_stream_event_bytes: usize,
-    ) -> Self {
-        Self {
-            request,
-            tool_search_state,
-            relay: StreamRelay::new(sender, RelayLimits::with_event_bytes(max_stream_event_bytes)),
+            relay,
             round: None,
             cancellation: CancellationToken::new(),
             agent_guidance: None,

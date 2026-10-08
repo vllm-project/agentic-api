@@ -204,7 +204,6 @@ impl ExecuteRequest {
             tool_search_state,
             &self.exec_ctx,
             self.client_auth.as_deref(),
-            max_stream_event_bytes,
         ))
         .await;
         match result {

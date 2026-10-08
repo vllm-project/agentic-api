@@ -67,7 +67,7 @@ impl Default for RelayLimits {
     }
 }
 
-/// Where presented frames go. Chosen before execution starts.
+/// Where presented frames go, fixed by the relay's constructor.
 enum RelaySink {
     /// Collect-only and JSON execution present nothing and defer nothing.
     Detached,
@@ -95,25 +95,35 @@ pub(super) struct StreamRelay {
 }
 
 impl StreamRelay {
-    pub(super) fn new(sender: Option<Sender<StreamEvent>>, limits: RelayLimits) -> Self {
+    /// For collect-only and JSON execution, which present nothing.
+    pub(super) fn detached() -> Self {
+        Self::with_sink(RelaySink::Detached, RelayLimits::default())
+    }
+
+    /// SSE: stamp each frame and await the bounded client channel.
+    pub(super) fn client(sender: Sender<StreamEvent>, limits: RelayLimits) -> Self {
+        Self::with_sink(RelaySink::Client(sender), limits)
+    }
+
+    /// A retained WebSocket response: present through its shared sequence owner.
+    pub(super) fn response(sink: ResponseEventSink, limits: RelayLimits) -> Self {
+        Self::with_sink(RelaySink::Response(sink), limits)
+    }
+
+    /// A multi-agent round task: forward to the response owner, which projects and stamps.
+    pub(super) fn agent(sink: AgentFrameSink, limits: RelayLimits) -> Self {
+        Self::with_sink(RelaySink::Agent(sink), limits)
+    }
+
+    fn with_sink(sink: RelaySink, limits: RelayLimits) -> Self {
         Self {
-            sink: sender.map_or(RelaySink::Detached, RelaySink::Client),
+            sink,
             presentation: GatewayStreamAccumulator::with_max_stream_event_bytes(limits.event_bytes),
             projection: SourceProjection::default(),
             output_offset: 0,
             deferred: DeferredFrames::default(),
             limits,
         }
-    }
-
-    /// Present through a retained response's shared sequence owner.
-    pub(super) fn attach_response_sink(&mut self, sink: ResponseEventSink) {
-        self.sink = RelaySink::Response(sink);
-    }
-
-    /// Forward to the response owner, which projects and stamps agent frames.
-    pub(super) fn attach_agent_sink(&mut self, sink: AgentFrameSink) {
-        self.sink = RelaySink::Agent(sink);
     }
 
     /// Whether frames reach a client. Callers of a detached relay collect output instead.

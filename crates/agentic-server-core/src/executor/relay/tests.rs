@@ -2,6 +2,7 @@ use super::*;
 use crate::events::{EventPayload, normalize_sse_line};
 use crate::executor::upstream::tests::request_context;
 use crate::types::agent::AgentIdentity;
+use crate::types::io::OutputItem;
 use crate::utils::common::serialize_to_string;
 use futures::poll;
 use serde_json::json;
@@ -97,7 +98,7 @@ async fn defer(relay: &mut StreamRelay, frames: Vec<EventFrame>) -> ExecutorResu
 #[tokio::test]
 async fn synthetic_gateway_items_share_public_indexes_with_upstream_items() {
     let (sender, mut receiver) = mpsc::channel(16);
-    let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
     for (index, name, kind) in [
         (0, "root", "reasoning"),
         (1, "mcp", "mcp_call"),
@@ -138,10 +139,80 @@ async fn synthetic_gateway_items_share_public_indexes_with_upstream_items() {
 }
 
 #[tokio::test]
+async fn agent_items_complete_streamed_items_and_materialize_new_ones() {
+    let (sender, mut receiver) = mpsc::channel(16);
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
+    let agent = AgentIdentity::root().child("researcher").unwrap();
+    let message = |id: &str| -> OutputItem {
+        serde_json::from_value(json!({
+            "type": "message", "id": id, "role": "assistant", "status": "completed",
+            "content": [{"type": "output_text", "text": "hi"}],
+            "agent": {"agent_name": agent.as_str()}
+        }))
+        .unwrap()
+    };
+    let source = AgentRoundId {
+        agent: agent.clone(),
+        round: 0,
+    };
+    let added = EventFrame::synthetic(
+        SSEEventType::OutputItemAdded,
+        json!({"output_index": 0, "item": {"id": "msg_streamed", "type": "message"}})
+            .as_object()
+            .unwrap()
+            .clone(),
+    )
+    .unwrap();
+    relay.accept_agent_frame(&source, added).await.unwrap();
+    assert_eq!(delivered(&mut receiver).len(), 1);
+
+    assert_eq!(relay.emit_agent_item(&message("msg_streamed")).await.unwrap(), 0);
+    let completed = delivered(&mut receiver);
+    assert_eq!(
+        completed.iter().map(|frame| frame.event_type).collect::<Vec<_>>(),
+        [SSEEventType::OutputItemDone],
+        "a streamed item needs only its completion"
+    );
+
+    assert_eq!(relay.emit_agent_item(&message("msg_new")).await.unwrap(), 1);
+    let materialized = delivered(&mut receiver);
+    assert_eq!(
+        materialized.iter().map(|frame| frame.event_type).collect::<Vec<_>>(),
+        [
+            SSEEventType::OutputItemAdded,
+            SSEEventType::ContentPartAdded,
+            SSEEventType::OutputTextDelta,
+            SSEEventType::OutputTextDone,
+            SSEEventType::ContentPartDone,
+            SSEEventType::OutputItemDone,
+        ]
+    );
+    assert!(materialized.iter().all(|frame| frame.wire.output_index == Some(1)));
+    for frame in completed.iter().chain(&materialized) {
+        let attribution = frame.wire.agent.as_ref().expect("attributed frame");
+        assert_eq!(attribution.agent_name, agent.as_str());
+    }
+    assert_eq!(sequence(&materialized), (2..8).map(Some).collect::<Vec<_>>());
+}
+
+#[tokio::test]
+async fn a_detached_relay_reserves_agent_item_indexes_without_presenting() {
+    let mut relay = StreamRelay::detached();
+    let item = OutputItem::Compaction(crate::types::io::CompactionItem {
+        agent: None,
+        id: Some("cmp_1".to_owned()),
+        encrypted_content: "summary".to_owned(),
+    });
+    assert_eq!(relay.emit_agent_item(&item).await.unwrap(), 0);
+    assert_eq!(relay.emit_agent_item(&item).await.unwrap(), 1);
+    assert_eq!(relay.upcoming_sequence_number(), 0);
+}
+
+#[tokio::test]
 async fn release_presents_deferred_frames_in_output_order_with_indexless_frames_last() {
     let request = request_context();
     let (sender, mut receiver) = mpsc::channel(8);
-    let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
     defer(
         &mut relay,
         vec![
@@ -168,7 +239,7 @@ async fn a_moving_window_releases_indexed_frames_and_holds_indexless_frames_unti
     let request = request_context();
     let registry = ToolRegistry::default();
     let (sender, mut receiver) = mpsc::channel(8);
-    let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
     let frames = vec![
         item_added(0, "msg_0"),
         indexless("diagnostic"),
@@ -204,7 +275,7 @@ async fn per_item_release_interleaves_upstream_frames_with_gateway_events() {
     // lifecycle, then its withheld upstream frames, then whatever had no item.
     let request = request_context();
     let (sender, mut receiver) = mpsc::channel(8);
-    let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
     relay.begin_round(5).unwrap();
     defer(
         &mut relay,
@@ -230,7 +301,7 @@ async fn item_release_presents_frames_after_an_omitted_call_at_contiguous_indexe
     // Item 1 is a refused call the public output omits, so item 2 is public item 1.
     let request = request_context();
     let (sender, mut receiver) = mpsc::channel(8);
-    let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
     relay.begin_round(4).unwrap();
     defer(
         &mut relay,
@@ -255,7 +326,7 @@ async fn item_release_presents_frames_after_an_omitted_call_at_contiguous_indexe
 async fn a_round_cannot_begin_while_the_previous_round_holds_deferred_frames() {
     let request = request_context();
     let (sender, mut receiver) = mpsc::channel(4);
-    let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
     defer(&mut relay, vec![item_added(0, "msg_0")]).await.unwrap();
 
     let error = relay.begin_round(1).unwrap_err();
@@ -275,7 +346,7 @@ async fn slow_consumer_backpressure_never_spills_into_the_deferred_buffer() {
     let request = request_context();
     let registry = ToolRegistry::default();
     let (sender, mut receiver) = mpsc::channel(1);
-    let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
     let frames = (0..3).map(|index| item_added(index, &format!("msg_{index}"))).collect();
 
     let mut accept = Box::pin(relay.accept(translation(frames, None), &request, &registry));
@@ -307,7 +378,7 @@ async fn a_one_entry_deferred_buffer_rejects_the_next_frame_and_keeps_the_first(
         deferred_frames: 1,
         ..RelayLimits::default()
     };
-    let mut relay = StreamRelay::new(Some(sender), limits);
+    let mut relay = StreamRelay::client(sender, limits);
     let first = item_added(1, "msg_1");
     let first_bytes = wire_bytes(&first);
     defer(&mut relay, vec![first]).await.unwrap();
@@ -334,7 +405,7 @@ async fn deferred_bytes_bound_both_the_buffer_and_any_single_frame() {
         deferred_bytes: limit,
         ..RelayLimits::default()
     };
-    let mut relay = StreamRelay::new(Some(sender), limits);
+    let mut relay = StreamRelay::client(sender, limits);
     defer(&mut relay, vec![first]).await.unwrap();
 
     let error = defer(&mut relay, vec![item_added(2, "msg_2")]).await.unwrap_err();
@@ -363,7 +434,7 @@ async fn deferred_bytes_bound_both_the_buffer_and_any_single_frame() {
 async fn a_completed_partial_release_refunds_only_the_frames_it_sent() {
     let request = request_context();
     let (sender, mut receiver) = mpsc::channel(1);
-    let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
     relay.begin_round(5).unwrap();
     let retained = item_added(3, "msg_3");
     let retained_bytes = wire_bytes(&retained);
@@ -394,7 +465,7 @@ async fn a_completed_partial_release_refunds_only_the_frames_it_sent() {
 async fn cancelling_a_release_keeps_unsent_frames_and_their_bytes() {
     let request = request_context();
     let (sender, mut receiver) = mpsc::channel(1);
-    let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
     let second = item_added(2, "msg_2");
     let second_bytes = wire_bytes(&second);
     defer(&mut relay, vec![item_added(1, "msg_1"), second]).await.unwrap();
@@ -413,7 +484,7 @@ async fn cancelling_a_release_keeps_unsent_frames_and_their_bytes() {
 async fn cancelled_send_does_not_consume_lifecycle_or_sequence() {
     let request = request_context();
     let (sender, mut receiver) = mpsc::channel(1);
-    let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
     relay
         .emit_upstream(&mut item_added(0, "msg_0"), &request)
         .await
@@ -438,7 +509,7 @@ async fn cancelled_send_does_not_consume_lifecycle_or_sequence() {
 async fn rejected_send_does_not_advance_sequence() {
     let request = request_context();
     let (sender, mut receiver) = mpsc::channel(1);
-    let mut relay = StreamRelay::new(Some(sender), RelayLimits::with_event_bytes(500 * 1024));
+    let mut relay = StreamRelay::client(sender, RelayLimits::with_event_bytes(500 * 1024));
     let error = relay
         .emit_upstream(&mut item_added(0, &"x".repeat(1024 * 1024)), &request)
         .await
@@ -456,7 +527,7 @@ async fn rejected_send_does_not_advance_sequence() {
 async fn local_and_upstream_events_share_numbering_but_not_id_rewriting() {
     let request = request_context();
     let (sender, mut receiver) = mpsc::channel(4);
-    let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
     relay.begin_round(7).unwrap();
     relay.emit_local(&mut created("local")).await.unwrap();
     let mut progress = normalize_sse_line(
@@ -488,7 +559,7 @@ async fn local_and_upstream_events_share_numbering_but_not_id_rewriting() {
 async fn closed_receiver_does_not_consume_presentation_state() {
     let (sender, receiver) = mpsc::channel(1);
     drop(receiver);
-    let mut relay = StreamRelay::new(Some(sender), RelayLimits::default());
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
     let error = relay.emit_local(&mut created("local")).await.unwrap_err();
     assert!(error.to_string().contains("stream receiver closed"));
 
@@ -503,7 +574,7 @@ async fn closed_receiver_does_not_consume_presentation_state() {
 #[tokio::test]
 async fn a_detached_relay_neither_presents_nor_defers() {
     let request = request_context();
-    let mut relay = StreamRelay::new(None, RelayLimits::default());
+    let mut relay = StreamRelay::detached();
     assert!(!relay.is_live());
     relay
         .accept(
@@ -522,12 +593,12 @@ async fn a_detached_relay_neither_presents_nor_defers() {
 async fn an_agent_sink_forwards_unstamped_frames_with_only_the_upstream_offset() {
     let request = request_context();
     let (sender, mut receiver) = mpsc::channel(4);
-    let mut relay = StreamRelay::new(None, RelayLimits::default());
-    relay.attach_agent_sink(AgentFrameSink {
+    let sink = AgentFrameSink {
         agent: AgentIdentity::root(),
         round: 2,
         sender,
-    });
+    };
+    let mut relay = StreamRelay::agent(sink, RelayLimits::default());
     relay.begin_round(3).unwrap();
 
     let forward = async {
@@ -558,8 +629,8 @@ async fn an_agent_sink_forwards_unstamped_frames_with_only_the_upstream_offset()
 async fn a_response_sink_owns_the_sequence_for_both_origins() {
     let request = request_context();
     let (sender, mut receiver) = mpsc::channel(4);
-    let mut relay = StreamRelay::new(None, RelayLimits::default());
-    relay.attach_response_sink(ResponseEventSink::new(sender, DEFAULT_MAX_STREAM_EVENT_BYTES));
+    let sink = ResponseEventSink::new(sender, DEFAULT_MAX_STREAM_EVENT_BYTES);
+    let mut relay = StreamRelay::response(sink, RelayLimits::default());
     relay.begin_round(2).unwrap();
 
     assert!(relay.emit_local(&mut created("local")).await.unwrap());

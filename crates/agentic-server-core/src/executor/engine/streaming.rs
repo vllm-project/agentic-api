@@ -8,9 +8,10 @@ use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, STREAM_EVEN
 use crate::executor::inference::{BoxStream, DONE_MARKER};
 use crate::executor::multi_agent::RunControlReceiver;
 use crate::executor::persist::persist_if_needed;
+use crate::executor::pipeline::AgentPipeline;
+use crate::executor::relay::{RelayLimits, StreamRelay};
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::telemetry::{ExecutionSpan, InstrumentedStream};
-use crate::executor::upstream::agent_pipeline_with_limits;
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
 use crate::types::request_response::ResponsePayload;
 use crate::utils::common::utcnow_str;
@@ -47,12 +48,8 @@ pub(super) fn run_stream(
         let failure_context = StreamFailureContext::from(&ctx);
         let (event_tx, event_rx) = mpsc::channel(STREAM_EVENT_BUFFER);
         let exec_ctx_for_run = Arc::clone(&exec_ctx);
-        let mut agent = agent_pipeline_with_limits(
-            ctx,
-            tool_search_state,
-            Some(event_tx),
-            max_stream_event_bytes,
-        );
+        let relay = StreamRelay::client(event_tx, RelayLimits::with_event_bytes(max_stream_event_bytes));
+        let mut agent = AgentPipeline::new(ctx, tool_search_state, relay);
         agent.control = control;
         let run = async move {
             let result = run_until_gateway_tools_complete(

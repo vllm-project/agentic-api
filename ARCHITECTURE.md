@@ -735,7 +735,12 @@ acknowledged channel into the existing response-wide `StreamRelay`.
 `AgentRoundId` scopes source indexes; delivery's public-position mapping is shared
 with final output assembly. The coordinator emits one response lifecycle and completes
 items after canonical registration and public projection. Delivery does not become a
-second response assembler.
+second response assembler. An item that agent frames already presented needs only
+`output_item.done`. An item the coordinator creates itself, which no upstream frame
+presented, gets its whole public lifecycle from `item_lifecycle.rs`. That module builds
+each frame lazily from the completed item and decides per item kind, through an
+exhaustive match, what streams between `output_item.added` and `output_item.done`.
+The relay attributes and presents those frames.
 
 **Recorded contract checks.** `tests/multi_agent_contract_test.rs` loads independently
 recorded OpenAI and gateway YAML for review, proposals, mixed tools and client-executed
@@ -936,9 +941,11 @@ method they call; none of them passes a sender, accumulator, or offset:
 
 `begin_round` sets the round's offset and rejects a new round while the previous round
 still holds deferred frames. Every method reaches the client through one private
-`send`, the only place an output offset is applied. Its sink is chosen before execution:
-the bounded SSE channel, a retained WebSocket response's `ResponseEventSink`, a
-multi-agent round's `AgentFrameSink`, or none for collect-only and JSON execution.
+`send`, the only place an output offset is applied. The relay's constructor fixes its
+sink: `StreamRelay::client` for the bounded SSE channel, `response` for a retained
+WebSocket response's `ResponseEventSink`, `agent` for a multi-agent round's
+`AgentFrameSink`, and `detached` for collect-only and JSON execution. `AgentPipeline::new`
+takes the configured relay, so the pipeline never handles a sender.
 Sequence and response-start deduplication state is committed after the sink accepts
 the event, so a failed serialization, closed receiver, or cancelled send cannot consume
 it. Enqueueing is not client receipt or playback acknowledgement, and this does not
