@@ -154,6 +154,7 @@ pub fn tool_use_to_call(id: &str, name: &str, input: &Value, map: &GatewayToolMa
         input.clone()
     };
     FunctionToolCall {
+        async_execution: false,
         agent: None,
         id: id.to_owned(),
         call_id: id.to_owned(),

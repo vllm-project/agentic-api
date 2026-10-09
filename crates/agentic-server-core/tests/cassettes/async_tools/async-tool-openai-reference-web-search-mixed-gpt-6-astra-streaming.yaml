@@ -1,0 +1,527 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Start the Paris demo weather lookup. Meanwhile, use web search to find
+        the population of Lisbon and answer in one sentence.
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      store: true
+      stream: true
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: web-search-mixed/t1-start
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_01e500ffe256f751006abdfeda360887d1b961212d409295a5","object":"response","created_at":1790836442,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":"Start
+      the weather lookup and answer the independent question without waiting. Use
+      the demo weather result when it arrives; never invent it.","max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-6-astra","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","async":true,"description":"Read
+      a demo weather snapshot for a city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_01e500ffe256f751006abdfeda360887d1b961212d409295a5","object":"response","created_at":1790836442,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":"Start
+      the weather lookup and answer the independent question without waiting. Use
+      the demo weather result when it arrives; never invent it.","max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-6-astra","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","async":true,"description":"Read
+      a demo weather snapshot for a city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"fc_01e500ffe256f751006abdfedbbb2887d198eb07523ba7df0a","type":"function_call","status":"in_progress","arguments":"","async":true,"call_id":"call_o31G0MGHsmS6NLq3DBl36dqO","name":"get_weather"},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"{\"","item_id":"fc_01e500ffe256f751006abdfedbbb2887d198eb07523ba7df0a","obfuscation":"nQuaEBbNrCba9W","output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"city","item_id":"fc_01e500ffe256f751006abdfedbbb2887d198eb07523ba7df0a","obfuscation":"zJhPGGVaXGWU","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"\":\"","item_id":"fc_01e500ffe256f751006abdfedbbb2887d198eb07523ba7df0a","obfuscation":"DF2mWBlfV9ER3","output_index":0,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"Paris","item_id":"fc_01e500ffe256f751006abdfedbbb2887d198eb07523ba7df0a","obfuscation":"COuZI0pfpOA","output_index":0,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"\"}","item_id":"fc_01e500ffe256f751006abdfedbbb2887d198eb07523ba7df0a","obfuscation":"169GDLEFPme233","output_index":0,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.done
+
+      '
+    - 'data: {"type":"response.function_call_arguments.done","arguments":"{\"city\":\"Paris\"}","item_id":"fc_01e500ffe256f751006abdfedbbb2887d198eb07523ba7df0a","output_index":0,"sequence_number":8}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"fc_01e500ffe256f751006abdfedbbb2887d198eb07523ba7df0a","type":"function_call","status":"completed","arguments":"{\"city\":\"Paris\"}","async":true,"call_id":"call_o31G0MGHsmS6NLq3DBl36dqO","name":"get_weather"},"output_index":0,"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"ws_01e500ffe256f751006abdfedd1b9c87d190147e74b507c951","type":"web_search_call","status":"in_progress"},"output_index":1,"sequence_number":10}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.in_progress
+
+      '
+    - 'data: {"type":"response.web_search_call.in_progress","item_id":"ws_01e500ffe256f751006abdfedd1b9c87d190147e74b507c951","output_index":1,"sequence_number":11}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.searching
+
+      '
+    - 'data: {"type":"response.web_search_call.searching","item_id":"ws_01e500ffe256f751006abdfedd1b9c87d190147e74b507c951","output_index":1,"sequence_number":12}
+
+      '
+    - '
+
+      '
+    - 'event: response.web_search_call.completed
+
+      '
+    - 'data: {"type":"response.web_search_call.completed","item_id":"ws_01e500ffe256f751006abdfedd1b9c87d190147e74b507c951","output_index":1,"sequence_number":13}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"ws_01e500ffe256f751006abdfedd1b9c87d190147e74b507c951","type":"web_search_call","status":"completed","action":{"type":"search","queries":["Lisbon
+      municipality population 2024 2025 INE 575"],"query":"Lisbon municipality population
+      2024 2025 INE 575"}},"output_index":1,"sequence_number":14}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_01e500ffe256f751006abdfee0ca8c87d1a263805fceb72a14","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvf7g7R5bHNa8Aswoqvr-KcwFv9gVy54urkpi2n40NgIwzg_PjEzXIN2vrUw6RMMqcKsmNRIxqm6ppl2EtN7yo8AFGcmsETCQGWdYOTzO4Y5N7u4C1OajcbQpnHj0awUEPgASJ0MTAaQrPSUrB5epG0yLYt00Cia72XrhXW_e29iyiovxGJzOm5QDGIzDUQQlGl0Ht6JkEVTTrf5coCb4KG0b3NpvAE2c1Gs4GCe4jhYQWoj2FlhWJqyBvTVIowkb6BBIwcJcljPiPTjGBXZvfTR7aA3vFYZH6wjLeU_t8hmwGdwqOurVh2GDFseKLOP_Ra_pWu2FQB7j9fbbtGvfVG-9By5Po8AsTsb_y7JKz6UjcwAu6Ks2Dc41YpAXixNlkmpuLAAoMUuyKEzNN91XWvOdbc1ch44Gxi7MSfsn-laqRE8Fkw7Wp9p3DC70eSECXLasgPY3XMJeWhXma4TLQUFbiOJPpz0rcb2EXPWrReHetuteh_5LwsEWyqtnC6faWIc4nRpRVuV5gE4BlRveEGOGcAjBOvY6HB6JCe-HqegTfLYyixMPKjmuojhw5yxRAMQ-QDLM5AVPo8Ve6ltVELvaYUpQwQtwFMuY470AOHGXQWoJZKCnOvLf1CM8dNkmLAXN_UdFbLYv1jpxw3JJay0S0wHIlbZ0AzZoKca2sctiaRIKLsIrE_OWQvDYtCQAo7BAfowKHambxUGEl2MedhjT0luOxSIuoSsyAjtokUlggkTb73z37NW3-y5--od_XdnDWgyCVfMtaEMDd1qrQHwapXk3mvLPneAWw7CfhGW7wRCr2SNjNyNzBDfJOZEEJBxFagjtspmtjfaUSb-13J7rkjoupZ12FYuS5WA4LQLyRytbYaLz7eMn5vr16zV1McgBVFCRTJ56Nbd9ytyno-DXvqMoSAjSY3kJaxnHl3UB2q__WUQ5bzxASwu6dutvepd6l_8adctgzU0W1WDjvRcFkVKR-eQVAXMwx2w5WqyyPVzGgY-gDbD00dvjJHB5FDOmRGFpy6KBsfx_1i5eCRnpA9awYNKeVLmlaHpGE5X7aItXUJDnNEQ71YULaEm9UdgG9et_WZLjIbZB8_l64PbgHSLsKqG1849O8pUrixiCS3z-omy7Fv_f3jl1KO8TEmFujnmRkRvC7e6pabSZYqfbTw==","summary":[]},"output_index":2,"sequence_number":15}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_01e500ffe256f751006abdfee0ca8c87d1a263805fceb72a14","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvf7hA5eeBnk5b_jBjnxekmXk9PtH5tWkVc45DYEhAhJSSj1ZNAB4NxMuLMH0zlZR8X5VLDEtT11TLsXpMDwJSZZ-9JFN3sqW5OeWCZ6log_PWwBmNFqU95xi72O7rgAo3ANnKK-ShLziDaDTAQDkeHYHXXo9qyUogY9voj5shxaPqpgSP03QjsW-PTZpjmrfPoZQbK17I-WF2NUsy8bD4i5KodeVcoteGfbSiWTYp1-o2YrWBsZZ94J5-fSAjguVT508-jje24oFMl_SlIvlsvy3MN6NUPb8aNXO3UDu8T80W2JIWtytTaBR9cOCmpZezRg_OZDdITupQ6kbn99H7TgJCKPzsL6Ro3YTeAKW48awR-PRwQ7_vW5BL-4MckNN14XTYm_SUle5HNwVDY3qlTDf-XLgbBYHxXzhz_Ixjxvrtg5dCg8FEvksiHT6d_DVTAVOoFbZ0bDxWEzYupq2MBB--Qke1lslAp24QkGP3fdkf12NP508kvvL9-GyPboqooNmqSeb4DlaBydW2-UtvVkG4rtSkSPKgJGuDz5pIEmhPIILNzr_6BTwn1JCxbEjygbX3zwzFSVlUgJh4l0CFO6Rhl8pH681HtqfA_xTtS4_pMU70ts4Eg4UrEq0d9r_Ja8U27pwmpBKvgMXfTjziDT2MBorFx_0IM-VgeSFLYnsgerbb9mTSyG2PSbxE61CH0yhcIU6e57GuIFGQIzbcGr_CXa3gSZW3xh6s7b6N_yZy-pBdP0lNDoViPuJLezfBTWwkqlrOZjx5mspAyh9_TtROw0sUMYSoYj3sDRnzn-XRevQ1IEf5jnudmP1wclfqKd9-RkPgSLAlS5fq8u-xLj_5Gu2iBruIKof6RBOUy8i7yjuQt_3wA8eVCa7FkvOZ9k2qeNfK_XeSkUSs3OO-Et4YBdntS97Ack3OKcgeMMGb6A4OOzHKT7uYPu4tQ7tLI6OKMSMJGR14VZqc-RH1v9_gZDS2Xd2Dd74HSQYL-siyCjpmlGhMCWu-TMilDgyRuQzA8sjq-QvCWLd2ew18ihzTnbV0_2-rp8Pyoy9VJNHYJSQuNytlWyBuRCwVMy27NVxYYDKS0KrYAwKBqYUHz1fQQP5l08nOYhVqCk8Ozq03R435zEMmGR3RKbRkPW3rUwS_yqLidBSyjMD0XkovRvCVjbMALpy953pc_iBM8DAflr2d9OmmLzrjKFt0ouwsIOg_Xe76QAvkuXH0C3hEcrpulo00G9td1DFL4MtEo4Mb_uTSg0m5nxohlRUw51gNq3n","summary":[]},"output_index":2,"sequence_number":16}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_01e500ffe256f751006abdfee101d087d19ff2918ce0ba5c70","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"},"output_index":3,"sequence_number":17}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_01e500ffe256f751006abdfee101d087d19ff2918ce0ba5c70","output_index":3,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":18}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"Lisbon","item_id":"msg_01e500ffe256f751006abdfee101d087d19ff2918ce0ba5c70","logprobs":[],"obfuscation":"mRp1EWcdP8","output_index":3,"sequence_number":19}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"’s city","item_id":"msg_01e500ffe256f751006abdfee101d087d19ff2918ce0ba5c70","logprobs":[],"obfuscation":"Rcq6pqgnE","output_index":3,"sequence_number":20}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" population
+      was estimated at **","item_id":"msg_01e500ffe256f751006abdfee101d087d19ff2918ce0ba5c70","logprobs":[],"obfuscation":"H","output_index":3,"sequence_number":21}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"575,739
+      in 2024","item_id":"msg_01e500ffe256f751006abdfee101d087d19ff2918ce0ba5c70","logprobs":[],"obfuscation":"f","output_index":3,"sequence_number":22}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"**, according
+      to the","item_id":"msg_01e500ffe256f751006abdfee101d087d19ff2918ce0ba5c70","logprobs":[],"obfuscation":"cNgxFvKi2MdA","output_index":3,"sequence_number":23}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" municipality’s
+      *","item_id":"msg_01e500ffe256f751006abdfee101d087d19ff2918ce0ba5c70","logprobs":[],"obfuscation":"I8yJdkAQtUBeWfL","output_index":3,"sequence_number":24}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"Economy
+      in Figures 2025","item_id":"msg_01e500ffe256f751006abdfee101d087d19ff2918ce0ba5c70","logprobs":[],"obfuscation":"JluJM6pAX","output_index":3,"sequence_number":25}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"* report.
+      ","item_id":"msg_01e500ffe256f751006abdfee101d087d19ff2918ce0ba5c70","logprobs":[],"obfuscation":"qdncdh","output_index":3,"sequence_number":26}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"([lisboa.pt](https://www.lisboa.pt/fileadmin/informacao/publicacoes/economia/Lisboa_the_Economy_in_Figures_2025.pdf?utm_source=openai))","item_id":"msg_01e500ffe256f751006abdfee101d087d19ff2918ce0ba5c70","logprobs":[],"obfuscation":"RdJU6mRv9","output_index":3,"sequence_number":27}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.annotation.added
+
+      '
+    - 'data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","end_index":264,"start_index":129,"title":"LEN25_AF_ENG_digital","url":"https://www.lisboa.pt/fileadmin/informacao/publicacoes/economia/Lisboa_the_Economy_in_Figures_2025.pdf?utm_source=openai"},"annotation_index":0,"content_index":0,"item_id":"msg_01e500ffe256f751006abdfee101d087d19ff2918ce0ba5c70","output_index":3,"sequence_number":28}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_01e500ffe256f751006abdfee101d087d19ff2918ce0ba5c70","logprobs":[],"output_index":3,"sequence_number":29,"text":"Lisbon’s
+      city population was estimated at **575,739 in 2024**, according to the municipality’s
+      *Economy in Figures 2025* report. ([lisboa.pt](https://www.lisboa.pt/fileadmin/informacao/publicacoes/economia/Lisboa_the_Economy_in_Figures_2025.pdf?utm_source=openai))"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_01e500ffe256f751006abdfee101d087d19ff2918ce0ba5c70","output_index":3,"part":{"type":"output_text","annotations":[{"type":"url_citation","end_index":264,"start_index":129,"title":"LEN25_AF_ENG_digital","url":"https://www.lisboa.pt/fileadmin/informacao/publicacoes/economia/Lisboa_the_Economy_in_Figures_2025.pdf?utm_source=openai"}],"logprobs":[],"text":"Lisbon’s
+      city population was estimated at **575,739 in 2024**, according to the municipality’s
+      *Economy in Figures 2025* report. ([lisboa.pt](https://www.lisboa.pt/fileadmin/informacao/publicacoes/economia/Lisboa_the_Economy_in_Figures_2025.pdf?utm_source=openai))"},"sequence_number":30}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_01e500ffe256f751006abdfee101d087d19ff2918ce0ba5c70","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":264,"start_index":129,"title":"LEN25_AF_ENG_digital","url":"https://www.lisboa.pt/fileadmin/informacao/publicacoes/economia/Lisboa_the_Economy_in_Figures_2025.pdf?utm_source=openai"}],"logprobs":[],"text":"Lisbon’s
+      city population was estimated at **575,739 in 2024**, according to the municipality’s
+      *Economy in Figures 2025* report. ([lisboa.pt](https://www.lisboa.pt/fileadmin/informacao/publicacoes/economia/Lisboa_the_Economy_in_Figures_2025.pdf?utm_source=openai))"}],"phase":"final_answer","role":"assistant"},"output_index":3,"sequence_number":31}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_01e500ffe256f751006abdfeda360887d1b961212d409295a5","object":"response","created_at":1790836442,"status":"completed","access_programs":null,"background":false,"completed_at":1790836450,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":"Start
+      the weather lookup and answer the independent question without waiting. Use
+      the demo weather result when it arrives; never invent it.","max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-6-astra","moderation":null,"output":[{"id":"fc_01e500ffe256f751006abdfedbbb2887d198eb07523ba7df0a","type":"function_call","status":"completed","arguments":"{\"city\":\"Paris\"}","async":true,"call_id":"call_o31G0MGHsmS6NLq3DBl36dqO","name":"get_weather"},{"id":"ws_01e500ffe256f751006abdfedd1b9c87d190147e74b507c951","type":"web_search_call","status":"completed","action":{"type":"search","queries":["Lisbon
+      municipality population 2024 2025 INE 575"],"query":"Lisbon municipality population
+      2024 2025 INE 575"}},{"id":"rs_01e500ffe256f751006abdfee0ca8c87d1a263805fceb72a14","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvf7iRq7s5egyXWRBQ8JFLNntnMSP86BvrpoceraGoDCN_4zSdSh3Wmg7MA-9WYw16w7gLqgrts0fKUltgDo7mhZm6VtIhsg-6hM7raSownOr3CBtz647GYy4jVq_7LpURlaBPZNVdTc7ByXIwwPvZPngjeY1XTdl7bUXOvLCs7lrapTeRtoiAGjNGTSAGqI4dcZp9gmwtp1sLJvA9FtBNSQdeVRGZqTpe_Pfc_NFvK-EZczVvkNMWxxvbvqGtu7bcUSRoN6gxeJ9Lii6pRPoVCHwq4KOib4X1iFz-VN-gburgGqEa-bhE_Exkp2x6lWX2JrS76vaU31ue5f18PuLPDGqSwMBB_ugzB6wQmzO_9YqaPn66wS9Z10UKeoZGCMwAGD3s2CP4ZwYkMDawAfynvv4ZlXWOTGBa5nAMt-q09jaJl5PKGf5Cm851wljy_541g7Nq_bdw7NoqIgzLLl1bzv8QKWZE3_g792cLZ8mla6cLCOgtsSUHUPp3vAfnGpvEykH8HgZdwtDxft4lAgxAa4bauTYHtC8gLj97UIvj0VMXFidcHGxshcQ4ccSHSX0vHASh8PZ8vuU9kGVQSZ2SFSojcrNcu93iFVy5of1YJELjIN-dsmy-wGWttM-Vcd5YcunWKxhD9ThedsN2JJ2QZjcyoVtZw5nmDbO1T0Uw3skrVCJtjNKWdFDdwsJSbMOOOUrXmi1si_SFmQfwCMPdlnCp70QFqaRrJAqpj-st3kwggjfWH7WhjoT2RcHYrpnSOgpttCw8AhDWBWU2J5169HfldEgaE3j_lfoOPE9f1V9zbxgd8kcHLW9Qm1xaC3P0Q0bTmlKfqvQpHJvmQgTyHnebejSulO0UDi3Fejcx4Uaa8Hfd7xRlFJCD7icpGK8lFxyI_AOkP4ndmdZVVmvO-CvlNySqJKI_icgHorV7kpsxDERGmicvm8MtPSBKScDhxD3Dj_5g1WC8v5V4cRp3HRwxz5l21Z6I2uUgJMOZ2cv7_1JMVe2da-svXDdeqd-i8EoQkSAtqqsyM02-HSofSatwdF-LGf3dACAZVWcfW9_VnWUnmabAivJ0xsxeEmFXASZj108KY3MfFV4ZAx1TkzfSfeeMw3Dg1kaxEP08-yXZXxD0xigWRvSxJRDPGAI_NBsOycI422Pan9iuk_rR6Invq-7cn92TJmugt4TOOb8Bg3EBIJneRld5X70z3GZLZvc0c9W_hZbH8fpvZgFmNJPWDoHih5nJLc8CHwC7LrgxFrMfmWJzSug914_YR8dubPW","summary":[]},{"id":"msg_01e500ffe256f751006abdfee101d087d19ff2918ce0ba5c70","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":264,"start_index":129,"title":"LEN25_AF_ENG_digital","url":"https://www.lisboa.pt/fileadmin/informacao/publicacoes/economia/Lisboa_the_Economy_in_Figures_2025.pdf?utm_source=openai"}],"logprobs":[],"text":"Lisbon’s
+      city population was estimated at **575,739 in 2024**, according to the municipality’s
+      *Economy in Figures 2025* report. ([lisboa.pt](https://www.lisboa.pt/fileadmin/informacao/publicacoes/economia/Lisboa_the_Economy_in_Figures_2025.pdf?utm_source=openai))"}],"phase":"final_answer","role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":1}},"tools":[{"type":"function","async":true,"description":"Read
+      a demo weather snapshot for a city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":8783,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":4466},"output_tokens":126,"output_tokens_details":{"reasoning_tokens":55},"total_tokens":8909},"user":null,"metadata":{}},"sequence_number":32}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: call_o31G0MGHsmS6NLq3DBl36dqO
+        output: '{"city":"Paris","temperature_c":22,"condition":"Clear","source":"demo
+          weather snapshot"}'
+        type: function_call_output
+      - content: What does the Paris demo weather snapshot say? Answer in one sentence.
+        role: user
+        type: message
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      previous_response_id: resp_01e500ffe256f751006abdfeda360887d1b961212d409295a5
+      store: true
+      stream: true
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: web-search-mixed/t2-late-output
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_01e500ffe256f751006abdff2a529487d18e94a7e57c476f3a","object":"response","created_at":1790836522,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":"Start
+      the weather lookup and answer the independent question without waiting. Use
+      the demo weather result when it arrives; never invent it.","max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-6-astra","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_01e500ffe256f751006abdfeda360887d1b961212d409295a5","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","async":true,"description":"Read
+      a demo weather snapshot for a city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_01e500ffe256f751006abdff2a529487d18e94a7e57c476f3a","object":"response","created_at":1790836522,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":"Start
+      the weather lookup and answer the independent question without waiting. Use
+      the demo weather result when it arrives; never invent it.","max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-6-astra","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_01e500ffe256f751006abdfeda360887d1b961212d409295a5","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","async":true,"description":"Read
+      a demo weather snapshot for a city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_01e500ffe256f751006abdff2bf94487d19f2db41ff432401a","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_01e500ffe256f751006abdff2bf94487d19f2db41ff432401a","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"The Paris
+      demo weather snapshot says","item_id":"msg_01e500ffe256f751006abdff2bf94487d19f2db41ff432401a","logprobs":[],"obfuscation":"ayoD7q2GNjfW","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" it is
+      clear with","item_id":"msg_01e500ffe256f751006abdff2bf94487d19f2db41ff432401a","logprobs":[],"obfuscation":"cIRxORrUh1CvpIb","output_index":0,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":" a temperature
+      of 22°C.","item_id":"msg_01e500ffe256f751006abdff2bf94487d19f2db41ff432401a","logprobs":[],"obfuscation":"UkygNr7dJ","output_index":0,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_01e500ffe256f751006abdff2bf94487d19f2db41ff432401a","logprobs":[],"output_index":0,"sequence_number":7,"text":"The
+      Paris demo weather snapshot says it is clear with a temperature of 22°C."}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_01e500ffe256f751006abdff2bf94487d19f2db41ff432401a","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"The
+      Paris demo weather snapshot says it is clear with a temperature of 22°C."},"sequence_number":8}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_01e500ffe256f751006abdff2bf94487d19f2db41ff432401a","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"The
+      Paris demo weather snapshot says it is clear with a temperature of 22°C."}],"phase":"final_answer","role":"assistant"},"output_index":0,"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_01e500ffe256f751006abdff2a529487d18e94a7e57c476f3a","object":"response","created_at":1790836522,"status":"completed","access_programs":null,"background":false,"completed_at":1790836524,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":"Start
+      the weather lookup and answer the independent question without waiting. Use
+      the demo weather result when it arrives; never invent it.","max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-6-astra","moderation":null,"output":[{"id":"msg_01e500ffe256f751006abdff2bf94487d19f2db41ff432401a","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"The
+      Paris demo weather snapshot says it is clear with a temperature of 22°C."}],"phase":"final_answer","role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_01e500ffe256f751006abdfeda360887d1b961212d409295a5","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","async":true,"description":"Read
+      a demo weather snapshot for a city.","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":8818,"input_tokens_details":{"cache_write_tokens":4284,"cached_tokens":4466},"output_tokens":21,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":8839},"user":null,"metadata":{}},"sequence_number":10}
+
+      '
+    - '
+
+      '
+    status_code: 200

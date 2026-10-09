@@ -1,0 +1,34 @@
+{
+  "instructions": {
+    "weather": "Start the weather lookup and answer the independent question without waiting. Use the demo weather result when it arrives; never invent it.",
+    "custom": "Start the echo job and answer the independent question without waiting. Use the echo result when it arrives; never invent it.",
+    "wait": "Start each price lookup without waiting. Call wait_for_tasks only when your next step needs pending results. Never invent prices.",
+    "multi_agent": "Handle this request yourself; do not start subagents. Start the weather lookup and answer the independent question without waiting. Use the demo weather result when it arrives; never invent it.",
+    "shell": "Start the command and answer the independent question without waiting. Use the command's real output when it arrives; never invent it.",
+    "tool_search": "Search the tool catalog for a weather tool and answer the independent question without waiting for the search. Never invent search results."
+  },
+  "shell_start": "Run the shell command printf 'SHELL_OK\\n'. Meanwhile, list three essentials for any city trip.",
+  "tool_search_start": "Find a tool that reads the demo weather for Paris. Meanwhile, list three essentials for any city trip.",
+  "weather_start": "Check the demo weather snapshot for Paris. Meanwhile, list three essentials for any city trip.",
+  "weather_follow_up_1": "Also, what is a good umbrella size for travel? Answer in one sentence.",
+  "weather_follow_up_2": "Name one Paris museum worth visiting. Answer in one sentence.",
+  "weather_ask": "What does the Paris demo weather snapshot say? Answer in one sentence.",
+  "custom_start": "Start the echo job with input ASYNC_CUSTOM_OK. Meanwhile, tell me the capital of France in one sentence.",
+  "custom_follow_up": "Name one river in France. Answer in one sentence.",
+  "web_search_start": "Start the Paris demo weather lookup. Meanwhile, use web search to find the population of Lisbon and answer in one sentence.",
+  "wait_start": "Look up the prices of WIDGET and GADGET, then tell me which one is cheaper.",
+  "parallel_start": "Get the Paris demo weather and the Tokyo demo local time. Answer with whatever is available.",
+  "multi_agent_start": "Check the demo weather snapshot for Paris. Meanwhile, list three essentials for any city trip.",
+  "weather_output": "{\"city\":\"Paris\",\"temperature_c\":22,\"condition\":\"Clear\",\"source\":\"demo weather snapshot\"}",
+  "weather_output_conflicting": "{\"city\":\"Paris\",\"temperature_c\":9,\"condition\":\"Rain\",\"source\":\"demo weather snapshot\"}",
+  "custom_output": "ASYNC_CUSTOM_RESULT_OK",
+  "local_time_output": "{\"city\":\"Tokyo\",\"local_time\":\"18:30\",\"source\":\"demo clock\"}",
+  "prices": {
+    "WIDGET": {"price_cents": 1200, "currency": "USD"},
+    "GADGET": {"price_cents": 1500, "currency": "USD"}
+  },
+  "upstream_hints": {
+    "tool_description_suffix": " Runs in the background: the result arrives in a later message. Until then, do not guess the result and do not call this tool again for the same request.",
+    "pending_note": "The {name} call {call_id} is running in the background; its result has not arrived yet. Do not guess it and do not call it again. Continue with the rest of the request."
+  }
+}

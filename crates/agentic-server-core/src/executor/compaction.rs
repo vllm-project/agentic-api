@@ -20,11 +20,43 @@ use crate::executor::upstream::fetch_blocking_payload;
 use crate::tool::ToolSearchState;
 use crate::types::event::MessageStatus;
 use crate::types::io::input::latest_compaction_window;
+use crate::types::io::input::open_async_calls;
 use crate::types::io::{CompactionItem, InputItem, InputMessage, InputMessageContent, ResponseUsage, ResponsesInput};
 use crate::types::request_response::{CompactRequest, CompactedResponse, RequestPayload};
 use crate::utils::common::{utcnow_str, uuid7_str};
 
 const COMPACTION_PROMPT: &str = "You are performing a CONTEXT CHECKPOINT COMPACTION. Create a concise handoff summary that preserves current progress, decisions, constraints, unresolved work, and critical references for the next model. Return only the summary.";
+
+/// Async calls still open in the compacted items, in their public form.
+///
+/// A summary cannot stand in for a call whose output may still arrive. Every open call stays in
+/// the model input after the summary (`model`). Only the calls this request supplied are stored
+/// again (`stored`): compaction replaces the request's own items, whereas a call stored earlier in
+/// the history, or in this response's output, keeps its place and stays model-visible through the
+/// compaction window. Storing it again would duplicate its item and `call_id`.
+struct OpenAsyncCalls {
+    model: Vec<InputItem>,
+    stored: Vec<InputItem>,
+}
+
+impl OpenAsyncCalls {
+    fn new(compacted_items: &[InputItem], own_items: &[InputItem]) -> Self {
+        let own: std::collections::HashSet<&str> = own_items.iter().filter_map(InputItem::call_id).collect();
+        let model = open_async_calls(compacted_items);
+        let stored = model
+            .iter()
+            .filter(|item| item.call_id().is_some_and(|call_id| own.contains(call_id)))
+            .cloned()
+            .collect();
+        Self { model, stored }
+    }
+}
+
+/// The open async calls in `items` that this request supplied (`own_items`), which a
+/// compaction that replaces the request's items must store again.
+pub(crate) fn retain_own_open_async_calls(items: &[InputItem], own_items: &[InputItem]) -> Vec<InputItem> {
+    OpenAsyncCalls::new(items, own_items).stored
+}
 fn retained_user_window(items: &[InputItem]) -> Vec<InputItem> {
     let window = latest_compaction_window(items);
     items
@@ -219,6 +251,12 @@ pub(crate) async fn maybe_compact_context(
     if !items[..prefix].iter().any(item_has_meaningful_context) {
         return Ok(None);
     }
+    // Single-agent compaction covers every item, so open calls keep their public, un-lowered form.
+    let compacted_items = match (&ctx.enriched_request.input, multi_agent) {
+        (ResponsesInput::Items(public_items), false) => public_items.as_slice(),
+        _ => &items[..prefix],
+    };
+    let open = OpenAsyncCalls::new(compacted_items, &ctx.new_input_items);
     let input = ResponsesInput::Items(items[..prefix].to_vec());
     let (mut compacted, usage, _) = compact_items_with_trigger(
         &ctx.enriched_request,
@@ -235,9 +273,14 @@ pub(crate) async fn maybe_compact_context(
                 .filter(|item| matches!(item, InputItem::McpListTools(_)))
                 .cloned(),
         );
-        compacted.extend_from_slice(&items[prefix..]);
     }
-    ctx.enriched_request.input = ResponsesInput::Items(compacted.clone());
+    let suffix = if multi_agent { &items[prefix..] } else { &[][..] };
+    let mut model_input = compacted.clone();
+    model_input.extend(open.model);
+    model_input.extend_from_slice(suffix);
+    compacted.extend(open.stored);
+    compacted.extend_from_slice(suffix);
+    ctx.enriched_request.input = ResponsesInput::Items(model_input);
     ctx.new_input_items = compacted;
     if let Some(continuation) = &mut ctx.continuation {
         continuation.mark_history_replaced();
@@ -276,7 +319,13 @@ pub async fn compact_response(
         prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler).await?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);
     let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
-    let (output, usage, service_tier) = compact_items_with_trigger(
+    // The returned window keeps every open async call so a client replaying it stays
+    // self-contained; storage adds only the calls this request supplied.
+    let open = match &input {
+        ResponsesInput::Items(items) => OpenAsyncCalls::new(items, &ctx.new_input_items),
+        ResponsesInput::Text(_) => OpenAsyncCalls::new(&[], &[]),
+    };
+    let (compacted, usage, service_tier) = compact_items_with_trigger(
         &ctx.enriched_request,
         input,
         exec_ctx,
@@ -284,9 +333,12 @@ pub async fn compact_response(
         CompactionTrigger::Explicit,
     )
     .await?;
+    let mut output = compacted.clone();
+    output.extend(open.model);
 
     let response_id = ctx.response_id.clone();
-    ctx.new_input_items.clone_from(&output);
+    ctx.new_input_items = compacted;
+    ctx.new_input_items.extend(open.stored);
     match persist_prepared_turn(
         ctx,
         tool_search_metadata,

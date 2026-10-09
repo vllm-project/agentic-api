@@ -158,6 +158,7 @@ mod tests {
     #[test]
     fn normalized_function_call_restores_shell_call() {
         let call = FunctionToolCall {
+            async_execution: false,
             agent: None,
             id: "fc_123".to_owned(),
             call_id: "call_123".to_owned(),
@@ -183,6 +184,7 @@ mod tests {
     #[test]
     fn malformed_function_arguments_are_not_restored() {
         let call = FunctionToolCall {
+            async_execution: false,
             agent: None,
             id: "fc_123".to_owned(),
             call_id: "call_123".to_owned(),

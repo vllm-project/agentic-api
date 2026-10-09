@@ -192,6 +192,20 @@ where
     <Option<Vec<T>> as serde::Deserialize>::deserialize(deserializer).map(Option::unwrap_or_default)
 }
 
+/// Serde `deserialize_with` helper: deserializes an explicit JSON `null` as the field's default
+/// instead of failing. Pair it with `#[serde(default)]` so an absent field also defaults.
+///
+/// # Errors
+///
+/// Returns the deserializer's error when the value is neither `null` nor a valid `T`.
+pub fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Default + serde::Deserialize<'de>,
+{
+    <Option<T> as serde::Deserialize>::deserialize(deserializer).map(Option::unwrap_or_default)
+}
+
 /// Serialize any type to JSON bytes, returning an empty `Vec` on error.
 #[must_use]
 pub fn serialize_to_vec_or_default<T: serde::Serialize>(value: &T) -> Vec<u8> {

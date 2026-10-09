@@ -86,6 +86,7 @@ async fn registry(search: &Arc<CountingSearch>, declarations: serde_json::Value)
 
 fn call(name: &str, call_id: &str) -> OutputItem {
     OutputItem::FunctionCall(FunctionToolCall {
+        async_execution: false,
         agent: None,
         id: format!("fc_{call_id}"),
         call_id: call_id.to_owned(),

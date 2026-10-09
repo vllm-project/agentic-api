@@ -416,6 +416,7 @@ mod tests {
         let params: CodeInterpreterToolParam =
             serde_json::from_value(serde_json::json!({"container": {"type": "auto"}})).expect("valid declaration");
         let call = FunctionToolCall {
+            async_execution: false,
             agent: Some(crate::types::io::AgentAttribution {
                 agent_name: "/root/worker".to_owned(),
             }),
@@ -460,6 +461,7 @@ mod tests {
             ("provider-item", "provider-call", None),
         ] {
             let call = FunctionToolCall {
+                async_execution: false,
                 agent: None,
                 id: id.to_owned(),
                 call_id: call_id.to_owned(),

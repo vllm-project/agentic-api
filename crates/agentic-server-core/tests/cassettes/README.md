@@ -254,6 +254,7 @@ These files use `sessions`, not the HTTP `turns` schema or synthesized SSE.
 | `record_tool_call_cassettes.sh` | 8 tool-call cassettes (4 tool_choice modes x streaming + non-streaming) | vLLM |
 | `record_codex_cli_tool_call_cassettes.sh` | Codex function/namespace/custom-tool matrix | gateway, vLLM, and OpenAI |
 | `record_custom_tool_cassettes.sh` | Matching two-turn custom-tool flows (streaming + non-streaming) | gateway and OpenAI reference |
+| `record_async_tool_cassettes.py` | Async function/custom tool scenarios and probes; each scenario declares its modes | OpenAI reference and gateway (vLLM: unrecorded sampling) |
 | `record_shell_cassettes.sh` | Four two-turn local-shell scenarios (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_mcp_cassettes.sh` | Native MCP counter tool discovery and calls (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_web_search_cassettes.sh` | Matching web-search calls (streaming + non-streaming) | gateway and OpenAI reference |
@@ -586,6 +587,14 @@ bash crates/agentic-server-core/tests/cassettes/record_custom_tool_cassettes.sh
 
 Use `CUSTOM_TOOL_RECORD_SET=gateway` or `CUSTOM_TOOL_RECORD_SET=openai` to
 record only one provider.
+
+### Async client tools (OpenAI reference and gateway)
+
+See [the async tool recording guide](async_tools/README.md) for what each recording shows, how to record, and the
+findings. `record_async_tool_cassettes.py` records an OpenAI reference set (`gpt-6-astra`) that pins the public
+contract, and a gateway set that replays the same scenarios through the gateway for a step-by-step comparison. Each
+scenario records only the modes that answer a distinct question. With `--provider vllm --sample N` it measures, without
+recording, how a model server continues around a pending call with and without the gateway's hints.
 
 ### Shell (gateway and OpenAI)
 

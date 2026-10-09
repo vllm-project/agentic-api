@@ -4,7 +4,7 @@ use super::super::agent_turn::AgentTurn;
 use crate::executor::{
     error::{ExecutorError, ExecutorResult},
     multi_agent::{
-        AgentPhase, AgentRegistry, AgentState, CheckpointLimits, PendingClientCalls, RegistryLimits,
+        AgentPhase, AgentRegistry, AgentState, CheckpointLimits, ClientCallError, PendingClientCalls, RegistryLimits,
         ValidatedTreeCheckpoint,
     },
     pipeline::AgentPipeline,
@@ -12,7 +12,7 @@ use crate::executor::{
     request::{ExecutionContext, RequestContext},
     response_budget::ExecutorResponseBudget,
 };
-use crate::tool::ToolSearchHandler;
+use crate::tool::{ToolError, ToolSearchHandler};
 use crate::types::{
     agent::{AgentCompletion, AgentIdentity, AgentMail, AgentMailContent, AgentTurnKey},
     agent_tree::{StoredAgent, StoredTreeSnapshot},
@@ -101,25 +101,37 @@ impl RestoredAgents {
             .iter()
             .map(|output| output.call_id().to_owned())
             .collect::<Vec<_>>();
-        if self
+        // Pending async calls may stay unanswered; their outputs can arrive in a later request.
+        // Missing and unknown outputs use the same errors as a single-agent continuation.
+        if let Some(call) = self
             .pending
-            .pending()
-            .any(|call| !ids.iter().any(|id| id == call.call_id.as_str()))
+            .awaiting_outputs()
+            .find(|call| !ids.iter().any(|id| id == call.call_id.as_str()))
         {
-            return Err(invalid("provide outputs for every outstanding multi-agent client call"));
+            return Err(ToolError::MissingOutput {
+                call_id: call.call_id.as_str().to_owned(),
+            }
+            .into());
         }
         self.pending
             .accept_outputs(ClientToolOutputBatch {
                 response_id: response_id.to_owned(),
                 outputs,
             })
-            .map_err(|error| invalid(&error.to_string()))?;
+            .map_err(|rejected| match rejected.reason {
+                ClientCallError::UnknownCall(call_id) => ToolError::UnknownCallOutput { call_id }.into(),
+                reason => invalid(&reason.to_string()),
+            })?;
         let mut resumed = HashSet::new();
+        let mut resume_root = !root_input.is_empty();
         for id in ids {
             let routed = self
                 .pending
                 .take_accepted(&id)
                 .expect("accepted output retained until transfer");
+            // A late async output is new information for the root, like a new message. A
+            // subagent's async output is read at that subagent's next turn.
+            resume_root |= routed.owner.async_execution && routed.owner.agent_turn.agent.is_root();
             let key = routed.owner.agent_turn;
             self.agents
                 .iter_mut()
@@ -145,7 +157,7 @@ impl RestoredAgents {
         }
         // Client outputs resume only their owners. Parents parked at the previous
         // response boundary remain asleep until registry mailbox delivery wakes them.
-        if !root_input.is_empty() {
+        if resume_root {
             self.registry.resume_root();
             self.agents
                 .iter_mut()

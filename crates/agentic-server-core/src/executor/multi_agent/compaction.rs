@@ -4,6 +4,7 @@ use crate::executor::error::ExecutorResult;
 use crate::executor::pending_calls::resolved_prefix_len;
 use crate::executor::request::ExecutionContext;
 use crate::types::agent::AgentIdentity;
+use crate::types::io::input::open_async_calls;
 use crate::types::io::{InputItem, ResponseUsage, ResponsesInput};
 use crate::types::request_response::{PromptCacheRetention, RequestPayload};
 
@@ -91,6 +92,8 @@ impl CompactionPlan {
             .filter(|item| matches!(item, InputItem::McpListTools(_)))
             .cloned()
             .collect::<Vec<_>>();
+        // Pending async calls stay verbatim after the summary so their outputs can still arrive.
+        let open_async_calls = open_async_calls(&self.prefix);
         let request = RequestPayload {
             model: self.model,
             instructions: self.instructions,
@@ -102,6 +105,7 @@ impl CompactionPlan {
         let (mut replacement, usage, service_tier) =
             compact_items(&request, ResponsesInput::Items(self.prefix), exec, auth).await?;
         replacement.extend(discovery);
+        replacement.extend(open_async_calls);
         Ok(CompactionResult {
             agent: self.agent,
             generation: self.generation,

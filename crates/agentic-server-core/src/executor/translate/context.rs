@@ -15,6 +15,7 @@ use std::collections::{HashMap, HashSet};
 pub(in crate::executor) struct TranslationContext {
     tool_types: HashMap<String, ToolType>,
     gateway_owned_names: HashSet<String>,
+    async_tool_names: HashSet<String>,
     withheld_function_names: HashSet<String>,
     tool_search_active: bool,
     collaboration_enabled: bool,
@@ -64,6 +65,16 @@ impl TranslationContext {
 
     pub(super) fn is_gateway_owned(&self, name: &str) -> bool {
         self.gateway_owned_names.contains(name)
+    }
+
+    /// Model-visible names of async client tools, copied from the registry.
+    pub(in crate::executor) fn with_async_tool_names(mut self, names: HashSet<String>) -> Self {
+        self.async_tool_names = names;
+        self
+    }
+
+    pub(super) fn is_async_tool(&self, name: &str) -> bool {
+        self.async_tool_names.contains(name)
     }
 
     /// Owned public mappings; construction performs no registry lookups.
@@ -134,6 +145,14 @@ impl TranslationContext {
         unfinished_stream_item_ids: &HashSet<String>,
     ) -> ExecutorResult<()> {
         super::tool_search::normalize_response_output(self, output, status, unfinished_stream_item_ids)?;
+        // Mark before namespace restoration, while calls still carry their model-visible names.
+        for item in output.iter_mut() {
+            if let OutputItem::FunctionCall(call) = item
+                && self.is_async_tool(&call.name)
+            {
+                call.async_execution = true;
+            }
+        }
         super::namespace::CodexNamespaceTranslator::restore_output_items(output, self.namespace_map.as_ref());
         Ok(())
     }

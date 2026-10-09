@@ -455,6 +455,7 @@ async fn concurrent_children_pause_and_resume_from_durable_tree_json_and_sse() {
                     parameters: Some(json!({"type":"object","properties":{"proposal":{"type":"string"}}})),
                     strict: None,
                     defer_loading: None,
+                    async_execution: None,
                     extra: HashMap::default(),
                 })]),
                 ..Default::default()

@@ -2,10 +2,10 @@
   "version": 1,
   "baseline": {
     "crates/agentic-server-core/src/executor/accumulator/mod.rs": 590,
-    "crates/agentic-server-core/src/executor/session.rs": 508,
+    "crates/agentic-server-core/src/executor/session.rs": 504,
     "crates/agentic-server-core/src/tool/registry.rs": 515,
     "crates/agentic-server-core/src/tool/tool_search.rs": 1661,
-    "crates/agentic-server-core/src/types/io/input.rs": 510,
+    "crates/agentic-server-core/src/types/io/input.rs": 503,
     "crates/agentic-server-core/src/types/io/output.rs": 1074,
     "crates/agentic-server-core/src/types/tools/params.rs": 537,
     "crates/agentic-server/src/agentic_process.rs": 557,
@@ -29,20 +29,20 @@
       "reason": "Code-interpreter done-only ID backfill remains in the shared output-item slot validation path."
     },
     "crates/agentic-server-core/src/tool/registry.rs": {
-      "limit": 545,
-      "reason": "The web_fetch executor binds through the existing registry validation and executor registration flow, like the code interpreter."
+      "limit": 567,
+      "reason": "The web_fetch executor binds through the existing registry validation and executor registration flow, like the code interpreter; async client tools record their marker on the shared catalog entry."
     },
     "crates/agentic-server-core/src/tool/tool_search.rs": {
       "limit": 1681,
       "reason": "Code-interpreter continuation items pass through tool-search history without changing discovery state."
     },
-    "crates/agentic-server-core/src/types/io/input.rs": {
-      "limit": 514,
-      "reason": "The shared input-item union accepts typed native code-interpreter calls for continuation replay."
+    "crates/agentic-server-core/src/types/io/output.rs": {
+      "limit": 1119,
+      "reason": "Function and custom calls carry the typed async marker through the shared output-item conversions."
     },
     "crates/agentic-server-core/src/types/tools/params.rs": {
-      "limit": 570,
-      "reason": "The shared tagged tool declaration validates the OpenAI auto-container form and exposes its closed public schema."
+      "limit": 622,
+      "reason": "The shared tagged tool declaration validates the OpenAI auto-container form and exposes its closed public schema; every declaration variant types the async parameter so validation can accept or reject it."
     },
     "crates/agentic-server/src/main.rs": {
       "limit": 644,

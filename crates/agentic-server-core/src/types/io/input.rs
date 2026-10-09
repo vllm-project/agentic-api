@@ -1,5 +1,10 @@
 mod content;
 mod conversions;
+mod window;
+
+pub(crate) use window::{
+    latest_compaction_window, model_items, open_async_call_ids, open_async_calls, retain_window, retained_async_call,
+};
 
 pub use content::{InputContent, InputFileContent, InputImageContent, InputTextContent, RefusalContent};
 
@@ -118,6 +123,15 @@ pub struct InputFunctionToolCall {
     pub arguments: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<MessageStatus>,
+    /// Replayed `async` marker: a pending async call does not require its output before the next
+    /// request. Serialized only when true.
+    #[serde(
+        default,
+        rename = "async",
+        deserialize_with = "crate::utils::common::null_as_default",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub async_execution: bool,
 }
 
 impl From<FunctionToolCall> for InputFunctionToolCall {
@@ -130,6 +144,7 @@ impl From<FunctionToolCall> for InputFunctionToolCall {
             namespace: call.namespace,
             arguments: call.arguments,
             status: Some(call.status),
+            async_execution: call.async_execution,
         }
     }
 }
@@ -144,6 +159,7 @@ impl From<CustomToolCall> for InputFunctionToolCall {
             namespace: None,
             arguments: serde_json::json!({ "input": call.input }).to_string(),
             status: call.status,
+            async_execution: call.async_execution,
         }
     }
 }
@@ -163,6 +179,8 @@ impl From<ShellCall> for InputFunctionToolCall {
                 Some(ShellCallStatus::InProgress) => Some(MessageStatus::InProgress),
                 Some(ShellCallStatus::Incomplete) | None => None,
             },
+            // Shell does not accept `async`; its calls always need their output.
+            async_execution: false,
         }
     }
 }
@@ -355,6 +373,18 @@ impl InputItem {
         matches!(self, Self::Unknown)
     }
 
+    /// The `call_id` of a replayed client call item; `None` for every other item.
+    #[must_use]
+    pub(crate) fn call_id(&self) -> Option<&str> {
+        match self {
+            Self::FunctionCall(call) => Some(&call.call_id),
+            Self::ToolSearchCall(call) => Some(&call.call_id),
+            Self::CustomToolCall(call) => Some(&call.call_id),
+            Self::ShellCall(call) => Some(&call.call_id),
+            _ => None,
+        }
+    }
+
     #[must_use]
     pub(crate) fn is_compaction_trigger(&self) -> bool {
         matches!(self, Self::CompactionTrigger)
@@ -390,56 +420,6 @@ impl Default for ResponsesInput {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct CompactionWindow {
-    latest_index: usize,
-    retained_start: usize,
-}
-
-impl CompactionWindow {
-    #[must_use]
-    pub(crate) const fn latest_index(self) -> usize {
-        self.latest_index
-    }
-
-    #[must_use]
-    pub(crate) fn retains_user_item(self, index: usize, item: &InputItem) -> bool {
-        index >= self.retained_start
-            && index < self.latest_index
-            && matches!(item, InputItem::Message(message)
-                if message.role == "user"
-                    && message.id.is_some()
-                    && message.status == Some(MessageStatus::Completed))
-    }
-}
-
-#[must_use]
-pub(crate) fn latest_compaction_window(items: &[InputItem]) -> Option<CompactionWindow> {
-    let latest_index = items
-        .iter()
-        .rposition(|item| matches!(item, InputItem::Compaction(_)))?;
-    let retained_start = items[..latest_index]
-        .iter()
-        .rposition(|item| matches!(item, InputItem::Compaction(_)))
-        .map_or(0, |index| index + 1);
-    Some(CompactionWindow {
-        latest_index,
-        retained_start,
-    })
-}
-
-pub(crate) fn model_items(items: &[InputItem]) -> impl Iterator<Item = &InputItem> {
-    let window = latest_compaction_window(items);
-    items
-        .iter()
-        .enumerate()
-        .filter(move |(index, item)| {
-            item.is_model_visible()
-                && window.is_none_or(|window| *index >= window.latest_index() || window.retains_user_item(*index, item))
-        })
-        .map(|(_, item)| item)
-}
-
 impl ResponsesInput {
     /// Iterate over the items in the canonical context sent to vLLM without cloning them.
     pub(crate) fn model_items(&self) -> impl Iterator<Item = &InputItem> {
@@ -458,6 +438,15 @@ impl ResponsesInput {
     #[must_use]
     pub fn has_compaction_trigger(&self) -> bool {
         matches!(self, Self::Items(items) if items.iter().any(InputItem::is_compaction_trigger))
+    }
+
+    /// Whether the input replays a call to an async tool.
+    #[must_use]
+    pub fn has_async_call(&self) -> bool {
+        matches!(self, Self::Items(items) if items.iter().any(|item| {
+            matches!(item, InputItem::FunctionCall(call) if call.async_execution)
+                || matches!(item, InputItem::CustomToolCall(call) if call.async_execution)
+        }))
     }
 
     /// Return the canonical context sent to vLLM.

@@ -17,9 +17,9 @@ use crate::types::messages::tool_seam::{
     GatewayToolMap, NATIVE_WEB_SEARCH_TYPE, WEB_SEARCH_EXECUTOR, is_native_web_fetch_type,
 };
 use crate::types::tools::{
-    CodeInterpreterToolParam, CodexNamespaceToolParam, CustomToolParam, DomainFilters, FileSearchToolParam,
-    FunctionToolParam, McpToolParam, ResponsesTool, ShellToolParam, ToolSearchToolParam, WebFetchToolParam,
-    WebSearchToolParam, WebSearchUserLocation,
+    CodeInterpreterToolParam, CodexNamespaceMember, CodexNamespaceToolParam, CustomToolParam, DomainFilters,
+    FileSearchToolParam, FunctionToolParam, McpToolParam, ResponsesTool, ShellToolParam, ToolSearchToolParam,
+    WebFetchToolParam, WebSearchToolParam, WebSearchUserLocation,
 };
 use crate::utils::common::deserialize_from_value_opt;
 
@@ -92,6 +92,32 @@ pub fn responses_declarations(tools: &[ResponsesTool]) -> Vec<ToolDeclaration> {
     tools.iter().map(ToolDeclaration::from).collect()
 }
 
+/// Whether a declared Responses tool makes any model-visible tool async; the borrowing
+/// counterpart of [`ToolDeclaration::declares_async`] for callers that only need the answer.
+#[must_use]
+pub fn declares_async(tool: &ResponsesTool) -> bool {
+    match tool {
+        ResponsesTool::Function(param) => param.is_async(),
+        ResponsesTool::Custom(param) => param.is_async(),
+        ResponsesTool::Namespace(param) => namespace_declares_async(param),
+        ResponsesTool::ToolSearch(_)
+        | ResponsesTool::Mcp(_)
+        | ResponsesTool::WebSearch(_)
+        | ResponsesTool::FileSearch(_)
+        | ResponsesTool::CodeInterpreter(_)
+        | ResponsesTool::Shell(_)
+        | ResponsesTool::Unknown => false,
+    }
+}
+
+/// Whether any member function of a namespace is async.
+pub(crate) fn namespace_declares_async(param: &CodexNamespaceToolParam) -> bool {
+    param.tools.iter().any(|member| match member {
+        CodexNamespaceMember::Function(function) => function.is_async(),
+        CodexNamespaceMember::Unknown => false,
+    })
+}
+
 /// Record what MCP discovery found back into a Responses request's wire
 /// declarations, so the discovered tools go upstream and are stored with the
 /// request. `declarations` are the request's tools as [`responses_declarations`]
@@ -140,6 +166,7 @@ fn map_tool(tool: &ToolParam, map: &GatewayToolMap) -> Option<ToolDeclaration> {
         parameters: tool.input_schema.clone(),
         strict: None,
         defer_loading: None,
+        async_execution: None,
         extra: std::collections::HashMap::new(),
     }))
 }
@@ -175,6 +202,7 @@ pub(crate) fn web_search_config(tool: &ToolParam) -> WebSearchToolParam {
         search_context_size: None,
         filters,
         user_location,
+        unsupported_async: None,
     }
 }
 

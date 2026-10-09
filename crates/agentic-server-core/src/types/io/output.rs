@@ -204,6 +204,15 @@ pub struct FunctionToolCall {
     #[serde(default = "default_completed_status")]
     #[serde(deserialize_with = "deserialize_status_or_default")]
     pub status: MessageStatus,
+    /// The call targets an async tool: the response continues without its output, which the client
+    /// returns later on this `call_id`. Serialized only when true.
+    #[serde(
+        default,
+        rename = "async",
+        deserialize_with = "crate::utils::common::null_as_default",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub async_execution: bool,
 }
 
 /// A newly emitted public client tool-search call.
@@ -242,6 +251,15 @@ pub struct CustomToolCall {
     pub name: String,
     #[serde(default)]
     pub input: String,
+    /// The call targets an async tool: the response continues without its output, which the client
+    /// returns later on this `call_id`. Serialized only when true.
+    #[serde(
+        default,
+        rename = "async",
+        deserialize_with = "crate::utils::common::null_as_default",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub async_execution: bool,
 }
 
 fn default_completed_status() -> MessageStatus {
@@ -289,17 +307,21 @@ impl TryFrom<&EventPayload> for FunctionToolCall {
         } else {
             item_id.clone()
         };
+        let initial_call = match initial_item.as_deref() {
+            Some(OutputItem::FunctionCall(call)) => Some(call),
+            _ => None,
+        };
         Ok(Self {
-            agent: match initial_item.as_deref() {
-                Some(OutputItem::FunctionCall(call)) => call.agent.clone(),
-                _ => None,
-            },
+            agent: initial_call.and_then(|call| call.agent.clone()),
             id,
             call_id: call_id.as_deref().unwrap_or_default().to_owned(),
             name: name.as_deref().unwrap_or_default().to_owned(),
             namespace: namespace.clone(),
             arguments: String::new(),
             status: MessageStatus::InProgress,
+            // A provider that already marks async calls keeps its marker; the gateway marks the
+            // calls of declared async tools when it restores the round's public output.
+            async_execution: initial_call.is_some_and(|call| call.async_execution),
         })
     }
 }
@@ -351,6 +373,7 @@ impl TryFrom<&EventPayload> for CustomToolCall {
             call_id: call_id.as_deref().unwrap_or_default().to_owned(),
             name: name.as_deref().unwrap_or_default().to_owned(),
             input: String::new(),
+            async_execution: false,
         })
     }
 }
@@ -1023,6 +1046,28 @@ impl OutputItem {
         *slot = Some(agent);
     }
 
+    /// Whether this item is a call to an async client tool, whose output may arrive later.
+    #[must_use]
+    pub fn is_async_call(&self) -> bool {
+        match self {
+            Self::FunctionCall(call) => call.async_execution,
+            Self::CustomToolCall(call) => call.async_execution,
+            Self::ToolSearchCall(_)
+            | Self::ShellCall(_)
+            | Self::Message(_)
+            | Self::CodeInterpreterCall(_)
+            | Self::WebSearchCall(_)
+            | Self::McpCall(_)
+            | Self::McpListTools(_)
+            | Self::Reasoning(_)
+            | Self::Compaction(_)
+            | Self::MultiAgentCall(_)
+            | Self::MultiAgentCallOutput(_)
+            | Self::AgentMessage(_)
+            | Self::Unknown => false,
+        }
+    }
+
     #[must_use]
     pub fn requires_client_action(&self, registry: &ToolRegistry) -> bool {
         match self {
@@ -1076,6 +1121,59 @@ impl OutputItem {
 mod tests {
     use super::*;
     use crate::types::io::InputItem;
+
+    /// `OpenAI` marks async calls with `async: true` and omits the field on other calls; some
+    /// upstream servers send `async: null`, which must read as not async.
+    #[test]
+    fn call_async_marker_is_written_only_when_true_and_tolerates_null() {
+        let function = serde_json::json!({
+            "type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "get_weather",
+            "arguments": "{}", "status": "completed", "async": true
+        });
+        let OutputItem::FunctionCall(call) = serde_json::from_value(function.clone()).unwrap() else {
+            panic!("function call");
+        };
+        assert!(call.async_execution);
+        assert_eq!(
+            serde_json::to_value(OutputItem::FunctionCall(call.clone())).unwrap(),
+            function
+        );
+
+        let replayed = InputFunctionToolCall::from(call.clone());
+        assert!(replayed.async_execution, "replay keeps the marker");
+        assert_eq!(serde_json::to_value(&replayed).unwrap()["async"], true);
+
+        let synchronous = FunctionToolCall {
+            async_execution: false,
+            ..call
+        };
+        assert!(
+            serde_json::to_value(&synchronous).unwrap().get("async").is_none(),
+            "a synchronous call omits the marker"
+        );
+
+        for value in [serde_json::Value::Null, serde_json::json!(false)] {
+            let mut item = function.clone();
+            item["async"] = value;
+            let OutputItem::FunctionCall(call) = serde_json::from_value(item).unwrap() else {
+                panic!("function call");
+            };
+            assert!(!call.async_execution);
+        }
+
+        let custom = serde_json::json!({
+            "type": "custom_tool_call", "id": "ctc_1", "call_id": "call_2", "name": "echo",
+            "input": "hi", "async": true
+        });
+        let OutputItem::CustomToolCall(call) = serde_json::from_value(custom.clone()).unwrap() else {
+            panic!("custom call");
+        };
+        assert!(call.async_execution);
+        assert!(
+            InputFunctionToolCall::from(call).async_execution,
+            "custom calls lowered for the model keep the marker"
+        );
+    }
 
     #[test]
     fn message_content_requires_a_known_type() {

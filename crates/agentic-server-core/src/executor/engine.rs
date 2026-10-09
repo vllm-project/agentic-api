@@ -20,7 +20,7 @@ use std::num::NonZeroUsize;
 #[cfg(test)]
 use either::Either;
 
-use super::compaction::compact_items;
+use super::compaction::{compact_items, retain_own_open_async_calls};
 use super::gateway::{
     compaction_event_plans, emit_gateway_completed_events, emit_gateway_start_events, emit_response_start_events,
 };
@@ -188,10 +188,17 @@ async fn run_compaction_trigger(
         MultiAgentRun::compact_root(ctx, exec_ctx, auth).await?
     } else {
         let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
+        // Earlier open async calls stay visible through the compaction window; the request's own
+        // open calls would be dropped with the items this turn replaces, so they are stored again.
+        let own_open_calls = match &input {
+            ResponsesInput::Items(items) => retain_own_open_async_calls(items, &ctx.new_input_items),
+            ResponsesInput::Text(_) => Vec::new(),
+        };
         let (mut compacted, usage, service_tier) = compact_items(&ctx.enriched_request, input, exec_ctx, auth).await?;
         let Some(InputItem::Compaction(compaction)) = compacted.pop() else {
             unreachable!("compact_items always appends a compaction item");
         };
+        compacted.extend(own_open_calls);
         ctx.new_input_items = compacted;
         if let Some(continuation) = &mut ctx.continuation {
             continuation.mark_history_replaced();

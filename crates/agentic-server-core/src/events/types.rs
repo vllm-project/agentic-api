@@ -482,6 +482,7 @@ mod tests {
     #[test]
     fn sse_item_type_is_derived_from_typed_output_items() {
         let item = OutputItem::FunctionCall(FunctionToolCall {
+            async_execution: false,
             agent: None,
             id: "fc_1".to_owned(),
             call_id: "call_1".to_owned(),

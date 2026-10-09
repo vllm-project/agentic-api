@@ -85,6 +85,9 @@ pub struct ToolEntry {
     /// For MCP tools: which server this tool belongs to.
     pub server_label: Option<String>,
     pub ownership: ToolOwnership,
+    /// The declaration is async: the model continues without waiting for this tool's output.
+    /// Only client-owned function, custom, and namespace member entries can be async.
+    pub async_execution: bool,
 }
 
 impl std::fmt::Debug for ToolEntry {
@@ -93,6 +96,7 @@ impl std::fmt::Debug for ToolEntry {
             .field("tool_type", &self.tool_type)
             .field("server_label", &self.server_label)
             .field("is_gateway", &self.ownership.is_gateway())
+            .field("async_execution", &self.async_execution)
             .finish()
     }
 }
@@ -105,6 +109,7 @@ impl ToolEntry {
             tool_type,
             server_label,
             ownership: ToolOwnership::Client,
+            async_execution: false,
         }
     }
 
@@ -116,7 +121,16 @@ impl ToolEntry {
             tool_type,
             server_label,
             ownership: ToolOwnership::Gateway(binding),
+            async_execution: false,
         }
+    }
+
+    /// Marks a client-owned entry async, as its declaration requests.
+    #[must_use]
+    pub(crate) fn with_async_execution(mut self, async_execution: bool) -> Self {
+        debug_assert!(!async_execution || matches!(self.ownership, ToolOwnership::Client));
+        self.async_execution = async_execution;
+        self
     }
 }
 
@@ -392,6 +406,14 @@ impl ToolRegistry {
         self.entries.keys().map(|name| (name.as_str(), self.tool_type(name)))
     }
 
+    /// Model-visible names of the request's async client tools.
+    pub(crate) fn async_tool_names(&self) -> impl Iterator<Item = &str> {
+        self.entries
+            .iter()
+            .filter(|(_, entry)| entry.async_execution)
+            .map(|(name, _)| name.as_str())
+    }
+
     #[cfg(test)]
     pub(crate) fn from_tool_types(tool_types: HashMap<String, ToolType>) -> Self {
         let entries = tool_types
@@ -575,6 +597,38 @@ mod tests {
     #[test]
     fn code_interpreter_tool_type_is_inherently_gateway_owned() {
         assert!(ToolType::CodeInterpreter.is_gateway_owned());
+    }
+
+    /// Async declarations reach the registry under their model-visible names, including the
+    /// flattened name of an async namespace member.
+    #[tokio::test]
+    async fn async_declarations_register_their_model_visible_names() {
+        let wire: Vec<ResponsesTool> = serde_json::from_value(serde_json::json!([
+            {"type": "function", "name": "get_weather", "async": true},
+            {"type": "function", "name": "get_time"},
+            {"type": "custom", "name": "echo", "async": true},
+            {
+                "type": "namespace",
+                "name": "travel",
+                "tools": [
+                    {"type": "function", "name": "book", "async": true},
+                    {"type": "function", "name": "cancel"}
+                ]
+            }
+        ]))
+        .unwrap();
+        let mut tools = crate::tool::responses_declarations(&wire);
+
+        let registry = ToolRegistry::build_with_handlers(&mut tools, &mut GatewayExecutors::default())
+            .await
+            .expect("client tools register");
+
+        let names: std::collections::BTreeSet<&str> = registry.async_tool_names().collect();
+        let member = crate::tool::codex::model_visible_namespace_member_name("travel", "book");
+        assert_eq!(
+            names,
+            std::collections::BTreeSet::from(["get_weather", "echo", member.as_str()])
+        );
     }
 
     #[cfg(feature = "embedded-code-interpreter")]
@@ -1055,6 +1109,7 @@ mod tests {
             ..ToolRegistry::default()
         };
         let call = FunctionToolCall {
+            async_execution: false,
             agent: None,
             id: "fc_1".to_owned(),
             call_id: "call_1".to_owned(),

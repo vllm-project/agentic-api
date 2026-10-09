@@ -94,6 +94,20 @@ fn a_function_call_streams_its_arguments_once() {
     assert_eq!(frames[3]["item"], serialize_to_value(&call).unwrap());
 }
 
+/// An async call keeps its public marker from its first event, as it does when streamed live.
+#[test]
+fn an_async_function_call_is_marked_from_its_first_event() {
+    let call = item(json!({
+        "type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "lookup",
+        "arguments": "{}", "status": "completed", "async": true
+    }));
+    let frames = frames(&call, 0);
+
+    assert_eq!(frames[0]["type"], "response.output_item.added");
+    assert_eq!(frames[0]["item"]["async"], true);
+    assert_eq!(frames[3]["item"]["async"], true);
+}
+
 #[test]
 fn mcp_discovery_starts_without_tools_and_completes_with_them() {
     let list = item(json!({

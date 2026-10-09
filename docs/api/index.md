@@ -66,8 +66,8 @@ to every other `/v1/*` route; the configured upstream credential is injected onl
 
 HTTP Responses requests use the OpenAI-compatible Responses shape. Requests
 with `store=true`, `previous_response_id`, `conversation_id`, any non-function
-tool, `multi_agent.enabled`, tool-search state, compaction input, or
-`context_management` run through the executor. Other stateless `store=false`
+tool, an async tool or replayed async call, `multi_agent.enabled`, tool-search state,
+compaction input, or `context_management` run through the executor. Other stateless `store=false`
 requests are passed directly to the configured vLLM backend. A `store=false`
 request that continues a stored response is hydrated from that response but is
 not stored itself: its id can be neither retrieved nor used as `previous_response_id`.
@@ -87,6 +87,52 @@ requests require `store: true`, reject `max_tool_calls` and reasoning summaries,
 and run over HTTP JSON and SSE only; the WebSocket transport rejects them.
 Continue the agent tree with `previous_response_id`. See
 [HTTP multi-agent execution](https://github.com/vllm-project/agentic-api/blob/main/ARCHITECTURE.md#http-multi-agent-execution).
+
+#### Async client tools
+
+`async: true` on a `function` or `custom` tool, including a function member of a
+`namespace`, lets the model keep working after it calls that tool; the client returns
+the output later on the original `call_id`, as in
+[OpenAI async tool calling](https://developers.openai.com/api/docs/guides/async-tool-calling).
+Calls to async tools carry `async: true`, in the response and in the streamed
+`response.output_item.added`/`done` items. Requests that declare an async tool, or replay
+an async call, always run through the executor.
+
+The gateway matches the recorded OpenAI behavior:
+
+- A follow-up request may omit the outputs of pending async calls; a synchronous call
+  left unanswered is still rejected (`No tool output found for function call <id>.`).
+- An async call accepts repeated and conflicting outputs, and the model receives each one.
+  An output whose `call_id` matches no call returns `400`, `param: input`,
+  `No tool call found for function call output with call_id <id>.`
+- Whether a call is async is read from the call itself, so re-declaring the tool without
+  `async` does not change a pending call.
+- `async` on a namespace itself, on `shell`, on `tool_search`, or on a gateway-executed tool
+  returns `400`, `code: unknown_parameter`, `param: tools[<index>].async`.
+- Multi-agent mode with `parallel_tool_calls: true` and an async tool returns `400`,
+  `code: unsupported_value`, `param: multi_agent`. The gateway defaults
+  `parallel_tool_calls` to `false`, so only an explicit `true` conflicts.
+- A response whose only client calls are async continues: the model answers in the same
+  response. A synchronous client call in the same round ends the response, as before.
+
+A model served by vLLM stops at a tool call and does not know `async`. The gateway
+therefore runs another inference round with the call pending, and adds two hints to the
+request it sends the model server: the async tool's description says that it runs in the
+background, and a `developer` note follows each async call whose output has not arrived.
+Without them the model tends to invent the pending result. The gateway does not store or
+return the hints: responses to a request with async tools echo the client's own tool
+declarations. The model's own reasoning output can still quote or paraphrase a hint.
+After compaction, by any of its triggers, an async call whose output has not arrived stays
+in the model context, so its output can still arrive. If the model keeps calling async tools
+instead of answering, the gateway stops after two such rounds in a row.
+
+Differences from OpenAI:
+
+- `async` is accepted for every served model; the gateway does not know which models
+  support it natively, and the emulation above does not require support.
+- When the model emits an async call after a gateway-executed tool call in the same
+  round, the stream delivers the async call after that tool completes, keeping output
+  indexes in order. Async calls before or without gateway calls stream immediately.
 
 `prompt_cache_key` is forwarded unchanged on direct and executor-backed HTTP
 requests, WebSocket requests, gateway tool rounds, automatic compaction,

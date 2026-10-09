@@ -43,7 +43,19 @@ impl ToolHandler for FunctionHandler {
     }
 
     fn normalize(&self, params: &FunctionToolParam) -> Vec<FunctionTool> {
-        vec![FunctionTool::from(params)]
+        vec![Self::model_visible_tool(params)]
+    }
+}
+
+impl FunctionHandler {
+    /// The declaration the model sees: the public function, with the background-execution hint
+    /// when the function is async. Namespace members are normalized through this as well.
+    pub(crate) fn model_visible_tool(params: &FunctionToolParam) -> FunctionTool {
+        let mut tool = FunctionTool::from(params);
+        if params.is_async() {
+            tool.description = Some(super::async_execution::async_description(tool.description.as_deref()));
+        }
+        tool
     }
 }
 
@@ -51,7 +63,10 @@ pub(crate) fn insert_function_entry(entries: &mut HashMap<String, ToolEntry>, p:
     // p.name is NonEmptyToolName — empty names are impossible here
     // (serde rejects them at deserialization time).
     if entries
-        .insert(p.name.as_str().to_owned(), ToolEntry::client(ToolType::Function, None))
+        .insert(
+            p.name.as_str().to_owned(),
+            ToolEntry::client(ToolType::Function, None).with_async_execution(p.is_async()),
+        )
         .is_some()
     {
         tracing::warn!(name = %p.name, "duplicate tool name — previous definition overwritten");

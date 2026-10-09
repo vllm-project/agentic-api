@@ -1,0 +1,358 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Start the echo job with input ASYNC_CUSTOM_OK. Meanwhile, tell me the
+        capital of France in one sentence.
+      instructions: Start the echo job and answer the independent question without
+        waiting. Use the echo result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Start a background echo job. The raw text input must be exactly
+          ASYNC_CUSTOM_OK.
+        name: agentic_async_echo
+        type: custom
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: custom-delayed-result/t1-start
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790836307
+      created_at: 1790836304
+      error: null
+      frequency_penalty: 0.0
+      id: resp_010c62336cdf54bc006abdfe50cbc087d1b9d814a7c63a6343
+      incomplete_details: null
+      instructions: Start the echo job and answer the independent question without
+        waiting. Use the echo result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - async: true
+        call_id: call_05Fr9MOYnM0oa2gOEGWThxOO
+        id: ctc_010c62336cdf54bc006abdfe52237887d198c3b63303061a43
+        input: 'ASYNC_CUSTOM_OK
+
+          '
+        name: agentic_async_echo
+        status: completed
+        type: custom_tool_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: The capital of France is Paris.
+          type: output_text
+        id: msg_010c62336cdf54bc006abdfe53095887d18782007cacbed0ea
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Start a background echo job. The raw text input must be exactly
+          ASYNC_CUSTOM_OK.
+        format:
+          type: text
+        name: agentic_async_echo
+        type: custom
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 157
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 29
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 186
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: Name one river in France. Answer in one sentence.
+      instructions: Start the echo job and answer the independent question without
+        waiting. Use the echo result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      previous_response_id: resp_010c62336cdf54bc006abdfe50cbc087d1b9d814a7c63a6343
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Start a background echo job. The raw text input must be exactly
+          ASYNC_CUSTOM_OK.
+        name: agentic_async_echo
+        type: custom
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: custom-delayed-result/t2-follow-up-without-output
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790836313
+      created_at: 1790836310
+      error: null
+      frequency_penalty: 0.0
+      id: resp_010c62336cdf54bc006abdfe56ab8887d1b810e0ae9540e0b4
+      incomplete_details: null
+      instructions: Start the echo job and answer the independent question without
+        waiting. Use the echo result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: The Seine is a river in France.
+          type: output_text
+        id: msg_010c62336cdf54bc006abdfe58a80087d1974d2f2e917d06f0
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_010c62336cdf54bc006abdfe50cbc087d1b9d814a7c63a6343
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Start a background echo job. The raw text input must be exactly
+          ASYNC_CUSTOM_OK.
+        format:
+          type: text
+        name: agentic_async_echo
+        type: custom
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 185
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 12
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 197
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - call_id: call_05Fr9MOYnM0oa2gOEGWThxOO
+        output: ASYNC_CUSTOM_RESULT_OK
+        type: custom_tool_call_output
+      - content: What did the echo job return? Reply with only its result.
+        role: user
+        type: message
+      instructions: Start the echo job and answer the independent question without
+        waiting. Use the echo result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      previous_response_id: resp_010c62336cdf54bc006abdfe56ab8887d1b810e0ae9540e0b4
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Start a background echo job. The raw text input must be exactly
+          ASYNC_CUSTOM_OK.
+        name: agentic_async_echo
+        type: custom
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: custom-delayed-result/t3-late-output
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790836315
+      created_at: 1790836313
+      error: null
+      frequency_penalty: 0.0
+      id: resp_010c62336cdf54bc006abdfe59b1a087d1ab9e1a4ee26824de
+      incomplete_details: null
+      instructions: Start the echo job and answer the independent question without
+        waiting. Use the echo result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: ASYNC_CUSTOM_RESULT_OK
+          type: output_text
+        id: msg_010c62336cdf54bc006abdfe5ad16487d1b8a4f199c60a1611
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_010c62336cdf54bc006abdfe56ab8887d1b810e0ae9540e0b4
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Start a background echo job. The raw text input must be exactly
+          ASYNC_CUSTOM_OK.
+        format:
+          type: text
+        name: agentic_async_echo
+        type: custom
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 212
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 9
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 221
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

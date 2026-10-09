@@ -208,6 +208,14 @@ impl<T: ?Sized> RequestPayload<T> {
         self.max_tool_calls.as_ref().map(MaxToolCalls::limit).transpose()
     }
 
+    /// Whether any declared tool makes a model-visible tool async.
+    #[must_use]
+    pub fn declares_async_tools(&self) -> bool {
+        self.tools
+            .as_deref()
+            .is_some_and(|tools| tools.iter().any(crate::tool::declares_async))
+    }
+
     /// Names the feature in this request that only the in-process executor
     /// implements, if any — neither the passthrough proxy nor split execution
     /// can serve it.
@@ -225,6 +233,10 @@ impl<T: ?Sized> RequestPayload<T> {
             .is_some_and(|tools| tools.iter().any(|tool| !matches!(tool, ResponsesTool::Function(_))))
         {
             return Some("gateway-owned tools");
+        }
+        // The gateway emulates async tools: the model server neither marks nor continues them.
+        if self.declares_async_tools() || self.input.has_async_call() {
+            return Some("async tools");
         }
         if self.input.contains_compaction() || self.input.has_compaction_trigger() {
             return Some("compaction input");
@@ -331,7 +343,9 @@ impl RequestPayload {
         });
         let tools = tools.filter(|tools| !tools.is_empty());
         let namespace_map = CodexNamespaceHandler.build_namespace_map(declarations.as_deref())?;
-        let input = CodexNamespaceHandler.resolve_input(namespace_map.as_ref(), self.input.normalized_model_input());
+        let input = crate::tool::async_execution::lower_async_calls(
+            CodexNamespaceHandler.resolve_input(namespace_map.as_ref(), self.input.normalized_model_input()),
+        );
         let tool_choice = CodexNamespaceHandler.resolve_tool_choice(namespace_map.as_ref(), self.tool_choice.as_ref());
         CustomHandler::validate_tool_choice(declarations.as_deref(), &tool_choice)?;
         Ok(UpstreamRequest {
@@ -569,6 +583,35 @@ mod tests {
         assert!(payload.multi_agent.is_none());
         assert!(serde_json::to_value(&payload).unwrap().get("multi_agent").is_none());
         assert_eq!(payload.in_process_feature(), None);
+    }
+
+    /// A stateless request with only function tools normally goes straight to the model server,
+    /// which ignores `async`; async tools and replayed async calls need the executor.
+    #[test]
+    fn async_tools_and_replayed_async_calls_require_the_executor() {
+        let request = |tools: serde_json::Value, input: serde_json::Value| -> RequestPayload {
+            serde_json::from_value(serde_json::json!({
+                "model": "test-model", "store": false, "tools": tools, "input": input
+            }))
+            .unwrap()
+        };
+        let sync_tool = serde_json::json!([{"type": "function", "name": "get_weather"}]);
+        let async_tool = serde_json::json!([{"type": "function", "name": "get_weather", "async": true}]);
+        let call = |async_execution: bool| {
+            serde_json::json!([{"type": "function_call", "call_id": "call_1", "name": "get_weather",
+                "arguments": "{}", "async": async_execution}])
+        };
+
+        assert_eq!(request(sync_tool.clone(), call(false)).in_process_feature(), None);
+        assert_eq!(
+            request(async_tool, serde_json::json!("hi")).in_process_feature(),
+            Some("async tools")
+        );
+        assert_eq!(
+            request(sync_tool, call(true)).in_process_feature(),
+            Some("async tools"),
+            "a replayed async call keeps executor semantics after the tool is re-declared"
+        );
     }
 
     #[test]

@@ -108,6 +108,7 @@ async fn live_discovery_does_not_recharge_mcp_metadata_on_ordinary_rounds() {
                 owner: ClientCallOwner {
                     agent_turn: turn.clone(),
                     kind: ClientCallKind::ToolSearch,
+                    async_execution: false,
                 },
             }],
         )
@@ -350,6 +351,7 @@ async fn partial_input_waits_for_all_owner_calls_and_does_not_revive_interrupted
         owner: ClientCallOwner {
             agent_turn: turn.clone(),
             kind: ClientCallKind::Function,
+            async_execution: false,
         },
     });
     run.pending.register_calls(&run.registry, &registrations[..2]).unwrap();
@@ -383,6 +385,70 @@ async fn partial_input_waits_for_all_owner_calls_and_does_not_revive_interrupted
     assert_eq!(run.registry.get(&root).unwrap().state, AgentState::Interrupted);
     assert_eq!(run.contexts[&root].generation, generation + 3);
     assert_eq!(run.pending.pending().count(), 0);
+    server.abort();
+}
+
+/// A pending async call never holds its owner: the synchronous output alone resumes it. A late
+/// async output then wakes an idle root, as it does in a continuation request.
+#[tokio::test]
+async fn live_async_outputs_do_not_hold_their_owner_and_wake_an_idle_root() {
+    use crate::types::agent::AgentCompletion;
+    let (exec, server) = setup().await;
+    let ctx = rehydrate_conversation(request(), &exec).await.unwrap();
+    let mut pipeline = AgentPipeline::new(ctx, None, StreamRelay::detached());
+    let mut run = MultiAgentRun::new(&mut pipeline, &exec).await.unwrap();
+    let root = AgentIdentity::root();
+    let turn = AgentTurnKey {
+        agent: root.clone(),
+        turn: run.registry.get(&root).unwrap().turn,
+    };
+    let registrations =
+        [("sync_call", false), ("async_call", true)].map(|(id, async_execution)| ClientCallRegistration {
+            call_id: ClientCallId::try_from(id.to_owned()).unwrap(),
+            owner: ClientCallOwner {
+                agent_turn: turn.clone(),
+                kind: ClientCallKind::Function,
+                async_execution,
+            },
+        });
+    run.pending.register_calls(&run.registry, &registrations).unwrap();
+    run.registry
+        .set_phase(&turn, AgentPhase::WaitingForClientOutputs)
+        .unwrap();
+
+    assert!(matches!(
+        run.accept_live_outputs(batch(&run.payload.id, &["sync_call"])),
+        OutputDecision::Accepted
+    ));
+    assert_eq!(
+        run.registry.get(&root).unwrap().state,
+        AgentState::Active(AgentPhase::Runnable),
+        "the pending async call must not hold its owner"
+    );
+
+    run.registry
+        .settle_turn(&turn, &AgentCompletion::Finished("done".into()))
+        .unwrap();
+    assert_eq!(run.registry.get(&root).unwrap().state, AgentState::Idle);
+    run.contexts.get_mut(&root).unwrap().stored.final_answer = Some("done".into());
+    assert!(matches!(
+        run.accept_live_outputs(batch(&run.payload.id, &["async_call"])),
+        OutputDecision::Accepted
+    ));
+    let resumed = run.registry.get(&root).unwrap();
+    assert_eq!(resumed.state, AgentState::Active(AgentPhase::Runnable));
+    assert_ne!(resumed.turn, turn.turn, "the late output starts a new root turn");
+    assert_eq!(
+        run.contexts[&root].stored.final_answer, None,
+        "the new turn starts without the previous answer"
+    );
+    assert!(
+        run.contexts[&root]
+            .stored
+            .history
+            .iter()
+            .any(|item| matches!(item, InputItem::FunctionCallOutput(output) if output.call_id == "async_call"))
+    );
     server.abort();
 }
 
@@ -448,6 +514,7 @@ async fn accepted_output_invalidates_inflight_compaction_without_losing_history(
                 owner: ClientCallOwner {
                     agent_turn: turn,
                     kind: ClientCallKind::Function,
+                    async_execution: false,
                 },
             }],
         )
@@ -559,6 +626,7 @@ fn register_race_call(run: &mut MultiAgentRun, agent: &AgentIdentity) -> AgentTu
                 owner: ClientCallOwner {
                     agent_turn: turn.clone(),
                     kind: ClientCallKind::Function,
+                    async_execution: false,
                 },
             }],
         )

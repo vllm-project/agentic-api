@@ -89,6 +89,7 @@ fn custom_added_frame(call: &AccumulatedFunctionCall<'_>) -> ExecutorResult<Even
                 call_id: call.item.call_id.clone(),
                 input: String::new(),
                 name: call.item.name.clone(),
+                async_execution: call.item.async_execution,
             }))?,
         )],
     )
@@ -161,6 +162,7 @@ fn custom_done_frame(state: &CustomCallState, call: &AccumulatedFunctionCall<'_>
                 call_id: call.item.call_id.clone(),
                 input: state.emitted_input.clone(),
                 name: call.item.name.clone(),
+                async_execution: call.item.async_execution,
             }))?,
         )],
     )

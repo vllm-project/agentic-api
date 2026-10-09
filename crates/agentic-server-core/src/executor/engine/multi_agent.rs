@@ -257,8 +257,8 @@ impl MultiAgentRun {
                     .map(|wait| wait.deadline_ms)
                     .min();
                 // A live socket does not keep an otherwise quiescent response open.
-                // Pending client outputs are persisted for explicit continuation.
-                if self.pending.pending().next().is_some() || waiting.is_none() {
+                // Pending synchronous client outputs are persisted for explicit continuation.
+                if self.pending.awaiting_outputs().next().is_some() || waiting.is_none() {
                     let waiters = self
                         .contexts
                         .iter()

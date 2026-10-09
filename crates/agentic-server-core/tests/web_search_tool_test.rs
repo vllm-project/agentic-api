@@ -466,6 +466,7 @@ async fn web_search_handler_output_is_byte_identical_for_mock_you_response() {
     assert_eq!(output.output, MOCK_YOU_TOOL_OUTPUT);
 
     let call = FunctionToolCall {
+        async_execution: false,
         agent: None,
         id: "fc_search".to_owned(),
         call_id: "call_search".to_owned(),
@@ -562,6 +563,7 @@ async fn web_search_handler_normalizes_recorded_you_response() {
     assert_eq!(output_json["metadata"], serde_json::json!([fixture["metadata"]]));
 
     let call = FunctionToolCall {
+        async_execution: false,
         agent: None,
         id: "fc_search".to_owned(),
         call_id: "call_search".to_owned(),

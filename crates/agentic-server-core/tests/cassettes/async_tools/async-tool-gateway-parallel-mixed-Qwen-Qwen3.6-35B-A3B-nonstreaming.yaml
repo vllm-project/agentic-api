@@ -1,0 +1,428 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Get the Paris demo weather and the Tokyo demo local time. Answer with
+        whatever is available.
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B
+      parallel_tool_calls: true
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Read the demo local time for a city.
+        name: get_local_time
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: parallel-mixed/t1-start
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1791453447
+      error: null
+      id: resp_01a11af2-42e5-7523-8502-132397f94354
+      incomplete_details: null
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_tool_calls: null
+      model: Qwen/Qwen3.6-35B-A3B
+      object: response
+      output:
+      - content:
+        - text: 'The user wants two things:
+
+            1. Paris demo weather
+
+            2. Tokyo demo local time
+
+
+            I need to call `get_weather` for "Paris" and `get_local_time` for "Tokyo".
+
+            Both tools can be called simultaneously.
+
+            I will execute both calls now.
+
+            Then I will provide the answer based on whatever results arrive. I must
+            not wait or guess.
+
+            Let''s trigger the tool calls.✅
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a11af2-46a0-7b52-9889-602543e03508
+        summary: []
+        type: reasoning
+      - arguments: '{"city": "Paris"}'
+        async: true
+        call_id: chatcmpl-tool-8ecaf44e5171c7f5
+        id: fc_01a11af2-46ad-74b1-a0b1-5578a46a77c7
+        name: get_weather
+        status: completed
+        type: function_call
+      - arguments: '{"city": "Tokyo"}'
+        call_id: chatcmpl-tool-a5824c2a1c41b82e
+        id: fc_01a11af2-46af-7182-b105-ed618d8a5fa9
+        name: get_local_time
+        status: completed
+        type: function_call
+      previous_response_id: null
+      service_tier: default
+      status: completed
+      tool_choice: auto
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Read the demo local time for a city.
+        name: get_local_time
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      usage:
+        input_tokens: 407
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 145
+        output_tokens_details:
+          reasoning_tokens: 89
+        total_tokens: 552
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: chatcmpl-tool-a5824c2a1c41b82e
+        output: '{"city":"Tokyo","local_time":"18:30","source":"demo clock"}'
+        type: function_call_output
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B
+      parallel_tool_calls: true
+      previous_response_id: resp_01a11af2-42e5-7523-8502-132397f94354
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Read the demo local time for a city.
+        name: get_local_time
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: parallel-mixed/t2-sync-output-only
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1791453448
+      error: null
+      id: resp_01a11af2-46e9-7840-a5d8-f50e0b6fca3e
+      incomplete_details: null
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_tool_calls: null
+      model: Qwen/Qwen3.6-35B-A3B
+      object: response
+      output:
+      - content:
+        - text: 'The tool call for `get_local_time` with Tokyo returned successfully:
+            "18:30".
+
+            The tool call for `get_weather` with Paris is still running in the background.
+
+            I will present the available information now (Tokyo local time) and state
+            that the Paris weather result is pending. I will not guess or invent the
+            weather data.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a11af2-4aff-72b0-99ec-f19e623b052b
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            Here is the information available so far:
+
+
+            *   **Tokyo Local Time:** 18:30
+
+            *   **Paris Weather:** The weather data for Paris is still loading in
+            the background. I will provide that details as soon as it arrives.'
+          type: output_text
+        id: msg_01a11af2-4b0f-7243-a981-9f2f94989451
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: resp_01a11af2-42e5-7523-8502-132397f94354
+      service_tier: default
+      status: completed
+      tool_choice: auto
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Read the demo local time for a city.
+        name: get_local_time
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      usage:
+        input_tokens: 643
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 130
+        output_tokens_details:
+          reasoning_tokens: 74
+        total_tokens: 773
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - call_id: chatcmpl-tool-8ecaf44e5171c7f5
+        output: '{"city":"Paris","temperature_c":22,"condition":"Clear","source":"demo
+          weather snapshot"}'
+        type: function_call_output
+      - content: What does the Paris demo weather snapshot say? Answer in one sentence.
+        role: user
+        type: message
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B
+      parallel_tool_calls: true
+      previous_response_id: resp_01a11af2-46e9-7840-a5d8-f50e0b6fca3e
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Read the demo local time for a city.
+        name: get_local_time
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: parallel-mixed/t3-late-async-output
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1791453450
+      error: null
+      id: resp_01a11af2-4b71-7b40-bac4-df359f852dfd
+      incomplete_details: null
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_tool_calls: null
+      model: Qwen/Qwen3.6-35B-A3B
+      object: response
+      output:
+      - content:
+        - text: 'The user wants to know the Paris demo weather snapshot based on the
+            latest tool output.
+
+            The tool output shows: `{"city":"Paris","temperature_c":22,"condition":"Clear","source":"demo
+            weather snapshot"}`.
+
+            I need to answer in one sentence.
+
+
+            Draft: The Paris demo weather snapshot indicates a temperature of 22°C
+            with clear conditions.
+
+            Refinement: Keep it simple and direct.
+
+            "The Paris demo weather snapshot shows a temperature of 22°C and clear
+            conditions."
+
+            Wait, I should check if I need to reiterate the Tokyo time or just answer
+            the specific question. The prompt asks "What does the Paris demo weather
+            snapshot say?". So just Paris.
+
+
+            Sentence: The Paris demo weather snapshot indicates a temperature of 22°C
+            with clear conditions.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a11af2-4fff-75a0-8bca-f7f8fc0225d7
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            The Paris demo weather snapshot indicates a temperature of 22°C with clear
+            conditions.'
+          type: output_text
+        id: msg_01a11af2-501c-7260-bedd-494968e6651c
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: resp_01a11af2-46e9-7840-a5d8-f50e0b6fca3e
+      service_tier: default
+      status: completed
+      tool_choice: auto
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - description: Read the demo local time for a city.
+        name: get_local_time
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      usage:
+        input_tokens: 601
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 184
+        output_tokens_details:
+          reasoning_tokens: 164
+        total_tokens: 785
+    headers:
+      content-type: application/json
+    status_code: 200

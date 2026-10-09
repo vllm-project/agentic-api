@@ -32,6 +32,7 @@ impl MultiAgentRun {
                 .pending
                 .take_accepted(&id)
                 .expect("validated output remains until transfer");
+            let late_root_output = routed.owner.async_execution && routed.owner.agent_turn.agent.is_root();
             let identity = routed.owner.agent_turn.agent;
             let context = self
                 .contexts
@@ -42,20 +43,26 @@ impl MultiAgentRun {
             // Invalidate an in-flight summary snapshot; never overwrite new input.
             context.generation += 1;
             let agent = self.registry.get(&identity).expect("registered call owner exists");
-            if agent.state == AgentState::Active(AgentPhase::WaitingForClientOutputs)
+            let (state, turn) = (agent.state, agent.turn);
+            // Pending async calls never hold their owner; it resumes once its synchronous calls resolve.
+            if state == AgentState::Active(AgentPhase::WaitingForClientOutputs)
                 && !self
                     .pending
-                    .pending()
+                    .awaiting_outputs()
                     .any(|call| call.owner.agent_turn.agent == identity)
             {
-                let turn = AgentTurnKey {
-                    agent: identity,
-                    turn: agent.turn,
-                };
+                let turn = AgentTurnKey { agent: identity, turn };
                 // Membership, current turn, and active phase were checked above.
                 self.registry
                     .set_phase(&turn, AgentPhase::Runnable)
                     .expect("validated active owner");
+            } else if late_root_output && state == AgentState::Idle {
+                // As in a continuation request, a late async output is new information for an
+                // idle root. A busy or waiting root reads it at its next turn.
+                self.registry.resume_root();
+                let context = self.contexts.get_mut(&identity).expect("root has context");
+                context.execution.restart();
+                context.stored.final_answer = None;
             }
         }
         OutputDecision::Accepted

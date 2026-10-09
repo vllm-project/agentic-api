@@ -151,6 +151,7 @@ fn mixed_response() -> serde_json::Value {
 
 fn call(arguments: &str) -> FunctionToolCall {
     FunctionToolCall {
+        async_execution: false,
         agent: None,
         id: "fc_brave".to_owned(),
         call_id: "call_brave".to_owned(),

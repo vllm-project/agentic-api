@@ -146,9 +146,21 @@ pub struct FunctionToolParam {
     pub strict: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub defer_loading: Option<bool>,
+    /// `async: true` lets the model keep working after it emits a call; the client returns the
+    /// output later on the original `call_id`.
+    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
+    pub async_execution: Option<bool>,
     #[serde(default)]
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
+}
+
+impl FunctionToolParam {
+    /// Whether calls to this tool are async: the model continues without waiting for the output.
+    #[must_use]
+    pub fn is_async(&self) -> bool {
+        self.async_execution.unwrap_or(false)
+    }
 }
 
 /// Parameters for a freeform (`type: "custom"`) tool.
@@ -166,9 +178,21 @@ pub struct CustomToolParam {
     pub format: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub defer_loading: Option<bool>,
+    /// `async: true` lets the model keep working after it emits a call; the client returns the
+    /// output later on the original `call_id`.
+    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
+    pub async_execution: Option<bool>,
     #[serde(default)]
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
+}
+
+impl CustomToolParam {
+    /// Whether calls to this tool are async: the model continues without waiting for the output.
+    #[must_use]
+    pub fn is_async(&self) -> bool {
+        self.async_execution.unwrap_or(false)
+    }
 }
 
 /// Only client-executed tool search is part of the public gateway contract.
@@ -201,6 +225,10 @@ pub struct ToolSearchToolParam {
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parameters: Option<Value>,
+    /// `async` applies only to function and custom tools; captured so declaration validation can reject it.
+    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(ignore))]
+    pub unsupported_async: Option<bool>,
 }
 
 /// Parameters for a gateway MCP built-in tool declaration.
@@ -222,6 +250,10 @@ pub struct McpToolParam {
     pub require_approval: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub defer_loading: Option<bool>,
+    /// `async` applies only to function and custom tools; captured so declaration validation can reject it.
+    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(ignore))]
+    pub unsupported_async: Option<bool>,
     /// Request-scoped `tools/list` results used by MCP normalization. This
     /// field is populated internally and ignored on the public request wire.
     #[serde(
@@ -280,6 +312,10 @@ pub struct WebSearchToolParam {
     pub search_context_size: Option<WebSearchContextSize>,
     pub filters: Option<DomainFilters>,
     pub user_location: Option<WebSearchUserLocation>,
+    /// `async` applies only to function and custom tools; captured so declaration validation can reject it.
+    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(ignore))]
+    pub unsupported_async: Option<bool>,
 }
 
 /// Parameters for a file search tool.
@@ -287,6 +323,10 @@ pub struct WebSearchToolParam {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct FileSearchToolParam {
     pub vector_store_ids: Option<Vec<String>>,
+    /// `async` applies only to function and custom tools; captured so declaration validation can reject it.
+    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(ignore))]
+    pub unsupported_async: Option<bool>,
 }
 
 /// The only `OpenAI` container selector supported by the gateway.
@@ -314,6 +354,10 @@ pub enum CodeInterpreterAutoContainerType {
 #[serde(deny_unknown_fields)]
 pub struct CodeInterpreterToolParam {
     pub container: CodeInterpreterAutoContainer,
+    /// `async` applies only to function and custom tools; captured so declaration validation can reject it.
+    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(ignore))]
+    pub unsupported_async: Option<bool>,
 }
 
 /// Parameters for the shell built-in tool.
@@ -323,6 +367,10 @@ pub struct ShellToolParam {
     pub environment: ShellEnvironment,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_callers: Option<Vec<String>>,
+    /// `async` applies only to function and custom tools; captured so declaration validation can reject it.
+    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(ignore))]
+    pub unsupported_async: Option<bool>,
     #[serde(default, flatten)]
     pub extra: HashMap<String, Value>,
 }
@@ -416,6 +464,10 @@ pub struct CodexNamespaceToolParam {
     pub description: Option<String>,
     #[serde(default)]
     pub tools: Vec<CodexNamespaceMember>,
+    /// `async` belongs on member functions, not the namespace; captured so declaration validation can reject it.
+    #[serde(default, rename = "async", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "openapi", schema(ignore))]
+    pub unsupported_async: Option<bool>,
     #[serde(default)]
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
@@ -571,6 +623,29 @@ impl ResponsesTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn async_declarations_round_trip_as_typed_fields() {
+        for declaration in [
+            serde_json::json!({"type": "function", "name": "get_weather", "async": true}),
+            serde_json::json!({"type": "custom", "name": "echo", "async": true}),
+        ] {
+            let tool: ResponsesTool = serde_json::from_value(declaration.clone()).unwrap();
+            match &tool {
+                ResponsesTool::Function(param) => assert!(param.is_async() && !param.extra.contains_key("async")),
+                ResponsesTool::Custom(param) => assert!(param.is_async() && !param.extra.contains_key("async")),
+                other => panic!("unexpected declaration {other:?}"),
+            }
+            assert_eq!(serde_json::to_value(&tool).unwrap(), declaration, "echoed unchanged");
+        }
+
+        let ResponsesTool::Function(param) =
+            serde_json::from_value(serde_json::json!({"type": "function", "name": "get_weather"})).unwrap()
+        else {
+            panic!("function declaration");
+        };
+        assert!(!param.is_async(), "async defaults to false");
+    }
 
     #[test]
     fn non_empty_name_accepts_valid() {

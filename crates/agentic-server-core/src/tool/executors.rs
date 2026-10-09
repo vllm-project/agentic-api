@@ -202,7 +202,12 @@ impl GatewayExecutors {
             return Ok(());
         };
         CodeInterpreterHandler::validate_declarations(tools)?;
-        for tool in tools {
+        for (index, tool) in tools.iter().enumerate() {
+            if tool.declares_unsupported_async() {
+                return Err(ToolError::UnknownParameter {
+                    param: format!("tools[{index}].async"),
+                });
+            }
             tool.validate()?;
         }
         if tools
@@ -503,6 +508,75 @@ mod tests {
             .expect_err("an unregistered executor must fail closed");
 
         assert!(matches!(error, ToolError::Config(message) if message.contains("code_interpreter")));
+    }
+
+    fn declarations(value: serde_json::Value) -> Vec<ToolDeclaration> {
+        let tools: Vec<ResponsesTool> = serde_json::from_value(value).expect("valid declarations");
+        crate::tool::responses_declarations(&tools)
+    }
+
+    fn weather_function(extra: &serde_json::Value) -> serde_json::Value {
+        let mut function = serde_json::json!({
+            "type": "function",
+            "name": "get_weather",
+            "parameters": {"type": "object", "properties": {"city": {"type": "string"}}}
+        });
+        function
+            .as_object_mut()
+            .expect("object")
+            .extend(extra.as_object().expect("object").clone());
+        function
+    }
+
+    #[test]
+    fn async_is_accepted_on_function_custom_and_namespace_member_tools() {
+        let tools = declarations(serde_json::json!([
+            weather_function(&serde_json::json!({"async": true})),
+            {"type": "custom", "name": "echo", "async": true},
+            {
+                "type": "namespace",
+                "name": "weather_tools",
+                "description": "Demo weather tools.",
+                "tools": [weather_function(&serde_json::json!({"name": "get_forecast", "async": true}))]
+            }
+        ]));
+
+        GatewayExecutors::default()
+            .validate_declarations(Some(&tools))
+            .expect("async is accepted on client function, custom, and namespace member tools");
+        assert!(tools.iter().all(ToolDeclaration::declares_async));
+    }
+
+    /// Matches the recorded `OpenAI` behavior: `async` anywhere else is an unknown parameter at its
+    /// declared index (namespace members do not shift the index).
+    #[test]
+    fn async_on_other_tool_types_is_an_unknown_parameter_at_its_declared_index() {
+        let rejected = [
+            serde_json::json!({"type": "web_search", "async": true}),
+            serde_json::json!({"type": "shell", "environment": {"type": "local"}, "async": true}),
+            serde_json::json!({"type": "tool_search", "execution": "client", "async": true}),
+            serde_json::json!({"type": "mcp", "server_label": "docs", "server_url": "https://example.test/mcp", "async": false}),
+            serde_json::json!({"type": "file_search", "async": true}),
+            serde_json::json!({"type": "code_interpreter", "container": {"type": "auto"}, "async": true}),
+            serde_json::json!({"type": "namespace", "name": "weather_tools", "async": true, "tools": []}),
+        ];
+        for declaration in rejected {
+            let tools = declarations(serde_json::json!([
+                {
+                    "type": "namespace",
+                    "name": "first",
+                    "tools": [weather_function(&serde_json::json!({})), weather_function(&serde_json::json!({"name": "other"}))]
+                },
+                declaration.clone()
+            ]));
+            let error = GatewayExecutors::default()
+                .validate_declarations(Some(&tools))
+                .expect_err("async is rejected outside function and custom tools");
+            assert!(
+                matches!(&error, ToolError::UnknownParameter { param } if param == "tools[1].async"),
+                "{declaration}: {error:?}"
+            );
+        }
     }
 
     #[test]

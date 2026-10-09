@@ -547,14 +547,22 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   discovery lifecycle output. After stored history and the new request input are
   combined, `pending_calls.rs` validates the complete continuation's function/custom
   call sequence. Every call and call output must have a non-empty `call_id`; call IDs
-  must be unique across the sequence; and each output must resolve exactly one
-  currently pending call of the same item kind. An output without a pending call, a
-  second output for an already resolved call, or a function/custom kind mismatch is an
-  invalid request rather than evidence that the call was resolved. Valid unresolved
-  calls remain ordered by their original emission, and the first unresolved
-  client-executed call produces the existing missing-output error. Gateway-executed
-  built-in tool calls are resolved and recorded within their originating round, so
-  they do not remain pending at this boundary.
+  must be unique across the sequence; and each output must resolve a call of the same
+  item kind. An output whose `call_id` matches no call is rejected with the `OpenAI`
+  unknown-call error; a second output for a resolved synchronous call or a
+  function/custom kind mismatch is an invalid request rather than evidence that the
+  call was resolved. Valid unresolved calls remain ordered by their original emission,
+  and the first unresolved synchronous client-executed call produces the existing
+  missing-output error. An async call (`async: true` on the call item) may stay
+  unresolved and accepts repeated outputs; it ends neither the resolved prefix used by
+  compaction nor the continuation. A compaction window (`model_items`,
+  `canonical_session_history`) keeps an async call that was still open at its checkpoint,
+  and a session whose history compaction replaces keeps open parent calls the same way.
+  Compaction stores again only the open calls the request itself supplied, which it would
+  otherwise drop; a call already stored keeps its place, so no item or `call_id` repeats.
+  Gateway-executed built-in tool calls are resolved and
+  recorded within their originating round, so they do not remain pending at this
+  boundary.
 - **`upstream.rs`** — the narrow adapter between inference transport and the pipeline.
   It builds `UpstreamRequest`s, snapshots registry classification facts into an owned
   `TranslationContext`, passes the shared retained-data budget into ingestion, and
@@ -591,8 +599,11 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   `multi_agent/pending_calls.rs` retains each client call's originating agent, turn and
   kind. It validates output batches before mutation, retains accepted outputs until
   transfer to canonical context, and keeps resolved IDs for duplicate detection.
-  Acceptance by this table does not itself resume an agent. It complements the
-  existing single-history rehydration validator; neither public error mapping nor
+  An async call's owner record says so: its owner does not wait for it
+  (`awaiting_outputs` lists only synchronous calls), and repeated outputs for it are
+  queued and transferred in order. Acceptance by this table does not itself resume an
+  agent or decide visibility for superseded turns. It complements the existing
+  single-history rehydration validator; neither public error mapping nor
   transport-specific batch policy is defined by it.
   `multi_agent/control.rs` provides opt-in live input through `RunControl::channel`
   and `ExecuteRequest::with_run_control`. It requires a stored, streaming multi-agent
@@ -600,9 +611,11 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   and at most 32 outstanding commands, including unread decisions. Adapters must keep
   draining response events while awaiting decisions. The coordinator validates the
   whole batch, transfers outputs into canonical histories, invalidates stale compaction
-  generations, and resumes a waiting owner only after all of its calls are resolved.
-  Interrupted owners retain input without being restarted. Without a control endpoint,
-  HTTP execution still completes at the client-output boundary.
+  generations, and resumes a waiting owner only after all of its synchronous calls are
+  resolved. A late async output owned by the root resumes an idle root with a fresh turn
+  when it arrives live, and any settled root in a continuation request; a busy or waiting
+  root reads it at its next turn. Live, interrupted owners retain input without being restarted.
+  Without a control endpoint, HTTP execution still completes at the client-output boundary.
   Finalization closes admission and rejects queued commands synchronously. `Finalizing`
   is distinct from successful persistence; a lost reply is an execution failure with
   unknown acceptance, never permission to retry silently. This core seam does not yet
@@ -908,6 +921,12 @@ registry facts and request metadata needed for classification and restoration. I
 provides each round's tool classification and owns final restoration of public tool
 declarations, custom/namespace shapes, tool choice, and tool-search metadata.
 
+Async client tools are marked from the same snapshot: the registry's async tool names
+(`ToolRegistry::async_tool_names`) are copied into the context. The dispatcher marks an
+async call's public `output_item.added`/`done` items with `async: true`, and final output
+normalization marks the round's call items, before namespace restoration renames them.
+Later stages read the marker from the call item itself.
+
 Gateway-executed types (`Mcp`, `WebSearch`, `FileSearch`, and `CodeInterpreter`) are
 classified as gateway calls by the dispatcher, which suppresses their canonical
 upstream function-call lifecycle. `gateway.rs` owns their execution result mapping and
@@ -1074,9 +1093,9 @@ The round decision remains in `engine.rs`, after gateway execution:
 
 | Decision | Condition and state transition |
 |---|---|
-| `RequiresClientAction` | At least one client-owned call exists. Any gateway calls from the mixed round have already executed; their internal calls/results are recorded before returning. |
-| `Done` | No gateway result and no client-owned call remains. Finalize accumulated output and usage. |
-| `Continue` | Gateway calls ran and round budget remains. Append the upstream output plus gateway results, set `tool_choice: auto`, and infer again. |
+| `RequiresClientAction` | At least one synchronous client-owned call exists. Any gateway calls from the mixed round have already executed; their internal calls/results are recorded before returning. |
+| `Done` | No gateway result and no client-owned call remains, or only async client calls remain on the last permitted round or after two consecutive async-only continuations. Finalize accumulated output and usage; a multi-agent turn finishes with the calls pending. |
+| `Continue` | Gateway calls ran, or the only client calls are async (`ClientCalls`), and round budget remains. Append the upstream output plus gateway results, set `tool_choice: auto`, and infer again; pending async calls stay in the input, and `tool/async_execution.rs` adds a note after each one in the upstream copy. |
 | `Incomplete` | Gateway calls ran on the tenth round. Record the final calls/results and return `status: incomplete` instead of leaving a dangling call. |
 
 `parallel_tool_calls` is an upstream model-generation preference, not a gateway
@@ -1311,6 +1330,16 @@ the operator enables it, and Eryx runtime readiness succeeds.
   code interpreter normalizes to one fixed function contract in every build, while
   request validation rejects unavailable runtimes before upstream inference.
   Feature-enabled builds bind the ready private `CodeInterpreterExecutor` to the provider.
+  `ToolDeclaration::declares_async` and `declares_unsupported_async` answer which
+  declarations make a tool async and which carry `async` where it is not accepted;
+  `GatewayExecutors::validate_declarations` rejects the latter with its declared index.
+- **`async_execution.rs`** — the model-visible hints for async client tools. A vLLM-served
+  model stops at a call, so the gateway continues the response with the call pending.
+  `FunctionHandler`, `CustomHandler`, and `CodexNamespaceHandler` normalization append
+  the background-execution suffix to async tool descriptions, and
+  `RequestPayload::to_upstream_request` calls `lower_async_calls`, which removes the public
+  `async` marker from replayed calls and adds a `developer` note after each pending one.
+  The texts equal the `upstream_hints` fixture, whose effect the recorder's `--sample` runs measured.
 - **`handler.rs`** — the two traits every tool type reasons about:
   ```rust
   pub trait ToolHandler: Send + Sync {

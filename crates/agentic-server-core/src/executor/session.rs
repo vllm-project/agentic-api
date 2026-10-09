@@ -4,6 +4,7 @@
 #[path = "session_budget_tests.rs"]
 mod budget_tests;
 
+use std::collections::HashSet;
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::ops::Deref;
@@ -15,7 +16,7 @@ use tokio::sync::Notify;
 
 use super::{ExecutorError, ExecutorResult};
 use crate::storage::{InOutItem, ResponseMetadata};
-use crate::types::io::input::latest_compaction_window;
+use crate::types::io::input::{open_async_call_ids, retain_window, retained_async_call};
 use crate::types::io::{InputItem, OutputItem};
 use crate::utils::common::serialized_size_up_to;
 
@@ -356,19 +357,8 @@ fn aggregate_budget_error() -> ExecutorError {
 /// can still reference superseded parent rows; those must not consume the session
 /// checkpoint budget or introduce obsolete pending calls after reconnecting.
 pub(super) fn canonical_session_history(history: Vec<InputItem>) -> Vec<InputItem> {
-    let Some(window) = latest_compaction_window(&history) else {
-        return history;
-    };
-    history
-        .into_iter()
-        .enumerate()
-        .filter(|(index, item)| {
-            *index >= window.latest_index()
-                || window.retains_user_item(*index, item)
-                || matches!(item, InputItem::McpListTools(_))
-        })
-        .map(|(_, item)| item)
-        .collect()
+    // MCP discovery records stay so the registry knows which servers were already listed.
+    retain_window(history, |item| matches!(item, InputItem::McpListTools(_)))
 }
 
 impl ResponseContinuation {
@@ -388,12 +378,18 @@ impl ResponseContinuation {
     }
 
     /// Retain orchestration records across compaction without restoring the old
-    /// model context. MCP discovery still needs to know which servers were listed.
+    /// model context. MCP discovery still needs to know which servers were listed,
+    /// and an async call still open in the parent history must remain for its output.
     pub(crate) fn parent_items(&self) -> impl Iterator<Item = &InputItem> {
-        self.parent
-            .iter()
-            .flat_map(|parent| parent.history.iter())
-            .filter(|item| !self.history_replaced || matches!(item, InputItem::McpListTools(_)))
+        let history = self.parent.as_ref().map_or(&[][..], |parent| parent.history.as_slice());
+        let open = if self.history_replaced {
+            open_async_call_ids(history)
+        } else {
+            HashSet::new()
+        };
+        history.iter().filter(move |item| {
+            !self.history_replaced || matches!(item, InputItem::McpListTools(_)) || retained_async_call(item, &open)
+        })
     }
 
     pub(crate) fn checkpoint(

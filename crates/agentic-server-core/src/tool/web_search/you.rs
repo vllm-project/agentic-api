@@ -340,6 +340,7 @@ mod tests {
                 country: Some(" de ".to_owned()),
                 ..WebSearchUserLocation::default()
             }),
+            unsupported_async: None,
         };
         let args = args(r#"{"query":"rust","country":"us","include_domains":["other.example"]}"#);
         let request = YouSearchRequest::from_args_and_config("rust", &args, &config).unwrap();

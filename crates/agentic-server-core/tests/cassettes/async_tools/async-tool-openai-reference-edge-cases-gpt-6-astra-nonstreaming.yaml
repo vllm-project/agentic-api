@@ -1,0 +1,1132 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Check the demo weather snapshot for Paris. Meanwhile, list three essentials
+        for any city trip.
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      store: true
+      stream: false
+      tools:
+      - description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: edge-cases/baseline-sync-unanswered/t1-start
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1791454600
+      created_at: 1791454598
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0cd7c59645de5052006ac76d860e7887d198d451472d3b25c3
+      incomplete_details: null
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - arguments: '{"city":"Paris"}'
+        call_id: call_HDCW2Al6WI6fgjqXkpnKFT1q
+        id: fc_0cd7c59645de5052006ac76d88117c87d1828c0520dfebf5f3
+        name: get_weather
+        status: completed
+        type: function_call
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Read a demo weather snapshot for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 92
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 18
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 110
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: Also, what is a good umbrella size for travel? Answer in one sentence.
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      previous_response_id: resp_0cd7c59645de5052006ac76d860e7887d198d451472d3b25c3
+      store: true
+      stream: false
+      tools:
+      - description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: edge-cases/baseline-sync-unanswered/t2-follow-up-without-output
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: No tool output found for function call call_HDCW2Al6WI6fgjqXkpnKFT1q.
+        param: input
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t3
+  request:
+    body:
+      input: Check the demo weather snapshot for Paris. Meanwhile, list three essentials
+        for any city trip.
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: edge-cases/async-call/t1-start
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1791454613
+      created_at: 1791454601
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0e2568a351b28f51006ac76d895a6c87d1b57902d1a5e8e9ea
+      incomplete_details: null
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - arguments: '{"city":"Paris"}'
+        async: true
+        call_id: call_W3z58SLHNf65cXBU68QwTnsx
+        id: fc_0e2568a351b28f51006ac76d8b47d087d18dce4ee4c27eb025
+        name: get_weather
+        status: completed
+        type: function_call
+      - content:
+        - annotations: []
+          logprobs: []
+          text: 'Three essentials for any city trip:
+
+            1. Comfortable walking shoes.
+
+            2. A charged phone with maps and a power bank.
+
+            3. A secure day bag for your ID, payment cards, and water.
+
+
+            The Paris demo weather lookup is underway.'
+          type: output_text
+        id: msg_0e2568a351b28f51006ac76d8c837487d19e45f1fee2fad02e
+        phase: commentary
+        role: assistant
+        status: completed
+        type: message
+      - content: []
+        encrypted_content: gAAAAABqx22V5d6YxrHXALisSZqwalGtw33BcuLpm2uCg7EahL-5b2OKS2KuJkQRCzybFzStGqJP-mqpyYzy5apbUBM3DbvJ7Q6Q_B8ciLeUH43WSDzkXPGczAjX9KzAanlmSl1GxbSk4lvjiOpbuq5wyq21zwi_v_na4tNkAaMQ211xLgeBqBbJtqgqvIJrno55adk2fZ2nrxoefX3nd5eCX8J9KGF_fXPkm4l-7ZF_sTweT6U2zL4dP-OM4sWQACYA2L9nNoblo4LYHY-q_dfx55LgJggoCXRG4Mpnse84Da_3Jz2Q-lfryxkUezXee3W957UbE18eHabnsVp2Gv8FS9L1MzVtv9_x8ZEGYzaMV2cNzKIYlZ6X1CZtWIWklu_XukDOZ9h6nW_ySLVT6rhDfo4EJjyInDbKHpqtnA48HAJrMVpM8r0c9ehvbzSQqK1_PXzCVag0kwuIdb3aDoNpFiHhYYtE14Cc-nNxJkazyxnoChfeby_F2aKWM6XMvRwzBhgh3IoYvNUcFAcGYaaSNlt-kEAxMezHePy0Y2rPw3z9xmGem2VX-6w5-ugZXZNEA8PUYD9TZT6dKNIuoCvE7KVANc-9HWpGrlx2XT_e3zGE2Dqb5Hzu73vRrxK5eMrdZkQepf13sOoBXjYlziID6QFnWnQypElheAWbKr0mcKZuzryKX7sJg3c1YYwTSz72i78dMtHkrfp1i41ZCqGgdInZ3Wj98XI5ZSubRuTFgv2waF5gRwFe7jO-WMydq0C3LanLoWc8OAbBYiRaAy-Eo2QxdbgltoIAgrb24o5VjOdT95Z9gpqaDuM5NwVNvnHgczn71PeEAg2fMochJ1sqcTSIEhXmqDSEMjJDg3hibuAfw5IvqRyhfEjajAYw7iWTivIYwSrUvFLKLS5EZiEfeYy6UVKmu65P6dZLhq5LlDaGP2axcZzvDQnIWbzS6HQXG6WXtOmPedgZ8gasXjlkGjk1YBhAsQQWr7ABvrCaozVlGwpDIW65YNkR9QVePANShtR0AcY6PKdAV7wjb9-uIX9BKKt69S7cvXisBfP9sbjeO0EojryVHHR9GybPGsM3fiOnX7o6kz-DlH93vRGhwHWVmuyzOW9qIYUgmDw1VtwtZYkPO3R2hylyLDPnZ1P_AXAg8hSV8ywDpEuXpAWhhbV4f39LyaMolZAT0gnrWBXC8rBJ0hVnINnE_wGWxGf4QnwNp5djy2ea1WkhMOfGx46OI8IolsoGfcCeIOJPdiDxMTM1g6lOL1LIsIL0H_w7uxGib0aA3WeW_vNnKltipgzd7o0K2xh8AOCojrafM2a-mSKdXf-SfY_TaXqN4BWKOo1oJxQyN2YtNe4itrYb2-JOl4yrH3nkatReulQWIw8Fx1kof5zAmbSxjp6LB8pMI9my17rr4fEQ-HMAxYLjIbshzDdrM_7yHjHnxKZ5uyHCwR0TWazfeKinfjK0vkLP6x737CLcKGRrRCu8Di4IlH5Sb0WyrSCPDGAxkYYkrsyudy-rE7tFWTTzYk44aB5KP55elVr6YAWqNHtuhfPSid5FYKkL1_9SHST4LnU5_qA1AGfg37TlNOniI2P33_c7iOQQ9LLS99vafXFV1h0wMd2k1MIu944Prj2kHQtL3T1p3BvdEy_UhVdRQD77ukVN2J6hvulVt5oMIZR6IZAigEOh9SZR5TV6QUId19Jno8Rf9y6oVrYM2wNuFQElaRPSl8njUuyCnOQkCaGR8Efj-8g_UFdKda0SJXyCSNeHcmLohED45gCjrJGVy6iBfF5Y9LSfPUDF2rT88MtfdpEbvcWcDiuLxC30aPG3jKQVuJ0W8aoLI97I0qnygvaWzGKUrgMaHePRwoV6OtdSqaXPoRSMz1krlALXZ_vWuP6NaTix31UPqh6O_4GPvR4Lm8-pErIHvIbmFhVZQBqbg4QnoPmwPRsyyNLCP6vBN-BIOFTxNCkJtYl6xEdjrjCzkHNNAbVXO9dtehWUucr830JLvg3XRP5hrk1JFIC4rtY6dl_F1d2tBYH9QQHFoAxm6oeHfHdtvs-IyUfN74KAcTx96d0z1H4NJicHV7LSRUH-SXWd06DtG3WDw1dAUHAH_rT5qfesmzMxy1xuv3WzwPPrYktWklbXj5BTs9TDI41w8R2A1Om-DPBZ6hHxzaiEE1jr3c2LUelFXxzA74UmcHOCQbLBDdpX1zEgz92Zmf_wXHcjDi1yIt9DEpR_NxRle9bbaNMZE2v7
+        id: rs_0e2568a351b28f51006ac76d8e6f7887d1acce00f32ffac206
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '**Three city-trip essentials:** comfortable walking shoes, a phone
+            with maps and a power bank, and a secure day bag for ID, payment cards,
+            and water.
+
+
+            **Paris demo weather:** requested, but the snapshot hasn’t arrived yet.'
+          type: output_text
+        id: msg_0e2568a351b28f51006ac76d93fb6887d19844b5d43703a7ae
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 130
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 283
+        output_tokens_details:
+          reasoning_tokens: 157
+        total_tokens: 413
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input:
+      - call_id: call_async_unknown_probe
+        output: '{"city":"Paris","temperature_c":22,"condition":"Clear","source":"demo
+          weather snapshot"}'
+        type: function_call_output
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      previous_response_id: resp_0e2568a351b28f51006ac76d895a6c87d1b57902d1a5e8e9ea
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: edge-cases/unknown-call-id/t2-output
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: No tool call found for function call output with call_id call_async_unknown_probe.
+        param: input
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t5
+  request:
+    body:
+      input:
+      - call_id: call_W3z58SLHNf65cXBU68QwTnsx
+        output: '{"city":"Paris","temperature_c":22,"condition":"Clear","source":"demo
+          weather snapshot"}'
+        type: function_call_output
+      - call_id: call_W3z58SLHNf65cXBU68QwTnsx
+        output: '{"city":"Paris","temperature_c":22,"condition":"Clear","source":"demo
+          weather snapshot"}'
+        type: function_call_output
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      previous_response_id: resp_0e2568a351b28f51006ac76d895a6c87d1b57902d1a5e8e9ea
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: edge-cases/duplicate-same-request/t2-output-twice
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1791454617
+      created_at: 1791454614
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0e2568a351b28f51006ac76d9683e087d1b6bdfbddc2bce503
+      incomplete_details: null
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: The **Paris demo weather snapshot** shows **22°C and clear skies**.
+          type: output_text
+        id: msg_0e2568a351b28f51006ac76d9891cc87d19b799107523d3bae
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_0e2568a351b28f51006ac76d895a6c87d1b57902d1a5e8e9ea
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 437
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 20
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 457
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      input:
+      - call_id: call_W3z58SLHNf65cXBU68QwTnsx
+        output: '{"city":"Paris","temperature_c":22,"condition":"Clear","source":"demo
+          weather snapshot"}'
+        type: function_call_output
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      previous_response_id: resp_0e2568a351b28f51006ac76d895a6c87d1b57902d1a5e8e9ea
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: edge-cases/duplicate-across-requests/t2-output
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1791454620
+      created_at: 1791454618
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0e2568a351b28f51006ac76d9a7dd887d19f1514d967a2968e
+      incomplete_details: null
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: The **Paris demo weather snapshot** shows **22°C and clear skies**.
+          type: output_text
+        id: msg_0e2568a351b28f51006ac76d9b700887d185f8da2e121604f3
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_0e2568a351b28f51006ac76d895a6c87d1b57902d1a5e8e9ea
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 408
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 20
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 428
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      input:
+      - call_id: call_W3z58SLHNf65cXBU68QwTnsx
+        output: '{"city":"Paris","temperature_c":22,"condition":"Clear","source":"demo
+          weather snapshot"}'
+        type: function_call_output
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      previous_response_id: resp_0e2568a351b28f51006ac76d9a7dd887d19f1514d967a2968e
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: edge-cases/duplicate-across-requests/t3-output-again
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1791454623
+      created_at: 1791454621
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0e2568a351b28f51006ac76d9d02e087d18b54b44c82d0df01
+      incomplete_details: null
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '**Paris demo weather:** 22°C and clear.
+
+
+            **Three city-trip essentials:**
+
+            1. Comfortable walking shoes.
+
+            2. A phone with maps and a power bank.
+
+            3. A secure day bag for ID, payment cards, and water.'
+          type: output_text
+        id: msg_0e2568a351b28f51006ac76d9eaad887d199b44afd6bb64748
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_0e2568a351b28f51006ac76d9a7dd887d19f1514d967a2968e
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 459
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 54
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 513
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      input:
+      - call_id: call_W3z58SLHNf65cXBU68QwTnsx
+        output: '{"city":"Paris","temperature_c":22,"condition":"Clear","source":"demo
+          weather snapshot"}'
+        type: function_call_output
+      - call_id: call_W3z58SLHNf65cXBU68QwTnsx
+        output: '{"city":"Paris","temperature_c":9,"condition":"Rain","source":"demo
+          weather snapshot"}'
+        type: function_call_output
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      previous_response_id: resp_0e2568a351b28f51006ac76d895a6c87d1b57902d1a5e8e9ea
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: edge-cases/conflicting-same-request/t2-two-different-outputs
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1791454627
+      created_at: 1791454624
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0e2568a351b28f51006ac76da0877c87d18a534f0e31d1ed62
+      incomplete_details: null
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: The latest **Paris demo weather snapshot** shows **9°C and rain**.
+            Pack a rain jacket or compact umbrella alongside your city-trip essentials.
+          type: output_text
+        id: msg_0e2568a351b28f51006ac76da2233c87d1aca7cd816a136a1e
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_0e2568a351b28f51006ac76d895a6c87d1b57902d1a5e8e9ea
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 437
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 33
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 470
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body:
+      input: Also, what is a good umbrella size for travel? Answer in one sentence.
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      previous_response_id: resp_0e2568a351b28f51006ac76d895a6c87d1b57902d1a5e8e9ea
+      store: true
+      stream: false
+      tools:
+      - description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: edge-cases/redeclared-without-async/t2-follow-up-without-output
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1791454630
+      created_at: 1791454628
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0e2568a351b28f51006ac76da3fe8087d18e69979082fd89f4
+      incomplete_details: null
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: A compact folding umbrella with a 36–42-inch (90–105 cm) canopy offers
+            a good balance of rain coverage and portability for travel.
+          type: output_text
+        id: msg_0e2568a351b28f51006ac76da562ac87d195f1bf6435015904
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_0e2568a351b28f51006ac76d895a6c87d1b57902d1a5e8e9ea
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - description: Read a demo weather snapshot for a city.
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 417
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 34
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 451
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body:
+      input: Check the demo weather snapshot for Paris. Meanwhile, list three essentials
+        for any city trip.
+      instructions: Start the weather lookup and answer the independent question without
+        waiting. Use the demo weather result when it arrives; never invent it.
+      max_output_tokens: 4096
+      model: gpt-5.5
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: edge-cases/unsupported-model/t1-start
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: unsupported_value
+        message: Async tools are not supported with gpt-5.5.
+        param: tools
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t11
+  request:
+    body:
+      input: Use web search to find the population of Lisbon. Answer in one sentence.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      store: true
+      stream: false
+      tools:
+      - async: true
+        type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: edge-cases/async-hosted-web-search/t1-start
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: unknown_parameter
+        message: 'Unknown parameter: ''tools[0].async''.'
+        param: tools[0].async
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400

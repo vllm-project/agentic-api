@@ -259,6 +259,100 @@ fn custom_input_over_limit_is_rejected() {
     assert!(error.to_string().contains("function-call SSE exceeded"));
 }
 
+fn function_call_events(output_index: u32, name: &str, arguments: &str) -> Vec<Value> {
+    let item_id = format!("fc_{output_index}");
+    let call_id = format!("call_{output_index}");
+    vec![
+        serde_json::json!({
+            "type": "response.output_item.added", "output_index": output_index,
+            "item": {"id": item_id, "type": "function_call", "status": "in_progress",
+                     "call_id": call_id, "name": name, "arguments": ""}
+        }),
+        serde_json::json!({
+            "type": "response.function_call_arguments.delta", "output_index": output_index,
+            "item_id": item_id, "call_id": call_id, "delta": arguments
+        }),
+        serde_json::json!({
+            "type": "response.function_call_arguments.done", "output_index": output_index,
+            "item_id": item_id, "call_id": call_id, "name": name, "arguments": arguments
+        }),
+        serde_json::json!({
+            "type": "response.output_item.done", "output_index": output_index,
+            "item": {"id": item_id, "type": "function_call", "status": "completed",
+                     "call_id": call_id, "name": name, "arguments": arguments}
+        }),
+    ]
+}
+
+/// Async client calls carry `async: true` on their public item lifecycle (stream) and on the
+/// round's final call items; other client calls are unchanged. Custom calls keep the marker in
+/// their restored public shape.
+#[test]
+fn async_tool_calls_are_marked_on_stream_items_and_final_output() {
+    let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
+    let context = test_context(HashMap::from([
+        ("get_weather".to_owned(), ToolType::Function),
+        ("get_time".to_owned(), ToolType::Function),
+        ("echo".to_owned(), ToolType::Custom),
+    ]))
+    .with_async_tool_names(HashSet::from(["get_weather".to_owned(), "echo".to_owned()]));
+    let mut translator = TranslationDispatcher::new(context);
+
+    let mut lifecycle = Vec::new();
+    for (index, name, arguments) in [
+        (0, "get_weather", r#"{"city":"Paris"}"#),
+        (1, "get_time", r#"{"city":"Tokyo"}"#),
+        (2, "echo", r#"{"input":"hi"}"#),
+    ] {
+        for event in function_call_events(index, name, arguments) {
+            for frame in translate(&mut accumulator, &mut translator, &event).frames {
+                if matches!(
+                    frame.event_type,
+                    SSEEventType::OutputItemAdded | SSEEventType::OutputItemDone
+                ) {
+                    lifecycle.push((index, frame.wire.rest["item"].clone()));
+                }
+            }
+        }
+    }
+    assert_eq!(lifecycle.len(), 6, "added and done for each call");
+    for (index, item) in &lifecycle {
+        let expected = *index != 1;
+        assert_eq!(
+            item.get("async") == Some(&Value::Bool(true)),
+            expected,
+            "{index}: {item}"
+        );
+    }
+    assert!(
+        lifecycle
+            .iter()
+            .any(|(index, item)| *index == 2 && item["type"] == "custom_tool_call"),
+        "custom calls are restored to their public shape"
+    );
+
+    let mut output: Vec<OutputItem> = ["get_weather", "get_time"]
+        .iter()
+        .map(|name| {
+            serde_json::from_value(serde_json::json!({
+                "type": "function_call", "id": format!("fc_{name}"), "call_id": format!("call_{name}"),
+                "name": name, "arguments": "{}", "status": "completed"
+            }))
+            .unwrap()
+        })
+        .collect();
+    translator
+        .finish()
+        .unwrap()
+        .normalize_response_output(&mut output, ResponseStatus::Completed)
+        .unwrap();
+    let marked: Vec<bool> = output
+        .iter()
+        .map(|item| matches!(item, OutputItem::FunctionCall(call) if call.async_execution))
+        .collect();
+    assert_eq!(marked, [true, false]);
+}
+
 #[test]
 fn ordinary_functions_pass_through_unchanged() {
     let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
@@ -558,6 +652,51 @@ fn gateway_owned_functions_are_suppressed_and_mark_the_defer_boundary() {
     assert_eq!(added.defer_from_output_index, Some(2));
     assert!(delta.frames.is_empty());
     assert_eq!(delta.defer_from_output_index, Some(2));
+}
+
+/// An async call that precedes the round's first gateway call streams at once, as in the recorded
+/// `OpenAI` web-search response. One that follows it keeps output-index order: it is released with
+/// the gateway call's lifecycle, after that tool completes.
+#[test]
+fn async_calls_keep_output_order_around_gateway_calls() {
+    let mut accumulator = ResponseAccumulator::new("resp_1".to_owned(), None);
+    let context = test_context(HashMap::from([
+        ("get_weather".to_owned(), ToolType::Function),
+        ("web_search".to_owned(), ToolType::WebSearch),
+    ]))
+    .with_gateway_owned_names(HashSet::from(["web_search".to_owned()]))
+    .with_async_tool_names(HashSet::from(["get_weather".to_owned()]));
+    let mut translator = TranslationDispatcher::new(context);
+
+    let mut async_frames = Vec::new();
+    for event in function_call_events(0, "get_weather", r#"{"city":"Paris"}"#) {
+        let translated = translate(&mut accumulator, &mut translator, &event);
+        assert_eq!(
+            translated.defer_from_output_index, None,
+            "nothing precedes the async call"
+        );
+        async_frames.extend(translated.frames);
+    }
+    assert!(!async_frames.is_empty(), "the async call streams immediately");
+    for event in function_call_events(1, "web_search", r#"{"query":"Lisbon"}"#) {
+        let translated = translate(&mut accumulator, &mut translator, &event);
+        assert!(
+            translated.frames.is_empty(),
+            "the gateway produces the search lifecycle"
+        );
+        assert_eq!(translated.defer_from_output_index, Some(1));
+    }
+    for event in function_call_events(2, "get_weather", r#"{"city":"Rome"}"#) {
+        let translated = translate(&mut accumulator, &mut translator, &event);
+        assert_eq!(
+            translated.defer_from_output_index,
+            Some(1),
+            "a later async call is held behind the gateway call"
+        );
+        for frame in translated.frames {
+            assert!(frame.wire.output_index.is_some_and(|index| index > 1));
+        }
+    }
 }
 
 #[test]

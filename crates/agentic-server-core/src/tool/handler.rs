@@ -89,6 +89,13 @@ pub enum ToolError {
     /// from the prior turn.
     #[error("No tool output found for function call {call_id}.")]
     MissingOutput { call_id: String },
+    /// A continuation request supplied an output for a call that does not exist in its history.
+    #[error("No tool call found for function call output with call_id {call_id}.")]
+    UnknownCallOutput { call_id: String },
+    /// A tool declaration carries a parameter its type does not accept, such as `async` on a
+    /// hosted tool. `param` is the request path, for example `tools[0].async`.
+    #[error("Unknown parameter: '{param}'.")]
+    UnknownParameter { param: String },
 }
 
 /// Trait implemented by every tool type — client-owned and gateway-owned alike.

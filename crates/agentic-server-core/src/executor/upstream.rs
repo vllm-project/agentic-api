@@ -9,7 +9,7 @@ use crate::executor::relay::StreamRelay;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::translate::TranslationContext;
-use crate::tool::{ToolRegistry, ToolSearchState};
+use crate::tool::{ToolRegistry, ToolSearchState, declares_async};
 use crate::types::io::{InputItem, InputMessage, MultiAgentAction};
 use crate::types::request_response::{ResponsePayload, UpstreamTool};
 use crate::types::tools::ResponsesTool;
@@ -44,6 +44,7 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
             .map(|(name, _)| name.to_owned())
             .collect(),
     )
+    .with_async_tool_names(registry.async_tool_names().map(str::to_owned).collect())
     .with_response_metadata(
         registry.namespace_map().cloned(),
         registry.custom_tool_map().cloned(),
@@ -51,12 +52,19 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
             .filter(|state| state.is_active())
             .map(ToolSearchState::public_response_tools)
             .or_else(|| {
+                // The model server echoes its own tool declarations; restore the public ones
+                // where they differ: shell, and async tools, whose model-visible description
+                // carries the background-execution hint and no `async` marker.
                 agent
                     .request
                     .enriched_request
                     .tools
                     .as_ref()
-                    .filter(|tools| tools.iter().any(|tool| matches!(tool, ResponsesTool::Shell(_))))
+                    .filter(|tools| {
+                        tools
+                            .iter()
+                            .any(|tool| matches!(tool, ResponsesTool::Shell(_)) || declares_async(tool))
+                    })
                     .cloned()
             }),
         agent.request.enriched_request.tool_choice.clone(),

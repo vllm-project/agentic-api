@@ -1,10 +1,14 @@
 //! Synthetic client discovery and custom-tool continuations; no recorded fixtures.
 use super::*;
+use crate::executor::ExecutorError;
+use crate::tool::ToolError;
 
 fn weather() -> Value {
     json!({"type":"function","name":"get_weather","defer_loading":true,
         "parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}})
 }
+
+const ASYNC_POLLING_PROMPT: &str = "keep polling async jobs";
 
 fn travel() -> Value {
     json!({"type":"namespace","name":"travel","tools":[{
@@ -15,6 +19,10 @@ fn travel() -> Value {
 
 pub(super) fn client_tools_output(request: &Value) -> Option<Vec<Value>> {
     let input = request["input"].as_array().unwrap();
+    // A model that never answers: every round starts another async job.
+    if input.iter().any(|item| item["content"] == ASYNC_POLLING_PROMPT) {
+        return Some(vec![function(&format!("poll_{}", input.len()), "poll_job", json!({}))]);
+    }
     let root_discovery = input
         .iter()
         .any(|item| item["content"] == "discover tools before delegation");
@@ -164,6 +172,88 @@ fn root_output(input: &[Value], names: &[&str], root_discovery: bool) -> Vec<Val
     }
 }
 
+async fn rejected_continuation(exec: &Arc<ExecutionContext>, previous: &str, input: Vec<Value>) -> ExecutorError {
+    match ExecuteRequest::new(continuation(previous, false, json!(input)), exec.clone())
+        .run()
+        .await
+    {
+        Err(error) => error,
+        Ok(_) => panic!("continuation should be rejected"),
+    }
+}
+
+/// Bad batches are rejected atomically, leaving the original stored response usable. Missing and
+/// unknown outputs use the single-agent continuation errors.
+async fn assert_invalid_batches_are_rejected(exec: &Arc<ExecutionContext>, previous: &str, outputs: &[Value]) {
+    let mut wrong_kind = outputs.to_vec();
+    let index = wrong_kind
+        .iter()
+        .position(|item| item["type"] == "custom_tool_call_output")
+        .unwrap();
+    wrong_kind[index]["type"] = json!("function_call_output");
+    let mut duplicate = outputs.to_vec();
+    duplicate.push(outputs[0].clone());
+    let mut incomplete_search = outputs.to_vec();
+    let index = incomplete_search
+        .iter()
+        .position(|item| item["type"] == "tool_search_output")
+        .unwrap();
+    incomplete_search[index]["status"] = json!("in_progress");
+    for invalid in [wrong_kind, duplicate, incomplete_search] {
+        rejected_continuation(exec, previous, invalid).await;
+    }
+    let mut unknown = outputs.to_vec();
+    unknown.push(json!({"type":"custom_tool_call_output","call_id":"unknown","output":"bad"}));
+    assert!(matches!(
+        rejected_continuation(exec, previous, unknown).await,
+        ExecutorError::Tool(ToolError::UnknownCallOutput { call_id }) if call_id == "unknown"
+    ));
+    assert!(matches!(
+        rejected_continuation(exec, previous, outputs[..3].to_vec()).await,
+        ExecutorError::Tool(ToolError::MissingOutput { .. })
+    ));
+}
+
+/// The async continuation cap ends a multi-agent turn as it ends a single-agent response: a model
+/// that only starts async jobs stops after two continuations instead of exhausting the round limit.
+#[tokio::test]
+async fn async_continuation_cap_finishes_the_multi_agent_turn() {
+    for stream in [false, true] {
+        let (exec, server) = setup().await;
+        let request = RequestPayload {
+            model: "test".into(),
+            store: true,
+            stream,
+            input: ResponsesInput::Text(ASYNC_POLLING_PROMPT.into()),
+            tools: Some(
+                serde_json::from_value(json!([
+                    {"type":"function","name":"poll_job","async":true,"parameters":{"type":"object"}}
+                ]))
+                .unwrap(),
+            ),
+            multi_agent: Some(MultiAgentConfig {
+                enabled: true,
+                max_concurrent_subagents: Some(1),
+            }),
+            ..Default::default()
+        };
+        let result = tokio::time::timeout(Duration::from_secs(10), response(request, exec)).await;
+        server.abort();
+        let payload = result.unwrap();
+        assert_eq!(payload.status, "completed", "stream={stream}");
+        let calls: Vec<_> = payload
+            .output
+            .iter()
+            .filter_map(|item| match item {
+                OutputItem::FunctionCall(call) => Some(call),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(calls.len(), 3, "one round plus two continuations; stream={stream}");
+        assert!(calls.iter().all(|call| call.async_execution));
+    }
+}
+
 fn continuation(previous: &str, stream: bool, input: Value) -> RequestPayload {
     RequestPayload {
         model: "test".into(),
@@ -205,31 +295,7 @@ async fn client_tools_preserve_ownership_discovery_and_namespace_across_continua
                 _ => None,
             }).collect();
             assert_eq!(outputs.len(), 4, "{:#?}", first.output);
-            // Reject bad batches atomically, leaving the original stored response usable.
-            let mut wrong_kind = outputs.clone();
-            let index = wrong_kind
-                .iter()
-                .position(|item| item["type"] == "custom_tool_call_output")
-                .unwrap();
-            wrong_kind[index]["type"] = json!("function_call_output");
-            let mut duplicate = outputs.clone();
-            duplicate.push(outputs[0].clone());
-            let mut unknown = outputs.clone();
-            unknown.push(json!({"type":"custom_tool_call_output","call_id":"unknown","output":"bad"}));
-            let mut incomplete_search = outputs.clone();
-            let index = incomplete_search
-                .iter()
-                .position(|item| item["type"] == "tool_search_output")
-                .unwrap();
-            incomplete_search[index]["status"] = json!("in_progress");
-            for invalid in [wrong_kind, duplicate, unknown, outputs[..3].to_vec(), incomplete_search] {
-                assert!(
-                    ExecuteRequest::new(continuation(&first.id, false, json!(invalid)), exec.clone())
-                        .run()
-                        .await
-                        .is_err()
-                );
-            }
+            assert_invalid_batches_are_rejected(&exec, &first.id, &outputs).await;
             // Resolve outputs in a different order from the agents' calls.
             let second = response(
                 continuation(&first.id, stream, json!(outputs.into_iter().rev().collect::<Vec<_>>())),

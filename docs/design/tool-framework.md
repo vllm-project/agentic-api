@@ -235,12 +235,17 @@ pub enum LoopDecision {
 }
 
 fn classify_round(
-    has_client_owned_calls: bool,
+    client_calls: ClientCalls,
     gateway_results: &[GatewayCallResult],
     round: usize,
     max_rounds: usize,
+    continuations: &mut AsyncContinuations,
 ) -> LoopDecision;
 ```
+
+`ClientCalls` separates synchronous from async client calls: a synchronous call
+hands the turn back, while async-only calls continue the loop with the calls
+pending, up to two consecutive continuations.
 
 > **Drift from proposal:** the shipped enum has **four** variants, not five.
 > `ContinuePartial` and a payload-carrying `RequiresAction(Vec<..>)` were

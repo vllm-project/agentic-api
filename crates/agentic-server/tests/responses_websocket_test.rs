@@ -5309,3 +5309,66 @@ async fn cache_usage_survives_websocket_storage_without_carrying_into_next_turn(
         assert_eq!(mock.request_bodies().await.len(), 2);
     }
 }
+
+/// Async client tools behave over WebSocket as over HTTP: the gateway continues the response
+/// after the async call, and a follow-up on the same socket may omit the pending output.
+#[tokio::test]
+async fn websocket_async_tool_call_continues_and_accepts_follow_ups_without_output() {
+    let mock = MockResponsesServer::start(vec![
+        sse_function_call_response("resp_upstream_1", "get_weather"),
+        sse_response("resp_upstream_2", "msg_upstream_2", "Essentials: shoes."),
+        sse_response("resp_upstream_3", "msg_upstream_3", "A compact umbrella."),
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    let tools = json!([{"type": "function", "name": "get_weather", "async": true,
+        "parameters": {"type": "object", "properties": {"numbers": {"type": "array"}}}}]);
+
+    send_json(
+        &mut ws,
+        json!({"type": "response.create", "model": "test-model", "input": "Check the weather; list essentials.",
+            "tools": tools, "store": false, "stream": true}),
+    )
+    .await;
+    let first = recv_until_completed(&mut ws).await;
+    let lifecycle: Vec<&Value> = first
+        .iter()
+        .filter(|event| {
+            matches!(
+                event["type"].as_str(),
+                Some("response.output_item.added" | "response.output_item.done")
+            ) && event["item"]["type"] == "function_call"
+        })
+        .collect();
+    assert_eq!(lifecycle.len(), 2, "the call's added and done events");
+    assert!(lifecycle.iter().all(|event| event["item"]["async"] == true));
+    let response = &first.last().expect("terminal event")["response"];
+    let output = response["output"].as_array().expect("output");
+    assert_eq!(output[0]["type"], "function_call");
+    assert_eq!(output[0]["async"], true);
+    assert_eq!(output[1]["type"], "message", "the answer follows in the same response");
+    let response_id = response["id"].as_str().expect("response id");
+
+    send_json(
+        &mut ws,
+        json!({"type": "response.create", "model": "test-model", "input": "Which umbrella?",
+            "tools": tools, "previous_response_id": response_id, "store": false, "stream": true}),
+    )
+    .await;
+    let second = recv_until_completed(&mut ws).await;
+    assert_eq!(second.last().expect("terminal event")["type"], "response.completed");
+
+    let requests = mock.request_bodies().await;
+    assert_eq!(requests.len(), 3);
+    for request in &requests[1..] {
+        let notes = request["input"]
+            .as_array()
+            .expect("input items")
+            .iter()
+            .filter(|item| item["role"] == "developer")
+            .count();
+        assert_eq!(notes, 1, "the pending call carries its note upstream");
+    }
+}

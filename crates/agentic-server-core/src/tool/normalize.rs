@@ -53,6 +53,45 @@ impl ToolDeclaration {
         }
     }
 
+    /// Whether this declaration makes any model-visible tool async: an async function or custom
+    /// tool, or a namespace with an async member function.
+    #[must_use]
+    pub fn declares_async(&self) -> bool {
+        match self {
+            Self::Function(param) => param.is_async(),
+            Self::Custom(param) => param.is_async(),
+            Self::Namespace(param) => super::declaration::namespace_declares_async(param),
+            Self::ToolSearch(_)
+            | Self::Mcp(_)
+            | Self::WebSearch(_)
+            | Self::WebFetch(_)
+            | Self::FileSearch(_)
+            | Self::CodeInterpreter(_)
+            | Self::Shell(_)
+            | Self::Unsupported => false,
+        }
+    }
+
+    /// Whether this declaration carries `async` where it is not accepted.
+    ///
+    /// Async execution applies to function and custom tools that the client runs, including
+    /// function members of a namespace. Like `OpenAI`, the gateway rejects `async` on a namespace
+    /// itself, on client shell and tool search, and on every gateway-executed tool. `web_fetch` is
+    /// declared only through the Messages API, which has no `async` parameter.
+    #[must_use]
+    pub fn declares_unsupported_async(&self) -> bool {
+        match self {
+            Self::Function(_) | Self::Custom(_) | Self::WebFetch(_) | Self::Unsupported => false,
+            Self::ToolSearch(param) => param.unsupported_async.is_some(),
+            Self::Mcp(param) => param.unsupported_async.is_some(),
+            Self::WebSearch(param) => param.unsupported_async.is_some(),
+            Self::FileSearch(param) => param.unsupported_async.is_some(),
+            Self::CodeInterpreter(param) => param.unsupported_async.is_some(),
+            Self::Shell(param) => param.unsupported_async.is_some(),
+            Self::Namespace(param) => param.unsupported_async.is_some(),
+        }
+    }
+
     /// Return the gateway routing type this declaration would register as.
     #[must_use]
     pub fn tool_type(&self) -> Option<ToolType> {

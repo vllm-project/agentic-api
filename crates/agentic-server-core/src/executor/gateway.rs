@@ -372,6 +372,8 @@ impl GatewayScheduler {
             }
             Err(
                 error @ (ToolError::MissingOutput { .. }
+                | ToolError::UnknownCallOutput { .. }
+                | ToolError::UnknownParameter { .. }
                 | ToolError::InvalidUpstreamToolSearch
                 | ToolError::UpstreamWithheldFunctionCall),
             ) => return Err(ExecutorError::from(error)),
@@ -395,10 +397,6 @@ fn enforce_gateway_tool_output_size(bytes: usize) -> ExecutorResult<()> {
         )));
     }
     Ok(())
-}
-
-pub(super) fn has_client_owned_calls(output_items: &[OutputItem], registry: &ToolRegistry) -> bool {
-    output_items.iter().any(|item| item.requires_client_action(registry))
 }
 
 /// Result for a call that is not executed; the model sees `message` as its tool call output.
@@ -821,6 +819,7 @@ mod tests {
 
     fn web_search_call(call_id: &str) -> FunctionToolCall {
         FunctionToolCall {
+            async_execution: false,
             agent: None,
             id: format!("fc_{call_id}"),
             call_id: call_id.to_owned(),
@@ -1617,6 +1616,7 @@ mod tests {
     #[tokio::test]
     async fn mcp_gateway_events_follow_openai_lifecycle() {
         let call = FunctionToolCall {
+            async_execution: false,
             agent: None,
             id: "fc_1".to_owned(),
             call_id: "call_1".to_owned(),
@@ -1714,6 +1714,7 @@ mod tests {
     #[tokio::test]
     async fn failed_mcp_gateway_events_keep_contiguous_sequence_numbers() {
         let call = FunctionToolCall {
+            async_execution: false,
             agent: None,
             id: "fc_1".to_owned(),
             call_id: "call_1".to_owned(),
