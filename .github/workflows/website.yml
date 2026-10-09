@@ -84,6 +84,9 @@ jobs:
         with:
           toolchain: 1.98.0
       - name: Test Rust CLI documentation generation
+        # Normal PR and main runs are covered by the Rust workspace tests.
+        # Keep this check for manual builds and reusable release calls.
+        if: github.event_name != 'pull_request' && github.event_name != 'push'
         working-directory: .
         run: cargo test --locked -p agentic-cli-docs
       - name: Test Python CLI documentation generation
