@@ -4,23 +4,25 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use agentic_core::executor::telemetry::{Api, ExecutionSpan, FailureCategory, Route};
-use agentic_core::proxy::{ProxyAuth, ProxyBody, ProxyRequest, ProxyResponse, ProxyState, proxy_request_with_path};
+use agentic_core::proxy::{ProxyAuth, ProxyBody, ProxyRequest, ProxyResponse, proxy_request_with_path};
 use bytes::Bytes;
 use futures::Stream;
 use tracing::Instrument as _;
+
+use crate::app::AppState;
 
 pub(crate) async fn trace_proxy_request(
     api: Api,
     request: ProxyRequest,
     path: &str,
-    state: &ProxyState,
+    state: &AppState,
 ) -> ProxyResponse {
-    let mut execution = ExecutionSpan::start(api, Route::Proxy, request.is_streaming());
+    let mut execution = ExecutionSpan::start(api, Route::Proxy, request.is_streaming(), &state.exec_ctx.metrics);
     let auth = match api {
         Api::Responses => ProxyAuth::OpenAiBearer,
         Api::Messages => ProxyAuth::Anthropic,
     };
-    let response = proxy_request_with_path(request, path, auth, state)
+    let response = proxy_request_with_path(request, path, auth, &state.proxy_state)
         .instrument(execution.span().clone())
         .await;
     if !response.status.is_success() {

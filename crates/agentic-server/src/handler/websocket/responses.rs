@@ -232,7 +232,7 @@ async fn handle_ws_request(request: WsRequest, context: RequestExecution<'_>) ->
         generate,
         execution,
     } = request;
-    let mut execution = execution.unwrap_or_else(telemetry::QueuedExecution::new).dispatch();
+    let mut execution = telemetry::dispatch(execution, state);
 
     if generate == Some(false) {
         debug!("handling non-generating websocket request locally");

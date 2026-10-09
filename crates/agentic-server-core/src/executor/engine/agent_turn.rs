@@ -23,6 +23,7 @@ use crate::executor::rehydrate::prepare_reasoning_for_vllm;
 use crate::executor::relay::Release;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::response_budget::ExecutorResponseBudget;
+use crate::executor::telemetry::metrics::Stage;
 use crate::executor::upstream::{fetch_blocking_payload, fetch_stream_payload};
 use crate::tool::{ToolRegistry, mcp, record_discovered_mcp_tools, responses_declarations};
 use crate::types::io::{InputItem, OutputItem, ResponsesInput, ToolChoice};
@@ -287,8 +288,9 @@ impl<'a> AgentTurn<'a> {
             compaction_usage.is_some(),
         )?;
         let round_span = crate::executor::telemetry::stages::inference_round(round);
-        let mut payload = if stream_upstream {
-            let payload = fetch_stream_payload(
+        let timer = self.exec_ctx.metrics.stage(Stage::Inference);
+        let fetched = if stream_upstream {
+            fetch_stream_payload(
                 self.pipeline,
                 self.exec_ctx,
                 auth,
@@ -297,11 +299,7 @@ impl<'a> AgentTurn<'a> {
                 response_budget,
             )
             .instrument(round_span)
-            .await?;
-            if round == 0 {
-                self.registry.clear_mcp_list_tool_items();
-            }
-            payload
+            .await
         } else {
             fetch_blocking_payload(
                 self.pipeline,
@@ -311,8 +309,16 @@ impl<'a> AgentTurn<'a> {
                 Some(response_budget),
             )
             .instrument(round_span)
-            .await?
+            .await
         };
+        timer.finish_result(&fetched);
+        let mut payload = fetched?;
+        if stream_upstream && round == 0 {
+            self.registry.clear_mcp_list_tool_items();
+        }
+        // Only what this round's upstream response reported; an absent
+        // `usage` records nothing.
+        self.exec_ctx.metrics.record_response_usage(payload.usage.as_ref());
         let mut round_usage = compaction_usage;
         accumulate_usage(&mut round_usage, payload.usage.take());
         payload.usage = round_usage;
@@ -404,14 +410,13 @@ impl<'a> AgentTurn<'a> {
         output_offset: usize,
         response_budget: &ExecutorResponseBudget,
     ) -> ExecutorResult<Vec<GatewayCallResult>> {
-        let policy = self.exec_ctx.gateway_scheduler_policy.clone();
         let (ctx, relay) = self.pipeline.parts_mut();
         if !relay.has_deferred() {
             return execute_and_emit_output_calls(
                 output_items,
                 &self.registry,
                 output_offset,
-                policy,
+                self.exec_ctx,
                 response_budget,
                 &mut self.tool_call_budget,
                 relay,
@@ -423,9 +428,10 @@ impl<'a> AgentTurn<'a> {
             output_items,
             &self.registry,
             output_offset,
-            policy,
+            self.exec_ctx.gateway_scheduler_policy.clone(),
             &mut self.tool_call_budget,
-        );
+        )
+        .with_metrics(&self.exec_ctx.metrics);
         let initial_event_run_len = scheduler.initial_event_run_len(output_items, &self.registry);
         emit_gateway_start_events(scheduler.event_plans().take(initial_event_run_len), relay).await?;
 

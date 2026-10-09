@@ -23,6 +23,7 @@ use crate::executor::messages_context::MessagesRequestContext;
 use crate::executor::messages_tools::{GatewayToolUse, execute_gateway_calls, request_gateway_map};
 use crate::executor::messages_usage::MessagesUsageTotals;
 use crate::executor::request::ExecutionContext;
+use crate::executor::telemetry::metrics::{ExecutorMetrics, Stage};
 use crate::executor::telemetry::{Api, ExecutionSpan, FailureCategory, Route};
 use crate::tool::ToolRegistry;
 use crate::types::messages::tool_seam;
@@ -85,7 +86,7 @@ pub async fn run_messages_loop(
     exec_ctx: &ExecutionContext,
     upstream: &MessagesUpstream,
 ) -> ExecutorResult<MessagesResponse<Value>> {
-    let mut execution = ExecutionSpan::start(Api::Messages, Route::Executor, false);
+    let mut execution = ExecutionSpan::start(Api::Messages, Route::Executor, false, &exec_ctx.metrics);
     let span = execution.span().clone();
     let result = run_messages_loop_traced(ctx, registry, exec_ctx, upstream, &mut execution)
         .instrument(span)
@@ -117,10 +118,13 @@ async fn run_messages_loop_traced(
     // Gateway ownership is request-scoped: the operator aliases plus the
     // gateway tools this request's registry resolved.
     let gateway_map = request_gateway_map(&exec_ctx.messages_gateway_tools, registry);
+    let mut rounds = exec_ctx.metrics.rounds(Api::Messages);
 
     for round in 0..MAX_GATEWAY_TOOL_ROUNDS {
         let body = ctx.upstream_body()?;
-        let (resp_text, response_headers) = fetch_response_json_with_headers(
+        rounds.begin_round();
+        let timer = exec_ctx.metrics.stage(Stage::Inference);
+        let fetched = fetch_response_json_with_headers(
             body,
             &upstream.url,
             &exec_ctx.client,
@@ -128,8 +132,11 @@ async fn run_messages_loop_traced(
             exec_ctx.responses_config.max_upstream_json_bytes,
         )
         .instrument(super::telemetry::stages::inference_round(round))
-        .await?;
+        .await;
+        timer.finish_result(&fetched);
+        let (resp_text, response_headers) = fetched?;
         let message: Value = deserialize_from_str(&resp_text).map_err(ExecutorError::JsonError)?;
+        record_message_usage(&exec_ctx.metrics, message.get("usage"));
 
         // Any error body from upstream is surfaced verbatim (handler maps it to
         // the Anthropic error envelope).
@@ -209,6 +216,15 @@ async fn run_messages_loop_traced(
         }),
         headers: http::HeaderMap::new(),
     })
+}
+
+/// Record one upstream response's own `usage`, before any turn totals are
+/// folded into it.
+fn record_message_usage(metrics: &ExecutorMetrics, usage: Option<&Value>) {
+    let mut round = MessagesUsageTotals::default();
+    round.observe(usage);
+    let (input, output) = round.round_tokens();
+    metrics.record_token_usage(Api::Messages, input, output);
 }
 
 /// Return the terminal assistant message with the turn's complete `usage` and
