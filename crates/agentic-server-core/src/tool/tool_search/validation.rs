@@ -1,5 +1,6 @@
 use super::{TOOL_SEARCH_NAME, ToolSearchHandler};
 use crate::tool::ToolError;
+use crate::tool::declaration::responses_declarations;
 use crate::types::io::{InputItem, ResponsesInput};
 use crate::types::request_response::RequestPayload;
 use crate::types::tools::{CodexNamespaceMember, ResponsesTool};
@@ -29,8 +30,10 @@ pub(super) fn validate_tool_search_request(
         ));
     }
 
+    for declaration in responses_declarations(tools) {
+        declaration.validate()?;
+    }
     for tool in tools {
-        tool.validate()?;
         if has_reserved_tool_search_name(tool) {
             return Err(ToolError::Config(
                 "model-visible tool name 'tool_search' is reserved while tool search is active".to_owned(),
@@ -76,7 +79,6 @@ pub(super) fn tool_has_deferred_definition(tool: &ResponsesTool) -> bool {
         ResponsesTool::Custom(custom) => custom.defer_loading == Some(true),
         ResponsesTool::ToolSearch(_)
         | ResponsesTool::WebSearch(_)
-        | ResponsesTool::WebFetch(_)
         | ResponsesTool::FileSearch(_)
         | ResponsesTool::CodeInterpreter(_)
         | ResponsesTool::Shell(_)
@@ -101,7 +103,6 @@ pub(super) fn has_reserved_tool_search_name(tool: &ResponsesTool) -> bool {
         ResponsesTool::ToolSearch(_)
         | ResponsesTool::Mcp(_)
         | ResponsesTool::WebSearch(_)
-        | ResponsesTool::WebFetch(_)
         | ResponsesTool::FileSearch(_)
         | ResponsesTool::CodeInterpreter(_)
         | ResponsesTool::Shell(_)

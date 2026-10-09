@@ -267,7 +267,7 @@ impl YouSearchResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::tools::{WebSearchFilters, WebSearchUserLocation};
+    use crate::types::tools::{DomainFilters, WebSearchUserLocation};
 
     fn args(json: &str) -> WebSearchArguments {
         WebSearchArguments::from_json(json).unwrap()
@@ -332,7 +332,7 @@ mod tests {
     fn request_applies_context_size_default_and_tool_config_overrides() {
         let config = WebSearchToolParam {
             search_context_size: Some(WebSearchContextSize::Low),
-            filters: Some(WebSearchFilters {
+            filters: Some(DomainFilters {
                 allowed_domains: Some(vec![" docs.example ".to_owned()]),
                 blocked_domains: None,
             }),

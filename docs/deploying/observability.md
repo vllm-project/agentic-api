@@ -146,8 +146,8 @@ argument, or error message appears on the span.
 
 #### Execution stages and upstream propagation
 
-Stages are children of `agentic.execute`, including work resumed from a
-stream or spawned executor task. A typical Responses tool loop has two
+Stages are children of `agentic.execute`, including work the response stream
+polls after the handler returns. A typical Responses tool loop has two
 `agentic.inference_round` children with `agentic.tool.execute` between them;
 each round contains its upstream `http.client.request`.
 

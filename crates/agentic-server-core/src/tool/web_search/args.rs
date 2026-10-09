@@ -1,9 +1,9 @@
 //! Model-facing `web_search` arguments and provider-neutral argument helpers.
 //!
 //! Everything here is independent of a concrete search backend: parsing and
-//! validating what the model sent, the typed [`Freshness`] filter, and the
-//! [`DomainFilter`] post-filter for providers without server-side domain
-//! filtering.
+//! validating what the model sent, the typed [`Freshness`] filter, and result
+//! retention under the shared [`DomainFilter`] for providers without
+//! server-side domain filtering.
 
 use std::fmt;
 use std::str::FromStr;
@@ -12,6 +12,7 @@ use chrono::NaiveDate;
 use serde::Deserialize;
 
 use super::WebSearchResult;
+use crate::tool::domain_policy::DomainFilter;
 use crate::tool::handler::ToolError;
 
 pub(crate) const MAX_WEB_SEARCH_QUERIES: usize = 5;
@@ -211,86 +212,13 @@ pub(crate) fn clean_vec(values: Option<&[String]>) -> Option<Vec<String>> {
     (!cleaned.is_empty()).then_some(cleaned)
 }
 
-/// Provider-neutral domain post-filter for providers without server-side
-/// `include_domains` / `exclude_domains` support.
-///
-/// A host matches a domain when it equals the domain or ends with `.{domain}`
-/// (label boundary), compared case-insensitively after IDNA normalization. A
-/// URL without a parseable host cannot be checked, so it is rejected whenever
-/// any allowlist or blocklist is active (fail closed). You.com filters
-/// server-side, so this is not applied on that path; Brave Search applies it
-/// to every result section.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct DomainFilter {
-    include: Vec<String>,
-    exclude: Vec<String>,
-    /// An allowlist was declared but none of its entries normalizes to a
-    /// domain, so nothing can match it: the filter fails closed instead of
-    /// widening to every host.
-    deny_all: bool,
-}
-
-impl DomainFilter {
-    pub(crate) fn new(include: Option<&[String]>, exclude: Option<&[String]>) -> Self {
-        let include_declared = include.is_some_and(|domains| !domains.is_empty());
-        let include = normalize_domains(include);
-        Self {
-            deny_all: include_declared && include.is_empty(),
-            include,
-            exclude: normalize_domains(exclude),
-        }
+/// Drops the results a declaration's domain filter refuses. A result without a
+/// parseable URL is dropped whenever a filter is active (fail closed); with no
+/// filter the results are untouched.
+pub(crate) fn retain_allowed_results(filter: &DomainFilter, results: &mut Vec<WebSearchResult>) {
+    if !filter.is_empty() {
+        results.retain(|result| filter.allows(&result.url));
     }
-
-    pub(crate) fn is_empty(&self) -> bool {
-        !self.deny_all && self.include.is_empty() && self.exclude.is_empty()
-    }
-
-    pub(crate) fn allows(&self, url: &str) -> bool {
-        if self.deny_all {
-            return false;
-        }
-        let Some(host) = url_host(url) else {
-            return self.is_empty();
-        };
-        let matches = |domain: &String| host_matches_domain(&host, domain);
-        (self.include.is_empty() || self.include.iter().any(matches)) && !self.exclude.iter().any(matches)
-    }
-
-    pub(crate) fn retain(&self, results: &mut Vec<WebSearchResult>) {
-        if !self.is_empty() {
-            results.retain(|result| self.allows(&result.url));
-        }
-    }
-}
-
-fn normalize_domains(domains: Option<&[String]>) -> Vec<String> {
-    domains
-        .unwrap_or_default()
-        .iter()
-        .filter_map(|domain| normalize_domain(domain))
-        .collect()
-}
-
-/// Lowercases and IDNA-normalizes a configured domain. Entries that are not a
-/// valid host are kept verbatim (lowercased) so a typo fails closed instead of
-/// silently widening an allowlist.
-fn normalize_domain(domain: &str) -> Option<String> {
-    let trimmed = domain.trim().trim_end_matches('.');
-    if trimmed.is_empty() {
-        return None;
-    }
-    Some(url::Host::parse(trimmed).map_or_else(|_| trimmed.to_ascii_lowercase(), |host| host.to_string()))
-}
-
-fn url_host(url: &str) -> Option<String> {
-    url::Url::parse(url)
-        .ok()?
-        .host()
-        .map(|host| host.to_string().trim_end_matches('.').to_owned())
-}
-
-fn host_matches_domain(host: &str, domain: &str) -> bool {
-    host == domain || host.strip_suffix(domain).is_some_and(|prefix| prefix.ends_with('.'))
 }
 
 #[cfg(test)]
@@ -426,88 +354,16 @@ mod tests {
     }
 
     #[test]
-    fn domain_filter_matches_on_label_boundary_case_insensitively() {
-        let filter = DomainFilter::new(Some(&["Example.COM.".to_owned()]), None);
-        assert!(filter.allows("https://example.com/a"));
-        assert!(filter.allows("https://EXAMPLE.com/a"));
-        assert!(filter.allows("https://docs.example.com./a"));
-        assert!(!filter.allows("https://notexample.com/a"));
-        assert!(!filter.allows("https://example.com.evil.net/a"));
-        assert!(!filter.allows("https://example.org/a"));
-    }
-
-    #[test]
-    fn domain_filter_excludes_after_including() {
-        let filter = DomainFilter::new(
-            Some(&["example.com".to_owned()]),
-            Some(&["internal.example.com".to_owned()]),
-        );
-        assert!(filter.allows("https://www.example.com/"));
-        assert!(!filter.allows("https://internal.example.com/"));
-        assert!(!filter.allows("https://a.internal.example.com/"));
-
-        let blocklist_only = DomainFilter::new(None, Some(&["example.com".to_owned()]));
-        assert!(blocklist_only.allows("https://example.org/"));
-        assert!(!blocklist_only.allows("https://sub.example.com/"));
-    }
-
-    #[test]
-    fn domain_filter_fails_closed_on_unparsable_urls() {
-        let unparsable = [
-            "not_a_valid_url",
-            "not a url",
-            "example.com/path",
-            "mailto:someone@example.com",
-        ];
-
-        let allowlist = DomainFilter::new(Some(&["example.com".to_owned()]), None);
-        let blocklist = DomainFilter::new(None, Some(&["example.com".to_owned()]));
-        for url in unparsable {
-            assert!(!allowlist.allows(url), "allowlist must reject {url:?}");
-            assert!(!blocklist.allows(url), "blocklist must reject {url:?}");
-        }
-
-        let unfiltered = DomainFilter::default();
-        for url in unparsable {
-            assert!(unfiltered.allows(url), "no active filter must pass {url:?}");
-        }
-    }
-
-    #[test]
-    fn domain_filter_normalizes_idna_and_fails_closed_on_invalid_entries() {
-        let idna = DomainFilter::new(Some(&["Bücher.example".to_owned()]), None);
-        assert!(idna.allows("https://shop.bücher.example/"));
-        assert!(idna.allows("https://xn--bcher-kva.example/"));
-
-        let invalid = DomainFilter::new(Some(&["https://example.com/path".to_owned()]), None);
-        assert!(!invalid.is_empty());
-        assert!(!invalid.allows("https://example.com/"));
-    }
-
-    #[test]
-    fn domain_filter_fails_closed_when_an_allowlist_names_no_domain() {
-        // "." normalizes to nothing; a declared allowlist must then admit
-        // nothing rather than every host.
-        let dots = DomainFilter::new(Some(&[".".to_owned(), "...".to_owned()]), None);
-        assert!(!dots.is_empty());
-        assert!(!dots.allows("https://example.com/"));
-        assert!(!dots.allows("not a url"));
-        // An absent or explicitly empty allowlist is still no filter.
-        assert!(DomainFilter::new(Some(&[]), None).allows("https://example.com/"));
-        assert!(DomainFilter::new(None, Some(&[".".to_owned()])).allows("https://example.com/"));
-    }
-
-    #[test]
-    fn domain_filter_retain_is_a_no_op_when_empty() {
+    fn retaining_results_is_a_no_op_without_a_filter_and_fails_closed_with_one() {
         let mut results = vec![result("https://a.example/"), result("not a url")];
-        DomainFilter::default().retain(&mut results);
+        retain_allowed_results(&DomainFilter::default(), &mut results);
         assert_eq!(results.len(), 2);
 
-        DomainFilter::new(None, Some(&["b.example".to_owned()])).retain(&mut results);
+        retain_allowed_results(&DomainFilter::new(None, Some(&["b.example".to_owned()])), &mut results);
         assert_eq!(results.len(), 1, "blocklist drops the uncheckable result");
         assert_eq!(results[0].url, "https://a.example/");
 
-        DomainFilter::new(Some(&["a.example".to_owned()]), None).retain(&mut results);
+        retain_allowed_results(&DomainFilter::new(Some(&["a.example".to_owned()]), None), &mut results);
         assert_eq!(results.len(), 1);
     }
 }

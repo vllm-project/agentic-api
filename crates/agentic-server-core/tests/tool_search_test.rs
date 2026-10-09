@@ -60,10 +60,7 @@ impl GatewayExecutor for CountingWebSearch {
         _config: &WebSearchToolParam,
     ) -> Pin<Box<dyn Future<Output = Result<ToolOutput, ToolError>> + Send + '_>> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        Box::pin(std::future::ready(Ok(ToolOutput {
-            call_id: call_id.to_owned(),
-            output: "must not execute".to_owned(),
-        })))
+        Box::pin(std::future::ready(Ok(ToolOutput::success(call_id, "must not execute"))))
     }
 }
 

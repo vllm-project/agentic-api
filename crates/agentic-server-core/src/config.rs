@@ -388,11 +388,12 @@ pub enum WebSearchProviderKind {
     You,
     Brave,
     Tavily,
+    Searxng,
 }
 
 impl WebSearchProviderKind {
     /// Every selectable provider, in the order operator-facing messages list them.
-    pub const ALL: &'static [Self] = &[Self::You, Self::Brave, Self::Tavily];
+    pub const ALL: &'static [Self] = &[Self::You, Self::Brave, Self::Tavily, Self::Searxng];
 
     /// Environment variable that conventionally carries this provider's API key.
     #[must_use]
@@ -401,16 +402,18 @@ impl WebSearchProviderKind {
             Self::You => "YOU_API_KEY",
             Self::Brave => "BRAVE_API_KEY",
             Self::Tavily => "TAVILY_API_KEY",
+            Self::Searxng => "SEARXNG_API_KEY",
         }
     }
 
     /// Endpoint used when neither the environment nor the configuration file
     /// sets one. You.com has no default so a deployment that fails today keeps
-    /// failing the same way (#291 Q2).
+    /// failing the same way (#291 Q2); SearXNG is operator-hosted, so its
+    /// endpoint is mandatory and never defaulted.
     #[must_use]
     pub const fn default_base_url(self) -> Option<&'static str> {
         match self {
-            Self::You => None,
+            Self::You | Self::Searxng => None,
             Self::Brave => Some("https://api.search.brave.com"),
             Self::Tavily => Some("https://api.tavily.com"),
         }
@@ -419,11 +422,12 @@ impl WebSearchProviderKind {
     /// Provider-imposed default ceiling on concurrent search requests. `None`
     /// inherits the gateway-wide limit. Brave's free plan allows roughly one
     /// request per second, so it defaults to serial queries; Tavily's plans
-    /// are metered per minute, so it inherits the gateway limit.
+    /// are metered per minute and SearXNG is operator-hosted, so both inherit
+    /// the gateway limit.
     #[must_use]
     pub const fn default_max_concurrent_queries(self) -> Option<NonZeroUsize> {
         match self {
-            Self::You | Self::Tavily => None,
+            Self::You | Self::Tavily | Self::Searxng => None,
             Self::Brave => Some(DEFAULT_BRAVE_MAX_CONCURRENT_QUERIES),
         }
     }
@@ -435,16 +439,18 @@ impl WebSearchProviderKind {
             Self::You => "You.com",
             Self::Brave => "Brave Search",
             Self::Tavily => "Tavily",
+            Self::Searxng => "SearXNG",
         }
     }
 
-    /// Configuration label (`you`, `brave`, `tavily`) matching the serialized form.
+    /// Configuration label (`you`, `brave`, `tavily`, `searxng`) matching the serialized form.
     #[must_use]
     pub const fn config_name(self) -> &'static str {
         match self {
             Self::You => "you",
             Self::Brave => "brave",
             Self::Tavily => "tavily",
+            Self::Searxng => "searxng",
         }
     }
 
@@ -760,6 +766,12 @@ mod tests {
         );
         assert_eq!(WebSearchProviderKind::Tavily.default_max_concurrent_queries(), None);
         assert!(!WebSearchProviderKind::Tavily.is_you());
+
+        assert_eq!(WebSearchProviderKind::Searxng.to_string(), "SearXNG");
+        assert_eq!(WebSearchProviderKind::Searxng.default_api_key_env(), "SEARXNG_API_KEY");
+        assert_eq!(WebSearchProviderKind::Searxng.default_base_url(), None);
+        assert_eq!(WebSearchProviderKind::Searxng.default_max_concurrent_queries(), None);
+        assert!(!WebSearchProviderKind::Searxng.is_you());
     }
 
     #[test]
@@ -778,15 +790,23 @@ mod tests {
             " Tavily ".parse::<WebSearchProviderKind>().unwrap(),
             WebSearchProviderKind::Tavily
         );
+        assert_eq!(
+            " SearXNG ".parse::<WebSearchProviderKind>().unwrap(),
+            WebSearchProviderKind::Searxng
+        );
         let error = "bing".parse::<WebSearchProviderKind>().unwrap_err();
         assert_eq!(
             error.to_string(),
-            "unknown web_search provider \"bing\"; expected one of: you, brave, tavily"
+            "unknown web_search provider \"bing\"; expected one of: you, brave, tavily, searxng"
         );
 
         assert_eq!(
             serde_json::to_string(&WebSearchProviderKind::Brave).unwrap(),
             "\"brave\""
+        );
+        assert_eq!(
+            serde_json::to_string(&WebSearchProviderKind::Searxng).unwrap(),
+            "\"searxng\""
         );
         assert_eq!(
             serde_json::from_str::<WebSearchProviderKind>("\"you\"").unwrap(),

@@ -1902,7 +1902,7 @@ fn lenient_ingestion_projects_reasoning_earlier_releases_accepted() {
         "type": "reasoning", "id": "rs_1",
         "content": [{"type": "reasoning_text", "text": "kept plaintext"}],
         "summary": [{"type": "summary_text", "text": "kept summary"}],
-        "encrypted_content": null, "status": null,
+        "encrypted_content": null,
     }]);
     let streamed = from_sse_lines(stream(&pre_typed), None);
     assert_eq!(serde_json::to_value(&streamed.output).unwrap(), projected);
@@ -1931,7 +1931,7 @@ fn lenient_ingestion_projects_reasoning_earlier_releases_accepted() {
             serde_json::to_value(&streamed.output).unwrap(),
             serde_json::json!([{
                 "type": "reasoning", "id": "rs_1", "content": [], "summary": [],
-                "encrypted_content": null, "status": null,
+                "encrypted_content": null,
             }]),
             "{fields}"
         );

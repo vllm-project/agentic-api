@@ -69,17 +69,26 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
 /// # Errors
 /// Unsupported message content, a tool-configuration error, or a serialization failure.
 pub fn upstream_request(ctx: &RequestContext, stream: bool) -> ExecutorResult<String> {
-    upstream_request_with_guidance(ctx, stream, None)
+    upstream_request_with_guidance(ctx, stream, None, None)
 }
 
+/// `withheld` names the registry whose gateway-executed tools are left out
+/// after a `max_tool_calls` refusal, without changing the persisted tools.
 fn upstream_request_with_guidance(
     ctx: &RequestContext,
     stream: bool,
     guidance: Option<&InputMessage>,
+    withheld: Option<&ToolRegistry>,
 ) -> ExecutorResult<String> {
     // Composable callers may supply RequestContext without the rehydration step.
     validate_message_content(&ctx.enriched_request.input)?;
     let mut request = ctx.enriched_request.to_upstream_request(stream)?;
+    if let Some(registry) = withheld {
+        if let Some(tools) = request.tools.as_mut() {
+            tools.retain(|UpstreamTool::Function(function)| !registry.is_gateway_owned_name(&function.name));
+        }
+        request.tools = request.tools.filter(|tools| !tools.is_empty());
+    }
     if ctx
         .enriched_request
         .multi_agent
@@ -130,7 +139,8 @@ pub(super) async fn fetch_blocking_payload(
     response_budget: Option<&ExecutorResponseBudget>,
 ) -> ExecutorResult<ResponsePayload> {
     agent.ensure_request_prepared()?;
-    let upstream_json = upstream_request_with_guidance(&agent.request, false, agent.agent_guidance())?;
+    let withheld = agent.builtin_tools_withheld().then_some(registry);
+    let upstream_json = upstream_request_with_guidance(&agent.request, false, agent.agent_guidance(), withheld)?;
     let body = fetch_response_json_limited(
         upstream_json,
         &exec_ctx.responses_url(),
@@ -196,7 +206,8 @@ pub(super) async fn fetch_stream_payload(
     response_budget: &ExecutorResponseBudget,
 ) -> ExecutorResult<StreamPayload> {
     agent.ensure_request_prepared()?;
-    let upstream_json = upstream_request_with_guidance(&agent.request, true, agent.agent_guidance())?;
+    let withheld = agent.builtin_tools_withheld().then_some(registry);
+    let upstream_json = upstream_request_with_guidance(&agent.request, true, agent.agent_guidance(), withheld)?;
     let lines = call_inference_limited(
         upstream_json,
         exec_ctx.responses_url(),
@@ -246,7 +257,8 @@ pub(super) mod tests {
         let baseline: Value = serde_json::from_str(&upstream_request(&ctx, false).unwrap()).unwrap();
         for stream in [false, true] {
             let body: Value =
-                serde_json::from_str(&upstream_request_with_guidance(&ctx, stream, Some(&guidance)).unwrap()).unwrap();
+                serde_json::from_str(&upstream_request_with_guidance(&ctx, stream, Some(&guidance), None).unwrap())
+                    .unwrap();
             assert_eq!(body["instructions"], "caller instructions");
             let items = body["input"].as_array().unwrap();
             assert_eq!(&items[..3], baseline["input"].as_array().unwrap());
@@ -310,12 +322,10 @@ pub(super) mod tests {
         );
         request.enriched_request.parallel_tool_calls = Some(false);
         let state = ToolSearchHandler::prepare_request(&mut request.enriched_request, &[], false).unwrap();
-        let registry = ToolRegistry::build_with_handlers(
-            request.enriched_request.tools.as_mut().unwrap(),
-            &mut GatewayExecutors::default(),
-        )
-        .await
-        .unwrap();
+        let mut declarations = request.enriched_request.tool_declarations().unwrap();
+        let registry = ToolRegistry::build_with_handlers(&mut declarations, &mut GatewayExecutors::default())
+            .await
+            .unwrap();
         let mut agent = agent_pipeline(request, state, None);
         let stream_context = translation_context(&registry, &agent);
         let json_context = translation_context(&registry, &agent);

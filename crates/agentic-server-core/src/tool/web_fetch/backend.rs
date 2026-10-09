@@ -15,7 +15,7 @@ use reqwest::StatusCode;
 use url::Url;
 
 use super::policy::UrlRejection;
-use crate::tool::web_search::args::DomainFilter;
+use crate::tool::domain_policy::DomainFilter;
 
 /// A page body a backend retrieved, before text extraction.
 #[derive(Debug, Clone, PartialEq, Eq)]

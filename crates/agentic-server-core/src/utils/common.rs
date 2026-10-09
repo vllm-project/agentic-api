@@ -179,6 +179,19 @@ pub fn deserialize_from_value_opt<T: serde::de::DeserializeOwned>(value: serde_j
     serde_json::from_value(value).ok()
 }
 
+/// Deserializes a JSON array that may be `null` or absent into a `Vec`, treating both as empty.
+///
+/// # Errors
+///
+/// Returns the deserializer's error when the value is neither `null` nor an array of `T`.
+pub fn deserialize_nullable_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    <Option<Vec<T>> as serde::Deserialize>::deserialize(deserializer).map(Option::unwrap_or_default)
+}
+
 /// Serialize any type to JSON bytes, returning an empty `Vec` on error.
 #[must_use]
 pub fn serialize_to_vec_or_default<T: serde::Serialize>(value: &T) -> Vec<u8> {

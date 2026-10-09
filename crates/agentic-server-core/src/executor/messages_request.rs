@@ -13,6 +13,8 @@ use serde_json::{Value, json};
 
 use crate::executor::{ExecutorError, ExecutorResult};
 use crate::tool::ToolHandler;
+use crate::tool::declaration::web_search_config;
+use crate::tool::domain_policy::EXCLUSIVE_LISTS_RULE;
 use crate::tool::web_fetch::{self, WebFetchErrorCode, WebFetchHandler};
 use crate::tool::web_search::WebSearchHandler;
 use crate::types::io::FunctionTool;
@@ -20,7 +22,7 @@ use crate::types::messages::GatewayToolResult;
 use crate::types::messages::request::ToolParam;
 use crate::types::messages::tool_seam::{
     NATIVE_WEB_FETCH_TYPE, NATIVE_WEB_SEARCH_TYPE, WEB_FETCH_EXECUTOR, WEB_SEARCH_EXECUTOR, is_native_web_fetch_type,
-    tool_result_block, web_search_config,
+    tool_result_block,
 };
 use crate::types::tools::WebFetchToolParam;
 
@@ -87,8 +89,10 @@ fn validate_domain_list(tool: &Value, tool_name: &str, field: &str) -> ExecutorR
 }
 
 /// `allowed_domains` and `blocked_domains` must each be well formed and are
-/// mutually exclusive, as Anthropic documents for every server tool.
-fn validate_domain_filters(tool: &Value, tool_name: &str) -> ExecutorResult<()> {
+/// mutually exclusive, as Anthropic documents for every server tool. What an
+/// entry must look like to match anything is the tool layer's rule
+/// (`domain_policy`), applied where the handler validates its declaration.
+fn validate_domain_list_shape(tool: &Value, tool_name: &str) -> ExecutorResult<()> {
     validate_domain_list(tool, tool_name, "allowed_domains")?;
     validate_domain_list(tool, tool_name, "blocked_domains")?;
     let has_entries = |field: &str| {
@@ -97,9 +101,7 @@ fn validate_domain_filters(tool: &Value, tool_name: &str) -> ExecutorResult<()> 
             .is_some_and(|domains| !domains.is_empty())
     };
     if has_entries("allowed_domains") && has_entries("blocked_domains") {
-        return Err(invalid(format!(
-            "{tool_name} allowed_domains and blocked_domains cannot be used together"
-        )));
+        return Err(invalid(format!("{tool_name} {EXCLUSIVE_LISTS_RULE}")));
     }
     Ok(())
 }
@@ -213,7 +215,7 @@ fn normalize_web_search_declaration(
     if tool_type != Some(NATIVE_WEB_SEARCH_TYPE) || !is_web_search {
         return Ok(None);
     }
-    validate_domain_filters(tool, WEB_SEARCH_EXECUTOR)?;
+    validate_domain_list_shape(tool, WEB_SEARCH_EXECUTOR)?;
     validate_user_location(tool)?;
     validate_allowed_callers(tool, WEB_SEARCH_EXECUTOR)?;
     *max_uses = fold_max_uses(*max_uses, tool, WEB_SEARCH_EXECUTOR)?;
@@ -243,7 +245,7 @@ fn normalize_web_fetch_declaration(tool: &Value, max_uses: &mut Option<usize>) -
             "{NATIVE_WEB_FETCH_TYPE} declarations must be named {WEB_FETCH_EXECUTOR}"
         )));
     }
-    validate_domain_filters(tool, WEB_FETCH_EXECUTOR)?;
+    validate_domain_list_shape(tool, WEB_FETCH_EXECUTOR)?;
     validate_allowed_callers(tool, WEB_FETCH_EXECUTOR)?;
     if let Some(citations) = tool.get("citations") {
         match citations.get("enabled").and_then(Value::as_bool) {

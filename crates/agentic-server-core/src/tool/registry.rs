@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use super::code_interpreter::CodeInterpreterHandler;
 use super::codex::insert_namespace_entries;
 use super::custom::{CustomHandler, CustomToolMap, insert_custom_entry};
+use super::declaration::ToolDeclaration;
 use super::executors::GatewayExecutors;
 use super::function::insert_function_entry;
 use super::mcp::registry::insert_discovered_mcp_entry;
@@ -22,7 +23,7 @@ use super::{CodexNamespaceHandler, McpHandler, NamespaceMap, ToolError, ToolOutp
 
 use crate::types::io::output::{FunctionToolCall, McpListTools};
 use crate::types::io::{InputItem, ResponsesInput};
-use crate::types::tools::{CodeInterpreterToolParam, FileSearchToolParam, ResponsesTool, WebFetchToolParam};
+use crate::types::tools::{CodeInterpreterToolParam, FileSearchToolParam, WebFetchToolParam};
 
 const MAX_MCP_SERVERS_PER_REQUEST: usize = 64;
 const MAX_DISCOVERED_MCP_TOOLS_PER_REQUEST: usize = 128;
@@ -223,7 +224,7 @@ impl ToolRegistry {
     /// [`ToolError::Execution`] when discovered MCP metadata exceeds its byte
     /// or tool-count limit.
     pub async fn build_with_handlers(
-        tools: &mut [ResponsesTool],
+        tools: &mut [ToolDeclaration],
         executors: &mut GatewayExecutors,
     ) -> Result<Self, ToolError> {
         let mut remaining = MAX_MCP_DISCOVERY_BYTES;
@@ -250,7 +251,7 @@ impl ToolRegistry {
     /// that crossed the limit. Keeping the callback generic preserves the dependency direction:
     /// tool registration does not depend on executor error or policy types.
     pub(crate) async fn build_with_handlers_guarded<E, Acquire, AcquireFuture, Guard>(
-        tools: &mut [ResponsesTool],
+        tools: &mut [ToolDeclaration],
         executors: &mut GatewayExecutors,
         mut consume_materialized: impl FnMut(usize) -> Result<(), E>,
         mut acquire_materialization: Acquire,
@@ -274,15 +275,15 @@ impl ToolRegistry {
 
         for (index, tool) in resolved_tools.iter().enumerate() {
             match tool {
-                ResponsesTool::Function(p) => {
+                ToolDeclaration::Function(p) => {
                     insert_unique_tool_entries(&mut entries, |resolved| insert_function_entry(resolved, p))?;
                 }
-                ResponsesTool::ToolSearch(param) => {
+                ToolDeclaration::ToolSearch(param) => {
                     insert_unique_tool_entries(&mut entries, |resolved| {
                         insert_tool_search_entry(resolved, param);
                     })?;
                 }
-                ResponsesTool::Mcp(p) => {
+                ToolDeclaration::Mcp(p) => {
                     let _materialization_guard = acquire_materialization().await;
                     let tool_set = match executors.mcp_server_tools(p).await {
                         Ok(tool_set) => tool_set,
@@ -318,8 +319,8 @@ impl ToolRegistry {
                         .entry(p.server_label.clone())
                         .or_default()
                         .push(tool_set.list_tools_item);
-                    if let ResponsesTool::Mcp(declaration) = &mut tools[index] {
-                        declaration.discovered_tools = handlers.iter().map(|item| item.param.clone()).collect();
+                    if let ToolDeclaration::Mcp(declared) = &mut tools[index] {
+                        declared.discovered_tools = handlers.iter().map(|item| item.param.clone()).collect();
                     }
                     for discovered in handlers {
                         insert_unique_tool_entries(&mut entries, |resolved| {
@@ -327,37 +328,37 @@ impl ToolRegistry {
                         })?;
                     }
                 }
-                ResponsesTool::WebSearch(p) => {
+                ToolDeclaration::WebSearch(p) => {
                     insert_unique_tool_entries(&mut entries, |resolved| {
                         insert_web_search_entry(resolved, p, executors.web_search_handler());
                     })?;
                 }
-                ResponsesTool::WebFetch(p) => insert_web_fetch_binding(&mut entries, executors, p)?,
-                ResponsesTool::FileSearch(p) => {
+                ToolDeclaration::WebFetch(p) => insert_web_fetch_binding(&mut entries, executors, p)?,
+                ToolDeclaration::FileSearch(p) => {
                     insert_unique_tool_entries(&mut entries, |resolved| insert_file_search_entry(resolved, p))?;
                 }
-                ResponsesTool::CodeInterpreter(param) => {
+                ToolDeclaration::CodeInterpreter(param) => {
                     insert_code_interpreter_entry(&mut entries, executors, param)?;
                 }
-                ResponsesTool::Shell(_) => {
+                ToolDeclaration::Shell(_) => {
                     insert_unique_tool_entries(&mut entries, |resolved| {
                         insert_shell_entry(resolved);
                     })?;
                 }
-                ResponsesTool::Namespace(p) => {
+                ToolDeclaration::Namespace(p) => {
                     insert_unique_tool_entries(&mut entries, |resolved| insert_namespace_entries(resolved, p))?;
                 }
-                ResponsesTool::Custom(p) => {
+                ToolDeclaration::Custom(p) => {
                     insert_unique_tool_entries(&mut entries, |resolved| insert_custom_entry(resolved, p))?;
                 }
-                ResponsesTool::Unknown => {
-                    tracing::debug!("unknown tool declared but skipped in registry");
+                ToolDeclaration::Unsupported => {
+                    tracing::debug!("unsupported tool declared but skipped in registry");
                 }
             }
         }
 
-        let namespace_map = CodexNamespaceHandler.build_namespace_map((!tools.is_empty()).then_some(tools))?;
-        let custom_tool_map = CustomHandler::build_tool_map(tools);
+        let namespace_map = CodexNamespaceHandler.build_namespace_map((!tools.is_empty()).then_some(&*tools))?;
+        let custom_tool_map = CustomHandler::build_tool_map(&*tools);
 
         Ok(Self {
             entries,
@@ -537,10 +538,10 @@ impl ToolRegistry {
     }
 }
 
-fn validate_mcp_server_count(tools: &[ResponsesTool]) -> Result<(), ToolError> {
+fn validate_mcp_server_count(tools: &[ToolDeclaration]) -> Result<(), ToolError> {
     let mcp_server_count = tools
         .iter()
-        .filter(|tool| matches!(tool, ResponsesTool::Mcp(_)))
+        .filter(|tool| matches!(tool, ToolDeclaration::Mcp(_)))
         .count();
     if mcp_server_count > MAX_MCP_SERVERS_PER_REQUEST {
         return Err(ToolError::Config(format!(
@@ -565,10 +566,11 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::tool::declaration::ToolDeclaration;
     use crate::tool::executors::GatewayExecutorRegistration;
     use crate::tool::mcp::{McpDiscoveredHandler, McpHandler};
     use crate::types::io::output::McpListTool;
-    use crate::types::tools::McpDiscoveredToolParam;
+    use crate::types::tools::{McpDiscoveredToolParam, ResponsesTool};
 
     #[test]
     fn code_interpreter_tool_type_is_inherently_gateway_owned() {
@@ -587,12 +589,13 @@ mod tests {
         };
         let mut executors = GatewayExecutors::from_config(Arc::new(reqwest::Client::new()), &config)
             .expect("enabled code interpreter executor");
-        let mut tools = vec![
-            serde_json::from_value(serde_json::json!({
+        let mut tools: Vec<ToolDeclaration> = vec![
+            serde_json::from_value::<ResponsesTool>(serde_json::json!({
                 "type": "code_interpreter",
                 "container": {"type": "auto"}
             }))
-            .expect("code interpreter declaration"),
+            .expect("code interpreter declaration")
+            .into(),
         ];
 
         let registry = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
@@ -606,35 +609,38 @@ mod tests {
         assert!(matches!(entry.ownership, ToolOwnership::Gateway(Some(_))));
     }
 
-    fn declaration(server_label: &str) -> ResponsesTool {
-        serde_json::from_value(serde_json::json!({
+    fn declaration(server_label: &str) -> ToolDeclaration {
+        serde_json::from_value::<ResponsesTool>(serde_json::json!({
             "type": "mcp",
             "server_label": server_label,
             "server_url": "http://127.0.0.1:8000/mcp",
             "require_approval": "never"
         }))
         .expect("MCP declaration")
+        .into()
     }
 
     /// A request-declared MCP tool for a server the gateway already has
     /// configured. Configured servers reject a request-supplied `server_url`,
     /// so declarations for them must omit it.
-    fn configured_declaration(server_label: &str) -> ResponsesTool {
-        serde_json::from_value(serde_json::json!({
+    fn configured_declaration(server_label: &str) -> ToolDeclaration {
+        serde_json::from_value::<ResponsesTool>(serde_json::json!({
             "type": "mcp",
             "server_label": server_label
         }))
         .expect("MCP declaration")
+        .into()
     }
 
-    fn unreachable_declaration(server_label: &str) -> ResponsesTool {
-        serde_json::from_value(serde_json::json!({
+    fn unreachable_declaration(server_label: &str) -> ToolDeclaration {
+        serde_json::from_value::<ResponsesTool>(serde_json::json!({
             "type": "mcp",
             "server_label": server_label,
             "server_url": "http://127.0.0.1:1/mcp",
             "require_approval": "never"
         }))
         .expect("unreachable MCP declaration")
+        .into()
     }
 
     fn discovered_handler(server_label: &str, tool_name: &str, internal_name: &str) -> McpDiscoveredHandler {
@@ -676,8 +682,8 @@ mod tests {
             .collect()
     }
 
-    fn mixed_tool_declarations() -> Vec<ResponsesTool> {
-        serde_json::from_value(serde_json::json!([
+    fn mixed_tool_declarations() -> Vec<ToolDeclaration> {
+        serde_json::from_value::<Vec<ResponsesTool>>(serde_json::json!([
             {
                 "type": "function",
                 "name": "echo",
@@ -698,6 +704,9 @@ mod tests {
             {"type": "future_tool", "opaque": true}
         ]))
         .expect("mixed tool declarations")
+        .into_iter()
+        .map(ToolDeclaration::from)
+        .collect()
     }
 
     #[test]
@@ -889,10 +898,11 @@ mod tests {
         });
         let mut tools = mixed_tool_declarations();
         tools.push(
-            serde_json::from_value(serde_json::json!({
+            serde_json::from_value::<ResponsesTool>(serde_json::json!({
                 "type": "shell", "environment": {"type": "local"}
             }))
-            .expect("shell declaration"),
+            .expect("shell declaration")
+            .into(),
         );
 
         let registry = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
@@ -947,7 +957,7 @@ mod tests {
             assert!(!registry.is_gateway_owned_name(name), "'{name}' should be client-owned");
         }
 
-        let ResponsesTool::Mcp(declared) = &tools[1] else {
+        let ToolDeclaration::Mcp(declared) = &tools[1] else {
             panic!("expected MCP declaration");
         };
         assert_eq!(declared.discovered_tools.len(), 2);
@@ -960,7 +970,7 @@ mod tests {
             ["mcp__counter__increment", "mcp__counter__get_value"]
         );
 
-        let ResponsesTool::Namespace(namespace) = &tools[4] else {
+        let ToolDeclaration::Namespace(namespace) = &tools[4] else {
             panic!("expected namespace declaration");
         };
         assert!(matches!(
@@ -972,7 +982,7 @@ mod tests {
 
     #[tokio::test]
     async fn web_fetch_registers_only_with_an_enabled_executor() {
-        let declaration = ResponsesTool::WebFetch(crate::types::tools::WebFetchToolParam::default());
+        let declaration = ToolDeclaration::WebFetch(crate::types::tools::WebFetchToolParam::default());
         let mut executors = GatewayExecutors::from_env(Arc::new(reqwest::Client::new()));
         let registry = ToolRegistry::build_with_handlers(&mut [declaration.clone()], &mut executors)
             .await
@@ -988,14 +998,89 @@ mod tests {
         assert!(matches!(error, ToolError::Config(message) if message.contains("web_fetch is disabled")));
     }
 
+    /// The status a handler sets on its output reaches the dispatcher's caller
+    /// unchanged, so a loop never has to parse an output to learn it.
+    #[tokio::test]
+    async fn dispatch_carries_the_handlers_output_status() {
+        use std::pin::Pin;
+
+        use crate::tool::handler::{GatewayExecutor, ToolHandler, ToolOutputStatus};
+        use crate::types::io::FunctionTool;
+        use crate::types::tools::WebSearchToolParam;
+
+        struct Refusing;
+
+        impl ToolHandler for Refusing {
+            type ToolParams = WebSearchToolParam;
+
+            fn tool_type(&self) -> ToolType {
+                ToolType::WebSearch
+            }
+
+            fn validate(&self, _params: &WebSearchToolParam) -> Result<(), ToolError> {
+                Ok(())
+            }
+
+            fn normalize(&self, _params: &WebSearchToolParam) -> Vec<FunctionTool> {
+                Vec::new()
+            }
+        }
+
+        impl GatewayExecutor for Refusing {
+            type ExecutionParams = WebSearchToolParam;
+
+            fn execute(
+                &self,
+                call_id: &str,
+                _tool_name: &str,
+                _arguments: &str,
+                _params: &WebSearchToolParam,
+            ) -> Pin<Box<dyn Future<Output = Result<ToolOutput, ToolError>> + Send + '_>> {
+                let call_id = call_id.to_owned();
+                Box::pin(async move { Ok(ToolOutput::failure(call_id, r#"{"error":"refused"}"#)) })
+            }
+        }
+
+        let mut entries = HashMap::new();
+        entries.insert(
+            "probe".to_owned(),
+            ToolEntry::gateway(
+                ToolType::WebSearch,
+                None,
+                Some(GatewayBinding::new(Arc::new(Refusing), WebSearchToolParam::default())),
+            ),
+        );
+        let registry = ToolRegistry {
+            entries,
+            ..ToolRegistry::default()
+        };
+        let call = FunctionToolCall {
+            agent: None,
+            id: "fc_1".to_owned(),
+            call_id: "call_1".to_owned(),
+            name: "probe".to_owned(),
+            arguments: "{}".to_owned(),
+            status: crate::types::event::MessageStatus::Completed,
+            namespace: None,
+        };
+
+        let result = registry.dispatch(&call).await.expect("a gateway entry dispatches");
+        let output = result.output.expect("the handler answered");
+        assert_eq!(result.tool_type, ToolType::WebSearch);
+        assert_eq!(output.call_id, "call_1");
+        assert_eq!(output.status, ToolOutputStatus::Failure);
+        assert!(output.is_failure());
+    }
+
     #[tokio::test]
     async fn build_with_handlers_rejects_unavailable_code_interpreter_before_entry_creation() {
-        let mut tools = vec![
-            serde_json::from_value(serde_json::json!({
+        let mut tools: Vec<ToolDeclaration> = vec![
+            serde_json::from_value::<ResponsesTool>(serde_json::json!({
                 "type": "code_interpreter",
                 "container": {"type": "auto"}
             }))
-            .expect("code interpreter declaration"),
+            .expect("code interpreter declaration")
+            .into(),
         ];
         let mut executors = GatewayExecutors::default();
 
@@ -1015,7 +1100,9 @@ mod tests {
             serde_json::json!({"type": "function", "name": "code_interpreter"}),
             serde_json::json!({"type": "custom", "name": "code_interpreter"}),
         ] {
-            let mut tools = vec![serde_json::from_value::<ResponsesTool>(declaration).expect("client declaration")];
+            let mut tools = vec![ToolDeclaration::from(
+                serde_json::from_value::<ResponsesTool>(declaration).expect("client declaration"),
+            )];
             let mut executors = GatewayExecutors::default();
 
             let registry = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
@@ -1035,7 +1122,10 @@ mod tests {
                 {"type": "code_interpreter", "container": {"type": "auto"}},
                 conflicting_tool
             ]))
-            .expect("individual declarations parse");
+            .expect("individual declarations parse")
+            .into_iter()
+            .map(ToolDeclaration::from)
+            .collect::<Vec<_>>();
             let mut executors = GatewayExecutors::default();
 
             let error = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
@@ -1263,11 +1353,13 @@ mod tests {
         let internal_name = "mcp__counter__increment";
 
         for mcp_first in [false, true] {
-            let function = serde_json::from_value(serde_json::json!({
-                "type": "function",
-                "name": internal_name
-            }))
-            .expect("function declaration");
+            let function = ToolDeclaration::from(
+                serde_json::from_value::<ResponsesTool>(serde_json::json!({
+                    "type": "function",
+                    "name": internal_name
+                }))
+                .expect("function declaration"),
+            );
             let mcp = configured_declaration("counter");
             let mut tools = if mcp_first {
                 vec![mcp, function]

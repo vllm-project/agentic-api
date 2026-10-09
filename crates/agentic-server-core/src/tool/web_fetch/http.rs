@@ -31,7 +31,7 @@ use super::backend::{FetchFailure, FetchedDocument, WebFetchBackend};
 use super::extract::{sniff_html_charset, truncate_to_char_boundary};
 use super::policy::{UrlRejection, is_public_ip, resolve_addrs, validate_url};
 use crate::config::WebFetchConfig;
-use crate::tool::web_search::args::DomainFilter;
+use crate::tool::domain_policy::DomainFilter;
 
 const USER_AGENT: &str = concat!("agentic-api/", env!("CARGO_PKG_VERSION"));
 const ACCEPT_VALUE: &str =

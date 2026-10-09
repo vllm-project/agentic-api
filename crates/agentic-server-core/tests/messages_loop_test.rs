@@ -18,8 +18,9 @@ use agentic_core::executor::{
     run_messages_loop,
 };
 use agentic_core::storage::{ConversationStore, ResponseStore};
+use agentic_core::tool::registry_tools;
 use agentic_core::tool::{ToolRegistry, WebSearchHandler};
-use agentic_core::types::messages::{GatewayToolMap, ToolParam, registry_tools};
+use agentic_core::types::messages::{GatewayToolMap, ToolParam};
 use axum::extract::State;
 use axum::http::Uri;
 use axum::routing::{get, post};

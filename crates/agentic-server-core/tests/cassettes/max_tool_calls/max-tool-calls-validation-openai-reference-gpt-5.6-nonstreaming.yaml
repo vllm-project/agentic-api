@@ -1,0 +1,868 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Use web search to search for the exact query "potato", then answer in
+        one sentence.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790871200
+      created_at: 1790871194
+      error: null
+      frequency_penalty: 0.0
+      id: resp_022ea90a49d18c22006abe869a212487d1a9ce189e48b1501c
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABqvoagSzrilmmTrvi8ZkOA8WRIDjCO4FEkfEW5l_YvF3W_UBBRwA7KvdBECE8uyqYJrQYjc37tlNR7A5Va7A_2eLjHU0ka00RJBJ6BZPkr2wMM2opkRmR-3JChlZ5PuENYaTkHVQ9t3dzV4wtAjGhRiPsakf3hZkKnZzFbl6tCuFDMRrg12wrGLP-nE2bh1WReb2uZzGtA9Sh4bRjNykoQqfzrwAFHTNSe8K5rzT7ASRqNIcQaJIpd5hUMIPCVYkLwu6D45bhE-1P8AoDyI6xR82jqL6A2pCYXHqifvzTnMZdMjmMJ0lNA8_48T0s5waDZzZF_phMH9RVz8c8fgnM3Re94IzlwheSJIQzzGVOfdiqZS3HxuoBfla0jKm-ZPYZdrTqpywTnUA1GNhRuZEnj3iFsiVb7wNLA9TKlJjKYbz9pSWGKziVDtMJmkGwPKOGwsFuODZtdP_MziLKhTbaWn2NdqHEeh4QCz_NzZPkwvWkjLNt-tVWE194F_pPA1F8IhyJhR7sjJAf6boWlEbkzyKd7riT_yb6yv8gVmfSCIq0_lRwZJR5TAbH8gxOt29_B15M_342amvJzs3yh0WKFlEIdFjKZzqSqJKKZk5qjaLj25P_t5F_44ophkxPdHLPvwQVJgC1rxreV0j-RnMzb3adZitkN5USdNGciCwNU8aN9Tj1G9b51AO9eH3vAAYsCXOstsiwFvzySYHKyaCL4Ais51bKit46pjc23mECT-xcOmAcveoI6U9hlf6APvvv2Hua6r3QhMPFyWIdXh3P5fUCmhENLON1WmQUxh4i0Xpz-o_sH9ie8z0o-Pb952YAQTKLsQYl3JpD0mTOJJF6Au194KBkYt1YUfbM93WKLMZmw-zkylm22MgDZybA-78aapDXeM8OiZFIPVbxyf2cmyUZ1mO7KKYhJZ8OP6yAFUIF-mpQhWzo_J0J4_oz4yR3TI1c4pbuoylUCUaNN4HGX0SH8Qpv_EeUJV2ZO5WccbLx5wOcDXBDWDrQx0_5ZIIbWpey_oKQujbRxOTsd7AUqrKeHXRsKkxwE8kM4bKJbx-DXPHmVHAdYXO6pMsknVj-4Eq5txzyUpcipSdfy1zpF3Vr-9Iq6X9VugvNGVRxmscl7xbs02AHZSqz0gdKKOBX5-r1wY8xYSos8tPzOOAf692fArFH3pMwt2HlHwB54QdZSCeTqLdnPh6G4s77CxKzwqjVsuoShRRK77rRzDopoBt-9NcHBRNsowhoH1Bi2Mk8VRuQ=
+        id: rs_022ea90a49d18c22006abe869b52c887d1aa229b35eb660356
+        summary: []
+        type: reasoning
+      - action:
+          queries:
+          - potato
+          query: potato
+          type: search
+        id: ws_022ea90a49d18c22006abe869b9d0087d18a077e002c911028
+        status: completed
+        type: web_search_call
+      - content:
+        - annotations:
+          - end_index: 234
+            start_index: 127
+            title: POTATO definition in American English | Collins English Dictionary
+            type: url_citation
+            url: https://www.collinsdictionary.com/us/dictionary/english/potato?utm_source=openai
+          logprobs: []
+          text: The exact search query **“potato”** returned dictionary definitions
+            and resources about the starchy tuber *Solanum tuberosum*. ([collinsdictionary.com](https://www.collinsdictionary.com/us/dictionary/english/potato?utm_source=openai))
+          type: output_text
+        id: msg_022ea90a49d18c22006abe869fa59c87d1a93eb998a889c928
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 1
+      tools:
+      - return_token_budget: default
+        search_content_types:
+        - text
+        search_context_size: medium
+        type: web_search
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 8767
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 4393
+        output_tokens: 96
+        output_tokens_details:
+          reasoning_tokens: 43
+        total_tokens: 8863
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: Use web search to search for the exact query "potato", then answer in
+        one sentence.
+      max_output_tokens: 4096
+      max_tool_calls: 0
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: integer_below_min_value
+        message: 'Invalid ''max_tool_calls'': integer below minimum value. Expected
+          a value >= 1, but got 0 instead.'
+        param: max_tool_calls
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t3
+  request:
+    body:
+      input: Use web search to search for the exact query "potato", then answer in
+        one sentence.
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790871209
+      created_at: 1790871204
+      error: null
+      frequency_penalty: 0.0
+      id: resp_08faa9317c144ecb006abe86a474e087d1aeb6e3f6baf46d7f
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - action:
+          queries:
+          - potato
+          query: potato
+          type: search
+        id: ws_08faa9317c144ecb006abe86a5391c87d19e7e99bf97e33471
+        status: completed
+        type: web_search_call
+      - content:
+        - annotations:
+          - end_index: 260
+            start_index: 153
+            title: POTATO definition in American English | Collins English Dictionary
+            type: url_citation
+            url: https://www.collinsdictionary.com/us/dictionary/english/potato?utm_source=openai
+          logprobs: []
+          text: The exact search query “potato” returned dictionary definitions and
+            botanical resources describing it as an edible, starchy tuber (*Solanum
+            tuberosum*). ([collinsdictionary.com](https://www.collinsdictionary.com/us/dictionary/english/potato?utm_source=openai))
+          type: output_text
+        id: msg_08faa9317c144ecb006abe86a8d53087d1851b1d9acf1a1256
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 1
+      tools:
+      - return_token_budget: default
+        search_content_types:
+        - text
+        search_context_size: medium
+        type: web_search
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 8735
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 4393
+        output_tokens: 82
+        output_tokens_details:
+          reasoning_tokens: 25
+        total_tokens: 8817
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input: Use web search to search for the exact query "potato", then answer in
+        one sentence.
+      max_output_tokens: 4096
+      max_tool_calls: -1
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: integer_below_min_value
+        message: 'Invalid ''max_tool_calls'': integer below minimum value. Expected
+          a value >= 1, but got -1 instead.'
+        param: max_tool_calls
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t5
+  request:
+    body:
+      input: Use web search to search for the exact query "potato", then answer in
+        one sentence.
+      max_output_tokens: 4096
+      max_tool_calls: '2'
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_type
+        message: 'Invalid type for ''max_tool_calls'': expected an integer, but got
+          a string instead.'
+        param: max_tool_calls
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t6
+  request:
+    body:
+      input: Use web search to search for the exact query "potato", then answer in
+        one sentence.
+      max_output_tokens: 4096
+      max_tool_calls: 2.5
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_type
+        message: 'Invalid type for ''max_tool_calls'': expected an integer, but got
+          a decimal number instead.'
+        param: max_tool_calls
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t7
+  request:
+    body:
+      input: Use web search to search for the exact query "potato", then answer in
+        one sentence.
+      max_output_tokens: 4096
+      max_tool_calls: true
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_type
+        message: 'Invalid type for ''max_tool_calls'': expected an integer, but got
+          a boolean instead.'
+        param: max_tool_calls
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t8
+  request:
+    body:
+      input: Use web search to search for the exact query "potato", then answer in
+        one sentence.
+      max_output_tokens: 4096
+      max_tool_calls: 2147483648
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790871228
+      created_at: 1790871220
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0d9c14032da1f1f7006abe86b407ac87d1b2014b48ab4d6106
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: 2147483648
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - content: []
+        encrypted_content: gAAAAABqvoa885c39utQWnpAl-G7pGWAWpGrGrfXFOZ9A7oBdAAK1xvuI25syWNe3WDN2pygTBN01lT5XIreObgmBRm57LZ04Jgq3tE6oCL3YAR64zFHE1AzQAhhtYAa3_Wgt-WS3PRf5BOFjwBSypxzRDK68AbP_JxKMSo9A8p1ZPcpvnlDKNz6GGy_FGA4_GmWdd8B2kU1GJR5VXDS6yUDslQb2Dc_O9GLnochPRPvNV5UK1BFIYbZh0-1wDD1VvpYtCTWb-BILxh1fcPNFzIw_8XZCOTO_Cv6A0rwpDhSVqIHYdWZzmnWEuWspA2rDkK87uSYJRBJWrgpv5E0tAOfvdTCaFjt0o0AotOUKE_rYbOssMg-bIb9f0cvAOYBLOMNxJEYwo8U_iiT9PbiqdrtfeP74TeuxV2r4py0qjgwClwq_kFg_Jtr4uXeXi-WW4sLkqfXcqky3sKgDyFYuATHMa8rvdIYd1f5iLH6E1mj8efst6BAqQWtBV2Mf0tPLpMSaRvtMU_TTXVcf5hJXgEQaNtVZqj4skucxUoEG0sVgludJfro6zmVHIduuWFW_31o4Tl3oi_oy1Of-k55UemDN5bSmSBs87Ib3VmLIKT07ycQb0WoPqG6pbf-p9QFiHmE53jaaCQckh72i8oD1XnbeZbeYYrXbF4Mu2s0cE7Uvi6gAWlJRLONDuW31FErGGgxzcxt5A_0CwltrN1Wka3q3mXIbGmzbZ_yQy61k3ipVpC43gekua8DJ1X_I191Iwt4pWRjOclDaGUkLxLXt4AKJZ9uMujSeLbHfz9UC_FQJUGyi1cnomvvGqbCGpLAIRYIKrVf0KtfvcC_sMxNHuIwvieYWqjrWRdFvxm4KNLN_NpLRKZQlrlvi4aPl28olJXTRJ157PLNOUbf0p76wfobG5WsdPhWa5KcQ6Le04uR-4hxrdIOzYSzomMKJPohl5FUGQ-8d8ngQFNZwvs5IszeClhLU4kXIw0cDFCJtlopyLolMenm3yQOjBDf2ovZf80q0RhI2eD889dptpr8I9m9aXELkdyK9OurOt230wtr9UGS4BzXbUrBEaEZUYZvBoQ_MvjqKScFQ2jpQ3KIVtcZUP3n7TsNRE-iNV0qE8osfR7X0a4kHcyzPyiPMPHz8M7jspVy6sFYBwGrl26iX_AgctYXhiZ0LJaASYaxYeZ5aC0Xg1vPbLShzq7JkyPuhxsYIni4MueZEPsq_kaAB55G0tyMvLuoadnRa7PrJTs9WHhWZSub-Fo=
+        id: rs_0d9c14032da1f1f7006abe86b5c2c487d19ac7e3e269c23b92
+        summary: []
+        type: reasoning
+      - action:
+          queries:
+          - potato
+          query: potato
+          type: search
+        id: ws_0d9c14032da1f1f7006abe86b610f487d191defc6947a37343
+        status: completed
+        type: web_search_call
+      - content:
+        - annotations:
+          - end_index: 255
+            start_index: 148
+            title: POTATO definition in American English | Collins English Dictionary
+            type: url_citation
+            url: https://www.collinsdictionary.com/us/dictionary/english/potato?utm_source=openai
+          logprobs: []
+          text: The exact search query **“potato”** returned dictionary definitions
+            and botanical resources, including Collins, Cambridge, Kew Gardens, and
+            Oxford. ([collinsdictionary.com](https://www.collinsdictionary.com/us/dictionary/english/potato?utm_source=openai))
+          type: output_text
+        id: msg_0d9c14032da1f1f7006abe86bbe2b487d1a5ccb02f14d225e0
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 1
+      tools:
+      - return_token_budget: default
+        search_content_types:
+        - text
+        search_context_size: medium
+        type: web_search
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 8527
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 4393
+        output_tokens: 109
+        output_tokens_details:
+          reasoning_tokens: 41
+        total_tokens: 8636
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body:
+      input: Use web search to search for the exact query "potato", then answer in
+        one sentence.
+      max_output_tokens: 4096
+      max_tool_calls: 4294967296
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790871237
+      created_at: 1790871231
+      error: null
+      frequency_penalty: 0.0
+      id: resp_02925fe48a3bc5da006abe86bf0e4887d18cd9c838173172c6
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: 4294967296
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - action:
+          queries:
+          - potato
+          query: potato
+          type: search
+        id: ws_02925fe48a3bc5da006abe86c0a82887d1a5663400acd789f1
+        status: completed
+        type: web_search_call
+      - content:
+        - annotations:
+          - end_index: 253
+            start_index: 146
+            title: POTATO definition in American English | Collins English Dictionary
+            type: url_citation
+            url: https://www.collinsdictionary.com/us/dictionary/english/potato?utm_source=openai
+          logprobs: []
+          text: The exact search query **“potato”** primarily returned dictionary
+            definitions describing it as a round, starchy vegetable that grows underground.
+            ([collinsdictionary.com](https://www.collinsdictionary.com/us/dictionary/english/potato?utm_source=openai))
+          type: output_text
+        id: msg_02925fe48a3bc5da006abe86c4e17887d192be2e3df28cb1b5
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 1
+      tools:
+      - return_token_budget: default
+        search_content_types:
+        - text
+        search_context_size: medium
+        type: web_search
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 8735
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 4393
+        output_tokens: 84
+        output_tokens_details:
+          reasoning_tokens: 25
+        total_tokens: 8819
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body:
+      input: Use web search to search for the exact query "potato", then answer in
+        one sentence.
+      max_output_tokens: 4096
+      max_tool_calls: 9223372036854775807
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790871245
+      created_at: 1790871239
+      error: null
+      frequency_penalty: 0.0
+      id: resp_089dd4a20a3764c3006abe86c7c0e087d1bb089e75a99a2b09
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: 9223372036854775807
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - action:
+          queries:
+          - potato
+          query: potato
+          type: search
+        id: ws_089dd4a20a3764c3006abe86c8aafc87d1b63eec33450b1361
+        status: completed
+        type: web_search_call
+      - content:
+        - annotations:
+          - end_index: 240
+            start_index: 133
+            title: POTATO definition in American English | Collins English Dictionary
+            type: url_citation
+            url: https://www.collinsdictionary.com/us/dictionary/english/potato?utm_source=openai
+          logprobs: []
+          text: The exact search query “potato” primarily returned dictionary definitions
+            describing it as an edible underground tuber or vegetable. ([collinsdictionary.com](https://www.collinsdictionary.com/us/dictionary/english/potato?utm_source=openai))
+          type: output_text
+        id: msg_089dd4a20a3764c3006abe86cc282487d1966acadff105ca5d
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 1
+      tools:
+      - return_token_budget: default
+        search_content_types:
+        - text
+        search_context_size: medium
+        type: web_search
+        user_location:
+          city: null
+          country: US
+          region: null
+          timezone: null
+          type: approximate
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 8735
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 4393
+        output_tokens: 80
+        output_tokens_details:
+          reasoning_tokens: 25
+        total_tokens: 8815
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body:
+      input: Use web search to search for the exact query "potato", then answer in
+        one sentence.
+      max_output_tokens: 4096
+      max_tool_calls: 9223372036854775808
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: integer_above_max_value
+        message: 'Invalid ''max_tool_calls'': integer above maximum value. Expected
+          a value <= 9223372036854775807, but got 9223372036854775808 instead.'
+        param: max_tool_calls
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t12
+  request:
+    body:
+      input: Use web search to search for the exact query "potato", then answer in
+        one sentence.
+      max_output_tokens: 4096
+      max_tool_calls: -9223372036854775808
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: integer_below_min_value
+        message: 'Invalid ''max_tool_calls'': integer below minimum value. Expected
+          a value >= 1, but got -9223372036854775808 instead.'
+        param: max_tool_calls
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400

@@ -649,6 +649,7 @@ mod tests {
             previous_response_id: None,
             conversation_id: None,
             instructions: None,
+            max_tool_calls: None,
             service_tier: None,
             tools: None,
             tool_choice: None,

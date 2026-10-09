@@ -1,17 +1,18 @@
 //! Declaration parameters for the gateway-executed `web_fetch` tool.
 //!
-//! A native Messages `web_fetch_20250910` declaration is classified by the
-//! Messages tool seam and carried into the request-scoped registry as
-//! [`ResponsesTool::WebFetch`](super::ResponsesTool::WebFetch). The tool has no
-//! Responses wire form, so this shape is never deserialized from a request
-//! body; it holds only what the handler needs for every call of one request.
+//! A native Messages `web_fetch_20250910` declaration is read by the tool
+//! layer's Messages mapping (`tool::registry_tools`) and carried into the
+//! request-scoped registry as the `WebFetch` kind of its internal
+//! `ToolDeclaration`. The tool has no Responses wire form, so this shape is
+//! never deserialized from a request body; it holds only what the handler
+//! needs for every call of one request.
 
 use std::num::NonZeroU32;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::params::WebSearchFilters;
+use super::domain::DomainFilters;
 
 /// Per-request settings of one `web_fetch` declaration.
 ///
@@ -20,7 +21,7 @@ use super::params::WebSearchFilters;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WebFetchToolParam {
     /// `allowed_domains` / `blocked_domains`, matched on the URL host only.
-    pub filters: Option<WebSearchFilters>,
+    pub filters: Option<DomainFilters>,
     /// Approximate ceiling on the text returned to the model, in tokens.
     pub max_content_tokens: Option<NonZeroU32>,
 }
@@ -57,7 +58,7 @@ impl WebFetchToolParam {
         };
         let allowed_domains = domains("allowed_domains")?;
         let blocked_domains = domains("blocked_domains")?;
-        let filters = (allowed_domains.is_some() || blocked_domains.is_some()).then_some(WebSearchFilters {
+        let filters = (allowed_domains.is_some() || blocked_domains.is_some()).then_some(DomainFilters {
             allowed_domains,
             blocked_domains,
         });

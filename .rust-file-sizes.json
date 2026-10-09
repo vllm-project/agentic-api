@@ -2,20 +2,19 @@
   "version": 1,
   "baseline": {
     "crates/agentic-server-core/src/executor/accumulator/mod.rs": 590,
-    "crates/agentic-server-core/src/executor/gateway.rs": 580,
     "crates/agentic-server-core/src/executor/session.rs": 508,
     "crates/agentic-server-core/src/tool/registry.rs": 515,
     "crates/agentic-server-core/src/tool/tool_search.rs": 1661,
     "crates/agentic-server-core/src/types/io/input.rs": 510,
-    "crates/agentic-server-core/src/types/io/output.rs": 1075,
+    "crates/agentic-server-core/src/types/io/output.rs": 1074,
     "crates/agentic-server-core/src/types/tools/params.rs": 537,
     "crates/agentic-server/src/agentic_process.rs": 557,
     "crates/agentic-server/src/auth.rs": 791
   },
   "exceptions": {
     "crates/agentic-server-core/src/config.rs": {
-      "limit": 637,
-      "reason": "The gateway-executed web_fetch settings join the shared tool runtime configuration beside the web-search provider and code-interpreter limits."
+      "limit": 643,
+      "reason": "The gateway-executed web_fetch settings join the shared tool runtime configuration beside the web-search provider and code-interpreter limits, and the web_search provider enum now also selects SearXNG."
     },
     "crates/agentic-server-core/src/executor/accumulator/active.rs": {
       "limit": 512,
@@ -29,12 +28,8 @@
       "limit": 518,
       "reason": "Code-interpreter done-only ID backfill remains in the shared output-item slot validation path."
     },
-    "crates/agentic-server-core/src/executor/gateway.rs": {
-      "limit": 696,
-      "reason": "Gateway-owned code-interpreter calls emit their public SSE lifecycle through the existing scheduler after policy extraction."
-    },
     "crates/agentic-server-core/src/tool/registry.rs": {
-      "limit": 544,
+      "limit": 545,
       "reason": "The web_fetch executor binds through the existing registry validation and executor registration flow, like the code interpreter."
     },
     "crates/agentic-server-core/src/tool/tool_search.rs": {
@@ -45,13 +40,9 @@
       "limit": 514,
       "reason": "The shared input-item union accepts typed native code-interpreter calls for continuation replay."
     },
-    "crates/agentic-server-core/src/types/io/output.rs": {
-      "limit": 1087,
-      "reason": "The shared output-item conversion replays native code-interpreter calls while omitting gateway projections."
-    },
     "crates/agentic-server-core/src/types/tools/params.rs": {
-      "limit": 581,
-      "reason": "The shared tagged tool declaration carries the Messages-only web_fetch variant so one registry builder serves every gateway tool."
+      "limit": 570,
+      "reason": "The shared tagged tool declaration validates the OpenAI auto-container form and exposes its closed public schema."
     },
     "crates/agentic-server/src/main.rs": {
       "limit": 644,

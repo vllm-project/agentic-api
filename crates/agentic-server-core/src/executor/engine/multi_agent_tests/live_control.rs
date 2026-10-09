@@ -2,7 +2,6 @@
 #![cfg(test)]
 
 use super::*;
-use crate::executor::engine::streaming::AbortOnDrop;
 use crate::executor::multi_agent::{
     AgentPhase, RunControl,
     control::{ControlAdmissionError, OutputDecision},
@@ -14,6 +13,7 @@ use crate::tool::{GatewayExecutorRegistration, McpDiscoveredHandler, McpHandler}
 use crate::types::client_calls::{ClientCallId, ClientCallKind, ClientCallOwner, ClientCallRegistration};
 use crate::types::client_calls::{ClientToolOutput, ClientToolOutputBatch};
 use crate::types::tools::McpDiscoveredToolParam;
+use tokio_util::task::AbortOnDropHandle;
 
 #[tokio::test]
 async fn retained_execution_rejects_external_control_before_starting_work() {
@@ -182,7 +182,7 @@ async fn next_event(events: &mut mpsc::Receiver<Value>) -> Value {
     event
 }
 
-fn drain_stream(mut stream: BoxStream) -> (mpsc::Receiver<Value>, AbortOnDrop<()>) {
+fn drain_stream(mut stream: BoxStream) -> (mpsc::Receiver<Value>, AbortOnDropHandle<()>) {
     let (sender, receiver) = mpsc::channel(64);
     let task = tokio::spawn(async move {
         let mut sequence = 0;
@@ -200,7 +200,7 @@ fn drain_stream(mut stream: BoxStream) -> (mpsc::Receiver<Value>, AbortOnDrop<()
             }
         }
     });
-    (receiver, AbortOnDrop::new(task))
+    (receiver, AbortOnDropHandle::new(task))
 }
 
 #[tokio::test]
@@ -285,7 +285,7 @@ async fn live_outputs_resume_one_child_while_sibling_waits_and_commit_once() {
                 .reason,
             ControlAdmissionError::Closed
         );
-        (&mut *drain).await.unwrap();
+        (&mut drain).await.unwrap();
         // Restoring the actual committed tree proves accepted inputs weren't just queued.
         let continued: RequestPayload =
             serde_json::from_value(json!({"model":"test","store":true,"previous_response_id":response_id,"input":[]}))
@@ -415,7 +415,7 @@ async fn disconnect_while_waiting_fails_run_without_publication() {
             assert_ne!(event["type"], "response.completed");
             failed |= event["type"] == "error";
         }
-        (&mut *drain).await.unwrap();
+        (&mut drain).await.unwrap();
         assert!(failed);
         assert!(exec.resp_handler.retrieve(&response_id).await.is_err());
     };

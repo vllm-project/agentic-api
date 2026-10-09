@@ -12,8 +12,7 @@ use agentic_core::executor::{
     normalize_native_server_tools_for_upstream, run_messages_loop, run_messages_stream,
 };
 use agentic_core::proxy::{ProxyAuth, ProxyRequest, error_response_for_auth, upstream_request_headers};
-use agentic_core::tool::ToolRegistry;
-use agentic_core::types::messages::registry_tools;
+use agentic_core::tool::{ToolRegistry, registry_tools};
 
 use super::super::common::{
     convert_response, read_bytes_with_auth, sse_response_with_headers, upstream_error_response,

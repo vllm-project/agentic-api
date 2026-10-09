@@ -264,3 +264,32 @@ async fn collaboration_input_schemas_allow_omitted_ids_without_weakening_output(
         );
     }
 }
+
+#[tokio::test]
+async fn prompt_cache_retention_schema_matches_request_validation() {
+    let spec = fetch_spec().await;
+    let schemas = &spec["components"]["schemas"];
+    assert_eq!(
+        schemas["PromptCacheRetention"]["enum"],
+        serde_json::json!(["in_memory", "24h"])
+    );
+    for name in ["RequestPayload", "CompactRequest"] {
+        let property = &schemas[name]["properties"]["prompt_cache_retention"];
+        assert!(!property.is_null(), "{name} must expose retention");
+        let alternatives = property["oneOf"].as_array().expect("nullable retention alternatives");
+        assert!(alternatives.iter().any(|schema| schema["type"] == "null"));
+        assert!(
+            alternatives
+                .iter()
+                .any(|schema| schema["enum"] == serde_json::json!(["in_memory", "24h"])
+                    || schema["$ref"] == "#/components/schemas/PromptCacheRetention")
+        );
+        assert!(
+            !schemas[name]["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|field| field == "prompt_cache_retention")
+        );
+    }
+}

@@ -1,0 +1,1155 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: 'Run three separate web searches, one after another, each as its own
+        web_search call: first the exact query "potato nutrition facts", then "tomato
+        nutrition facts", then "carrot nutrition facts". Do not combine them into
+        one search. Then summarize each result in one sentence.'
+      max_output_tokens: 16384
+      max_tool_calls: 1
+      model: Qwen/Qwen3.6-35B-A3B
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1790866959
+      error: null
+      id: resp_01a0f7fd-09cf-7583-92bc-efbf24248511
+      incomplete_details: null
+      instructions: null
+      max_tool_calls: 1
+      model: Qwen/Qwen3.6-35B-A3B
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to run three separate web searches, one after another,
+            as independent calls.
+
+            Then I need to summarize the results of each in one sentence.
+
+
+            The searches are:
+
+            1. "potato nutrition facts"
+
+            2. "tomato nutrition facts"
+
+            3. "carrot nutrition facts"
+
+
+            I will run the first search, process it, then run the second, process
+            it, then run the third, process it, and finally summarize each.
+
+
+            Wait, the user said "Run three separate web searches, one after another,
+            each as its own web_search call". This implies a sequence of tool calls.
+            I should make the first one, wait for the output, then make the second,
+            wait for output, then make the third, wait for output. Finally, I will
+            write the summary.
+
+
+            Let''s start with the first search.
+
+            Search 1: "potato nutrition facts"
+
+            Search 2: "tomato nutrition facts"
+
+            Search 3: "carrot nutrition facts"
+
+
+            I will execute Search 1 now.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0f7fd-0fd3-70e2-b0e2-5c27f64f28c5
+        status: null
+        summary: []
+        type: reasoning
+      - action:
+          queries:
+          - potato nutrition facts
+          query: potato nutrition facts
+          sources:
+          - title: Result for potato nutrition facts
+            url: https://example.com/potato-nutrition-facts
+          type: search
+        id: ws_01a0f7fd-1004-7cd0-ba53-f07379645cfb
+        status: completed
+        type: web_search_call
+      - content:
+        - text: 'I have received the result for the first search ("potato nutrition
+            facts"). Now I will proceed with the second search ("tomato nutrition
+            facts").
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0f7fd-1287-7953-a109-749daf59ba7b
+        status: null
+        summary: []
+        type: reasoning
+      - action:
+          queries:
+          - tomato nutrition facts
+          query: tomato nutrition facts
+          type: search
+        id: ws_01a0f7fd-128c-74f2-9e1d-14298c59f895
+        status: searching
+        type: web_search_call
+      - content:
+        - text: "The user asked for three separate web searches, one after another.\
+            \ I have only completed the first one so far, and the tool call limit\
+            \ has been reached. I have the result for \"potato nutrition facts\".\
+            \ I need to summarize it. However, I cannot perform the other two searches\
+            \ due to the limit. \n\nWait, the instructions say \"Run three separate\
+            \ web searches... Do not combine them into one search.\" and \"Then summarize\
+            \ each result in one sentence.\"\n\nI have one result. I should probably\
+            \ summarize that one result. But I cannot get the other two. The error\
+            \ indicates I hit the tool call limit. \n\nI should provide the summary\
+            \ for the potato result and explain that I could not complete the other\
+            \ searches due to the limit. Or, perhaps I can use the context from the\
+            \ tool call to generate the summary if the result was sufficient? The\
+            \ result description is \"Deterministic stub result for the query: potato\
+            \ nutrition facts.\" This doesn't give actual facts.\n\nActually, looking\
+            \ at the result: \"Deterministic stub result for the query: potato nutrition\
+            \ facts.\" This is a stub. I can't summarize actual nutrition facts from\
+            \ this.\n\nHowever, the user asked me to run the searches. I ran one.\
+            \ I failed on the second. I need to respond to the user.\n\nThe user's\
+            \ constraint is \"Run three separate web searches... Then summarize each\
+            \ result in one sentence.\"\n\nSince I hit the limit, I can only fulfill\
+            \ part of the request. I should provide the summary for the potato based\
+            \ on general knowledge? No, the prompt implies I should use the search\
+            \ results. The search result is a stub.\n\nIf I assume the user wants\
+            \ me to act as the AI that performed the tool calls, I should report what\
+            \ I got. But I only got a stub.\n\nLet's look at the result again. It's\
+            \ a \"Deterministic stub\". This is likely a mock result for testing.\n\
+            \nI will summarize the potato result based on the stub (which says nothing\
+            \ specific about nutrition, just that it's a result for the query). But\
+            \ that's unhelpful.\n\nHowever, usually, in these scenarios, I should\
+            \ proceed with the next step if possible. The error says \"Reached tool\
+            \ call limit of 1\". This means I cannot make any more tool calls.\n\n\
+            I must generate a response. I have one search result (stub). I cannot\
+            \ get the other two. I will summarize the potato result. Since the result\
+            \ is a stub, I might have to use general knowledge to summarize \"potato\
+            \ nutrition facts\" to be helpful, or state that the search returned a\
+            \ stub. Given the \"Deterministic stub\" nature, it's likely a test environment.\n\
+            \nLet's assume the user wants the summaries based on the search results.\n\
+            Result 1: \"Deterministic stub result for the query: potato nutrition\
+            \ facts.\"\nSummary: The search result for potato nutrition facts is a\
+            \ stub placeholder.\n\nResult 2 & 3: Failed due to limit.\n\nThe user\
+            \ might be testing if I stop correctly.\n\nHowever, standard behavior\
+            \ is to provide the summary. I will provide the summary for the potato.\
+            \ I will mention the limitation for the others.\n\nActually, maybe I can\
+            \ just provide the summary for the potato using general knowledge if the\
+            \ stub is useless? No, the instruction is \"summarize each result\".\n\
+            \nI will output the summary for the potato and note the failure for the\
+            \ others.\n\nSummary for Potato: The search results for potato nutrition\
+            \ facts are currently unavailable as the provided source is a stub placeholder.\n\
+            \nWait, I should check if I can use the \"memory\" or \"scratchpad\" to\
+            \ continue? No, the session ended.\n\nI will just provide the summary\
+            \ for the potato and explain the error.\n\nActually, looking at the prompt\
+            \ again: \"Run three separate web searches... Then summarize each result\
+            \ in one sentence.\"\n\nI have one result. I will summarize it.\n\n\"\
+            The search for 'potato nutrition facts' returned a stub placeholder rather\
+            \ than actual nutritional data.\"\n\nI cannot do the others.\n\nHowever,\
+            \ often in these tests, the \"stub\" result is just a placeholder and\
+            \ I might be expected to hallucinate or use internal knowledge if the\
+            \ stub is obvious? No, that violates the \"search\" constraint.\n\nI will\
+            \ just summarize the potato result.\n\nPotato: The provided search result\
+            \ for potato nutrition facts is a placeholder stub without specific data.\n\
+            \nI cannot summarize tomato and carrot.\n\nThe user might be expecting\
+            \ a failure. I will state the summary for the first one and the failure.\n\
+            \nActually, is there any chance I can run the other searches in the same\
+            \ turn? No, the error said \"Reached tool call limit of 1\". I already\
+            \ used 1. I cannot run any more.\n\nI will provide the response.\n\nResponse:\n\
+            The search for \"potato nutrition facts\" yielded a placeholder result.\
+            \ The searches for tomato and carrot nutrition facts could not be performed\
+            \ due to a tool call limit.\n\nWait, the user asked for a one-sentence\
+            \ summary for *each* result. I only have one result.\n\nI will provide\
+            \ the summary for the potato.\n\n\"The search result for potato nutrition\
+            \ facts is a placeholder stub.\"\n\nThat seems appropriate.\n\nHowever,\
+            \ if I look at the result content: \"Deterministic stub result for the\
+            \ query: potato nutrition facts.\"\n\nOkay, I will generate the response\
+            \ now.\n"
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0f7fd-2bb1-7e53-8eb9-432755f8d6bf
+        status: null
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            The search for "potato nutrition facts" returned a placeholder stub result.
+            The searches for tomato and carrot nutrition facts could not be completed
+            due to a tool call limit.'
+          type: output_text
+        id: msg_01a0f7fd-2c2f-7c42-892d-6bb6c36554b9
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: null
+      service_tier: default
+      status: completed
+      usage:
+        input_tokens: 2003
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 1457
+        output_tokens_details:
+          reasoning_tokens: 1358
+        total_tokens: 3460
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: 'Run four separate web searches in parallel in this single turn, each
+        as its own web_search call with exactly one query: "potato nutrition facts",
+        "tomato nutrition facts", "cucumber nutrition facts", and "carrot nutrition
+        facts". Do not combine queries. Then summarize each result in one sentence.'
+      max_output_tokens: 16384
+      max_tool_calls: 2
+      model: Qwen/Qwen3.6-35B-A3B
+      parallel_tool_calls: true
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1790866973
+      error: null
+      id: resp_01a0f7fd-3256-7da1-9c68-ed435462ddf0
+      incomplete_details: null
+      instructions: null
+      max_tool_calls: 2
+      model: Qwen/Qwen3.6-35B-A3B
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to run four separate web searches in parallel using
+            the `web_search` tool.
+
+            The queries are:
+
+            1. "potato nutrition facts"
+
+            2. "tomato nutrition facts"
+
+            3. "cucumber nutrition facts"
+
+            4. "carrot nutrition facts"
+
+
+            The user specifies that this should be done in "four separate web_search
+            calls", each with "exactly one query". The `web_search` tool has a parameter
+            `queries` which allows multiple queries in a single call, but the user
+            explicitly requested separate calls *each* with one query. This might
+            mean calling the function four times, or calling it once with `queries`
+            having four items?
+
+
+            Wait, the prompt says "Run four separate web searches in parallel in this
+            single turn, each as its own web_search call with exactly one query".
+
+            This phrasing suggests I should use the `queries` parameter, or it might
+            be interpreted as making 4 tool calls.
+
+            However, usually, "Run four separate web searches in parallel... each
+            as its own web_search call" implies multiple tool calls in the same turn.
+            But the LLM framework usually allows one `tool_use` block with multiple
+            calls, or just calling the tool with `queries`.
+
+            Let''s look at the tool definition: `queries` is an optional array.
+
+            If I call `web_search` with `queries=["potato nutrition facts", "tomato
+            nutrition facts", ...]`, that is *one* call.
+
+            If I call `web_search` four times, that is *four* calls.
+
+            The prompt says "in this single turn... each as its own web_search call".
+
+            I will provide four tool calls in the output.
+
+
+            Wait, looking at standard tool usage, usually we generate the tool calls
+            in a specific block.
+
+            I will generate 4 tool calls, each invoking `web_search` with `query`
+            set to the respective string.
+
+
+            Let''s double-check the prompt constraints: "Run four separate web searches
+            in parallel in this single turn, each as its own web_search call with
+            exactly one query".
+
+
+            Okay, I will generate 4 tool calls.
+
+
+            Call 1: web_search(query="potato nutrition facts")
+
+            Call 2: web_search(query="tomato nutrition facts")
+
+            Call 3: web_search(query="cucumber nutrition facts")
+
+            Call 4: web_search(query="carrot nutrition facts")
+
+
+            After the tool calls return, I will summarize the results in one sentence
+            per vegetable.
+
+
+            Plan:
+
+            1. Issue 4 tool calls.
+
+            2. Wait for results.
+
+            3. Summarize.
+
+
+            I don''t need to use the `queries` parameter for batching here because
+            the user asked for "its own web_search call". I will use the singular
+            `query` parameter in each call.
+
+
+            Let''s execute.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0f7fd-4175-7df1-b310-ae943004b421
+        status: null
+        summary: []
+        type: reasoning
+      - action:
+          queries:
+          - potato nutrition facts
+          query: potato nutrition facts
+          sources:
+          - title: Result for potato nutrition facts
+            url: https://example.com/potato-nutrition-facts
+          type: search
+        id: ws_01a0f7fd-41ce-7c52-b24d-c8908dd6fc2d
+        status: completed
+        type: web_search_call
+      - action:
+          queries:
+          - tomato nutrition facts
+          query: tomato nutrition facts
+          sources:
+          - title: Result for tomato nutrition facts
+            url: https://example.com/tomato-nutrition-facts
+          type: search
+        id: ws_01a0f7fd-41d0-7f31-a283-4eb50ab99e1c
+        status: completed
+        type: web_search_call
+      - action:
+          queries:
+          - cucumber nutrition facts
+          query: cucumber nutrition facts
+          type: search
+        id: ws_01a0f7fd-41d1-7b91-896c-b7eae4ec73f5
+        status: searching
+        type: web_search_call
+      - content:
+        - text: 'The user asked for four separate web searches, but the tool usage
+            hit a limit. I need to retry the remaining searches or combine them if
+            possible, but the user explicitly asked for separate calls. Since I hit
+            the limit, I should probably try to combine the remaining queries into
+            one call if the tool allows it, or just accept the error. However, usually,
+            a tool call limit of 2 means I can only do 2 tool calls in this turn.
+            I did 2. I need to finish the task in the next turn or try to combine.
+            But the prompt said "in this single turn".
+
+            Since I got an error, I will assume the system will allow me to retry
+            or I should proceed with what I have. Actually, looking at the responses,
+            I got stub results for potato and tomato. I didn''t get results for cucumber
+            and carrot.
+
+            Wait, if I am in a loop, I should probably just use the information I
+            have or try to get the rest.
+
+            However, as an AI, I can often rely on internal knowledge if web search
+            fails or is limited, but here I have stub results. The stub results say
+            "Deterministic stub result for the query: ...".
+
+            I will proceed to summarize based on the tool outputs provided, even if
+            they are stubs. The stubs confirm the topic but don''t give facts.
+
+            Wait, I cannot access the internet in this thought block.
+
+            I will assume the stub results are placeholders for the purpose of this
+            exercise. I will summarize the expected results based on general knowledge
+            or the stub description if it contained facts (it doesn''t).
+
+            Actually, the user wants me to summarize *each result*. The result says
+            "Deterministic stub result...".
+
+            This implies the system is simulating the tool.
+
+            I will write the summary based on the fact that I have results for potato
+            and tomato, and errors for the others.
+
+            But wait, I might be able to retry with a combined query if the limit
+            is strictly 2. But the user asked for separate calls.
+
+            I will output the summary now.
+
+
+            Summary of Potato: The nutrition facts for potatoes include essential
+            nutrients.
+
+            Summary of Tomato: The nutrition facts for tomatoes include essential
+            nutrients.
+
+            Cucumber and Carrot failed.
+
+
+            Wait, looking at the prompt again: "Run four separate web searches...
+            in this single turn".
+
+            The tool limit was reached.
+
+            I should report the summaries for the ones that worked and note the error
+            for the others? Or should I just hallucinate/assume the stubs contain
+            the info?
+
+            The stubs contain the text "Deterministic stub result for the query: [query]".
+
+            I will summarize that the search results provided are deterministic stubs
+            confirming the query.
+
+
+            Actually, looking at the previous turn''s structure, this is a simulation.
+
+            I will generate the summaries based on the successful calls.
+
+            The failed calls indicate I cannot fetch them in this turn.
+
+            However, often in these tests, I should just use the info I have.
+
+
+            Let''s look at the results again.
+
+            Potato result: "Deterministic stub result for the query: potato nutrition
+            facts."
+
+            Tomato result: "Deterministic stub result for the query: tomato nutrition
+            facts."
+
+            Cucumber/Carrot: Error.
+
+
+            Summary:
+
+            Potato: Web search results for potato nutrition facts returned a deterministic
+            stub confirming the query.
+
+            Tomato: Web search results for tomato nutrition facts returned a deterministic
+            stub confirming the query.
+
+            Cucumber: Web search failed due to a tool call limit.
+
+            Carrot: Web search failed due to a tool call limit.
+
+
+            This seems like the most honest reflection of the turn.
+
+
+            However, maybe I should try to be helpful? No, I must report the tool
+            results.
+
+            The prompt asks to "summarize each result".
+
+            I will do that.
+
+
+            One more thing: The user asked for "exactly one query" per call. I did
+            that.
+
+            I hit the limit.
+
+            I will present the summary.
+
+
+            One alternative: The user might expect me to know the facts if the search
+            fails? No, the instruction is "summarize each result". The result is an
+            error or a stub.
+
+            I will summarize accordingly.
+
+
+            Wait, is there a way to combine the last two?
+
+            If I combine them, I violate "each as its own web_search call".
+
+            So I stick to the limit.
+
+
+            Final check of the summary sentences.
+
+            1. Potato nutrition facts search returned a deterministic stub result
+            confirming the query.
+
+            2. Tomato nutrition facts search returned a deterministic stub result
+            confirming the query.
+
+            3. Cucumber nutrition facts search failed with a tool call limit error.
+
+            4. Carrot nutrition facts search failed with a tool call limit error.
+
+
+            This seems accurate.
+
+
+            One detail: "summarize each result".
+
+            The result for potato is the object `{"query":"potato nutrition facts",...,"results":...}`.
+
+            The text in the result is the stub message.
+
+            So saying "returned a deterministic stub result" is correct.
+
+
+            I will formulate the response.
+
+
+            I''ll combine the failures into one sentence for cucumber/carrot or keep
+            them separate? "summarize each result".
+
+            "Each result" implies 4 summaries.
+
+
+            Summary 1: The potato nutrition facts search returned a deterministic
+            stub result confirming the query.
+
+            Summary 2: The tomato nutrition facts search returned a deterministic
+            stub result confirming the query.
+
+            Summary 3: The cucumber nutrition facts search failed due to a tool call
+            limit.
+
+            Summary 4: The carrot nutrition facts search failed due to a tool call
+            limit.
+
+
+            This is precise.
+
+
+            Wait, I should check if I can interpret the stubs as having content.
+
+            "Result for potato nutrition facts" is the title.
+
+            "Description": "Deterministic stub result..."
+
+            Okay, the summary is solid.
+
+
+            I will output the response now.
+
+
+            One thought: The user prompt says "Run four separate web searches in parallel...
+            in this single turn".
+
+            I did.
+
+            "Then summarize each result in one sentence."
+
+            I will do that.
+
+
+            I will provide the four sentences.
+
+
+            Wait, is it possible the tool limit is per turn and I should have requested
+            fewer?
+
+            Yes, but the prompt demanded four.
+
+            So the failure is expected behavior given the constraints.
+
+
+            I''m ready.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0f7fd-611c-7062-bdb3-6d58a5c03ac9
+        status: null
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            The potato nutrition facts search returned a deterministic stub result
+            confirming the query.
+
+            The tomato nutrition facts search returned a deterministic stub result
+            confirming the query.
+
+            The cucumber nutrition facts search failed due to a tool call limit.
+
+            The carrot nutrition facts search failed due to a tool call limit.'
+          type: output_text
+        id: msg_01a0f7fd-6196-7661-84b3-efb2a3375eaf
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: null
+      service_tier: default
+      status: completed
+      usage:
+        input_tokens: 1565
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 2084
+        output_tokens_details:
+          reasoning_tokens: 1906
+        total_tokens: 3649
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input: 'Run three separate web searches, one after another, each as its own
+        web_search call: first the exact query "potato nutrition facts", then "tomato
+        nutrition facts", then "carrot nutrition facts". Do not combine them into
+        one search. Then summarize each result in one sentence.'
+      max_output_tokens: 16384
+      max_tool_calls: 1
+      model: Qwen/Qwen3.6-35B-A3B
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tool_choice: required
+      tools:
+      - type: web_search
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1790866979
+      error: null
+      id: resp_01a0f7fd-67c7-7572-b47a-d1d5f9166c9b
+      incomplete_details: null
+      instructions: null
+      max_tool_calls: 1
+      model: Qwen/Qwen3.6-35B-A3B
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to perform three separate web searches for nutrition
+            facts of potatoes, tomatoes, and carrots. I need to run them one after
+            another, not combined. I will use the `web_search` tool for each query
+            individually.
+
+
+            First search: "potato nutrition facts"
+
+            Second search: "tomato nutrition facts"
+
+            Third search: "carrot nutrition facts"
+
+
+            I will execute the first search now.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0f7fd-6b1e-72f3-a256-7cd7fe6806b1
+        status: null
+        summary: []
+        type: reasoning
+      - action:
+          queries:
+          - potato nutrition facts
+          query: potato nutrition facts
+          sources:
+          - title: Result for potato nutrition facts
+            url: https://example.com/potato-nutrition-facts
+          type: search
+        id: ws_01a0f7fd-6b32-7dc3-8c16-58217e72a5d9
+        status: completed
+        type: web_search_call
+      - content:
+        - text: 'The first search for "potato nutrition facts" returned a result with
+            a generic description. I will now proceed to the second search for "tomato
+            nutrition facts".
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0f7fd-6dd5-7501-ae33-fde170fddb02
+        status: null
+        summary: []
+        type: reasoning
+      - action:
+          queries:
+          - tomato nutrition facts
+          query: tomato nutrition facts
+          type: search
+        id: ws_01a0f7fd-6ddd-7b73-9aa1-c8500e478f37
+        status: searching
+        type: web_search_call
+      - content:
+        - text: 'The second search failed because I reached the tool call limit. The
+            user asked for three separate searches. I have completed one search and
+            need to perform two more. However, the system limit was reached after
+            the first tool call attempt, even though the first call succeeded. This
+            suggests the limit applies to the entire interaction or a specific window.
+            Since I cannot make further tool calls, I must rely on my internal knowledge
+            to answer the remaining parts of the request.
+
+
+            The user wants:
+
+            1. Summarize the potato result (which I have a stub for, but I should
+            use my knowledge for a real summary since the stub is generic).
+
+            2. Summarize the tomato result.
+
+            3. Summarize the carrot result.
+
+
+            Since I cannot run the other searches, I will use my pre-trained knowledge
+            to summarize the nutrition facts for tomatoes and carrots, and provide
+            a summary for the potato as well based on general knowledge, while acknowledging
+            the search results I did get (or lack thereof for the second two).
+
+
+            Actually, looking at the first result, it''s a "stub result". I should
+            probably still summarize it as if it were a real result or use my knowledge.
+            Given the user explicitly asked for "web searches", the expectation is
+            for fresh data. Since I can''t get fresh data for the second two, I will
+            use my general knowledge base for all three to ensure a complete answer,
+            or just the two I''m missing.
+
+
+            Wait, the prompt says "Do not combine them into one search." It implies
+            I should do three distinct calls. I did one. The system blocked the second.
+            I cannot proceed with the other calls.
+
+
+            I will provide summaries for all three items based on general knowledge
+            since the tool calls failed.
+
+
+            Potato summary: Potatoes are a good source of carbohydrates, vitamin C,
+            vitamin B6, and potassium, but they are low in fat and calories unless
+            prepared with added fats.
+
+            Tomato summary: Tomatoes are low in calories and provide significant amounts
+            of vitamin C, potassium, folate, and vitamin K, along with the antioxidant
+            lycopene.
+
+            Carrot summary: Carrots are highly nutritious, being low in calories but
+            rich in beta-carotene (vitamin A), fiber, vitamin K1, and potassium.
+
+
+            I will formulate the final response now.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0f7fd-7bae-7ca1-81e6-2a2231f76000
+        status: null
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            I encountered a system limit after the first tool call, so I could not
+            perform the subsequent searches. Based on general nutritional data, here
+            are the summaries:
+
+
+            1.  **Potato:** Potatoes are a calorie-dense carbohydrate source that
+            provides significant amounts of vitamin C, potassium, and vitamin B6.
+
+            2.  **Tomato:** Tomatoes are low-calorie vegetables rich in vitamin C,
+            potassium, and the antioxidant lycopene.
+
+            3.  **Carrot:** Carrots are nutritious, low-calorie vegetables known for
+            their high beta-carotene (vitamin A) content, as well as fiber and vitamin
+            K1.'
+          type: output_text
+        id: msg_01a0f7fd-7c07-7a32-8f23-b51ece5265bb
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: null
+      service_tier: default
+      status: completed
+      usage:
+        input_tokens: 1765
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 793
+        output_tokens_details:
+          reasoning_tokens: 595
+        total_tokens: 2558
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input: 'Use the python tool twice, as two separate tool calls: first compute
+        2**100, then in a second call compute the sum of the integers from 1 to 1000.
+        Report both results.'
+      max_output_tokens: 16384
+      max_tool_calls: 1
+      model: Qwen/Qwen3.6-35B-A3B
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1790866989
+      error: null
+      id: resp_01a0f7fd-827d-7bd3-b523-f102afb6bb85
+      incomplete_details: null
+      instructions: null
+      max_tool_calls: 1
+      model: Qwen/Qwen3.6-35B-A3B
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to use the python tool twice.
+
+            First call: Compute 2**100.
+
+            Second call: Compute the sum of integers from 1 to 1000.
+
+
+            I will make the first tool call now.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0f7fd-8537-7841-8102-61881688eefc
+        status: null
+        summary: []
+        type: reasoning
+      - code: print(2**100)
+        container_id: cntr_01a0f7fd-8544-7772-afb0-7e1d9f57e139
+        id: ci_01a0f7fd-8544-7772-afb0-7e1d9f57e139
+        outputs:
+        - logs: '1267650600228229401496703205376
+
+            '
+          type: logs
+        status: completed
+        type: code_interpreter_call
+      - content:
+        - text: 'The first tool call successfully computed 2**100. The result is 1267650600228229401496703205376.
+
+
+            Now I will make the second tool call to compute the sum of integers from
+            1 to 1000.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0f7fd-95ff-70b3-9b3f-e11d595e9199
+        status: null
+        summary: []
+        type: reasoning
+      - code: print(sum(range(1, 1001)))
+        container_id: cntr_01a0f7fd-960d-7ad2-b211-6058374d5bdb
+        id: ci_01a0f7fd-960d-7ad2-b211-6058374d5bdb
+        outputs: null
+        status: interpreting
+        type: code_interpreter_call
+      - content:
+        - text: 'I hit the tool call limit. I need to complete the task with the first
+            result and then explain that I cannot make the second tool call due to
+            the limit, or try to provide the answer based on the first tool call result
+            and my internal knowledge for the second part.
+
+
+            Wait, the prompt asks me to use the python tool twice. I used it once.
+            The system says I reached the tool call limit.
+
+
+            Actually, I can just compute the second part mentally or with simple reasoning
+            since I am an AI, but the prompt specifically asked to use the tool twice.
+            Since I cannot make the second tool call, I will report the result of
+            the first call and provide the answer for the second call based on my
+            internal knowledge, noting that the tool call couldn''t be completed.
+
+
+            Actually, looking at the error "Reached tool call limit of 1", it seems
+            the environment limits me to 1 tool call per response.
+
+
+            Let me check the first result: 2**100 = 1267650600228229401496703205376.
+
+
+            For the second part: sum of integers from 1 to 1000.
+
+            Formula: n*(n+1)/2 where n=1000.
+
+            Sum = 1000 * 1001 / 2 = 500 * 1001 = 500500.
+
+
+            I will report both results. I''ll mention that the second tool call was
+            not possible due to the limit, but I will provide the answer.
+
+
+            However, often "tool call limit" means limit per turn. I should try to
+            provide the final answer.
+
+
+            First result: 1267650600228229401496703205376
+
+            Second result: 500500
+
+
+            I will structure the response to give both results clearly.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0f7fd-a1b7-7281-b334-6670755606f2
+        status: null
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            Here are the results from the computation:
+
+
+            1. **2**^100**: 1267650600228229401496703205376
+
+            2. **Sum of integers from 1 to 1000**: 500500
+
+
+            *(Note: The second tool call could not be executed due to a tool call
+            limit, but the result was computed using standard arithmetic formula $n(n+1)/2$
+            where $n=1000$.)*'
+          type: output_text
+        id: msg_01a0f7fd-a202-7453-9023-846ae56d0a7d
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: null
+      service_tier: default
+      status: completed
+      usage:
+        input_tokens: 1180
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 753
+        output_tokens_details:
+          reasoning_tokens: 551
+        total_tokens: 1933
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      input: Use the python tool to run exactly print(1/0). If that raises an error,
+        make a second, separate python tool call that runs exactly print("retry ok").
+        Report what happened in each call.
+      max_output_tokens: 16384
+      max_tool_calls: 1
+      model: Qwen/Qwen3.6-35B-A3B
+      parallel_tool_calls: false
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - container:
+          type: auto
+        type: code_interpreter
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1790866997
+      error: null
+      id: resp_01a0f7fd-a88f-75b3-9a48-291cb3a20f26
+      incomplete_details: null
+      instructions: null
+      max_tool_calls: 1
+      model: Qwen/Qwen3.6-35B-A3B
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to execute two Python code snippets in separate
+            tool calls.
+
+            First, I will run `print(1/0)`. This should raise a ZeroDivisionError.
+
+            Then, I will run `print("retry ok")`. This should print "retry ok".
+
+            I need to report the results of both calls.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0f7fd-ab4e-74a1-84b9-662e9197a057
+        status: null
+        summary: []
+        type: reasoning
+      - code: print(1/0)
+        container_id: cntr_01a0f7fd-ab54-7d22-ae0c-3ffe58ccd20f
+        id: ci_01a0f7fd-ab54-7d22-ae0c-3ffe58ccd20f
+        outputs:
+        - logs: "Traceback (most recent call last):\n  File \"<string>\", line 182,\
+            \ in _eryx_exec\n  File \"<user>\", line 1, in <module>\nZeroDivisionError:\
+            \ division by zero\n"
+          type: logs
+        status: failed
+        type: code_interpreter_call
+      - content:
+        - text: 'The first call failed with a `ZeroDivisionError: division by zero`
+            as expected. Now I will make the second tool call to run `print("retry
+            ok")`.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0f7fd-baad-73f3-9df3-ee298dea54bc
+        status: null
+        summary: []
+        type: reasoning
+      - code: print("retry ok")
+        container_id: cntr_01a0f7fd-bab4-7a23-983a-796c027f2484
+        id: ci_01a0f7fd-bab4-7a23-983a-796c027f2484
+        outputs: null
+        status: interpreting
+        type: code_interpreter_call
+      - content:
+        - text: 'The user asked for two separate tool calls. The first one was successful
+            in demonstrating the error, though it failed due to the division by zero.
+            The second call to run `print("retry ok")` failed because I hit the tool
+            call limit. I should report what happened: the first call raised a ZeroDivisionError,
+            and the second call failed due to a tool call limit, so it couldn''t complete
+            the task of printing "retry ok".
+
+
+            However, looking at the conversation history, the user wants me to *report*
+            what happened. The system response indicates I hit a tool call limit on
+            the second attempt. I should explain this to the user.
+
+
+            Wait, the system response says "Reached tool call limit of 1". This means
+            I cannot make any more tool calls in this interaction. I have already
+            made one tool call (the first one). The second tool call attempt failed.
+
+
+            So, the report is:
+
+            1. First call `print(1/0)`: Raised a `ZeroDivisionError: division by zero`.
+
+            2. Second call `print("retry ok")`: Failed to execute because I reached
+            the tool call limit for this session.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a0f7fd-c23f-7c41-99cd-9d01891562d2
+        status: null
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            The first tool call to run `print(1/0)` failed and raised a `ZeroDivisionError:
+            division by zero`, which is the expected behavior for dividing by zero.
+
+
+            The second tool call to run `print("retry ok")` failed to execute because
+            the tool call limit for this session was reached (the limit is 1). Therefore,
+            the string "retry ok" was not printed.'
+          type: output_text
+        id: msg_01a0f7fd-c254-7f13-925d-17235047f25d
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: null
+      service_tier: default
+      status: completed
+      usage:
+        input_tokens: 1188
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 498
+        output_tokens_details:
+          reasoning_tokens: 344
+        total_tokens: 1686
+    headers:
+      content-type: application/json
+    status_code: 200

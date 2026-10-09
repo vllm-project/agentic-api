@@ -77,6 +77,7 @@ fn empty_response_event(
             "previous_response_id": &ctx.original_request.previous_response_id,
             "conversation_id": &ctx.conversation_id,
             "instructions": &ctx.enriched_request.instructions,
+            "max_tool_calls": ctx.max_tool_calls(),
         },
     })
 }

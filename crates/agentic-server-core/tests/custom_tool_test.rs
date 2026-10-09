@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use agentic_core::executor::accumulator::ResponseAccumulator;
+use agentic_core::tool::ToolDeclaration;
 use agentic_core::tool::{GatewayExecutors, ToolOwnership, ToolRegistry, ToolType};
 use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::{CustomToolCall, OutputItem};
@@ -214,14 +215,14 @@ fn assert_contiguous_sequence_numbers(events: &[Value]) {
 
 #[tokio::test]
 async fn custom_tool_type_normalizes_for_the_model_but_remains_client_owned() {
-    let mut tools = vec![
+    let mut tools = vec![ToolDeclaration::from(
         serde_json::from_value::<ResponsesTool>(serde_json::json!({
             "type": "custom",
             "name": "agentic_raw_echo",
             "description": "Emit raw text."
         }))
         .expect("custom declaration"),
-    ];
+    )];
     let registry = ToolRegistry::build_with_handlers(&mut tools, &mut GatewayExecutors::default())
         .await
         .expect("custom registry");
@@ -253,7 +254,9 @@ fn custom_tool_grammar_format_is_rejected() {
     }))
     .expect("custom declaration");
 
-    let error = tool.validate().expect_err("unsupported grammar must fail closed");
+    let error = ToolDeclaration::from(&tool)
+        .validate()
+        .expect_err("unsupported grammar must fail closed");
     assert!(error.to_string().contains("cannot preserve constrained decoding"));
 }
 

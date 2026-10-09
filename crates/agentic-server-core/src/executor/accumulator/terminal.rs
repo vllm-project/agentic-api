@@ -88,6 +88,7 @@ impl ResponseAccumulator {
             previous_response_id: previous_response_id.map(str::to_string),
             conversation_id: self.conversation_id,
             instructions: instructions.map(str::to_string),
+            max_tool_calls: None,
             service_tier: self.service_tier,
             tools: None,
             tool_choice: None,

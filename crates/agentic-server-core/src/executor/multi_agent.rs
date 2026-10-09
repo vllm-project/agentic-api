@@ -76,6 +76,9 @@ struct OwnedTask {
 /// all spawned futures are `Send + 'static`, and the owner explicitly joins
 /// them. Dropping the owner aborts remaining tasks through `JoinSet`; normal
 /// teardown must use [`Self::cancel_and_join`] or [`Self::finish_and_join`].
+/// The exception is a client that drops a streaming HTTP response: the stream
+/// owns the run, so dropping it drops this owner. Its tasks are aborted without
+/// being joined; each stops at its next await point and its result is discarded.
 ///
 /// At most one root and `max_concurrent_subagents` descendant tasks are retained.
 /// Finished tasks occupy their slots until joined so an undrained result queue

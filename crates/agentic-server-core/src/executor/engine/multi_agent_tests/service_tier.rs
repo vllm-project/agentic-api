@@ -9,6 +9,7 @@ async fn tier_model(
         "/v1/responses",
         post(move |Json(request): Json<Value>| async move {
             assert_eq!(request["service_tier"], "priority");
+            assert_eq!(request["prompt_cache_retention"], "24h");
             let input = request["input"].as_array().unwrap();
             let child = input.last().unwrap()["content"]
                 .as_str()
@@ -91,6 +92,7 @@ async fn final_root_tier_controls_json_sse_and_stored_snapshot() {
                     store: true,
                     stream,
                     service_tier: Some("priority".into()),
+                    prompt_cache_retention: Some(crate::types::request_response::PromptCacheRetention::TwentyFourHours),
                     input: ResponsesInput::Text("review context".into()),
                     multi_agent: Some(MultiAgentConfig {
                         enabled: true,

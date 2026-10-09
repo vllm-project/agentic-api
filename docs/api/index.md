@@ -103,6 +103,27 @@ a `compaction_trigger` input item.
 
 The configured upstream decides whether a request receives a cache hit.
 
+`prompt_cache_retention` accepts the legacy `"in_memory"` and `"24h"` values.
+An explicit value is forwarded through HTTP JSON/SSE, WebSocket execution,
+gateway tool rounds, multi-agent execution, automatic compaction,
+`compaction_trigger` summary inference, and `/v1/responses/compact`.
+Continuations restore item history but do not inherit a previous request's
+retention policy: send it again when needed. Missing or `null` values are omitted
+by typed execution; direct HTTP preserves an explicit `null`. Invalid values
+return `400` before inference. This is request forwarding; response-object
+retention echoing is outside its scope.
+
+Retention support depends on the configured upstream and model. The gateway
+sets no retention default, manages no KV-cache lifetime, and does not translate
+retention into `cache_salt` or `prompt_cache_options.ttl`. See the
+[OpenAI prompt caching guide](https://developers.openai.com/api/docs/guides/prompt-caching).
+Forwarding is not a capability guarantee: the
+[vLLM Responses request contract](https://github.com/vllm-project/vllm/blob/840c7c2f4bc72c7c55edb2dea6d23f9a9c9734e0/vllm/entrypoints/openai/responses/protocol.py)
+checked on October 1, 2026 does not define `prompt_cache_retention`, so this field should not be
+used to configure vLLM cache lifetime. Backend capability enforcement and
+`prompt_cache_options` remain follow-ups in
+[#330](https://github.com/vllm-project/agentic-api/issues/330).
+
 `service_tier` is also request-scoped. Direct and executor-backed HTTP requests,
 WebSocket requests, gateway tool rounds, automatic compaction, standalone
 `/v1/responses/compact` requests, and `compaction_trigger` summary inference
@@ -113,6 +134,69 @@ differ from the requested value. The gateway does not select a tier or silently
 retry with another one. In multi-agent execution, the last root-agent inference
 round determines the returned tier; child-agent tiers do not override it, and a
 missing final root tier clears any earlier value.
+
+#### `max_tool_calls`
+
+`max_tool_calls` limits the built-in tool calls one response may dispatch: web
+search, MCP calls, and code interpreter share one limit across every inference
+round. Listing MCP tools and client-executed function, custom, and shell calls do
+not count. A dispatched call counts even when it fails. The behavior matches the
+OpenAI reference recordings under `crates/agentic-server-core/tests/cassettes/max_tool_calls`.
+
+- The value must be an integer from 1 to 9223372036854775807. Other values return
+  `400` with `param: "max_tool_calls"` and code `integer_below_min_value`,
+  `integer_above_max_value`, or `invalid_type`, on direct and executor-backed HTTP
+  requests and on WebSocket requests.
+- A call over the limit is not executed. The model receives
+  `{"error":"UserError: Reached tool call limit of N"}` as its tool call output, and later
+  rounds of the response no longer offer gateway-executed built-in tools. One
+  refused call stays in the output: the first refused `web_search_call` ends at
+  `searching` or `code_interpreter_call` at `interpreting`, without a completed
+  event. Refused MCP calls and every other refused call are omitted. The response
+  still completes normally.
+- Every response echoes `max_tool_calls` (`null` when unset). The value applies
+  to one response and is not inherited through `previous_response_id`.
+- Executor-backed requests enforce the limit in the gateway and do not forward
+  it upstream; direct requests are passed through unchanged. Multi-agent
+  requests reject it.
+
+#### Prompt-cache usage compatibility
+
+Cache-read usage is reported in `usage.input_tokens_details.cached_tokens`;
+cache-write usage, when supplied by the upstream, is reported in
+`usage.input_tokens_details.cache_write_tokens`. The wire names follow the
+[OpenAI Responses usage contract](https://github.com/openai/openai-python/blob/becc1d20eed83c1b8d85e15dc131a372d9dc7813/src/openai/types/responses/response_usage.py),
+checked on October 2, 2026. That SDK declares `cache_write_tokens` as a required
+`int`. Accepting an absent or `null` counter is this gateway's compatibility
+policy for other upstreams, rather than an allowance in that OpenAI contract.
+Availability of these counters depends on the upstream.
+
+Direct HTTP requests pass through without typed response assembly. Requests with
+`store:true`, `previous_response_id`, tool-search state, or a feature requiring
+in-process execution use the executor and typed accounting. Thus `store:false`
+alone does not guarantee a direct request.
+
+| Path | Cache reads | Cache writes |
+| --- | --- | --- |
+| Direct HTTP JSON/SSE | Upstream value passes through | Upstream value and field presence pass through, including `null` |
+| Typed HTTP JSON/SSE | Preserved for a single inference; accumulated across inference rounds | Accumulated when reported; explicit `0` is retained |
+| WebSocket | Same typed accounting, scoped to the current response | Same typed accounting; a continuation does not carry over its parent's usage |
+| Stored response retrieval | Returns the terminal response snapshot without inference | Preserves the terminal value or omission |
+
+Typed execution treats an absent or `null` cache-write counter as unreported and
+omits it when every round leaves it unreported. A round that reports the counter
+contributes its value even when another round does not report it. The gateway
+never derives cache writes from cache reads. Typed SSE accounting uses the
+terminal response usage snapshot and counts each inference once; separate tool
+inference rounds contribute separately. Reported `total_tokens` is preserved
+independently rather than recomputed from the other counters. These counts do not establish a cache hit
+rate or billing amount.
+
+This matrix covers usage preservation under
+[#330](https://github.com/vllm-project/agentic-api/issues/330) and
+[#314](https://github.com/vllm-project/agentic-api/issues/314).
+Cache mode, TTL, breakpoint qualification, and backend capability enforcement
+remain separate acceptance items; this matrix does not claim support for them.
 
 ### `GET /v1/responses/{response_id}`
 

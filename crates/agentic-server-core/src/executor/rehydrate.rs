@@ -169,11 +169,13 @@ pub(crate) async fn rehydrate_with_continuation(
     continuation: Option<ResponseContinuation>,
 ) -> ExecutorResult<RequestContext> {
     validate_multi_agent_request(&request)?;
+    // Stored turns never supply `max_tool_calls`, so the request value is final here.
+    request.max_tool_calls_limit()?;
     // Fail before storage work for explicitly declared tools and new content;
     // check again once stored effective settings and history are resolved.
     exec_ctx
         .gateway_executors
-        .validate_declarations(request.tools.as_deref())?;
+        .validate_declarations(request.tool_declarations().as_deref())?;
     validate_message_content(&request.input)?;
     let response_id = uuid7_str("resp_");
     // Persistence keeps the public items. Tool lowering belongs to the enriched
@@ -212,7 +214,7 @@ pub(crate) async fn rehydrate_with_continuation(
 
     exec_ctx
         .gateway_executors
-        .validate_declarations(ctx.enriched_request.tools.as_deref())?;
+        .validate_declarations(ctx.enriched_request.tool_declarations().as_deref())?;
     validate_message_content(&ctx.enriched_request.input)?;
     validate_multi_agent_request(&ctx.enriched_request)?;
     Ok(ctx)
@@ -461,7 +463,8 @@ mod tests {
     use crate::types::agent_tree::{AgentState, StoredAgent, StoredTreeSnapshot};
     use crate::types::io::MultiAgentConfig;
     use crate::types::io::output::{McpListTools, OutputItem};
-    use crate::types::request_response::RequestPayload;
+    use crate::types::request_response::{MaxToolCalls, RequestPayload};
+    use std::num::NonZeroU64;
 
     #[test]
     fn session_history_without_compaction_is_unchanged() {
@@ -723,6 +726,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn invalid_max_tool_calls_is_rejected_before_history_access() {
+        let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
+        for (limit, code) in [
+            (serde_json::json!(0), "integer_below_min_value"),
+            (serde_json::json!("2"), "invalid_type"),
+        ] {
+            for previous in [None, Some("resp_missing")] {
+                let request: RequestPayload = serde_json::from_value(serde_json::json!({
+                    "model": "test", "input": "hello", "previous_response_id": previous, "max_tool_calls": limit
+                }))
+                .unwrap();
+                let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
+                assert!(matches!(error, ExecutorError::InvalidMaxToolCalls(_)), "{error:?}");
+                assert_eq!(error.error_code(), code);
+            }
+        }
+    }
+
+    #[tokio::test]
     async fn multi_agent_max_tool_calls_is_rejected_before_history_access() {
         let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
         for stream in [false, true] {
@@ -795,7 +817,7 @@ mod tests {
                 // No explicit multi_agent: admission must check again after restoring the tree.
                 let mut request = request(conversation_id, previous);
                 request.stream = stream;
-                request.max_tool_calls = Some(5);
+                request.max_tool_calls = Some(MaxToolCalls::new(NonZeroU64::new(5).unwrap()));
                 let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
                 assert!(matches!(error, ExecutorError::InvalidRequest(message)
                     if message == "max_tool_calls is not supported with multi_agent"));

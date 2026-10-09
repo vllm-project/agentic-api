@@ -23,12 +23,13 @@ use std::sync::Arc;
 use reqwest::StatusCode;
 use serde::Deserialize;
 
-use super::args::{DomainFilter, Freshness, WebSearchArguments, clean_string, clean_vec, validate_count};
+use super::args::{Freshness, WebSearchArguments, clean_string, clean_vec, retain_allowed_results, validate_count};
 use super::{
     ApiKey, WebSearchProvider, WebSearchProviderMetadata, WebSearchProviderResponse, WebSearchResult, clean_base_url,
     null_as_default, read_response_limited,
 };
 use crate::config::WebSearchProviderKind;
+use crate::tool::domain_policy::DomainFilter;
 use crate::tool::handler::ToolError;
 use crate::types::tools::{WebSearchContextSize, WebSearchToolParam};
 
@@ -341,8 +342,8 @@ impl BraveSearchResponse {
     fn into_provider_response(self, query: &str, domain_filter: &DomainFilter) -> WebSearchProviderResponse {
         let mut web: Vec<WebSearchResult> = self.web.results.into_iter().map(Into::into).collect();
         let mut news: Vec<WebSearchResult> = self.news.results.into_iter().map(Into::into).collect();
-        domain_filter.retain(&mut web);
-        domain_filter.retain(&mut news);
+        retain_allowed_results(domain_filter, &mut web);
+        retain_allowed_results(domain_filter, &mut news);
         WebSearchProviderResponse {
             web,
             news,
@@ -359,7 +360,7 @@ impl BraveSearchResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::tools::{WebSearchFilters, WebSearchUserLocation};
+    use crate::types::tools::{DomainFilters, WebSearchUserLocation};
 
     fn build_provider(api_key: Option<&str>, base_url: Option<&str>) -> BraveSearchProvider {
         BraveSearchProvider::from_values(
@@ -506,7 +507,7 @@ mod tests {
     #[test]
     fn request_prefers_tool_config_filters_and_location_over_arguments() {
         let config = WebSearchToolParam {
-            filters: Some(WebSearchFilters {
+            filters: Some(DomainFilters {
                 allowed_domains: Some(vec!["rust-lang.org".to_owned()]),
                 blocked_domains: None,
             }),

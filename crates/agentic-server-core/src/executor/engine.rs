@@ -13,26 +13,18 @@ mod streaming;
 mod usage;
 
 pub use execute::{ExecuteRequest, execute, prepare_non_generating_turn};
-#[cfg(test)]
-use streaming::panicked_stream_chunks;
 use usage::accumulate_usage;
 
 use std::num::NonZeroUsize;
 
 #[cfg(test)]
 use either::Either;
-#[cfg(test)]
-use tokio::sync::mpsc;
 
 use super::compaction::compact_items;
 use super::gateway::{
     compaction_event_plans, emit_gateway_completed_events, emit_gateway_start_events, emit_response_start_events,
 };
-#[cfg(test)]
-use super::gateway_accumulator::{GatewayStreamAccumulator, STREAM_EVENT_BUFFER, StreamEvent, StreamFrame};
 use crate::executor::error::ExecutorResult;
-#[cfg(test)]
-use crate::executor::inference::DONE_MARKER;
 use crate::executor::persist::persist_if_needed;
 use crate::executor::pipeline::AgentPipeline;
 use crate::executor::request::{ExecutionContext, RequestContext};
@@ -222,6 +214,7 @@ async fn run_compaction_trigger(
         previous_response_id: ctx.original_request.previous_response_id.clone(),
         conversation_id: ctx.conversation_id.clone(),
         instructions,
+        max_tool_calls: None,
         service_tier,
         tools: None,
         tool_choice: None,
@@ -281,7 +274,7 @@ mod tests {
     use crate::executor::modes::{ConversationHandler, ResponseHandler};
     use crate::storage::{ConversationStore, InOutItem, ResponseStore, create_pool_with_schema};
     use crate::tool::{GatewayExecutorRegistration, McpDiscoveredHandler, McpHandler};
-    use crate::types::tools::McpDiscoveredToolParam;
+    use crate::types::tools::{McpDiscoveredToolParam, ResponsesTool};
     use futures::StreamExt;
     use std::sync::Arc;
     use tokio::sync::Mutex;
@@ -579,6 +572,72 @@ mod tests {
             .expect("sequential MCP discoveries should reuse the released shared permit");
     }
 
+    /// The registry is built from the converted declarations; what discovery
+    /// found must still reach the request's own `mcp` declaration, where the
+    /// upstream request and storage read it.
+    #[tokio::test]
+    async fn the_registry_build_records_discovered_mcp_tools_into_the_request() {
+        let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test-model",
+            "store": false,
+            "input": "test input",
+            "tools": [
+                {"type": "function", "name": "echo"},
+                {"type": "mcp", "server_label": "counter"}
+            ]
+        }))
+        .expect("valid MCP request");
+        let request = RequestContext {
+            multi_agent_tree: None,
+            original_request: payload.clone(),
+            enriched_request: payload,
+            new_input_items: Vec::new(),
+            response_id: "resp_discovery".to_owned(),
+            conversation_id: None,
+            conversation_version: None,
+            continuation: None,
+        };
+        let mut exec_ctx = ExecutionContext::new(
+            ConversationHandler::new(ConversationStore::disabled()),
+            ResponseHandler::new(ResponseStore::disabled()),
+            Arc::new(reqwest::Client::new()),
+            "http://127.0.0.1:1".to_owned(),
+        );
+        exec_ctx.gateway_executors.insert(GatewayExecutorRegistration::Mcp {
+            server_label: "counter".to_owned(),
+            handlers: vec![McpDiscoveredHandler {
+                param: McpDiscoveredToolParam {
+                    server_label: "counter".to_owned(),
+                    tool_name: "read".to_owned(),
+                    internal_name: "mcp__counter__read".to_owned(),
+                    tool: serde_json::from_value(serde_json::json!({
+                        "name": "read",
+                        "inputSchema": {"type": "object"}
+                    }))
+                    .expect("valid MCP tool"),
+                },
+                handler: Arc::new(McpHandler::discovered_tool_spec_only()),
+            }],
+        });
+
+        let mut agent = agent_pipeline(request, None, None);
+        let registry = build_tool_registry(&mut agent, &exec_ctx, &ExecutorResponseBudget::new())
+            .await
+            .expect("registry with a discovered MCP tool");
+        assert!(registry.lookup("mcp__counter__read").is_some());
+
+        let tools = agent.request.enriched_request.tools.as_deref().expect("declared tools");
+        let ResponsesTool::Mcp(declared) = &tools[1] else {
+            panic!("expected the mcp wire declaration, got {tools:?}");
+        };
+        assert_eq!(declared.discovered_tools.len(), 1);
+        assert_eq!(declared.discovered_tools[0].internal_name, "mcp__counter__read");
+        assert!(matches!(
+            &tools[0],
+            ResponsesTool::Function(function) if function.name.as_str() == "echo"
+        ));
+    }
+
     #[tokio::test]
     async fn compaction_trigger_returns_single_compaction_item_without_upstream_trigger() {
         let captured = Arc::new(Mutex::new(None));
@@ -587,6 +646,7 @@ mod tests {
         let payload: RequestPayload = serde_json::from_value(serde_json::json!({
             "model": "test-model",
             "service_tier": "priority",
+            "prompt_cache_retention": "24h",
             "stream": false,
             "store": false,
             "input": [
@@ -615,6 +675,7 @@ mod tests {
 
         let upstream = captured.lock().await.take().expect("summary inference ran");
         assert_eq!(upstream["service_tier"], "priority");
+        assert_eq!(upstream["prompt_cache_retention"], "24h");
         assert!(
             !upstream.to_string().contains("compaction_trigger"),
             "trigger must never reach the upstream model"
@@ -861,6 +922,7 @@ mod tests {
         let payload: RequestPayload = serde_json::from_value(serde_json::json!({
             "model": "test-model",
             "service_tier": "priority",
+            "prompt_cache_retention": "24h",
             "stream": true,
             "store": false,
             "input": [
@@ -915,6 +977,7 @@ mod tests {
             ]
         );
         assert_eq!(compaction_done_count, 1);
+        assert_eq!(captured.lock().await.as_ref().unwrap()["prompt_cache_retention"], "24h");
         assert_eq!(
             captured.lock().await.as_ref().expect("summary inference ran")["service_tier"],
             "priority"
@@ -929,42 +992,5 @@ mod tests {
                 .contains("compaction_trigger")
         );
         server.abort();
-    }
-
-    #[tokio::test]
-    async fn stream_task_panic_after_event_uses_next_sequence_number_for_error() {
-        let accumulator = GatewayStreamAccumulator::new();
-        let (event_tx, mut event_rx) = mpsc::channel(STREAM_EVENT_BUFFER);
-        let task = tokio::spawn(async move {
-            let mut accumulator = accumulator;
-            let event = accumulator
-                .process_sse_line(r#"data: {"type":"response.created"}"#, 0)
-                .expect("event should be emitted");
-            event_tx
-                .try_send(StreamEvent::Frame(StreamFrame {
-                    content: "event".to_owned(),
-                    sequence_number: event.sequence_number().expect("event should be numbered"),
-                }))
-                .expect("test receiver should remain open");
-            panic!("test task panic");
-        });
-
-        let error = task.await.expect_err("task should panic");
-        let mut next_sequence_number = 0;
-        let chunks = panicked_stream_chunks(&error, &mut event_rx, &mut next_sequence_number);
-        let mut error_lines = chunks[1].lines();
-        assert_eq!(error_lines.next(), Some("event: error"));
-        let error_data = error_lines
-            .next()
-            .and_then(|line| line.strip_prefix("data: "))
-            .expect("SSE data");
-        assert!(error_lines.all(str::is_empty), "unexpected SSE frame content");
-        let error_event: serde_json::Value =
-            serde_json::from_str(error_data).expect("error chunk should be valid JSON");
-
-        assert_eq!(chunks[0], "event");
-        assert_eq!(error_event["type"], "error");
-        assert_eq!(error_event["sequence_number"], 1);
-        assert_eq!(chunks[2], DONE_MARKER);
     }
 }

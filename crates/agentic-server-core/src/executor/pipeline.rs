@@ -42,6 +42,8 @@ pub(super) struct AgentPipeline {
     round: Option<RoundIngestion>,
     cancellation: CancellationToken,
     agent_guidance: Option<InputMessage>,
+    /// Set after a `max_tool_calls` refusal; later rounds omit gateway-executed tools.
+    builtin_tools_withheld: bool,
 }
 
 impl AgentPipeline {
@@ -54,6 +56,14 @@ impl AgentPipeline {
 
     pub(super) fn agent_guidance(&self) -> Option<&InputMessage> {
         self.agent_guidance.as_ref()
+    }
+
+    pub(super) fn withhold_builtin_tools(&mut self) {
+        self.builtin_tools_withheld = true;
+    }
+
+    pub(super) const fn builtin_tools_withheld(&self) -> bool {
+        self.builtin_tools_withheld
     }
 
     pub(super) fn has_live_agent_items(&self, agent: &AgentIdentity) -> bool {
@@ -92,6 +102,7 @@ impl AgentPipeline {
             cancellation: CancellationToken::new(),
             agent_guidance: None,
             control: None,
+            builtin_tools_withheld: false,
         }
     }
 
@@ -109,6 +120,7 @@ impl AgentPipeline {
             cancellation: CancellationToken::new(),
             agent_guidance: None,
             control: None,
+            builtin_tools_withheld: false,
         }
     }
 
