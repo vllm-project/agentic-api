@@ -28,6 +28,10 @@
       "limit": 518,
       "reason": "Code-interpreter done-only ID backfill remains in the shared output-item slot validation path."
     },
+    "crates/agentic-server-core/src/executor/engine/multi_agent_tests.rs": {
+      "limit": 501,
+      "reason": "Declares the multi-agent execution-metrics test module (multi_agent_tests/metrics.rs). The module tree reached the 500-line limit with #432; the tests themselves live in the child file."
+    },
     "crates/agentic-server-core/src/tool/registry.rs": {
       "limit": 545,
       "reason": "The web_fetch executor binds through the existing registry validation and executor registration flow, like the code interpreter."
