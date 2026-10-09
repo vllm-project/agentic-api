@@ -1,4 +1,5 @@
 use super::*;
+use crate::executor::relay::RelayLimits;
 use crate::executor::upstream::tests::request_context;
 use crate::tool::ToolType;
 use serde_json::{Value, json};
@@ -20,7 +21,11 @@ fn search_context() -> TranslationContext {
 #[tokio::test]
 async fn live_delivery_applies_backpressure_and_disconnect_stops_input() {
     let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
-    let mut agent = AgentPipeline::new(request_context(), None, Some(sender));
+    let mut agent = AgentPipeline::new(
+        request_context(),
+        None,
+        StreamRelay::client(sender, RelayLimits::default()),
+    );
     let polled = AtomicUsize::new(0);
     let body = futures::stream::iter([
         Ok(line(
@@ -64,7 +69,11 @@ async fn live_delivery_applies_backpressure_and_disconnect_stops_input() {
 #[tokio::test]
 async fn gateway_sequence_and_lifecycle_survive_rounds_while_items_start_fresh() {
     let (sender, mut receiver) = tokio::sync::mpsc::channel(16);
-    let mut agent = AgentPipeline::new(request_context(), None, Some(sender));
+    let mut agent = AgentPipeline::new(
+        request_context(),
+        None,
+        StreamRelay::client(sender, RelayLimits::default()),
+    );
     let registry = ToolRegistry::default();
     for round in 0..2 {
         let item = json!({"id":format!("fc_{round}"),"type":"function_call","call_id":format!("call_{round}"),"name":"echo","arguments":"{}","status":"completed"});
@@ -85,9 +94,9 @@ async fn gateway_sequence_and_lifecycle_survive_rounds_while_items_start_fresh()
             )
             .await
             .unwrap();
-        assert_eq!(result.payload.id, "resp_test");
-        assert_eq!(result.payload.output.len(), 1, "each round owns fresh item slots");
-        assert!(result.deferred_events.is_empty());
+        assert_eq!(result.id, "resp_test");
+        assert_eq!(result.output.len(), 1, "each round owns fresh item slots");
+        assert!(!agent.relay.has_deferred());
         assert!(agent.round.is_none());
     }
     let mut events = Vec::new();
@@ -115,7 +124,7 @@ async fn gateway_sequence_and_lifecycle_survive_rounds_while_items_start_fresh()
 async fn json_and_sse_preserve_the_same_terminal_metadata_and_request_ids() {
     for status in ["completed", "incomplete", "failed"] {
         let response = json!({"id":"upstream","status":status,"output":[],"error":{"code":"test","message":"detail"},"incomplete_details":{"reason":"max_output_tokens"},"usage":{"input_tokens":2,"output_tokens":3,"total_tokens":5}});
-        let mut agent = AgentPipeline::new(request_context(), None, None);
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
         let mut from_json = serde_json::to_value(
             agent
                 .run_with_json_body(
@@ -143,7 +152,7 @@ async fn json_and_sse_preserve_the_same_terminal_metadata_and_request_ids() {
             )
             .await
             .unwrap();
-        let mut from_sse = serde_json::to_value(result.payload).unwrap();
+        let mut from_sse = serde_json::to_value(result).unwrap();
         from_json.as_object_mut().unwrap().remove("created_at");
         from_sse.as_object_mut().unwrap().remove("created_at");
         assert_eq!(from_json, from_sse);
@@ -154,7 +163,7 @@ async fn json_and_sse_preserve_the_same_terminal_metadata_and_request_ids() {
 #[test]
 fn json_preserves_nonterminal_status_and_strict_validation_rejects_it() {
     let body = r#"{"id":"upstream","status":"in_progress","output":[]}"#;
-    let mut agent = AgentPipeline::new(request_context(), None, None);
+    let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
     assert_eq!(
         agent
             .run_with_json_body(body, Validation::Lenient, TranslationContext::default(), None)
@@ -177,7 +186,7 @@ fn json_search_validation_precedes_lenient_item_loading() {
         json!({"type":"function_call","name":"tool_search","arguments":"{}","status":"completed"}),
         json!({"type":"function_call","id":"fc_1","call_id":"call_1","name":"hidden","arguments":"{}","status":"completed"}),
     ] {
-        let mut agent = AgentPipeline::new(request_context(), None, None);
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
         let body = json!({"id":"upstream","status":"completed","output":[item]}).to_string();
         assert!(
             agent
@@ -196,7 +205,7 @@ fn json_search_projection_handles_completed_and_aborted_calls() {
             ("{\"query\":", "in_progress")
         };
         let body = json!({"id":"upstream","status":status,"output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"tool_search","arguments":arguments,"status":call_status}]}).to_string();
-        let mut agent = AgentPipeline::new(request_context(), None, None);
+        let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
         let payload = agent
             .run_with_json_body(&body, Validation::Lenient, search_context(), None)
             .unwrap();
@@ -231,7 +240,7 @@ fn prepared_search_state_survives_rounds_and_is_taken_once_for_persistence() {
     );
     request.enriched_request.parallel_tool_calls = Some(false);
     request.original_request = request.enriched_request.clone();
-    let unprepared = AgentPipeline::new(request, None, None);
+    let unprepared = AgentPipeline::new(request, None, StreamRelay::detached());
     assert!(
         unprepared
             .ensure_request_prepared()
@@ -244,7 +253,7 @@ fn prepared_search_state_survives_rounds_and_is_taken_once_for_persistence() {
         serde_json::from_value(json!([{"type":"function","name":"weather","defer_loading":true}])).unwrap();
     let mut state = ToolSearchState::build_with_loaded_tools(&request.enriched_request, &loaded, false).unwrap();
     state.prepare_inference_request(&mut request.enriched_request).unwrap();
-    let mut agent = AgentPipeline::new(request, Some(state), None);
+    let mut agent = AgentPipeline::new(request, Some(state), StreamRelay::detached());
     for _ in 0..2 {
         agent.ensure_request_prepared().unwrap();
         let state = agent.tool_search_state().expect("request keeps prepared search state");

@@ -3,7 +3,8 @@ use crate::events::SSEEventType;
 use crate::executor::{
     error::{ExecutorError, ExecutorResult},
     multi_agent::{AgentPhase, AgentState, RegistryError, collaboration::attribution},
-    pipeline::{AgentFrame, AgentPipeline, AgentRoundId},
+    pipeline::AgentPipeline,
+    relay::{AgentFrame, AgentRoundId},
     response_budget::RetainedSize,
 };
 use crate::types::{

@@ -528,7 +528,7 @@ executor so the accumulator doesn't do inline JSON parsing.
    path.
 4. If the event represents a client-executed function shape, extend the corresponding
    translator under `executor/translate/`. If it is gateway-synthesized, construct the
-   typed `EventFrame` in `executor/gateway.rs`; `pipeline/delivery.rs` owns client relay.
+   typed `EventFrame` in `executor/gateway.rs` and present it with `StreamRelay::emit_local`.
 
 ### `executor/` — the loop, and the server's only door into storage
 
@@ -563,7 +563,8 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   parsing beyond splitting `data: ...` lines and stopping at `[DONE]`.
 - **`pipeline.rs`, `pipeline/`** — `AgentPipeline`, the request-owned entry point for
   both response body formats. `RoundIngestion` owns the synchronous per-round semantic
-  core; `StreamDelivery` owns awaited, ordered client delivery across rounds.
+  core; its `StreamRelay` (`relay.rs`, `relay/`) owns awaited, ordered client delivery
+  across rounds.
 - **`engine.rs`** — the top-level orchestrator: `ExecuteRequest`/`execute()`,
   `create_conversation()`, and `EngineOrchestration`, which owns the response byte
   budget, accumulated output/usage, and root `AgentTurn`. It advances the turn and
@@ -730,11 +731,16 @@ mail in private agent histories. `ResponsesInput::model_input` removes the publi
 collaboration items at the upstream boundary.
 
 Both JSON and SSE use this coordinator. Streaming workers feed a bounded,
-acknowledged channel into the existing response-wide `StreamDelivery`.
+acknowledged channel into the existing response-wide `StreamRelay`.
 `AgentRoundId` scopes source indexes; delivery's public-position mapping is shared
 with final output assembly. The coordinator emits one response lifecycle and completes
 items after canonical registration and public projection. Delivery does not become a
-second response assembler.
+second response assembler. An item that agent frames already presented needs only
+`output_item.done`. An item the coordinator creates itself, which no upstream frame
+presented, gets its whole public lifecycle from `item_lifecycle.rs`. That module builds
+each frame lazily from the completed item and decides per item kind, through an
+exhaustive match, what streams between `output_item.added` and `output_item.done`.
+The relay attributes and presents those frames.
 
 **Recorded contract checks.** `tests/multi_agent_contract_test.rs` loads independently
 recorded OpenAI and gateway YAML for review, proposals, mixed tools and client-executed
@@ -770,7 +776,7 @@ inference.rs
                 (per-tool translators)
                          │ translated SSE frames
                          ▼
-                  StreamDelivery
+                   StreamRelay
                          │
                          ▼
               GatewayStreamAccumulator
@@ -786,9 +792,9 @@ inference rounds → gateway execution → terminal policy → persistence
 | --- | --- |
 | Inference transport (`inference.rs`) | HTTP I/O, byte chunks, SSE framing, timeouts, and `[DONE]` detection. |
 | Event parsing (`events/`) | Classify one SSE line and normalize one data payload into an `EventFrame`. |
-| Request pipeline (`pipeline.rs`) | Hold one request context, tool-search state, cross-round delivery state, and the JSON/SSE body entry points. |
+| Request pipeline (`pipeline.rs`) | Hold one request context, tool-search state, the response's stream relay, and the JSON/SSE body entry points. |
 | Round ingestion (`pipeline/ingest.rs`) | Process one body with one `ResponseAccumulator`, one `TranslationDispatcher`, and final response normalization. |
-| Stream delivery (`pipeline/delivery.rs`) | Provide awaited sender delivery, gateway-event deferral and release, response IDs, and cross-round stream accumulation. |
+| Stream relay (`relay.rs`) | Own the client sink, presentation state, round offset, deferred buffer, and their limits; present local and upstream frames through one send path. |
 | Agent execution (`engine/agent_turn.rs`) | Own the per-agent registry and round progress; perform inference/tool work and return typed round outcomes. |
 | Orchestration (`engine.rs`) | Own agent execution, the shared response budget, response assembly, terminal policy, and persistence coordination. |
 
@@ -797,11 +803,11 @@ creates the shared response budget and an `AgentTurn` that retains its own regis
 and exclusively borrows the pipeline. Each turn step asks `upstream.rs` to run the
 inference body through `run_with_json_body` or live `run_with_stream_body`. A new
 `RoundIngestion` is created for every body and consumed by finalization, while
-`StreamDelivery` and `GatewayStreamAccumulator` survive across inference rounds.
+`StreamRelay` and its `GatewayStreamAccumulator` survive across inference rounds.
 
 For multi-agent execution, the engine owns tree coordination and schedules separate
 agent execution contexts. Per-agent ingestion feeds typed frames through a bounded,
-acknowledged channel into one response-wide `StreamDelivery`. Its source-scoped index
+acknowledged channel into one response-wide `StreamRelay`. Its source-scoped index
 mapping is shared with the engine's final response assembly; delivery does not assemble items.
 
 The live runner polls one framed line, performs synchronous ingestion and translation,
@@ -919,31 +925,47 @@ the client; RFC #352 proposes a gateway-executed shell backend as future work.
 The client executes each call and submits a `shell_call_output` item with the
 same `call_id`.
 
-#### `gateway_accumulator.rs` and `pipeline/delivery.rs` — continuous client SSE
+#### `relay.rs` and `gateway_accumulator.rs` — continuous client SSE
 
-`StreamDelivery`, owned by `AgentPipeline`, withholds terminal upstream lifecycle
-events for the engine, defers frames at and after the first hidden gateway-call
-index, and later releases them in output order around synthesized gateway events.
-Deferred frames are bounded by both 1024 entries and the existing 256 KiB
-serialized-wire-data limit. This is separate from response assembly, retained
-session state, and total process memory.
+`StreamRelay`, owned by `AgentPipeline` for the whole response, is the only owner of
+the client sink, cross-round presentation state, the current round's output offset,
+the deferred-frame buffer, and `RelayLimits`. Callers state a frame's origin by the
+method they call; none of them passes a sender, accumulator, or offset:
 
-`pipeline/delivery.rs` owns the shared emission path for both translated upstream
-events and gateway-synthesized events. Only the upstream adapter restores response
-IDs and applies the round's output offset; gateway events already use public IDs
-and absolute indexes. Sequence and response-start deduplication state is committed
-after the bounded sender accepts the event. A failed serialization, closed receiver,
-or cancelled send cannot consume that state. Enqueueing is not client receipt or
-playback acknowledgement. Failed or cancelled frames are discarded by the caller;
-this does not make an interrupted pipeline resumable or support retrying an already
-rebased frame.
+| Method | Frames | Transforms |
+| --- | --- | --- |
+| `accept` | One translation from ingestion | Withhold terminal response events for the engine, defer or present each frame, then release what a moved defer window no longer hides. |
+| `emit_upstream` | One translated provider frame | Restore the public response IDs and rebase the output index onto the round. |
+| `emit_local` | Gateway-synthesized and multi-agent frames | None: they already carry public IDs and absolute indexes. |
+| `release_deferred` | Deferred provider frames that a `Release` admits | As `emit_upstream`. |
 
-While a gateway-call defer window is active, index-less frames remain deferred
-and are released after indexed frames. Flushes keep unsent frames and their byte
-accounting in `StreamDelivery` until the bounded sender accepts each event, so a
-cancelled or disconnected flush cannot silently discard the remainder.
-When an upstream round fails, the engine releases its deferred public events through
-the same delivery path before the terminal event, without executing gateway tools.
+`begin_round` sets the round's offset and rejects a new round while the previous round
+still holds deferred frames. Every method reaches the client through one private
+`send`, the only place an output offset is applied. The relay's constructor fixes its
+sink: `StreamRelay::client` for the bounded SSE channel, `response` for a retained
+WebSocket response's `ResponseEventSink`, `agent` for a multi-agent round's
+`AgentFrameSink`, and `detached` for collect-only and JSON execution. `AgentPipeline::new`
+takes the configured relay, so the pipeline never handles a sender.
+Sequence and response-start deduplication state is committed after the sink accepts
+the event, so a failed serialization, closed receiver, or cancelled send cannot consume
+it. Enqueueing is not client receipt or playback acknowledgement, and this does not
+make an interrupted pipeline resumable or support retrying an already rebased frame.
+
+The relay defers provider frames at and after the first hidden gateway-call index, and
+index-less frames while that window is open. The buffer keeps release order on entry:
+indexed frames by output index, then index-less frames, each in arrival order.
+`RelayLimits` bounds it by 1024 entries and 256 KiB of serialized wire data by default.
+A single frame over the byte limit is rejected on its own terms, and no limit drops a
+frame. A frame's charged size is refunded only when the sink accepts it, so a cancelled
+or failed release keeps the remaining frames and their byte account. These limits are
+separate from response assembly, retained session state, and total process memory. A
+slow client applies backpressure through the bounded sink and never moves frames into
+the deferred buffer.
+
+`release_deferred` is the one release path. It runs when the defer window moves during
+a stream; after gateway execution, once per output item, so each item's deferred frames
+follow its synthesized gateway lifecycle; and, when an upstream round fails, before the
+terminal event without executing gateway tools.
 
 The Responses `BoxStream` owns its orchestration future directly. It polls that future
 and the existing bounded event receiver on the consumer's task; there is no detached
@@ -968,8 +990,11 @@ Their `wait_until_idle` lease fences remain in place.
 
 `GatewayStreamAccumulator` carries only cross-round presentation state: monotonic
 `sequence_number`s, public `output_index` rebasing, and deduplication of response start
-events. It holds no `OutputItem` assembly state. Sending is awaited before ingestion
-continues, so sender closure or delivery failure propagates through the live pipeline.
+events. It holds no `OutputItem` assembly state and no sink. Sending is awaited before
+ingestion continues, so sender closure or delivery failure propagates through the live
+pipeline. After the producer finishes, `engine/streaming.rs` takes the state back from
+the relay and renders the terminal event on a clone, which it discards if persistence
+fails; cloning copies a few scalars.
 
 #### `gateway.rs` — the tool-loop's building blocks
 
@@ -1025,19 +1050,20 @@ round:
   web search, MCP, and optional code-interpreter calls from those same slots. A code-interpreter
   call emits `output_item.added`, `code_interpreter_call.in_progress`, the
   `code_interpreter_call_code.delta`/`done` pair, `code_interpreter_call.interpreting`,
-  `code_interpreter_call.completed`, and `output_item.done`, with indexes and sequence numbers
-  assigned by `GatewayStreamAccumulator`. The dispatcher suppresses the canonical upstream
+  `code_interpreter_call.completed`, and `output_item.done`, with indexes from the plan and
+  sequence numbers from `StreamRelay`. The dispatcher suppresses the canonical upstream
   `function_call` lifecycle after classifying the call as gateway-executed. Native upstream
   `code_interpreter_call` items instead follow the accumulator's typed lifecycle and pass through;
   contradictory item kinds at one output index are handled by ingestion before translation. The
   ordinary path emits all planned start events, executes the round concurrently, then emits ordered
   completed/failed events.
 - Streaming may receive client-visible output interleaved with gateway calls. In that
-  case `engine.rs::execute_and_emit_ordered_output_calls` temporarily groups deferred
-  upstream frames by `output_index`, executes the same `GatewayScheduler` concurrently,
-  and then interleaves synthetic gateway lifecycle events with released upstream
-  frames in original output order. Concurrency and wire ordering are therefore
-  separate concerns.
+  case `engine/agent_turn.rs::execute_round_output` executes the same `GatewayScheduler`
+  concurrently, then `gateway/lifecycle.rs::relay_round_events` walks the output items in
+  order: each item's synthetic gateway lifecycle is presented, followed by that item's
+  deferred upstream frames through `StreamRelay::release_deferred` with `Release::Item`,
+  which presents them at the item's `public_item_index`. Concurrency and wire ordering
+  are therefore separate concerns.
 - `public_output_items` is the public projection: custom function calls become
   `custom_tool_call`; gateway-owned internal function calls become their handler's
   `web_search_call`/`mcp_call` output; client-owned function calls remain function
@@ -1446,7 +1472,7 @@ router, reusing the same core logic in-process.
 | Add a new tool type | `tool/handler.rs` impl(s) → `tool/declaration.rs` (a `ToolDeclaration` kind and its view) → `tool/normalize.rs` → `tool/registry.rs` → `executor/translate/client.rs` for client-executed function shapes → `tool/executors.rs` for lazy gateway setup |
 | Change gateway-round concurrency or lifecycle ordering | `executor/gateway.rs` (`GatewayScheduler`/event plans) + `executor/engine.rs` (round decision/ordered streaming) + `tool/ownership.rs` (typed binding and same-tool safety) |
 | Change agent admission, mailbox wakeups or client continuation routing | `executor/engine/multi_agent/` + `executor/multi_agent/`; keep tree persistence in the existing mode handlers |
-| Change client streaming order, buffering, or backpressure | `executor/pipeline/delivery.rs`; keep parsing in `events/` and response assembly in `executor/accumulator/` |
+| Change client streaming order, buffering, or backpressure | `executor/relay.rs` and `executor/relay/`; keep parsing in `events/` and response assembly in `executor/accumulator/` |
 | Move streaming ingestion to a worker | Benchmark the equivalent inline and worker paths under [#245](https://github.com/vllm-project/agentic-api/issues/245) before changing executor placement |
 | Feed response output into the next inference round | `types/io/output.rs::OutputItem::to_input_item`; use `executor/gateway.rs::append_output_items_to_input` only to append those converted items |
 | Change continuation history visibility | `storage/types/item.rs::into_input_items` → `types/io/output.rs::to_input_item` (preservation) → `types/io/input.rs::model_input` (upstream visibility) |

@@ -11,10 +11,12 @@ use summary::completed_summary_text;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::pending_calls::resolved_prefix_len;
 use crate::executor::persist::persist_prepared_turn;
+use crate::executor::pipeline::AgentPipeline;
 use crate::executor::prepare::prepare_request_tools;
 use crate::executor::rehydrate::rehydrate_conversation;
+use crate::executor::relay::StreamRelay;
 use crate::executor::request::{ExecutionContext, RequestContext};
-use crate::executor::upstream::{agent_pipeline, fetch_blocking_payload};
+use crate::executor::upstream::fetch_blocking_payload;
 use crate::tool::ToolSearchState;
 use crate::types::event::MessageStatus;
 use crate::types::io::input::latest_compaction_window;
@@ -156,7 +158,7 @@ async fn compact_items_with_trigger(
         conversation_version: None,
         continuation: None,
     };
-    let mut agent = agent_pipeline(ctx, None, None);
+    let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached());
     let response =
         fetch_blocking_payload(&mut agent, exec_ctx, auth, &crate::tool::ToolRegistry::default(), None).await?;
     let summary = completed_summary_text(&response)?;

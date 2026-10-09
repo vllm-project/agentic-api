@@ -8,6 +8,7 @@ use crate::executor::{
         ValidatedTreeCheckpoint,
     },
     pipeline::AgentPipeline,
+    relay::StreamRelay,
     request::{ExecutionContext, RequestContext},
     response_budget::ExecutorResponseBudget,
 };
@@ -264,7 +265,7 @@ pub(super) async fn prepare_agent(
         conversation_version: None,
         continuation: None,
     };
-    let mut pipeline = AgentPipeline::new(ctx, tool_search, None);
+    let mut pipeline = AgentPipeline::new(ctx, tool_search, StreamRelay::detached());
     let turn = AgentTurn::new(&mut pipeline, exec, budget, MAX_ROUNDS).await?;
     let mut execution = turn.execution_state();
     let discovery = execution.take_discovery_output();

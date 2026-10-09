@@ -27,13 +27,11 @@ use super::gateway::{
 use crate::executor::error::ExecutorResult;
 use crate::executor::persist::persist_if_needed;
 use crate::executor::pipeline::AgentPipeline;
+use crate::executor::relay::StreamRelay;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::response_budget::ExecutorResponseBudget;
 #[cfg(test)]
 use crate::executor::response_budget::MAX_EXECUTOR_RESPONSE_BYTES;
-#[cfg(test)]
-use crate::executor::upstream::agent_pipeline;
-use crate::executor::upstream::agent_pipeline_with_limits;
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
 use crate::types::io::{InputItem, OutputItem, ResponseUsage, ResponsesInput};
 #[cfg(test)]
@@ -58,12 +56,11 @@ async fn run_until_gateway_tools_complete(
     if agent.request.original_request.input.has_compaction_trigger() {
         let tool_search_metadata = agent.take_tool_search_metadata();
         let payload = run_compaction_trigger(&mut agent.request, exec_ctx, auth).await?;
-        if let (_, Some((stream_accumulator, stream_sender))) = agent.parts_mut() {
-            emit_response_start_events(&payload, stream_accumulator, stream_sender).await?;
-            let event_plans = compaction_event_plans(&payload.output, 0);
-            emit_gateway_start_events(&event_plans, stream_accumulator, stream_sender).await?;
-            emit_gateway_completed_events(&payload.output, &event_plans, stream_accumulator, stream_sender).await?;
-        }
+        let relay = agent.relay_mut();
+        emit_response_start_events(&payload, relay).await?;
+        let event_plans = compaction_event_plans(&payload.output, 0);
+        emit_gateway_start_events(&event_plans, relay).await?;
+        emit_gateway_completed_events(&payload.output, &event_plans, relay).await?;
         return Ok((payload, tool_search_metadata));
     }
     EngineOrchestration::new(agent, exec_ctx)
@@ -242,9 +239,8 @@ async fn run_blocking(
     tool_search_state: Option<ToolSearchState>,
     exec_ctx: &ExecutionContext,
     auth: Option<&str>,
-    max_stream_event_bytes: usize,
 ) -> ExecutorResult<ResponsePayload> {
-    let mut agent = agent_pipeline_with_limits(ctx, tool_search_state, None, max_stream_event_bytes);
+    let mut agent = AgentPipeline::new(ctx, tool_search_state, StreamRelay::detached());
     let (payload, tool_search_metadata) =
         Box::pin(run_until_gateway_tools_complete(&mut agent, exec_ctx, auth, false)).await?;
     let (ctx, _) = agent.into_parts();
@@ -457,7 +453,7 @@ mod tests {
             .consume(MAX_EXECUTOR_RESPONSE_BYTES - 512)
             .expect("reserve most of the response budget");
 
-        let mut request = agent_pipeline(request, None, None);
+        let mut request = AgentPipeline::new(request, None, StreamRelay::detached());
         let error = build_tool_registry(&mut request, &exec_ctx, &response_budget)
             .await
             .expect_err("MCP discovery must share the request-wide response budget");
@@ -553,7 +549,7 @@ mod tests {
         }
 
         let plain_budget = ExecutorResponseBudget::new();
-        let mut plain_request = agent_pipeline(plain_request, None, None);
+        let mut plain_request = AgentPipeline::new(plain_request, None, StreamRelay::detached());
         let mut plain_build = Box::pin(build_tool_registry(&mut plain_request, &exec_ctx, &plain_budget));
         assert!(matches!(
             futures::poll!(plain_build.as_mut()),
@@ -562,7 +558,7 @@ mod tests {
         drop(plain_build);
 
         let mcp_budget = ExecutorResponseBudget::new();
-        let mut mcp_request = agent_pipeline(mcp_request, None, None);
+        let mut mcp_request = AgentPipeline::new(mcp_request, None, StreamRelay::detached());
         let mut mcp_build = Box::pin(build_tool_registry(&mut mcp_request, &exec_ctx, &mcp_budget));
         assert!(futures::poll!(mcp_build.as_mut()).is_pending());
 
@@ -620,7 +616,7 @@ mod tests {
             }],
         });
 
-        let mut agent = agent_pipeline(request, None, None);
+        let mut agent = AgentPipeline::new(request, None, StreamRelay::detached());
         let registry = build_tool_registry(&mut agent, &exec_ctx, &ExecutorResponseBudget::new())
             .await
             .expect("registry with a discovered MCP tool");

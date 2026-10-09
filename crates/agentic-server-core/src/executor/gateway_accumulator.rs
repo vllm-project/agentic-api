@@ -1,16 +1,14 @@
 use crate::config::DEFAULT_MAX_STREAM_EVENT_BYTES;
 use crate::events::{EventFrame, EventPayload, SSEEventType, WireEvent, normalize_sse_line};
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::pipeline::AgentFrameSink;
-use crate::executor::response_events::ResponseEventSink;
 use crate::types::request_response::ResponsePayload;
 use crate::utils::common::{serialize_to_string, serialize_to_value};
 use serde_json::Value;
 
+/// Cross-round presentation state: sequence numbers, output-index rebasing, and
+/// response-start deduplication. `StreamRelay` owns the instance for a response.
 #[derive(Clone)]
 pub struct GatewayStreamAccumulator {
-    pub(super) response_sink: Option<ResponseEventSink>,
-    pub(super) agent_sink: Option<AgentFrameSink>,
     next_sequence_number: u64,
     emitted_created: bool,
     emitted_in_progress: bool,
@@ -53,17 +51,11 @@ impl GatewayStreamAccumulator {
     #[must_use]
     pub fn with_max_stream_event_bytes(max_stream_event_bytes: usize) -> Self {
         Self {
-            agent_sink: None,
-            response_sink: None,
             next_sequence_number: 0,
             emitted_created: false,
             emitted_in_progress: false,
             max_stream_event_bytes,
         }
-    }
-
-    pub(crate) fn max_stream_event_bytes(&self) -> usize {
-        self.max_stream_event_bytes
     }
 
     pub fn process_sse_line(&mut self, line: &str, output_offset: usize) -> Option<EventFrame> {

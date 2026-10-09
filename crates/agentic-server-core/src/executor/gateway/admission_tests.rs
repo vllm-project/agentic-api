@@ -9,7 +9,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use crate::executor::gateway_accumulator::GatewayStreamAccumulator;
+use crate::executor::gateway_accumulator::StreamEvent;
+use crate::executor::relay::{RelayLimits, StreamRelay};
 use crate::tool::{
     GatewayExecutor, GatewayExecutors, GatewayToolEventPlan, ToolHandler, ToolType, responses_declarations,
 };
@@ -250,11 +251,11 @@ async fn refused_web_search_completes_at_searching_without_a_completed_event() {
     let (scheduler, results) = plan_and_run(&items, &registry, &mut budget).await;
 
     let (sender, mut receiver) = mpsc::channel(64);
-    let mut accumulator = GatewayStreamAccumulator::new();
-    emit_gateway_start_events(scheduler.event_plans(), &mut accumulator, &sender)
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
+    emit_gateway_start_events(scheduler.event_plans(), &mut relay)
         .await
         .expect("start events");
-    emit_gateway_completed_events(&results, scheduler.event_plans(), &mut accumulator, &sender)
+    emit_gateway_completed_events(&results, scheduler.event_plans(), &mut relay)
         .await
         .expect("completed events");
 
@@ -340,11 +341,11 @@ async fn refused_code_interpreter_completes_at_interpreting_without_a_completed_
     };
 
     let (sender, mut receiver) = mpsc::channel(64);
-    let mut accumulator = GatewayStreamAccumulator::new();
-    emit_gateway_start_events(std::iter::once(&plan), &mut accumulator, &sender)
+    let mut relay = StreamRelay::client(sender, RelayLimits::default());
+    emit_gateway_start_events(std::iter::once(&plan), &mut relay)
         .await
         .expect("start events");
-    emit_gateway_completed_events::<GatewayCallResult>(&[], std::iter::once(&plan), &mut accumulator, &sender)
+    emit_gateway_completed_events::<GatewayCallResult>(&[], std::iter::once(&plan), &mut relay)
         .await
         .expect("completed events");
 

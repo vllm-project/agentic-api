@@ -7,10 +7,11 @@ use crate::executor::{
     inference::BoxStream,
     multi_agent::RunControl,
     persist::persist_if_needed,
+    pipeline::AgentPipeline,
+    relay::{RelayLimits, StreamRelay},
     request::{ExecutionContext, RequestContext},
     response_events::{ResponseCommitState, ResponseEventSink},
     telemetry::ExecutionSpan,
-    upstream::agent_pipeline_with_limits,
 };
 use crate::tool::ToolSearchState;
 use std::{num::NonZeroUsize, sync::Arc};
@@ -86,9 +87,9 @@ pub(super) fn start(
     let response_id = ctx.response_id.clone();
     let failure_context = StreamFailureContext::from(&ctx);
     let (sender, receiver) = mpsc::channel(STREAM_EVENT_BUFFER);
-    let sink = ResponseEventSink::new(sender.clone(), max_bytes);
-    let mut pipeline = agent_pipeline_with_limits(ctx, tools, Some(sender), max_bytes);
-    pipeline.set_response_event_sink(sink.clone());
+    let sink = ResponseEventSink::new(sender, max_bytes);
+    let relay = StreamRelay::response(sink.clone(), RelayLimits::with_event_bytes(max_bytes));
+    let mut pipeline = AgentPipeline::new(ctx, tools, relay);
     let control = if pipeline
         .request
         .enriched_request
