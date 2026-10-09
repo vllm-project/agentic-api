@@ -428,6 +428,7 @@ pub struct ResponsePayload {
     pub previous_response_id: Option<String>,
     #[serde(
         default,
+        alias = "conversation_id",
         deserialize_with = "deserialize_conversation",
         serialize_with = "serialize_conversation_object",
         skip_serializing_if = "Option::is_none"

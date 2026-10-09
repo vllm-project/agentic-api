@@ -181,6 +181,38 @@ mod tests {
     }
 
     #[test]
+    fn legacy_conversation_id_snapshot_serializes_with_canonical_conversation() {
+        let metadata = serde_json::json!({
+            "model": "test-model",
+            "effective_tool_choice": "auto",
+            "response_snapshot": {
+                "id": "resp_legacy",
+                "object": "response",
+                "created_at": 1_704_067_200,
+                "model": "test-model",
+                "status": "completed",
+                "output": [],
+                "conversation_id": "conv_legacy"
+            }
+        });
+        let row = StorageDbResponse {
+            id: "resp_legacy".to_owned(),
+            conversation_id: Some("conv_legacy".to_owned()),
+            previous_response_id: None,
+            history_item_ids: Some("[]".to_owned()),
+            metadata: Some(metadata.to_string()),
+            created_at: 1_704_067_200,
+        };
+
+        let stored = ResponseData::try_from(row).expect("decode pre-rename stored metadata");
+        let snapshot = stored.metadata.response_snapshot.expect("stored response snapshot");
+        assert_eq!(snapshot.conversation.as_deref(), Some("conv_legacy"));
+        let public = serde_json::to_value(snapshot).expect("serialize retrieved response");
+        assert_eq!(public["conversation"], serde_json::json!({"id": "conv_legacy"}));
+        assert!(public.get("conversation_id").is_none());
+    }
+
+    #[test]
     fn test_response_metadata_serialization() {
         let metadata = ResponseMetadata {
             multi_agent_tree: None,
