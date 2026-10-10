@@ -451,7 +451,13 @@ access happen — those live in `tool/`, `executor/`, and `storage/` respectivel
   that one internal type in `tool/normalize.rs`, which delegates to per-type handlers.
   Types own the shape; tool owns what it means.
 - **`types/messages/`** — a separate, parallel type layer for the Anthropic Messages
-  API (`MessagesRequest`, `ContentBlock`, etc.). `tool_seam.rs` is the pure, I/O-free
+  API (`MessagesRequest`, `ContentBlock`, etc.). `tools.rs` classifies declarations
+  as function tools, supported native web search/fetch tools, or opaque provider
+  tools. Known variants fix their wire discriminator; unknown versions retain
+  their discriminator and extension fields without becoming supported native versions.
+  New supported kinds extend the enum and its explicit deserialization/serialization
+  mapping, then add the corresponding tool-layer conversion and validation.
+  `tool_seam.rs` is the pure, I/O-free
   adapter for `tool_use`/`tool_result` blocks and the gateway-ownership map; the
   declarations themselves are mapped by `tool::registry_tools` into the tool layer's
   `ToolDeclaration`, so both APIs build a `ToolRegistry` through one path without the

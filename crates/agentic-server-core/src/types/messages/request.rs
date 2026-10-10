@@ -368,22 +368,8 @@ pub struct ToolResultBlock {
     pub text: Option<String>,
 }
 
-/// A tool declared in the request. Anthropic's shape is `{name, description,
-/// input_schema}`; server tools may additionally carry a versioned `type`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct ToolParam {
-    pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub input_schema: Option<Value>,
-    /// Anthropic server tools carry a versioned `type` (e.g. `web_search_20250305`).
-    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
-    pub type_: Option<String>,
-    #[serde(flatten)]
-    pub extra: HashMap<String, Value>,
-}
+// Preserve the existing import path for callers of the Messages wire types.
+pub use super::tools::ToolParam;
 
 #[cfg(test)]
 mod effort_tests {

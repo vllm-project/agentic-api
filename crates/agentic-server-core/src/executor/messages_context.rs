@@ -429,8 +429,8 @@ mod tests {
         // The typed view keeps the client's native declaration, which is what
         // the tool seam classifies on...
         let tools = ctx.tools().expect("tools");
-        assert_eq!(tools[0].name, "web_search");
-        assert_eq!(tools[0].type_.as_deref(), Some("web_search_20250305"));
+        assert_eq!(tools[0].name(), "web_search");
+        assert_eq!(tools[0].tool_type(), Some("web_search_20250305"));
         // ...while the raw body carries the function-tool shape vLLM accepts.
         assert_eq!(ctx.raw["tools"][0]["name"], "web_search");
         assert!(ctx.raw["tools"][0].get("type").is_none());

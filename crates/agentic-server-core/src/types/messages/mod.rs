@@ -9,6 +9,7 @@
 pub mod request;
 pub mod tool_choice;
 pub mod tool_seam;
+pub mod tools;
 
 pub use request::{
     ContentBlock, GatewayToolResult, MessageContent, MessageParam, MessagesRequest, OutputConfig, ReasoningEffort,
@@ -19,3 +20,4 @@ pub use tool_seam::{
     GatewayToolMap, adapt_web_search_input, call_to_tool_use_block, has_gateway_tool, parse_tool_input,
     strip_gateway_tool_use, tool_result_block, tool_use_to_call,
 };
+pub use tools::{MessagesProviderTool, MessagesToolFields};

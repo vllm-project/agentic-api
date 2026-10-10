@@ -442,6 +442,32 @@ mod tests {
     }
 
     #[test]
+    fn messages_tool_schema_preserves_named_provider_declarations() {
+        let spec = serde_json::to_value(ApiDoc::openapi()).unwrap();
+        let schema = &spec["components"]["schemas"]["ToolParam"];
+        let validator = jsonschema::validator_for(schema).unwrap();
+        for value in [
+            serde_json::json!({"name":"echo","input_schema":{"type":"object"}}),
+            serde_json::json!({"name":"echo","input_schema":false,"type":null,"description":null}),
+            serde_json::json!({"type":"web_search_20250305","name":"web_search","max_uses":2}),
+            serde_json::json!({"type":"web_fetch_20250910","name":"web_fetch","allowed_domains":["example.com"]}),
+            serde_json::json!({"type":"future_tool","name":"hosted","future":{"nested":[null,true,42]}}),
+        ] {
+            assert!(validator.is_valid(&value), "schema rejected {value}");
+            assert!(serde_json::from_value::<agentic_core::types::messages::ToolParam>(value).is_ok());
+        }
+        for value in [
+            serde_json::json!({"type":"web_search_20250305"}),
+            serde_json::json!({"name":null}),
+            serde_json::json!({"name":"echo","type":42}),
+            serde_json::json!({"name":"echo","description":false}),
+        ] {
+            assert!(!validator.is_valid(&value), "schema accepted {value}");
+            assert!(serde_json::from_value::<agentic_core::types::messages::ToolParam>(value).is_err());
+        }
+    }
+
+    #[test]
     fn conversation_request_body_is_optional() {
         let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec must serialize");
         let required = spec["paths"]["/v1/conversations"]["post"]["requestBody"]["required"]
