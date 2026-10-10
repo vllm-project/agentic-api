@@ -50,7 +50,10 @@ impl BufferedBlock {
     /// `{}`; the paired error `tool_result` records the failure).
     pub(super) fn to_block(&self) -> Value {
         let mut block = self.block.clone();
-        if block.get("type").and_then(Value::as_str) == Some("tool_use") {
+        if matches!(
+            block.get("type").and_then(Value::as_str),
+            Some("tool_use" | "server_tool_use")
+        ) {
             block["input"] = tool_seam::parse_tool_input(&self.input_json).unwrap_or_else(|_| json!({}));
         }
         block
@@ -93,4 +96,40 @@ pub(super) async fn execute_gateway_calls(
         })
         .collect();
     messages_tools::execute_gateway_calls(tool_uses, ctx, registry, gateway_map).await
+}
+
+impl super::MessagesStreamAccumulator {
+    /// Consume this round's buffered blocks, returning (full assistant content in
+    /// order, gateway calls to dispatch). The assistant content preserves
+    /// `thinking`/`text`/`signature` and the gateway `tool_use` blocks (F3); the
+    /// calls are the gateway `tool_use` blocks reconstructed for dispatch.
+    pub(super) fn take_round(&mut self) -> (Vec<Value>, Vec<StreamedCall>) {
+        self.usage.commit();
+        self.take_terminal_round()
+    }
+
+    /// Consume terminal content without committing usage before final delivery.
+    pub(super) fn take_terminal_round(&mut self) -> (Vec<Value>, Vec<StreamedCall>) {
+        let blocks = std::mem::take(&mut self.blocks);
+        let mut assistant_content = Vec::with_capacity(blocks.len());
+        let mut calls = Vec::new();
+        for buffered in blocks.values() {
+            assistant_content.push(buffered.to_block());
+            if buffered.is_gateway_tool {
+                calls.push(StreamedCall {
+                    id: buffered.block["id"].as_str().unwrap_or_default().to_owned(),
+                    name: buffered.block["name"].as_str().unwrap_or_default().to_owned(),
+                    input_json: buffered.input_json.clone(),
+                });
+            }
+        }
+        (assistant_content, calls)
+    }
+}
+
+impl super::MessagesStreamAccumulator {
+    /// Number of gateway `tool_use` blocks buffered this round.
+    pub(super) fn gateway_call_count(&self) -> usize {
+        self.blocks.values().filter(|b| b.is_gateway_tool).count()
+    }
 }

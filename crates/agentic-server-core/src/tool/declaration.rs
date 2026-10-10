@@ -127,6 +127,9 @@ pub fn registry_tools(tools: Option<&Vec<ToolParam>>, map: &GatewayToolMap) -> V
 }
 
 fn map_tool(tool: &ToolParam, map: &GatewayToolMap) -> Option<ToolDeclaration> {
+    if tool.type_.as_deref() == Some("mcp_toolset") {
+        return None;
+    }
     if is_native_web_fetch_type(tool.type_.as_deref()) {
         return web_fetch_config(tool).map(ToolDeclaration::WebFetch);
     }
@@ -139,7 +142,7 @@ fn map_tool(tool: &ToolParam, map: &GatewayToolMap) -> Option<ToolDeclaration> {
         description: tool.description.clone(),
         parameters: tool.input_schema.clone(),
         strict: None,
-        defer_loading: None,
+        defer_loading: tool.defer_loading,
         extra: std::collections::HashMap::new(),
     }))
 }

@@ -6,6 +6,7 @@
 pub mod code_interpreter;
 /// Domain lists shared by the web tools' declarations.
 pub mod domain;
+pub mod mcp;
 /// This module contains only serde shapes (serialization/deserialization types).
 pub mod params;
 /// Declaration parameters of the Messages-only `web_fetch` tool.

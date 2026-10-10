@@ -48,6 +48,7 @@ tracing-subscriber.workspace = true
 url.workspace = true
 
 [dev-dependencies]
+agentic-core = { workspace = true, features = ["mcp-test-support"] }
 bytes.workspace = true
 flate2 = "1"
 opentelemetry-proto = { version = "0.32", default-features = false, features = ["gen-tonic-messages", "trace", "metrics"] }

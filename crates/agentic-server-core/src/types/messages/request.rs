@@ -25,6 +25,8 @@ pub struct MessagesRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<ToolParam>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_servers: Option<Vec<super::mcp::MessagesMcpServer>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<MessagesToolChoice>,
     #[serde(default)]
     pub stream: bool,
@@ -44,6 +46,8 @@ pub struct MessagesRequest {
 /// declaring a gateway tool must not escape validation through the proxy path.
 #[derive(Deserialize)]
 pub(crate) struct MessagesToolDeclarations {
+    #[serde(default)]
+    pub mcp_servers: Option<Vec<super::mcp::MessagesMcpServer>>,
     #[serde(default)]
     pub tools: Option<Vec<ToolParam>>,
 }
@@ -175,6 +179,20 @@ pub enum MessageContent {
     Blocks(Vec<ContentBlock>),
 }
 
+impl MessageContent {
+    pub(crate) fn has_mcp_blocks(&self) -> bool {
+        match self {
+            Self::Text(_) => false,
+            Self::Blocks(blocks) => blocks.iter().any(|block| {
+                matches!(
+                    block,
+                    ContentBlock::McpToolUse { .. } | ContentBlock::McpToolResult { .. }
+                )
+            }),
+        }
+    }
+}
+
 #[cfg(feature = "openapi")]
 impl utoipa::PartialSchema for MessageContent {
     fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
@@ -214,6 +232,19 @@ pub enum ContentBlock {
         name: String,
         #[serde(default)]
         input: Value,
+    },
+    McpToolUse {
+        id: String,
+        name: String,
+        server_name: String,
+        input: Value,
+    },
+    McpToolResult {
+        tool_use_id: String,
+        #[serde(default)]
+        is_error: bool,
+        #[serde(default)]
+        content: ToolResultContent,
     },
     ToolResult {
         tool_use_id: String,
@@ -310,6 +341,31 @@ impl utoipa::PartialSchema for ContentBlock {
                     .required("tool_use_id")
                     .property("content", utoipa::openapi::Ref::from_schema_name("ToolResultContent")),
             )
+            .item(
+                ObjectBuilder::new()
+                    .property("type", str_type().enum_values(Some(["mcp_tool_use"])))
+                    .required("type")
+                    .property("id", str_type())
+                    .required("id")
+                    .property("name", str_type())
+                    .required("name")
+                    .property("server_name", str_type())
+                    .required("server_name")
+                    .property("input", ObjectBuilder::new())
+                    .required("input"),
+            )
+            .item(
+                ObjectBuilder::new()
+                    .property("type", str_type().enum_values(Some(["mcp_tool_result"])))
+                    .required("type")
+                    .property("tool_use_id", str_type())
+                    .required("tool_use_id")
+                    .property(
+                        "is_error",
+                        ObjectBuilder::new().schema_type(SchemaType::new(Type::Boolean)),
+                    )
+                    .property("content", utoipa::openapi::Ref::from_schema_name("ToolResultContent")),
+            )
             .into()
     }
 }
@@ -373,7 +429,16 @@ pub struct ToolResultBlock {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ToolParam {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_server_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub defer_loading: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_config: Option<super::mcp::McpToolConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub configs: Option<HashMap<String, super::mcp::McpToolConfig>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -383,6 +448,16 @@ pub struct ToolParam {
     pub type_: Option<String>,
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
+}
+
+impl ToolParam {
+    pub(crate) fn is_hosted_tool_search(&self) -> bool {
+        matches!(
+            (self.type_.as_deref(), self.name.as_str()),
+            (Some("tool_search_tool_regex_20251119"), "tool_search_tool_regex")
+                | (Some("tool_search_tool_bm25_20251119"), "tool_search_tool_bm25")
+        )
+    }
 }
 
 #[cfg(test)]

@@ -20,3 +20,15 @@ pub(crate) fn insert_discovered_mcp_entry(entries: &mut HashMap<String, ToolEntr
         ),
     );
 }
+
+/// Apply connector configuration before registering executable names or retaining discovery metadata.
+pub(crate) fn apply_messages_config(
+    set: &mut super::handler::McpServerToolSet,
+    param: &crate::types::tools::McpToolParam,
+) {
+    if let Some(config) = &param.messages_config {
+        set.discovered_handlers
+            .retain(|handler| config.effective(&handler.param.tool_name).0);
+        set.list_tools_item.tools.retain(|tool| config.effective(&tool.name).0);
+    }
+}

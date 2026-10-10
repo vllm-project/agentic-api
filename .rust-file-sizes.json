@@ -7,7 +7,6 @@
     "crates/agentic-server-core/src/tool/tool_search.rs": 1661,
     "crates/agentic-server-core/src/types/io/input.rs": 510,
     "crates/agentic-server-core/src/types/io/output.rs": 1074,
-    "crates/agentic-server-core/src/types/tools/params.rs": 537,
     "crates/agentic-server/src/agentic_process.rs": 557,
     "crates/agentic-server/src/auth.rs": 791
   },

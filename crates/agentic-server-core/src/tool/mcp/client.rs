@@ -23,6 +23,10 @@ use tokio::process::Command;
 
 use super::bounded_http::BoundedMcpHttpClient;
 
+#[cfg(feature = "mcp-test-support")]
+#[doc(hidden)]
+pub mod test_support;
+
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(30);
 const TOOL_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_LIST_TOOLS_PAGES: usize = 32;
@@ -132,10 +136,12 @@ impl McpClient {
         if let Some(headers) = headers.filter(|headers| !headers.is_empty()) {
             let mut custom_headers = HashMap::with_capacity(headers.len());
             for (name, value) in headers {
-                custom_headers.insert(
-                    HeaderName::try_from(name).map_err(McpError::InvalidHeaderName)?,
-                    HeaderValue::try_from(value).map_err(McpError::InvalidHeaderValue)?,
-                );
+                let name = HeaderName::try_from(name).map_err(McpError::InvalidHeaderName)?;
+                let mut value = HeaderValue::try_from(value).map_err(McpError::InvalidHeaderValue)?;
+                if name == http::header::AUTHORIZATION {
+                    value.set_sensitive(true);
+                }
+                custom_headers.insert(name, value);
             }
             config = config.custom_headers(custom_headers);
         }
@@ -344,20 +350,23 @@ async fn pinned_http_client(server_url: &str) -> Result<http_client::Client, Mcp
 }
 
 fn http_client_for_addresses(host: &str, addresses: &[SocketAddr]) -> Result<http_client::Client, McpError> {
-    http_client::Client::builder()
-        .no_proxy()
-        .redirect(http_client::redirect::Policy::none())
+    http_client_builder()
         .resolve_to_addrs(host, addresses)
         .build()
         .map_err(McpError::BuildHttpClient)
 }
 
 fn http_client_for_literal_address() -> Result<http_client::Client, McpError> {
-    http_client::Client::builder()
+    http_client_builder().build().map_err(McpError::BuildHttpClient)
+}
+
+fn http_client_builder() -> http_client::ClientBuilder {
+    let builder = http_client::Client::builder()
         .no_proxy()
-        .redirect(http_client::redirect::Policy::none())
-        .build()
-        .map_err(McpError::BuildHttpClient)
+        .redirect(http_client::redirect::Policy::none());
+    #[cfg(feature = "mcp-test-support")]
+    let builder = test_support::apply_root_certificate(builder);
+    builder
 }
 
 #[cfg(test)]

@@ -6,6 +6,7 @@
 //! else is a transparent proxy. These are the Anthropic wire types shared by
 //! the handler, the loop, and the tool seam.
 
+pub mod mcp;
 pub mod request;
 pub mod tool_choice;
 pub mod tool_seam;

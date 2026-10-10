@@ -17,6 +17,8 @@ name = "agentic_core"
 [features]
 default = []
 openapi = ["dep:utoipa"]
+# Scoped certificate trust for HTTPS fixtures; not enabled in production builds.
+mcp-test-support = []
 # Opt-in embedded Eryx runtime. It is additionally operator-gated at startup;
 # default builds retain no Eryx dependency or code-interpreter registration.
 embedded-code-interpreter = ["dep:async-trait", "dep:eryx", "dep:nix"]
