@@ -571,3 +571,41 @@ async fn postgres_lock_wait_is_bounded_without_blocking_other_conversations() {
     first_pool.close().await;
     second_pool.close().await;
 }
+
+#[tokio::test]
+#[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
+async fn postgres_response_history_keeps_repeated_public_ids() {
+    let database_url = std::env::var("TEST_POSTGRES_URL").expect("TEST_POSTGRES_URL must be set");
+    let pool = agentic_core::storage::create_pool_with_schema(Some(&database_url))
+        .await
+        .unwrap();
+    let store = ResponseStore::new(Arc::clone(&pool));
+    let suffix = uuid::Uuid::now_v7();
+    let public_id = format!("msg_{suffix}");
+    let first_id = format!("resp_first_{suffix}");
+    let replay_id = format!("resp_replay_{suffix}");
+    let items: Vec<_> = (0..350)
+        .map(|index| {
+            InOutItem::Input(InputItem::Message(InputMessage {
+                id: Some(public_id.clone()),
+                role: "user".to_owned(),
+                status: None,
+                content: InputMessageContent::Text(format!("position {index}")),
+            }))
+        })
+        .collect();
+    let metadata = ResponseMetadata::default();
+    store.persist(&first_id, None, items.clone(), &metadata).await.unwrap();
+    store.persist(&replay_id, None, items.clone(), &metadata).await.unwrap();
+    assert_eq!(store.rehydrate(&first_id).await.unwrap(), items);
+    assert_eq!(store.rehydrate(&replay_id).await.unwrap(), items);
+    let first_ids = store.get(&first_id).await.unwrap().history_item_ids;
+    let replay_ids = store.get(&replay_id).await.unwrap().history_item_ids;
+    let unique_ids: std::collections::HashSet<_> = first_ids.iter().chain(&replay_ids).collect();
+    assert_eq!(unique_ids.len(), 700);
+    let rows = agentic_core::storage::models::item::get_items(&pool, &replay_ids)
+        .await
+        .unwrap();
+    assert!(rows.iter().all(|row| row.public_id() == public_id));
+    pool.close().await;
+}

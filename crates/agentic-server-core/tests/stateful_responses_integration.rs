@@ -1598,3 +1598,54 @@ fn reasoning_response(stream: bool, plaintext: &[&str], opaque_state: bool) -> M
     body.push_str("data: [DONE]\n\n");
     MockResponse::Sse(body)
 }
+
+#[tokio::test]
+async fn resubmitted_output_items_are_stored_again() {
+    let cassette_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/reasoning/responses");
+    let first_recording = load_cassette(&format!(
+        "{cassette_dir}/reasoning-single-Qwen-Qwen3-30B-A3B-FP8-nonstreaming.yaml"
+    ));
+    let second_recording = load_cassette(&format!(
+        "{cassette_dir}/reasoning-single-openai-gpt-oss-20b-nonstreaming.yaml"
+    ));
+    let fixture = TestFixture::new(&[&first_recording.turns[0], &second_recording.turns[0]]).await;
+    let prompt = first_recording.turns[0].request.body.input.clone();
+    let run = |input: Value| {
+        agentic_core::executor::ExecuteRequest::new(
+            make_request(input, true, false, None, None),
+            Arc::clone(&fixture.exec_ctx),
+        )
+        .run()
+    };
+    let first = unwrap_blocking(run(prompt.clone()).await.unwrap());
+    let first_output = serde_json::to_value(&first.output).unwrap();
+    let mut input = vec![json!({"role": "user", "content": prompt})];
+    input.extend(first_output.as_array().unwrap().iter().cloned());
+    input.push(json!({"role": "user", "content": "Reply with exactly one word: HELLO"}));
+
+    let second = unwrap_blocking(run(Value::Array(input)).await.expect("resubmitted output must persist"));
+    assert_eq!(second.status, "completed");
+    let context = rehydrate_conversation(
+        make_request("next", false, false, Some(second.id.clone()), None),
+        &fixture.exec_ctx,
+    )
+    .await
+    .unwrap();
+    let ResponsesInput::Items(items) = &context.enriched_request.input else {
+        panic!("expected item history")
+    };
+    let stored = serde_json::to_value(items).unwrap();
+    let ids: Vec<_> = stored
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|item| item["id"].as_str())
+        .collect();
+    let expected: Vec<_> = first
+        .output
+        .iter()
+        .chain(&second.output)
+        .filter_map(OutputItem::id)
+        .collect();
+    assert_eq!(ids, expected);
+}

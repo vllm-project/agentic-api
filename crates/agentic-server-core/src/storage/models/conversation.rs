@@ -36,6 +36,7 @@ struct ConversationSnapshotRow {
     latest_response_id: Option<String>,
     item_id: Option<String>,
     item_reference_id: Option<String>,
+    item_public_id: Option<String>,
     item_data: Option<String>,
     item_created_at: Option<i64>,
     item_conversation_id: Option<String>,
@@ -97,7 +98,7 @@ pub async fn get(pool: &DbPool, id: &str) -> DbResult<Option<Conversation>> {
 pub async fn get_snapshot(pool: &DbPool, id: &str) -> DbResult<ConversationSnapshotRows> {
     let rows = sqlx::query_as::<_, ConversationSnapshotRow>(
         "SELECT conversations.latest_response_id, conversations.revision, \
-                items.id AS item_id, items.reference_id AS item_reference_id, \
+                items.id AS item_id, items.reference_id AS item_reference_id, items.public_id AS item_public_id, \
                 items.data AS item_data, \
                 items.created_at AS item_created_at, \
                 items.conversation_id AS item_conversation_id, \
@@ -129,6 +130,7 @@ pub async fn get_snapshot(pool: &DbPool, id: &str) -> DbResult<ConversationSnaps
                 seq: row.item_sequence,
                 tenant_id: None,
                 reference_id: row.item_reference_id,
+                public_id: row.item_public_id,
             }),
             (None, None, None, None) => {}
             _ => {
