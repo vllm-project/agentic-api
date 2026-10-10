@@ -152,10 +152,10 @@ fn compare_path(a: &str, b: &str, ids: &mut IdPairs) {
 fn sse_events(response: &RecordedResponse) -> Vec<Value> {
     let mut events = Vec::new();
     for line in response.sse.as_ref().expect("streaming response has no SSE capture") {
-        if let Some(data) = line.trim().strip_prefix("data: ") {
-            if data != "[DONE]" {
-                events.push(serde_json::from_str(data).expect("valid SSE JSON"));
-            }
+        if let Some(data) = line.trim().strip_prefix("data: ")
+            && data != "[DONE]"
+        {
+            events.push(serde_json::from_str(data).expect("valid SSE JSON"));
         }
     }
     assert!(!events.is_empty(), "empty SSE recording");

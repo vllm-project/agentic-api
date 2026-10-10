@@ -1,3 +1,3 @@
-msrv = "1.85"
+msrv = "1.98.1"
 # Product names that are not Rust identifiers and need no backticks in docs.
 doc-valid-idents = ["SearXNG", ".."]

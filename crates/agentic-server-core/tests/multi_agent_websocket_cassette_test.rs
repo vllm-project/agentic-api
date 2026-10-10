@@ -102,10 +102,10 @@ fn audit(provider: &str, scenario: &str) -> Audit {
                 event["response"]["id"].as_str().unwrap().clone_into(&mut response_id);
             }
             let id = event["response_id"].as_str().unwrap_or(&response_id);
-            if let Some(sequence) = event["sequence_number"].as_u64() {
-                if let Some(previous) = sequences.insert(id.to_owned(), sequence) {
-                    assert!(previous < sequence, "{}: {event}", path.display());
-                }
+            if let Some(sequence) = event["sequence_number"].as_u64()
+                && let Some(previous) = sequences.insert(id.to_owned(), sequence)
+            {
+                assert!(previous < sequence, "{}: {event}", path.display());
             }
             match kind {
                 "response.inject.created" => result.accepted.extend(

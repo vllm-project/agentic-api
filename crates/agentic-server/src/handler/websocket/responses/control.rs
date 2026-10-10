@@ -222,10 +222,10 @@ impl Controls {
     }
     pub(super) async fn shutdown(&mut self) {
         self.registrations.close();
-        if let Some(mut owner) = self.rejected_owner.take() {
-            if let Err(error) = owner.join().await {
-                tracing::debug!(%error, "responses websocket execution ended during disposal");
-            }
+        if let Some(mut owner) = self.rejected_owner.take()
+            && let Err(error) = owner.join().await
+        {
+            tracing::debug!(%error, "responses websocket execution ended during disposal");
         }
         while let Ok(registration) = self.registrations.try_recv() {
             let mut owner = registration.response.owner;
@@ -236,10 +236,10 @@ impl Controls {
         }
         self.tasks.abort_all();
         while let Some(completion) = self.tasks.join_next().await {
-            if let Err(error) = completion {
-                if !error.is_cancelled() {
-                    tracing::warn!(%error, "responses websocket control task failed during disposal");
-                }
+            if let Err(error) = completion
+                && !error.is_cancelled()
+            {
+                tracing::warn!(%error, "responses websocket control task failed during disposal");
             }
         }
         self.routes.clear();

@@ -139,10 +139,10 @@ impl RecordedSession {
             let mut collaboration = HashMap::<&str, (MultiAgentAction, Option<&str>)>::new();
             let mut ids = HashSet::new();
             for item in &exchange.response.output {
-                if let Some(id) = item.id() {
-                    if !ids.insert(id) {
-                        return Err(mismatch("duplicate output item ID"));
-                    }
+                if let Some(id) = item.id()
+                    && !ids.insert(id)
+                {
+                    return Err(mismatch("duplicate output item ID"));
                 }
                 let agent = item.agent().map(|agent| agent.agent_name.as_str());
                 if agent.is_some_and(|name| name != "/root" && !name.starts_with("/root/")) {
