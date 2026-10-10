@@ -291,6 +291,7 @@ mod tests {
             service_tier: None,
             tools: Some(vec![tool.clone()]),
             tool_choice: None,
+            standard_fields: crate::types::request_response::StandardResponseFields::default(),
         };
         let metadata = ResponseMetadata {
             multi_agent_tree: None,

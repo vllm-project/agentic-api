@@ -148,6 +148,7 @@ impl MultiAgentRun {
             service_tier: None,
             tools: pipeline.request.enriched_request.tools.clone(),
             tool_choice: pipeline.request.enriched_request.tool_choice.clone(),
+            standard_fields: crate::types::request_response::StandardResponseFields::default(),
         };
         // One bounded event in flight, plus one size-limited awaited frame per
         // active worker. Client backpressure reaches upstream readers.

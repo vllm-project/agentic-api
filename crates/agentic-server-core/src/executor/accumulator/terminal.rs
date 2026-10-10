@@ -92,6 +92,7 @@ impl ResponseAccumulator {
             service_tier: self.service_tier,
             tools: None,
             tool_choice: None,
+            standard_fields: crate::types::request_response::StandardResponseFields::default(),
         }
     }
 }

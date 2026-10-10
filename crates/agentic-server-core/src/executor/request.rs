@@ -63,6 +63,8 @@ impl RequestContext {
             .previous_response_id
             .clone_from(&self.original_request.previous_response_id);
         payload.max_tool_calls = self.max_tool_calls().map(NonZeroU64::get);
+        payload.standard_fields.apply_request(&self.original_request);
+        payload.standard_fields.completed_at = (payload.status == "completed").then(crate::utils::common::utcnow_str);
     }
 }
 

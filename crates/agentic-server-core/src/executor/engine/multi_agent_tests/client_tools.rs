@@ -17,8 +17,8 @@ pub(super) fn client_tools_output(request: &Value) -> Option<Vec<Value>> {
     let input = request["input"].as_array().unwrap();
     let root_discovery = input
         .iter()
-        .any(|item| item["content"] == "discover tools before delegation");
-    if !root_discovery && !input.iter().any(|item| item["content"] == "discover client tools") {
+        .any(|item| has_message_text(item, "discover tools before delegation"));
+    if !root_discovery && !input.iter().any(|item| has_message_text(item, "discover client tools")) {
         return None;
     }
     assert!(input.iter().all(|item| !matches!(

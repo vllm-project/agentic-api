@@ -124,7 +124,16 @@ async fn final_root_tier_controls_json_sse_and_stored_snapshot() {
                         terminal.unwrap()
                     }
                 };
-                assert_eq!(payload.service_tier.as_deref(), tier, "{status}, stream={stream}");
+                let serialized_tier = if stream && tier.is_none() {
+                    Some("default")
+                } else {
+                    tier
+                };
+                assert_eq!(
+                    payload.service_tier.as_deref(),
+                    serialized_tier,
+                    "{status}, stream={stream}"
+                );
                 assert_eq!(payload.status, if status == "failed" { "error" } else { status });
                 if status == "failed" {
                     assert!(matches!(
@@ -133,7 +142,7 @@ async fn final_root_tier_controls_json_sse_and_stored_snapshot() {
                     ));
                 } else {
                     let stored = exec.resp_handler.retrieve(&payload.id).await.unwrap();
-                    assert_eq!(stored.service_tier, payload.service_tier);
+                    assert_eq!(stored.service_tier.as_deref(), tier.or(Some("default")));
                 }
                 server.abort();
             }
