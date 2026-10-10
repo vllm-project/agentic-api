@@ -215,6 +215,8 @@ Known text, thinking, signature, and input-JSON deltas require string fragments;
 For known block types, text deltas require text blocks, thinking/signature deltas require thinking blocks,
 and input-JSON deltas require tool-use blocks.
 Named extension types remain accepted; these checks are not complete schema validation.
+All blocks must close before `message_delta`, and no new block may start afterward. Repeated terminal
+usage snapshots remain supported and do not add duplicate usage.
 Duplicate `message_start` events within one round fail before usage updates or tool dispatch;
 a new upstream start in a later tool round remains valid. Tool-use blocks require non-empty string IDs and names.
 Invalid identifiers fail before dispatch or completion, including in hidden built-in tool blocks.
