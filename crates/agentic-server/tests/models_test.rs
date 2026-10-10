@@ -32,10 +32,17 @@ const UPSTREAM_MODELS_WITH_PATH_ID: &str = r#"{"object":"list","data":[
 
 const PATH_ID_ENTRY: &str = r#"{"id":"meta-llama/Llama-3.1-8B-Instruct",  "object":"model","max_model_len":131072,"root":"meta-llama/Llama-3.1-8B-Instruct"}"#;
 
+/// Upstream `/v1/models` that answers with `body` and `status`, tagged with a request ID.
 async fn spawn_upstream_models(body: &'static str, status: StatusCode) -> (String, tokio::task::JoinHandle<()>) {
     let app = Router::new().route(
         "/v1/models",
-        get(move || async move { (status, [(http::header::CONTENT_TYPE, "application/json")], body).into_response() }),
+        get(move || async move {
+            let headers = [
+                (http::header::CONTENT_TYPE, "application/json"),
+                (http::HeaderName::from_static("x-request-id"), "req-upstream"),
+            ];
+            (status, headers, body).into_response()
+        }),
     );
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -258,6 +265,16 @@ async fn listed_model_is_retrieved_as_the_upstream_wrote_it() {
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.headers()[http::header::CONTENT_TYPE], "application/json");
+    assert_eq!(
+        response.headers()["x-request-id"],
+        "req-upstream",
+        "upstream metadata headers are kept"
+    );
+    assert_eq!(
+        response.headers()[http::header::CONTENT_LENGTH],
+        PATH_ID_ENTRY.len().to_string(),
+        "the length describes the entry, not the upstream list"
+    );
     assert_eq!(response.text().await.unwrap(), PATH_ID_ENTRY);
 }
 

@@ -446,6 +446,15 @@ mod tests {
     }
 
     #[test]
+    fn model_retrieval_declares_the_model_object_body() {
+        let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec must serialize");
+        let response_schema =
+            &spec["paths"]["/v1/models/{model}"]["get"]["responses"]["200"]["content"]["application/json"]["schema"];
+
+        assert_eq!(response_schema["$ref"], "#/components/schemas/ModelObject");
+    }
+
+    #[test]
     fn conversation_request_body_is_optional() {
         let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec must serialize");
         let required = spec["paths"]["/v1/conversations"]["post"]["requestBody"]["required"]

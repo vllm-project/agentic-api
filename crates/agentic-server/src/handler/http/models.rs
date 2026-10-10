@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use tracing::{debug, info, warn};
 
-use agentic_core::proxy::{ProxyBody, ProxyResponse, error_response, proxy_get};
+use agentic_core::proxy::{ProxyBody, ProxyResponse, error_response, processed_response_headers, proxy_get};
 use agentic_core::readiness::{LLM_READINESS_PROBE_TIMEOUT, LlmReadiness, probe_llm_readiness};
 
 use super::super::common::convert_response;
@@ -418,7 +418,8 @@ pub async fn models(State(state): State<AppState>, headers: HeaderMap, Query(par
 ///
 /// vLLM serves no per-model route, so the gateway answers from the upstream `/v1/models`
 /// list instead of forwarding the request: the matching entry is returned unchanged, a model
-/// the upstream does not list is a 404, and an upstream error is forwarded as is.
+/// the upstream does not list is a 404, and an upstream error is forwarded as is. The entry
+/// keeps the upstream's metadata headers, such as request IDs, but not those describing the list.
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/v1/models/{model}",
@@ -426,7 +427,7 @@ pub async fn models(State(state): State<AppState>, headers: HeaderMap, Query(par
         ("model" = String, Path, description = "Model ID; may contain `/`, encoded or not"),
     ),
     responses(
-        (status = 200, description = "The upstream's entry for this model, unchanged"),
+        (status = 200, description = "The upstream's entry, unchanged", body = crate::openapi::ModelObject),
         (status = 404, description = "The upstream does not list this model", body = crate::openapi::ApiErrorResponse),
         (status = 502, description = "Upstream unavailable", body = crate::openapi::ApiErrorResponse),
     ),
@@ -435,6 +436,7 @@ pub async fn models(State(state): State<AppState>, headers: HeaderMap, Query(par
 ))]
 pub async fn retrieve_model(State(state): State<AppState>, headers: HeaderMap, Path(model): Path<String>) -> Response {
     let upstream = proxy_get("/v1/models", &headers, &state.proxy_state).await;
+    let mut response_headers = processed_response_headers(&upstream.headers);
     let upstream_bytes = match model_list_body(upstream) {
         Ok(bytes) => bytes,
         Err(response) => return response,
@@ -442,8 +444,11 @@ pub async fn retrieve_model(State(state): State<AppState>, headers: HeaderMap, P
 
     match find_upstream_model(&upstream_bytes, &model) {
         Ok(Some(entry)) => {
-            let content_type = [(http::header::CONTENT_TYPE, "application/json")];
-            (content_type, entry.get().to_owned()).into_response()
+            response_headers.insert(
+                http::header::CONTENT_TYPE,
+                http::HeaderValue::from_static("application/json"),
+            );
+            (response_headers, entry.get().to_owned()).into_response()
         }
         Ok(None) => convert_response(error_response(
             StatusCode::NOT_FOUND,
