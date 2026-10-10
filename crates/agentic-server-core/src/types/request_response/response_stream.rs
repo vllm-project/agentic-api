@@ -8,6 +8,7 @@ impl ResponsePayload {
     pub fn as_created_response_chunk(&self) -> String {
         let mut response = self.clone();
         "in_progress".clone_into(&mut response.status);
+        response.standard_fields.completed_at = None;
         let event = json!({
             "type": "response.created",
             "response": response,

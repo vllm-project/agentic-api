@@ -839,6 +839,7 @@ pub struct ReasoningOutput {
     pub content: Vec<ReasoningTextContent>,
     #[serde(default, deserialize_with = "deserialize_nullable_vec")]
     pub summary: Vec<ReasoningSummaryContent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub encrypted_content: Option<OpaqueReasoning>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<ReasoningStatus>,

@@ -128,7 +128,13 @@ fn forked_message_parts_preserve_role_metadata_and_public_order() {
                 RoundIngestion::translate_line(&mut acc, SseLine::parse(&format!("data: {event}")), &mut translator)
                     .unwrap()
                     .unwrap();
-            assert_eq!(serde_json::to_value(&result.frames[0].wire).unwrap(), event);
+            let wire = serde_json::to_value(&result.frames[0].wire).unwrap();
+            if event["type"] == "response.completed" {
+                assert_eq!(wire["response"]["id"], event["response"]["id"]);
+                assert_eq!(wire["response"]["output"], event["response"]["output"]);
+            } else {
+                assert_eq!(wire, event);
+            }
         }
         assert_eq!(
             serde_json::to_value(acc.finish("model", None, None).unwrap().output).unwrap(),
@@ -333,7 +339,13 @@ fn collaboration_snapshots_and_encrypted_parts_use_the_shared_ingestion_path() {
                     .unwrap()
                     .unwrap();
             assert_eq!(translated.frames.len(), 1);
-            assert_eq!(serde_json::to_value(&translated.frames[0].wire).unwrap(), event);
+            let wire = serde_json::to_value(&translated.frames[0].wire).unwrap();
+            if event["type"] == "response.completed" {
+                assert_eq!(wire["response"]["id"], event["response"]["id"]);
+                assert_eq!(wire["response"]["output"], event["response"]["output"]);
+            } else {
+                assert_eq!(wire, event);
+            }
         }
         let response = acc.finish("model", None, None).unwrap();
         assert_eq!(serde_json::to_value(&response.output).unwrap(), json!(items));
@@ -1902,7 +1914,6 @@ fn lenient_ingestion_projects_reasoning_earlier_releases_accepted() {
         "type": "reasoning", "id": "rs_1",
         "content": [{"type": "reasoning_text", "text": "kept plaintext"}],
         "summary": [{"type": "summary_text", "text": "kept summary"}],
-        "encrypted_content": null,
     }]);
     let streamed = from_sse_lines(stream(&pre_typed), None);
     assert_eq!(serde_json::to_value(&streamed.output).unwrap(), projected);
@@ -1931,7 +1942,6 @@ fn lenient_ingestion_projects_reasoning_earlier_releases_accepted() {
             serde_json::to_value(&streamed.output).unwrap(),
             serde_json::json!([{
                 "type": "reasoning", "id": "rs_1", "content": [], "summary": [],
-                "encrypted_content": null,
             }]),
             "{fields}"
         );

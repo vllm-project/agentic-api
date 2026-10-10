@@ -40,6 +40,10 @@
       "limit": 514,
       "reason": "The shared input-item union accepts typed native code-interpreter calls for continuation replay."
     },
+    "crates/agentic-server-core/src/types/io/output.rs": {
+      "limit": 1075,
+      "reason": "Open Responses omits absent encrypted reasoning content; this adds one serialization attribute to the canonical item type."
+    },
     "crates/agentic-server-core/src/types/tools/params.rs": {
       "limit": 570,
       "reason": "The shared tagged tool declaration validates the OpenAI auto-container form and exposes its closed public schema."

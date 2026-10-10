@@ -2156,7 +2156,10 @@ async fn test_http_preserves_multiple_images_across_messages() {
 
     let requests = requests.lock().await;
     assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0]["input"], input);
+    let mut expected_input = input.clone();
+    expected_input[0]["content"][1]["detail"] = "auto".into();
+    expected_input[2]["content"][0]["detail"] = "auto".into();
+    assert_eq!(requests[0]["input"], expected_input);
     let images = requests[0]["input"]
         .as_array()
         .expect("input items")
@@ -2406,7 +2409,9 @@ async fn test_http_conversation_rehydration_preserves_images() {
     let requests = requests.lock().await;
     assert_eq!(requests.len(), 2);
     let history = requests[1]["input"].as_array().expect("rehydrated history");
-    assert_eq!(history[0]["content"], content);
+    let mut expected_content = content.clone();
+    expected_content[1]["detail"] = "auto".into();
+    assert_eq!(history[0]["content"], expected_content);
     assert_eq!(history.last().expect("newest turn")["content"], "follow up");
 }
 
@@ -2499,12 +2504,9 @@ async fn test_store_false_proxies_image_content_verbatim() {
 }
 
 #[tokio::test]
-async fn test_http_text_only_model_still_forwards_images_unchanged() {
-    // The gateway never strips image content on the model's behalf: whether a
-    // model accepts images is the upstream's decision, so a request naming a
-    // text-only model must still reach it with the image part intact. That is
-    // what lets a missing image be attributed to the client rather than to the
-    // gateway.
+async fn test_http_text_only_model_still_forwards_images() {
+    // The gateway preserves image content regardless of model capability and
+    // supplies vLLM's required default image detail when the client omits it.
     let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
     let fixture = storage_backed_state(&llm_url).await;
     let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
@@ -2526,7 +2528,9 @@ async fn test_http_text_only_model_still_forwards_images_unchanged() {
 
     let requests = requests.lock().await;
     assert_eq!(requests[0]["model"], "text-only-model");
-    assert_eq!(requests[0]["input"][0]["content"], content);
+    let mut expected_content = content.clone();
+    expected_content[1]["detail"] = "auto".into();
+    assert_eq!(requests[0]["input"][0]["content"], expected_content);
 }
 
 async fn stored_row_counts(pool: &Arc<DbPool>) -> (i64, i64) {

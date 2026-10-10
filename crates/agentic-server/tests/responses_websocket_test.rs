@@ -4031,7 +4031,10 @@ async fn test_websocket_multiple_images_across_messages_keep_order() {
         .map(|part| part["image_url"].as_str().expect("image URL"))
         .collect::<Vec<_>>();
     assert_eq!(images, vec![RED_PIXEL_PNG, BLUE_PIXEL_PNG]);
-    assert_eq!(requests[0]["input"], input);
+    let mut expected_input = input.clone();
+    expected_input[0]["content"][1]["detail"] = "auto".into();
+    expected_input[2]["content"][0]["detail"] = "auto".into();
+    assert_eq!(requests[0]["input"], expected_input);
 }
 
 #[tokio::test]

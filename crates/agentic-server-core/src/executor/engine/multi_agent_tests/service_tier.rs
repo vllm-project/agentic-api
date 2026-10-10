@@ -91,6 +91,9 @@ async fn final_root_tier_controls_json_sse_and_stored_snapshot() {
                     model: "test".into(),
                     store: true,
                     stream,
+                    parallel_tool_calls: Some(true),
+                    temperature: Some(0.4),
+                    metadata: Some(json!({"review": "multi-agent"})),
                     service_tier: Some("priority".into()),
                     prompt_cache_retention: Some(crate::types::request_response::PromptCacheRetention::TwentyFourHours),
                     input: ResponsesInput::Text("review context".into()),
@@ -124,8 +127,22 @@ async fn final_root_tier_controls_json_sse_and_stored_snapshot() {
                         terminal.unwrap()
                     }
                 };
-                assert_eq!(payload.service_tier.as_deref(), tier, "{status}, stream={stream}");
+                let serialized_tier = if stream && tier.is_none() {
+                    Some("default")
+                } else {
+                    tier
+                };
+                assert_eq!(
+                    payload.service_tier.as_deref(),
+                    serialized_tier,
+                    "{status}, stream={stream}"
+                );
                 assert_eq!(payload.status, if status == "failed" { "error" } else { status });
+                assert!(payload.standard_fields.store);
+                assert!(payload.standard_fields.parallel_tool_calls);
+                assert_eq!(payload.standard_fields.temperature, 0.4);
+                assert_eq!(payload.standard_fields.metadata["review"], "multi-agent");
+                assert_eq!(payload.standard_fields.completed_at.is_some(), status == "completed");
                 if status == "failed" {
                     assert!(matches!(
                         exec.resp_handler.retrieve(&payload.id).await,
@@ -133,7 +150,7 @@ async fn final_root_tier_controls_json_sse_and_stored_snapshot() {
                     ));
                 } else {
                     let stored = exec.resp_handler.retrieve(&payload.id).await.unwrap();
-                    assert_eq!(stored.service_tier, payload.service_tier);
+                    assert_eq!(stored.service_tier.as_deref(), tier.or(Some("default")));
                 }
                 server.abort();
             }

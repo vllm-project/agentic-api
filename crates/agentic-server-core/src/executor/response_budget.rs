@@ -653,6 +653,7 @@ mod tests {
             service_tier: None,
             tools: None,
             tool_choice: None,
+            standard_fields: crate::types::request_response::StandardResponseFields::default(),
         };
         let expected = RETAINED_CONTAINER_OVERHEAD_BYTES + "resp_test".len() + RETAINED_CONTAINER_OVERHEAD_BYTES;
         assert_eq!(retained_response_bytes(&payload), expected);

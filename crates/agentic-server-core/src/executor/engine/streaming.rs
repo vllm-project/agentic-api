@@ -52,12 +52,12 @@ pub(super) fn run_stream(
         let mut agent = AgentPipeline::new(ctx, tool_search_state, relay);
         agent.control = control;
         let run = async move {
-            let result = run_until_gateway_tools_complete(
+            let result = Box::pin(run_until_gateway_tools_complete(
                 &mut agent,
                 exec_ctx_for_run.as_ref(),
                 auth.as_deref(),
                 true,
-            )
+            ))
             .await;
             let (ctx, stream_accumulator) = agent.into_parts();
             (result.map(|(payload, metadata)| (payload, ctx, metadata)), stream_accumulator)
@@ -154,7 +154,7 @@ async fn completed_stream_chunk(
     let status = payload.status.clone();
     let ch = exec_ctx.conv_handler.clone();
     let rh = exec_ctx.resp_handler.clone();
-    match persist_if_needed(payload, ctx, tool_search_metadata, ch, rh).await {
+    match Box::pin(persist_if_needed(payload, ctx, tool_search_metadata, ch, rh)).await {
         Ok(()) => {
             execution.completed_with_status(&status);
             chunk
@@ -173,6 +173,7 @@ pub(super) struct StreamFailureContext {
     previous_response_id: Option<String>,
     instructions: Option<String>,
     max_tool_calls: Option<u64>,
+    standard_fields: crate::types::request_response::StandardResponseFields,
 }
 
 impl From<&RequestContext> for StreamFailureContext {
@@ -184,6 +185,11 @@ impl From<&RequestContext> for StreamFailureContext {
             previous_response_id: ctx.original_request.previous_response_id.clone(),
             instructions: ctx.original_request.instructions.clone(),
             max_tool_calls: ctx.max_tool_calls().map(NonZeroU64::get),
+            standard_fields: {
+                let mut fields = crate::types::request_response::StandardResponseFields::default();
+                fields.apply_request(&ctx.original_request);
+                fields
+            },
         }
     }
 }
@@ -211,6 +217,7 @@ impl StreamFailureContext {
             service_tier: None,
             tools: None,
             tool_choice: None,
+            standard_fields: self.standard_fields.clone(),
         }
     }
 }

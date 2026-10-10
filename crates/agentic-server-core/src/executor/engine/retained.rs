@@ -114,7 +114,7 @@ pub(super) fn start(
         let result = Box::pin(async {
             // The multi-agent coordinator handles cancellation by joining its children.
             let multi = pipeline.request.enriched_request.multi_agent.as_ref().is_some_and(|config| config.enabled);
-            let run = run_until_gateway_tools_complete(&mut pipeline, &exec, auth.as_deref(), true);
+            let run = Box::pin(run_until_gateway_tools_complete(&mut pipeline, &exec, auth.as_deref(), true));
             let (payload, metadata) = if multi { run.await? } else {
                 tokio::select! {
                     result = run => result?,
