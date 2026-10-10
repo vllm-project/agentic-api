@@ -22,8 +22,9 @@ use crate::auth::api_key::require_api_key;
 use crate::auth::{ANTHROPIC_COUNT_TOKENS_PATH, ANTHROPIC_MESSAGES_PATH, OidcAuthenticator, require_oidc};
 use crate::handler::{
     chat_completions, compact_response, completions, count_tokens, create_conversation, create_item,
-    delete_conversation, delete_item, health, list_items, messages, models, ready, responses, responses_ws_with_auth,
-    retrieve_conversation, retrieve_item, retrieve_response, update_conversation,
+    delete_conversation, delete_item, embeddings, health, list_items, messages, models, ready, responses,
+    responses_ws_with_auth, retrieve_conversation, retrieve_item, retrieve_model, retrieve_response,
+    update_conversation,
 };
 use crate::model_capabilities::ModelCapabilities;
 use crate::telemetry::http::{HttpMetrics, track_request};
@@ -331,7 +332,10 @@ pub fn build_router_with_auth(
         )
         .route("/v1/chat/completions", post(chat_completions))
         .route("/v1/completions", post(completions))
+        .route("/v1/embeddings", post(embeddings))
         .route("/v1/models", get(models))
+        // A wildcard, because model IDs such as `org/name` contain slashes.
+        .route("/v1/models/{*model}", get(retrieve_model))
         .route(ANTHROPIC_MESSAGES_PATH, post(messages))
         .route(ANTHROPIC_COUNT_TOKENS_PATH, post(count_tokens))
         .route("/v1/responses", post(responses).get(responses_ws_with_auth))

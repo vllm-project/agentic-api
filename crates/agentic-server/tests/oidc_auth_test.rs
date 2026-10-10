@@ -1007,7 +1007,10 @@ async fn every_v1_route_rejects_missing_credentials() {
     let client = reqwest::Client::new();
 
     for path in [
+        "/v1/chat/completions",
+        "/v1/completions",
         "/v1/conversations",
+        "/v1/embeddings",
         "/v1/messages",
         "/v1/messages/count_tokens",
         "/v1/responses",
@@ -1020,12 +1023,14 @@ async fn every_v1_route_rejects_missing_credentials() {
             .expect("protected POST");
         assert_eq!(response.status(), reqwest::StatusCode::UNAUTHORIZED, "{path}");
     }
-    let models = client
-        .get(format!("http://{}/v1/models", gateway.address))
-        .send()
-        .await
-        .expect("protected models request");
-    assert_eq!(models.status(), reqwest::StatusCode::UNAUTHORIZED);
+    for path in ["/v1/models", "/v1/models/org/model"] {
+        let models = client
+            .get(format!("http://{}{path}", gateway.address))
+            .send()
+            .await
+            .expect("protected models request");
+        assert_eq!(models.status(), reqwest::StatusCode::UNAUTHORIZED, "{path}");
+    }
     let retrieved = client
         .get(format!("http://{}/v1/responses/resp_private", gateway.address))
         .send()

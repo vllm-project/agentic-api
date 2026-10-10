@@ -9,32 +9,8 @@
 use axum::extract::{Request, State};
 use axum::response::Response;
 
-use agentic_core::proxy::{ProxyAuth, ProxyRequest, proxy_request_with_path};
-
-use super::super::common::{convert_response, read_bytes};
+use super::super::common::passthrough;
 use crate::app::AppState;
-
-/// Forward one request body to `path` on the configured upstream.
-async fn passthrough(state: &AppState, req: Request, path: &'static str) -> Response {
-    let (parts, body) = req.into_parts();
-    let body = match read_bytes(body, state.max_request_body_size).await {
-        Ok(body) => body,
-        Err(response) => return response,
-    };
-    convert_response(
-        proxy_request_with_path(
-            ProxyRequest {
-                headers: parts.headers,
-                body,
-                query: parts.uri.query().map(str::to_owned),
-            },
-            path,
-            ProxyAuth::OpenAiBearer,
-            &state.proxy_state,
-        )
-        .await,
-    )
-}
 
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,

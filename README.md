@@ -72,8 +72,8 @@ flowchart LR
 | `POST /v1/responses/compact` | Compact direct input or a stored response chain | ✅ |
 | `/v1/conversations` · `/v1/conversations/{id}/items` | Conversations API: create, retrieve, update, and delete conversations and their items | ✅ |
 | `POST /v1/messages` · `POST /v1/messages/count_tokens` | Anthropic Messages API forwarded to the upstream, with a server-side loop for gateway-owned tools | ✅ |
-| `GET /v1/models` | Model listing proxied from vLLM | ✅ |
-| `POST /v1/chat/completions` · `POST /v1/completions` | Forwarded to the upstream verbatim, so clients on those endpoints keep working when the gateway is the entry point | ✅ |
+| `GET /v1/models` · `GET /v1/models/{model}` | Model listing proxied from vLLM; a single model is answered from that list | ✅ |
+| `POST /v1/chat/completions` · `POST /v1/completions` · `POST /v1/embeddings` | Forwarded to the upstream verbatim, so clients on those endpoints keep working when the gateway is the entry point | ✅ |
 | `GET /health` · `GET /ready` | Liveness and readiness probes | ✅ |
 | `GET /swagger-ui` · `GET /openapi.json` | Generated OpenAPI spec and Swagger UI, served when `ENABLE_OPENAPI_DOCS=true` | ✅ |
 | Stateful Messages | Messages continuation on the shared persistence primitives | ⏳ Planned |

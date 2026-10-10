@@ -24,6 +24,14 @@ const UPSTREAM_MODELS: &str = r#"{"object":"list",  "data":[
   {"id":"plain-model"}
 ]}"#;
 
+/// A vLLM-style list whose second entry has an ID containing `/` and fields the gateway does
+/// not model, so a retrieved entry can be compared byte for byte.
+const UPSTREAM_MODELS_WITH_PATH_ID: &str = r#"{"object":"list","data":[
+  {"id":"plain-model","object":"model","owned_by":"vllm"},
+  {"id":"meta-llama/Llama-3.1-8B-Instruct",  "object":"model","max_model_len":131072,"root":"meta-llama/Llama-3.1-8B-Instruct"}]}"#;
+
+const PATH_ID_ENTRY: &str = r#"{"id":"meta-llama/Llama-3.1-8B-Instruct",  "object":"model","max_model_len":131072,"root":"meta-llama/Llama-3.1-8B-Instruct"}"#;
+
 async fn spawn_upstream_models(body: &'static str, status: StatusCode) -> (String, tokio::task::JoinHandle<()>) {
     let app = Router::new().route(
         "/v1/models",
@@ -237,4 +245,72 @@ async fn launcher_capability_view_parses_the_served_catalog() {
         InputModalities::Text
     );
     assert!(catalog.select(Some("absent-model")).is_none());
+}
+
+#[tokio::test]
+async fn listed_model_is_retrieved_as_the_upstream_wrote_it() {
+    let (gateway_url, _upstream, _gateway) =
+        spawn_configured_gateway(UPSTREAM_MODELS_WITH_PATH_ID, StatusCode::OK, &[]).await;
+
+    let response = reqwest::get(format!("{gateway_url}/v1/models/meta-llama/Llama-3.1-8B-Instruct"))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()[http::header::CONTENT_TYPE], "application/json");
+    assert_eq!(response.text().await.unwrap(), PATH_ID_ENTRY);
+}
+
+#[tokio::test]
+async fn encoded_slash_retrieves_the_same_model() {
+    let (gateway_url, _upstream, _gateway) =
+        spawn_configured_gateway(UPSTREAM_MODELS_WITH_PATH_ID, StatusCode::OK, &[]).await;
+
+    let response = reqwest::get(format!("{gateway_url}/v1/models/meta-llama%2FLlama-3.1-8B-Instruct"))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.text().await.unwrap(), PATH_ID_ENTRY);
+}
+
+#[tokio::test]
+async fn unlisted_model_retrieval_is_a_not_found_error() {
+    let (gateway_url, _upstream, _gateway) =
+        spawn_configured_gateway(UPSTREAM_MODELS_WITH_PATH_ID, StatusCode::OK, &[]).await;
+
+    for path in ["/v1/models/missing-model", "/v1/models/meta-llama"] {
+        let response = reqwest::get(format!("{gateway_url}{path}")).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
+        let body: Value = response.json().await.unwrap();
+        assert_eq!(body["error"]["code"], "model_not_found", "{path}");
+    }
+}
+
+#[tokio::test]
+async fn model_retrieval_forwards_upstream_failures_unchanged() {
+    let (gateway_url, _upstream, _gateway) =
+        spawn_configured_gateway(r#"{"error":"upstream exploded"}"#, StatusCode::SERVICE_UNAVAILABLE, &[]).await;
+
+    let response = reqwest::get(format!("{gateway_url}/v1/models/plain-model"))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(response.text().await.unwrap(), r#"{"error":"upstream exploded"}"#);
+}
+
+#[tokio::test]
+async fn model_retrieval_reports_an_undecodable_list_as_a_bad_gateway() {
+    let (gateway_url, _upstream, _gateway) =
+        spawn_configured_gateway(r#"{"data":"not-a-list"}"#, StatusCode::OK, &[]).await;
+
+    let response = reqwest::get(format!("{gateway_url}/v1/models/plain-model"))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "upstream_unavailable");
 }

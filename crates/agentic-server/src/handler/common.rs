@@ -1,6 +1,7 @@
 use std::num::NonZeroUsize;
 
 use axum::body::Body;
+use axum::extract::Request;
 use axum::http::HeaderMap;
 use axum::response::Response;
 use bytes::Bytes;
@@ -10,7 +11,11 @@ use serde::de::DeserializeOwned;
 use tracing::warn;
 
 use agentic_core::executor::{BoxStream, ExecutorError};
-use agentic_core::proxy::{ProxyAuth, ProxyBody, ProxyResponse, error_response_for_auth};
+use agentic_core::proxy::{
+    ProxyAuth, ProxyBody, ProxyRequest, ProxyResponse, error_response_for_auth, proxy_request_with_path,
+};
+
+use crate::app::AppState;
 
 /// # Panics
 /// Panics if the response builder produces an invalid response (unreachable in practice).
@@ -73,6 +78,31 @@ pub(super) async fn read_bytes_with_auth(body: Body, auth: ProxyAuth, limit: Non
             auth,
         ))
     })
+}
+
+/// Forward one request body to `path` on the configured upstream, unchanged.
+///
+/// For the stateless endpoints the gateway does not own: no translation, no state, no
+/// gateway tool loop. Streaming responses are relayed as they arrive.
+pub(super) async fn passthrough(state: &AppState, req: Request, path: &'static str) -> Response {
+    let (parts, body) = req.into_parts();
+    let body = match read_bytes(body, state.max_request_body_size).await {
+        Ok(body) => body,
+        Err(response) => return response,
+    };
+    convert_response(
+        proxy_request_with_path(
+            ProxyRequest {
+                headers: parts.headers,
+                body,
+                query: parts.uri.query().map(str::to_owned),
+            },
+            path,
+            ProxyAuth::OpenAiBearer,
+            &state.proxy_state,
+        )
+        .await,
+    )
 }
 
 #[allow(clippy::result_large_err)]

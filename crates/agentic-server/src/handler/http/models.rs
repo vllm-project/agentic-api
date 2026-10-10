@@ -1,10 +1,12 @@
 use std::future::Future;
 
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
+use bytes::Bytes;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
+use serde_json::value::RawValue;
 use tracing::{debug, info, warn};
 
 use agentic_core::proxy::{ProxyBody, ProxyResponse, error_response, proxy_get};
@@ -37,6 +39,19 @@ struct UpstreamModel {
 struct UpstreamModelList {
     #[serde(default)]
     data: Vec<UpstreamModel>,
+}
+
+/// An upstream `/v1/models` payload whose entries stay raw, so a matched entry is returned unchanged.
+#[derive(Debug, Deserialize)]
+struct RawUpstreamModelList<'a> {
+    #[serde(borrow, default)]
+    data: Vec<&'a RawValue>,
+}
+
+/// The identifier of one upstream model entry; its other fields are not decoded.
+#[derive(Debug, Deserialize)]
+struct UpstreamModelId {
+    id: Option<String>,
 }
 
 /// Reasoning effort levels Codex offers for a model.
@@ -210,6 +225,25 @@ fn build_codex_models_response(
     })
 }
 
+/// Find the upstream model entry whose `id` is exactly `model`.
+///
+/// The entry is returned as the upstream wrote it, so fields the gateway does not model, such
+/// as vLLM's `max_model_len` and `root`, reach the client unchanged.
+///
+/// # Errors
+///
+/// Returns the deserialization error when the upstream payload is not a model list.
+fn find_upstream_model<'a>(upstream_bytes: &'a [u8], model: &str) -> Result<Option<&'a RawValue>, serde_json::Error> {
+    let list: RawUpstreamModelList<'a> = serde_json::from_slice(upstream_bytes)?;
+    for entry in list.data {
+        let UpstreamModelId { id } = serde_json::from_str(entry.get())?;
+        if id.as_deref() == Some(model) {
+            return Ok(Some(entry));
+        }
+    }
+    Ok(None)
+}
+
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/health",
@@ -369,32 +403,87 @@ pub async fn models(State(state): State<AppState>, headers: HeaderMap, Query(par
         return convert_response(upstream);
     }
 
-    let ProxyBody::Full(upstream_bytes) = upstream.body else {
-        return convert_response(error_response(
-            StatusCode::BAD_GATEWAY,
-            "upstream_unavailable",
-            "unexpected streaming response from /v1/models",
-        ));
+    let upstream_bytes = match model_list_body(upstream) {
+        Ok(bytes) => bytes,
+        Err(response) => return response,
     };
-
-    if !upstream.status.is_success() {
-        return convert_response(ProxyResponse {
-            body: ProxyBody::Full(upstream_bytes),
-            ..upstream
-        });
-    }
 
     match build_codex_models_response(&upstream_bytes, &state.model_capabilities) {
         Ok(response) => axum::Json(response).into_response(),
-        Err(error) => {
-            warn!(error = %error, "upstream /v1/models payload could not be decoded");
-            convert_response(error_response(
-                StatusCode::BAD_GATEWAY,
-                "upstream_unavailable",
-                "invalid model list from /v1/models",
-            ))
-        }
+        Err(error) => invalid_model_list(&error),
     }
+}
+
+/// GET /v1/models/{model} — one entry of the upstream model list.
+///
+/// vLLM serves no per-model route, so the gateway answers from the upstream `/v1/models`
+/// list instead of forwarding the request: the matching entry is returned unchanged, a model
+/// the upstream does not list is a 404, and an upstream error is forwarded as is.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/v1/models/{model}",
+    params(
+        ("model" = String, Path, description = "Model ID; may contain `/`, encoded or not"),
+    ),
+    responses(
+        (status = 200, description = "The upstream's entry for this model, unchanged"),
+        (status = 404, description = "The upstream does not list this model", body = crate::openapi::ApiErrorResponse),
+        (status = 502, description = "Upstream unavailable", body = crate::openapi::ApiErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+    tag = "models",
+))]
+pub async fn retrieve_model(State(state): State<AppState>, headers: HeaderMap, Path(model): Path<String>) -> Response {
+    let upstream = proxy_get("/v1/models", &headers, &state.proxy_state).await;
+    let upstream_bytes = match model_list_body(upstream) {
+        Ok(bytes) => bytes,
+        Err(response) => return response,
+    };
+
+    match find_upstream_model(&upstream_bytes, &model) {
+        Ok(Some(entry)) => {
+            let content_type = [(http::header::CONTENT_TYPE, "application/json")];
+            (content_type, entry.get().to_owned()).into_response()
+        }
+        Ok(None) => convert_response(error_response(
+            StatusCode::NOT_FOUND,
+            "model_not_found",
+            &format!("The model `{model}` does not exist"),
+        )),
+        Err(error) => invalid_model_list(&error),
+    }
+}
+
+/// Take the body of a successful upstream `/v1/models` response, or the response to return instead.
+///
+/// An upstream error is forwarded unchanged; a streamed body cannot be a model list.
+#[allow(clippy::result_large_err)]
+fn model_list_body(upstream: ProxyResponse) -> Result<Bytes, Response> {
+    let ProxyBody::Full(upstream_bytes) = upstream.body else {
+        return Err(convert_response(error_response(
+            StatusCode::BAD_GATEWAY,
+            "upstream_unavailable",
+            "unexpected streaming response from /v1/models",
+        )));
+    };
+
+    if !upstream.status.is_success() {
+        return Err(convert_response(ProxyResponse {
+            body: ProxyBody::Full(upstream_bytes),
+            ..upstream
+        }));
+    }
+
+    Ok(upstream_bytes)
+}
+
+fn invalid_model_list(error: &serde_json::Error) -> Response {
+    warn!(error = %error, "upstream /v1/models payload could not be decoded");
+    convert_response(error_response(
+        StatusCode::BAD_GATEWAY,
+        "upstream_unavailable",
+        "invalid model list from /v1/models",
+    ))
 }
 
 #[cfg(test)]
@@ -405,7 +494,7 @@ mod tests {
 
     use serde_json::{Value, json};
 
-    use super::{build_codex_models_response, dependencies_are_ready};
+    use super::{build_codex_models_response, dependencies_are_ready, find_upstream_model};
     use crate::app::ReadinessTracker;
     use crate::model_capabilities::{InputModalities, ModelCapabilities};
 
@@ -630,6 +719,41 @@ mod tests {
             assert!(
                 build_codex_models_response(payload.as_bytes(), &ModelCapabilities::default()).is_err(),
                 "{payload} must not be served as an empty catalog"
+            );
+        }
+    }
+
+    #[test]
+    fn model_lookup_returns_the_exact_upstream_entry() {
+        let payload = r#"{"data": [{"object": "model"}, {"id": "org/model-2"}, {"id": "org/model",  "root": "r"}]}"#;
+
+        let entry = find_upstream_model(payload.as_bytes(), "org/model")
+            .expect("decodable payload")
+            .expect("listed model");
+        assert_eq!(entry.get(), r#"{"id": "org/model",  "root": "r"}"#);
+        assert!(
+            find_upstream_model(payload.as_bytes(), "org")
+                .expect("decodable payload")
+                .is_none(),
+            "IDs must match exactly, not by prefix"
+        );
+        assert!(
+            find_upstream_model(b"{}", "org/model")
+                .expect("decodable payload")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn model_lookup_reports_undecodable_payloads() {
+        for payload in [
+            "not json",
+            r#"{"data": "not-a-list"}"#,
+            r#"{"data": ["not-an-object"]}"#,
+        ] {
+            assert!(
+                find_upstream_model(payload.as_bytes(), "a-model").is_err(),
+                "{payload} must not be served as an unlisted model"
             );
         }
     }
