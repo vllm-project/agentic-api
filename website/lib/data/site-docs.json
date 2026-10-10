@@ -1,0 +1,92 @@
+{
+  "documents": [
+    {
+      "id": "quickstart",
+      "slug": "guides/quickstart",
+      "sourcePath": "guides/quickstart.md",
+      "title": "Quickstart",
+      "description": "Install the published package, connect a running model, and send a first Responses API request.",
+      "group": "Start"
+    },
+    {
+      "id": "api",
+      "slug": "api/index",
+      "sourcePath": "api/index.md",
+      "title": "API Reference",
+      "description": "Explore the Responses, Messages, and other HTTP API endpoints.",
+      "group": "API"
+    },
+    {
+      "id": "python-installation",
+      "slug": "guides/python-installation",
+      "sourcePath": "guides/python-installation.md",
+      "title": "Python installation and workflows",
+      "description": "Install from PyPI, check the package, and choose a remote or managed vLLM workflow.",
+      "group": "Guides"
+    },
+    {
+      "id": "harness-cli-testing",
+      "slug": "guides/harness-cli-testing",
+      "sourcePath": "guides/harness-cli-testing.md",
+      "title": "Testing Claude Code and Codex through the agentic CLI",
+      "description": "Connect coding clients and verify their setup against an Agentic API gateway.",
+      "group": "Guides"
+    },
+    {
+      "id": "responses-compaction",
+      "slug": "guides/responses-compaction",
+      "sourcePath": "guides/responses-compaction.md",
+      "title": "Responses compaction",
+      "description": "Compact Responses item history and continue with the resulting context window.",
+      "group": "Guides"
+    },
+    {
+      "id": "codex-desktop",
+      "slug": "guides/codex-desktop",
+      "sourcePath": "guides/codex-desktop.md",
+      "title": "Codex Desktop with local models",
+      "description": "Configure Codex Desktop to use a local model through Agentic API.",
+      "group": "Guides"
+    },
+    {
+      "id": "sglang-upstream",
+      "slug": "guides/sglang-upstream",
+      "sourcePath": "guides/sglang-upstream.md",
+      "title": "Running Agentic API in front of SGLang",
+      "description": "Connect an SGLang inference endpoint and review its tested configuration.",
+      "group": "Guides"
+    },
+    {
+      "id": "dynamo-upstream",
+      "slug": "guides/dynamo-upstream",
+      "sourcePath": "guides/dynamo-upstream.md",
+      "title": "Running Agentic API in front of NVIDIA Dynamo",
+      "description": "Connect NVIDIA Dynamo and a vLLM worker to the gateway.",
+      "group": "Guides"
+    },
+    {
+      "id": "container",
+      "slug": "deploying/container",
+      "sourcePath": "deploying/container.md",
+      "title": "Run agentic-api in a container",
+      "description": "Build and configure the production gateway container.",
+      "group": "Deploy"
+    },
+    {
+      "id": "observability",
+      "slug": "deploying/observability",
+      "sourcePath": "deploying/observability.md",
+      "title": "Observability with OpenTelemetry",
+      "description": "Export gateway traces and metrics with OpenTelemetry.",
+      "group": "Deploy"
+    },
+    {
+      "id": "getting-started",
+      "slug": "developing/getting-started",
+      "sourcePath": "developing/getting-started.md",
+      "title": "Getting Started",
+      "description": "Set up a contributor development environment and build the repository.",
+      "group": "Develop"
+    }
+  ]
+}

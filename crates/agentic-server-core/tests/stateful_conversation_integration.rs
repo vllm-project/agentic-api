@@ -479,6 +479,7 @@ async fn test_multi_branch() {
     );
     assert_eq!(p3.status, "completed");
     assert_eq!(output_text(&p3), expected_text(t3));
+    assert!(p3.conversation.is_none());
 
     let p4 = unwrap_blocking(
         execute(
@@ -490,7 +491,7 @@ async fn test_multi_branch() {
     );
     assert_eq!(p4.status, "completed");
     assert_eq!(output_text(&p4), expected_text(t4));
-    assert_eq!(p4.conversation_id.as_deref(), Some(conv_id.as_str()));
+    assert!(p4.conversation.is_none());
 
     // Branch 2 — off turn 2
     let p5 = unwrap_blocking(
@@ -503,6 +504,7 @@ async fn test_multi_branch() {
     );
     assert_eq!(p5.status, "completed");
     assert_eq!(output_text(&p5), expected_text(t5));
+    assert!(p5.conversation.is_none());
 }
 
 #[tokio::test]

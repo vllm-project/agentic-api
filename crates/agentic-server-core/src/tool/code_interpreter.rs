@@ -1,7 +1,8 @@
 //! Gateway-executed Python code interpreter and backend-independent public projection.
 
+use super::declaration::ToolDeclaration;
 use crate::types::io::FunctionTool;
-use crate::types::tools::{CodeInterpreterToolParam, ResponsesTool};
+use crate::types::tools::CodeInterpreterToolParam;
 
 use super::{ToolError, ToolHandler, ToolType};
 
@@ -12,10 +13,10 @@ pub(crate) const CODE_INTERPRETER_FUNCTION_NAME: &str = "code_interpreter";
 pub struct CodeInterpreterHandler;
 
 impl CodeInterpreterHandler {
-    pub(crate) fn validate_declarations(tools: &[ResponsesTool]) -> Result<(), ToolError> {
+    pub(crate) fn validate_declarations(tools: &[ToolDeclaration]) -> Result<(), ToolError> {
         let declarations = tools
             .iter()
-            .filter(|tool| matches!(tool, ResponsesTool::CodeInterpreter(_)))
+            .filter(|tool| matches!(tool, ToolDeclaration::CodeInterpreter(_)))
             .count();
         if declarations > 1 {
             return Err(ToolError::Config(
@@ -27,8 +28,8 @@ impl CodeInterpreterHandler {
         }
         for tool in tools {
             let conflicts = match tool {
-                ResponsesTool::Function(function) => function.name.as_str() == CODE_INTERPRETER_FUNCTION_NAME,
-                ResponsesTool::Custom(custom) => custom.name.as_str() == CODE_INTERPRETER_FUNCTION_NAME,
+                ToolDeclaration::Function(function) => function.name.as_str() == CODE_INTERPRETER_FUNCTION_NAME,
+                ToolDeclaration::Custom(custom) => custom.name.as_str() == CODE_INTERPRETER_FUNCTION_NAME,
                 _ => false,
             };
             if conflicts {
@@ -261,7 +262,7 @@ impl GatewayExecutor for CodeInterpreterExecutor {
         Box::pin(async move {
             let output = serde_json::to_string(&self.execute_call(&arguments).await?)
                 .map_err(|error| ToolError::Execution(format!("failed to serialize code output: {error}")))?;
-            Ok(ToolOutput { call_id, output })
+            Ok(ToolOutput::success(call_id, output))
         })
     }
 

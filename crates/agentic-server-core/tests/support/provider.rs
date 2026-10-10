@@ -108,6 +108,16 @@ fn first_message_id(payload: &ResponsePayload) -> &str {
         .expect("turn 1 output contains an assistant message")
 }
 
+/// Recordings made before the gateway omitted a missing reasoning `status`
+/// replay it as `null`; both mean the item has no status.
+fn omit_null_reasoning_status(history: &mut Value) {
+    for item in history.as_array_mut().into_iter().flatten() {
+        if item["type"] == "reasoning" && item.get("status").is_some_and(Value::is_null) {
+            item.as_object_mut().map(|fields| fields.remove("status"));
+        }
+    }
+}
+
 /// Recorded clients can omit empty output-text metadata when replaying a
 /// response item. Treat those empty fields as equivalent to omission while
 /// still comparing the full ordered history and all non-empty metadata.
@@ -166,6 +176,7 @@ fn assert_upstream_requests_are_stateless(requests: &[Value], t2: &Turn, p1: &Re
     let mut actual_history = requests[1]["input"].clone();
     omit_empty_output_text_metadata(&mut actual_history);
     omit_empty_output_text_metadata(&mut expected_history);
+    omit_null_reasoning_status(&mut expected_history);
     assert_eq!(
         actual_history, expected_history,
         "turn 2 must replay the full item history to the stateless upstream"

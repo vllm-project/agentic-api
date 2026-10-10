@@ -174,7 +174,7 @@ impl ExecuteRequest {
             store = self.payload.store,
             stream = self.payload.stream,
             has_previous_response_id = self.payload.previous_response_id.is_some(),
-            has_conversation_id = self.payload.conversation_id.is_some(),
+            has_conversation_id = self.payload.conversation.is_some(),
             tools = self.payload.tools.as_ref().map_or(0, Vec::len),
             "executor received responses request"
         );
@@ -204,7 +204,6 @@ impl ExecuteRequest {
             tool_search_state,
             &self.exec_ctx,
             self.client_auth.as_deref(),
-            max_stream_event_bytes,
         ))
         .await;
         match result {

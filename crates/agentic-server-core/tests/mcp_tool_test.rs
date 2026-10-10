@@ -1,4 +1,5 @@
 use agentic_core::executor::accumulator::ResponseAccumulator;
+use agentic_core::tool::ToolDeclaration;
 use agentic_core::tool::{GatewayExecutors, ToolOwnership, ToolRegistry, ToolType};
 use agentic_core::types::io::output::McpListTools;
 use agentic_core::types::io::{McpCall, OutputItem};
@@ -71,7 +72,7 @@ fn native_mcp_declaration_ignores_a_client_supplied_tool_name() {
 
 #[tokio::test]
 async fn read_mcp_resource_function_is_client_owned() {
-    let mut tools = vec![
+    let mut tools = vec![ToolDeclaration::from(
         serde_json::from_value::<ResponsesTool>(serde_json::json!({
             "type": "function",
             "name": "read_mcp_resource",
@@ -83,7 +84,7 @@ async fn read_mcp_resource_function_is_client_owned() {
             }
         }))
         .expect("function declaration"),
-    ];
+    )];
     let mut executors = GatewayExecutors::default();
 
     let registry = ToolRegistry::build_with_handlers(&mut tools, &mut executors)

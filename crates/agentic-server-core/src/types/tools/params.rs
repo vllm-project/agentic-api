@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::web_fetch::WebFetchToolParam;
+use super::domain::DomainFilters;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -111,10 +111,6 @@ pub enum ResponsesTool {
         alias = "web_search_2025_08_26"
     )]
     WebSearch(WebSearchToolParam),
-    /// Gateway-executed page fetch declared through the Messages seam. It
-    /// has no Responses wire form and is never read from a request body.
-    #[serde(skip)]
-    WebFetch(WebFetchToolParam),
     #[serde(rename = "file_search")]
     FileSearch(FileSearchToolParam),
     #[serde(rename = "code_interpreter")]
@@ -268,13 +264,6 @@ impl WebSearchContextSize {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct WebSearchFilters {
-    pub allowed_domains: Option<Vec<String>>,
-    pub blocked_domains: Option<Vec<String>>,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct WebSearchUserLocation {
     #[serde(rename = "type")]
     pub type_: Option<String>,
@@ -289,7 +278,7 @@ pub struct WebSearchUserLocation {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct WebSearchToolParam {
     pub search_context_size: Option<WebSearchContextSize>,
-    pub filters: Option<WebSearchFilters>,
+    pub filters: Option<DomainFilters>,
     pub user_location: Option<WebSearchUserLocation>,
 }
 
@@ -564,7 +553,7 @@ impl ResponsesTool {
             Self::Shell(_) => Some("shell"),
             Self::Namespace(_) => Some("namespace"),
             Self::Custom(_) => Some("custom"),
-            Self::WebFetch(_) | Self::Unknown => None,
+            Self::Unknown => None,
         }
     }
 
@@ -708,15 +697,16 @@ mod tests {
         });
 
         let tool: ResponsesTool = serde_json::from_value(declaration.clone()).expect("valid tool-search declaration");
+        let normalized = crate::tool::ToolDeclaration::from(&tool);
 
         assert_eq!(tool.original_type(), Some("tool_search"));
-        assert_eq!(tool.tool_type(), Some(crate::tool::ToolType::ToolSearch));
+        assert_eq!(normalized.tool_type(), Some(crate::tool::ToolType::ToolSearch));
         assert!(
-            !tool.is_gateway_owned(),
+            !normalized.is_gateway_owned(),
             "client-executed tool search must bypass gateway dispatch"
         );
         assert_eq!(
-            serde_json::to_value(tool.to_function_tools()).unwrap(),
+            serde_json::to_value(normalized.to_function_tools()).unwrap(),
             serde_json::json!([{
                 "type": "function",
                 "name": "tool_search",
@@ -742,7 +732,9 @@ mod tests {
 
         let tool: ResponsesTool = serde_json::from_value(declaration.clone()).expect("valid minimal declaration");
 
-        tool.validate().expect("omitted optional fields are valid");
+        crate::tool::ToolDeclaration::from(&tool)
+            .validate()
+            .expect("omitted optional fields are valid");
         assert_eq!(serde_json::to_value(tool).expect("tool serializes"), declaration);
     }
 
@@ -779,7 +771,8 @@ mod tests {
 
         assert_eq!(serde_json::to_value(&tool).expect("tool serializes"), declaration);
         assert!(
-            tool.validate()
+            crate::tool::ToolDeclaration::from(&tool)
+                .validate()
                 .expect_err("private function lowering requires an object schema")
                 .to_string()
                 .contains("parameters must be a JSON object")
@@ -801,7 +794,8 @@ mod tests {
             }))
             .expect("structurally valid declaration");
 
-            tool.validate()
+            crate::tool::ToolDeclaration::from(&tool)
+                .validate()
                 .expect("typed public values are normalized only when building the private synthetic function");
         }
     }

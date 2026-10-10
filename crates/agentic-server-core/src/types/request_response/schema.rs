@@ -1,6 +1,14 @@
-use super::{MultiAgentConfig, RequestPayload, ResponseTextFormat};
+use super::{MultiAgentConfig, PromptCacheRetention, RequestPayload, ResponsePayload, ResponseTextFormat};
 use utoipa::openapi::schema::{AllOfBuilder, ArrayBuilder, ObjectBuilder, OneOfBuilder, SchemaType, Type};
 use utoipa::openapi::{Ref, RefOr};
+
+/// Helper to create conversation object schema: `{"id": "string"}`.
+fn conversation_object_schema() -> RefOr<utoipa::openapi::schema::Schema> {
+    ObjectBuilder::new()
+        .property("id", ObjectBuilder::new().schema_type(SchemaType::new(Type::String)))
+        .required("id")
+        .into()
+}
 
 impl utoipa::PartialSchema for ResponseTextFormat {
     fn schema() -> RefOr<utoipa::openapi::schema::Schema> {
@@ -63,6 +71,11 @@ impl utoipa::PartialSchema for RequestPayload {
                 .item(ArrayBuilder::new().items(item))
                 .item(null_type())
         };
+        // conversation accepts: string OR {"id": "..."} OR null
+        let conversation_input = OneOfBuilder::new()
+            .item(str_type())
+            .item(conversation_object_schema())
+            .item(null_type());
         ObjectBuilder::new()
             .property("model", str_type())
             .required("model")
@@ -70,7 +83,7 @@ impl utoipa::PartialSchema for RequestPayload {
             .required("input")
             .property("instructions", nullable_str())
             .property("previous_response_id", nullable_str())
-            .property("conversation_id", nullable_str())
+            .property("conversation", conversation_input)
             .property("tools", nullable_array(Ref::from_schema_name("ResponsesTool").into()))
             .property("tool_choice", nullable_ref("ToolChoice"))
             .property("stream", bool_type())
@@ -90,6 +103,12 @@ impl utoipa::PartialSchema for RequestPayload {
             )
             .property("parallel_tool_calls", nullable_bool())
             .property("prompt_cache_key", nullable_str())
+            .property(
+                "prompt_cache_retention",
+                OneOfBuilder::new()
+                    .item(<PromptCacheRetention as utoipa::PartialSchema>::schema())
+                    .item(null_type()),
+            )
             .property("service_tier", nullable_str())
             .property(
                 "multi_agent",
@@ -109,5 +128,59 @@ impl utoipa::PartialSchema for RequestPayload {
 impl utoipa::ToSchema for RequestPayload {
     fn name() -> std::borrow::Cow<'static, str> {
         std::borrow::Cow::Borrowed("RequestPayload")
+    }
+}
+
+impl utoipa::PartialSchema for ResponsePayload {
+    fn schema() -> RefOr<utoipa::openapi::schema::Schema> {
+        let str_type = || ObjectBuilder::new().schema_type(SchemaType::new(Type::String));
+        let null_type = || ObjectBuilder::new().schema_type(SchemaType::new(Type::Null));
+        let nullable_str = || ObjectBuilder::new().schema_type(SchemaType::from_iter([Type::String, Type::Null]));
+        let nullable_int = || ObjectBuilder::new().schema_type(SchemaType::from_iter([Type::Integer, Type::Null]));
+        let nullable_ref = |name: &str| OneOfBuilder::new().item(Ref::from_schema_name(name)).item(null_type());
+        let nullable_array = |item: RefOr<utoipa::openapi::schema::Schema>| {
+            OneOfBuilder::new()
+                .item(ArrayBuilder::new().items(item))
+                .item(null_type())
+        };
+        // conversation in response is always: {"id": "..."} OR null
+        let conversation_output = OneOfBuilder::new().item(conversation_object_schema()).item(null_type());
+
+        ObjectBuilder::new()
+            .property("id", str_type())
+            .required("id")
+            .property("object", str_type())
+            .required("object")
+            .property(
+                "created_at",
+                ObjectBuilder::new().schema_type(SchemaType::new(Type::Integer)),
+            )
+            .required("created_at")
+            .property("model", str_type())
+            .required("model")
+            .property("status", str_type())
+            .required("status")
+            .property("output", ArrayBuilder::new().items(Ref::from_schema_name("OutputItem")))
+            .required("output")
+            .property("usage", nullable_ref("ResponseUsage"))
+            .property("incomplete_details", nullable_ref("IncompleteDetails"))
+            .property(
+                "error",
+                ObjectBuilder::new().schema_type(SchemaType::from_iter([Type::Object, Type::Null])),
+            )
+            .property("previous_response_id", nullable_str())
+            .property("conversation", conversation_output)
+            .property("instructions", nullable_str())
+            .property("max_tool_calls", nullable_int())
+            .property("service_tier", nullable_str())
+            .property("tools", nullable_array(Ref::from_schema_name("ResponsesTool").into()))
+            .property("tool_choice", nullable_ref("ToolChoice"))
+            .into()
+    }
+}
+
+impl utoipa::ToSchema for ResponsePayload {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("ResponsePayload")
     }
 }

@@ -364,8 +364,8 @@ fn normalized_custom_name(value: &Value, map: &CustomToolMap) -> Option<String> 
 #[cfg(test)]
 mod metadata_tests {
     use super::*;
-    use crate::tool::CustomHandler;
-    use crate::types::tools::{CustomToolParam, ResponsesTool};
+    use crate::tool::{CustomHandler, ToolDeclaration};
+    use crate::types::tools::CustomToolParam;
     #[test]
     fn response_lifecycle_metadata_restores_public_custom_tool_shape() {
         let param = serde_json::from_value::<CustomToolParam>(serde_json::json!({
@@ -373,7 +373,7 @@ mod metadata_tests {
             "description": "Echo raw input."
         }))
         .expect("custom tool");
-        let tools = vec![ResponsesTool::Custom(param)];
+        let tools = vec![ToolDeclaration::Custom(param)];
         let map = CustomHandler::build_tool_map(&tools);
         let mut wire = WireEvent::new("response.created");
         wire.rest.insert(
@@ -403,7 +403,7 @@ mod metadata_tests {
             "name": "raw_echo"
         }))
         .expect("custom tool");
-        let tools = vec![ResponsesTool::Custom(param)];
+        let tools = vec![ToolDeclaration::Custom(param)];
         let map = CustomHandler::build_tool_map(&tools);
         let mut wire = WireEvent::new("response.in_progress");
         wire.rest.insert(

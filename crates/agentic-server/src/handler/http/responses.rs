@@ -83,7 +83,7 @@ pub async fn responses(State(state): State<AppState>, req: Request) -> Response 
         store = routing_payload.store,
         stream = routing_payload.stream,
         has_previous_response_id = routing_payload.previous_response_id.is_some(),
-        has_conversation_id = routing_payload.conversation_id.is_some(),
+        has_conversation_id = routing_payload.conversation.is_some(),
         has_compaction = routing_payload.input.contains_compaction(),
         has_compaction_trigger = routing_payload.input.has_compaction_trigger(),
         has_tool_search_state,
@@ -100,6 +100,9 @@ pub async fn responses(State(state): State<AppState>, req: Request) -> Response 
             Err(error) => return executor_error_response(error.into()),
         };
         execute_responses(&state, parts, payload).await
+    } else if let Err(error) = routing_payload.max_tool_calls_limit() {
+        // The executor validates its own requests; proxied ones are checked here.
+        executor_error_response(error.into())
     } else {
         proxy_responses(&state, parts, bytes).await
     }

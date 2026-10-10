@@ -4,7 +4,8 @@
 //! function tool for the upstream model, and the resulting `web_fetch` call is
 //! executed here instead of reaching a client that expects the server to have
 //! run it. This module owns the model-facing policy: argument parsing, URL
-//! admission ([`policy`]), domain filtering, text extraction ([`extract`]), the
+//! admission ([`policy`]), domain filtering through the shared
+//! [`domain_policy`](super::domain_policy), text extraction ([`extract`]), the
 //! content limit, the ceiling on fetches in flight, and the output shape
 //! ([`output`]). Retrieval sits behind [`backend::WebFetchBackend`]; the
 //! built-in [`http::HttpFetchBackend`] is the default, and replacing it is a
@@ -13,8 +14,8 @@
 //! A call produces one [`output::WebFetchOutcome`]: a rendered page, or a
 //! refusal with one of the documented `web_fetch_tool_result_error` codes.
 //! Both are serialized once, at the model-facing boundary; a refusal is `Ok`
-//! output that the Messages loop marks `is_error`. `Err` is reserved for
-//! gateway faults.
+//! output with a failure status, which the Messages loop reports as
+//! `is_error`. `Err` is reserved for gateway faults.
 
 pub(crate) mod backend;
 mod extract;
@@ -35,12 +36,11 @@ use url::Url;
 use self::backend::{FetchFailure, FetchedDocument, WebFetchBackend};
 use self::http::HttpFetchBackend;
 use self::output::{Refusal, WebFetchOutcome, render_document};
-pub(crate) use self::output::{WebFetchErrorCode, failure_output, is_failure_output};
-use self::policy::validate_domain_entry;
+pub(crate) use self::output::{WebFetchErrorCode, failure_output};
+use super::domain_policy::{DomainFilter, validate_domain_filters};
 use super::handler::{GatewayExecutor, ToolError, ToolHandler, ToolOutput};
 use super::ownership::GatewayBinding;
 use super::registry::{ToolEntry, ToolType};
-use super::web_search::args::DomainFilter;
 use crate::config::{DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS, WebFetchConfig};
 use crate::types::io::FunctionTool;
 use crate::types::tools::WebFetchToolParam;
@@ -196,7 +196,7 @@ impl WebFetchHandler {
             .map_err(|reason| Refusal::new(WebFetchErrorCode::InvalidToolInput, reason))?;
         let url = policy::validate_url(&args.url)
             .map_err(|rejection| Refusal::new(rejection.code(), rejection.to_string()))?;
-        let filter = domain_filter(params);
+        let filter = DomainFilter::from_filters(params.filters.as_ref());
         if !filter.allows(url.as_str()) {
             return Err(Refusal::new(
                 WebFetchErrorCode::UrlNotAllowed,
@@ -218,14 +218,6 @@ impl WebFetchHandler {
     }
 }
 
-fn domain_filter(params: &WebFetchToolParam) -> DomainFilter {
-    let filters = params.filters.as_ref();
-    DomainFilter::new(
-        filters.and_then(|filters| filters.allowed_domains.as_deref()),
-        filters.and_then(|filters| filters.blocked_domains.as_deref()),
-    )
-}
-
 impl ToolHandler for WebFetchHandler {
     type ToolParams = WebFetchToolParam;
 
@@ -233,29 +225,12 @@ impl ToolHandler for WebFetchHandler {
         ToolType::WebFetch
     }
 
-    /// The shared declaration parameters: domain filters must name hosts and
-    /// are mutually exclusive. Anthropic-specific settings (tool version,
-    /// citations, cache) are the Messages adapter's to judge.
+    /// The shared declaration parameters: the domain lists must name hosts
+    /// and are mutually exclusive, the rule both web tools share.
+    /// Anthropic-specific settings (tool version, citations, cache) are the
+    /// Messages adapter's to judge.
     fn validate(&self, params: &WebFetchToolParam) -> Result<(), ToolError> {
-        let filters = params.filters.as_ref();
-        let allowed = filters
-            .and_then(|filters| filters.allowed_domains.as_deref())
-            .unwrap_or_default();
-        let blocked = filters
-            .and_then(|filters| filters.blocked_domains.as_deref())
-            .unwrap_or_default();
-        if !allowed.is_empty() && !blocked.is_empty() {
-            return Err(ToolError::Config(
-                "web_fetch allowed_domains and blocked_domains cannot be used together".to_owned(),
-            ));
-        }
-        for (field, entries) in [("allowed_domains", allowed), ("blocked_domains", blocked)] {
-            for entry in entries {
-                validate_domain_entry(entry)
-                    .map_err(|reason| ToolError::Config(format!("web_fetch {field} entry {entry:?} {reason}")))?;
-            }
-        }
-        Ok(())
+        validate_domain_filters(WEB_FETCH_TOOL_NAME, params.filters.as_ref())
     }
 
     fn normalize(&self, _params: &WebFetchToolParam) -> Vec<FunctionTool> {
@@ -303,7 +278,7 @@ mod tests {
     use super::policy::UrlRejection;
     use super::*;
     use crate::tool::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
-    use crate::types::tools::WebSearchFilters;
+    use crate::types::tools::DomainFilters;
 
     fn handler(backend: Arc<dyn WebFetchBackend>) -> WebFetchHandler {
         WebFetchHandler::with_backend(backend, DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS)
@@ -375,7 +350,7 @@ mod tests {
 
     fn allowlist(domains: &[&str]) -> WebFetchToolParam {
         WebFetchToolParam {
-            filters: Some(WebSearchFilters {
+            filters: Some(DomainFilters {
                 allowed_domains: Some(domains.iter().map(|domain| (*domain).to_owned()).collect()),
                 blocked_domains: None,
             }),
@@ -536,7 +511,7 @@ mod tests {
         assert_eq!(error_code(&refused), "url_not_allowed");
 
         let blocklist = WebFetchToolParam {
-            filters: Some(WebSearchFilters {
+            filters: Some(DomainFilters {
                 allowed_domains: None,
                 blocked_domains: Some(vec!["example.com".to_owned()]),
             }),
@@ -621,7 +596,7 @@ mod tests {
         let error = handler.validate(&allowlist(&["https://example.com"])).unwrap_err();
         assert!(error.to_string().contains("without a scheme or path"), "{error}");
         let both = WebFetchToolParam {
-            filters: Some(WebSearchFilters {
+            filters: Some(DomainFilters {
                 allowed_domains: Some(vec!["a.com".to_owned()]),
                 blocked_domains: Some(vec!["b.com".to_owned()]),
             }),

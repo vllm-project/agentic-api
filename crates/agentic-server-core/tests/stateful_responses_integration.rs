@@ -419,7 +419,7 @@ async fn test_previous_response_id_rehydrates_function_call_before_tool_output()
             "incomplete_details": null,
             "error": null,
             "previous_response_id": null,
-            "conversation_id": null,
+            "conversation": null,
             "instructions": null
         })
         .to_string(),
@@ -538,7 +538,7 @@ async fn test_mcp_namespace_showcase_round_trip_rehydrates_calls_tools_and_outpu
             "incomplete_details": null,
             "error": null,
             "previous_response_id": null,
-            "conversation_id": null,
+            "conversation": null,
             "instructions": null
         })
         .to_string(),

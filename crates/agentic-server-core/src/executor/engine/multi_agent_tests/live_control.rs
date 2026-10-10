@@ -2,18 +2,19 @@
 #![cfg(test)]
 
 use super::*;
-use crate::executor::engine::streaming::AbortOnDrop;
 use crate::executor::multi_agent::{
     AgentPhase, RunControl,
     control::{ControlAdmissionError, OutputDecision},
 };
 use crate::executor::rehydrate::rehydrate_conversation;
+use crate::executor::relay::StreamRelay;
 use crate::executor::response_events::ResponseCommitState;
 use crate::executor::{BoxStream, RunningResponse};
 use crate::tool::{GatewayExecutorRegistration, McpDiscoveredHandler, McpHandler};
 use crate::types::client_calls::{ClientCallId, ClientCallKind, ClientCallOwner, ClientCallRegistration};
 use crate::types::client_calls::{ClientToolOutput, ClientToolOutputBatch};
 use crate::types::tools::McpDiscoveredToolParam;
+use tokio_util::task::AbortOnDropHandle;
 
 #[tokio::test]
 async fn retained_execution_rejects_external_control_before_starting_work() {
@@ -92,7 +93,7 @@ async fn live_discovery_does_not_recharge_mcp_metadata_on_ordinary_rounds() {
         .unwrap(),
     );
     let ctx = rehydrate_conversation(request, &exec).await.unwrap();
-    let mut pipeline = AgentPipeline::new(ctx, None, None);
+    let mut pipeline = AgentPipeline::new(ctx, None, StreamRelay::detached());
     let mut run = MultiAgentRun::new(&mut pipeline, &exec).await.unwrap();
     let root = AgentIdentity::root();
     let turn = AgentTurnKey {
@@ -182,7 +183,7 @@ async fn next_event(events: &mut mpsc::Receiver<Value>) -> Value {
     event
 }
 
-fn drain_stream(mut stream: BoxStream) -> (mpsc::Receiver<Value>, AbortOnDrop<()>) {
+fn drain_stream(mut stream: BoxStream) -> (mpsc::Receiver<Value>, AbortOnDropHandle<()>) {
     let (sender, receiver) = mpsc::channel(64);
     let task = tokio::spawn(async move {
         let mut sequence = 0;
@@ -200,7 +201,7 @@ fn drain_stream(mut stream: BoxStream) -> (mpsc::Receiver<Value>, AbortOnDrop<()
             }
         }
     });
-    (receiver, AbortOnDrop::new(task))
+    (receiver, AbortOnDropHandle::new(task))
 }
 
 #[tokio::test]
@@ -285,7 +286,7 @@ async fn live_outputs_resume_one_child_while_sibling_waits_and_commit_once() {
                 .reason,
             ControlAdmissionError::Closed
         );
-        (&mut *drain).await.unwrap();
+        (&mut drain).await.unwrap();
         // Restoring the actual committed tree proves accepted inputs weren't just queued.
         let continued: RequestPayload =
             serde_json::from_value(json!({"model":"test","store":true,"previous_response_id":response_id,"input":[]}))
@@ -337,7 +338,7 @@ async fn partial_input_waits_for_all_owner_calls_and_does_not_revive_interrupted
     let ctx = crate::executor::rehydrate::rehydrate_conversation(request(), &exec)
         .await
         .unwrap();
-    let mut pipeline = AgentPipeline::new(ctx, None, None);
+    let mut pipeline = AgentPipeline::new(ctx, None, StreamRelay::detached());
     let mut run = MultiAgentRun::new(&mut pipeline, &exec).await.unwrap();
     let root = AgentIdentity::root();
     let turn = AgentTurnKey {
@@ -415,7 +416,7 @@ async fn disconnect_while_waiting_fails_run_without_publication() {
             assert_ne!(event["type"], "response.completed");
             failed |= event["type"] == "error";
         }
-        (&mut *drain).await.unwrap();
+        (&mut drain).await.unwrap();
         assert!(failed);
         assert!(exec.resp_handler.retrieve(&response_id).await.is_err());
     };
@@ -432,7 +433,7 @@ async fn accepted_output_invalidates_inflight_compaction_without_losing_history(
     let ctx = crate::executor::rehydrate::rehydrate_conversation(request(), &exec)
         .await
         .unwrap();
-    let mut pipeline = AgentPipeline::new(ctx, None, None);
+    let mut pipeline = AgentPipeline::new(ctx, None, StreamRelay::detached());
     let mut run = MultiAgentRun::new(&mut pipeline, &exec).await.unwrap();
     let root = AgentIdentity::root();
     let turn = AgentTurnKey {
@@ -589,7 +590,7 @@ async fn control_injection_before_during_and_after_compaction_keeps_call_linkage
             let ctx = crate::executor::rehydrate::rehydrate_conversation(request(), &exec)
                 .await
                 .unwrap();
-            let mut pipeline = AgentPipeline::new(ctx, None, None);
+            let mut pipeline = AgentPipeline::new(ctx, None, StreamRelay::detached());
             let mut run = MultiAgentRun::new(&mut pipeline, &exec).await.unwrap();
             let root = AgentIdentity::root();
             register_race_call(&mut run, &root);
@@ -674,7 +675,7 @@ async fn sibling_output_and_mail_are_preserved_during_root_compaction() {
                 let ctx = crate::executor::rehydrate::rehydrate_conversation(request(), &exec)
                     .await
                     .unwrap();
-                let mut pipeline = AgentPipeline::new(ctx, None, None);
+                let mut pipeline = AgentPipeline::new(ctx, None, StreamRelay::detached());
                 let mut run = MultiAgentRun::new(&mut pipeline, &exec).await.unwrap();
                 let root = AgentIdentity::root();
                 let root_turn = AgentTurnKey {

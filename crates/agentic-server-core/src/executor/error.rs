@@ -3,6 +3,7 @@ use thiserror::Error;
 
 use crate::StorageError;
 use crate::tool::ToolError;
+use crate::types::request_response::{MAX_TOOL_CALLS_PARAM, MaxToolCallsError};
 use crate::utils::common::serialize_to_vec_or_default;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,6 +28,9 @@ impl std::fmt::Display for ResourceLimit {
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum ExecutorError {
+    /// Request-owned streaming orchestration panicked. Never forward panic data.
+    #[error("stream producer panicked")]
+    StreamProducerPanicked,
     /// A storage layer operation failed.
     #[error("storage error: {0}")]
     Storage(#[from] StorageError),
@@ -104,6 +108,10 @@ pub enum ExecutorError {
     #[error("invalid request: {0}")]
     InvalidRequest(String),
 
+    /// The request's `max_tool_calls` is not an integer of at least one.
+    #[error(transparent)]
+    InvalidMaxToolCalls(#[from] MaxToolCallsError),
+
     /// The request exceeds a documented transport or component size budget.
     #[error("{0}")]
     PayloadTooLarge(String),
@@ -156,6 +164,7 @@ impl ExecutorError {
             Self::ConversationLocked { .. }
             | Self::Tool(ToolError::Config(_) | ToolError::MissingOutput { .. })
             | Self::InvalidRequest(_)
+            | Self::InvalidMaxToolCalls(_)
             | Self::PreviousResponseNotFound { .. }
             | Self::JsonError(_) => StatusCode::BAD_REQUEST,
             Self::Tool(
@@ -182,6 +191,7 @@ impl ExecutorError {
             Self::ConversationLocked { .. }
             | Self::Tool(ToolError::Config(_) | ToolError::MissingOutput { .. })
             | Self::InvalidRequest(_)
+            | Self::InvalidMaxToolCalls(_)
             | Self::PreviousResponseNotFound { .. }
             | Self::ParseError(_)
             | Self::JsonError(_)
@@ -215,6 +225,7 @@ impl ExecutorError {
             Self::Storage(StorageError::ItemAlreadyInConversation) => "item_already_in_conversation",
             Self::PayloadTooLarge(_) => "body_too_large",
             Self::ResourceLimitExceeded { .. } => "response_resource_limit_exceeded",
+            Self::InvalidMaxToolCalls(error) => error.code(),
             other => other.error_type(),
         }
     }
@@ -229,6 +240,7 @@ impl ExecutorError {
             Self::ConversationLocked { .. } => Some("conversation"),
             Self::PreviousResponseNotFound { .. } => Some("previous_response_id"),
             Self::Tool(ToolError::MissingOutput { .. }) => Some("input"),
+            Self::InvalidMaxToolCalls(_) => Some(MAX_TOOL_CALLS_PARAM),
             _ => None,
         }
     }
@@ -391,6 +403,24 @@ mod tests {
         let value: serde_json::Value = serde_json::from_slice(&body).expect("valid error response JSON");
 
         assert!(!value["error"].as_object().expect("error object").contains_key("param"));
+    }
+
+    #[test]
+    fn invalid_max_tool_calls_matches_the_openai_parameter_envelope() {
+        let below = crate::types::request_response::OutOfRangeInteger::Unsigned(0);
+        let error = ExecutorError::from(MaxToolCallsError::BelowMinimum(below));
+
+        assert_eq!(error.http_status(), StatusCode::BAD_REQUEST);
+        let value: serde_json::Value = serde_json::from_slice(&error.into_response_body()).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({"error": {
+                "message": "Invalid 'max_tool_calls': integer below minimum value. Expected a value >= 1, but got 0 instead.",
+                "type": "invalid_request_error",
+                "code": "integer_below_min_value",
+                "param": "max_tool_calls"
+            }})
+        );
     }
 
     #[test]

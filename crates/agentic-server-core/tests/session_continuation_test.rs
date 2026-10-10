@@ -67,12 +67,7 @@ impl GatewayExecutor for LocalSearch {
     ) -> Pin<Box<dyn Future<Output = Result<ToolOutput, ToolError>> + Send + '_>> {
         self.calls.fetch_add(1, Ordering::Relaxed);
         let call_id = call_id.to_owned();
-        Box::pin(async move {
-            Ok(ToolOutput {
-                call_id,
-                output: "local search result".to_owned(),
-            })
-        })
+        Box::pin(async move { Ok(ToolOutput::success(call_id, "local search result")) })
     }
 
     fn public_output(
@@ -85,7 +80,7 @@ impl GatewayExecutor for LocalSearch {
         Some(OutputItem::WebSearchCall(
             WebSearchCall::try_new(
                 format!("ws_{}", call.id.strip_prefix("fc_").unwrap_or(&call.id)),
-                status,
+                status.into(),
                 vec!["local".to_owned()],
                 Vec::new(),
             )
@@ -279,7 +274,7 @@ async fn session_explicit_conversation_generated_turns_match_no_session_history(
             let session = session();
             for input in ["first question", "second question"] {
                 let mut payload = request(None, json!(input));
-                payload.conversation_id = Some(conversation.conversation_id.clone());
+                payload.conversation = Some(conversation.conversation_id.clone());
                 payload.store = store;
                 let execution = ExecuteRequest::new(payload, Arc::new(model.exec.clone()));
                 let execution = if use_session {
@@ -333,7 +328,7 @@ async fn explicit_conversation_tool_history(use_session: bool, gateway_tool: boo
     };
     for (index, input) in [json!("first question"), next_input].into_iter().enumerate() {
         let mut payload = request(None, input);
-        payload.conversation_id = Some(conversation.conversation_id.clone());
+        payload.conversation = Some(conversation.conversation_id.clone());
         payload.store = store;
         if index == 0 {
             payload.tools = Some(if gateway_tool {

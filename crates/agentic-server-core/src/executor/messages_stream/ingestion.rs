@@ -37,6 +37,16 @@ impl MessagesStreamAccumulator {
         {
             return self.fail("invalid content block index in upstream Messages stream");
         }
+        let payload_field = match event["type"].as_str() {
+            Some("content_block_start") => Some("content_block"),
+            Some("content_block_delta") => Some("delta"),
+            _ => None,
+        };
+        if let Some(field) = payload_field {
+            if event[field]["type"].as_str().is_none_or(str::is_empty) {
+                return self.fail("invalid content block payload in upstream Messages stream");
+            }
+        }
         match event.get("type").and_then(Value::as_str) {
             Some("message_start") => self.on_message_start(&event),
             Some("content_block_start") => self.on_block_start(&mut event),
@@ -102,6 +112,13 @@ impl MessagesStreamAccumulator {
             return self.fail("invalid identifier in upstream Messages stream");
         }
 
+        if block_type == "tool_use" {
+            let id = event["content_block"]["id"].as_str().unwrap_or_default();
+            if !self.tool_ids.insert(id.to_owned()) {
+                return self.fail("duplicate tool identifier in upstream Messages stream");
+            }
+        }
+
         // Buffer every block for history reconstruction (F3), preserving order.
         let is_gateway_tool = block_type == "tool_use" && self.gateway_map.is_gateway_owned(name);
         self.blocks.insert(
@@ -139,6 +156,25 @@ impl MessagesStreamAccumulator {
         if self.blocks.get(&up_index).is_none_or(|block| block.closed) {
             return self.fail("invalid content block transition in upstream Messages stream");
         }
+        let fragment_field = match event["delta"]["type"].as_str() {
+            Some("text_delta") => Some(("text", "text")),
+            Some("thinking_delta") => Some(("thinking", "thinking")),
+            Some("signature_delta") => Some(("signature", "thinking")),
+            Some("input_json_delta") => Some(("partial_json", "tool_use")),
+            _ => None,
+        };
+        if let Some((field, expected_block)) = fragment_field {
+            if !event["delta"][field].is_string() {
+                return self.fail("invalid content block delta in upstream Messages stream");
+            }
+            let block_kind = self
+                .blocks
+                .get(&up_index)
+                .and_then(|block| block.block["type"].as_str());
+            if matches!(block_kind, Some("text" | "thinking" | "tool_use")) && block_kind != Some(expected_block) {
+                return self.fail("incompatible content block delta in upstream Messages stream");
+            }
+        }
         // Accumulate the delta into the buffered block (for history — F3),
         // regardless of whether it is forwarded to the client.
         if let Some(buffered) = self.blocks.get_mut(&up_index) {
@@ -172,5 +208,25 @@ impl MessagesStreamAccumulator {
         };
         event["index"] = Value::from(client_index);
         vec![sse("content_block_stop", event)]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tool_identifiers_are_scoped_to_each_round() {
+        let mut acc = MessagesStreamAccumulator::default();
+        for _ in 0..2 {
+            acc.begin_round();
+            acc.push(r#"data: {"type":"message_start","message":{"id":"m"}}"#);
+            let events = acc.push(
+                r#"data: {"type":"content_block_start","index":0,
+                "content_block":{"type":"tool_use","id":"call","name":"client_function","input":{}}}"#,
+            );
+            assert_eq!(events.len(), 1);
+            assert!(events[0].starts_with("event: content_block_start"));
+        }
     }
 }

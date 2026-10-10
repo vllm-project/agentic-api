@@ -1,0 +1,396 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: 'Run three separate web searches, one after another, each as its own
+        web_search call: first the exact query "potato nutrition facts", then "tomato
+        nutrition facts", then "carrot nutrition facts". Do not combine them into
+        one search. Then summarize each result in one sentence.'
+      max_output_tokens: 4096
+      max_tool_calls: 1
+      model: gpt-5.6
+      parallel_tool_calls: false
+      store: true
+      tool_choice: auto
+      tools:
+      - type: web_search
+      type: response.create
+    headers:
+      Authorization: Bearer ***
+    method: WEBSOCKET
+    path: /v1/responses
+    query_params: {}
+    transport: websocket
+  response:
+    headers:
+      transport: websocket
+    sse:
+    - 'event: response.created
+
+      data: {"type":"response.created","response":{"id":"resp_06dbbd1ddd3fe15f006abe3dbfddbc87d18cddc2aec5593644","object":"response","created_at":1790852543,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - 'event: response.in_progress
+
+      data: {"type":"response.in_progress","response":{"id":"resp_06dbbd1ddd3fe15f006abe3dbfddbc87d18cddc2aec5593644","object":"response","created_at":1790852543,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - 'event: response.output_item.added
+
+      data: {"type":"response.output_item.added","item":{"id":"ws_06dbbd1ddd3fe15f006abe3dc1271087d1b23c19680e8a5cf0","type":"web_search_call","status":"in_progress"},"output_index":0,"sequence_number":2}
+
+      '
+    - 'event: response.web_search_call.in_progress
+
+      data: {"type":"response.web_search_call.in_progress","item_id":"ws_06dbbd1ddd3fe15f006abe3dc1271087d1b23c19680e8a5cf0","output_index":0,"sequence_number":3}
+
+      '
+    - 'event: response.web_search_call.searching
+
+      data: {"type":"response.web_search_call.searching","item_id":"ws_06dbbd1ddd3fe15f006abe3dc1271087d1b23c19680e8a5cf0","output_index":0,"sequence_number":4}
+
+      '
+    - 'event: response.web_search_call.completed
+
+      data: {"type":"response.web_search_call.completed","item_id":"ws_06dbbd1ddd3fe15f006abe3dc1271087d1b23c19680e8a5cf0","output_index":0,"sequence_number":5}
+
+      '
+    - 'event: response.output_item.done
+
+      data: {"type":"response.output_item.done","item":{"id":"ws_06dbbd1ddd3fe15f006abe3dc1271087d1b23c19680e8a5cf0","type":"web_search_call","status":"completed","action":{"type":"search","queries":["potato
+      nutrition facts"],"query":"potato nutrition facts"}},"output_index":0,"sequence_number":6}
+
+      '
+    - 'event: response.output_item.added
+
+      data: {"type":"response.output_item.added","item":{"id":"ws_06dbbd1ddd3fe15f006abe3dc353ec87d189d74b35fd53d43a","type":"web_search_call","status":"in_progress"},"output_index":1,"sequence_number":7}
+
+      '
+    - 'event: response.web_search_call.in_progress
+
+      data: {"type":"response.web_search_call.in_progress","item_id":"ws_06dbbd1ddd3fe15f006abe3dc353ec87d189d74b35fd53d43a","output_index":1,"sequence_number":8}
+
+      '
+    - 'event: response.web_search_call.searching
+
+      data: {"type":"response.web_search_call.searching","item_id":"ws_06dbbd1ddd3fe15f006abe3dc353ec87d189d74b35fd53d43a","output_index":1,"sequence_number":9}
+
+      '
+    - 'event: response.output_item.done
+
+      data: {"type":"response.output_item.done","item":{"id":"ws_06dbbd1ddd3fe15f006abe3dc353ec87d189d74b35fd53d43a","type":"web_search_call","status":"searching","action":{"type":"search","queries":["tomato
+      nutrition facts"],"query":"tomato nutrition facts"}},"output_index":1,"sequence_number":10}
+
+      '
+    - 'event: response.output_item.added
+
+      data: {"type":"response.output_item.added","item":{"id":"rs_06dbbd1ddd3fe15f006abe3dc47a7087d19fb9a9eb84c618d2","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvj3EJDXB5-yAYMwrnj0VOwvTvQ4dZRjBQ_cNoOqaXBVvTpfwz91HBw6yxt81U1S1jhZT26LmMkm0GhOixU0HB4pjsEypJkZtjlXbrHaAfzUjM2gtGtjxfm8xDFFvj_J3aiz1Xgo9-0SnDMTurFcO8MIlAta3sFhct5FYBZ8A9Ok6I9iFj0JJ6OHGVmWxGZZRAO3AtsUfEfcTox1iEkU8QzB_dloKMizL-2Wf9mhJM1EW4sjYhMFiCTkRwxrnxSyo6V-32DaO8y_PnxSvVSxwaznWsCSwdu_J92nTIoUKrPahAtI_sWPZPHPEFaRTO3nA-Jfoo1Sul0mhXcS8urgP9FXx8yNSIlYUgwBpzvb_0-3yAMwd0HkF4Ge2HOfNmU1ZaiWxK-zqDp6g-8TNIUb0IQrABoxZ-U732DAsRND35-WN_0bDaUtH4q49zXe-36q8SAOGAwb4LWYB5sWiOgYyQbi9vWCxlRm1TsNET_c-h9lXrl4tYpI9hv7BdaSY28asNAV2NkeIu_fkQKCQmu9lcJ6yufMid859zgSTGverQvsg2DM8guERmpJlRLTjt45kZRjHiBONuMzP7j7EJgl-XhQJHtay_eBKXQ3w_ITKIsJnl9C_JWi2ZqT1ac71q3PEFPF46zAyUR1AL-bLwoS6z6EbX7gYCaKKtNRsGLMNS7FYcPftQzovLN-sQOlxMjNpuNfik6z94vjofPb1qGjGdA2C-YsMgXwZ3UlqSzhJaLU-RXLrvza-ph610VTN1CdTt-xl4nLXMR-sq2Epaef2otMIFPKlZC4y4WBqZ6NJdkT1wsbxtY247htiCGlnIKZq42SShv7PRy549s4ota456Bb5HmDB2OizAnvzdaOmTqvuyV4v_tT80M8GD0c2LQAXIgO89E2bkhHy0pRFRxodQCF2sSYif8IZzE8ulI8aGmmwZ2CcL6lae1ss2SilFD1Ag_lUuxEDq8Dt0ku9fOZVT7jcvQY8O9nxU9OUxR06C0DRjW_Bm0ubVdcg_4FaUN5Etx7VR1MDqfrcUnVicJNzjoBXbEfrFYI5lIVyf-Q0II0lwSuVJaG0iEtWA6X0e6P36Y-k3D0_Q6si33h-mX4PYEZvKNG4OaLiLPU5PA-735DED1TsmKzorSFEV-IzgKnsaFfH5nId1dYZnRt9bXM3r7MTrA==","summary":[]},"output_index":2,"sequence_number":11}
+
+      '
+    - 'event: response.output_item.done
+
+      data: {"type":"response.output_item.done","item":{"id":"rs_06dbbd1ddd3fe15f006abe3dc47a7087d19fb9a9eb84c618d2","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvj3Fa3eqW3F2QVfxwgbhgWaAxQFXqUw-sZ24XXD0bU3mBYYw53ZOUTyCwO9KH8tChxVm1q3OXEQnBtchzMCa3VMdIoYLYs_O9o4XFjEOj_PYEtxNnLbBShZ7_XtlHtBvSEyrlivaPpn4NrCvsnp8HuLpVsNxPUKI1zSEVIRs8A2eLPC0MrMOjQWoEsRIZrXzU7qWNgtkGA3YQqYf7cbotBxpvnl-f_puxRrRG6rkPK_VDEQxsKz7lnjuTPqXmiRQojfcwTpE06mQyjPUKY8OKMA7Gzr1M1otO5-MbbLRF5BUVXklYjFo5S-MSnkjcyGrkBShqI7D97L-VaAWEwXkuNG8iAsNMrGL47XxOMNeDMCKHBTK6ag4bVPtgQrnt1ZwNEa9SK14clSDhMS73ciymxpziGcd-OLxSObvKa4yEHsi8s_mjqUO4G8g1vc7tnlO5YlcBy_Zua0WfkMM7MKmNY62DQkzLQttBU0mG9g0uXB6SxM3Qw_ukETZvrKdi53YU5cJJDgGK-GnxjSmefWjK4ujzE_UKamO5aOiNc4EAJ0XqUjTfjdPi-LIiHfR8gZ-d4HoCJNFI3nCW6JLP0orvaQ2LLwwggrefPTRIj9pdPDcSyTYAQgK_oLzOx9IKvK2IrRhZqBJE2VttwJQjIkeM8VaO6ByUkt8Swav-Q72yICIP5Tx7Y9rTN54z3hFszDjVZD3QVZaIyogvOq35Ug9XXMshj27cp1n6J17aFMAeeRmARBJPLs9dx3Rnc4z1QZZTF-fEcSAoq2GMmPW2dFh3uF4Z2dKhRFP1hEWso9uI6GByrRuabKj-enIT9g9VmQmZ54DuQlW-nrvbgtvxhuovTro4_HN6EhMgHEI6qKVFFE3NfrADgkMHA1hKywFAoQSohUqrBVmTYNZaiCi6tvsy7J9hosVl_BS7kdoHrco-ks-jYwcqcUpJw8KwJNQWIEJY3jFuEzTsr-VsKGOhsm1_pO5kcQjtnZmcsVF0xt3ed220rCCCV9up7izRc2BkaOaVU2XnqKpSyWUKnP4_w746BqirzCfPQaJZaD2CvPLM41-0hj5CKd371ndirC2QaDCaIuKFKZSzMYlZXJkOs1Osp7Gff8gT_hTUYtNSAbGtSh9ghsZ8BEMDK9EbqrzIqvwIzWg7SffI9Qv7_f03b2eBByttceV-8WWxDn-eRIPCChRezMI-uRE9fcXSlixtOSbRpD8HFzfcxRhlG1iT_hQVvjIoUU20lXrDJ0hYX_VJvG8-AaxNcu6FgCNbU4d5XOWU32OdrZmy1KflHI4xsis2MMGDWytUpGlZATm5WJcWeArYSSF4qWKALMq_ijrAtz8KJM-rWrvQRd2rMmYtdFIYX_V3HZff91a1lEF1H2iUJLWWad_pZS9G9DgpKlM7jjF9OFBUSOA-hVU37-d0-Ldb432OG84ka6EdJ2Oep2TO9jggv0raL4l5_C4VloUpllx-RY-xJPNuIQjrgmXpepWPqBz8YUx8gp_KQZHJehkMQbIX9llE6IxBHuXgl7aJJ8gwPCmuOh596ag5XXPqBUvURHHT7BI5CSHpvMbEP9xUaGfZOLpjo5oqRxZnYQcGyZmiOsGQ6eWcjJEsZ8Q1fe65aIVxQWfaCCsN6CB1AvREL4A8BuazUmlrNi10DRCQ2O8Mjb84yC_TaC1AHJR0tLjNjdZTQM2yjcUZ9bccMFHVx9n6_ZazYYjv3TTlcg-GKPshlh7b_bBWB0B7qgu6CyT138K0ODbYTtbPll8FMrsJeJ0J8kbXP281NICVMR6byptJ_HlN-SQm992IafymjFhfBbrr4XutKQ6Me8zQpOc8YmUIFwo7DWZ-7QwSLAzdVbN1E6BXd_hACgX1PhmJUZI0JcXTvxBiMirWg57Jx5foOPKHVo=","summary":[]},"output_index":2,"sequence_number":12}
+
+      '
+    - 'event: response.output_item.added
+
+      data: {"type":"response.output_item.added","item":{"id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"},"output_index":3,"sequence_number":13}
+
+      '
+    - 'event: response.content_part.added
+
+      data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","output_index":3,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":14}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":"- **Potato:**
+      The","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"HdZtDwvxk8DvRc2","output_index":3,"sequence_number":15}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" search
+      results indicate that 100 g","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"XVdeJY0u385ly","output_index":3,"sequence_number":16}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" of","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"2CKPdF4ckGzH9","output_index":3,"sequence_number":17}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" boiled
+      potato with skin has","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"uGvR","output_index":3,"sequence_number":18}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" about
+      87 calories, 20.","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"1T6gAkVoe","output_index":3,"sequence_number":19}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":"1 g","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"WOSOTvYuGd3Q0","output_index":3,"sequence_number":20}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" carbohydrates,
+      1.9 g protein","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"ANS","output_index":3,"sequence_number":21}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":", 1.8
+      g fiber,","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"tg","output_index":3,"sequence_number":22}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" and ","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"mgNEsqGGYSa","output_index":3,"sequence_number":23}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":"0.1 g
+      fat,","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"NVAAXc","output_index":3,"sequence_number":24}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" while","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"mqqfHIGcpz","output_index":3,"sequence_number":25}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" providing
+      potassium and vitamin C.","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"wJTQh90b6v5Nz","output_index":3,"sequence_number":26}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))  ","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"1XAp","output_index":3,"sequence_number":27}
+
+      '
+    - 'event: response.output_text.annotation.added
+
+      data: {"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","end_index":298,"start_index":209,"title":"Potatoes
+      101: Nutrition Facts, Health Benefits, and Types","url":"https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai"},"annotation_index":0,"content_index":0,"item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","output_index":3,"sequence_number":28}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":"\n- **Tomato:**","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"oZ","output_index":3,"sequence_number":29}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" I attempted
+      the separate search, but the web","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"sIn","output_index":3,"sequence_number":30}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" tool
+      returned","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"4y","output_index":3,"sequence_number":31}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" a tool","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"cb97OnhWD","output_index":3,"sequence_number":32}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":"-call-limit","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"Euhan","output_index":3,"sequence_number":33}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" error,
+      so no result was available to","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"7RRmNJ1q7vq","output_index":3,"sequence_number":34}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" summarize.  \n-
+      **Carrot:**","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"bKepx","output_index":3,"sequence_number":35}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" I could
+      not run the third","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"fjkG62","output_index":3,"sequence_number":36}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" search
+      because the web tool","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"3yAD","output_index":3,"sequence_number":37}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" instructed
+      me not to make further calls after","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"yd","output_index":3,"sequence_number":38}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" that
+      error.","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"NMMK","output_index":3,"sequence_number":39}
+
+      '
+    - 'event: response.output_text.done
+
+      data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"output_index":3,"sequence_number":40,"text":"-
+      **Potato:** The search results indicate that 100 g of boiled potato with skin
+      has about 87 calories, 20.1 g carbohydrates, 1.9 g protein, 1.8 g fiber, and
+      0.1 g fat, while providing potassium and vitamin C. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))  \n-
+      **Tomato:** I attempted the separate search, but the web tool returned a tool-call-limit
+      error, so no result was available to summarize.  \n- **Carrot:** I could not
+      run the third search because the web tool instructed me not to make further
+      calls after that error."}
+
+      '
+    - 'event: response.content_part.done
+
+      data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","output_index":3,"part":{"type":"output_text","annotations":[{"type":"url_citation","end_index":298,"start_index":209,"title":"Potatoes
+      101: Nutrition Facts, Health Benefits, and Types","url":"https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai"}],"logprobs":[],"text":"-
+      **Potato:** The search results indicate that 100 g of boiled potato with skin
+      has about 87 calories, 20.1 g carbohydrates, 1.9 g protein, 1.8 g fiber, and
+      0.1 g fat, while providing potassium and vitamin C. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))  \n-
+      **Tomato:** I attempted the separate search, but the web tool returned a tool-call-limit
+      error, so no result was available to summarize.  \n- **Carrot:** I could not
+      run the third search because the web tool instructed me not to make further
+      calls after that error."},"sequence_number":41}
+
+      '
+    - 'event: response.output_item.done
+
+      data: {"type":"response.output_item.done","item":{"id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":298,"start_index":209,"title":"Potatoes
+      101: Nutrition Facts, Health Benefits, and Types","url":"https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai"}],"logprobs":[],"text":"-
+      **Potato:** The search results indicate that 100 g of boiled potato with skin
+      has about 87 calories, 20.1 g carbohydrates, 1.9 g protein, 1.8 g fiber, and
+      0.1 g fat, while providing potassium and vitamin C. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))  \n-
+      **Tomato:** I attempted the separate search, but the web tool returned a tool-call-limit
+      error, so no result was available to summarize.  \n- **Carrot:** I could not
+      run the third search because the web tool instructed me not to make further
+      calls after that error."}],"phase":"final_answer","role":"assistant"},"output_index":3,"sequence_number":42}
+
+      '
+    - 'event: response.completed
+
+      data: {"type":"response.completed","response":{"id":"resp_06dbbd1ddd3fe15f006abe3dbfddbc87d18cddc2aec5593644","object":"response","created_at":1790852543,"status":"completed","access_programs":null,"background":false,"completed_at":1790852551,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"ws_06dbbd1ddd3fe15f006abe3dc1271087d1b23c19680e8a5cf0","type":"web_search_call","status":"completed","action":{"type":"search","queries":["potato
+      nutrition facts"],"query":"potato nutrition facts"}},{"id":"ws_06dbbd1ddd3fe15f006abe3dc353ec87d189d74b35fd53d43a","type":"web_search_call","status":"searching","action":{"type":"search","queries":["tomato
+      nutrition facts"],"query":"tomato nutrition facts"}},{"id":"rs_06dbbd1ddd3fe15f006abe3dc47a7087d19fb9a9eb84c618d2","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvj3HW47efNfGVznGw202o5F5ojLkcMZ_bdRmT-QlsHPIpICUSDAOwUaIv5XinBQCeAPd3Nr9u49TYCqZM8zteIXjJ2yyqw8_WiBGCW8PIQrE0GEE08sT6z0cvSOEDGUORDQiKIW0Y8GqjpYi6v2DUPNOAdzh3By8-UjGU6aVHFRmLLyoUzhq-kw95lXxJX5fKeOi_H5YXI1E0Q_m-lzt1vWa9zCh92SOCZbPCx0u5tMM1SebtLCH8S6ELEZCEqqjLIZESSibUFxCe6r1h0KWQcadiO52jBC3VW30zYtiWdlIqu9BFbelSJQLxE83iiUEzwOc-2K9KURzpiCBZa6o8ExpHNEHtsqSYeUW_DryOnhG3cnVCa4HW857BdSDpH7-ldVGC91Wv1fTnNNFRo2gJrAY4C9xkfp7CpMQcdcfxxIeMwAK-bPAE4xpqdVZtgpHn_vGyOQXnGp4dhejxi0Ld18GZIpfkfPOAZAWFcwybLpUlZPEuGFYBctvBcF734C4uk-z3lxRUoZ7kRHNl4MhKW0cDArDXi0JgWNY2yUV2Om3fxtsKjW0jJaosjvh_6xvy3wt9cL-wNzfzP4O-IcR2ZXy-hOFtXxkdBnwGc0Uwe5jJIdUAeFp_dhGnP5H8_GPvZF75-VhrDQNbP-edGEVldt1O_JDjWBQbOBXBpv4Tju0bjCJh5NOL4VIA4PTqRR9Go9kBFDIQQS8jPeBLOpwGazyzNX5SIkgM2Xx3D1ltU3yYVDHGc9Y2ZSEc4-loR__nsyVoLrGEAbSMC58syS4Cmhv5IKekbU3j9KGCj3oqUdAZCrC9k0kJvpY3Hwz5esC5meHIK652RWvYtU0Ro3LMUn26mXhC_iEhUi1cqiH871Kek14P7vnd6f4YWPdRLN8vkR_sX-QWfokn7Q3SzSgH67bxGJau_TIzJ1l1pdaYG3o487jSfiQlnxnRoztWQwG0_VsslXG8-o8uGlp2uH7e06QTN8Q6AWMUtuHFsT_N-NWWC0__iQ-2C9y5_euME08r8OeTgTbuu-DFR9NE8_zxiL670gvLeEnhaZs-OOJOkdbJeCj4l5kY5i1QMJrpKjqJ0s04xK-6Ns4ZOANMv8yPXP7v5N_FGJOskZtUk8qZHq9YfKQqzntPgPGGQqkOPOcr9gU394SAA2Ztet9CrRJE5LR88OVu-yu7r81IPw-uIBOinBIScVJDK2i490Ay_lrVg748A2c_cmfS1qGm-z81GhtHOhnKTci3DytylK-RGVsYtPP9XWSqqVuB8x4Gw_1-LlU3xAHqkIfGIz7XLGKN8EV3cSPPyORdKtnlyMfWbbqBZTpnXg3cgetzVp7FAN3ZFovYC8gLYIFCy0A_eHgjALKbOhOTlOQzYYpsXOMW-OpEVW6HGDeLmay-S4YmUU-saLEf8W8zt7sCTuCBHxWTvotZ-mO-ylk6p3S0nwSUtlrBgGp0zd4hzHISdvGK0m83d4qoWwBnCgZqTevc6lLQoopMtNg4SPoubmxt__sWg8ZvZZpTyRxmRgre-l_8fqsPJdKqUqJ3TpiLZkbMz2yxo4dEAh4sOW7ykRrBb8HQyGu2_8juz-ZBCqR-xn5b1C5GAwxs53deF5M3wujbTuJq0qTbPNa_2HUxwHh2hDrvlm3Sx9A8QmaFW5StRTQc8hw672RPL35Qz8rwOmAX-CdyyHuncDssRIp8br7yPzgoGtsemZl5wihB5DssS9BMuFnvnK4g_eRBLDdnRipsiS2LORnmB2ey9BnAQH0vVX5EAbg-xcPGu2dP1f6c-uYCM2AabG1D2vye98lX6mFruEiRG37IoM42YIjW28tMomMSyuKxRpw0jpe_MTXHqyrfQT54doumMDeG7HkTrfB_hPCKkndIypCtFBUhqaNlh1g11MG0yY=","summary":[]},{"id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":298,"start_index":209,"title":"Potatoes
+      101: Nutrition Facts, Health Benefits, and Types","url":"https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai"}],"logprobs":[],"text":"-
+      **Potato:** The search results indicate that 100 g of boiled potato with skin
+      has about 87 calories, 20.1 g carbohydrates, 1.9 g protein, 1.8 g fiber, and
+      0.1 g fat, while providing potassium and vitamin C. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))  \n-
+      **Tomato:** I attempted the separate search, but the web tool returned a tool-call-limit
+      error, so no result was available to summarize.  \n- **Carrot:** I could not
+      run the third search because the web tool instructed me not to make further
+      calls after that error."}],"phase":"final_answer","role":"assistant"}],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":1}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":8695,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":4432},"output_tokens":272,"output_tokens_details":{"reasoning_tokens":133},"total_tokens":8967},"user":null,"metadata":{}},"sequence_number":43}
+
+      '
+    - 'data: [DONE]
+
+      '
+    status_code: 101
+    websocket:
+    - '{"type":"response.created","response":{"id":"resp_06dbbd1ddd3fe15f006abe3dbfddbc87d18cddc2aec5593644","object":"response","created_at":1790852543,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}'
+    - '{"type":"response.in_progress","response":{"id":"resp_06dbbd1ddd3fe15f006abe3dbfddbc87d18cddc2aec5593644","object":"response","created_at":1790852543,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}'
+    - '{"type":"response.output_item.added","item":{"id":"ws_06dbbd1ddd3fe15f006abe3dc1271087d1b23c19680e8a5cf0","type":"web_search_call","status":"in_progress"},"output_index":0,"sequence_number":2}'
+    - '{"type":"response.web_search_call.in_progress","item_id":"ws_06dbbd1ddd3fe15f006abe3dc1271087d1b23c19680e8a5cf0","output_index":0,"sequence_number":3}'
+    - '{"type":"response.web_search_call.searching","item_id":"ws_06dbbd1ddd3fe15f006abe3dc1271087d1b23c19680e8a5cf0","output_index":0,"sequence_number":4}'
+    - '{"type":"response.web_search_call.completed","item_id":"ws_06dbbd1ddd3fe15f006abe3dc1271087d1b23c19680e8a5cf0","output_index":0,"sequence_number":5}'
+    - '{"type":"response.output_item.done","item":{"id":"ws_06dbbd1ddd3fe15f006abe3dc1271087d1b23c19680e8a5cf0","type":"web_search_call","status":"completed","action":{"type":"search","queries":["potato
+      nutrition facts"],"query":"potato nutrition facts"}},"output_index":0,"sequence_number":6}'
+    - '{"type":"response.output_item.added","item":{"id":"ws_06dbbd1ddd3fe15f006abe3dc353ec87d189d74b35fd53d43a","type":"web_search_call","status":"in_progress"},"output_index":1,"sequence_number":7}'
+    - '{"type":"response.web_search_call.in_progress","item_id":"ws_06dbbd1ddd3fe15f006abe3dc353ec87d189d74b35fd53d43a","output_index":1,"sequence_number":8}'
+    - '{"type":"response.web_search_call.searching","item_id":"ws_06dbbd1ddd3fe15f006abe3dc353ec87d189d74b35fd53d43a","output_index":1,"sequence_number":9}'
+    - '{"type":"response.output_item.done","item":{"id":"ws_06dbbd1ddd3fe15f006abe3dc353ec87d189d74b35fd53d43a","type":"web_search_call","status":"searching","action":{"type":"search","queries":["tomato
+      nutrition facts"],"query":"tomato nutrition facts"}},"output_index":1,"sequence_number":10}'
+    - '{"type":"response.output_item.added","item":{"id":"rs_06dbbd1ddd3fe15f006abe3dc47a7087d19fb9a9eb84c618d2","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvj3EJDXB5-yAYMwrnj0VOwvTvQ4dZRjBQ_cNoOqaXBVvTpfwz91HBw6yxt81U1S1jhZT26LmMkm0GhOixU0HB4pjsEypJkZtjlXbrHaAfzUjM2gtGtjxfm8xDFFvj_J3aiz1Xgo9-0SnDMTurFcO8MIlAta3sFhct5FYBZ8A9Ok6I9iFj0JJ6OHGVmWxGZZRAO3AtsUfEfcTox1iEkU8QzB_dloKMizL-2Wf9mhJM1EW4sjYhMFiCTkRwxrnxSyo6V-32DaO8y_PnxSvVSxwaznWsCSwdu_J92nTIoUKrPahAtI_sWPZPHPEFaRTO3nA-Jfoo1Sul0mhXcS8urgP9FXx8yNSIlYUgwBpzvb_0-3yAMwd0HkF4Ge2HOfNmU1ZaiWxK-zqDp6g-8TNIUb0IQrABoxZ-U732DAsRND35-WN_0bDaUtH4q49zXe-36q8SAOGAwb4LWYB5sWiOgYyQbi9vWCxlRm1TsNET_c-h9lXrl4tYpI9hv7BdaSY28asNAV2NkeIu_fkQKCQmu9lcJ6yufMid859zgSTGverQvsg2DM8guERmpJlRLTjt45kZRjHiBONuMzP7j7EJgl-XhQJHtay_eBKXQ3w_ITKIsJnl9C_JWi2ZqT1ac71q3PEFPF46zAyUR1AL-bLwoS6z6EbX7gYCaKKtNRsGLMNS7FYcPftQzovLN-sQOlxMjNpuNfik6z94vjofPb1qGjGdA2C-YsMgXwZ3UlqSzhJaLU-RXLrvza-ph610VTN1CdTt-xl4nLXMR-sq2Epaef2otMIFPKlZC4y4WBqZ6NJdkT1wsbxtY247htiCGlnIKZq42SShv7PRy549s4ota456Bb5HmDB2OizAnvzdaOmTqvuyV4v_tT80M8GD0c2LQAXIgO89E2bkhHy0pRFRxodQCF2sSYif8IZzE8ulI8aGmmwZ2CcL6lae1ss2SilFD1Ag_lUuxEDq8Dt0ku9fOZVT7jcvQY8O9nxU9OUxR06C0DRjW_Bm0ubVdcg_4FaUN5Etx7VR1MDqfrcUnVicJNzjoBXbEfrFYI5lIVyf-Q0II0lwSuVJaG0iEtWA6X0e6P36Y-k3D0_Q6si33h-mX4PYEZvKNG4OaLiLPU5PA-735DED1TsmKzorSFEV-IzgKnsaFfH5nId1dYZnRt9bXM3r7MTrA==","summary":[]},"output_index":2,"sequence_number":11}'
+    - '{"type":"response.output_item.done","item":{"id":"rs_06dbbd1ddd3fe15f006abe3dc47a7087d19fb9a9eb84c618d2","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvj3Fa3eqW3F2QVfxwgbhgWaAxQFXqUw-sZ24XXD0bU3mBYYw53ZOUTyCwO9KH8tChxVm1q3OXEQnBtchzMCa3VMdIoYLYs_O9o4XFjEOj_PYEtxNnLbBShZ7_XtlHtBvSEyrlivaPpn4NrCvsnp8HuLpVsNxPUKI1zSEVIRs8A2eLPC0MrMOjQWoEsRIZrXzU7qWNgtkGA3YQqYf7cbotBxpvnl-f_puxRrRG6rkPK_VDEQxsKz7lnjuTPqXmiRQojfcwTpE06mQyjPUKY8OKMA7Gzr1M1otO5-MbbLRF5BUVXklYjFo5S-MSnkjcyGrkBShqI7D97L-VaAWEwXkuNG8iAsNMrGL47XxOMNeDMCKHBTK6ag4bVPtgQrnt1ZwNEa9SK14clSDhMS73ciymxpziGcd-OLxSObvKa4yEHsi8s_mjqUO4G8g1vc7tnlO5YlcBy_Zua0WfkMM7MKmNY62DQkzLQttBU0mG9g0uXB6SxM3Qw_ukETZvrKdi53YU5cJJDgGK-GnxjSmefWjK4ujzE_UKamO5aOiNc4EAJ0XqUjTfjdPi-LIiHfR8gZ-d4HoCJNFI3nCW6JLP0orvaQ2LLwwggrefPTRIj9pdPDcSyTYAQgK_oLzOx9IKvK2IrRhZqBJE2VttwJQjIkeM8VaO6ByUkt8Swav-Q72yICIP5Tx7Y9rTN54z3hFszDjVZD3QVZaIyogvOq35Ug9XXMshj27cp1n6J17aFMAeeRmARBJPLs9dx3Rnc4z1QZZTF-fEcSAoq2GMmPW2dFh3uF4Z2dKhRFP1hEWso9uI6GByrRuabKj-enIT9g9VmQmZ54DuQlW-nrvbgtvxhuovTro4_HN6EhMgHEI6qKVFFE3NfrADgkMHA1hKywFAoQSohUqrBVmTYNZaiCi6tvsy7J9hosVl_BS7kdoHrco-ks-jYwcqcUpJw8KwJNQWIEJY3jFuEzTsr-VsKGOhsm1_pO5kcQjtnZmcsVF0xt3ed220rCCCV9up7izRc2BkaOaVU2XnqKpSyWUKnP4_w746BqirzCfPQaJZaD2CvPLM41-0hj5CKd371ndirC2QaDCaIuKFKZSzMYlZXJkOs1Osp7Gff8gT_hTUYtNSAbGtSh9ghsZ8BEMDK9EbqrzIqvwIzWg7SffI9Qv7_f03b2eBByttceV-8WWxDn-eRIPCChRezMI-uRE9fcXSlixtOSbRpD8HFzfcxRhlG1iT_hQVvjIoUU20lXrDJ0hYX_VJvG8-AaxNcu6FgCNbU4d5XOWU32OdrZmy1KflHI4xsis2MMGDWytUpGlZATm5WJcWeArYSSF4qWKALMq_ijrAtz8KJM-rWrvQRd2rMmYtdFIYX_V3HZff91a1lEF1H2iUJLWWad_pZS9G9DgpKlM7jjF9OFBUSOA-hVU37-d0-Ldb432OG84ka6EdJ2Oep2TO9jggv0raL4l5_C4VloUpllx-RY-xJPNuIQjrgmXpepWPqBz8YUx8gp_KQZHJehkMQbIX9llE6IxBHuXgl7aJJ8gwPCmuOh596ag5XXPqBUvURHHT7BI5CSHpvMbEP9xUaGfZOLpjo5oqRxZnYQcGyZmiOsGQ6eWcjJEsZ8Q1fe65aIVxQWfaCCsN6CB1AvREL4A8BuazUmlrNi10DRCQ2O8Mjb84yC_TaC1AHJR0tLjNjdZTQM2yjcUZ9bccMFHVx9n6_ZazYYjv3TTlcg-GKPshlh7b_bBWB0B7qgu6CyT138K0ODbYTtbPll8FMrsJeJ0J8kbXP281NICVMR6byptJ_HlN-SQm992IafymjFhfBbrr4XutKQ6Me8zQpOc8YmUIFwo7DWZ-7QwSLAzdVbN1E6BXd_hACgX1PhmJUZI0JcXTvxBiMirWg57Jx5foOPKHVo=","summary":[]},"output_index":2,"sequence_number":12}'
+    - '{"type":"response.output_item.added","item":{"id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"},"output_index":3,"sequence_number":13}'
+    - '{"type":"response.content_part.added","content_index":0,"item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","output_index":3,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":14}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"- **Potato:**
+      The","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"HdZtDwvxk8DvRc2","output_index":3,"sequence_number":15}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" search results
+      indicate that 100 g","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"XVdeJY0u385ly","output_index":3,"sequence_number":16}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" of","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"2CKPdF4ckGzH9","output_index":3,"sequence_number":17}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" boiled potato
+      with skin has","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"uGvR","output_index":3,"sequence_number":18}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" about 87 calories,
+      20.","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"1T6gAkVoe","output_index":3,"sequence_number":19}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"1 g","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"WOSOTvYuGd3Q0","output_index":3,"sequence_number":20}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" carbohydrates,
+      1.9 g protein","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"ANS","output_index":3,"sequence_number":21}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":", 1.8 g fiber,","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"tg","output_index":3,"sequence_number":22}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" and ","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"mgNEsqGGYSa","output_index":3,"sequence_number":23}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"0.1 g fat,","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"NVAAXc","output_index":3,"sequence_number":24}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" while","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"mqqfHIGcpz","output_index":3,"sequence_number":25}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" providing
+      potassium and vitamin C.","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"wJTQh90b6v5Nz","output_index":3,"sequence_number":26}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))  ","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"1XAp","output_index":3,"sequence_number":27}'
+    - '{"type":"response.output_text.annotation.added","annotation":{"type":"url_citation","end_index":298,"start_index":209,"title":"Potatoes
+      101: Nutrition Facts, Health Benefits, and Types","url":"https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai"},"annotation_index":0,"content_index":0,"item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","output_index":3,"sequence_number":28}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"\n- **Tomato:**","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"oZ","output_index":3,"sequence_number":29}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" I attempted
+      the separate search, but the web","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"sIn","output_index":3,"sequence_number":30}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" tool returned","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"4y","output_index":3,"sequence_number":31}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" a tool","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"cb97OnhWD","output_index":3,"sequence_number":32}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"-call-limit","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"Euhan","output_index":3,"sequence_number":33}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" error, so
+      no result was available to","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"7RRmNJ1q7vq","output_index":3,"sequence_number":34}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" summarize.  \n-
+      **Carrot:**","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"bKepx","output_index":3,"sequence_number":35}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" I could not
+      run the third","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"fjkG62","output_index":3,"sequence_number":36}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" search because
+      the web tool","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"3yAD","output_index":3,"sequence_number":37}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" instructed
+      me not to make further calls after","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"yd","output_index":3,"sequence_number":38}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" that error.","item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"obfuscation":"NMMK","output_index":3,"sequence_number":39}'
+    - '{"type":"response.output_text.done","content_index":0,"item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","logprobs":[],"output_index":3,"sequence_number":40,"text":"-
+      **Potato:** The search results indicate that 100 g of boiled potato with skin
+      has about 87 calories, 20.1 g carbohydrates, 1.9 g protein, 1.8 g fiber, and
+      0.1 g fat, while providing potassium and vitamin C. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))  \n-
+      **Tomato:** I attempted the separate search, but the web tool returned a tool-call-limit
+      error, so no result was available to summarize.  \n- **Carrot:** I could not
+      run the third search because the web tool instructed me not to make further
+      calls after that error."}'
+    - '{"type":"response.content_part.done","content_index":0,"item_id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","output_index":3,"part":{"type":"output_text","annotations":[{"type":"url_citation","end_index":298,"start_index":209,"title":"Potatoes
+      101: Nutrition Facts, Health Benefits, and Types","url":"https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai"}],"logprobs":[],"text":"-
+      **Potato:** The search results indicate that 100 g of boiled potato with skin
+      has about 87 calories, 20.1 g carbohydrates, 1.9 g protein, 1.8 g fiber, and
+      0.1 g fat, while providing potassium and vitamin C. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))  \n-
+      **Tomato:** I attempted the separate search, but the web tool returned a tool-call-limit
+      error, so no result was available to summarize.  \n- **Carrot:** I could not
+      run the third search because the web tool instructed me not to make further
+      calls after that error."},"sequence_number":41}'
+    - '{"type":"response.output_item.done","item":{"id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":298,"start_index":209,"title":"Potatoes
+      101: Nutrition Facts, Health Benefits, and Types","url":"https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai"}],"logprobs":[],"text":"-
+      **Potato:** The search results indicate that 100 g of boiled potato with skin
+      has about 87 calories, 20.1 g carbohydrates, 1.9 g protein, 1.8 g fiber, and
+      0.1 g fat, while providing potassium and vitamin C. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))  \n-
+      **Tomato:** I attempted the separate search, but the web tool returned a tool-call-limit
+      error, so no result was available to summarize.  \n- **Carrot:** I could not
+      run the third search because the web tool instructed me not to make further
+      calls after that error."}],"phase":"final_answer","role":"assistant"},"output_index":3,"sequence_number":42}'
+    - '{"type":"response.completed","response":{"id":"resp_06dbbd1ddd3fe15f006abe3dbfddbc87d18cddc2aec5593644","object":"response","created_at":1790852543,"status":"completed","access_programs":null,"background":false,"completed_at":1790852551,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":1,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"ws_06dbbd1ddd3fe15f006abe3dc1271087d1b23c19680e8a5cf0","type":"web_search_call","status":"completed","action":{"type":"search","queries":["potato
+      nutrition facts"],"query":"potato nutrition facts"}},{"id":"ws_06dbbd1ddd3fe15f006abe3dc353ec87d189d74b35fd53d43a","type":"web_search_call","status":"searching","action":{"type":"search","queries":["tomato
+      nutrition facts"],"query":"tomato nutrition facts"}},{"id":"rs_06dbbd1ddd3fe15f006abe3dc47a7087d19fb9a9eb84c618d2","type":"reasoning","content":[],"encrypted_content":"gAAAAABqvj3HW47efNfGVznGw202o5F5ojLkcMZ_bdRmT-QlsHPIpICUSDAOwUaIv5XinBQCeAPd3Nr9u49TYCqZM8zteIXjJ2yyqw8_WiBGCW8PIQrE0GEE08sT6z0cvSOEDGUORDQiKIW0Y8GqjpYi6v2DUPNOAdzh3By8-UjGU6aVHFRmLLyoUzhq-kw95lXxJX5fKeOi_H5YXI1E0Q_m-lzt1vWa9zCh92SOCZbPCx0u5tMM1SebtLCH8S6ELEZCEqqjLIZESSibUFxCe6r1h0KWQcadiO52jBC3VW30zYtiWdlIqu9BFbelSJQLxE83iiUEzwOc-2K9KURzpiCBZa6o8ExpHNEHtsqSYeUW_DryOnhG3cnVCa4HW857BdSDpH7-ldVGC91Wv1fTnNNFRo2gJrAY4C9xkfp7CpMQcdcfxxIeMwAK-bPAE4xpqdVZtgpHn_vGyOQXnGp4dhejxi0Ld18GZIpfkfPOAZAWFcwybLpUlZPEuGFYBctvBcF734C4uk-z3lxRUoZ7kRHNl4MhKW0cDArDXi0JgWNY2yUV2Om3fxtsKjW0jJaosjvh_6xvy3wt9cL-wNzfzP4O-IcR2ZXy-hOFtXxkdBnwGc0Uwe5jJIdUAeFp_dhGnP5H8_GPvZF75-VhrDQNbP-edGEVldt1O_JDjWBQbOBXBpv4Tju0bjCJh5NOL4VIA4PTqRR9Go9kBFDIQQS8jPeBLOpwGazyzNX5SIkgM2Xx3D1ltU3yYVDHGc9Y2ZSEc4-loR__nsyVoLrGEAbSMC58syS4Cmhv5IKekbU3j9KGCj3oqUdAZCrC9k0kJvpY3Hwz5esC5meHIK652RWvYtU0Ro3LMUn26mXhC_iEhUi1cqiH871Kek14P7vnd6f4YWPdRLN8vkR_sX-QWfokn7Q3SzSgH67bxGJau_TIzJ1l1pdaYG3o487jSfiQlnxnRoztWQwG0_VsslXG8-o8uGlp2uH7e06QTN8Q6AWMUtuHFsT_N-NWWC0__iQ-2C9y5_euME08r8OeTgTbuu-DFR9NE8_zxiL670gvLeEnhaZs-OOJOkdbJeCj4l5kY5i1QMJrpKjqJ0s04xK-6Ns4ZOANMv8yPXP7v5N_FGJOskZtUk8qZHq9YfKQqzntPgPGGQqkOPOcr9gU394SAA2Ztet9CrRJE5LR88OVu-yu7r81IPw-uIBOinBIScVJDK2i490Ay_lrVg748A2c_cmfS1qGm-z81GhtHOhnKTci3DytylK-RGVsYtPP9XWSqqVuB8x4Gw_1-LlU3xAHqkIfGIz7XLGKN8EV3cSPPyORdKtnlyMfWbbqBZTpnXg3cgetzVp7FAN3ZFovYC8gLYIFCy0A_eHgjALKbOhOTlOQzYYpsXOMW-OpEVW6HGDeLmay-S4YmUU-saLEf8W8zt7sCTuCBHxWTvotZ-mO-ylk6p3S0nwSUtlrBgGp0zd4hzHISdvGK0m83d4qoWwBnCgZqTevc6lLQoopMtNg4SPoubmxt__sWg8ZvZZpTyRxmRgre-l_8fqsPJdKqUqJ3TpiLZkbMz2yxo4dEAh4sOW7ykRrBb8HQyGu2_8juz-ZBCqR-xn5b1C5GAwxs53deF5M3wujbTuJq0qTbPNa_2HUxwHh2hDrvlm3Sx9A8QmaFW5StRTQc8hw672RPL35Qz8rwOmAX-CdyyHuncDssRIp8br7yPzgoGtsemZl5wihB5DssS9BMuFnvnK4g_eRBLDdnRipsiS2LORnmB2ey9BnAQH0vVX5EAbg-xcPGu2dP1f6c-uYCM2AabG1D2vye98lX6mFruEiRG37IoM42YIjW28tMomMSyuKxRpw0jpe_MTXHqyrfQT54doumMDeG7HkTrfB_hPCKkndIypCtFBUhqaNlh1g11MG0yY=","summary":[]},{"id":"msg_06dbbd1ddd3fe15f006abe3dc5c71c87d1847b659b286524ab","type":"message","status":"completed","content":[{"type":"output_text","annotations":[{"type":"url_citation","end_index":298,"start_index":209,"title":"Potatoes
+      101: Nutrition Facts, Health Benefits, and Types","url":"https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai"}],"logprobs":[],"text":"-
+      **Potato:** The search results indicate that 100 g of boiled potato with skin
+      has about 87 calories, 20.1 g carbohydrates, 1.9 g protein, 1.8 g fiber, and
+      0.1 g fat, while providing potassium and vitamin C. ([healthline.com](https://www.healthline.com/nutrition/foods/potatoes?utm_source=openai))  \n-
+      **Tomato:** I attempted the separate search, but the web tool returned a tool-call-limit
+      error, so no result was available to summarize.  \n- **Carrot:** I could not
+      run the third search because the web tool instructed me not to make further
+      calls after that error."}],"phase":"final_answer","role":"assistant"}],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":1}},"tools":[{"type":"web_search","return_token_budget":"default","search_content_types":["text"],"search_context_size":"medium","user_location":{"type":"approximate","city":null,"country":"US","region":null,"timezone":null}}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":8695,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":4432},"output_tokens":272,"output_tokens_details":{"reasoning_tokens":133},"total_tokens":8967},"user":null,"metadata":{}},"sequence_number":43}'

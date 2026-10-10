@@ -61,7 +61,7 @@ fn empty_response_event(
     sequence_number: u32,
     usage: Option<ResponseUsage>,
 ) -> Value {
-    serde_json::json!({
+    let mut response = serde_json::json!({
         "type": event_type,
         "sequence_number": sequence_number,
         "response": {
@@ -75,8 +75,14 @@ fn empty_response_event(
             "incomplete_details": null,
             "error": null,
             "previous_response_id": &ctx.original_request.previous_response_id,
-            "conversation_id": &ctx.conversation_id,
             "instructions": &ctx.enriched_request.instructions,
+            "max_tool_calls": ctx.max_tool_calls(),
         },
-    })
+    });
+
+    if let Some(conversation_id) = &ctx.conversation_id {
+        response["response"]["conversation"] = serde_json::json!({"id": conversation_id});
+    }
+
+    response
 }

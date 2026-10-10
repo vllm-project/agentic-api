@@ -125,7 +125,7 @@ use utoipa::OpenApi;
         agentic_core::types::tools::McpToolParam,
         agentic_core::types::tools::WebSearchToolParam,
         agentic_core::types::tools::WebSearchContextSize,
-        agentic_core::types::tools::WebSearchFilters,
+        agentic_core::types::tools::DomainFilters,
         agentic_core::types::tools::WebSearchUserLocation,
         agentic_core::types::tools::FileSearchToolParam,
         agentic_core::types::tools::CodeInterpreterToolParam,

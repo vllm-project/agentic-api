@@ -134,7 +134,7 @@ pub(super) fn prepare_reasoning_for_vllm(input: &mut ResponsesInput) -> Executor
 ///
 /// Dispatches based on `store` flag and which ID is present:
 /// - `previous_response_id`: rehydrate from the prior response checkpoint
-/// - `conversation_id`:      rehydrate from the conversation
+/// - `conversation`:         rehydrate from the conversation
 /// - no ids:                 forward only the new input
 ///
 /// # Errors
@@ -169,11 +169,13 @@ pub(crate) async fn rehydrate_with_continuation(
     continuation: Option<ResponseContinuation>,
 ) -> ExecutorResult<RequestContext> {
     validate_multi_agent_request(&request)?;
+    // Stored turns never supply `max_tool_calls`, so the request value is final here.
+    request.max_tool_calls_limit()?;
     // Fail before storage work for explicitly declared tools and new content;
     // check again once stored effective settings and history are resolved.
     exec_ctx
         .gateway_executors
-        .validate_declarations(request.tools.as_deref())?;
+        .validate_declarations(request.tool_declarations().as_deref())?;
     validate_message_content(&request.input)?;
     let response_id = uuid7_str("resp_");
     // Persistence keeps the public items. Tool lowering belongs to the enriched
@@ -196,13 +198,13 @@ pub(crate) async fn rehydrate_with_continuation(
         continuation,
     };
 
-    if ctx.original_request.conversation_id.is_some() && ctx.original_request.previous_response_id.is_some() {
+    if ctx.original_request.conversation.is_some() && ctx.original_request.previous_response_id.is_some() {
         return Err(ExecutorError::InvalidRequest(
-            "provide only one of conversation_id or previous_response_id".into(),
+            "provide only one of conversation or previous_response_id".into(),
         ));
     }
 
-    if ctx.original_request.conversation_id.is_some() {
+    if ctx.original_request.conversation.is_some() {
         from_conversation(&mut ctx, exec_ctx).await?;
     } else if ctx.original_request.previous_response_id.is_some() {
         from_response(&mut ctx, exec_ctx).await?;
@@ -212,7 +214,7 @@ pub(crate) async fn rehydrate_with_continuation(
 
     exec_ctx
         .gateway_executors
-        .validate_declarations(ctx.enriched_request.tools.as_deref())?;
+        .validate_declarations(ctx.enriched_request.tool_declarations().as_deref())?;
     validate_message_content(&ctx.enriched_request.input)?;
     validate_multi_agent_request(&ctx.enriched_request)?;
     Ok(ctx)
@@ -253,14 +255,14 @@ fn validate_multi_agent_request(request: &RequestPayload) -> ExecutorResult<()> 
 ///
 /// Loads the stored response, rehydrates its history items, resolves effective
 /// tools and tool choice from the stored metadata, and prepends the history to
-/// the enriched request input.
+/// the enriched request input. The new response is independent of any conversation
+/// associated with its parent.
 async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
     if ctx.continuation.is_some() {
         return from_session_response(ctx, exec_ctx).await;
     }
     let stored = exec_ctx.resp_handler.get(ctx).await?;
     if restore_agent_tree(ctx, &stored.metadata, exec_ctx.responses_config.max_retained_bytes)? {
-        ctx.conversation_id = stored.conversation_id;
         return Ok(());
     }
     let history = exec_ctx.resp_handler.rehydrate(ctx).await?;
@@ -277,7 +279,6 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
     ctx.enriched_request.previous_response_id = None;
     ctx.enriched_request.input = ResponsesInput::Items(items);
     apply_effective_settings(ctx, &stored.metadata);
-    ctx.conversation_id = stored.conversation_id;
     Ok(())
 }
 
@@ -316,7 +317,6 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
         std::sync::Arc::new(continuation.retain_parent(checkpoint)?)
     };
     if restore_agent_tree(ctx, &parent.metadata, exec_ctx.responses_config.max_retained_bytes)? {
-        ctx.conversation_id.clone_from(&parent.conversation_id);
         if let Some(continuation) = ctx.continuation.as_mut() {
             continuation.parent = Some(parent);
         }
@@ -344,7 +344,6 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
         &parent.metadata.effective_tool_choice,
         ctx.original_request.tool_choice.is_some(),
     ));
-    ctx.conversation_id.clone_from(&parent.conversation_id);
     if let Some(continuation) = ctx.continuation.as_mut() {
         continuation.parent = Some(parent);
     }
@@ -461,7 +460,8 @@ mod tests {
     use crate::types::agent_tree::{AgentState, StoredAgent, StoredTreeSnapshot};
     use crate::types::io::MultiAgentConfig;
     use crate::types::io::output::{McpListTools, OutputItem};
-    use crate::types::request_response::RequestPayload;
+    use crate::types::request_response::{MaxToolCalls, RequestPayload};
+    use std::num::NonZeroU64;
 
     #[test]
     fn session_history_without_compaction_is_unchanged() {
@@ -661,7 +661,7 @@ mod tests {
             input: ResponsesInput::Text("new input".into()),
             store: true,
             previous_response_id: previous_response_id.map(str::to_owned),
-            conversation_id: conversation_id.map(str::to_owned),
+            conversation: conversation_id.map(str::to_owned),
             ..Default::default()
         }
     }
@@ -720,6 +720,25 @@ mod tests {
         validate_multi_agent_request(&request).unwrap();
         request.multi_agent = serde_json::from_value(serde_json::json!({"enabled":true})).unwrap();
         validate_multi_agent_request(&request).unwrap();
+    }
+
+    #[tokio::test]
+    async fn invalid_max_tool_calls_is_rejected_before_history_access() {
+        let exec_ctx = execution_context(ConversationStore::disabled(), ResponseStore::disabled());
+        for (limit, code) in [
+            (serde_json::json!(0), "integer_below_min_value"),
+            (serde_json::json!("2"), "invalid_type"),
+        ] {
+            for previous in [None, Some("resp_missing")] {
+                let request: RequestPayload = serde_json::from_value(serde_json::json!({
+                    "model": "test", "input": "hello", "previous_response_id": previous, "max_tool_calls": limit
+                }))
+                .unwrap();
+                let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
+                assert!(matches!(error, ExecutorError::InvalidMaxToolCalls(_)), "{error:?}");
+                assert_eq!(error.error_code(), code);
+            }
+        }
     }
 
     #[tokio::test]
@@ -795,7 +814,7 @@ mod tests {
                 // No explicit multi_agent: admission must check again after restoring the tree.
                 let mut request = request(conversation_id, previous);
                 request.stream = stream;
-                request.max_tool_calls = Some(5);
+                request.max_tool_calls = Some(MaxToolCalls::new(NonZeroU64::new(5).unwrap()));
                 let error = rehydrate_conversation(request, &exec_ctx).await.unwrap_err();
                 assert!(matches!(error, ExecutorError::InvalidRequest(message)
                     if message == "max_tool_calls is not supported with multi_agent"));

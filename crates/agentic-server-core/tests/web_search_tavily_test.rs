@@ -13,8 +13,8 @@ use agentic_core::config::{WebSearchProviderConfig, WebSearchProviderKind};
 use agentic_core::tool::{GatewayExecutor, WebSearchHandler};
 use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::OutputItem;
-use agentic_core::types::io::output::{FunctionToolCall, WebSearchCallStatus};
-use agentic_core::types::tools::{WebSearchFilters, WebSearchToolParam};
+use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus, WebSearchCallStatus};
+use agentic_core::types::tools::{DomainFilters, WebSearchToolParam};
 use axum::body::Bytes;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
@@ -217,7 +217,7 @@ async fn tavily_handler_posts_json_and_maps_results_and_public_sources() {
     );
 
     let public = handler
-        .public_output(&call(arguments), &output, WebSearchCallStatus::Completed, &params)
+        .public_output(&call(arguments), &output, GatewayCallStatus::Completed, &params)
         .expect("web_search_call public output");
     assert_eq!(
         serde_json::to_value(&public).unwrap(),
@@ -286,7 +286,7 @@ async fn tavily_handler_returns_empty_sections_without_error() {
         .public_output(
             &call(r#"{"query":"nothing"}"#),
             &output,
-            WebSearchCallStatus::Completed,
+            GatewayCallStatus::Completed,
             &WebSearchToolParam::default(),
         )
         .unwrap();
@@ -317,7 +317,7 @@ async fn tavily_handler_forwards_domain_filters_and_reapplies_them_client_side()
     .await;
     let handler = tavily_handler(&base_url, None);
     let params = WebSearchToolParam {
-        filters: Some(WebSearchFilters {
+        filters: Some(DomainFilters {
             allowed_domains: Some(vec!["rust-lang.org".to_owned()]),
             blocked_domains: None,
         }),

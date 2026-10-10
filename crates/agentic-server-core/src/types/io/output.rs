@@ -1,5 +1,7 @@
 mod apply_done;
+mod web_search_status;
 pub use apply_done::ApplyDone;
+pub use web_search_status::WebSearchCallStatus;
 
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
@@ -10,7 +12,7 @@ use crate::executor::error::ExecutorError;
 use crate::tool::ToolRegistry;
 use crate::types::event::MessageStatus;
 use crate::types::tools::{ToolSearchExecution, ToolSearchStatus};
-use crate::utils::common::deserialize_from_value_opt;
+use crate::utils::common::{deserialize_from_value_opt, deserialize_nullable_vec};
 use crate::utils::uuid7_str;
 
 use super::code_interpreter::CodeInterpreterCall;
@@ -440,8 +442,6 @@ impl GatewayCallStatus {
     }
 }
 
-pub type WebSearchCallStatus = GatewayCallStatus;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
@@ -840,15 +840,8 @@ pub struct ReasoningOutput {
     #[serde(default, deserialize_with = "deserialize_nullable_vec")]
     pub summary: Vec<ReasoningSummaryContent>,
     pub encrypted_content: Option<OpaqueReasoning>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<ReasoningStatus>,
-}
-
-fn deserialize_nullable_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    Option::<Vec<T>>::deserialize(deserializer).map(Option::unwrap_or_default)
 }
 
 impl ReasoningOutput {
@@ -1799,5 +1792,20 @@ mod tests {
             panic!("expected message parts");
         };
         assert!(matches!(parts.as_slice(), [InputContent::Unknown(kind)] if kind == "future_content"));
+    }
+
+    #[test]
+    fn reasoning_omits_a_missing_status_for_openai_compatible_replay() {
+        // OpenAI rejects `status: null` on a replayed reasoning input item and omits the key on output.
+        let without: ReasoningOutput =
+            serde_json::from_value(serde_json::json!({"type": "reasoning", "id": "rs_1", "summary": []})).unwrap();
+        let value = serde_json::to_value(InputItem::Reasoning(without)).unwrap();
+        assert!(value.get("status").is_none(), "{value}");
+
+        let with: ReasoningOutput = serde_json::from_value(serde_json::json!({
+            "type": "reasoning", "id": "rs_2", "summary": [], "status": "completed"
+        }))
+        .unwrap();
+        assert_eq!(serde_json::to_value(with).unwrap()["status"], "completed");
     }
 }

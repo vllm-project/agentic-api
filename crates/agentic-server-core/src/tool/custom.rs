@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
+use super::declaration::ToolDeclaration;
 use crate::types::io::{CustomToolCall, FunctionTool, FunctionToolCall, OutputItem, ToolChoice};
-use crate::types::tools::{CustomToolParam, ResponsesTool};
+use crate::types::tools::CustomToolParam;
 
 use super::{ToolEntry, ToolError, ToolHandler, ToolType};
 
@@ -15,11 +16,11 @@ pub(crate) struct CustomToolMap {
 }
 
 impl CustomToolMap {
-    fn from_tools(tools: &[ResponsesTool]) -> Option<Self> {
+    fn from_tools(tools: &[ToolDeclaration]) -> Option<Self> {
         let declarations = tools
             .iter()
             .filter_map(|tool| match tool {
-                ResponsesTool::Custom(param) => Some((param.name.as_str().to_owned(), param.clone())),
+                ToolDeclaration::Custom(param) => Some((param.name.as_str().to_owned(), param.clone())),
                 _ => None,
             })
             .collect::<HashMap<_, _>>();
@@ -41,12 +42,12 @@ pub struct CustomHandler;
 
 impl CustomHandler {
     #[must_use]
-    pub(crate) fn build_tool_map(tools: &[ResponsesTool]) -> Option<CustomToolMap> {
+    pub(crate) fn build_tool_map(tools: &[ToolDeclaration]) -> Option<CustomToolMap> {
         CustomToolMap::from_tools(tools)
     }
 
     pub(crate) fn validate_tool_choice(
-        tools: Option<&[ResponsesTool]>,
+        tools: Option<&[ToolDeclaration]>,
         tool_choice: &ToolChoice,
     ) -> Result<(), ToolError> {
         let map = tools.and_then(CustomToolMap::from_tools);

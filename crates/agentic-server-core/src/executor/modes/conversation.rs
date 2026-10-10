@@ -38,33 +38,33 @@ impl ConversationHandler {
 
     /// Gets an existing conversation or creates one.
     ///
-    /// Reads `conversation_id` from `ctx.original_request`.
+    /// Reads `conversation` from `ctx.original_request`.
     ///
     /// # Errors
-    /// Returns `ExecutorError` if `conversation_id` is absent, the store is
+    /// Returns `ExecutorError` if `conversation` is absent, the store is
     /// disabled, or the database query fails.
     pub async fn get_or_create(&self, ctx: &RequestContext) -> ExecutorResult<ConversationData> {
         let conv_id = ctx
             .original_request
-            .conversation_id
+            .conversation
             .as_deref()
-            .ok_or_else(|| ExecutorError::InvalidRequest("conversation_id is required for get_or_create".into()))?;
+            .ok_or_else(|| ExecutorError::InvalidRequest("conversation is required for get_or_create".into()))?;
         self.store.get_or_create(conv_id).await.map_err(ExecutorError::Storage)
     }
 
     /// Gets an existing conversation.
     ///
-    /// Reads `conversation_id` from `ctx.original_request`.
+    /// Reads `conversation` from `ctx.original_request`.
     ///
     /// # Errors
-    /// Returns `ExecutorError` if `conversation_id` is absent, the store is
+    /// Returns `ExecutorError` if `conversation` is absent, the store is
     /// disabled, the conversation does not exist, or the database query fails.
     pub async fn get(&self, ctx: &RequestContext) -> ExecutorResult<ConversationData> {
         let conv_id = ctx
             .original_request
-            .conversation_id
+            .conversation
             .as_deref()
-            .ok_or_else(|| ExecutorError::InvalidRequest("conversation_id is required for get".into()))?;
+            .ok_or_else(|| ExecutorError::InvalidRequest("conversation is required for get".into()))?;
         self.store.get(conv_id).await.map_err(ExecutorError::Storage)
     }
 
@@ -138,11 +138,11 @@ impl ConversationHandler {
 
     /// Loads all history items for the conversation referenced by the request.
     ///
-    /// Reads `conversation_id` from `ctx.original_request`. Returns an empty vec
+    /// Reads `conversation` from `ctx.original_request`. Returns an empty vec
     /// if the conversation exists but has no items yet.
     ///
     /// # Errors
-    /// Returns `ExecutorError` if `conversation_id` is absent, the store is
+    /// Returns `ExecutorError` if `conversation` is absent, the store is
     /// disabled, or the database query fails.
     pub async fn rehydrate(&self, ctx: &RequestContext) -> ExecutorResult<Vec<InOutItem>> {
         Ok(self.rehydrate_snapshot(ctx).await?.items)
@@ -150,17 +150,17 @@ impl ConversationHandler {
 
     /// Loads the conversation's history items and storage version.
     ///
-    /// Reads `conversation_id` from `ctx.original_request`.
+    /// Reads `conversation` from `ctx.original_request`.
     ///
     /// # Errors
-    /// Returns `ExecutorError` if `conversation_id` is absent, the store is
+    /// Returns `ExecutorError` if `conversation` is absent, the store is
     /// disabled, or the database query fails.
     pub async fn rehydrate_snapshot(&self, ctx: &RequestContext) -> ExecutorResult<ConversationSnapshot> {
         let conv_id = ctx
             .original_request
-            .conversation_id
+            .conversation
             .as_deref()
-            .ok_or_else(|| ExecutorError::InvalidRequest("conversation_id is required for rehydrate".into()))?;
+            .ok_or_else(|| ExecutorError::InvalidRequest("conversation is required for rehydrate".into()))?;
         self.store
             .rehydrate_snapshot(conv_id)
             .await
@@ -170,15 +170,15 @@ impl ConversationHandler {
     /// Loads metadata for the persisted turn matching a captured conversation version.
     ///
     /// # Errors
-    /// Returns `ExecutorError` if `conversation_id` is absent, the store is
+    /// Returns `ExecutorError` if `conversation` is absent, the store is
     /// disabled, or the database query fails.
     pub(crate) async fn response_metadata_at_version(
         &self,
         ctx: &RequestContext,
         version: &ConversationVersion,
     ) -> ExecutorResult<Option<ResponseMetadata>> {
-        let conv_id = ctx.original_request.conversation_id.as_deref().ok_or_else(|| {
-            ExecutorError::InvalidRequest("conversation_id is required for response metadata lookup".into())
+        let conv_id = ctx.original_request.conversation.as_deref().ok_or_else(|| {
+            ExecutorError::InvalidRequest("conversation is required for response metadata lookup".into())
         })?;
         self.store
             .response_metadata_at_version(conv_id, version)
@@ -311,7 +311,7 @@ impl ConversationHandler {
     /// numbers and appends, so prior history must not be re-inserted.
     ///
     /// # Errors
-    /// Returns `ExecutorError` if `conversation_id` is absent on the context,
+    /// Returns `ExecutorError` if `conversation` is absent on the context,
     /// the store is disabled, or the database operation fails.
     pub async fn execute_turn(&self, mut ctx: RequestContext, output_items: Vec<OutputItem>) -> ExecutorResult<()> {
         let metadata = ResponseMetadata {
@@ -337,7 +337,7 @@ impl ConversationHandler {
     ) -> ExecutorResult<()> {
         let conversation_id = ctx
             .conversation_id
-            .ok_or_else(|| ExecutorError::InvalidRequest("conversation_id is required for execute_turn".into()))?;
+            .ok_or_else(|| ExecutorError::InvalidRequest("conversation is required for execute_turn".into()))?;
         let conversation_version = ctx
             .conversation_version
             .ok_or_else(|| ExecutorError::InvalidRequest("conversation version is required for execute_turn".into()))?;
@@ -401,7 +401,7 @@ mod tests {
             model: "test".into(),
             input: ResponsesInput::Text("hi".into()),
             store: true,
-            conversation_id: conversation_id.map(str::to_string),
+            conversation: conversation_id.map(str::to_string),
             ..Default::default()
         };
         RequestContext {

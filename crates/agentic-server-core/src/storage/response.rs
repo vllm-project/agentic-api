@@ -108,7 +108,7 @@ impl ResponseStore {
             .await
     }
 
-    /// Persists a response while retaining its inherited conversation ID.
+    /// Persists a response with its optional conversation association.
     ///
     /// # Errors
     ///

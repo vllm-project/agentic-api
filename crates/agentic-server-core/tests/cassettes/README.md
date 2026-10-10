@@ -130,6 +130,8 @@ normalizing only the origin and `retrieved_at`.
 --reasoning JSON       JSON object containing Responses reasoning settings
 --input-file FILE       JSON string or item array for turn 1 of an HTTP Responses recording; later turns are prompted
 --max-output-tokens N  max_output_tokens for Responses requests (default 1024; use 0 to omit)
+--max-tool-calls JSON  max_tool_calls per linear Responses turn: an integer for every turn, or an array where null
+                       omits the field on that turn (e.g. '[1, null]')
 --proxy-port PORT      Local proxy port (default 7070)
 --branch-from TURN     Branch from this turn's response id (repeatable)
 --branch-turn-number N First turn number for the corresponding branch (repeatable)
@@ -255,6 +257,7 @@ These files use `sessions`, not the HTTP `turns` schema or synthesized SSE.
 | `record_shell_cassettes.sh` | Four two-turn local-shell scenarios (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_mcp_cassettes.sh` | Native MCP counter tool discovery and calls (streaming + non-streaming) | gateway and OpenAI reference |
 | `record_web_search_cassettes.sh` | Matching web-search calls (streaming + non-streaming) | gateway and OpenAI reference |
+| `record_max_tool_calls_cassettes.sh` | `max_tool_calls` validation, per-tool exhaustion, call counting, and WebSocket scenarios | gateway and OpenAI reference |
 | `record_code_interpreter_cassettes.sh` | One code-interpreter calculation; OpenAI blocking/SSE and gateway blocking/SSE/WebSocket | gateway and OpenAI reference |
 | `record_messages_tool_choice.py` | Forced `any` and named Messages searches followed by an automatic answer (JSON + SSE) | gateway's upstream traffic to vLLM |
 | `record_image_input_cassettes.sh` | Matching two-turn image-input conversations (streaming + non-streaming) | gateway and OpenAI reference |
@@ -491,6 +494,28 @@ The default records both providers. Use `WEB_SEARCH_RECORD_SET=gateway` or
 OPENAI_API_KEY=sk-... \
 bash crates/agentic-server-core/tests/cassettes/record_web_search_cassettes.sh
 ```
+
+### `max_tool_calls` (OpenAI reference and gateway)
+
+The recorder captures four groups per provider for [#398](https://github.com/vllm-project/agentic-api/issues/398):
+`validation` (JSON only; every accepted and rejected value), `builtin` and `counting` (JSON and SSE; web search,
+code interpreter, and MCP exhaustion, client-executed calls, and continuations), and `websocket`. Each leg is an
+independent conversation appended with `--append`; the script header lists the legs and what each isolates. The
+gateway recordings show the gateway enforcing the limit against a local You.com-compatible search stub
+(`YOU_API_BASE_URL`), so their search results are synthetic.
+
+```bash
+OPENAI_API_KEY=sk-... \
+bash crates/agentic-server-core/tests/cassettes/record_max_tool_calls_cassettes.sh
+
+MAX_TOOL_CALLS_RECORD_SET=gateway GATEWAY_URL=http://localhost:9000 GATEWAY_MODEL=Qwen/Qwen3.6-35B-A3B \
+MAX_OUTPUT_TOKENS=16384 MAX_TOOL_CALLS_SKIP_LEGS="mixed-builtin mcp-failure mcp-then-search" \
+bash crates/agentic-server-core/tests/cassettes/record_max_tool_calls_cassettes.sh
+```
+
+`MAX_TOOL_CALLS_RECORD_SET` selects `openai` (default), `gateway`, or `all`; `MAX_TOOL_CALLS_GROUPS` selects
+groups; `MAX_TOOL_CALLS_SKIP_LEGS` omits legs a provider cannot run. The gateway `code-interpreter` legs need the
+embedded-code-interpreter gateway described above.
 
 ### Image input (gateway → vLLM vision model, and OpenAI)
 

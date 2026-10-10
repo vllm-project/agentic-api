@@ -10,21 +10,21 @@ use std::{collections::HashMap, num::NonZeroUsize};
 
 use tracing::{Instrument as _, debug};
 
-use crate::events::EventFrame;
 use crate::executor::compaction::maybe_compact_context;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway::history::append_input_item;
 use crate::executor::gateway::{
-    GatewayCallResult, GatewayScheduler, append_gateway_calls_to_new_input, append_output_items_to_input,
-    append_tool_outputs, emit_gateway_completed_events, emit_gateway_start_events, execute_and_emit_output_calls,
-    has_client_owned_calls, public_output_items,
+    BuiltInToolCallBudget, GatewayCallResult, GatewayScheduler, append_gateway_calls_to_new_input,
+    append_output_items_to_input, append_tool_outputs, emit_gateway_start_events, execute_and_emit_output_calls,
+    has_client_owned_calls, public_output_items, relay_round_events,
 };
-use crate::executor::pipeline::{AgentPipeline, emit_deferred_stream_events};
+use crate::executor::pipeline::AgentPipeline;
 use crate::executor::rehydrate::prepare_reasoning_for_vllm;
+use crate::executor::relay::Release;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::upstream::{fetch_blocking_payload, fetch_stream_payload};
-use crate::tool::{ToolRegistry, mcp};
+use crate::tool::{ToolRegistry, mcp, record_discovered_mcp_tools, responses_declarations};
 use crate::types::io::{InputItem, OutputItem, ResponsesInput, ToolChoice};
 use crate::types::request_response::ResponsePayload;
 
@@ -88,14 +88,21 @@ pub(super) async fn build_tool_registry(
     let mut executors = exec_ctx.gateway_executors.request_scoped();
     let mut registry: ToolRegistry = match agent.request.enriched_request.tools.as_mut() {
         Some(tools) => {
+            // The Responses adapter boundary: the registry is built from the
+            // converted declarations, and what MCP discovery recorded on them
+            // is written back into the request's wire tools so the discovered
+            // tools go upstream and are stored with the request.
+            let mut declarations = responses_declarations(tools);
             let policy = exec_ctx.gateway_scheduler_policy.clone();
-            ToolRegistry::build_with_handlers_guarded(
-                tools,
+            let registry = ToolRegistry::build_with_handlers_guarded(
+                &mut declarations,
                 &mut executors,
                 |bytes| response_budget.consume(bytes),
                 move || policy.acquire_materialization_permit(),
             )
-            .await?
+            .await?;
+            record_discovered_mcp_tools(declarations, tools);
+            registry
         }
         None => ToolRegistry::default(),
     };
@@ -125,7 +132,7 @@ fn record_round_history(
     if let Some(continuation) = ctx
         .continuation
         .as_mut()
-        .filter(|_| ctx.original_request.conversation_id.is_none())
+        .filter(|_| ctx.original_request.conversation.is_none())
     {
         // The canonical sequence includes reasoning and intermediate messages in
         // their original positions, followed by this round's tool call outputs.
@@ -153,6 +160,7 @@ pub(super) struct AgentTurn<'a> {
     exec_ctx: &'a ExecutionContext,
     max_rounds: NonZeroUsize,
     next_round: usize,
+    tool_call_budget: BuiltInToolCallBudget,
 }
 
 /// A resumable execution snapshot. Canonical input remains with the coordinator
@@ -162,6 +170,7 @@ pub(super) struct AgentExecutionState {
     registry: ToolRegistry,
     max_rounds: NonZeroUsize,
     next_round: usize,
+    tool_call_budget: BuiltInToolCallBudget,
 }
 
 impl AgentExecutionState {
@@ -205,6 +214,7 @@ impl<'a> AgentTurn<'a> {
             registry: state.registry,
             max_rounds: state.max_rounds,
             next_round: state.next_round,
+            tool_call_budget: state.tool_call_budget,
         }
     }
 
@@ -213,6 +223,7 @@ impl<'a> AgentTurn<'a> {
             registry: self.registry.clone(),
             max_rounds: self.max_rounds,
             next_round: self.next_round,
+            tool_call_budget: self.tool_call_budget.clone(),
         }
     }
     pub(super) async fn new(
@@ -222,12 +233,14 @@ impl<'a> AgentTurn<'a> {
         max_rounds: NonZeroUsize,
     ) -> ExecutorResult<Self> {
         let registry = build_tool_registry(agent, exec_ctx, response_budget).await?;
+        let tool_call_budget = BuiltInToolCallBudget::new(agent.request.original_request.max_tool_calls_limit()?);
         Ok(Self {
             pipeline: agent,
             registry,
             exec_ctx,
             max_rounds,
             next_round: 0,
+            tool_call_budget,
         })
     }
 
@@ -274,8 +287,8 @@ impl<'a> AgentTurn<'a> {
             compaction_usage.is_some(),
         )?;
         let round_span = crate::executor::telemetry::stages::inference_round(round);
-        let (mut payload, deferred_stream_events) = if stream_upstream {
-            let stream_payload = fetch_stream_payload(
+        let mut payload = if stream_upstream {
+            let payload = fetch_stream_payload(
                 self.pipeline,
                 self.exec_ctx,
                 auth,
@@ -288,27 +301,26 @@ impl<'a> AgentTurn<'a> {
             if round == 0 {
                 self.registry.clear_mcp_list_tool_items();
             }
-            (stream_payload.payload, stream_payload.deferred_events)
+            payload
         } else {
-            (
-                fetch_blocking_payload(
-                    self.pipeline,
-                    self.exec_ctx,
-                    auth,
-                    &self.registry,
-                    Some(response_budget),
-                )
-                .instrument(round_span)
-                .await?,
-                Vec::new(),
+            fetch_blocking_payload(
+                self.pipeline,
+                self.exec_ctx,
+                auth,
+                &self.registry,
+                Some(response_budget),
             )
+            .instrument(round_span)
+            .await?
         };
         let mut round_usage = compaction_usage;
         accumulate_usage(&mut round_usage, payload.usage.take());
         payload.usage = round_usage;
         if matches!(payload.status.as_str(), "error" | "failed") {
-            self.emit_failed_round_events(deferred_stream_events, output_offset)
-                .await?;
+            // A failed round skips tool execution, but its deferred public events
+            // (including upstream diagnostics) still precede the terminal event.
+            let (ctx, relay) = self.pipeline.parts_mut();
+            relay.release_deferred(Release::All, ctx).await?;
             return Ok(RoundResult {
                 payload,
                 decision: RoundDecision::UpstreamTerminal,
@@ -319,9 +331,12 @@ impl<'a> AgentTurn<'a> {
         log_custom_tool_calls(&current_output, &self.pipeline.request.response_id);
         let has_client_owned = has_client_owned_calls(&current_output, &self.registry);
         let gateway_results = self
-            .execute_round_output(&current_output, output_offset, deferred_stream_events, response_budget)
+            .execute_round_output(&current_output, output_offset, response_budget)
             .await?;
         payload.output = public_output_items(&current_output, &self.registry, &gateway_results)?;
+        if self.tool_call_budget.has_refused() {
+            self.pipeline.withhold_builtin_tools();
+        }
         record_round_history(
             &mut self.pipeline.request,
             &current_output,
@@ -376,20 +391,6 @@ impl<'a> AgentTurn<'a> {
         }
     }
 
-    async fn emit_failed_round_events(
-        &mut self,
-        deferred_events: Vec<EventFrame>,
-        output_offset: usize,
-    ) -> ExecutorResult<()> {
-        // A failed round skips tool execution, but its deferred public events
-        // (including upstream diagnostics) still precede the terminal event.
-        let (ctx, stream) = self.pipeline.parts_mut();
-        if let Some((accumulator, sender)) = stream {
-            emit_deferred_stream_events(deferred_events, ctx, accumulator, sender, output_offset).await?;
-        }
-        Ok(())
-    }
-
     fn record_gateway_results(&mut self, results: Vec<GatewayCallResult>) {
         append_tool_outputs(
             &mut self.pipeline.request,
@@ -401,76 +402,44 @@ impl<'a> AgentTurn<'a> {
         &mut self,
         output_items: &[OutputItem],
         output_offset: usize,
-        deferred_events: Vec<EventFrame>,
         response_budget: &ExecutorResponseBudget,
     ) -> ExecutorResult<Vec<GatewayCallResult>> {
-        let (ctx, stream) = self.pipeline.parts_mut();
-        let (stream_accumulator, stream_sender) = match (deferred_events.is_empty(), stream) {
-            (false, Some(stream)) => stream,
-            (_, stream) => {
-                return execute_and_emit_output_calls(
-                    output_items,
-                    &self.registry,
-                    output_offset,
-                    self.exec_ctx.gateway_scheduler_policy.clone(),
-                    response_budget,
-                    stream,
-                )
-                .await;
-            }
-        };
-        let mut events_by_output = Vec::with_capacity(output_items.len());
-        events_by_output.resize_with(output_items.len(), Vec::new);
-        let mut remaining_events = Vec::new();
-        for frame in deferred_events {
-            let Some(output_index) = frame
-                .wire
-                .output_index
-                .and_then(|index| usize::try_from(index).ok())
-                .filter(|index| *index < events_by_output.len())
-            else {
-                remaining_events.push(frame);
-                continue;
-            };
-            events_by_output[output_index].push(frame);
+        let policy = self.exec_ctx.gateway_scheduler_policy.clone();
+        let (ctx, relay) = self.pipeline.parts_mut();
+        if !relay.has_deferred() {
+            return execute_and_emit_output_calls(
+                output_items,
+                &self.registry,
+                output_offset,
+                policy,
+                response_budget,
+                &mut self.tool_call_budget,
+                relay,
+            )
+            .await;
         }
 
-        let mut scheduler = GatewayScheduler::plan(
+        let mut scheduler = GatewayScheduler::plan_with_budget(
             output_items,
             &self.registry,
             output_offset,
-            self.exec_ctx.gateway_scheduler_policy.clone(),
+            policy,
+            &mut self.tool_call_budget,
         );
         let initial_event_run_len = scheduler.initial_event_run_len(output_items, &self.registry);
-        emit_gateway_start_events(
-            scheduler.event_plans().take(initial_event_run_len),
-            stream_accumulator,
-            stream_sender,
-        )
-        .await?;
+        emit_gateway_start_events(scheduler.event_plans().take(initial_event_run_len), relay).await?;
 
         let gateway_results = scheduler.execute_with_budget(response_budget).await?;
-        for (index, output_events) in events_by_output.iter_mut().enumerate() {
-            if let Some(call_index) = scheduler.call_index_for_item(index) {
-                let plan = scheduler
-                    .event_plan(call_index)
-                    .expect("scheduled call index always has an event plan");
-                let result = std::slice::from_ref(&gateway_results[call_index]);
-                if call_index >= initial_event_run_len {
-                    emit_gateway_start_events(std::iter::once(plan), stream_accumulator, stream_sender).await?;
-                }
-                emit_gateway_completed_events(result, std::iter::once(plan), stream_accumulator, stream_sender).await?;
-            }
-            emit_deferred_stream_events(
-                std::mem::take(output_events),
-                ctx,
-                stream_accumulator,
-                stream_sender,
-                output_offset,
-            )
-            .await?;
-        }
-        emit_deferred_stream_events(remaining_events, ctx, stream_accumulator, stream_sender, output_offset).await?;
+        // Calls ran concurrently; the wire still follows output order.
+        relay_round_events(
+            &scheduler,
+            &gateway_results,
+            output_items.len(),
+            relay,
+            ctx,
+            initial_event_run_len,
+        )
+        .await?;
         Ok(gateway_results)
     }
 }
@@ -500,6 +469,7 @@ mod tests {
             item_index: 0,
             input_item: InputItem::Unknown,
             public_output: None,
+            omitted: false,
         }];
         assert!(matches!(
             classify_round(true, &results, 0, 1),

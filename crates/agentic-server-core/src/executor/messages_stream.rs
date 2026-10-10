@@ -251,6 +251,8 @@ struct MessagesStreamAccumulator {
     index_map: HashMap<u64, u32>,
     /// Upstream indices belonging to a suppressed gateway `tool_use` this round.
     suppressed_indices: HashSet<u64>,
+    /// Tool-use IDs admitted in this upstream round, including client-executed tools.
+    tool_ids: HashSet<String>,
     /// Every assistant block this round, keyed by upstream index (ordered), so
     /// the full turn — `thinking`/`text`/`signature` + gateway `tool_use` — can
     /// be reconstructed for the next round's history (F3). Cleared each round.
@@ -275,6 +277,7 @@ impl MessagesStreamAccumulator {
     fn begin_round(&mut self) {
         self.index_map.clear();
         self.suppressed_indices.clear();
+        self.tool_ids.clear();
         self.blocks.clear();
         self.has_client_tool_use = false;
         self.round_state = RoundState::Active;
@@ -858,7 +861,7 @@ mod tests {
     /// the ONLY way `execute_gateway_calls` can produce a non-"no handler" result
     /// for a malformed input is by rejecting the args before dispatch (the fix).
     async fn no_op_registry() -> ToolRegistry {
-        let mut tools = [];
+        let mut tools: [crate::tool::ToolDeclaration; 0] = [];
         let mut executors = crate::tool::GatewayExecutors::from_env(std::sync::Arc::new(reqwest::Client::new()));
         ToolRegistry::build_with_handlers(&mut tools, &mut executors)
             .await

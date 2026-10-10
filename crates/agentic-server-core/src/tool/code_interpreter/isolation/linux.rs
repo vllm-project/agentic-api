@@ -4,6 +4,7 @@ use std::fs::{self, DirBuilder};
 use std::io::{self, ErrorKind};
 use std::os::unix::fs::DirBuilderExt;
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
@@ -192,12 +193,13 @@ impl Drop for WorkerChild {
     }
 }
 
-fn worker_executable() -> io::Result<PathBuf> {
+fn worker_executable() -> PathBuf {
     // The explicit path is for a separately built worker executable in tests
     // and deployments with a renamed server binary. It is operator-owned.
+    // Otherwise exec the running image through the kernel link: unlike
+    // `current_exe`, it stays valid when the binary on disk is replaced.
     std::env::var_os("AGENTIC_CODE_INTERPRETER_WORKER_EXECUTABLE")
-        .map(PathBuf::from)
-        .map_or_else(std::env::current_exe, Ok)
+        .map_or_else(|| PathBuf::from("/proc/self/exe"), PathBuf::from)
 }
 
 pub(in crate::tool::code_interpreter) fn run_isolated(
@@ -242,7 +244,11 @@ fn run_isolated_inner(
     if cancelled.load(Ordering::Acquire) {
         return Err(io::Error::new(ErrorKind::Interrupted, "worker request was cancelled"));
     }
-    let mut command = Command::new(worker_executable()?);
+    let mut command = Command::new(worker_executable());
+    // Process tools match the server name; the kernel link alone would show `/proc/self/exe`.
+    if let Ok(server) = std::env::current_exe() {
+        command.arg0(server);
+    }
     command
         .arg(super::WORKER_MARKER)
         .arg(&socket.path)

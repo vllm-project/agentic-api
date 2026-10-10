@@ -13,7 +13,7 @@ use crate::executor::messages_context::MessagesRequestContext;
 use crate::executor::messages_request::{
     web_fetch_budget_exhausted_result, web_fetch_refused_result, web_search_budget_exhausted_result,
 };
-use crate::tool::web_fetch::{self, WebFetchArguments, WebFetchErrorCode};
+use crate::tool::web_fetch::{WebFetchArguments, WebFetchErrorCode};
 use crate::tool::web_search::args::requested_searches;
 use crate::tool::{ToolRegistry, ToolType};
 use crate::types::io::output::FunctionToolCall;
@@ -145,11 +145,10 @@ async fn run(admission: Admission<'_>, registry: &ToolRegistry) -> GatewayToolRe
     };
     let (output, is_error) = match tokio::time::timeout(GATEWAY_TOOL_TIMEOUT, registry.dispatch(&call)).await {
         Ok(Some(result)) => match result.output {
+            // A documented failure is the tool's answer, carried with the
+            // output's status so the model knows the call did not succeed.
             Ok(tool_output) => {
-                // A documented web_fetch failure is the tool's answer, flagged
-                // so the model knows the page did not arrive.
-                let failed =
-                    call.name == tool_seam::WEB_FETCH_EXECUTOR && web_fetch::is_failure_output(&tool_output.output);
+                let failed = tool_output.is_failure();
                 (tool_output.output, failed)
             }
             Err(e) => (format!("tool execution failed: {e}"), true),

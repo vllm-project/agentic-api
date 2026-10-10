@@ -259,7 +259,8 @@ impl WsMultiplexer {
             }
             let result = match work {
                 WsWorkItem::Execute { request, .. } => {
-                    handle_ws_request(
+                    // Boxed like `responses_ws_loop`: this future carries a whole executor turn.
+                    Box::pin(handle_ws_request(
                         *request,
                         RequestExecution {
                             state: &state,
@@ -270,7 +271,7 @@ impl WsMultiplexer {
                             event_limit,
                             register: &register,
                         },
-                    )
+                    ))
                     .await
                 }
                 WsWorkItem::Reject { error, .. } => {

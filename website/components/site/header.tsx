@@ -48,9 +48,25 @@ export function Header() {
         Capabilities
       </Link>
       <Link
+        href="/docs/latest/guides/quickstart"
+        onClick={() => setOpen(false)}
+        aria-current={
+          path.replace(/\/$/, '') === '/docs/latest/guides/quickstart'
+            ? 'page'
+            : undefined
+        }
+      >
+        Quickstart
+      </Link>
+      <Link
         href={DOCS}
         onClick={() => setOpen(false)}
-        aria-current={path.startsWith('/docs') ? 'page' : undefined}
+        aria-current={
+          path.startsWith('/docs') &&
+          path.replace(/\/$/, '') !== '/docs/latest/guides/quickstart'
+            ? 'page'
+            : undefined
+        }
       >
         Documentation
       </Link>

@@ -12,11 +12,12 @@ use agentic_core::executor::{
     run_messages_loop, run_messages_stream,
 };
 use agentic_core::storage::{ConversationStore, ResponseStore};
+use agentic_core::tool::registry_tools;
 use agentic_core::tool::{
     GatewayExecutor, ToolError, ToolHandler, ToolOutput, ToolRegistry, ToolType, WebSearchHandler,
 };
 use agentic_core::types::io::FunctionTool;
-use agentic_core::types::messages::{ToolParam, registry_tools};
+use agentic_core::types::messages::ToolParam;
 use agentic_core::types::tools::WebSearchToolParam;
 use axum::{Router, routing::post};
 use futures::{FutureExt, StreamExt};
@@ -56,10 +57,7 @@ impl GatewayExecutor for RecordedTool {
         assert_eq!(name, "web_search");
         assert_eq!(serde_json::from_str::<Value>(arguments).unwrap(), self.expected_input);
         *self.calls.lock().unwrap() += 1;
-        let output = ToolOutput {
-            call_id: call_id.to_owned(),
-            output: self.output.clone(),
-        };
+        let output = ToolOutput::success(call_id, self.output.clone());
         Box::pin(async move { Ok(output) })
     }
 }

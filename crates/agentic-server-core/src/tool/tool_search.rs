@@ -22,6 +22,7 @@ use crate::types::tools::{
 use crate::utils::common::{deserialize_from_str, deserialize_from_value, serialize_to_string, serialize_to_value};
 
 use super::CodexNamespaceHandler;
+use super::declaration::responses_declarations;
 use super::handler::{ToolError, ToolHandler};
 use super::registry::{ToolEntry, ToolType};
 
@@ -426,7 +427,7 @@ impl ToolSearchState {
             &mut unqualified_call_positions,
         )?;
 
-        CodexNamespaceHandler.validate_namespace_collisions(Some(&public_tools))?;
+        CodexNamespaceHandler.validate_namespace_collisions(Some(&responses_declarations(&public_tools)))?;
 
         let catalog = build_catalog(&public_tools, &definitions, &definition_indexes);
         let synthetic_tool_search = declaration.map(|declaration| synthetic_tool_search(declaration, &catalog));
@@ -839,7 +840,6 @@ fn definition_record(
         ResponsesTool::ToolSearch(_)
         | ResponsesTool::Mcp(_)
         | ResponsesTool::WebSearch(_)
-        | ResponsesTool::WebFetch(_)
         | ResponsesTool::FileSearch(_)
         | ResponsesTool::CodeInterpreter(_)
         | ResponsesTool::Shell(_)
@@ -1189,7 +1189,6 @@ fn model_visible_output_tools(tools: &[ResponsesTool]) -> Result<Vec<ModelVisibl
             ResponsesTool::ToolSearch(_)
             | ResponsesTool::Mcp(_)
             | ResponsesTool::WebSearch(_)
-            | ResponsesTool::WebFetch(_)
             | ResponsesTool::FileSearch(_)
             | ResponsesTool::CodeInterpreter(_)
             | ResponsesTool::Shell(_)
@@ -1376,7 +1375,6 @@ fn loaded_tool_identity(tool: &ResponsesTool) -> Result<Option<LoadedToolIdentit
         ResponsesTool::ToolSearch(_)
         | ResponsesTool::Mcp(_)
         | ResponsesTool::WebSearch(_)
-        | ResponsesTool::WebFetch(_)
         | ResponsesTool::FileSearch(_)
         | ResponsesTool::CodeInterpreter(_)
         | ResponsesTool::Shell(_)
@@ -1452,7 +1450,6 @@ fn build_catalog(
                 | ResponsesTool::Mcp(_)
                 | ResponsesTool::ToolSearch(_)
                 | ResponsesTool::WebSearch(_)
-                | ResponsesTool::WebFetch(_)
                 | ResponsesTool::FileSearch(_)
                 | ResponsesTool::CodeInterpreter(_)
                 | ResponsesTool::Shell(_)
@@ -1516,7 +1513,6 @@ fn build_private_tools(
             }
             ResponsesTool::Mcp(_)
             | ResponsesTool::WebSearch(_)
-            | ResponsesTool::WebFetch(_)
             | ResponsesTool::FileSearch(_)
             | ResponsesTool::CodeInterpreter(_)
             | ResponsesTool::Shell(_)
@@ -1544,7 +1540,6 @@ fn available_public_tools(public_tools: &[ResponsesTool], loaded_tools: &[Respon
             ResponsesTool::ToolSearch(_)
             | ResponsesTool::Mcp(_)
             | ResponsesTool::WebSearch(_)
-            | ResponsesTool::WebFetch(_)
             | ResponsesTool::FileSearch(_)
             | ResponsesTool::CodeInterpreter(_)
             | ResponsesTool::Shell(_)
@@ -1591,7 +1586,6 @@ fn available_public_tools(public_tools: &[ResponsesTool], loaded_tools: &[Respon
             }
             ResponsesTool::Mcp(_)
             | ResponsesTool::WebSearch(_)
-            | ResponsesTool::WebFetch(_)
             | ResponsesTool::FileSearch(_)
             | ResponsesTool::CodeInterpreter(_)
             | ResponsesTool::Shell(_)
@@ -1626,7 +1620,6 @@ fn private_definition(
         | ResponsesTool::Mcp(_)
         | ResponsesTool::ToolSearch(_)
         | ResponsesTool::WebSearch(_)
-        | ResponsesTool::WebFetch(_)
         | ResponsesTool::FileSearch(_)
         | ResponsesTool::CodeInterpreter(_)
         | ResponsesTool::Shell(_)

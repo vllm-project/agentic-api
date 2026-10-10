@@ -996,6 +996,29 @@ def _parse_multi_agent(raw: str | None) -> dict | None:
     return value
 
 
+def _parse_max_tool_calls(raw: str | None) -> list[int | None] | int | None:
+    """Return one limit for every turn, or one entry per turn where null omits the field."""
+    if raw is None:
+        return None
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise click.UsageError(f"--max-tool-calls is not valid JSON: {error}") from error
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, list) and all(
+        entry is None or (isinstance(entry, int) and not isinstance(entry, bool)) for entry in value
+    ):
+        return value
+    raise click.UsageError("--max-tool-calls must be an integer or a JSON array of integers and nulls.")
+
+
+def _max_tool_calls_for_turn(max_tool_calls: list[int | None] | int | None, turn: int) -> int | None:
+    if isinstance(max_tool_calls, list):
+        return max_tool_calls[turn - 1] if turn <= len(max_tool_calls) else None
+    return max_tool_calls
+
+
 def _inject_tools(
     body: dict, tools: list | None, tool_choice: Any, parallel_tool_calls: bool | None = None
 ) -> None:
@@ -1431,6 +1454,7 @@ def run_responses(
     multi_agent: dict | None = None,
     request_overrides: dict | None = None,
     auto_tool_continuations: int = 0,
+    max_tool_calls: list[int | None] | int | None = None,
 ) -> None:
     if transport == "websocket" and multi_agent is not None:
         from websocket_recorder import RecordedSession, exchange
@@ -1577,6 +1601,9 @@ def run_responses(
             else parallel_tool_calls
         )
         _inject_tools(body, effective_tools, turn_tool_choice, effective_parallel_tool_calls)
+        turn_max_tool_calls = _max_tool_calls_for_turn(max_tool_calls, turn)
+        if turn_max_tool_calls is not None:
+            body["max_tool_calls"] = turn_max_tool_calls
         if request_overrides is not None:
             # Characterization must send invalid/null values without repairing them.
             body.update(request_overrides)
@@ -1866,6 +1893,14 @@ def run_responses(
     help="max_output_tokens for Responses requests. Use 0 to omit the field.",
 )
 @click.option(
+    "--max-tool-calls",
+    "max_tool_calls_raw",
+    metavar="JSON",
+    default=None,
+    help="max_tool_calls for linear Responses turns: an integer sent on every turn, or a JSON array with one "
+    "entry per turn where null omits the field (e.g. '[1, null]'). The value is sent unvalidated.",
+)
+@click.option(
     "--append",
     is_flag=True,
     default=False,
@@ -1904,6 +1939,7 @@ def main(
     request_overrides_raw: str | None,
     http_read_timeout: int,
     max_output_tokens: int,
+    max_tool_calls_raw: str | None,
     append: bool,
 ) -> None:
     """Interactive multi-turn cassette recorder (proxy embedded)."""
@@ -1937,6 +1973,9 @@ def main(
             raise click.UsageError("--request-overrides must contain a JSON object.")
         if "stream" in request_overrides:
             raise click.UsageError("Use --stream/--no-stream instead of overriding stream.")
+    max_tool_calls = _parse_max_tool_calls(max_tool_calls_raw)
+    if max_tool_calls is not None and (mode != "responses" or branch_from or branch_turn_number):
+        raise click.UsageError("--max-tool-calls requires linear --mode responses without branches.")
 
     if mode == "items":
         expected_turns = (10 if items_scenario == "pagination" else
@@ -2184,6 +2223,7 @@ def main(
                 multi_agent=multi_agent,
                 auto_tool_continuations=auto_tool_continuations,
                 request_overrides=request_overrides,
+                max_tool_calls=max_tool_calls,
             )
     else:
         click.echo(f"Proxy:   {proxy_url}  (requests go through here for recording)")
@@ -2227,6 +2267,7 @@ def main(
                         multi_agent=multi_agent,
                         request_overrides=request_overrides,
                         auto_tool_continuations=auto_tool_continuations,
+                        max_tool_calls=max_tool_calls,
                     )
                 elif mode == "messages":
                     run_messages(

@@ -11,8 +11,8 @@ turns:
     query_params: {}
   response:
     body:
-      created_at: 1790336334
-      id: conv_01a0d85c-7a9c-75b3-b765-6c8a15392faa
+      created_at: 1791528833
+      id: conv_01a11f70-9396-7740-ba5e-05f72d8ca64f
       metadata: {}
       object: conversation
     headers:
@@ -21,7 +21,7 @@ turns:
 - filename: t2
   request:
     body:
-      conversation: conv_01a0d85c-7a9c-75b3-b765-6c8a15392faa
+      conversation: conv_01a11f70-9396-7740-ba5e-05f72d8ca64f
       input:
       - content: Remember the secret word SAPPHIRE. Reply with only SAPPHIRE.
         role: user
@@ -37,35 +37,35 @@ turns:
     query_params: {}
   response:
     body:
-      conversation_id: conv_01a0d85c-7a9c-75b3-b765-6c8a15392faa
-      created_at: 1790336336
+      conversation:
+        id: conv_01a11f70-9396-7740-ba5e-05f72d8ca64f
+      created_at: 1791528835
       error: null
-      id: resp_01a0d85c-7aa4-74f0-84c8-1a28e018e338
+      id: resp_01a11f70-93a2-7180-b706-63cdd96869cb
       incomplete_details: null
       instructions: null
+      max_tool_calls: null
       model: Qwen/Qwen3.6-35B-A3B-FP8
       object: response
       output:
       - content:
-        - text: "Thinking Process:\n\n1.  **Deconstruct the user's request:**\n  \
-            \  *   User says: \"Remember the secret word SAPPHIRE.\"\n    *   User\
-            \ commands: \"Reply with only SAPPHIRE.\"\n\n2.  **Evaluate safety and\
-            \ policy:**\n    *   The word \"SAPPHIRE\" is a gemstone. It is not harmful,\
-            \ offensive, or against any AI safety policy.\n    *   The instruction\
-            \ is a simple repetition task.\n    *   There is no jailbreak attempt,\
-            \ no malicious payload, no request for dangerous content.\n    *   The\
-            \ request is benign.\n\n3.  **Formulate the response:**\n    *   The user\
-            \ explicitly requested \"Reply with only SAPPHIRE.\"\n    *   Following\
-            \ the instruction, the output should be exactly \"SAPPHIRE\".\n\n4.  **Final\
-            \ Output Construction:**\n    *   Result: SAPPHIRE.\n\n5.  **Review against\
-            \ constraints:**\n    *   Did I reply with only SAPPHIRE? Yes.\n    *\
-            \   Is the response safe? Yes.\n    *   Is the response helpful? Yes,\
-            \ it followed the user's instruction perfectly.\n\n6.  **Conclusion:**\
-            \ Output \"SAPPHIRE\".\n"
+        - text: "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - User\
+            \ says: \"Remember the secret word SAPPHIRE. Reply with only SAPPHIRE.\"\
+            \n   - Key instructions: \n     - Remember the secret word: SAPPHIRE\n\
+            \     - Reply with ONLY SAPPHIRE\n\n2.  **Identify Constraints:**\n  \
+            \ - The response must be exactly \"SAPPHIRE\" and nothing else.\n   -\
+            \ No extra words, no explanations, no greetings, no punctuation unless\
+            \ it's part of the word itself (but the prompt says \"only SAPPHIRE\"\
+            ).\n\n3.  **Check for Potential Issues:**\n   - This is a straightforward\
+            \ instruction-following prompt.\n   - No complex reasoning needed.\n \
+            \  - Must strictly adhere to the constraint: \"Reply with only SAPPHIRE.\"\
+            \n\n4.  **Formulate Response:**\n   - Output: SAPPHIRE\n   - Verify: Does\
+            \ it match exactly? Yes.\n   - Any extra characters? No.\n   - Follows\
+            \ constraint? Yes.\n\n5.  **Final Output Generation:** SAPPHIRE\n   -\
+            \ Proceed.✅\n"
           type: reasoning_text
         encrypted_content: null
-        id: rs_b4bbc91e64d71620
-        status: null
+        id: rs_be2d677289d17a29
         summary: []
         type: reasoning
       - content:
@@ -75,20 +75,21 @@ turns:
 
             SAPPHIRE'
           type: output_text
-        id: msg_95d7947189c7e99a
+        id: msg_81bbbff1c1911929
         role: assistant
         status: completed
         type: message
       previous_response_id: null
+      service_tier: auto
       status: completed
       usage:
         input_tokens: 25
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 269
+        output_tokens: 246
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 294
+        total_tokens: 271
     headers:
       content-type: application/json
     status_code: 200
@@ -103,7 +104,7 @@ turns:
       content-type: application/json
       user-agent: python-httpx/0.28.1
     method: POST
-    path: /v1/conversations/conv_01a0d85c-7a9c-75b3-b765-6c8a15392faa/items
+    path: /v1/conversations/conv_01a11f70-9396-7740-ba5e-05f72d8ca64f/items
     query_params: {}
   response:
     body:
@@ -111,13 +112,13 @@ turns:
       - content:
         - text: The new secret word is ORCHID.
           type: input_text
-        id: item_01a0d85c-8187-72c3-8b84-f103b9ca184a
+        id: msg_01a11f70-99f9-7080-ab1c-03d478f840f6
         role: user
         status: completed
         type: message
-      first_id: item_01a0d85c-8187-72c3-8b84-f103b9ca184a
+      first_id: msg_01a11f70-99f9-7080-ab1c-03d478f840f6
       has_more: false
-      last_id: item_01a0d85c-8187-72c3-8b84-f103b9ca184a
+      last_id: msg_01a11f70-99f9-7080-ab1c-03d478f840f6
       object: list
     headers:
       content-type: application/json
@@ -129,7 +130,7 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_01a0d85c-7a9c-75b3-b765-6c8a15392faa/items
+    path: /v1/conversations/conv_01a11f70-9396-7740-ba5e-05f72d8ca64f/items
     query_params:
       order: asc
   response:
@@ -138,30 +139,28 @@ turns:
       - content:
         - text: Remember the secret word SAPPHIRE. Reply with only SAPPHIRE.
           type: input_text
-        id: item_01a0d85c-8170-7600-8f63-53a7f91999d2
+        id: msg_01a11f70-99e3-7311-ab1f-e66e3823a2a0
         role: user
         status: completed
         type: message
       - content:
-        - text: "Thinking Process:\n\n1.  **Deconstruct the user's request:**\n  \
-            \  *   User says: \"Remember the secret word SAPPHIRE.\"\n    *   User\
-            \ commands: \"Reply with only SAPPHIRE.\"\n\n2.  **Evaluate safety and\
-            \ policy:**\n    *   The word \"SAPPHIRE\" is a gemstone. It is not harmful,\
-            \ offensive, or against any AI safety policy.\n    *   The instruction\
-            \ is a simple repetition task.\n    *   There is no jailbreak attempt,\
-            \ no malicious payload, no request for dangerous content.\n    *   The\
-            \ request is benign.\n\n3.  **Formulate the response:**\n    *   The user\
-            \ explicitly requested \"Reply with only SAPPHIRE.\"\n    *   Following\
-            \ the instruction, the output should be exactly \"SAPPHIRE\".\n\n4.  **Final\
-            \ Output Construction:**\n    *   Result: SAPPHIRE.\n\n5.  **Review against\
-            \ constraints:**\n    *   Did I reply with only SAPPHIRE? Yes.\n    *\
-            \   Is the response safe? Yes.\n    *   Is the response helpful? Yes,\
-            \ it followed the user's instruction perfectly.\n\n6.  **Conclusion:**\
-            \ Output \"SAPPHIRE\".\n"
+        - text: "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - User\
+            \ says: \"Remember the secret word SAPPHIRE. Reply with only SAPPHIRE.\"\
+            \n   - Key instructions: \n     - Remember the secret word: SAPPHIRE\n\
+            \     - Reply with ONLY SAPPHIRE\n\n2.  **Identify Constraints:**\n  \
+            \ - The response must be exactly \"SAPPHIRE\" and nothing else.\n   -\
+            \ No extra words, no explanations, no greetings, no punctuation unless\
+            \ it's part of the word itself (but the prompt says \"only SAPPHIRE\"\
+            ).\n\n3.  **Check for Potential Issues:**\n   - This is a straightforward\
+            \ instruction-following prompt.\n   - No complex reasoning needed.\n \
+            \  - Must strictly adhere to the constraint: \"Reply with only SAPPHIRE.\"\
+            \n\n4.  **Formulate Response:**\n   - Output: SAPPHIRE\n   - Verify: Does\
+            \ it match exactly? Yes.\n   - Any extra characters? No.\n   - Follows\
+            \ constraint? Yes.\n\n5.  **Final Output Generation:** SAPPHIRE\n   -\
+            \ Proceed.✅\n"
           type: reasoning_text
         encrypted_content: null
-        id: rs_b4bbc91e64d71620
-        status: null
+        id: rs_be2d677289d17a29
         summary: []
         type: reasoning
       - content:
@@ -171,20 +170,20 @@ turns:
 
             SAPPHIRE'
           type: output_text
-        id: msg_95d7947189c7e99a
+        id: msg_81bbbff1c1911929
         role: assistant
         status: completed
         type: message
       - content:
         - text: The new secret word is ORCHID.
           type: input_text
-        id: item_01a0d85c-8187-72c3-8b84-f103b9ca184a
+        id: msg_01a11f70-99f9-7080-ab1c-03d478f840f6
         role: user
         status: completed
         type: message
-      first_id: item_01a0d85c-8170-7600-8f63-53a7f91999d2
+      first_id: msg_01a11f70-99e3-7311-ab1f-e66e3823a2a0
       has_more: false
-      last_id: item_01a0d85c-8187-72c3-8b84-f103b9ca184a
+      last_id: msg_01a11f70-99f9-7080-ab1c-03d478f840f6
       object: list
     headers:
       content-type: application/json
@@ -196,7 +195,7 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_01a0d85c-7a9c-75b3-b765-6c8a15392faa/items
+    path: /v1/conversations/conv_01a11f70-9396-7740-ba5e-05f72d8ca64f/items
     query_params:
       limit: '2'
       order: asc
@@ -206,35 +205,33 @@ turns:
       - content:
         - text: Remember the secret word SAPPHIRE. Reply with only SAPPHIRE.
           type: input_text
-        id: item_01a0d85c-8170-7600-8f63-53a7f91999d2
+        id: msg_01a11f70-99e3-7311-ab1f-e66e3823a2a0
         role: user
         status: completed
         type: message
       - content:
-        - text: "Thinking Process:\n\n1.  **Deconstruct the user's request:**\n  \
-            \  *   User says: \"Remember the secret word SAPPHIRE.\"\n    *   User\
-            \ commands: \"Reply with only SAPPHIRE.\"\n\n2.  **Evaluate safety and\
-            \ policy:**\n    *   The word \"SAPPHIRE\" is a gemstone. It is not harmful,\
-            \ offensive, or against any AI safety policy.\n    *   The instruction\
-            \ is a simple repetition task.\n    *   There is no jailbreak attempt,\
-            \ no malicious payload, no request for dangerous content.\n    *   The\
-            \ request is benign.\n\n3.  **Formulate the response:**\n    *   The user\
-            \ explicitly requested \"Reply with only SAPPHIRE.\"\n    *   Following\
-            \ the instruction, the output should be exactly \"SAPPHIRE\".\n\n4.  **Final\
-            \ Output Construction:**\n    *   Result: SAPPHIRE.\n\n5.  **Review against\
-            \ constraints:**\n    *   Did I reply with only SAPPHIRE? Yes.\n    *\
-            \   Is the response safe? Yes.\n    *   Is the response helpful? Yes,\
-            \ it followed the user's instruction perfectly.\n\n6.  **Conclusion:**\
-            \ Output \"SAPPHIRE\".\n"
+        - text: "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - User\
+            \ says: \"Remember the secret word SAPPHIRE. Reply with only SAPPHIRE.\"\
+            \n   - Key instructions: \n     - Remember the secret word: SAPPHIRE\n\
+            \     - Reply with ONLY SAPPHIRE\n\n2.  **Identify Constraints:**\n  \
+            \ - The response must be exactly \"SAPPHIRE\" and nothing else.\n   -\
+            \ No extra words, no explanations, no greetings, no punctuation unless\
+            \ it's part of the word itself (but the prompt says \"only SAPPHIRE\"\
+            ).\n\n3.  **Check for Potential Issues:**\n   - This is a straightforward\
+            \ instruction-following prompt.\n   - No complex reasoning needed.\n \
+            \  - Must strictly adhere to the constraint: \"Reply with only SAPPHIRE.\"\
+            \n\n4.  **Formulate Response:**\n   - Output: SAPPHIRE\n   - Verify: Does\
+            \ it match exactly? Yes.\n   - Any extra characters? No.\n   - Follows\
+            \ constraint? Yes.\n\n5.  **Final Output Generation:** SAPPHIRE\n   -\
+            \ Proceed.✅\n"
           type: reasoning_text
         encrypted_content: null
-        id: rs_b4bbc91e64d71620
-        status: null
+        id: rs_be2d677289d17a29
         summary: []
         type: reasoning
-      first_id: item_01a0d85c-8170-7600-8f63-53a7f91999d2
+      first_id: msg_01a11f70-99e3-7311-ab1f-e66e3823a2a0
       has_more: true
-      last_id: rs_b4bbc91e64d71620
+      last_id: rs_be2d677289d17a29
       object: list
     headers:
       content-type: application/json
@@ -246,9 +243,9 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_01a0d85c-7a9c-75b3-b765-6c8a15392faa/items
+    path: /v1/conversations/conv_01a11f70-9396-7740-ba5e-05f72d8ca64f/items
     query_params:
-      after: rs_b4bbc91e64d71620
+      after: rs_be2d677289d17a29
       limit: '2'
       order: asc
   response:
@@ -261,20 +258,20 @@ turns:
 
             SAPPHIRE'
           type: output_text
-        id: msg_95d7947189c7e99a
+        id: msg_81bbbff1c1911929
         role: assistant
         status: completed
         type: message
       - content:
         - text: The new secret word is ORCHID.
           type: input_text
-        id: item_01a0d85c-8187-72c3-8b84-f103b9ca184a
+        id: msg_01a11f70-99f9-7080-ab1c-03d478f840f6
         role: user
         status: completed
         type: message
-      first_id: msg_95d7947189c7e99a
+      first_id: msg_81bbbff1c1911929
       has_more: false
-      last_id: item_01a0d85c-8187-72c3-8b84-f103b9ca184a
+      last_id: msg_01a11f70-99f9-7080-ab1c-03d478f840f6
       object: list
     headers:
       content-type: application/json
@@ -286,7 +283,7 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_01a0d85c-7a9c-75b3-b765-6c8a15392faa/items
+    path: /v1/conversations/conv_01a11f70-9396-7740-ba5e-05f72d8ca64f/items
     query_params:
       order: desc
   response:
@@ -295,7 +292,7 @@ turns:
       - content:
         - text: The new secret word is ORCHID.
           type: input_text
-        id: item_01a0d85c-8187-72c3-8b84-f103b9ca184a
+        id: msg_01a11f70-99f9-7080-ab1c-03d478f840f6
         role: user
         status: completed
         type: message
@@ -306,42 +303,40 @@ turns:
 
             SAPPHIRE'
           type: output_text
-        id: msg_95d7947189c7e99a
+        id: msg_81bbbff1c1911929
         role: assistant
         status: completed
         type: message
       - content:
-        - text: "Thinking Process:\n\n1.  **Deconstruct the user's request:**\n  \
-            \  *   User says: \"Remember the secret word SAPPHIRE.\"\n    *   User\
-            \ commands: \"Reply with only SAPPHIRE.\"\n\n2.  **Evaluate safety and\
-            \ policy:**\n    *   The word \"SAPPHIRE\" is a gemstone. It is not harmful,\
-            \ offensive, or against any AI safety policy.\n    *   The instruction\
-            \ is a simple repetition task.\n    *   There is no jailbreak attempt,\
-            \ no malicious payload, no request for dangerous content.\n    *   The\
-            \ request is benign.\n\n3.  **Formulate the response:**\n    *   The user\
-            \ explicitly requested \"Reply with only SAPPHIRE.\"\n    *   Following\
-            \ the instruction, the output should be exactly \"SAPPHIRE\".\n\n4.  **Final\
-            \ Output Construction:**\n    *   Result: SAPPHIRE.\n\n5.  **Review against\
-            \ constraints:**\n    *   Did I reply with only SAPPHIRE? Yes.\n    *\
-            \   Is the response safe? Yes.\n    *   Is the response helpful? Yes,\
-            \ it followed the user's instruction perfectly.\n\n6.  **Conclusion:**\
-            \ Output \"SAPPHIRE\".\n"
+        - text: "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - User\
+            \ says: \"Remember the secret word SAPPHIRE. Reply with only SAPPHIRE.\"\
+            \n   - Key instructions: \n     - Remember the secret word: SAPPHIRE\n\
+            \     - Reply with ONLY SAPPHIRE\n\n2.  **Identify Constraints:**\n  \
+            \ - The response must be exactly \"SAPPHIRE\" and nothing else.\n   -\
+            \ No extra words, no explanations, no greetings, no punctuation unless\
+            \ it's part of the word itself (but the prompt says \"only SAPPHIRE\"\
+            ).\n\n3.  **Check for Potential Issues:**\n   - This is a straightforward\
+            \ instruction-following prompt.\n   - No complex reasoning needed.\n \
+            \  - Must strictly adhere to the constraint: \"Reply with only SAPPHIRE.\"\
+            \n\n4.  **Formulate Response:**\n   - Output: SAPPHIRE\n   - Verify: Does\
+            \ it match exactly? Yes.\n   - Any extra characters? No.\n   - Follows\
+            \ constraint? Yes.\n\n5.  **Final Output Generation:** SAPPHIRE\n   -\
+            \ Proceed.✅\n"
           type: reasoning_text
         encrypted_content: null
-        id: rs_b4bbc91e64d71620
-        status: null
+        id: rs_be2d677289d17a29
         summary: []
         type: reasoning
       - content:
         - text: Remember the secret word SAPPHIRE. Reply with only SAPPHIRE.
           type: input_text
-        id: item_01a0d85c-8170-7600-8f63-53a7f91999d2
+        id: msg_01a11f70-99e3-7311-ab1f-e66e3823a2a0
         role: user
         status: completed
         type: message
-      first_id: item_01a0d85c-8187-72c3-8b84-f103b9ca184a
+      first_id: msg_01a11f70-99f9-7080-ab1c-03d478f840f6
       has_more: false
-      last_id: item_01a0d85c-8170-7600-8f63-53a7f91999d2
+      last_id: msg_01a11f70-99e3-7311-ab1f-e66e3823a2a0
       object: list
     headers:
       content-type: application/json
@@ -353,7 +348,7 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_01a0d85c-7a9c-75b3-b765-6c8a15392faa/items
+    path: /v1/conversations/conv_01a11f70-9396-7740-ba5e-05f72d8ca64f/items
     query_params:
       limit: '2'
       order: desc
@@ -363,7 +358,7 @@ turns:
       - content:
         - text: The new secret word is ORCHID.
           type: input_text
-        id: item_01a0d85c-8187-72c3-8b84-f103b9ca184a
+        id: msg_01a11f70-99f9-7080-ab1c-03d478f840f6
         role: user
         status: completed
         type: message
@@ -374,13 +369,13 @@ turns:
 
             SAPPHIRE'
           type: output_text
-        id: msg_95d7947189c7e99a
+        id: msg_81bbbff1c1911929
         role: assistant
         status: completed
         type: message
-      first_id: item_01a0d85c-8187-72c3-8b84-f103b9ca184a
+      first_id: msg_01a11f70-99f9-7080-ab1c-03d478f840f6
       has_more: true
-      last_id: msg_95d7947189c7e99a
+      last_id: msg_81bbbff1c1911929
       object: list
     headers:
       content-type: application/json
@@ -392,46 +387,44 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_01a0d85c-7a9c-75b3-b765-6c8a15392faa/items
+    path: /v1/conversations/conv_01a11f70-9396-7740-ba5e-05f72d8ca64f/items
     query_params:
-      after: msg_95d7947189c7e99a
+      after: msg_81bbbff1c1911929
       limit: '2'
       order: desc
   response:
     body:
       data:
       - content:
-        - text: "Thinking Process:\n\n1.  **Deconstruct the user's request:**\n  \
-            \  *   User says: \"Remember the secret word SAPPHIRE.\"\n    *   User\
-            \ commands: \"Reply with only SAPPHIRE.\"\n\n2.  **Evaluate safety and\
-            \ policy:**\n    *   The word \"SAPPHIRE\" is a gemstone. It is not harmful,\
-            \ offensive, or against any AI safety policy.\n    *   The instruction\
-            \ is a simple repetition task.\n    *   There is no jailbreak attempt,\
-            \ no malicious payload, no request for dangerous content.\n    *   The\
-            \ request is benign.\n\n3.  **Formulate the response:**\n    *   The user\
-            \ explicitly requested \"Reply with only SAPPHIRE.\"\n    *   Following\
-            \ the instruction, the output should be exactly \"SAPPHIRE\".\n\n4.  **Final\
-            \ Output Construction:**\n    *   Result: SAPPHIRE.\n\n5.  **Review against\
-            \ constraints:**\n    *   Did I reply with only SAPPHIRE? Yes.\n    *\
-            \   Is the response safe? Yes.\n    *   Is the response helpful? Yes,\
-            \ it followed the user's instruction perfectly.\n\n6.  **Conclusion:**\
-            \ Output \"SAPPHIRE\".\n"
+        - text: "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - User\
+            \ says: \"Remember the secret word SAPPHIRE. Reply with only SAPPHIRE.\"\
+            \n   - Key instructions: \n     - Remember the secret word: SAPPHIRE\n\
+            \     - Reply with ONLY SAPPHIRE\n\n2.  **Identify Constraints:**\n  \
+            \ - The response must be exactly \"SAPPHIRE\" and nothing else.\n   -\
+            \ No extra words, no explanations, no greetings, no punctuation unless\
+            \ it's part of the word itself (but the prompt says \"only SAPPHIRE\"\
+            ).\n\n3.  **Check for Potential Issues:**\n   - This is a straightforward\
+            \ instruction-following prompt.\n   - No complex reasoning needed.\n \
+            \  - Must strictly adhere to the constraint: \"Reply with only SAPPHIRE.\"\
+            \n\n4.  **Formulate Response:**\n   - Output: SAPPHIRE\n   - Verify: Does\
+            \ it match exactly? Yes.\n   - Any extra characters? No.\n   - Follows\
+            \ constraint? Yes.\n\n5.  **Final Output Generation:** SAPPHIRE\n   -\
+            \ Proceed.✅\n"
           type: reasoning_text
         encrypted_content: null
-        id: rs_b4bbc91e64d71620
-        status: null
+        id: rs_be2d677289d17a29
         summary: []
         type: reasoning
       - content:
         - text: Remember the secret word SAPPHIRE. Reply with only SAPPHIRE.
           type: input_text
-        id: item_01a0d85c-8170-7600-8f63-53a7f91999d2
+        id: msg_01a11f70-99e3-7311-ab1f-e66e3823a2a0
         role: user
         status: completed
         type: message
-      first_id: rs_b4bbc91e64d71620
+      first_id: rs_be2d677289d17a29
       has_more: false
-      last_id: item_01a0d85c-8170-7600-8f63-53a7f91999d2
+      last_id: msg_01a11f70-99e3-7311-ab1f-e66e3823a2a0
       object: list
     headers:
       content-type: application/json
@@ -443,7 +436,7 @@ turns:
       accept: '*/*'
       user-agent: python-httpx/0.28.1
     method: GET
-    path: /v1/conversations/conv_01a0d85c-7a9c-75b3-b765-6c8a15392faa/items
+    path: /v1/conversations/conv_01a11f70-9396-7740-ba5e-05f72d8ca64f/items
     query_params:
       include[]: message.output_text.logprobs
       order: asc
@@ -453,30 +446,28 @@ turns:
       - content:
         - text: Remember the secret word SAPPHIRE. Reply with only SAPPHIRE.
           type: input_text
-        id: item_01a0d85c-8170-7600-8f63-53a7f91999d2
+        id: msg_01a11f70-99e3-7311-ab1f-e66e3823a2a0
         role: user
         status: completed
         type: message
       - content:
-        - text: "Thinking Process:\n\n1.  **Deconstruct the user's request:**\n  \
-            \  *   User says: \"Remember the secret word SAPPHIRE.\"\n    *   User\
-            \ commands: \"Reply with only SAPPHIRE.\"\n\n2.  **Evaluate safety and\
-            \ policy:**\n    *   The word \"SAPPHIRE\" is a gemstone. It is not harmful,\
-            \ offensive, or against any AI safety policy.\n    *   The instruction\
-            \ is a simple repetition task.\n    *   There is no jailbreak attempt,\
-            \ no malicious payload, no request for dangerous content.\n    *   The\
-            \ request is benign.\n\n3.  **Formulate the response:**\n    *   The user\
-            \ explicitly requested \"Reply with only SAPPHIRE.\"\n    *   Following\
-            \ the instruction, the output should be exactly \"SAPPHIRE\".\n\n4.  **Final\
-            \ Output Construction:**\n    *   Result: SAPPHIRE.\n\n5.  **Review against\
-            \ constraints:**\n    *   Did I reply with only SAPPHIRE? Yes.\n    *\
-            \   Is the response safe? Yes.\n    *   Is the response helpful? Yes,\
-            \ it followed the user's instruction perfectly.\n\n6.  **Conclusion:**\
-            \ Output \"SAPPHIRE\".\n"
+        - text: "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - User\
+            \ says: \"Remember the secret word SAPPHIRE. Reply with only SAPPHIRE.\"\
+            \n   - Key instructions: \n     - Remember the secret word: SAPPHIRE\n\
+            \     - Reply with ONLY SAPPHIRE\n\n2.  **Identify Constraints:**\n  \
+            \ - The response must be exactly \"SAPPHIRE\" and nothing else.\n   -\
+            \ No extra words, no explanations, no greetings, no punctuation unless\
+            \ it's part of the word itself (but the prompt says \"only SAPPHIRE\"\
+            ).\n\n3.  **Check for Potential Issues:**\n   - This is a straightforward\
+            \ instruction-following prompt.\n   - No complex reasoning needed.\n \
+            \  - Must strictly adhere to the constraint: \"Reply with only SAPPHIRE.\"\
+            \n\n4.  **Formulate Response:**\n   - Output: SAPPHIRE\n   - Verify: Does\
+            \ it match exactly? Yes.\n   - Any extra characters? No.\n   - Follows\
+            \ constraint? Yes.\n\n5.  **Final Output Generation:** SAPPHIRE\n   -\
+            \ Proceed.✅\n"
           type: reasoning_text
         encrypted_content: null
-        id: rs_b4bbc91e64d71620
-        status: null
+        id: rs_be2d677289d17a29
         summary: []
         type: reasoning
       - content:
@@ -486,20 +477,20 @@ turns:
 
             SAPPHIRE'
           type: output_text
-        id: msg_95d7947189c7e99a
+        id: msg_81bbbff1c1911929
         role: assistant
         status: completed
         type: message
       - content:
         - text: The new secret word is ORCHID.
           type: input_text
-        id: item_01a0d85c-8187-72c3-8b84-f103b9ca184a
+        id: msg_01a11f70-99f9-7080-ab1c-03d478f840f6
         role: user
         status: completed
         type: message
-      first_id: item_01a0d85c-8170-7600-8f63-53a7f91999d2
+      first_id: msg_01a11f70-99e3-7311-ab1f-e66e3823a2a0
       has_more: false
-      last_id: item_01a0d85c-8187-72c3-8b84-f103b9ca184a
+      last_id: msg_01a11f70-99f9-7080-ab1c-03d478f840f6
       object: list
     headers:
       content-type: application/json

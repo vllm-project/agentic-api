@@ -23,8 +23,10 @@ pub mod translate;
 
 mod gateway;
 pub mod gateway_accumulator;
+mod item_lifecycle;
 mod pending_calls;
 mod pipeline;
+mod relay;
 mod response_budget;
 mod upstream;
 

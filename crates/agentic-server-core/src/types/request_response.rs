@@ -1,16 +1,22 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::num::NonZeroU64;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use super::io::{FunctionTool, InputItem, MultiAgentConfig, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
 use super::tools::ResponsesTool;
-use crate::tool::{CodexNamespaceHandler, CustomHandler, ToolError};
+use crate::tool::{CodexNamespaceHandler, CustomHandler, ToolDeclaration, ToolError, responses_declarations};
 
+mod max_tool_calls;
 mod response_stream;
 mod serde_helpers;
-use serde_helpers::{default_true, is_absent_or_default_tool_choice, serialize_upstream_tool_choice};
+pub use max_tool_calls::{JsonKind, MAX_TOOL_CALLS_PARAM, MaxToolCalls, MaxToolCallsError, OutOfRangeInteger};
+use serde_helpers::{
+    default_true, deserialize_conversation, is_absent_or_default_tool_choice, serialize_conversation_object,
+    serialize_upstream_tool_choice,
+};
 #[cfg(feature = "openapi")]
 mod schema;
 
@@ -75,6 +81,16 @@ pub enum ResponseTextFormat {
     },
 }
 
+/// Legacy upstream prompt-cache retention policy. Cache lifetime remains upstream-owned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum PromptCacheRetention {
+    #[serde(rename = "in_memory")]
+    InMemory,
+    #[serde(rename = "24h")]
+    TwentyFourHours,
+}
+
 /// A Responses request. Rust's derived default uses `store: false`; JSON deserialization
 /// uses `store: true` when storage is not specified. Set `store` explicitly when constructing
 /// a stored request with struct update syntax.
@@ -85,8 +101,8 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig> {
     pub input: ResponsesInput,
     pub instructions: Option<String>,
     pub previous_response_id: Option<String>,
-    #[serde(alias = "conversation")]
-    pub conversation_id: Option<String>,
+    #[serde(default, alias = "conversation_id", deserialize_with = "deserialize_conversation")]
+    pub conversation: Option<String>,
     pub tools: Option<Vec<ResponsesTool>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ToolChoice>,
@@ -102,9 +118,10 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig> {
     pub temperature: Option<f64>,
     pub top_p: Option<f64>,
     pub max_output_tokens: Option<u32>,
-    /// Parsed for admission checks; unsupported when multi-agent execution is enabled.
+    /// Maximum built-in tool calls one response may process, as sent by the client.
+    /// Read it through [`RequestPayload::max_tool_calls_limit`]; unsupported with multi-agent execution.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub max_tool_calls: Option<u32>,
+    pub max_tool_calls: Option<MaxToolCalls>,
     /// vLLM extension: continue generation past the end-of-sequence token.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ignore_eos: Option<bool>,
@@ -117,6 +134,8 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig> {
     pub multi_agent: Option<MultiAgentConfig>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_retention: Option<PromptCacheRetention>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -165,6 +184,8 @@ pub struct UpstreamRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_retention: Option<PromptCacheRetention>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_salt: Option<&'a str>,
@@ -181,6 +202,15 @@ pub enum UpstreamTool {
 }
 
 impl<T: ?Sized> RequestPayload<T> {
+    /// The validated `max_tool_calls` limit; `None` means no limit.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MaxToolCallsError`] when the client sent an invalid value.
+    pub fn max_tool_calls_limit(&self) -> Result<Option<NonZeroU64>, MaxToolCallsError> {
+        self.max_tool_calls.as_ref().map(MaxToolCalls::limit).transpose()
+    }
+
     /// Names the feature in this request that only the in-process executor
     /// implements, if any — neither the passthrough proxy nor split execution
     /// can serve it.
@@ -189,8 +219,8 @@ impl<T: ?Sized> RequestPayload<T> {
         if self.multi_agent.as_ref().is_some_and(|config| config.enabled) {
             return Some("multi_agent");
         }
-        if self.conversation_id.is_some() {
-            return Some("conversation_id");
+        if self.conversation.is_some() {
+            return Some("conversation");
         }
         if self
             .tools
@@ -228,7 +258,7 @@ impl<T: ?Sized> RequestPayload<T> {
             input: self.input,
             instructions: self.instructions,
             previous_response_id: self.previous_response_id,
-            conversation_id: self.conversation_id,
+            conversation: self.conversation,
             tools: self.tools,
             tool_choice: self.tool_choice,
             stream: self.stream,
@@ -245,6 +275,7 @@ impl<T: ?Sized> RequestPayload<T> {
             metadata: self.metadata,
             parallel_tool_calls: self.parallel_tool_calls,
             prompt_cache_key: self.prompt_cache_key,
+            prompt_cache_retention: self.prompt_cache_retention,
             service_tier: self.service_tier,
             multi_agent: self.multi_agent,
             cache_salt: self.cache_salt,
@@ -254,6 +285,13 @@ impl<T: ?Sized> RequestPayload<T> {
 }
 
 impl RequestPayload {
+    /// The Responses adapter boundary: this request's declared tools as the
+    /// tool layer's declarations, with the wire tools left in place.
+    #[must_use]
+    pub fn tool_declarations(&self) -> Option<Vec<ToolDeclaration>> {
+        self.tools.as_deref().map(responses_declarations)
+    }
+
     /// Construct an `UpstreamRequest` suitable for forwarding to vLLM.
     ///
     /// Codex `namespace` tools' members are first renamed to their flat,
@@ -277,8 +315,8 @@ impl RequestPayload {
         // handler's same-tool parallel-safety policy to whatever calls appear.
         let parallel_tool_calls = Some(self.parallel_tool_calls.unwrap_or(false));
 
-        let renamed_tools = self
-            .tools
+        let declarations = self.tool_declarations();
+        let renamed_tools = declarations
             .as_deref()
             .map(|tools| CodexNamespaceHandler.resolve_namespace_members(tools))
             .transpose()?;
@@ -290,15 +328,15 @@ impl RequestPayload {
         let tools: Option<Vec<UpstreamTool>> = renamed_tools.map(|tools| {
             tools
                 .iter()
-                .flat_map(ResponsesTool::to_function_tools)
+                .flat_map(ToolDeclaration::to_function_tools)
                 .map(UpstreamTool::Function)
                 .collect()
         });
         let tools = tools.filter(|tools| !tools.is_empty());
-        let namespace_map = CodexNamespaceHandler.build_namespace_map(self.tools.as_deref())?;
+        let namespace_map = CodexNamespaceHandler.build_namespace_map(declarations.as_deref())?;
         let input = CodexNamespaceHandler.resolve_input(namespace_map.as_ref(), self.input.normalized_model_input());
         let tool_choice = CodexNamespaceHandler.resolve_tool_choice(namespace_map.as_ref(), self.tool_choice.as_ref());
-        CustomHandler::validate_tool_choice(self.tools.as_deref(), &tool_choice)?;
+        CustomHandler::validate_tool_choice(declarations.as_deref(), &tool_choice)?;
         Ok(UpstreamRequest {
             model: &self.model,
             input,
@@ -317,6 +355,7 @@ impl RequestPayload {
             metadata: self.metadata.as_ref(),
             parallel_tool_calls,
             prompt_cache_key: self.prompt_cache_key.as_deref(),
+            prompt_cache_retention: self.prompt_cache_retention,
             service_tier: self.service_tier.as_deref(),
             cache_salt: self.cache_salt.as_deref(),
         })
@@ -347,6 +386,8 @@ pub struct CompactRequest {
     #[serde(default)]
     pub service_tier: Option<String>,
     #[serde(default)]
+    pub prompt_cache_retention: Option<PromptCacheRetention>,
+    #[serde(default)]
     pub prompt_cache_key: Option<String>,
     /// Compatibility fields sent by current SDK and Codex clients.
     #[serde(flatten)]
@@ -373,7 +414,6 @@ pub struct IncompleteDetails {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ResponsePayload {
     pub id: String,
     pub object: String,
@@ -386,8 +426,18 @@ pub struct ResponsePayload {
     pub incomplete_details: Option<IncompleteDetails>,
     pub error: Option<Value>,
     pub previous_response_id: Option<String>,
-    pub conversation_id: Option<String>,
+    #[serde(
+        default,
+        alias = "conversation_id",
+        deserialize_with = "deserialize_conversation",
+        serialize_with = "serialize_conversation_object",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub conversation: Option<String>,
     pub instructions: Option<String>,
+    /// The request's `max_tool_calls`, always echoed (`null` when unset). Never inherited.
+    #[serde(default)]
+    pub max_tool_calls: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -399,6 +449,37 @@ pub struct ResponsePayload {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prompt_cache_retention_survives_text_mapping_and_request_round_trip() {
+        for value in [
+            None,
+            Some(serde_json::Value::Null),
+            Some(serde_json::json!("in_memory")),
+            Some(serde_json::json!("24h")),
+        ] {
+            let mut wire = serde_json::json!({"model":"test-model", "input":"hello"});
+            if let Some(value) = value {
+                wire["prompt_cache_retention"] = value;
+            }
+            let routing: RequestPayload<serde_json::value::RawValue> = serde_json::from_value(wire).unwrap();
+            let request = routing
+                .try_map_text(|text| serde_json::from_str::<ResponseTextConfig>(text.get()).map(Box::new))
+                .unwrap();
+            let stored: RequestPayload = serde_json::from_value(serde_json::to_value(&request).unwrap()).unwrap();
+            assert_eq!(stored.prompt_cache_retention, request.prompt_cache_retention);
+            for stream in [false, true] {
+                let upstream = serde_json::to_value(stored.to_upstream_request(stream).unwrap()).unwrap();
+                assert_eq!(
+                    upstream.get("prompt_cache_retention"),
+                    request
+                        .prompt_cache_retention
+                        .map(|value| serde_json::to_value(value).unwrap())
+                        .as_ref()
+                );
+            }
+        }
+    }
 
     #[test]
     fn stored_struct_defaults_match_minimal_wire_request() {
@@ -474,7 +555,13 @@ mod tests {
             }
             let request: RequestPayload = serde_json::from_value(wire).unwrap();
             let request = request.try_map_text(Ok::<_, std::convert::Infallible>).unwrap();
-            assert_eq!(request.max_tool_calls, limit);
+            assert_eq!(
+                request.max_tool_calls_limit().map(|limit| limit.map(NonZeroU64::get)),
+                match limit {
+                    Some(0) => Err(MaxToolCallsError::BelowMinimum(OutOfRangeInteger::Unsigned(0))),
+                    limit => Ok(limit),
+                }
+            );
             assert_eq!(
                 serde_json::to_value(request).unwrap().get("max_tool_calls"),
                 limit.map(serde_json::Value::from).as_ref()
@@ -499,8 +586,89 @@ mod tests {
             "model": "test-model", "input": "hello", "conversation": "conv_test"
         }))
         .expect("OpenAI conversation field should deserialize");
-        assert_eq!(request.conversation_id.as_deref(), Some("conv_test"));
-        assert_eq!(request.in_process_feature(), Some("conversation_id"));
+        assert_eq!(request.conversation.as_deref(), Some("conv_test"));
+        assert_eq!(request.in_process_feature(), Some("conversation"));
+    }
+
+    #[test]
+    fn request_payload_accepts_conversation_id_alias() {
+        let request: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test-model", "input": "hello", "conversation_id": "conv_alias"
+        }))
+        .expect("conversation_id alias should deserialize");
+        assert_eq!(request.conversation.as_deref(), Some("conv_alias"));
+        assert_eq!(request.in_process_feature(), Some("conversation"));
+    }
+
+    #[test]
+    fn request_payload_accepts_conversation_object_form() {
+        let request: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test-model", "input": "hello", "conversation": { "id": "conv_object" }
+        }))
+        .expect("conversation object form should deserialize");
+        assert_eq!(request.conversation.as_deref(), Some("conv_object"));
+        assert_eq!(request.in_process_feature(), Some("conversation"));
+    }
+
+    #[test]
+    fn request_payload_accepts_conversation_id_object_form() {
+        let request: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model": "test-model", "input": "hello", "conversation_id": { "id": "conv_id_object" }
+        }))
+        .expect("conversation_id alias with object form should deserialize");
+        assert_eq!(request.conversation.as_deref(), Some("conv_id_object"));
+        assert_eq!(request.in_process_feature(), Some("conversation"));
+    }
+
+    #[test]
+    fn response_payload_serializes_conversation_as_object() {
+        let payload = ResponsePayload {
+            id: "resp_test".to_string(),
+            object: "response".to_string(),
+            created_at: 0,
+            model: "test-model".to_string(),
+            status: "completed".to_string(),
+            output: Vec::new(),
+            usage: None,
+            incomplete_details: None,
+            error: None,
+            previous_response_id: None,
+            conversation: Some("conv_123".to_string()),
+            instructions: None,
+            service_tier: None,
+            tools: None,
+            tool_choice: None,
+            max_tool_calls: None,
+        };
+
+        let json = serde_json::to_value(&payload).expect("response should serialize");
+        assert_eq!(json["conversation"]["id"], "conv_123");
+        assert!(json["conversation"].is_object());
+    }
+
+    #[test]
+    fn response_payload_omits_absent_conversation() {
+        let payload = ResponsePayload {
+            id: "resp_test".to_string(),
+            object: "response".to_string(),
+            created_at: 0,
+            model: "test-model".to_string(),
+            status: "completed".to_string(),
+            output: Vec::new(),
+            usage: None,
+            incomplete_details: None,
+            error: None,
+            previous_response_id: None,
+            conversation: None,
+            instructions: None,
+            service_tier: None,
+            tools: None,
+            max_tool_calls: None,
+            tool_choice: None,
+        };
+
+        let json = serde_json::to_value(&payload).expect("response should serialize");
+        assert!(json.get("conversation").is_none());
     }
 
     #[test]
@@ -1241,8 +1409,9 @@ mod tests {
             incomplete_details: None,
             error: None,
             previous_response_id: None,
-            conversation_id: None,
+            conversation: None,
             instructions: None,
+            max_tool_calls: None,
             service_tier: None,
             tools: None,
             tool_choice: None,
@@ -1279,8 +1448,9 @@ mod tests {
             incomplete_details: None,
             error: None,
             previous_response_id: None,
-            conversation_id: None,
+            conversation: None,
             instructions: None,
+            max_tool_calls: None,
             service_tier: None,
             tools: Some(vec![tool]),
             tool_choice: None,
@@ -1308,8 +1478,9 @@ mod tests {
             incomplete_details: None,
             error: None,
             previous_response_id: None,
-            conversation_id: None,
+            conversation: None,
             instructions: None,
+            max_tool_calls: None,
             service_tier: None,
             tools: None,
             tool_choice: None,

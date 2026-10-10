@@ -33,7 +33,7 @@ pub(crate) enum StateSource {
 
 impl StateSource {
     pub(crate) fn from_request(request: &RequestPayload) -> Self {
-        if request.conversation_id.is_some() {
+        if request.conversation.is_some() {
             Self::Conversation
         } else if request.previous_response_id.is_some() {
             Self::PreviousResponse

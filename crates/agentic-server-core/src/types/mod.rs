@@ -31,9 +31,9 @@ pub use request_response::{
 };
 pub use tools::{
     CodeInterpreterCallArguments, CodeInterpreterCallArgumentsError, CodeInterpreterToolParam, CodexNamespaceMember,
-    CodexNamespaceToolParam, CustomToolParam, EmptyToolNameError, FileSearchToolParam, FunctionToolParam,
-    LocalShellEnvironment, McpToolParam, NonEmptyToolName, ResponsesTool, ShellEnvironment, ShellToolParam,
-    ToolSearchExecution, ToolSearchStatus, ToolSearchToolParam, WebSearchContextSize, WebSearchFilters,
+    CodexNamespaceToolParam, CustomToolParam, DomainFilters, EmptyToolNameError, FileSearchToolParam,
+    FunctionToolParam, LocalShellEnvironment, McpToolParam, NonEmptyToolName, ResponsesTool, ShellEnvironment,
+    ShellToolParam, ToolSearchExecution, ToolSearchStatus, ToolSearchToolParam, WebSearchContextSize,
     WebSearchToolParam, WebSearchUserLocation,
 };
 
