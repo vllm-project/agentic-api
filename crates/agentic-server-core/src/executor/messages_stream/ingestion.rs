@@ -9,6 +9,7 @@ use crate::utils::common::deserialize_from_str;
 impl MessagesStreamAccumulator {
     /// Translate one upstream SSE line into zero or more client SSE lines.
     pub(super) fn push(&mut self, line: &str) -> Vec<String> {
+        self.pushed_text = false;
         let ClassifiedSseLine::Data(data) = SseLine::parse(line) else {
             return Vec::new();
         };
@@ -189,6 +190,7 @@ impl MessagesStreamAccumulator {
             return Vec::new();
         };
         event["index"] = Value::from(client_index);
+        self.pushed_text = event["delta"]["type"] == "text_delta";
         vec![sse("content_block_delta", event)]
     }
 

@@ -24,6 +24,8 @@ pub(super) enum StreamEvent {
 pub(super) struct StreamFrame {
     pub(super) content: String,
     pub(super) sequence_number: u64,
+    /// An output-text delta, for the relay's first-text timing.
+    pub(super) text: bool,
 }
 
 #[cfg(test)]
@@ -226,6 +228,7 @@ pub(super) async fn emit_sse_frame_limited(
         .send(StreamEvent::Frame(StreamFrame {
             content,
             sequence_number,
+            text: frame.event_type == SSEEventType::OutputTextDelta,
         }))
         .await
         .map_err(|_| ExecutorError::StreamError("stream receiver closed while emitting gateway event".to_owned()))

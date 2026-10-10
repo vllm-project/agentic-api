@@ -32,6 +32,8 @@ use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::response_budget::ExecutorResponseBudget;
 #[cfg(test)]
 use crate::executor::response_budget::MAX_EXECUTOR_RESPONSE_BYTES;
+use crate::executor::telemetry::Api;
+use crate::executor::telemetry::metrics::RoundCounter;
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
 use crate::types::io::{InputItem, OutputItem, ResponseUsage, ResponsesInput};
 #[cfg(test)]
@@ -126,6 +128,7 @@ struct SingleAgentRun<'a> {
     response_budget: ExecutorResponseBudget,
     output: Vec<OutputItem>,
     usage: Option<ResponseUsage>,
+    rounds: RoundCounter,
 }
 
 impl<'a> SingleAgentRun<'a> {
@@ -138,6 +141,7 @@ impl<'a> SingleAgentRun<'a> {
             response_budget,
             output,
             usage: None,
+            rounds: exec_ctx.metrics.rounds(Api::Responses),
         })
     }
 
@@ -147,6 +151,7 @@ impl<'a> SingleAgentRun<'a> {
         stream_upstream: bool,
     ) -> ExecutorResult<(ResponsePayload, Option<ToolSearchMetadata>)> {
         loop {
+            self.rounds.begin_round();
             let RoundResult { mut payload, decision } = self
                 .root
                 .run_round(self.output.len(), auth, stream_upstream, &self.response_budget)
@@ -247,7 +252,7 @@ async fn run_blocking(
 
     let ch = exec_ctx.conv_handler.clone();
     let rh = exec_ctx.resp_handler.clone();
-    persist_if_needed(payload.clone(), ctx, tool_search_metadata, ch, rh).await?;
+    persist_if_needed(payload.clone(), ctx, tool_search_metadata, ch, rh, &exec_ctx.metrics).await?;
 
     Ok(payload)
 }

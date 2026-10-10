@@ -119,7 +119,7 @@ impl ExecuteRequest {
         let mut execution = self
             .execution
             .take()
-            .unwrap_or_else(|| ExecutionSpan::start(Api::Responses, Route::Executor, true));
+            .unwrap_or_else(|| ExecutionSpan::start(Api::Responses, Route::Executor, true, &self.exec_ctx.metrics));
         let limit = self.effective_max_stream_event_bytes();
         let prepared = if self.control.is_some() {
             Err(ExecutorError::InvalidRequest(
@@ -155,10 +155,14 @@ impl ExecuteRequest {
     /// # Errors
     /// Returns [`ExecutorError`] if rehydration or (non-streaming) LLM inference fails.
     pub async fn run(mut self) -> ExecutorResult<Either<ResponsePayload, BoxStream>> {
-        let execution = self
-            .execution
-            .take()
-            .unwrap_or_else(|| ExecutionSpan::start(Api::Responses, Route::Executor, self.payload.stream));
+        let execution = self.execution.take().unwrap_or_else(|| {
+            ExecutionSpan::start(
+                Api::Responses,
+                Route::Executor,
+                self.payload.stream,
+                &self.exec_ctx.metrics,
+            )
+        });
         let span = execution.span().clone();
         Box::pin(self.run_traced(execution)).instrument(span).await
     }

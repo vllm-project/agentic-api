@@ -6,6 +6,8 @@ mod client_tools;
 mod explicit_compaction;
 #[path = "multi_agent_tests/live_control.rs"]
 mod live_control;
+#[path = "multi_agent_tests/metrics.rs"]
+mod metrics;
 #[path = "multi_agent_tests/root_completion.rs"]
 mod root_completion;
 #[path = "multi_agent_tests/service_tier.rs"]

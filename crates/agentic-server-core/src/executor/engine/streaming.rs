@@ -11,6 +11,7 @@ use crate::executor::persist::persist_if_needed;
 use crate::executor::pipeline::AgentPipeline;
 use crate::executor::relay::{RelayLimits, StreamRelay};
 use crate::executor::request::{ExecutionContext, RequestContext};
+use crate::executor::telemetry::metrics::ExecutionClock;
 use crate::executor::telemetry::{ExecutionSpan, InstrumentedStream};
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
 use crate::types::request_response::ResponsePayload;
@@ -32,6 +33,10 @@ use tokio::sync::mpsc;
 /// into the stream so the span stays open, and is entered on every poll,
 /// until the terminal frame has been yielded or the stream is dropped. The
 /// stream owns and polls orchestration, so its stages run inside that span.
+///
+/// The loop below is the client relay: every semantic event is handed to the
+/// transport here, so this is where the first-event and first-text timings
+/// are taken. The pipeline takes the first-upstream-data timing.
 /// Dropping the stream drops orchestration. For a multi-agent response that
 /// includes its `RunOwner`, which aborts round tasks without joining them.
 pub(super) fn run_stream(
@@ -44,6 +49,8 @@ pub(super) fn run_stream(
     control: Option<RunControlReceiver>,
 ) -> BoxStream {
     let span = execution.span().clone();
+    let clock = execution.clock().clone();
+    let relay_clock = clock.clone();
     let frames: BoxStream = Box::pin(stream! {
         let failure_context = StreamFailureContext::from(&ctx);
         let (event_tx, event_rx) = mpsc::channel(STREAM_EVENT_BUFFER);
@@ -51,6 +58,7 @@ pub(super) fn run_stream(
         let relay = StreamRelay::client(event_tx, RelayLimits::with_event_bytes(max_stream_event_bytes));
         let mut agent = AgentPipeline::new(ctx, tool_search_state, relay);
         agent.control = control;
+        agent.set_execution_clock(clock.clone());
         let run = async move {
             let result = run_until_gateway_tools_complete(
                 &mut agent,
@@ -69,7 +77,7 @@ pub(super) fn run_stream(
         while let Some(event) = events.next().await {
             match event {
                 ProducerEvent::Event(event) => {
-                    if let Some(content) = consume_stream_event(event, &mut next_sequence_number) {
+                    if let Some(content) = consume_stream_event(event, &mut next_sequence_number, &clock) {
                         yield content;
                     }
                 }
@@ -109,7 +117,7 @@ pub(super) fn run_stream(
             }
         }
     });
-    Box::pin(InstrumentedStream::new(frames, span))
+    Box::pin(InstrumentedStream::delivering(frames, span, relay_clock))
 }
 
 fn failed_stream_chunk(
@@ -154,7 +162,7 @@ async fn completed_stream_chunk(
     let status = payload.status.clone();
     let ch = exec_ctx.conv_handler.clone();
     let rh = exec_ctx.resp_handler.clone();
-    match persist_if_needed(payload, ctx, tool_search_metadata, ch, rh).await {
+    match persist_if_needed(payload, ctx, tool_search_metadata, ch, rh, &exec_ctx.metrics).await {
         Ok(()) => {
             execution.completed_with_status(&status);
             chunk
@@ -215,9 +223,15 @@ impl StreamFailureContext {
     }
 }
 
-pub(super) fn consume_stream_event(event: StreamEvent, next_sequence_number: &mut u64) -> Option<String> {
+/// Hand one relayed event to the transport.
+pub(super) fn consume_stream_event(
+    event: StreamEvent,
+    next_sequence_number: &mut u64,
+    clock: &ExecutionClock,
+) -> Option<String> {
     match event {
         StreamEvent::Frame(frame) => {
+            clock.client_event(frame.text);
             *next_sequence_number = frame.sequence_number.saturating_add(1);
             Some(frame.content)
         }

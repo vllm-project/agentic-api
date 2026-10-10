@@ -10,6 +10,7 @@ use crate::executor::gateway_accumulator::{
     GatewayStreamAccumulator, StreamEvent, StreamFrame, checked_stream_event_limited, executor_error_frame,
     terminal_response_frame,
 };
+use crate::executor::telemetry::metrics::ExecutionClock;
 use crate::types::{injection::InjectionEvent, request_response::ResponsePayload};
 use crate::utils::common::serialize_to_value;
 
@@ -38,15 +39,22 @@ impl ResponseEventSink {
     pub fn channel(max_bytes: usize) -> (Self, BoxStream) {
         let (sender, receiver) = mpsc::channel(1);
         let sink = Self::new(sender, max_bytes);
-        let stream = Self::stream(receiver);
+        let stream = Self::stream(receiver, None);
         (sink, stream)
     }
 
-    pub(super) fn stream(receiver: mpsc::Receiver<StreamEvent>) -> BoxStream {
-        futures::stream::unfold(receiver, |mut receiver| async move {
+    /// Hand each frame to the adapter; with an execution `clock`, this is where
+    /// the first-event and first-text timings are taken.
+    pub(super) fn stream(receiver: mpsc::Receiver<StreamEvent>, clock: Option<ExecutionClock>) -> BoxStream {
+        futures::stream::unfold((receiver, clock), |(mut receiver, clock)| async move {
             while let Some(event) = receiver.recv().await {
                 match event {
-                    StreamEvent::Frame(frame) => return Some((frame.content, receiver)),
+                    StreamEvent::Frame(frame) => {
+                        if let Some(clock) = &clock {
+                            clock.client_event(frame.text);
+                        }
+                        return Some((frame.content, (receiver, clock)));
+                    }
                     StreamEvent::Flush(flushed) => {
                         // A cancelled flush waiter does not cancel event delivery.
                         let _ = flushed.send(());
@@ -137,6 +145,7 @@ impl ResponseEventSink {
         permit.send(StreamEvent::Frame(StreamFrame {
             content,
             sequence_number,
+            text: frame.event_type == SSEEventType::OutputTextDelta,
         }));
         *state = published;
         Ok(true)

@@ -28,8 +28,7 @@ async fn proxy_responses(state: &AppState, parts: Parts, body: Bytes) -> Respons
         query: parts.uri.query().map(str::to_string),
     };
     convert_response(
-        crate::telemetry::proxy::trace_proxy_request(Api::Responses, proxy_req, "/v1/responses", &state.proxy_state)
-            .await,
+        crate::telemetry::proxy::trace_proxy_request(Api::Responses, proxy_req, "/v1/responses", state).await,
     )
 }
 

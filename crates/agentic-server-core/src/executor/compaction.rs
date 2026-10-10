@@ -4,6 +4,8 @@ pub(crate) use estimate::{estimate_history_tokens, estimate_input_tokens};
 mod context;
 mod summary;
 
+use super::telemetry::FailureCategory;
+use super::telemetry::metrics::Stage;
 use super::telemetry::stages::CompactionTrigger;
 use context::item_has_meaningful_context;
 use summary::completed_summary_text;
@@ -117,6 +119,18 @@ async fn compact_items_with_trigger(
     auth: Option<&str>,
     trigger: CompactionTrigger,
 ) -> ExecutorResult<(Vec<InputItem>, ResponseUsage, Option<String>)> {
+    let timer = exec_ctx.metrics.stage(Stage::Compaction);
+    let summarized = summarize_items(request, input, exec_ctx, auth).await;
+    timer.finish_result(&summarized);
+    summarized
+}
+
+async fn summarize_items(
+    request: &RequestPayload,
+    input: ResponsesInput,
+    exec_ctx: &ExecutionContext,
+    auth: Option<&str>,
+) -> ExecutorResult<(Vec<InputItem>, ResponseUsage, Option<String>)> {
     let original_items = Vec::from(input);
     if !original_items.iter().any(item_has_meaningful_context) {
         return Err(ExecutorError::InvalidRequest(
@@ -161,6 +175,7 @@ async fn compact_items_with_trigger(
     let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached());
     let response =
         fetch_blocking_payload(&mut agent, exec_ctx, auth, &crate::tool::ToolRegistry::default(), None).await?;
+    exec_ctx.metrics.record_response_usage(response.usage.as_ref());
     let summary = completed_summary_text(&response)?;
 
     Ok((
@@ -287,6 +302,7 @@ pub async fn compact_response(
 
     let response_id = ctx.response_id.clone();
     ctx.new_input_items.clone_from(&output);
+    let timer = exec_ctx.metrics.stage(Stage::Persist);
     match persist_prepared_turn(
         ctx,
         tool_search_metadata,
@@ -297,8 +313,13 @@ pub async fn compact_response(
     )
     .await
     {
-        Ok(()) | Err(ExecutorError::Storage(crate::StorageError::NotConfigured)) => {}
-        Err(error) => return Err(error),
+        Ok(()) => timer.finish(None),
+        // Without storage nothing was written, so there is no stage to time.
+        Err(ExecutorError::Storage(crate::StorageError::NotConfigured)) => timer.discard(),
+        Err(error) => {
+            timer.finish(Some(FailureCategory::from(&error)));
+            return Err(error);
+        }
     }
 
     Ok(CompactedResponse {

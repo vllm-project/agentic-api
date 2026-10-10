@@ -5,6 +5,7 @@ mod admission_tests;
 pub(super) mod history;
 mod lifecycle;
 mod policy;
+mod timing;
 
 pub(crate) use admission::BuiltInToolCallBudget;
 pub(super) use history::{append_gateway_calls_to_new_input, append_output_items_to_input, append_tool_outputs};
@@ -23,7 +24,9 @@ use tokio::sync::Semaphore;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::relay::StreamRelay;
+use crate::executor::request::ExecutionContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
+use crate::executor::telemetry::metrics::ExecutorMetrics;
 use crate::tool::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
 use crate::tool::{GatewayBinding, ToolError, ToolOutput, ToolOwnership, ToolRegistry};
 use crate::types::io::output::{FunctionToolCall, GatewayCallStatus};
@@ -107,6 +110,8 @@ pub(super) struct GatewayScheduler {
     omitted_items: Vec<usize>,
     policy: GatewaySchedulerPolicy,
     timeout: Duration,
+    /// Times each executed call as an `agentic.stage.duration` sample.
+    metrics: Option<ExecutorMetrics>,
 }
 
 impl GatewayScheduler {
@@ -206,6 +211,7 @@ impl GatewayScheduler {
             omitted_items,
             policy,
             timeout,
+            metrics: None,
         }
     }
 
@@ -307,7 +313,7 @@ impl GatewayScheduler {
         response_budget: &ExecutorResponseBudget,
     ) -> ExecutorResult<GatewayCallResult> {
         let Some(limit) = plan.refused else {
-            return self.run_one(plan, execution_slots, response_budget).await;
+            return self.timed_run(plan, execution_slots, response_budget).await;
         };
         let message = admission::limit_reached_message(limit);
         let omitted = plan.events.completed_output.is_none();
@@ -330,7 +336,7 @@ impl GatewayScheduler {
         plan: GatewayCallPlan,
         execution_slots: &Semaphore,
         response_budget: &ExecutorResponseBudget,
-    ) -> ExecutorResult<GatewayCallResult> {
+    ) -> ExecutorResult<(GatewayCallResult, GatewayCallStatus)> {
         let GatewayCallPlan {
             item_index,
             call,
@@ -339,7 +345,8 @@ impl GatewayScheduler {
         } = plan;
         let GatewayExecutionPlan::Bound(binding) = execution else {
             let message = format!("gateway tool '{}' has no registered handler", call.name);
-            return unexecuted_result(item_index, &call, &message, None, false, response_budget);
+            return unexecuted_result(item_index, &call, &message, None, false, response_budget)
+                .map(|result| (result, GatewayCallStatus::Failed));
         };
 
         let _permit = match &binding.self_exclusion {
@@ -379,12 +386,13 @@ impl GatewayScheduler {
         enforce_gateway_tool_output_size(output.output.len())?;
         response_budget.consume(output.output.len())?;
         let public_output = binding.public_output(&call, &output, status);
-        Ok(GatewayCallResult {
+        let result = GatewayCallResult {
             item_index,
             input_item: InputItem::FunctionCallOutput(output.into()),
             public_output,
             omitted: false,
-        })
+        };
+        Ok((result, status))
     }
 }
 
@@ -505,17 +513,21 @@ fn complete_gateway_event_plans<T: GatewayPublicOutputSource>(plans: &mut [Gatew
     }
 }
 
+/// Plan, execute and relay one round's gateway calls under the execution
+/// context's scheduler policy, timing each call with its metrics.
 pub(super) async fn execute_and_emit_output_calls(
     output_items: &[OutputItem],
     registry: &ToolRegistry,
     output_offset: usize,
-    policy: GatewaySchedulerPolicy,
+    exec_ctx: &ExecutionContext,
     response_budget: &ExecutorResponseBudget,
     tool_call_budget: &mut BuiltInToolCallBudget,
     relay: &mut StreamRelay,
 ) -> ExecutorResult<Vec<GatewayCallResult>> {
+    let policy = exec_ctx.gateway_scheduler_policy.clone();
     let mut scheduler =
-        GatewayScheduler::plan_with_budget(output_items, registry, output_offset, policy, tool_call_budget);
+        GatewayScheduler::plan_with_budget(output_items, registry, output_offset, policy, tool_call_budget)
+            .with_metrics(&exec_ctx.metrics);
     emit_gateway_start_events(scheduler.event_plans(), relay).await?;
     let gateway_results = scheduler.execute_with_budget(response_budget).await?;
     emit_gateway_completed_events(&gateway_results, scheduler.event_plans(), relay).await?;
@@ -1351,6 +1363,7 @@ mod tests {
             omitted_items: Vec::new(),
             policy: GatewaySchedulerPolicy::new(NonZeroUsize::new(2).expect("nonzero test limit")),
             timeout: std::time::Duration::ZERO,
+            metrics: None,
         };
 
         let execution = tokio::spawn(async move { scheduler.execute().await });
@@ -1396,6 +1409,7 @@ mod tests {
             omitted_items: Vec::new(),
             policy: GatewaySchedulerPolicy::new(NonZeroUsize::new(2).expect("nonzero test limit")),
             timeout: std::time::Duration::ZERO,
+            metrics: None,
         };
 
         let execution = tokio::spawn(async move { scheduler.execute().await });

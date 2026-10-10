@@ -149,6 +149,9 @@ impl MultiAgentRun {
             StreamRelay::detached()
         };
         let mut agent = AgentPipeline::new(ctx, tool_search, relay);
+        if let Some(clock) = &self.clock {
+            agent.set_execution_clock(clock.clone());
+        }
         agent.set_agent_guidance(self.round_guidance(turn));
         let mut execution = context.execution.clone();
         let source = AgentRoundId {
@@ -181,6 +184,7 @@ impl MultiAgentRun {
             .set_phase(turn, AgentPhase::Inferring)
             .map_err(registry_error)?;
         self.rounds += 1;
+        self.round_counter.begin_round();
         Ok(())
     }
 

@@ -18,6 +18,7 @@ fn event(sequence_number: u64) -> StreamEvent {
     StreamEvent::Frame(StreamFrame {
         content: "event".into(),
         sequence_number,
+        text: false,
     })
 }
 
