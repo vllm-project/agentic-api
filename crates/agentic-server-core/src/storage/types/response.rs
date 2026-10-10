@@ -207,6 +207,7 @@ mod tests {
         let stored = ResponseData::try_from(row).expect("decode pre-rename stored metadata");
         let snapshot = stored.metadata.response_snapshot.expect("stored response snapshot");
         assert_eq!(snapshot.conversation.as_deref(), Some("conv_legacy"));
+        assert!(snapshot.standard_fields.store, "legacy response snapshots were stored");
         let public = serde_json::to_value(snapshot).expect("serialize retrieved response");
         assert_eq!(public["conversation"], serde_json::json!({"id": "conv_legacy"}));
         assert!(public.get("conversation_id").is_none());

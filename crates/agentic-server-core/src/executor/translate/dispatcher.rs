@@ -129,12 +129,6 @@ impl TranslationDispatcher {
                 defer_from_output_index: None,
             }),
         }?;
-        translated.frames.retain(|frame| {
-            !matches!(
-                frame.wire.event_type.as_deref(),
-                Some("response.reasoning_part.added" | "response.reasoning_part.done")
-            )
-        });
         for frame in &mut translated.frames {
             self.context.restore_stream_event_wire(&mut frame.wire)?;
         }

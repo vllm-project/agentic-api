@@ -47,6 +47,7 @@ pub struct StandardResponseFields {
     pub temperature: f64,
     pub reasoning: Option<ResponseReasoning>,
     pub max_output_tokens: Option<u32>,
+    #[serde(default = "default_stored_response")]
     pub store: bool,
     pub background: bool,
     pub metadata: HashMap<String, Value>,
@@ -86,6 +87,10 @@ impl Default for StandardResponseFields {
             prompt_cache_key: None,
         }
     }
+}
+
+fn default_stored_response() -> bool {
+    true
 }
 
 impl StandardResponseFields {

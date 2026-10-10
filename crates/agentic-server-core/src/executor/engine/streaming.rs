@@ -173,6 +173,7 @@ pub(super) struct StreamFailureContext {
     previous_response_id: Option<String>,
     instructions: Option<String>,
     max_tool_calls: Option<u64>,
+    standard_fields: crate::types::request_response::StandardResponseFields,
 }
 
 impl From<&RequestContext> for StreamFailureContext {
@@ -184,6 +185,11 @@ impl From<&RequestContext> for StreamFailureContext {
             previous_response_id: ctx.original_request.previous_response_id.clone(),
             instructions: ctx.original_request.instructions.clone(),
             max_tool_calls: ctx.max_tool_calls().map(NonZeroU64::get),
+            standard_fields: {
+                let mut fields = crate::types::request_response::StandardResponseFields::default();
+                fields.apply_request(&ctx.original_request);
+                fields
+            },
         }
     }
 }
@@ -211,7 +217,7 @@ impl StreamFailureContext {
             service_tier: None,
             tools: None,
             tool_choice: None,
-            standard_fields: crate::types::request_response::StandardResponseFields::default(),
+            standard_fields: self.standard_fields.clone(),
         }
     }
 }

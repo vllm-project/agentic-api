@@ -6,7 +6,7 @@ use crate::types::event::ResponseStatus;
 use crate::types::io::MultiAgentAction;
 use crate::types::io::OutputItem;
 use crate::types::io::ToolChoice;
-use crate::types::request_response::ResponsePayload;
+use crate::types::request_response::{RequestPayload, ResponsePayload, StandardResponseFields};
 use crate::types::tools::ResponsesTool;
 use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
@@ -23,7 +23,7 @@ pub(in crate::executor) struct TranslationContext {
     custom_tool_map: Option<CustomToolMap>,
     response_tools: Option<Vec<ResponsesTool>>,
     response_tool_choice: Option<ToolChoice>,
-    request_store: bool,
+    response_fields: StandardResponseFields,
 }
 
 impl std::fmt::Debug for TranslationContext {
@@ -83,17 +83,12 @@ impl TranslationContext {
         self
     }
 
-    pub(in crate::executor) fn with_request_store(mut self, store: bool) -> Self {
-        self.request_store = store;
+    pub(in crate::executor) fn with_request_fields(mut self, request: &RequestPayload) -> Self {
+        self.response_fields.apply_request(request);
         self
     }
 
     pub(super) fn restore_stream_event_wire(&self, wire: &mut WireEvent) -> ExecutorResult<()> {
-        wire.event_type = match wire.event_type.as_deref() {
-            Some("response.reasoning_text.delta") => Some("response.reasoning.delta".to_owned()),
-            Some("response.reasoning_text.done") => Some("response.reasoning.done".to_owned()),
-            _ => wire.event_type.take(),
-        };
         super::tool_search::restore_response_tools(wire, self.response_tools.as_deref())?;
         if self.response_tools.is_some()
             && let Some(choice) = self.response_tool_choice.as_ref()
@@ -105,8 +100,7 @@ impl TranslationContext {
         super::custom::CustomTranslator::restore_response_wire(wire, self.custom_tool_map.as_ref());
         let _ = super::namespace::CodexNamespaceTranslator::restore_response_wire(wire, self.namespace_map.as_ref());
         if let Some(response) = wire.rest.get_mut("response").and_then(Value::as_object_mut) {
-            complete_response_fields(response);
-            response.insert("store".to_owned(), json!(self.request_store));
+            complete_response_fields(response, &self.response_fields)?;
             if let Some(output) = response.get_mut("output").and_then(Value::as_array_mut) {
                 for item in output {
                     normalize_output_item(item);
@@ -166,39 +160,34 @@ impl TranslationContext {
     }
 }
 
-fn complete_response_fields(response: &mut Map<String, Value>) {
+fn complete_response_fields(response: &mut Map<String, Value>, fields: &StandardResponseFields) -> ExecutorResult<()> {
+    let Value::Object(standard) = serde_json::to_value(fields)? else {
+        unreachable!("standard response fields serialize as an object");
+    };
+    for (key, value) in standard {
+        if key == "completed_at" {
+            response.entry(key).or_insert(value);
+        } else {
+            response.insert(key, value);
+        }
+    }
     let required_defaults = [
-        ("completed_at", Value::Null),
         ("error", Value::Null),
         ("incomplete_details", Value::Null),
         ("previous_response_id", Value::Null),
         ("instructions", Value::Null),
         ("tools", json!([])),
         ("tool_choice", json!("auto")),
-        ("truncation", json!("disabled")),
-        ("parallel_tool_calls", json!(true)),
-        ("text", json!({"format": {"type": "text"}})),
-        ("top_p", json!(1.0)),
-        ("presence_penalty", json!(0.0)),
-        ("frequency_penalty", json!(0.0)),
-        ("top_logprobs", json!(0)),
-        ("temperature", json!(1.0)),
-        ("reasoning", Value::Null),
         ("usage", Value::Null),
-        ("max_output_tokens", Value::Null),
         ("max_tool_calls", Value::Null),
-        ("store", json!(true)),
-        ("background", json!(false)),
         ("service_tier", json!("default")),
-        ("metadata", json!({})),
-        ("safety_identifier", Value::Null),
-        ("prompt_cache_key", Value::Null),
     ];
     for (key, default) in required_defaults {
-        if !response.contains_key(key) || matches!(key, "text" | "top_logprobs") && response[key].is_null() {
+        if !response.contains_key(key) {
             response.insert(key.to_owned(), default);
         }
     }
+    Ok(())
 }
 
 fn normalize_output_item(item: &mut Value) {
@@ -248,17 +237,23 @@ mod tests {
             json!({
                 "id": "resp_1", "object": "response", "created_at": 1,
                 "model": "test", "status": "in_progress", "output": [],
-                "text": null, "top_logprobs": null
+                "text": null, "top_logprobs": null, "parallel_tool_calls": true,
+                "temperature": 0.9
             }),
         );
         TranslationContext::default()
-            .with_request_store(false)
+            .with_request_fields(&RequestPayload {
+                store: false,
+                ..RequestPayload::default()
+            })
             .restore_stream_event_wire(&mut wire)
             .expect("normalize response event");
         let response = &wire.rest["response"];
         assert_eq!(response["text"]["format"]["type"], "text");
         assert_eq!(response["top_logprobs"], 0);
         assert_eq!(response["store"], false);
+        assert_eq!(response["parallel_tool_calls"], false);
+        assert_eq!(response["temperature"], 1.0);
         assert_eq!(response["completed_at"], Value::Null);
         assert_eq!(response["tools"], json!([]));
     }
@@ -270,7 +265,16 @@ mod tests {
         context
             .restore_stream_event_wire(&mut reasoning)
             .expect("normalize reasoning event");
-        assert_eq!(reasoning.event_type.as_deref(), Some("response.reasoning.delta"));
+        assert_eq!(reasoning.event_type.as_deref(), Some("response.reasoning_text.delta"));
+
+        let mut reasoning_part = WireEvent::new("response.reasoning_part.added");
+        context
+            .restore_stream_event_wire(&mut reasoning_part)
+            .expect("preserve reasoning part event");
+        assert_eq!(
+            reasoning_part.event_type.as_deref(),
+            Some("response.reasoning_part.added")
+        );
 
         let mut item = WireEvent::new("response.output_item.added");
         item.rest.insert(

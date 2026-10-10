@@ -61,7 +61,7 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
             }),
         agent.request.enriched_request.tool_choice.clone(),
     )
-    .with_request_store(agent.request.original_request.store)
+    .with_request_fields(&agent.request.original_request)
 }
 
 /// Builds the JSON body sent upstream: history inlined, continuation and storage
