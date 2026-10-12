@@ -12,7 +12,6 @@ use agentic_core::executor::{
     normalize_native_server_tools_for_upstream, run_messages_loop, run_messages_stream,
 };
 use agentic_core::proxy::{ProxyAuth, ProxyRequest, error_response_for_auth, upstream_request_headers};
-use agentic_core::tool::{ToolRegistry, registry_tools};
 
 use super::super::common::{
     convert_response, read_bytes_with_auth, sse_response_with_headers, upstream_error_response,
@@ -62,7 +61,7 @@ async fn execute_messages(
     query: Option<&str>,
     parsed: ParsedMessagesRequest<'_>,
 ) -> Response {
-    let ctx = match MessagesRequestContext::new(parsed) {
+    let mut ctx = match MessagesRequestContext::new(parsed) {
         Ok(ctx) => ctx,
         Err(e) => return messages_error_response(e),
     };
@@ -71,11 +70,10 @@ async fn execute_messages(
     // ownership (incl. configured aliases like Claude Code's `WebSearch`) is
     // resolved against the operator-configured map.
     let gateway_map = &state.exec_ctx.messages_gateway_tools;
-    let mut tools = registry_tools(ctx.tools(), gateway_map);
     let mut executors = state.exec_ctx.gateway_executors.clone();
-    let registry = match ToolRegistry::build_with_handlers(&mut tools, &mut executors).await {
+    let registry = match ctx.prepare_registry(gateway_map, &mut executors).await {
         Ok(r) => r,
-        Err(e) => return messages_error_response(ExecutorError::from(e)),
+        Err(e) => return messages_error_response(e),
     };
 
     let upstream = MessagesUpstream::new(
@@ -164,6 +162,18 @@ pub async fn count_tokens(State(state): State<AppState>, request: Request) -> Re
         Ok(bytes) => bytes,
         Err(response) => return response,
     };
+    let mut executors = state.exec_ctx.gateway_executors.clone();
+    match agentic_core::executor::prepare_messages_count_tokens(
+        &bytes,
+        &state.exec_ctx.messages_gateway_tools,
+        &mut executors,
+    )
+    .await
+    {
+        Ok(Some(body)) => bytes = Bytes::from(body),
+        Ok(None) => {}
+        Err(error) => return messages_error_response(error),
+    }
     if let Ok(mut request_json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
         // The executors own the availability policy: a disabled executor
         // refuses the declaration here too, so counting tokens and sending the

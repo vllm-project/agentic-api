@@ -376,7 +376,11 @@ pub(crate) fn discovered_mcp_function_tool(param: &McpDiscoveredToolParam) -> Fu
 const INTERNAL_MCP_PREFIX: &str = "mcp__";
 const MAX_INTERNAL_TOOL_NAME_LEN: usize = 64;
 
-fn internal_mcp_tool_name(server_label: &str, tool_name: &str, used: &mut HashMap<String, (String, String)>) -> String {
+pub(crate) fn internal_mcp_tool_name(
+    server_label: &str,
+    tool_name: &str,
+    used: &mut HashMap<String, (String, String)>,
+) -> String {
     let identity = (server_label.to_owned(), tool_name.to_owned());
     let base = sanitize_internal_tool_name(&format!("{INTERNAL_MCP_PREFIX}{server_label}__{tool_name}"));
     if base.len() <= MAX_INTERNAL_TOOL_NAME_LEN && used.get(&base).is_none_or(|existing| existing == &identity) {

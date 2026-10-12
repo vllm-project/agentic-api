@@ -252,6 +252,8 @@ pub struct CountTokensRequest {
     pub system: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<serde_json::Value>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_servers: Option<Vec<agentic_core::types::messages::mcp::MessagesMcpServer>>,
 }
 
 /// Response from Anthropic's `count_tokens` endpoint (proxied from upstream).

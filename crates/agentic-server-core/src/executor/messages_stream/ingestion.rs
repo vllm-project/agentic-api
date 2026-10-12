@@ -95,7 +95,16 @@ impl MessagesStreamAccumulator {
             return Vec::new();
         }
         self.message_started = true;
-        vec![sse("message_start", event)]
+        let mut frames = vec![sse("message_start", event)];
+        for result in std::mem::take(&mut self.pending_mcp_results) {
+            if let Ok(block) = serde_json::to_value(crate::types::messages::mcp::McpContentBlock::result(&result)) {
+                frames.extend(self.emit_block(&block));
+            } else {
+                frames.extend(self.fail("could not project resumed MCP result"));
+                break;
+            }
+        }
+        frames
     }
 
     fn on_block_start(&mut self, event: &mut Value) -> Vec<String> {
@@ -126,21 +135,28 @@ impl MessagesStreamAccumulator {
             BufferedBlock {
                 closed: false,
                 block: event["content_block"].clone(),
-                input_json: String::new(),
+                input_json: event["content_block"]["input"]
+                    .as_object()
+                    .filter(|input| !input.is_empty())
+                    .map_or_else(String::new, |input| Value::Object(input.clone()).to_string()),
                 is_gateway_tool,
             },
         );
 
         if block_type == "tool_use" {
             if is_gateway_tool {
-                // Suppress gateway-owned tool_use from the client; it stays in the
-                // buffered history only and drives the loop.
-                self.suppressed_indices.insert(up_index);
-                return Vec::new();
+                if let Some(call) = self.gateway_map.public_mcp_call(&event["content_block"]) {
+                    match crate::utils::common::serialize_to_value(&call) {
+                        Ok(call) => event["content_block"] = call,
+                        Err(_) => return self.fail("failed to serialize MCP call"),
+                    }
+                } else {
+                    self.suppressed_indices.insert(up_index);
+                    return Vec::new();
+                }
+            } else {
+                self.has_client_tool_use = true;
             }
-            // A client-owned tool_use: the client must execute it, so this round
-            // is terminal (E7). Forward it (below) and stop the loop.
-            self.has_client_tool_use = true;
         }
 
         // Forward with a rebased contiguous client index.

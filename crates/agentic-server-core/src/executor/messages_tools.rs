@@ -161,3 +161,27 @@ async fn run(admission: Admission<'_>, registry: &ToolRegistry) -> GatewayToolRe
     };
     tool_seam::tool_result_block(&call.call_id, output, is_error)
 }
+
+/// Resume only connector calls validated by request preparation, before inference.
+/// Both response modes use the same dispatch and history mutation.
+pub(super) async fn resume_pending_mcp(
+    ctx: &mut MessagesRequestContext,
+    registry: &ToolRegistry,
+    map: &tool_seam::GatewayToolMap,
+) -> crate::executor::error::ExecutorResult<Vec<GatewayToolResult>> {
+    let mut pending = ctx.take_pending_mcp();
+    if pending.is_empty() {
+        return Ok(Vec::new());
+    }
+    let calls = pending
+        .iter_mut()
+        .map(|call| GatewayToolUse {
+            id: &call.id,
+            name: &call.name,
+            input: Ok(Value::Object(std::mem::take(&mut call.input))),
+        })
+        .collect();
+    let results = execute_gateway_calls(calls, ctx, registry, map).await;
+    ctx.complete_pending_mcp(&results)?;
+    Ok(results)
+}

@@ -5,6 +5,7 @@ pub mod compaction;
 pub mod engine;
 pub mod error;
 pub mod inference;
+mod messages_connector;
 pub mod messages_context;
 pub mod messages_loop;
 mod messages_request;
@@ -34,6 +35,7 @@ pub use compaction::compact_response;
 pub use engine::{BoxStream, ExecuteRequest, create_conversation, execute, prepare_non_generating_turn};
 pub use error::{ExecutorError, ExecutorResult, ResourceLimit};
 pub use inference::call_inference;
+pub use messages_connector::prepare_messages_count_tokens;
 pub use messages_context::{MessagesRequestContext, ParsedMessagesRequest};
 pub use messages_loop::{MessagesResponse, MessagesUpstream, run_messages_loop};
 pub use messages_request::{

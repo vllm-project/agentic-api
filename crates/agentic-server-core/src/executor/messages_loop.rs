@@ -3,11 +3,11 @@
 //! Runs the server-side gateway-tool loop for `/v1/messages` **natively**: the
 //! client's Anthropic request is forwarded to vLLM `/v1/messages` essentially
 //! untouched on the first round, the assistant turn is
-//! inspected, any gateway-owned `tool_use` is executed server-side and hidden,
+//! inspected, any gateway-owned `tool_use` is executed server-side,
 //! the loop appends the `tool_result`, relaxes a fulfilled forced tool choice,
 //! and re-POSTs until the model stops asking
-//! for a gateway tool. Only the final assistant message reaches the client,
-//! carrying the `usage` of every round.
+//! for a gateway tool. MCP calls and outputs are projected into the public
+//! assistant message; web-search calls stay hidden. Usage includes every round.
 //!
 //! This never touches `RequestPayload`/`ResponsePayload`; it reuses only the
 //! protocol-neutral tool layer (`ToolRegistry::dispatch`) via
@@ -114,9 +114,15 @@ async fn run_messages_loop_traced(
     // what the client asked (the handler routes streaming elsewhere).
     ctx.force_stream(false);
     let mut usage = MessagesUsageTotals::default();
-    // Gateway ownership is request-scoped: the operator aliases plus the
-    // gateway tools this request's registry resolved.
-    let gateway_map = request_gateway_map(&exec_ctx.messages_gateway_tools, registry);
+    let gateway_map = request_gateway_map(ctx.gateway_tools_or(&exec_ctx.messages_gateway_tools), registry);
+    let resumed = super::messages_tools::resume_pending_mcp(&mut ctx, registry, &gateway_map).await?;
+    let mut public_content = resumed
+        .iter()
+        .map(|result| {
+            serde_json::to_value(crate::types::messages::mcp::McpContentBlock::result(result))
+                .map_err(ExecutorError::JsonError)
+        })
+        .collect::<ExecutorResult<Vec<_>>>()?;
 
     for round in 0..MAX_GATEWAY_TOOL_ROUNDS {
         let body = ctx.upstream_body()?;
@@ -147,32 +153,36 @@ async fn run_messages_loop_traced(
         // Split the assistant turn into gateway-owned tool_use vs everything the
         // client should see. A client-owned tool_use means we cannot continue
         // the loop server-side — return the turn to the client (edge E7).
+        let gateway_map = &gateway_map;
         let Some(content) = content else {
             execution.completed_with_stop_reason(stop_reason);
-            return Ok(deliver(message, &mut usage, &gateway_map, response_headers));
+            return Ok(deliver(
+                message,
+                &mut usage,
+                gateway_map,
+                &mut public_content,
+                response_headers,
+            ));
         };
-        let mut gateway_calls: Vec<Value> = Vec::new();
-        let mut has_client_tool_use = false;
-        for block in content {
-            if block.get("type").and_then(Value::as_str) == Some("tool_use") {
-                let name = block.get("name").and_then(Value::as_str).unwrap_or_default();
-                if gateway_map.is_gateway_owned(name) {
-                    gateway_calls.push(block.clone());
-                } else {
-                    has_client_tool_use = true;
-                }
-            }
-        }
+        let (gateway_calls, has_client_tool_use) = split_gateway_calls(content, gateway_map);
 
         if has_client_tool_use {
             // Client execution takes precedence even when the provider labels a
             // named call end_turn. `deliver` keeps the hidden gateway calls out.
             execution.completed_with_stop_reason(stop_reason);
+            let projected = tool_seam::project_mcp_round(content, &[], gateway_map, true)?;
             let mut message = message;
             if message["stop_reason"] == "end_turn" {
                 message["stop_reason"] = json!("tool_use");
             }
-            return Ok(deliver(message, &mut usage, &gateway_map, response_headers));
+            message["content"] = Value::Array(projected);
+            return Ok(deliver(
+                message,
+                &mut usage,
+                gateway_map,
+                &mut public_content,
+                response_headers,
+            ));
         }
 
         // The shared context accepts tool_use and vLLM's end_turn for a matching
@@ -184,13 +194,31 @@ async fn run_messages_loop_traced(
             )
         {
             execution.completed_with_stop_reason(stop_reason);
-            return Ok(deliver(message, &mut usage, &gateway_map, response_headers));
+            let visible = tool_seam::project_mcp_round(content, &[], gateway_map, true)?;
+            let mut message = message;
+            message["content"] = Value::Array(visible);
+            return Ok(deliver(
+                message,
+                &mut usage,
+                gateway_map,
+                &mut public_content,
+                response_headers,
+            ));
         }
         // Pure gateway-tool round: execute the calls, then feed the model's FULL
         // assistant turn (thinking/text/tool_use, order preserved — F3) plus the
         // tool_results back for the next round. Gateway blocks stay internal.
         usage.record(message.get("usage"));
-        let tool_results = execute_gateway_calls(tool_uses(&gateway_calls), &mut ctx, registry, &gateway_map).await;
+        let tool_results = execute_gateway_calls(tool_uses(&gateway_calls), &mut ctx, registry, gateway_map).await;
+        let include_visible = ctx
+            .tools()
+            .is_some_and(|tools| tools.iter().any(|t| t.type_.as_deref() == Some("mcp_toolset")));
+        public_content.extend(tool_seam::project_mcp_round(
+            content,
+            &tool_results,
+            gateway_map,
+            include_visible,
+        )?);
         ctx.append_round(content, tool_results)?;
     }
 
@@ -199,7 +227,11 @@ async fn run_messages_loop_traced(
     // Reaching here means every round emitted a gateway tool_use; surface a
     // minimal terminal so the client isn't left hanging.
     execution.failed_with(FailureCategory::RoundBudget);
-    Ok(MessagesResponse {
+    Ok(round_budget_error())
+}
+
+fn round_budget_error() -> MessagesResponse<Value> {
+    MessagesResponse {
         body: json!({
             "type": "error",
             "error": {
@@ -208,7 +240,24 @@ async fn run_messages_loop_traced(
             }
         }),
         headers: http::HeaderMap::new(),
-    })
+    }
+}
+
+fn split_gateway_calls(content: &[Value], gateway_map: &tool_seam::GatewayToolMap) -> (Vec<Value>, bool) {
+    let mut gateway_calls: Vec<Value> = Vec::new();
+    let mut has_client_tool_use = false;
+    for block in content {
+        if block.get("type").and_then(Value::as_str) == Some("tool_use") {
+            let name = block.get("name").and_then(Value::as_str).unwrap_or_default();
+            if gateway_map.is_gateway_owned(name) {
+                gateway_calls.push(block.clone());
+            } else {
+                has_client_tool_use = true;
+            }
+        }
+    }
+
+    (gateway_calls, has_client_tool_use)
 }
 
 /// Return the terminal assistant message with the turn's complete `usage` and
@@ -226,13 +275,16 @@ fn deliver(
     mut message: Value,
     usage: &mut MessagesUsageTotals,
     gateway_map: &tool_seam::GatewayToolMap,
+    public_content: &mut Vec<Value>,
     headers: http::HeaderMap,
 ) -> MessagesResponse<Value> {
     if let Some(content) = message.get("content").and_then(Value::as_array) {
-        let visible = tool_seam::strip_gateway_tool_use(content, gateway_map);
-        if visible.len() != content.len() {
-            message["content"] = Value::Array(visible);
+        let mut visible = tool_seam::strip_gateway_tool_use(content, gateway_map);
+        if !public_content.is_empty() {
+            public_content.append(&mut visible);
+            visible = std::mem::take(public_content);
         }
+        message["content"] = Value::Array(visible);
     }
     usage.finish(&mut message);
     MessagesResponse { body: message, headers }

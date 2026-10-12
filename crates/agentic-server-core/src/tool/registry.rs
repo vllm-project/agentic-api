@@ -285,9 +285,8 @@ impl ToolRegistry {
                 }
                 ToolDeclaration::Mcp(p) => {
                     let _materialization_guard = acquire_materialization().await;
-                    let tool_set = match executors.mcp_server_tools(p).await {
+                    let mut tool_set = match executors.mcp_server_tools(p).await {
                         Ok(tool_set) => tool_set,
-                        // Config errors mean the declaration is invalid; the client can fix it.
                         Err(error @ ToolError::Config(_)) => return Err(error.into()),
                         Err(error) => {
                             let list_tools_item = McpHandler::failed_list_tools_item(&p.server_label, &error);
@@ -299,6 +298,7 @@ impl ToolRegistry {
                             continue;
                         }
                     };
+                    super::mcp::registry::apply_messages_config(&mut tool_set, p);
                     let handlers = tool_set.discovered_handlers;
                     discovered_mcp_tools = discovered_mcp_tools.checked_add(handlers.len()).ok_or_else(|| {
                         E::from(ToolError::Execution(
