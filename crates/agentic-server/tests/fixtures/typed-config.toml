@@ -2,7 +2,7 @@ llm_api_base = "http://127.0.0.1:8000/v1"
 database_url = "sqlite:///tmp/agentic.db"
 
 [web_search]
-base_url = "https://api.ydc-index.io"
+base_url = "https://ydc-index.io"
 api_key_env = "YOU_API_KEY"
 
 [mcp]

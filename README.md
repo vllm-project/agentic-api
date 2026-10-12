@@ -273,7 +273,7 @@ llm_api_base = "http://127.0.0.1:5050"
 [web_search]
 # Search backend for the gateway-owned web_search tool: "you" (default), "brave", "tavily", or "searxng".
 provider = "you"
-base_url = "https://api.ydc-index.io"
+base_url = "https://ydc-index.io"
 api_key_env = "YOU_API_KEY"
 # Concurrent provider requests inside one batched web-search call; unset uses
 # the provider default (Brave: 1; You.com, Tavily and SearXNG: max_concurrent_gateway_calls).
