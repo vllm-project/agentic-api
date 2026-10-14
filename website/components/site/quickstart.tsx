@@ -2,14 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import {
-  Check,
-  Copy,
-  Terminal,
-  Monitor,
-  Code2,
-  ArrowUpRight,
-} from 'lucide-react';
+import { Check, Copy, ArrowUpRight } from 'lucide-react';
 import {
   DEFAULT_INSTALL_METHOD,
   INSTALL_METHODS,
@@ -17,7 +10,6 @@ import {
   type InstallMethod,
   isInstallMethod,
   getLaunchCommands,
-  getServeCommand,
   getLaunchInstructions,
 } from '@/lib/quickstart';
 type ModelContext = {
@@ -201,64 +193,26 @@ export function Quickstart() {
               </TabsContent>
             ))}
           </Tabs>
+          <p className="install-note">
+            Run either command to start Agentic API and launch the harness:
+          </p>
           <CopyCode
-            key={installation + '-serve'}
-            code={getServeCommand(installation)}
-            label="Start the standalone server"
+            key={installation + '-codex'}
+            code={launchCommands.codex}
+            label="Launch Codex CLI"
+          />
+          <CopyCode
+            key={installation + '-claude'}
+            code={launchCommands.claude}
+            label="Launch Claude Code"
           />
           <p className="install-note">
-            The CLI launchers below start the gateway for you.
+            For the desktop app, see the{' '}
+            <Link href="/docs/latest/guides/codex-desktop">
+              Codex Desktop setup guide
+            </Link>
+            .
           </p>
-          <Tabs defaultValue="codex" className="launch-tabs">
-            <TabsList
-              className="launch-tab-list client-tab-list"
-              aria-label="Choose your coding agent"
-            >
-              <TabsTrigger value="codex">
-                <Terminal size={16} /> Codex CLI
-              </TabsTrigger>
-              <TabsTrigger value="codex-desktop">
-                <Monitor size={16} /> Codex Desktop
-              </TabsTrigger>
-              <TabsTrigger value="claude">
-                <Code2 size={16} /> Claude Code
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="codex">
-              <CopyCode
-                key={installation + '-codex'}
-                code={launchCommands.codex}
-                label="Launch Codex"
-              />
-            </TabsContent>
-            <TabsContent value="codex-desktop" className="desktop-guide">
-              <p>
-                Use the desktop UI with a local vLLM model. The tested Linux
-                setup keeps your normal session separate and configures Agentic
-                API as the model provider.
-              </p>
-              <p>
-                Shell commands, file writes, and follow-up turns were verified.
-                Freeform <code>apply_patch</code> must be disabled; file editing
-                uses shell commands.
-              </p>
-              <p>
-                <Link
-                  className="text-link"
-                  href="/docs/latest/guides/codex-desktop"
-                >
-                  Set up Codex Desktop <ArrowUpRight size={16} />
-                </Link>
-              </p>
-            </TabsContent>
-            <TabsContent value="claude">
-              <CopyCode
-                key={installation + '-claude'}
-                code={launchCommands.claude}
-                label="Launch Claude Code"
-              />
-            </TabsContent>
-          </Tabs>
           <div className="terminal-note">
             <span />
             Use the model ID served by your vLLM instance.
