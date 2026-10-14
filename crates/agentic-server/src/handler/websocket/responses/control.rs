@@ -339,10 +339,10 @@ impl Controls {
         self.routes.clear();
         self.steering_workers.abort_all();
         while let Some(result) = self.steering_workers.join_next().await {
-            if let Err(error) = result {
-                if !error.is_cancelled() {
-                    tracing::warn!(%error, "steering outcome worker failed during disposal");
-                }
+            if let Err(error) = result
+                && !error.is_cancelled()
+            {
+                tracing::warn!(%error, "steering outcome worker failed during disposal");
             }
         }
         self.relays.abort_all();

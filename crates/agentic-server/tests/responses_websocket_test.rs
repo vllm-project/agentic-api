@@ -6113,15 +6113,15 @@ mod duplex_replay {
                 assert_eq!(event["sequence_number"], 0, "{}: successor sequence", case(session));
                 active.insert(lane.clone(), id.to_owned());
                 response_lanes.insert(id.to_owned(), lane.clone());
-                if let Some(parent) = event["response"]["previous_response_id"].as_str() {
-                    if response_lanes.get(parent) == Some(&lane) {
-                        committed.extend(
-                            accepted
-                                .iter()
-                                .filter(|(_, (target, _))| target.as_deref() == Some(parent))
-                                .map(|(id, _)| id.clone()),
-                        );
-                    }
+                if let Some(parent) = event["response"]["previous_response_id"].as_str()
+                    && response_lanes.get(parent) == Some(&lane)
+                {
+                    committed.extend(
+                        accepted
+                            .iter()
+                            .filter(|(_, (target, _))| target.as_deref() == Some(parent))
+                            .map(|(id, _)| id.clone()),
+                    );
                 }
                 settings.push(event["response"].clone());
             }
@@ -6134,14 +6134,13 @@ mod duplex_replay {
                 // Generic creation/input errors may use an independent error envelope.
                 if kind != "error"
                     && !(kind == "response.steer.failed" && (parent.is_none() || !sequences.contains_key(response)))
+                    && let Some(previous) = sequences.insert(response.to_owned(), sequence)
                 {
-                    if let Some(previous) = sequences.insert(response.to_owned(), sequence) {
-                        assert!(
-                            previous < sequence,
-                            "{}: nonmonotonic parent sequence: {event}",
-                            case(session)
-                        );
-                    }
+                    assert!(
+                        previous < sequence,
+                        "{}: nonmonotonic parent sequence: {event}",
+                        case(session)
+                    );
                 }
             }
             match kind {
@@ -7194,15 +7193,15 @@ mod duplex_replay {
                             let normalized = serialize_to_value(&profile.to_upstream_request(true).unwrap()).unwrap();
                             settings_spies.push((next_model, normalized));
                             profiles.insert(source.to_owned(), profile);
-                            if let Some(parent) = event["response"]["previous_response_id"].as_str() {
-                                if let Some(input) = pending_input.get(parent) {
-                                    let consumes = source_lanes.get(parent) == Some(&lane);
-                                    if consumes {
-                                        retained.extend(input.clone());
-                                        pending_input.remove(parent);
-                                    } else {
-                                        spies.push((next_model, input.clone(), false));
-                                    }
+                            if let Some(parent) = event["response"]["previous_response_id"].as_str()
+                                && let Some(input) = pending_input.get(parent)
+                            {
+                                let consumes = source_lanes.get(parent) == Some(&lane);
+                                if consumes {
+                                    retained.extend(input.clone());
+                                    pending_input.remove(parent);
+                                } else {
+                                    spies.push((next_model, input.clone(), false));
                                 }
                             }
                             spies.push((next_model, retained.clone(), true));

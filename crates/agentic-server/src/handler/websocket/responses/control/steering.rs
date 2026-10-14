@@ -435,10 +435,10 @@ impl Controls {
         lane: Option<&StreamId>,
     ) -> Result<Option<super::super::WsRequest>, WsError> {
         for route in self.routes.values() {
-            if route.route.lane.as_ref() == lane {
-                if let Some(request) = route.route.steering.automatic_request()? {
-                    return Ok(Some(request));
-                }
+            if route.route.lane.as_ref() == lane
+                && let Some(request) = route.route.steering.automatic_request()?
+            {
+                return Ok(Some(request));
             }
         }
         Ok(None)

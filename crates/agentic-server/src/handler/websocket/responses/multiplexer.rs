@@ -144,15 +144,15 @@ impl WsMultiplexer {
     }
 
     pub(super) fn schedule(&mut self, mut work: WsWorkItem) -> Result<(), WsAdmissionError> {
-        if let WsWorkItem::Execute { request, .. } = &mut work {
-            if request.steering.is_none() {
-                request.steering = request
-                    .payload
-                    .previous_response_id
-                    .as_deref()
-                    .and_then(|parent| self.controls.steering_target(parent))
-                    .filter(|target| target.lane == request.stream_id && target.has_pending_steers());
-            }
+        if let WsWorkItem::Execute { request, .. } = &mut work
+            && request.steering.is_none()
+        {
+            request.steering = request
+                .payload
+                .previous_response_id
+                .as_deref()
+                .and_then(|parent| self.controls.steering_target(parent))
+                .filter(|target| target.lane == request.stream_id && target.has_pending_steers());
         }
         if !self.has_capacity_for(work.input_bytes()) {
             return Err(WsAdmissionError {
