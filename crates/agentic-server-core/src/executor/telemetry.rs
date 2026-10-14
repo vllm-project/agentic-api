@@ -432,6 +432,14 @@ impl<S> InstrumentedStream<S> {
             delivery: Some(DeliveryTimer { clock, handed_at: None }),
         }
     }
+
+    /// A frame stream whose execution runs inside its span on another task.
+    /// Delivery is timed without holding the span, which the stream can
+    /// outlive: a retained response's events end only when its connection
+    /// releases the sink, so holding the span would delay its export until then.
+    pub(crate) fn timing_delivery(inner: S, clock: ExecutionClock) -> Self {
+        Self::delivering(inner, Span::none(), clock)
+    }
 }
 
 impl<S: Stream + Unpin> Stream for InstrumentedStream<S> {

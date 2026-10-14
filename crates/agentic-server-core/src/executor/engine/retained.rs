@@ -112,7 +112,6 @@ pub(super) fn start(
     let worker_cancel = cancellation.clone();
     let worker_sink = sink.clone();
     let span = execution.span().clone();
-    let events_span = span.clone();
     let task = tokio::spawn(async move {
         let result = Box::pin(async {
             // The multi-agent coordinator handles cancellation by joining its children.
@@ -171,9 +170,8 @@ pub(super) fn start(
         }
         result
     }.instrument(span));
-    let events = Box::pin(InstrumentedStream::delivering(
+    let events = Box::pin(InstrumentedStream::timing_delivery(
         ResponseEventSink::stream(receiver, Some(clock.clone())),
-        events_span,
         clock,
     ));
     let owner_sink = sink.clone();

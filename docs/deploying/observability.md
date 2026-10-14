@@ -257,7 +257,7 @@ raw proxy handles, or one WebSocket `response.create`.
 Attribute values are the span's: see [Execution span](#execution-span).
 An execution becomes active when the gateway accepts it — for WebSocket, when
 the request is admitted to its connection's queue — and is finalized when its
-span closes. At that moment the count, duration, and delivery outcome are
+execution guard drops. At that moment the count, duration, and delivery outcome are
 recorded once and the active count is released. Duration runs from acceptance
 to finalization, so for a stream it includes client delivery.
 
