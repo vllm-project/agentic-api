@@ -138,7 +138,7 @@ For example, `max_fuel` maps to `AGENTIC_CODE_INTERPRETER_MAX_FUEL`, and `execut
 
 The feature is not part of the repository's default build. A user-built opt-in binary obtains its platform-matched artifact through the setup step above. This repository does not yet have an automated release pipeline that provisions and verifies that artifact, so prebuilt feature-enabled releases would additionally need provenance and checksum verification in their packaging workflow.
 
-The locked Eryx version is 0.8.0, which declares `rust-version = "1.98.1"`. The checked-in development toolchain is therefore pinned to Rust 1.98.1 so feature builds pass Cargo's version check. This toolchain pin is distinct from the project's Rust 1.85 MSRV policy for default-feature builds.
+The locked Eryx version is 0.8.0, which declares `rust-version = "1.98.1"`. The checked-in development toolchain and the project's MSRV are therefore both Rust 1.98.1, so every feature builds on the supported toolchain.
 
 At executor construction, an explicit `TMPDIR` selects the interpreter's temporary
 directory. When it is unset, the gateway uses `<AGENTIC_API_HOME>/tmp`, or

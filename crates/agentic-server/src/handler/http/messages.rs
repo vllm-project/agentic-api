@@ -168,10 +168,10 @@ pub async fn count_tokens(State(state): State<AppState>, request: Request) -> Re
         // The executors own the availability policy: a disabled executor
         // refuses the declaration here too, so counting tokens and sending the
         // request answer alike.
-        if declares_native_web_fetch(&request_json) {
-            if let Err(error) = state.exec_ctx.gateway_executors.require_web_fetch() {
-                return messages_error_response(ExecutorError::from(error));
-            }
+        if declares_native_web_fetch(&request_json)
+            && let Err(error) = state.exec_ctx.gateway_executors.require_web_fetch()
+        {
+            return messages_error_response(ExecutorError::from(error));
         }
         match normalize_native_server_tools_for_upstream(&mut request_json) {
             Ok(true) => match serde_json::to_vec(&request_json) {

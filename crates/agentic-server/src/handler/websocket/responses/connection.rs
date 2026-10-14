@@ -71,9 +71,8 @@ pub(super) async fn responses_ws_loop(
                 }
             }
             completion = multiplexer.controls.tasks.join_next(), if !multiplexer.controls.tasks.is_empty() => {
-                if let Some(completion) = completion {
-                    if !multiplexer.controls.finish(completion) { client_disconnected = true; break; }
-                }
+                if let Some(completion) = completion
+                    && !multiplexer.controls.finish(completion) { client_disconnected = true; break; }
             }
             Some(worker) = multiplexer.controls.steering_workers.join_next(), if !multiplexer.controls.steering_workers.is_empty() => {
                 if !relay_completed(worker) { client_disconnected = true; break; }

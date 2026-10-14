@@ -102,7 +102,5 @@ cargo clippy --workspace --all-targets --offline -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Rust 1.85 verification currently stops at dependency MSRV checks: the existing
-lockfile includes dependencies requiring Rust 1.86–1.88. This slice does not change
-the dependency graph. Dependency and baseline language compatibility need a separate
-MSRV repair before the repository can claim the documented 1.85 release gate.
+This slice does not change the dependency graph. The repository's MSRV is 1.98.1,
+declared as `rust-version` in `Cargo.toml` and checked by the `msrv` CI job (#377).

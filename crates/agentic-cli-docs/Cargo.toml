@@ -3,6 +3,7 @@ name = "agentic-cli-docs"
 description = "Build-time command reference for the agentic CLI"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 publish = false
 

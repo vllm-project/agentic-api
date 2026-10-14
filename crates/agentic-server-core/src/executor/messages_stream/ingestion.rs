@@ -42,10 +42,10 @@ impl MessagesStreamAccumulator {
             Some("content_block_delta") => Some("delta"),
             _ => None,
         };
-        if let Some(field) = payload_field {
-            if event[field]["type"].as_str().is_none_or(str::is_empty) {
-                return self.fail("invalid content block payload in upstream Messages stream");
-            }
+        if let Some(field) = payload_field
+            && event[field]["type"].as_str().is_none_or(str::is_empty)
+        {
+            return self.fail("invalid content block payload in upstream Messages stream");
         }
         match event.get("type").and_then(Value::as_str) {
             Some("message_start") => self.on_message_start(&event),

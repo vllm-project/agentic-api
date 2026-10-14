@@ -528,10 +528,10 @@ mod tests {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
         let worker_group = loop {
             let groups = isolation::active_worker_cgroups().expect("list active worker cgroups");
-            if let Some(path) = groups.into_iter().find(|path| !before.contains(path)) {
-                if std::fs::read_to_string(path.join("cgroup.procs")).is_ok_and(|pids| !pids.trim().is_empty()) {
-                    break path;
-                }
+            if let Some(path) = groups.into_iter().find(|path| !before.contains(path))
+                && std::fs::read_to_string(path.join("cgroup.procs")).is_ok_and(|pids| !pids.trim().is_empty())
+            {
+                break path;
             }
             assert!(tokio::time::Instant::now() < deadline, "worker did not start");
             tokio::time::sleep(Duration::from_millis(20)).await;

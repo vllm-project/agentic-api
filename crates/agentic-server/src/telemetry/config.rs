@@ -51,9 +51,8 @@ impl ExporterSelection {
 
 /// OTLP wire protocol.
 ///
-/// Only `http/protobuf` is offered: the gRPC transport requires `tonic`,
-/// whose minimum supported Rust version (1.88) is above this repository's
-/// MSRV (1.85).
+/// Only `http/protobuf` is offered: the gateway is built without the gRPC
+/// exporter and its `tonic` stack.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum OtlpProtocol {
     #[default]
@@ -111,7 +110,7 @@ pub enum TelemetryConfigError {
     InvalidBool { var: &'static str, value: String },
     #[error("{var} must be `none` or `otlp`, got `{value}`")]
     UnknownExporter { var: &'static str, value: String },
-    #[error("{var} must be `http/protobuf` (gRPC is unavailable below Rust 1.88), got `{value}`")]
+    #[error("{var} must be `http/protobuf` (the gRPC exporter is not compiled in), got `{value}`")]
     UnsupportedProtocol { var: &'static str, value: String },
     #[error("{var} must be `gzip` or unset (zstd is not compiled in), got `{value}`")]
     UnsupportedCompression { var: &'static str, value: String },
@@ -409,7 +408,10 @@ mod tests {
                 matches!(&error, TelemetryConfigError::UnsupportedProtocol { var: failed, value } if *failed == var && value == "grpc"),
                 "{var}: {error}"
             );
-            assert!(error.to_string().contains("Rust 1.88"), "{error}");
+            assert!(
+                error.to_string().contains("gRPC exporter is not compiled in"),
+                "{error}"
+            );
         }
     }
 

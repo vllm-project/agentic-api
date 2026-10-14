@@ -104,21 +104,21 @@ impl Providers {
     /// call themselves.
     pub(crate) fn shutdown_blocking(self, deadline: Duration) -> Result<(), TelemetryError> {
         let mut first_error = None;
-        if let Some(tracer) = self.tracer {
-            if let Err(source) = tracer.shutdown_with_timeout(deadline) {
-                first_error.get_or_insert(TelemetryError::ProviderShutdown {
-                    signal: Signal::Traces,
-                    source,
-                });
-            }
+        if let Some(tracer) = self.tracer
+            && let Err(source) = tracer.shutdown_with_timeout(deadline)
+        {
+            first_error.get_or_insert(TelemetryError::ProviderShutdown {
+                signal: Signal::Traces,
+                source,
+            });
         }
-        if let Some(meter) = self.meter {
-            if let Err(source) = meter.shutdown() {
-                first_error.get_or_insert(TelemetryError::ProviderShutdown {
-                    signal: Signal::Metrics,
-                    source,
-                });
-            }
+        if let Some(meter) = self.meter
+            && let Err(source) = meter.shutdown()
+        {
+            first_error.get_or_insert(TelemetryError::ProviderShutdown {
+                signal: Signal::Metrics,
+                source,
+            });
         }
         first_error.map_or(Ok(()), Err)
     }

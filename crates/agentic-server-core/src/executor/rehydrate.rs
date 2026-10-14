@@ -370,12 +370,11 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
         .conv_handler
         .response_metadata_at_version(ctx, &snapshot.version)
         .await?
+        && restore_agent_tree(ctx, &metadata, exec_ctx.responses_config.max_retained_bytes)?
     {
-        if restore_agent_tree(ctx, &metadata, exec_ctx.responses_config.max_retained_bytes)? {
-            ctx.conversation_id = Some(conv_data.conversation_id);
-            ctx.conversation_version = Some(snapshot.version);
-            return Ok(());
-        }
+        ctx.conversation_id = Some(conv_data.conversation_id);
+        ctx.conversation_version = Some(snapshot.version);
+        return Ok(());
     }
 
     let mut items = InOutItem::into_input_items(snapshot.items);

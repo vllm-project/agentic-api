@@ -125,11 +125,11 @@ impl TryFrom<&ResponseMetadata> for String {
                 tool.sanitize_for_persistence();
             }
         }
-        if let Some(snapshot) = persisted.response_snapshot.as_mut() {
-            if let Some(tools) = snapshot.tools.as_mut() {
-                for tool in tools {
-                    tool.sanitize_for_persistence();
-                }
+        if let Some(snapshot) = persisted.response_snapshot.as_mut()
+            && let Some(tools) = snapshot.tools.as_mut()
+        {
+            for tool in tools {
+                tool.sanitize_for_persistence();
             }
         }
         serialize_to_string(&persisted).map_err(StorageError::Serialization)

@@ -64,14 +64,14 @@ impl Provider {
         for (turn_index, turn) in cassette.turns.iter().enumerate() {
             if let Some(raw_frames) = &turn.response.sse {
                 for (frame_index, line) in raw_frames.iter().flat_map(|raw| raw.lines()).enumerate() {
-                    if let Some(data) = line.strip_prefix("data:") {
-                        if data.trim() != "[DONE]" {
-                            assert!(
-                                normalize_sse_line(line).is_some(),
-                                "{path}, turn {}, frame {frame_index}: discarded {line}",
-                                turn_index + 1
-                            );
-                        }
+                    if let Some(data) = line.strip_prefix("data:")
+                        && data.trim() != "[DONE]"
+                    {
+                        assert!(
+                            normalize_sse_line(line).is_some(),
+                            "{path}, turn {}, frame {frame_index}: discarded {line}",
+                            turn_index + 1
+                        );
                     }
                 }
             }

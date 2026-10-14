@@ -115,17 +115,17 @@ fn rebase_sse(stream: &str, live_origin: &str) -> String {
                 .push_str(event["delta"]["partial_json"].as_str().unwrap_or_default());
             continue;
         }
-        if event["type"] == "content_block_stop" {
-            if let Some(input) = inputs.remove(&index) {
-                let delta = json!({
-                    "type": "content_block_delta",
-                    "index": index,
-                    "delta": {"type": "input_json_delta", "partial_json": input.replace(RECORDED_ORIGIN, live_origin)}
-                });
-                out.push_str("event: content_block_delta\ndata: ");
-                out.push_str(&delta.to_string());
-                out.push_str("\n\n");
-            }
+        if event["type"] == "content_block_stop"
+            && let Some(input) = inputs.remove(&index)
+        {
+            let delta = json!({
+                "type": "content_block_delta",
+                "index": index,
+                "delta": {"type": "input_json_delta", "partial_json": input.replace(RECORDED_ORIGIN, live_origin)}
+            });
+            out.push_str("event: content_block_delta\ndata: ");
+            out.push_str(&delta.to_string());
+            out.push_str("\n\n");
         }
         out.push_str(frame);
         out.push_str("\n\n");

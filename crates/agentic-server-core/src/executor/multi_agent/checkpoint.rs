@@ -69,15 +69,14 @@ impl ValidatedTreeCheckpoint {
                 return Err(invalid("checkpoint contains live work"));
             }
             let calls = pending_calls(&agent.history)?;
-            if let Some(wait) = &agent.wait {
-                if !calls.iter().any(|call| call.call_id == wait.call_id)
+            if let Some(wait) = &agent.wait
+                && (!calls.iter().any(|call| call.call_id == wait.call_id)
                     || !agent.history.iter().any(|item| {
                         matches!(item, InputItem::FunctionCall(call)
                         if call.call_id == wait.call_id && call.name == "wait_agent")
-                    })
-                {
-                    return Err(invalid("checkpoint wait has no matching collaboration call"));
-                }
+                    }))
+            {
+                return Err(invalid("checkpoint wait has no matching collaboration call"));
             }
             for call in calls {
                 if agent.wait.as_ref().is_some_and(|wait| wait.call_id == call.call_id) {

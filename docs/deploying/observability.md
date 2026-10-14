@@ -26,9 +26,8 @@ agentic-server
 
 The only supported transport is OTLP over **HTTP/protobuf**. Setting
 `OTEL_EXPORTER_OTLP_PROTOCOL` (or a signal-specific variant) to `grpc` or
-`http/json` is a startup error rather than a silent fallback: the gRPC
-exporter depends on `tonic 0.14`, whose minimum Rust version (1.88) is above
-this repository's MSRV.
+`http/json` is a startup error rather than a silent fallback: the gateway is
+built without the gRPC exporter and its `tonic` stack.
 
 `OTEL_SDK_DISABLED=true` overrides every other variable and disables telemetry.
 
