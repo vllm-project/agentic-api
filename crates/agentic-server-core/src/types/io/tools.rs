@@ -271,6 +271,8 @@ pub(crate) fn resolve_tools(
 }
 
 /// Returns the effective tool choice using the same precedence as [`resolve_tools`].
+/// An explicit tool list selects the request's own choice or its default, so
+/// inherited selectors cannot refer to tools that the request has removed.
 #[inline]
 pub(crate) fn resolve_tool_choice(
     request_choice: Option<&ToolChoice>,

@@ -75,7 +75,7 @@ impl Fixture {
 
     async fn stream(&self, request: RequestPayload, session: &ResponseSession) -> BoxStream {
         let Either::Right(stream) = ExecuteRequest::new(request, Arc::clone(&self.context))
-            .with_session(session)
+            .with_session(session, None)
             .unwrap()
             .run()
             .await
@@ -92,7 +92,7 @@ impl Fixture {
             support::make_request("probe", false, true, None, None),
             Arc::clone(&self.context),
         )
-        .with_session(session)
+        .with_session(session, None)
         .expect("stream drop must synchronously release the execution lease");
         drop(next);
     }

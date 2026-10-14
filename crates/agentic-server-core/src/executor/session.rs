@@ -4,19 +4,29 @@
 #[path = "session_budget_tests.rs"]
 mod budget_tests;
 
-use std::fmt;
 use std::num::NonZeroUsize;
-use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 
-use serde::Serialize;
 use tokio::sync::Notify;
 
+mod checkpoint;
+mod steering;
+
+pub(super) use checkpoint::canonical_session_history;
+pub(crate) use checkpoint::{ResponseCheckpoint, RetainedCheckpoint};
+pub use checkpoint::{ResponseCheckpointPin, ResponseContinuation};
+pub use steering::{SteeringQueue, SteeringSuccessorPublication, SteeringSuccessorReservation};
+
 use super::{ExecutorError, ExecutorResult};
+
+#[cfg(test)]
 use crate::storage::{InOutItem, ResponseMetadata};
-use crate::types::io::input::latest_compaction_window;
+#[cfg(test)]
 use crate::types::io::{InputItem, OutputItem};
+#[cfg(test)]
+use crate::types::websocket::SteeringRequiredInput;
+#[cfg(test)]
 use crate::utils::common::serialized_size_up_to;
 
 /// One latest response checkpoint with a lifetime independent of durable storage.
@@ -176,6 +186,64 @@ impl ResponseSession {
         }
     }
 
+    /// Pin this session's latest published checkpoint without occupying its
+    /// execution slot. Lookup is local to the owning session, never storage.
+    /// An active response cannot be pinned until its checkpoint is published.
+    ///
+    /// The pin shares the existing immutable checkpoint and its byte reservation.
+    /// It survives cache disposal or replacement, but does not change steering
+    /// eligibility, accept input, or prevent ordinary cache eviction.
+    ///
+    /// # Errors
+    /// Returns an invalid-request error for a closed session/group, or a stream
+    /// error if either state lock is poisoned. An unavailable ID returns `None`.
+    pub fn pin_response(&self, response_id: &str) -> ExecutorResult<Option<ResponseCheckpointPin>> {
+        let group = self.group.as_ref().map(|group| lock_group(group)).transpose()?;
+        if group.as_ref().is_some_and(|group| group.closed) {
+            return Err(ExecutorError::InvalidRequest(
+                "response session group has closed".to_owned(),
+            ));
+        }
+        let state = lock_state(&self.state)?;
+        if state.closed {
+            return Err(ExecutorError::InvalidRequest("response session has closed".to_owned()));
+        }
+        Ok(state
+            .latest
+            .as_ref()
+            .filter(|checkpoint| checkpoint.response_id == response_id)
+            .map(|checkpoint| ResponseCheckpointPin {
+                owner: Arc::downgrade(&self.state),
+                checkpoint: Arc::clone(checkpoint),
+            }))
+    }
+
+    /// Acquire a serial execution lease from an explicitly retained parent,
+    /// including after a failed preparation has evicted that parent from cache.
+    /// Pass the request's actual `previous_response_id`; a pin cannot retarget it.
+    ///
+    /// The pin remains owned by the caller across attempts. No parent lookup or
+    /// storage fallback replaces its exact immutable snapshot. The caller still
+    /// decides target eligibility and when a successful successor consumes it.
+    ///
+    /// # Errors
+    /// Rejects a mismatched previous response ID, a pin from another session,
+    /// or a busy/closed session. Poisoned state locks return a stream error.
+    pub fn begin_pinned(
+        &self,
+        previous_id: Option<&str>,
+        pin: &ResponseCheckpointPin,
+    ) -> ExecutorResult<ResponseContinuation> {
+        if previous_id != Some(pin.response_id()) || !Weak::ptr_eq(&pin.owner, &Arc::downgrade(&self.state)) {
+            return Err(ExecutorError::InvalidRequest(
+                "pinned response does not match the request's previous_response_id or owning session".to_owned(),
+            ));
+        }
+        let mut continuation = self.begin(None)?;
+        continuation.parent = Some(Arc::clone(&pin.checkpoint));
+        Ok(continuation)
+    }
+
     /// Discard a referenced checkpoint when a request fails before execution.
     ///
     /// An unrelated checkpoint is preserved. This does not cancel an active turn
@@ -260,57 +328,8 @@ impl Drop for ResponseSession {
     }
 }
 
-/// An active turn's coherent parent snapshot and completion lease.
-///
-/// Constructed by the executor, not serialized into split-execution contexts.
-/// Dropping an unfinished lease evicts its referenced cached parent and releases
-/// the serial execution slot, including on rehydration, tool or stream errors.
-#[derive(Debug)]
-pub struct ResponseContinuation {
-    state: Arc<Mutex<SessionState>>,
-    idle: Arc<Notify>,
-    pub(crate) parent: Option<Arc<RetainedCheckpoint>>,
-    budget: Option<Arc<CheckpointBudget>>,
-    history_replaced: bool,
-    recorded_output_count: usize,
-    finished: bool,
-}
-
-#[derive(Serialize)]
-pub(crate) struct ResponseCheckpoint {
-    pub response_id: String,
-    pub conversation_id: Option<String>,
-    pub history: Vec<InputItem>,
-    pub metadata: ResponseMetadata,
-    pub durable: bool,
-}
-
-impl fmt::Debug for ResponseCheckpoint {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ResponseCheckpoint")
-            .field("items", &self.history.len())
-            .finish_non_exhaustive()
-    }
-}
-
-/// An immutable checkpoint paired with its lifetime charge. Keeping the fields
-/// private and omitting `DerefMut` prevents post-reservation size changes.
-#[derive(Debug, Serialize)]
-#[serde(transparent)]
-pub(crate) struct RetainedCheckpoint {
-    checkpoint: ResponseCheckpoint,
-    #[serde(skip)]
-    _reservation: Option<CheckpointReservation>,
-}
-
-impl Deref for RetainedCheckpoint {
-    type Target = ResponseCheckpoint;
-
-    fn deref(&self) -> &Self::Target {
-        &self.checkpoint
-    }
-}
-
+/// Shared byte-reservation mechanism. Each owner supplies an independent budget
+/// and defines how its retained payloads are measured.
 #[derive(Debug)]
 struct CheckpointBudget {
     used: AtomicUsize,
@@ -319,12 +338,17 @@ struct CheckpointBudget {
 
 impl CheckpointBudget {
     fn reserve(self: &Arc<Self>, bytes: usize) -> ExecutorResult<CheckpointReservation> {
+        self.try_reserve(bytes).ok_or_else(aggregate_budget_error)
+    }
+
+    /// Shared reservation arithmetic; each owner chooses its capacity error.
+    fn try_reserve(self: &Arc<Self>, bytes: usize) -> Option<CheckpointReservation> {
         self.used
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
                 used.checked_add(bytes).filter(|total| *total <= self.limit.get())
             })
-            .map_err(|_| aggregate_budget_error())?;
-        Ok(CheckpointReservation {
+            .ok()?;
+        Some(CheckpointReservation {
             budget: Arc::clone(self),
             bytes,
         })
@@ -340,7 +364,7 @@ struct CheckpointReservation {
 impl Drop for CheckpointReservation {
     fn drop(&mut self) {
         let previous = self.budget.used.fetch_sub(self.bytes, Ordering::AcqRel);
-        debug_assert!(previous >= self.bytes, "checkpoint charge released exactly once");
+        debug_assert!(previous >= self.bytes, "retained byte charge released exactly once");
     }
 }
 
@@ -349,152 +373,6 @@ fn aggregate_budget_error() -> ExecutorError {
         "response continuation exceeds the aggregate retained checkpoint budget; release inactive state or replay a compacted input window"
             .to_owned(),
     )
-}
-
-/// Restore only the current canonical window, while preserving orchestration
-/// records that the model-facing projection would strip. Durable response chains
-/// can still reference superseded parent rows; those must not consume the session
-/// checkpoint budget or introduce obsolete pending calls after reconnecting.
-pub(super) fn canonical_session_history(history: Vec<InputItem>) -> Vec<InputItem> {
-    let Some(window) = latest_compaction_window(&history) else {
-        return history;
-    };
-    history
-        .into_iter()
-        .enumerate()
-        .filter(|(index, item)| {
-            *index >= window.latest_index()
-                || window.retains_user_item(*index, item)
-                || matches!(item, InputItem::McpListTools(_))
-        })
-        .map(|(_, item)| item)
-        .collect()
-}
-
-impl ResponseContinuation {
-    /// The executor has replaced this turn's input with a canonical compacted window.
-    pub(crate) fn mark_history_replaced(&mut self) {
-        self.history_replaced = true;
-    }
-
-    /// The loop has recorded these outputs in canonical inference-round order.
-    /// Public output remains complete, but persistence must not append it again.
-    pub(crate) fn mark_outputs_recorded(&mut self, output_count: usize) {
-        self.recorded_output_count = output_count;
-    }
-
-    pub(crate) fn retains_output(&self, index: usize, item: &OutputItem) -> bool {
-        index >= self.recorded_output_count || matches!(item, OutputItem::McpListTools(_))
-    }
-
-    /// Retain orchestration records across compaction without restoring the old
-    /// model context. MCP discovery still needs to know which servers were listed.
-    pub(crate) fn parent_items(&self) -> impl Iterator<Item = &InputItem> {
-        self.parent
-            .iter()
-            .flat_map(|parent| parent.history.iter())
-            .filter(|item| !self.history_replaced || matches!(item, InputItem::McpListTools(_)))
-    }
-
-    pub(crate) fn checkpoint(
-        &self,
-        response_id: String,
-        conversation_id: Option<String>,
-        metadata: &ResponseMetadata,
-        new_items: &[InOutItem],
-        durable: bool,
-    ) -> ExecutorResult<RetainedCheckpoint> {
-        let mut history = self.parent_items().cloned().collect::<Vec<_>>();
-        history.extend(InOutItem::into_input_items(new_items.to_vec()));
-        let mut metadata = metadata.clone();
-        if let Some(tools) = metadata.effective_tools.as_mut() {
-            for tool in tools {
-                tool.sanitize_for_persistence();
-            }
-        }
-        let checkpoint = ResponseCheckpoint {
-            response_id,
-            conversation_id,
-            history: canonical_session_history(history),
-            metadata,
-            durable,
-        };
-        let (max_items, max_bytes) = {
-            let state = lock_state(&self.state)?;
-            (state.max_items.get(), state.max_bytes.get())
-        };
-        let bytes = if checkpoint.history.len() <= max_items {
-            serialized_size_up_to(&checkpoint, max_bytes)?
-        } else {
-            None
-        };
-        let Some(bytes) = bytes else {
-            return Err(ExecutorError::PayloadTooLarge(
-                "response continuation exceeds the session checkpoint budget; replay a compacted input window"
-                    .to_owned(),
-            ));
-        };
-        self.retain(checkpoint, bytes)
-    }
-
-    /// A durable fallback becomes a live pinned parent before inference. It must
-    /// share the aggregate budget instead of bypassing it through storage.
-    pub(crate) fn retain_parent(&self, checkpoint: ResponseCheckpoint) -> ExecutorResult<RetainedCheckpoint> {
-        let bytes = if let Some(budget) = &self.budget {
-            serialized_size_up_to(&checkpoint, budget.limit.get())?.ok_or_else(aggregate_budget_error)?
-        } else {
-            0 // Standalone sessions retain their existing per-completion policy.
-        };
-        self.retain(checkpoint, bytes)
-    }
-
-    fn retain(&self, checkpoint: ResponseCheckpoint, bytes: usize) -> ExecutorResult<RetainedCheckpoint> {
-        let reservation = self.budget.as_ref().map(|budget| budget.reserve(bytes)).transpose()?;
-        Ok(RetainedCheckpoint {
-            checkpoint,
-            _reservation: reservation,
-        })
-    }
-
-    pub(crate) fn publish(mut self, checkpoint: RetainedCheckpoint) -> ExecutorResult<()> {
-        {
-            let mut state = lock_state(&self.state)?;
-            if state.closed {
-                return Err(ExecutorError::InvalidRequest("response session has closed".to_owned()));
-            }
-            state.latest = Some(Arc::new(checkpoint));
-            // Return this lease's parent charge before another turn can observe
-            // an idle slot, including a waiter resumed by notify_waiters below.
-            self.parent = None;
-            state.active = false;
-        }
-        self.finished = true;
-        self.idle.notify_waiters();
-        Ok(())
-    }
-}
-
-impl Drop for ResponseContinuation {
-    fn drop(&mut self) {
-        if self.finished {
-            return;
-        }
-        let mut state = self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        if self.parent.as_ref().is_some_and(|parent| {
-            state
-                .latest
-                .as_ref()
-                .is_some_and(|latest| latest.response_id == parent.response_id)
-        }) {
-            state.latest = None;
-        }
-        // Field destructors run after Drop returns, too late for a waiter that
-        // can immediately reuse the slot and reserve the released capacity.
-        self.parent = None;
-        state.active = false;
-        drop(state);
-        self.idle.notify_waiters();
-    }
 }
 
 fn lock_state(state: &Mutex<SessionState>) -> ExecutorResult<MutexGuard<'_, SessionState>> {
@@ -510,366 +388,4 @@ fn lock_group(state: &Mutex<SessionGroupState>) -> ExecutorResult<MutexGuard<'_,
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::types::io::ResponsesInput;
-    use serde_json::json;
-
-    fn session(items: usize, bytes: usize) -> ResponseSession {
-        ResponseSession::new(NonZeroUsize::new(items).unwrap(), NonZeroUsize::new(bytes).unwrap())
-    }
-
-    fn new_checkpoint(lease: &ResponseContinuation, id: &str) -> RetainedCheckpoint {
-        let input = ResponsesInput::Text("private prompt".to_owned());
-        let items = Vec::from(&input).into_iter().map(InOutItem::Input).collect::<Vec<_>>();
-        lease
-            .checkpoint(id.to_owned(), None, &ResponseMetadata::default(), &items, false)
-            .unwrap()
-    }
-
-    fn complete(session: &ResponseSession, id: &str) {
-        let lease = session.begin(None).unwrap();
-        let checkpoint = new_checkpoint(&lease, id);
-        lease.publish(checkpoint).unwrap();
-    }
-
-    fn group(count: usize) -> ResponseSessionGroup {
-        ResponseSessionGroup::new(
-            NonZeroUsize::new(count).unwrap(),
-            NonZeroUsize::new(10).unwrap(),
-            NonZeroUsize::new(10_000).unwrap(),
-            NonZeroUsize::new(100_000).unwrap(),
-        )
-    }
-
-    #[test]
-    fn group_session_cap_counts_idle_and_dropped_members() {
-        let group = group(2);
-        let first = group.new_session().unwrap();
-        let second = group.new_session().unwrap();
-        complete(&first, "resp_1");
-        assert!(group.new_session().is_err());
-        drop(second);
-        assert!(group.new_session().is_err(), "the cap covers the entire group lifetime");
-        assert!(first.begin(Some("resp_1")).unwrap().parent.is_some());
-    }
-
-    #[test]
-    fn grouped_members_inherit_item_and_byte_budgets() {
-        for (items, bytes) in [(1, 10_000), (10, 1)] {
-            let group = ResponseSessionGroup::new(
-                NonZeroUsize::new(1).unwrap(),
-                NonZeroUsize::new(items).unwrap(),
-                NonZeroUsize::new(bytes).unwrap(),
-                NonZeroUsize::new(100_000).unwrap(),
-            );
-            let member = group.new_session().unwrap();
-            let lease = member.begin(None).unwrap();
-            let input = Vec::from(&ResponsesInput::Text("private prompt".to_owned()));
-            let input = input
-                .iter()
-                .cycle()
-                .take(2)
-                .cloned()
-                .map(InOutItem::Input)
-                .collect::<Vec<_>>();
-            assert!(matches!(
-                lease.checkpoint("resp_1".to_owned(), None, &ResponseMetadata::default(), &input, false),
-                Err(ExecutorError::PayloadTooLarge(_))
-            ));
-        }
-    }
-
-    #[test]
-    fn groups_do_not_share_parent_lookup() {
-        let first_group = group(1);
-        let second_group = group(1);
-        let source = first_group.new_session().unwrap();
-        let other = second_group.new_session().unwrap();
-        complete(&source, "resp_1");
-        assert!(other.begin(Some("resp_1")).unwrap().parent.is_none());
-    }
-
-    #[test]
-    fn failed_fork_preserves_source_and_unrelated_destination_checkpoint() {
-        let group = group(2);
-        let source = group.new_session().unwrap();
-        let target = group.new_session().unwrap();
-        complete(&source, "resp_source");
-        complete(&target, "resp_target");
-        let fork = target.begin(Some("resp_source")).unwrap();
-        assert!(fork.parent.is_some());
-        drop(fork);
-        assert!(source.begin(Some("resp_source")).unwrap().parent.is_some());
-        assert!(target.begin(Some("resp_target")).unwrap().parent.is_some());
-    }
-
-    #[test]
-    fn fork_cannot_find_parent_evicted_before_execution_starts() {
-        let group = group(2);
-        let source = group.new_session().unwrap();
-        let target = group.new_session().unwrap();
-        complete(&source, "resp_source");
-        drop(source.begin(Some("resp_source")).unwrap());
-        assert!(target.begin(Some("resp_source")).unwrap().parent.is_none());
-    }
-
-    #[test]
-    fn dropped_group_invalidates_live_members_and_rejects_late_fork_publication() {
-        let group = group(2);
-        let source = group.new_session().unwrap();
-        let target = group.new_session().unwrap();
-        complete(&source, "resp_source");
-        let fork = target.begin(Some("resp_source")).unwrap();
-        let weak = Arc::downgrade(fork.parent.as_ref().unwrap());
-        let checkpoint = new_checkpoint(&fork, "resp_fork");
-        drop(group);
-        assert!(source.begin(None).is_err());
-        assert!(weak.upgrade().is_some(), "the active fork still pins its parent");
-        assert!(fork.publish(checkpoint).is_err());
-        assert!(weak.upgrade().is_none());
-        assert!(target.begin(None).is_err());
-    }
-
-    #[test]
-    fn group_does_not_keep_dropped_members_or_their_checkpoints_alive() {
-        let group = group(2);
-        let source = group.new_session().unwrap();
-        let target = group.new_session().unwrap();
-        complete(&source, "resp_source");
-        let member = Arc::downgrade(&source.state);
-        let checkpoint = Arc::downgrade(source.state.lock().unwrap().latest.as_ref().unwrap());
-        drop(source);
-        assert!(member.upgrade().is_none());
-        assert!(checkpoint.upgrade().is_none());
-        assert!(target.begin(Some("resp_source")).unwrap().parent.is_none());
-    }
-
-    #[test]
-    fn session_rejects_concurrent_turns_and_releases_cancelled_lease() {
-        let session = session(10, 10_000);
-        let lease = session.begin(None).unwrap();
-        assert!(session.begin(None).is_err());
-        drop(lease);
-        assert!(session.begin(None).is_ok());
-    }
-
-    #[tokio::test]
-    async fn idle_wait_is_not_cancellation_and_is_notified_by_lease_disposal() {
-        let session = session(10, 10_000);
-        session.wait_until_idle().await.unwrap();
-        let lease = session.begin(None).unwrap();
-        let waiting = session.wait_until_idle();
-        tokio::pin!(waiting);
-        assert!(futures::poll!(&mut waiting).is_pending());
-        assert!(session.begin(None).is_err());
-        drop(lease);
-        waiting.await.unwrap();
-        assert!(session.begin(None).is_ok());
-    }
-
-    #[tokio::test]
-    async fn successful_publication_wakes_all_idle_waiters() {
-        let session = session(10, 10_000);
-        let lease = session.begin(None).unwrap();
-        let checkpoint = new_checkpoint(&lease, "resp_1");
-        let first = session.wait_until_idle();
-        let second = session.wait_until_idle();
-        tokio::pin!(first, second);
-        assert!(futures::poll!(&mut first).is_pending());
-        assert!(futures::poll!(&mut second).is_pending());
-        lease.publish(checkpoint).unwrap();
-        first.await.unwrap();
-        second.await.unwrap();
-        assert!(session.begin(Some("resp_1")).unwrap().parent.is_some());
-    }
-
-    #[test]
-    fn owner_drop_releases_checkpoint_and_rejects_late_publication() {
-        let session = session(10, 10_000);
-        complete(&session, "resp_1");
-        let lease = session.begin(Some("resp_1")).unwrap();
-        let weak = Arc::downgrade(lease.parent.as_ref().unwrap());
-        let checkpoint = new_checkpoint(&lease, "resp_2");
-        drop(session);
-        assert!(lease.publish(checkpoint).is_err());
-        assert!(weak.upgrade().is_none());
-    }
-
-    #[test]
-    fn successful_replacement_does_not_keep_ancestor_objects() {
-        let session = session(10, 10_000);
-        complete(&session, "resp_1");
-        let lease = session.begin(Some("resp_1")).unwrap();
-        let weak = Arc::downgrade(lease.parent.as_ref().unwrap());
-        let checkpoint = new_checkpoint(&lease, "resp_2");
-        assert_eq!(checkpoint.history.len(), 2);
-        lease.publish(checkpoint).unwrap();
-        assert!(weak.upgrade().is_none());
-        let lease = session.begin(Some("resp_2")).unwrap();
-        assert_eq!(lease.parent.as_ref().unwrap().history.len(), 2);
-    }
-
-    #[test]
-    fn failed_continuation_evicts_parent_but_unknown_id_does_not() {
-        let session = session(10, 10_000);
-        complete(&session, "resp_1");
-        drop(session.begin(Some("unknown")).unwrap());
-        let lease = session.begin(Some("resp_1")).unwrap();
-        assert!(lease.parent.is_some());
-        drop(lease);
-        assert!(session.begin(Some("resp_1")).unwrap().parent.is_none());
-    }
-
-    #[test]
-    fn separate_sessions_have_no_shared_lookup() {
-        let first = session(10, 10_000);
-        let second = session(10, 10_000);
-        complete(&first, "resp_1");
-        assert!(second.begin(Some("resp_1")).unwrap().parent.is_none());
-    }
-
-    #[test]
-    fn explicit_discard_preserves_the_active_snapshot_and_execution_slot() {
-        let session = session(10, 10_000);
-        complete(&session, "resp_1");
-        session.discard_cached_response("unrelated").unwrap();
-        let lease = session.begin(Some("resp_1")).unwrap();
-        assert!(lease.parent.is_some());
-        session.discard_cached_response("resp_1").unwrap();
-        assert!(lease.parent.is_some(), "the active snapshot remains pinned");
-        assert!(session.begin(None).is_err(), "discard is not cancellation");
-        drop(lease);
-        assert!(session.begin(Some("resp_1")).unwrap().parent.is_none());
-    }
-
-    #[test]
-    fn item_budget_is_enforced_on_the_complete_history() {
-        let session = session(1, 10_000);
-        complete(&session, "resp_1");
-        let lease = session.begin(Some("resp_1")).unwrap();
-        let input = serde_json::from_value(json!({"type":"message", "role":"user", "content":"next"})).unwrap();
-        assert!(matches!(
-            lease.checkpoint(
-                "resp_2".to_owned(),
-                None,
-                &ResponseMetadata::default(),
-                &[InOutItem::Input(input)],
-                false
-            ),
-            Err(ExecutorError::PayloadTooLarge(_))
-        ));
-    }
-
-    #[test]
-    fn byte_budget_includes_metadata_and_exact_boundary() {
-        let source = session(10, 10_000);
-        let lease = source.begin(None).unwrap();
-        let checkpoint = new_checkpoint(&lease, "resp_1");
-        let size = serialized_size_up_to(&checkpoint, usize::MAX).unwrap().unwrap();
-        let exact = session(10, size);
-        complete(&exact, "resp_1");
-        let too_small = session(10, size - 1);
-        let lease = too_small.begin(None).unwrap();
-        let metadata = ResponseMetadata {
-            multi_agent_tree: None,
-            effective_instructions: Some("large metadata".repeat(100)),
-            ..ResponseMetadata::default()
-        };
-        assert!(matches!(
-            lease.checkpoint("resp_1".to_owned(), None, &metadata, &[], false),
-            Err(ExecutorError::PayloadTooLarge(_))
-        ));
-    }
-
-    #[test]
-    fn canonical_items_and_sanitized_mcp_metadata_are_retained() {
-        let session = session(10, 10_000);
-        let lease = session.begin(None).unwrap();
-        let metadata = ResponseMetadata {
-            multi_agent_tree: None,
-            effective_tools: Some(
-                serde_json::from_value(json!([{
-                    "type":"mcp", "server_label":"counter", "server_url":"https://example.com/mcp",
-                    "headers":{"X-API-Key":"secret-header"}, "authorization":"secret-token", "require_approval":"never"
-                }]))
-                .unwrap(),
-            ),
-            ..ResponseMetadata::default()
-        };
-        let input = serde_json::from_value(json!({"type":"reasoning", "id":"rs_1",
-            "content":[{"type":"reasoning_text", "text":"part one"},{"type":"reasoning_text", "text":"part two"}],
-            "summary":[{"type":"summary_text", "text":"canonical summary"}], "encrypted_content":"opaque"
-        }))
-        .unwrap();
-        let checkpoint = lease
-            .checkpoint("resp_1".to_owned(), None, &metadata, &[InOutItem::Input(input)], false)
-            .unwrap();
-        let serialized = serde_json::to_value(&checkpoint).unwrap();
-        assert_eq!(serialized["history"][0]["content"].as_array().unwrap().len(), 2);
-        assert_eq!(serialized["history"][0]["encrypted_content"], "opaque");
-        assert!(!serialized.to_string().contains("secret-header"));
-        assert!(!serialized.to_string().contains("secret-token"));
-        assert!(!format!("{checkpoint:?}").contains("canonical summary"));
-    }
-
-    #[test]
-    fn compaction_replacement_preserves_mcp_discovery_without_old_context() {
-        let session = session(3, 10_000);
-        let lease = session.begin(None).unwrap();
-        let items = serde_json::from_value::<Vec<InputItem>>(json!([
-            {"type":"message", "role":"user", "content":"private prompt"},
-            {"type":"mcp_list_tools", "id":"mcp_1", "server_label":"counter", "tools":[]}
-        ]))
-        .unwrap()
-        .into_iter()
-        .map(InOutItem::Input)
-        .collect::<Vec<_>>();
-        let parent = lease
-            .checkpoint("resp_1".to_owned(), None, &ResponseMetadata::default(), &items, false)
-            .unwrap();
-        lease.publish(parent).unwrap();
-        let mut lease = session.begin(Some("resp_1")).unwrap();
-        lease.mark_history_replaced();
-        let compacted: Vec<InputItem> = serde_json::from_value(json!([
-            {"type":"message", "role":"user", "id":"msg_kept", "status":"completed", "content":"retained user"},
-            {"type":"compaction", "id":"cmp_1", "encrypted_content":"canonical summary"}
-        ]))
-        .unwrap();
-        let items = compacted.into_iter().map(InOutItem::Input).collect::<Vec<_>>();
-        let checkpoint = lease
-            .checkpoint("resp_2".to_owned(), None, &ResponseMetadata::default(), &items, false)
-            .unwrap();
-        assert_eq!(checkpoint.history.len(), 3);
-        assert!(matches!(checkpoint.history[0], InputItem::McpListTools(_)));
-        assert!(matches!(checkpoint.history[2], InputItem::Compaction(_)));
-        assert!(
-            !serde_json::to_string(&checkpoint.history)
-                .unwrap()
-                .contains("private prompt")
-        );
-    }
-
-    #[test]
-    fn recorded_rounds_are_not_duplicated_and_mcp_discovery_is_retained() {
-        let session = session(10, 10_000);
-        let mut lease = session.begin(None).unwrap();
-        let message: OutputItem = serde_json::from_value(json!({
-            "type":"message", "id":"msg_1", "role":"assistant", "status":"completed", "content":[]
-        }))
-        .unwrap();
-        let discovery: OutputItem = serde_json::from_value(json!({
-            "type":"mcp_list_tools", "id":"mcp_1", "server_label":"counter", "tools":[]
-        }))
-        .unwrap();
-        assert!(lease.retains_output(0, &message));
-        lease.mark_outputs_recorded(2);
-        assert!(!lease.retains_output(1, &message));
-        assert!(lease.retains_output(2, &message));
-        lease.mark_history_replaced();
-        lease.mark_outputs_recorded(4);
-        assert!(!lease.retains_output(2, &message));
-        assert!(lease.retains_output(4, &message));
-        assert!(lease.retains_output(0, &discovery));
-    }
-}
+mod tests;

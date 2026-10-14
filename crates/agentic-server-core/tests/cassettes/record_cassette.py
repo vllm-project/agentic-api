@@ -184,7 +184,9 @@ async def proxy_request(request: Request, path: str) -> Response:
     target_host: str = request.app.state.target_host
     output_file: Path = request.app.state.output_file
 
-    turn_num = getattr(request.state, "recording_turn", None) or _turn_number(output_file)
+    turn_num = getattr(request.state, "recording_turn", None)
+    if turn_num is None:
+        turn_num = _turn_number(output_file)
     filename = f"t{turn_num}"
 
     target_url = f"{target_host}/{path}"
@@ -845,16 +847,9 @@ def _headers_from_text(header_text: str) -> dict[str, str]:
 
 
 def _websocket_url(base_url: str) -> str:
-    parsed = urlparse(base_url.rstrip("/"))
-    if parsed.scheme in {"ws", "wss"}:
-        root = base_url.rstrip("/")
-    elif parsed.scheme == "http":
-        root = "ws://" + base_url.rstrip("/")[len("http://"):]
-    elif parsed.scheme == "https":
-        root = "wss://" + base_url.rstrip("/")[len("https://"):]
-    else:
-        raise ValueError(f"unsupported websocket base URL: {base_url}")
-    return f"{root}/v1/responses"
+    from websocket_recorder import RecordedSession
+
+    return RecordedSession.responses_url(base_url)
 
 
 def _send_websocket(
@@ -969,6 +964,29 @@ def _load_response_input(path: str | None) -> str | list | None:
     if not isinstance(value, (str, list)):
         raise click.UsageError("--input-file must contain a JSON string or array.")
     return value
+
+
+def _load_tools_file(path: str | Path) -> list:
+    with open(path, encoding="utf-8") as source:
+        tools = json.load(source)
+    if not isinstance(tools, list):
+        raise click.UsageError("--tools file must contain a JSON array.")
+    return tools
+
+
+def _load_tool_outputs_file(path: str | Path) -> "dict[str, Any] | types.ModuleType":
+    if str(path).endswith(".py"):
+        spec = importlib.util.spec_from_file_location("cassette_tool_outputs", path)
+        if spec is None or spec.loader is None:
+            raise click.UsageError(f"--tool-outputs could not load Python module: {path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    with open(path, encoding="utf-8") as source:
+        outputs = json.load(source)
+    if not isinstance(outputs, dict):
+        raise click.UsageError("--tool-outputs JSON file must contain an object (name -> output string).")
+    return outputs
 
 
 def _parse_reasoning(raw: str | None) -> dict | None:
@@ -2077,10 +2095,7 @@ def main(
 
     tools: list | None = None
     if tools_file:
-        with open(tools_file, encoding="utf-8") as f:
-            tools = json.load(f)
-        if not isinstance(tools, list):
-            raise click.UsageError("--tools file must contain a JSON array.")
+        tools = _load_tools_file(tools_file)
 
     tool_choice: Any = None
     if tool_choice_raw:
@@ -2105,19 +2120,10 @@ def main(
 
     tool_outputs: "dict[str, Any] | types.ModuleType | None" = None
     if tool_outputs_file:
-        if tool_outputs_file.endswith(".py"):
-            spec = importlib.util.spec_from_file_location("cassette_tool_outputs", tool_outputs_file)
-            if spec is None or spec.loader is None:
-                raise click.UsageError(f"--tool-outputs could not load Python module: {tool_outputs_file}")
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            tool_outputs = module
+        tool_outputs = _load_tool_outputs_file(tool_outputs_file)
+        if isinstance(tool_outputs, types.ModuleType):
             click.echo(f"Tool outputs: python functions from {tool_outputs_file}")
         else:
-            with open(tool_outputs_file, encoding="utf-8") as f:
-                tool_outputs = json.load(f)
-            if not isinstance(tool_outputs, dict):
-                raise click.UsageError("--tool-outputs JSON file must contain an object (name -> output string).")
             click.echo(f"Tool outputs: {list(tool_outputs.keys())}")
 
     tool_search_output_tools: list[dict] | None = None

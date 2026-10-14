@@ -57,6 +57,14 @@ pub(super) fn finish_local(execution: &mut ExecutionSpan, result: &Result<(), Ws
             execution.failed_with(FailureCategory::Parse);
             execution.not_delivered();
         }
+        Err(WsError::TaskFailed(error)) => {
+            if error.is_cancelled() {
+                execution.cancelled();
+            } else {
+                execution.failed_with(FailureCategory::Panic);
+            }
+            execution.not_delivered();
+        }
         Err(WsError::InvalidJson(_) | WsError::UnexpectedType | WsError::BinaryFrame | WsError::TooManyRequests) => {
             execution.failed_with(FailureCategory::InvalidRequest);
             execution.not_delivered();

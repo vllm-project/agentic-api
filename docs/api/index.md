@@ -258,9 +258,58 @@ replay the full item history or a compacted window; an unstored response ID retu
 loaded from durable storage. Explicit `conversation` requests retain the durable
 Conversations API behavior.
 
-A failed same-lane continuation evicts its referenced cached parent. Failed forks
+A failed ordinary same-lane continuation evicts its referenced cached parent. Failed forks
 preserve the source lane's parent. Admission rejections (429) preserve existing
 checkpoints and accepted queued work. Parent lookup happens when execution begins.
+
+For a single-agent response on the current connection, send a steering update
+while generation or tool execution is in progress:
+
+```json
+{
+  "type": "response.steer",
+  "previous_response_id": "resp_parent",
+  "input": "Keep the work so far, but use Fahrenheit and summarize briefly."
+}
+```
+
+Steering accepts text (including empty text) or a nonempty array of user messages
+using the usual input text and image content types. Images require a vision-capable backend; file input
+is not supported by the gateway. The target determines
+the lane; do not add `stream_id` or response settings to the steering message.
+`response.steer.accepted` returns a distinct steering ID. It acknowledges retained
+input; the successor's `response.created` commits that input to a new response.
+Multiple accepted updates are applied in acceptance order. Earlier output is
+preserved, active output items and started tool work finish, and an interrupted
+parent ends with `response.incomplete` and reason `steered`. Natural completion
+may win that race. An eligible completed parent can also accept steering.
+
+If the parent needs client-executed function or custom-tool output,
+`response.steer.pending` lists the required call IDs. Submit a normal
+`response.create` in the same lane with the parent's `previous_response_id` and
+all required outputs. The server prepends the accepted steering; do not resend it.
+An invalid output submission preserves pending steering so a corrected submission
+can succeed. The explicit create uses its own settings and defaults. When no
+client output is needed, the server creates a successor automatically using the
+parent's effective settings and fresh response budgets.
+
+`response.steer.failed` returns the original submitted input and a failure code;
+accepted input that fails before successor creation also returns its steering ID.
+After successor creation, later execution failure does not make that input
+replayable. Control events can follow a parent's terminal event. Disconnect
+discards unapplied steering, even for a stored parent; storage remains available
+for ordinary continuation. Completed targets expire after 60 seconds and may be
+evicted sooner under capacity pressure. Each target permits 32 queued updates;
+the connection bounds retained steering input and settings at 12 MiB separately
+from ordinary request and checkpoint budgets.
+
+Steering is local to generating, single-agent WebSocket responses. Multi-agent
+responses, conversation-bound requests, compaction/context-management requests,
+and unsupported client call kinds are rejected. It uses complete upstream item
+lifecycle events as safe boundaries; a truncated or ambiguous stream cannot
+establish that started work has settled. Backend model capability is not inferred
+from its name. Non-generating prewarm responses and HTTP/SSE steering are outside
+this interface; HTTP continues to support ordinary response continuation.
 
 Set `stream_id` to a string containing 1 to 256 characters to multiplex
 responses over one connection. Requests with different `stream_id` values can
@@ -279,8 +328,7 @@ measure total process memory. Upstream SSE lines, the per-request retained respo
 budget, and outbound events follow the `[responses]` limits in `config.toml`
 (`max_upstream_sse_line_bytes`, `max_retained_bytes`, and `max_stream_event_bytes`;
 defaults 16 MiB, 8 MiB, and 16 MiB). Every outbound WebSocket event, including
-`stream_id`, counts toward `max_stream_event_bytes`. Multi-agent requests are
-not supported on this transport. Local `generate: false` requests validate both lifecycle events
+`stream_id`, counts toward `max_stream_event_bytes`. Local `generate: false` requests validate both lifecycle events
 before storing the response or emitting either event. OIDC identity expiry is
 checked again when queued work starts, including work in the default lane;
 expired work receives a tagged `invalid_token` event without reaching inference.

@@ -17,7 +17,7 @@ async fn run_turn(fixture: &TestFixture, session: Option<&ResponseSession>, requ
     let conversation = request.conversation.clone();
     let execution = ExecuteRequest::new(request, Arc::clone(&fixture.exec_ctx));
     let execution = if let Some(session) = session {
-        execution.with_session(session).unwrap()
+        execution.with_session(session, None).unwrap()
     } else {
         execution
     };

@@ -10,7 +10,10 @@ use std::collections::HashSet;
 use indexmap::IndexMap;
 
 use super::{ExecutorError, ExecutorResult};
+use crate::types::client_calls::ClientCallId;
 use crate::types::io::InputItem;
+use crate::types::tools::ResponsesTool;
+use crate::types::websocket::SteeringRequiredInput;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum CallKind {
@@ -46,6 +49,42 @@ impl CallKind {
 pub(super) struct PendingCall {
     pub(super) call_id: String,
     pub(super) kind: CallKind,
+    function_name: Option<String>,
+    namespaced: bool,
+}
+
+impl PendingCall {
+    /// Canonical history normalizes public custom calls into functions. Restore
+    /// only their output kind from the same parent's public tool declarations;
+    /// namespace members remain functions even when their member name matches.
+    /// Unsupported or incomplete records retain their original identity. This
+    /// projection neither admits steering nor accepts tool outputs.
+    pub(super) fn into_steering_required_input(
+        mut self,
+        tools: &[ResponsesTool],
+    ) -> Result<SteeringRequiredInput, Self> {
+        let Ok(call_id) = ClientCallId::try_from(std::mem::take(&mut self.call_id)) else {
+            // ClientCallId rejects only an empty ID; taking it leaves that
+            // rejected record unchanged and avoids cloning successful IDs.
+            return Err(self);
+        };
+        match self.kind {
+            CallKind::Function => {
+                if let Some(name) = self.function_name.take() {
+                    if !self.namespaced && tools.iter().any(|tool| {
+                        matches!(tool, ResponsesTool::Custom(declaration) if declaration.name.as_str() == name)
+                    }) {
+                        return Ok(SteeringRequiredInput::Custom { call_id });
+                    }
+                    return Ok(SteeringRequiredInput::Function { call_id, name });
+                }
+            }
+            CallKind::Custom => return Ok(SteeringRequiredInput::Custom { call_id }),
+            CallKind::Shell | CallKind::ToolSearch => {}
+        }
+        self.call_id = call_id.into();
+        Err(self)
+    }
 }
 
 /// Scans `items` in order and returns every call left unresolved, in emission
@@ -68,10 +107,24 @@ fn scan_calls(items: &[InputItem]) -> ExecutorResult<(Vec<PendingCall>, usize)> 
     for (index, item) in items.iter().enumerate() {
         match item {
             InputItem::FunctionCall(call) => {
-                add_call(&call.call_id, CallKind::Function, &mut seen_call_ids, &mut pending)?;
+                add_call(
+                    &call.call_id,
+                    CallKind::Function,
+                    Some(&call.name),
+                    call.namespace.is_some(),
+                    &mut seen_call_ids,
+                    &mut pending,
+                )?;
             }
             InputItem::CustomToolCall(call) => {
-                add_call(&call.call_id, CallKind::Custom, &mut seen_call_ids, &mut pending)?;
+                add_call(
+                    &call.call_id,
+                    CallKind::Custom,
+                    None,
+                    false,
+                    &mut seen_call_ids,
+                    &mut pending,
+                )?;
             }
             InputItem::FunctionCallOutput(output) => {
                 resolve_call(&output.call_id, CallKind::Function, &mut pending)?;
@@ -80,13 +133,27 @@ fn scan_calls(items: &[InputItem]) -> ExecutorResult<(Vec<PendingCall>, usize)> 
                 resolve_call(&output.call_id, CallKind::Custom, &mut pending)?;
             }
             InputItem::ShellCall(call) => {
-                add_call(&call.call_id, CallKind::Shell, &mut seen_call_ids, &mut pending)?;
+                add_call(
+                    &call.call_id,
+                    CallKind::Shell,
+                    None,
+                    false,
+                    &mut seen_call_ids,
+                    &mut pending,
+                )?;
             }
             InputItem::ShellCallOutput(output) => {
                 resolve_call(&output.call_id, CallKind::Shell, &mut pending)?;
             }
             InputItem::ToolSearchCall(call) => {
-                add_call(&call.call_id, CallKind::ToolSearch, &mut seen_call_ids, &mut pending)?;
+                add_call(
+                    &call.call_id,
+                    CallKind::ToolSearch,
+                    None,
+                    false,
+                    &mut seen_call_ids,
+                    &mut pending,
+                )?;
             }
             InputItem::ToolSearchOutput(output) => {
                 resolve_call(&output.call_id, CallKind::ToolSearch, &mut pending)?;
@@ -109,17 +176,24 @@ fn scan_calls(items: &[InputItem]) -> ExecutorResult<(Vec<PendingCall>, usize)> 
     Ok((
         pending
             .into_iter()
-            .map(|(call_id, kind)| PendingCall { call_id, kind })
+            .map(|(call_id, (kind, function_name, namespaced))| PendingCall {
+                call_id: call_id.to_owned(),
+                kind,
+                function_name: function_name.map(str::to_owned),
+                namespaced,
+            })
             .collect(),
         resolved_prefix,
     ))
 }
 
-fn add_call(
-    call_id: &str,
+fn add_call<'a>(
+    call_id: &'a str,
     kind: CallKind,
-    seen_call_ids: &mut HashSet<String>,
-    pending: &mut IndexMap<String, CallKind>,
+    function_name: Option<&'a str>,
+    namespaced: bool,
+    seen_call_ids: &mut HashSet<&'a str>,
+    pending: &mut IndexMap<&'a str, (CallKind, Option<&'a str>, bool)>,
 ) -> ExecutorResult<()> {
     if call_id.is_empty() {
         return Err(ExecutorError::InvalidRequest(format!(
@@ -127,24 +201,28 @@ fn add_call(
             kind.call_item_name()
         )));
     }
-    if !seen_call_ids.insert(call_id.to_owned()) {
+    if !seen_call_ids.insert(call_id) {
         return Err(ExecutorError::InvalidRequest(format!(
             "duplicate call_id '{call_id}' in {}",
             kind.call_item_name()
         )));
     }
-    pending.insert(call_id.to_owned(), kind);
+    pending.insert(call_id, (kind, function_name, namespaced));
     Ok(())
 }
 
-fn resolve_call(call_id: &str, output_kind: CallKind, pending: &mut IndexMap<String, CallKind>) -> ExecutorResult<()> {
+fn resolve_call(
+    call_id: &str,
+    output_kind: CallKind,
+    pending: &mut IndexMap<&str, (CallKind, Option<&str>, bool)>,
+) -> ExecutorResult<()> {
     if call_id.is_empty() {
         return Err(ExecutorError::InvalidRequest(format!(
             "{} call_id must not be empty",
             output_kind.output_item_name()
         )));
     }
-    let Some(call_kind) = pending.shift_remove(call_id) else {
+    let Some((call_kind, _, _)) = pending.shift_remove(call_id) else {
         return Err(ExecutorError::InvalidRequest(format!(
             "{} references call_id '{call_id}' without a pending call",
             output_kind.output_item_name()
@@ -179,17 +257,22 @@ mod tests {
         assert_eq!(resolved_prefix_len(&resolved).unwrap(), resolved.len());
     }
     use crate::types::io::{
-        CustomToolCall, CustomToolCallOutputMessage, FunctionToolResultMessage, InputFunctionToolCall, ShellCall,
-        ShellCallAction, ShellCallOutputMessage, ToolCallOutput,
+        CustomToolCall, CustomToolCallOutputMessage, FunctionToolResultMessage, InputFunctionToolCall,
+        InputToolSearchCall, ResponsesInput, ShellCall, ShellCallAction, ShellCallOutputMessage, ToolCallOutput,
     };
+    use crate::types::tools::{ToolSearchExecution, ToolSearchStatus};
 
     fn function_call(call_id: &str) -> InputItem {
+        named_function_call(call_id, "get_weather", None)
+    }
+
+    fn named_function_call(call_id: &str, name: &str, namespace: Option<&str>) -> InputItem {
         InputItem::FunctionCall(InputFunctionToolCall {
             agent: None,
             id: None,
             call_id: call_id.to_owned(),
-            name: "get_weather".to_owned(),
-            namespace: None,
+            name: name.to_owned(),
+            namespace: namespace.map(str::to_owned),
             arguments: "{}".to_owned(),
             status: None,
         })
@@ -289,6 +372,123 @@ mod tests {
     #[test]
     fn empty_items_have_no_pending_calls() {
         assert!(pending_calls(&[]).expect("empty history is valid").is_empty());
+    }
+
+    #[test]
+    fn steering_stubs_preserve_function_names_and_unresolved_emission_order() {
+        let mut items = vec![
+            function_call("resolved"),
+            function_call("weather"),
+            custom_tool_call("custom"),
+            named_function_call("deadline", "get_deadline", Some("project")),
+            function_call_output("resolved"),
+        ];
+        items.extend(Vec::<InputItem>::from(&ResponsesInput::Text(
+            "change the scope".to_owned(),
+        )));
+        let required = pending_calls(&items)
+            .unwrap()
+            .into_iter()
+            .map(|pending| pending.into_steering_required_input(&[]))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(required.len(), 3);
+        assert!(matches!(&required[0], SteeringRequiredInput::Function { call_id, name }
+            if call_id.as_str() == "weather" && name == "get_weather"));
+        assert!(matches!(&required[1], SteeringRequiredInput::Custom { call_id }
+            if call_id.as_str() == "custom"));
+        assert!(matches!(&required[2], SteeringRequiredInput::Function { call_id, name }
+            if call_id.as_str() == "deadline" && name == "get_deadline"));
+
+        // Out-of-order resolution removes only the matching obligation. User
+        // steering never supplies or substitutes for these owed tool outputs.
+        items.push(function_call_output("deadline"));
+        items.push(custom_tool_call_output("custom"));
+        let required = pending_calls(&items)
+            .unwrap()
+            .into_iter()
+            .map(|pending| pending.into_steering_required_input(&[]))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(required.len(), 1);
+        assert!(matches!(&required[0], SteeringRequiredInput::Function { call_id, name }
+            if call_id.as_str() == "weather" && name == "get_weather"));
+    }
+
+    #[test]
+    fn unsupported_steering_obligations_return_the_original_typed_record() {
+        let search = InputItem::ToolSearchCall(InputToolSearchCall {
+            agent: None,
+            id: "ts_search".to_owned(),
+            call_id: "search".to_owned(),
+            execution: ToolSearchExecution::Client,
+            arguments: serde_json::json!({}),
+            status: ToolSearchStatus::Completed,
+        });
+        for (item, expected_kind, expected_id) in [
+            (shell_call("shell"), CallKind::Shell, "shell"),
+            (search, CallKind::ToolSearch, "search"),
+        ] {
+            let pending = pending_calls(&[item]).unwrap().pop().unwrap();
+            let rejected = pending.into_steering_required_input(&[]).unwrap_err();
+            assert_eq!(rejected.kind, expected_kind);
+            assert_eq!(rejected.call_id, expected_id);
+            assert!(rejected.function_name.is_none());
+        }
+    }
+
+    #[test]
+    fn steering_projection_restores_custom_kind_without_changing_canonical_resolution() {
+        let tools: Vec<ResponsesTool> = crate::utils::common::deserialize_from_value(serde_json::json!([
+            {"type":"custom", "name":"set_temperature_unit"}
+        ]))
+        .unwrap();
+        let mut items = vec![
+            named_function_call("custom", "set_temperature_unit", None),
+            function_call("weather"),
+            named_function_call("namespace", "set_temperature_unit", Some("units")),
+        ];
+        let required = pending_calls(&items)
+            .unwrap()
+            .into_iter()
+            .map(|pending| pending.into_steering_required_input(&tools))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert!(matches!(&required[0], SteeringRequiredInput::Custom { call_id }
+            if call_id.as_str() == "custom"));
+        assert!(matches!(&required[1], SteeringRequiredInput::Function { call_id, name }
+            if call_id.as_str() == "weather" && name == "get_weather"));
+        assert!(matches!(&required[2], SteeringRequiredInput::Function { call_id, name }
+            if call_id.as_str() == "namespace" && name == "set_temperature_unit"));
+
+        // Public custom output normalization still resolves the canonical
+        // function obligation. Projection must not change scanner semantics.
+        items.push(function_call_output("custom"));
+        let pending = pending_calls(&items).unwrap();
+        assert_eq!(pending.len(), 2);
+        assert_eq!(pending[0].call_id, "weather");
+        assert_eq!(pending[1].call_id, "namespace");
+    }
+
+    #[test]
+    fn steering_conversion_returns_incomplete_records_without_inventing_fields() {
+        for (kind, call_id, function_name) in [
+            (CallKind::Function, "missing-name", None),
+            (CallKind::Function, "", Some("get_weather")),
+            (CallKind::Custom, "", None),
+        ] {
+            let rejected = PendingCall {
+                call_id: call_id.to_owned(),
+                kind,
+                function_name: function_name.map(str::to_owned),
+                namespaced: false,
+            }
+            .into_steering_required_input(&[])
+            .unwrap_err();
+            assert_eq!(rejected.kind, kind);
+            assert_eq!(rejected.call_id, call_id);
+            assert_eq!(rejected.function_name.as_deref(), function_name);
+        }
     }
 
     fn assert_invalid(items: &[InputItem], expected: &str) {

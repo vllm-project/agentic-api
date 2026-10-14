@@ -7,7 +7,7 @@ use agentic_core::executor::{ResponseSession, ResponseSessionGroup};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, warn};
+use tracing::debug;
 
 use super::control::Controls;
 use super::{
@@ -144,6 +144,16 @@ impl WsMultiplexer {
     }
 
     pub(super) fn schedule(&mut self, mut work: WsWorkItem) -> Result<(), WsAdmissionError> {
+        if let WsWorkItem::Execute { request, .. } = &mut work {
+            if request.steering.is_none() {
+                request.steering = request
+                    .payload
+                    .previous_response_id
+                    .as_deref()
+                    .and_then(|parent| self.controls.steering_target(parent))
+                    .filter(|target| target.lane == request.stream_id && target.has_pending_steers());
+            }
+        }
         if !self.has_capacity_for(work.input_bytes()) {
             return Err(WsAdmissionError {
                 error: WsError::TooManyRequests,
@@ -181,14 +191,54 @@ impl WsMultiplexer {
         Ok(())
     }
 
-    fn schedule_next(&mut self, lane: Option<StreamId>) {
+    fn schedule_next(&mut self, lane: Option<StreamId>) -> Result<(), WsError> {
         let next = self.lanes.get_mut(&lane).and_then(VecDeque::pop_front);
         if let Some(work) = next {
             self.queued_requests -= 1;
             self.spawn(lane, work);
-        } else {
-            self.lanes.remove(&lane);
+            return Ok(());
         }
+        self.lanes.remove(&lane);
+        let Some(request) = self.controls.automatic_request(lane.as_ref())? else {
+            return Ok(());
+        };
+        let target = request.steering.clone();
+        match self.schedule(WsWorkItem::Execute {
+            request: Box::new(request),
+            input_bytes: 0,
+        }) {
+            Ok(()) => Ok(()),
+            Err(error) => match target {
+                Some(target) => self.controls.fail_automatic_admission(target),
+                None => Err(error.error),
+            },
+        }
+    }
+
+    pub(super) fn schedule_automatic_ready(&mut self) -> Result<(), WsError> {
+        let idle = self
+            .sessions
+            .keys()
+            .filter(|lane| !self.lanes.contains_key(*lane))
+            .cloned()
+            .collect::<Vec<_>>();
+        for lane in idle {
+            if let Some(request) = self.controls.automatic_request(lane.as_ref())? {
+                let target = request.steering.clone();
+                if let Err(error) = self.schedule(WsWorkItem::Execute {
+                    request: Box::new(request),
+                    input_bytes: 0,
+                }) {
+                    // Recover one failed admission before considering other
+                    // idle lanes, rather than failing every target under load.
+                    return match target {
+                        Some(target) => self.controls.fail_automatic_admission(target),
+                        None => Err(error.error),
+                    };
+                }
+            }
+        }
+        Ok(())
     }
 
     pub(super) fn discard_queued(&mut self) {
@@ -207,35 +257,48 @@ impl WsMultiplexer {
         &mut self,
         completion: Result<RequestCompletion, tokio::task::JoinError>,
         draining: bool,
-    ) -> bool {
-        let completion = match completion {
-            Ok(completion) => completion,
-            Err(error) => {
-                warn!(%error, "responses websocket request task failed");
-                return false;
-            }
-        };
+    ) -> Result<(), WsError> {
+        let completion = completion?;
         self.byte_budget.release(completion.input_bytes);
-        if let Err(error) = completion.result {
-            warn!(%error, "responses websocket request failed without a client-visible event");
-            return false;
-        }
+        completion.result?;
         if !draining && !self.shutdown_token.is_cancelled() {
-            self.schedule_next(completion.lane);
+            return self.schedule_next(completion.lane);
         }
-        true
+        Ok(())
     }
 
-    pub(super) fn reap_ready(&mut self, draining: bool) -> bool {
+    pub(super) fn reap_ready(&mut self, draining: bool) -> Result<(), WsError> {
         while let Some(completion) = self.request_tasks.try_join_next() {
-            if !self.finish(completion, draining) {
-                return false;
+            self.finish(completion, draining)?;
+        }
+        Ok(())
+    }
+
+    fn spawn(&mut self, lane: Option<StreamId>, mut work: WsWorkItem) {
+        let mut preserve_parent = false;
+        match &mut work {
+            WsWorkItem::Execute { request, .. } => {
+                if request.steering.is_none() {
+                    request.steering = request
+                        .payload
+                        .previous_response_id
+                        .as_deref()
+                        .and_then(|parent| self.controls.steering_target(parent))
+                        .filter(|target| target.lane == request.stream_id && target.has_pending_steers());
+                }
+            }
+            WsWorkItem::Reject { error, .. } => {
+                preserve_parent = error
+                    .previous_response_id
+                    .as_deref()
+                    .and_then(|parent| self.controls.steering_target(parent))
+                    .is_some_and(|target| target.lane == error.stream_id && target.has_pending_steers());
             }
         }
-        true
-    }
-
-    fn spawn(&mut self, lane: Option<StreamId>, work: WsWorkItem) {
+        let automatic_target = match &work {
+            WsWorkItem::Execute { request, .. } if request.automatic => request.steering.clone(),
+            _ => None,
+        };
         let register = self.controls.register.clone();
         let disposal = self.disposal.clone();
         let state = Arc::clone(&self.state);
@@ -275,7 +338,7 @@ impl WsMultiplexer {
                     .await
                 }
                 WsWorkItem::Reject { error, .. } => {
-                    if let Some(parent) = error.previous_response_id.as_deref() {
+                    if let Some(parent) = error.previous_response_id.as_deref().filter(|_| !preserve_parent) {
                         session
                             .discard_cached_response(parent)
                             .map_err(WsError::from)
@@ -284,6 +347,10 @@ impl WsMultiplexer {
                         Err(error.error)
                     }
                 }
+            };
+            let result = match (result, automatic_target) {
+                (Err(_), Some(target)) if !disposal.is_cancelled() => target.fail_successor().await,
+                (result, _) => result,
             };
             // Dropping a failed executor stream aborts its worker asynchronously.
             // Do not dispatch the next turn until its lease has been released.

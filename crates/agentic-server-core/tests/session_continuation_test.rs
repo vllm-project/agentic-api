@@ -179,7 +179,7 @@ fn search_request() -> RequestPayload {
 
 async fn execute_local(model: &LocalModel, session: &ResponseSession, payload: RequestPayload) -> ResponsePayload {
     let result = ExecuteRequest::new(payload, Arc::new(model.exec.clone()))
-        .with_session(session)
+        .with_session(session, None)
         .unwrap()
         .run()
         .await
@@ -278,7 +278,7 @@ async fn session_explicit_conversation_generated_turns_match_no_session_history(
                 payload.store = store;
                 let execution = ExecuteRequest::new(payload, Arc::new(model.exec.clone()));
                 let execution = if use_session {
-                    execution.with_session(&session).unwrap()
+                    execution.with_session(&session, None).unwrap()
                 } else {
                     execution
                 };
@@ -342,7 +342,7 @@ async fn explicit_conversation_tool_history(use_session: bool, gateway_tool: boo
         }
         let execution = ExecuteRequest::new(payload, Arc::new(model.exec.clone()));
         let execution = if use_session {
-            execution.with_session(&session).unwrap()
+            execution.with_session(&session, None).unwrap()
         } else {
             execution
         };
@@ -870,7 +870,7 @@ async fn grouped_aggregate_rejection_precedes_durable_child_writes_and_preserves
         let mut payload = request(Some(&parent.id), json!("fork"));
         payload.store = true;
         let result = ExecuteRequest::new(payload, Arc::new(model.exec.clone()))
-            .with_session(&target)
+            .with_session(&target, None)
             .unwrap()
             .run()
             .await;
@@ -1064,7 +1064,7 @@ async fn grouped_aggregate_cancellation_while_waiting_for_storage_releases_capac
         assert!(futures::poll!(&mut pending).is_pending());
         assert!(
             ExecuteRequest::new(request(None, json!("busy")), Arc::new(exec.clone()))
-                .with_session(target)
+                .with_session(target, None)
                 .is_err()
         );
         let probe_ctx = rehydrate_in_session(request(None, json!("p".repeat(2_000))), &exec, &probe)
@@ -1146,7 +1146,7 @@ async fn grouped_aggregate_durable_fallback_is_rejected_before_inference_and_can
     let mut payload = request(Some(&parent.id), json!("continue"));
     payload.store = true;
     let result = ExecuteRequest::new(payload, Arc::new(model.exec.clone()))
-        .with_session(&restored)
+        .with_session(&restored, None)
         .unwrap()
         .run()
         .await;
@@ -1194,7 +1194,7 @@ async fn session_budget_rejection_does_not_partially_store_a_child() {
             let mut payload = request(Some(&parent.id), json!("child"));
             payload.store = true;
             let result = ExecuteRequest::new(payload, Arc::new(model.exec.clone()))
-                .with_session(&session)
+                .with_session(&session, None)
                 .unwrap()
                 .run()
                 .await;

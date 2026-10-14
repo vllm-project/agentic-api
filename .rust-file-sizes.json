@@ -1,8 +1,6 @@
 {
   "version": 1,
   "baseline": {
-    "crates/agentic-server-core/src/executor/accumulator/mod.rs": 590,
-    "crates/agentic-server-core/src/executor/session.rs": 508,
     "crates/agentic-server-core/src/tool/registry.rs": 515,
     "crates/agentic-server-core/src/tool/tool_search.rs": 1661,
     "crates/agentic-server-core/src/types/io/input.rs": 510,
@@ -15,18 +13,6 @@
     "crates/agentic-server-core/src/config.rs": {
       "limit": 643,
       "reason": "The gateway-executed web_fetch settings join the shared tool runtime configuration beside the web-search provider and code-interpreter limits, and the web_search provider enum now also selects SearXNG."
-    },
-    "crates/agentic-server-core/src/executor/accumulator/active.rs": {
-      "limit": 512,
-      "reason": "Code-interpreter call state shares the typed item lifecycle dispatcher with multi-agent call and agent-message states."
-    },
-    "crates/agentic-server-core/src/executor/accumulator/mod.rs": {
-      "limit": 607,
-      "reason": "Merge the main branch multi-agent and code-interpreter ingestion into the existing accumulator while preserving service-tier accounting."
-    },
-    "crates/agentic-server-core/src/executor/accumulator/slot.rs": {
-      "limit": 518,
-      "reason": "Code-interpreter done-only ID backfill remains in the shared output-item slot validation path."
     },
     "crates/agentic-server-core/src/tool/registry.rs": {
       "limit": 545,

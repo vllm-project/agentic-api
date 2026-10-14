@@ -144,7 +144,7 @@ async fn combined_media_token_allowance_does_not_bypass_serialized_retention_bud
         media_request(None, media_input(128 * 1024)),
         Arc::new(model.exec.clone()),
     )
-    .with_session(&session)
+    .with_session(&session, None)
     .unwrap()
     .run()
     .await
@@ -184,7 +184,7 @@ async fn combined_media_message_file_rejection_precedes_compaction_and_releases_
         .unwrap()
         .push(json!({"type":"input_file", "file_data":"encoded document"}));
     let error = ExecuteRequest::new(media_request(None, input), Arc::new(model.exec.clone()))
-        .with_session(&session)
+        .with_session(&session, None)
         .unwrap()
         .run()
         .await

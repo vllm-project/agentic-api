@@ -10,14 +10,15 @@
 //! [`SlotMap`](super::slot::SlotMap) owns identity and lifecycle and dispatches
 //! here; nothing in this module resolves indexes or IDs.
 mod agent_message;
+mod shell;
 use agent_message::AgentMessageState;
+use shell::ShellCallState;
 
 use indexmap::IndexMap;
 
 pub(super) use super::active_text::MessagePart;
 use super::active_text::{MessageState, ReasoningState};
 use super::completion::MergeDone;
-use crate::events::types::ShellCommandUpdate;
 use crate::events::{EventPayload, SSEItemType};
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::response_budget::{
@@ -26,9 +27,11 @@ use crate::executor::response_budget::{
 use crate::types::event::MessageStatus;
 use crate::types::io::output::McpListTools;
 use crate::types::io::{
-    ApplyDone, CodeInterpreterCall, CompactionItem, CustomToolCall, FunctionToolCall, McpCall, MultiAgentCall,
-    MultiAgentCallOutput, OutputItem, OutputMessage, ReasoningOutput, ShellCall, ToolSearchCall, WebSearchCall,
+    ApplyDone, CodeInterpreterCall, CodeInterpreterCallStatus, CompactionItem, CustomToolCall, FunctionToolCall,
+    McpCall, McpCallStatus, MultiAgentCall, MultiAgentCallOutput, OutputItem, OutputMessage, ReasoningOutput,
+    ReasoningStatus, ShellCall, ShellCallStatus, ToolSearchCall, WebSearchCall, WebSearchCallStatus,
 };
+use crate::types::tools::ToolSearchStatus;
 
 pub(super) type Budget<'a> = Option<&'a ExecutorResponseBudget>;
 
@@ -115,95 +118,6 @@ impl CustomToolCallState {
 impl RetainedSize for CustomToolCallState {
     fn retained_bytes(&self) -> usize {
         self.item.retained_bytes() + self.input.len()
-    }
-}
-
-#[derive(Clone)]
-pub(super) struct ShellCallState {
-    pub(super) item: ShellCall,
-    /// Per-command completion flags once the first command event arrives.
-    command_stream: Option<Vec<bool>>,
-    /// Text of the command currently streaming; moved into the item on done.
-    command: String,
-}
-
-impl ShellCallState {
-    fn new(item: ShellCall) -> Self {
-        Self {
-            item,
-            command_stream: None,
-            command: String::new(),
-        }
-    }
-
-    pub(super) fn has_unfinished_commands(&self) -> bool {
-        self.command_stream
-            .as_deref()
-            .is_some_and(|done| done.iter().any(|complete| !complete))
-    }
-
-    pub(super) fn tracks_commands(&self) -> bool {
-        self.command_stream.is_some()
-    }
-
-    fn apply(
-        &mut self,
-        payload: &EventPayload,
-        account: &mut RetainedAccount,
-        budget: Budget<'_>,
-    ) -> ExecutorResult<()> {
-        let EventPayload::ShellCallCommand {
-            command_index, update, ..
-        } = payload
-        else {
-            return Ok(());
-        };
-        let index = *command_index as usize;
-        let done = self.command_stream.as_deref().unwrap_or_default();
-        match update {
-            ShellCommandUpdate::Added(command) => {
-                if index != done.len() || self.item.action.commands.len() != done.len() || done.last() == Some(&false) {
-                    return Err(invalid("shell command added out of order"));
-                }
-                account.charge(budget, RETAINED_CONTAINER_OVERHEAD_BYTES + command.len())?;
-                self.item.action.commands.push(String::new());
-                self.command.clone_from(command);
-                self.command_stream.get_or_insert_with(Vec::new).push(false);
-                Ok(())
-            }
-            ShellCommandUpdate::Delta(delta) => {
-                if done.get(index) != Some(&false) {
-                    return Err(invalid("shell command delta has no active command"));
-                }
-                account.charge(budget, delta.len())?;
-                self.command.push_str(delta);
-                Ok(())
-            }
-            ShellCommandUpdate::Done(command) => {
-                if done.get(index) != Some(&false) || self.command != *command {
-                    return Err(invalid(
-                        "shell command done is repeated or contradicts streamed command",
-                    ));
-                }
-                account.grow(
-                    budget,
-                    self,
-                    |state| state.item.action.commands[index].len() + state.command.len(),
-                    |state| {
-                        state.item.apply_done(payload, &mut state.command);
-                        if let Some(done) = state.command_stream.as_mut() {
-                            done[index] = true;
-                        }
-                    },
-                )
-            }
-        }
-    }
-}
-
-impl RetainedSize for ShellCallState {
-    fn retained_bytes(&self) -> usize {
-        self.item.retained_bytes() + self.command.len()
     }
 }
 
@@ -393,16 +307,72 @@ impl ActiveItem {
     }
 
     /// Completion snapshots may fill in results, but cannot reassign identity
-    /// or contradict completed content parts.
-    pub(super) fn validate_completion(&self, done: Option<&OutputItem>) -> ExecutorResult<()> {
-        match (self, done) {
-            (Self::Message(state), Some(OutputItem::Message(done))) => state.validate_completion(done)?,
+    /// or contradict completed content parts. The returned proof distinguishes
+    /// authoritative completion from tolerated recovery: only the former can
+    /// close in-flight work before the upstream response itself terminates.
+    pub(super) fn validate_completion(
+        &self,
+        done: Option<&OutputItem>,
+        raw: &serde_json::Value,
+    ) -> ExecutorResult<bool> {
+        let text = |field| raw.get(field).is_some_and(serde_json::Value::is_string);
+        Ok(match (self, done) {
+            (Self::Message(state), Some(OutputItem::Message(done))) => {
+                state.validate_completion(done)?;
+                done.status == MessageStatus::Completed && raw.get("content").is_some_and(serde_json::Value::is_array)
+            }
+            (Self::FunctionCall(_), Some(OutputItem::FunctionCall(done))) => {
+                done.status == MessageStatus::Completed
+                    && text("status")
+                    && text("arguments")
+                    && !done.call_id.is_empty()
+                    && !done.name.is_empty()
+            }
+            (Self::CustomToolCall(_), Some(OutputItem::CustomToolCall(done))) => {
+                done.status.is_none_or(|status| status == MessageStatus::Completed)
+                    && text("input")
+                    && !done.call_id.is_empty()
+                    && !done.name.is_empty()
+            }
+            (Self::Reasoning(_), Some(OutputItem::Reasoning(done))) => {
+                done.status.is_none_or(|status| status != ReasoningStatus::InProgress)
+                    && (raw.get("content").is_some() || raw.get("summary").is_some() || text("encrypted_content"))
+            }
+            (Self::CodeInterpreterCall { .. }, Some(OutputItem::CodeInterpreterCall(done))) => matches!(
+                done.status,
+                CodeInterpreterCallStatus::Completed
+                    | CodeInterpreterCallStatus::Failed
+                    | CodeInterpreterCallStatus::Incomplete
+            ),
+            (Self::WebSearchCall { .. }, Some(OutputItem::WebSearchCall(done))) => {
+                matches!(
+                    done.status,
+                    WebSearchCallStatus::Completed | WebSearchCallStatus::Failed
+                )
+            }
+            (Self::ToolSearchCall { .. }, Some(OutputItem::ToolSearchCall(done))) => {
+                matches!(done.status, ToolSearchStatus::Completed | ToolSearchStatus::Incomplete)
+            }
+            (Self::McpCall { .. }, Some(OutputItem::McpCall(done))) => matches!(
+                done.status,
+                Some(McpCallStatus::Completed | McpCallStatus::Incomplete | McpCallStatus::Failed)
+            ),
+            (Self::McpListTools { .. }, Some(OutputItem::McpListTools(_))) => {
+                // This item has no modeled status; an extension cannot prove
+                // that hosted activity is finished. The tools field is required.
+                raw.get("status").is_none()
+            }
+            (Self::ShellCall(_), Some(OutputItem::ShellCall(done))) => {
+                done.status.is_none_or(|status| status != ShellCallStatus::InProgress)
+            }
+            (Self::Compaction { .. }, Some(OutputItem::Compaction(_))) => true,
             (Self::MultiAgentCall { item }, Some(OutputItem::MultiAgentCall(done))) => {
                 if item.call_id != done.call_id || item.action != done.action || item.agent != done.agent {
                     return Err(invalid(
                         "collaboration call completion changes call_id, action, or attribution",
                     ));
                 }
+                false
             }
             (Self::MultiAgentCallOutput { item }, Some(OutputItem::MultiAgentCallOutput(done))) => {
                 if item.call_id != done.call_id || item.action != done.action || item.agent != done.agent {
@@ -410,14 +380,17 @@ impl ActiveItem {
                         "collaboration output completion changes call_id, action, or attribution",
                     ));
                 }
+                false
             }
-            (Self::AgentMessage(state), Some(OutputItem::AgentMessage(done))) => state.validate_completion(done)?,
+            (Self::AgentMessage(state), Some(OutputItem::AgentMessage(done))) => {
+                state.validate_completion(done)?;
+                false
+            }
             (Self::MultiAgentCall { .. } | Self::MultiAgentCallOutput { .. } | Self::AgentMessage(_), _) => {
                 return Err(invalid("collaboration item requires a valid completion snapshot"));
             }
-            _ => {}
-        }
-        Ok(())
+            _ => false,
+        })
     }
 
     /// Merge an `output_item.done` payload with the same per-kind policy for a

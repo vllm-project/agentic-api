@@ -287,6 +287,18 @@ impl<T: ?Sized> RequestPayload<T> {
 }
 
 impl RequestPayload {
+    /// Snapshot effective settings for an automatic successor without copying
+    /// canonical item history or carrying the current response's routing.
+    /// The original request, including its input, remains unchanged.
+    pub(crate) fn continuation_settings(&mut self) -> Self {
+        let input = std::mem::take(&mut self.input);
+        let mut settings = self.clone();
+        self.input = input;
+        settings.previous_response_id = None;
+        settings.conversation = None;
+        settings
+    }
+
     /// The Responses adapter boundary: this request's declared tools as the
     /// tool layer's declarations, with the wire tools left in place.
     #[must_use]

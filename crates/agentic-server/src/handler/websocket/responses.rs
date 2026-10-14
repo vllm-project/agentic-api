@@ -37,7 +37,7 @@ use event::{StreamId, WsEventLimit, WsOutboundEvent};
 use event::{WS_MAX_STREAM_ID_CHARS, WS_ROUTING_SLACK_BYTES, attach_stream_id, ws_routing_overhead};
 use local::complete_without_inference;
 use multiplexer::{WsMultiplexer, WsWorkItem};
-use request::{WsRequest, WsRequestParseError, is_injection, parse_ws_request, stream_id_from_text};
+use request::{WsRequest, WsRequestParseError, is_injection, is_steering, parse_ws_request, stream_id_from_text};
 
 type WsSender = mpsc::Sender<WsOutboundEvent>;
 
@@ -102,13 +102,23 @@ fn handle_ws_client_message(
                 return false;
             }
 
-            if !multiplexer.reap_ready(*draining) {
+            if let Err(error) = multiplexer.reap_ready(*draining) {
+                warn!(%error, "failed to advance websocket response lane");
                 return false;
             }
             if multiplexer.shutdown_token.is_cancelled() {
                 begin_ws_draining(multiplexer, draining);
                 debug!("discarded websocket response.create during shutdown");
                 return true;
+            }
+            if is_steering(&text) {
+                if let Err(error) = multiplexer.controls.dispatch_steering(&text) {
+                    return handle_ws_error(sender, error, None, multiplexer.event_limit());
+                }
+                return multiplexer
+                    .schedule_automatic_ready()
+                    .inspect_err(|error| warn!(%error, "failed to schedule websocket steering successor"))
+                    .is_ok();
             }
             if is_injection(&text) {
                 match serde_json::from_str::<ResponseInjectRequest>(&text) {
@@ -211,30 +221,33 @@ struct RequestExecution<'a> {
     auth: Option<String>,
     outbound_tx: &'a mpsc::Sender<WsOutboundEvent>,
     disposal: &'a CancellationToken,
-    session: &'a ResponseSession,
+    session: &'a Arc<ResponseSession>,
     event_limit: WsEventLimit,
     register: &'a mpsc::Sender<Registration>,
 }
 
-async fn handle_ws_request(request: WsRequest, context: RequestExecution<'_>) -> Result<(), WsError> {
-    let RequestExecution {
-        state,
-        auth,
-        outbound_tx,
-        disposal,
-        session,
-        event_limit,
-        register,
-    } = context;
+async fn handle_ws_request(request: WsRequest, mut context: RequestExecution<'_>) -> Result<(), WsError> {
+    let state = context.state;
+    let auth = context.auth.take();
+    let outbound_tx = context.outbound_tx;
+    let session = context.session;
+    let event_limit = context.event_limit;
     let WsRequest {
         payload,
         stream_id,
         generate,
         execution,
+        steering,
+        automatic: _,
     } = request;
     let mut execution = execution.unwrap_or_else(telemetry::QueuedExecution::new).dispatch();
 
     if generate == Some(false) {
+        if steering.is_some() {
+            return Err(WsError::from(ExecutorError::InvalidRequest(
+                "a steering continuation must generate a response".into(),
+            )));
+        }
         debug!("handling non-generating websocket request locally");
         let result = complete_without_inference(outbound_tx, state, payload, stream_id.as_ref(), session, event_limit)
             .instrument(execution.span().clone())
@@ -246,47 +259,138 @@ async fn handle_ws_request(request: WsRequest, context: RequestExecution<'_>) ->
     // The executor validates every frame, including the terminal
     // `response.completed`, against what this socket can deliver after routing
     // metadata is attached, and does so before persisting the response.
-    let response = ExecuteRequest::new(payload, Arc::clone(&state.exec_ctx))
-        .with_execution_span(execution)
-        .with_auth(auth)
-        .with_session(session)?
-        .with_max_stream_event_bytes(event_limit.executor_limit(stream_id.as_ref()))
-        .run_retained()
-        .await?;
-    let sink = response.sink.clone();
-    let (reply, receive) = oneshot::channel();
-    if let Err(rejected) = register
-        .send(Registration {
-            response,
-            lane: stream_id,
-            reply,
-        })
+    let steering_supported = payload.conversation.is_none()
+        && !payload.input.contains_compaction()
+        && !payload.input.has_compaction_trigger();
+    let (response, publication) = if let Some(target) = &steering {
+        target
+            .prepare_successor(
+                &payload,
+                Arc::clone(&state.exec_ctx),
+                auth.as_deref(),
+                event_limit.executor_limit(stream_id.as_ref()),
+                execution,
+            )
+            .await?
+    } else {
+        let prepared = ExecuteRequest::new(payload, Arc::clone(&state.exec_ctx))
+            .with_execution_span(execution)
+            .with_auth(auth)
+            .with_session(session, None)?
+            .with_max_stream_event_bytes(event_limit.executor_limit(stream_id.as_ref()))
+            .prepare_retained()
+            .await?;
+        (prepared.start_gated(), None)
+    };
+    context
+        .run_response(response, publication, steering, stream_id, steering_supported)
         .await
-    {
-        let mut owner = rejected.0.response.owner;
-        owner.cancel();
-        let _ = owner.join().await;
-        return Err(WsError::SendFailed);
-    }
-    let mut owner = receive.await.map_err(|_| WsError::SendFailed)?;
-    let result = tokio::select! {
-        result = owner.join() => result,
-        () = disposal.cancelled() => {
+}
+
+impl RequestExecution<'_> {
+    async fn run_response(
+        &self,
+        response: agentic_core::executor::RunningResponse,
+        publication: Option<agentic_core::executor::session::SteeringSuccessorPublication>,
+        steering: Option<Arc<control::SteeringTarget>>,
+        stream_id: Option<StreamId>,
+        steering_supported: bool,
+    ) -> Result<(), WsError> {
+        let disposal = self.disposal;
+        let register = self.register;
+        let session = self.session;
+        if let Some(target) = &steering {
+            let admission = tokio::select! {
+                result = target.flush_outcomes() => result,
+                () = disposal.cancelled() => Err(WsError::SendFailed),
+            };
+            if let Err(error) = admission {
+                let mut owner = response.owner;
+                owner.cancel();
+                let _ = owner.join().await;
+                return Err(error);
+            }
+        }
+        let sink = response.sink.clone();
+        let (reply, receive) = oneshot::channel();
+        if let Err(rejected) = register
+            .send(Registration {
+                response,
+                lane: stream_id,
+                reply,
+                session: Arc::clone(session),
+                steering_supported,
+            })
+            .await
+        {
+            let mut owner = rejected.0.response.owner;
             owner.cancel();
             let _ = owner.join().await;
             return Err(WsError::SendFailed);
         }
-    };
-    if sink.commit_state() == ResponseCommitState::Aborted {
-        return Err(WsError::SendFailed);
+        let (mut owner, target) = receive.await.map_err(|_| WsError::SendFailed)?;
+        if let Err(error) = owner.activate() {
+            owner.cancel();
+            let _ = owner.join().await;
+            return Err(WsError::from(error));
+        }
+        if let Some(proof) = publication {
+            let created = tokio::select! {
+                created = proof.wait_created() => created,
+                () = disposal.cancelled() => {
+                    owner.cancel();
+                    let _ = owner.join().await;
+                    return Err(WsError::SendFailed);
+                }
+            };
+            if let Ok(receipt) = created {
+                let committed = proof
+                    .commit(&receipt)
+                    .map_err(|_| WsError::SendFailed)
+                    .and_then(|()| steering.as_ref().map_or(Ok(()), |parent| parent.commit_successor()));
+                if let Err(error) = committed {
+                    owner.cancel();
+                    let _ = owner.join().await;
+                    return Err(error);
+                }
+            } else {
+                owner.cancel();
+                let _ = owner.join().await;
+                if let Some(receipt) = sink.created_receipt() {
+                    proof.commit(&receipt).map_err(|_| WsError::SendFailed)?;
+                    if let Some(parent) = &steering {
+                        parent.commit_successor()?;
+                    }
+                    target.finish_response().await?;
+                } else {
+                    proof.fail_before_creation().map_err(|_| WsError::SendFailed)?;
+                    if let Some(parent) = &steering {
+                        parent.fail_successor().await?;
+                    }
+                }
+                return Ok(());
+            }
+        }
+        let result = tokio::select! {
+            result = owner.join() => result,
+            () = disposal.cancelled() => {
+                owner.cancel();
+                let _ = owner.join().await;
+                return Err(WsError::SendFailed);
+            }
+        };
+        if sink.commit_state() == ResponseCommitState::Aborted {
+            return Err(WsError::SendFailed);
+        }
+        sink.flush().await?;
+        target.finish_response().await?;
+        // Execution failures were delivered by the retained executor. They end this
+        // response without closing the session or emitting a duplicate error.
+        if let Err(error) = result {
+            debug!(%error, "retained websocket response ended with an execution error");
+        }
+        Ok(())
     }
-    sink.flush().await?;
-    // Execution failures were delivered by the retained executor. They end this
-    // response without closing the session or emitting a duplicate error.
-    if let Err(error) = result {
-        debug!(%error, "retained websocket response ended with an execution error");
-    }
-    Ok(())
 }
 
 async fn stream_ws_response(

@@ -73,7 +73,10 @@ fn extract_payload(event_type: SSEEventType, json: &Value) -> EventPayload {
         | SSEEventType::ResponseFailed
         | SSEEventType::ResponseIncomplete => extract_response_payload(json),
 
-        SSEEventType::Keepalive => EventPayload::None,
+        SSEEventType::Keepalive
+        | SSEEventType::ResponseSteerAccepted
+        | SSEEventType::ResponseSteerPending
+        | SSEEventType::ResponseSteerFailed => EventPayload::None,
 
         SSEEventType::OutputItemAdded => extract_output_item_added(json),
         SSEEventType::OutputItemDone => extract_output_item_done(json),

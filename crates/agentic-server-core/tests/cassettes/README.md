@@ -37,6 +37,195 @@ printf 'What did I just show you?\n' | python tests/cassettes/record_cassette.py
 
 The recorder scripts (`record_reasoning_cassettes.sh`, `record_tool_call_cassettes.sh`, etc.) use `printf` to feed fixed prompts per test so no manual input is needed.
 
+## Mid-turn steering exploration
+
+`record_multi_turn_steering_cassettes.sh` records OpenAI references or gateway observations of the WebSocket
+`response.steer` operation through
+`websocket_recorder.py steering`, using its existing duplex socket/session recorder. HTTP steering probes, modes
+and cassettes have been removed. Ordinary HTTP recording remains in `record_cassette.py`.
+
+The shared `multi_turn_steering/fixtures.py` supplies prompts, category membership, media and tool fixtures. It reuses
+`record_cassette.py`'s ordinary tool loaders/output builder through the WebSocket driver. Transport logic stays in
+the main recorder. All prompts are documented in
+[multi_turn_steering/prompts.txt](multi_turn_steering/prompts.txt). No findings JSON or extra recorder test files are generated.
+
+Five categories produce **five YAML files per provider** under `multi_turn_steering/`.
+Image steering is separate so the other four categories can use a text model:
+
+| Category / filename scenario | Coverage | Selection |
+| --- | --- | --- |
+| `mixed-tools-steer` | Original [parallel mixed-tools](parallel_tool_calls/parallel-mixed-openai-reference-gpt-5.6-nonstreaming.yaml) workflow; web search, weather function and custom temperature-unit call, with two steering updates | `--suite smoke` (default) |
+| `edge-input-lifecycle` | 18 cases: input validation, repeated steering, timing, completed targets, old-parent admission timing, store:false and two ordered user messages in one steer | `--suite input-lifecycle` |
+| `edge-tools-settings` | 13 cases: pending/withheld outputs, wrong/partial-output recovery, running hosted tools, queue pressure, automatic/explicit/default settings and store:false recovery | `--suite tools-settings` |
+| `edge-connections` | Three cases: old target after reconnect, disconnect with pending steering, and parent/lane matching | `--suite connections` |
+| `vision-steering` | One case: `array-image-user`, using the existing red/blue PNG in a steering message | `--suite vision` |
+
+`--suite non-vision` selects the four text/tool categories. `--suite vision` selects only image steering.
+`--suite edges` selects the three non-vision edge categories; `--suite all` selects all five categories.
+`--case edge-input-lifecycle`, `edge-tools-settings`, `edge-connections`, or `vision-steering` selects that category.
+`--case edge-cases` remains an umbrella alias selecting the three edge files. An individual `--case NAME`
+records only that scenario in its category filename, replacing that category's previous capture.
+
+Run from the repository root with `OPENAI_API_KEY` exported:
+
+```bash
+# Inspect cases and output paths; no requests or file writes.
+uv run --no-project --with click --with fastapi --with httpx --with uvicorn --with pyyaml \
+  bash crates/agentic-server-core/tests/cassettes/record_multi_turn_steering_cassettes.sh --suite all --dry-run
+
+# Record all five categories, including the separate vision-steering file.
+uv run --no-project --with click --with fastapi --with httpx --with uvicorn --with pyyaml \
+  bash crates/agentic-server-core/tests/cassettes/record_multi_turn_steering_cassettes.sh --suite all
+
+# Record only tool/output/settings edge cases.
+uv run --no-project --with click --with fastapi --with httpx --with uvicorn --with pyyaml \
+  bash crates/agentic-server-core/tests/cassettes/record_multi_turn_steering_cassettes.sh --suite tools-settings
+```
+
+To record the running gateway, use its served model name:
+
+```bash
+# Serve Qwen3.6, then record the four text/tool categories.
+GATEWAY_URL=http://localhost:9000 GATEWAY_MODEL=Qwen/Qwen3.6-35B-A3B-FP8 \
+  uv run --no-project --with click --with fastapi --with httpx --with uvicorn --with pyyaml \
+  bash crates/agentic-server-core/tests/cassettes/record_multi_turn_steering_cassettes.sh \
+  --record-set gateway --suite non-vision
+
+# Switch the backend to Qwen-VL, then record only the image category.
+GATEWAY_URL=http://localhost:9000 GATEWAY_MODEL=Qwen/Qwen3-VL-30B-A3B-Instruct \
+  uv run --no-project --with click --with fastapi --with httpx --with uvicorn --with pyyaml \
+  bash crates/agentic-server-core/tests/cassettes/record_multi_turn_steering_cassettes.sh \
+  --record-set gateway --suite vision
+```
+
+Add `--dry-run` to inspect the selected gateway output paths without contacting it. The recorder does not start the
+server. `--record-set openai|gateway|all` defaults to `STEERING_RECORD_SET=openai`; `all` records both providers.
+`--gateway-url` overrides `GATEWAY_URL` (default `http://localhost:9000`, converted to `ws://localhost:9000/v1/responses`).
+Gateway recording requires `GATEWAY_MODEL`, its `MODEL` fallback, or `--model`. The optional `GATEWAY_API_KEY` supplies
+only gateway authentication; the recorder never falls back to `OPENAI_API_KEY` for gateway requests. Credentials
+are masked in captures and never printed. Supply credentials through these environment variables, not URL userinfo.
+
+The OpenAI default model is `gpt-6-sol`; override with `OPENAI_MODEL` or `--model`. Only its `unsupported-model`
+probe uses GPT-5.6. Gateway runs explicitly skip that probe because OpenAI model availability restrictions are not
+modeled locally; all other scenarios retain the same prompts and fixture outputs. A gateway may lack a model/tool
+capability needed by a probe; its actual failure or missing trigger remains visible rather than becoming a parity pass.
+`--model` overrides the model for every selected provider; use separate model environment variables with `--record-set all`.
+`--timeout` defaults to 300 seconds per scenario, including both sockets for reconnect cases; close cleanup has
+its own maximum five-second budget. The default per-response output cap is 8192 tokens. Live calls incur usage.
+`--repeat` labels fresh attempts inside the same category file. Reruns replace selected category files.
+The vision-only command leaves all four text/tool category files untouched; `--suite non-vision` leaves
+the vision file untouched. `--case array-image-user` writes the same separate vision filename.
+Use `--help` or `--list-cases` for selection. HTTP transport/stream-mode/timeout flags are absent from this wrapper.
+
+YAML uses `format: responses-websocket-v1`; each session preserves actual handshake headers, ordered client/server
+frames and close outcomes. Stable filenames follow
+`multi-turn-steering-openai-reference-CATEGORY-MODEL-websocket.yaml` or
+`multi-turn-steering-gateway-CATEGORY-MODEL-websocket.yaml` (model names are sanitized for filenames).
+Gateway runs preserve reference filenames. No simulated provider events are written.
+Tool outputs come from existing local fixtures; generated commands are never executed by the recorder.
+
+The current OpenAI references include the following additional probes:
+
+- `pending-partial-outputs`: submit one of two required outputs, then recover with all saved outputs.
+- `pending-output-recovery-store-false`: characterize whether an invalid continuation loses transient parent state.
+- `settings-explicit-defaults`: omit inherited settings in an explicit continuation and observe defaults.
+- `lane-parent-mismatch`: provide outputs on another lane, observe that branch/rejection, then continue on the owning lane.
+- `array-image-user`: attach the existing red/blue PNG to steering input.
+- `array-multiple-user`: submit two ordered user messages in one steering event, with distinct data and verification tokens.
+
+Reviewed observations establish wrong-output recovery without resending steering, old-parent acceptance before
+successor creation and rejection after it, automatic settings inheritance, explicit replacement/default settings,
+and connection-local targets and pending input. A capture rejection is evidence; timeout, missing prerequisites and transport failures remain
+inconclusive. Acceptance alone does not establish application. Media probes require reviewing the actual answer.
+The settings probes compare fields/format/markers; they do not exhaust token or built-in-tool budgets.
+`max_tool_calls` does not limit the status function used by these fixtures.
+The separate vision category is recorded for OpenAI and Qwen-VL. Both captured client graphs replay through the
+real gateway handlers, checking exact image/detail forwarding and accepted input once at successor inference.
+The Qwen-VL successor contains its description/marker in reasoning only, without an assistant message; this is
+an explicitly qualified backend-output gap, not successful assistant-answer parity.
+
+Tool scenarios now use `tool_choice: auto`, including the partial-output and hosted-tool cases.
+They still require actual observed calls; missing calls remain inconclusive. Minimal explicit-default
+continuations intentionally omit tool choice to check normal defaults. Older recordings retain their
+original required/named choices. The current OpenAI and Qwen3.6 recordings both use the updated auto-choice scenarios.
+
+The current Qwen3.6 tools/settings file contains all 13 cases. Three remain limited by upstream generation:
+`settings-automatic` creates an inherited successor that exhausts 2,048 tokens without a final answer;
+`pending-user-steer` exhausts 8,192 tokens before sending steering; and `settings-explicit-defaults`
+exhausts its 2,048-token parent budget without the required call, so it sends no steering or continuation.
+Tests assert these exact incomplete outcomes, then replay the complete OpenAI workflows through the real
+gateway as additional protocol coverage. They do not classify these live recordings as completed parity.
+The fixtures do not enable `context_management`; automatic compaction would reduce earlier input history,
+not extend the output budget of an active generation.
+
+The gateway recordings are compared with the OpenAI recordings in the existing
+`agentic-server/tests/responses_websocket_test.rs` integration target. Its `duplex_replay::steering_` tests
+check both captured causal contracts and replay client workflows through the real gateway handlers, using
+local synthetic model dependencies derived from captured output items. A companion core executor test,
+`recorded_hosted_steering_drains_real_interpreter_before_successor`, exercises the recorded interpreter
+workflow with a controlled provider. Neither test contacts OpenAI or edits the YAML files.
+Synthetic inference exposes custom calls as normalized functions to exercise the actual translator.
+Its control gates can let steering reach a completed client call before the captured native token-limit
+terminal. That replay may complete the parent instead, but must preserve the same calls and pending
+obligations. This exception applies only to that fixture race; other terminal statuses remain checked.
+
+From the repository root, run the cassette regressions with:
+
+```bash
+cargo test --offline -p agentic-server --test responses_websocket_test duplex_replay::steering_
+cargo test --offline -p agentic-server-core --lib recorded_hosted_steering_drains_real_interpreter_before_successor
+```
+
+Vision comparison/replay is separate and requires its gateway capture. After recording it, run:
+
+```bash
+cargo test --offline -p agentic-server --test responses_websocket_test duplex_replay::vision_
+```
+
+To run the entire WebSocket integration target before the vision recording is ready, use
+`cargo test --offline -p agentic-server --test responses_websocket_test -- --skip vision_`.
+The vision tests remain strict about missing or ambiguous captures; the non-vision tests do not skip missing peers.
+
+The first gateway comparison exposed two defects: custom-tool pending stubs were incorrectly labeled as
+function outputs, and explicit `tools: []` continuations inherited an incompatible forced parent selector.
+The fixes use the parent tool metadata for public obligation types and default tool choice when a new tool
+list is supplied. The healthy gateway rerecords confirm both fixes, including reconnect and lane branching.
+
+The latest non-vision audit covers 36 gateway and 37 OpenAI sessions across 34 shared named cases.
+Old-parent rejection now matches in both captures; earlier acceptance differences were reservation races.
+Mixed-tool batching and interpreter runtime outcomes remain explicitly qualified. Wrong-output recovery,
+partial-output recovery with two actual calls, `store:false` recovery, lane ownership, and reconnect
+isolation have matching steering control outcomes. In the burst capture the gateway model prints only
+the final token, but replay's upstream input spy verifies that all three accepted inputs reach successor
+inference exactly once and in order. Actual final answer wording is not a protocol assertion.
+
+All 33 ordinary gateway client graphs and three complete OpenAI intent graphs run through real WebSocket
+handlers. The hosted interpreter case runs through the companion core executor test for both providers.
+The full non-vision WebSocket target passes all 88 tests; the two separate vision tests await recording.
+These results establish steering regression coverage while preserving the three generation/coverage gaps above.
+
+File steering is outside this gateway's supported input capabilities. Its scenario and sessions were
+removed from both providers' lifecycle cassettes, preserving every other recorded frame. The replacement
+`array-multiple-user` is now recorded on both providers: both final answers preserve the codename,
+deadline, and two verification tokens in order. Image steering has its own `vision-steering` category;
+its current OpenAI capture is ready, and the gateway capture awaits the vision model.
+Vision tests compare normalized image input and the final verification token.
+Image steering requires a vision-capable model. When changing gateway models,
+archive the old gateway category files outside this directory before recording the new set: replay
+requires exactly one gateway cassette per category and rejects ambiguous model sets.
+For the split, archive the previous Qwen-VL `mixed-tools-steer`, `edge-input-lifecycle`, and
+`edge-connections` gateway files before recording those categories with Qwen3.6. Keep the current
+Qwen3.6 tools/settings file until its rerecord replaces it. OpenAI `--suite all` replaces its old
+lifecycle category and records image steering in `vision-steering`; use both gateway commands above
+to produce the same five-category layout. Existing captured frames are not rewritten by this change.
+
+Multi-agent steering cases and captures are removed. The
+[OpenAI steering reference](https://developers.openai.com/api/reference/resources/responses/websocket-events#response.steer)
+restricts steering to single-agent responses. Ordinary multi-agent execution/injection uses its separate recorder.
+
+See the [implementation RFC](../../../../../../rfcs/agentic-api-multi-turn-steering-issue.md) for evidence, interfaces
+and remaining qualification gates.
+
 ## Coding-harness CLI acceptance tests
 
 The literal fixture at `../fixtures/claude-code-cache-control-request.json` mirrors the cache-bearing parts of a
@@ -107,7 +296,7 @@ normalizing only the origin and `retrieved_at`.
 ```
 --turns N              Number of turns
 --output PATH          Output YAML path
---mode MODE            responses | messages | conv | items | isolation | mixed | store_true_then_store_false  (default: conv)
+--mode MODE            responses | messages | conv | items | isolation | mixed | store_true_then_store_false
 --stream / --no-stream Streaming or non-streaming (default: streaming)
 --transport TRANSPORT  http | websocket  (default: http; WebSocket requires responses mode)
 --model NAME           Model name sent in requests

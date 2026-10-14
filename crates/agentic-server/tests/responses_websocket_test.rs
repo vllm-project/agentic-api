@@ -35,7 +35,580 @@ use agentic_core::types::io::{CompactionItem, InputItem, ResponsesInput};
 use agentic_core::types::tools::ResponsesTool;
 use agentic_server::app::{AppState, DEFAULT_MAX_REQUEST_BODY_SIZE, WebSocketTracker};
 
+use agentic_core::utils::common::{deserialize_from_value, serialize_to_value};
 use common::{spawn_gateway, test_config};
+
+mod steering {
+    use super::*;
+
+    #[tokio::test]
+    async fn steering_drains_active_gateway_batch_before_starting_successor() {
+        let mut events = vec![json!({"type":"response.created",
+            "response":{"id":"upstream_search", "status":"in_progress"}})];
+        for index in 0..2 {
+            let item = json!({"type":"function_call", "id":format!("fc_search_{index}"),
+                "call_id":format!("call_search_{index}"), "name":"web_search",
+                "arguments":format!("{{\"query\":\"rust async {index}\",\"count\":2}}"), "status":"completed"});
+            let mut opening = item.clone();
+            opening["arguments"] = json!("");
+            opening["status"] = json!("in_progress");
+            events.push(json!({"type":"response.output_item.added", "output_index":index, "item":opening}));
+            events.push(json!({"type":"response.output_item.done", "output_index":index, "item":item}));
+        }
+        events.push(json!({"type":"response.completed",
+            "response":{"id":"upstream_search", "status":"completed"}}));
+        let mut body = String::new();
+        for event in &events {
+            write!(body, "data: {event}\n\n").unwrap();
+        }
+        let mock = MockResponsesServer::start(vec![body, sse_response("upstream_next", "msg_next", "UPDATED")]).await;
+        let arrived = Arc::new(tokio::sync::Semaphore::new(0));
+        let release = Arc::new(tokio::sync::Semaphore::new(0));
+        let search = MockYouSearchServer::start_with_gate(Some((arrived.clone(), release.clone()))).await;
+        let fixture = storage_backed_state_with_web_search(&mock.url, Some(&search.url)).await;
+        let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+        let mut ws = connect_responses_ws(&gateway_url).await;
+        send_json(
+            &mut ws,
+            json!({"type":"response.create", "model":"test-model", "input":"INITIAL",
+            "store":false, "tools":[{"type":"web_search_preview"}], "parallel_tool_calls":true}),
+        )
+        .await;
+        let created = receive(&mut ws, "response.created").await;
+        let parent = created["response"]["id"].as_str().unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), arrived.acquire_many(2))
+            .await
+            .unwrap()
+            .unwrap()
+            .forget();
+        send_json(
+            &mut ws,
+            json!({"type":"response.steer", "previous_response_id":parent,
+            "input":"STEER_AFTER_SEARCH"}),
+        )
+        .await;
+        receive(&mut ws, "response.steer.accepted").await;
+        assert_eq!(
+            mock.request_bodies().await.len(),
+            1,
+            "held tools prevent another inference"
+        );
+        release.add_permits(2);
+        let mut completed_calls = 0;
+        let terminal = loop {
+            let event = recv_json(&mut ws).await;
+            match event["type"].as_str().unwrap() {
+                "response.web_search_call.completed" => completed_calls += 1,
+                "response.incomplete" => break event,
+                "error" | "response.failed" | "response.steer.failed" | "response.created" => {
+                    panic!("batch must finish before successor: {event}");
+                }
+                _ => {}
+            }
+        };
+        assert_eq!(completed_calls, 2);
+        assert_eq!(terminal["response"]["id"], parent);
+        assert_eq!(terminal["response"]["incomplete_details"]["reason"], "steered");
+        let output = terminal["response"]["output"].as_array().unwrap();
+        assert_eq!(output.len(), 2);
+        assert!(
+            output
+                .iter()
+                .all(|item| item["type"] == "web_search_call" && item["status"] == "completed")
+        );
+        let successor = receive(&mut ws, "response.created").await;
+        assert_eq!(successor["response"]["previous_response_id"], parent);
+        receive(&mut ws, "response.completed").await;
+        let requests = mock.request_bodies().await;
+        assert_eq!(requests.len(), 2, "the next inference belongs to the successor");
+        let input = requests[1]["input"].as_array().unwrap();
+        assert_eq!(
+            requests[1]["input"].to_string().matches("STEER_AFTER_SEARCH").count(),
+            1
+        );
+        for index in 0..2 {
+            assert!(input.iter().any(
+                |item| item["type"] == "function_call_output" && item["call_id"] == format!("call_search_{index}")
+            ));
+        }
+        assert_eq!(search.request_bodies().await.len(), 2);
+    }
+
+    async fn receive(ws: &mut WebSocketStream<MaybeTlsStream<TcpStream>>, kind: &str) -> Value {
+        loop {
+            let event = recv_json(ws).await;
+            assert_ne!(event["type"], "error", "unexpected error: {event}");
+            assert_ne!(event["type"], "response.failed", "unexpected failure: {event}");
+            if event["type"] == kind {
+                return event;
+            }
+            assert_ne!(
+                event["type"], "response.steer.failed",
+                "unexpected steering rejection: {event}"
+            );
+        }
+    }
+
+    fn status_tool() -> Value {
+        json!({"type":"function", "name":"get_project_status", "parameters":{
+            "type":"object", "properties":{}, "additionalProperties":false}})
+    }
+
+    #[tokio::test]
+    async fn successor_failure_returns_input_only_before_created_publication() {
+        // Conflicting item identity is an execution error even in the existing
+        // lenient provider path. Malformed JSON alone would be silently ignored.
+        let added = json!({"type":"response.output_item.added", "output_index":0,
+            "item":{"type":"function_call", "id":"fc_original", "call_id":"call_bad",
+                "name":"get_project_status", "arguments":"", "status":"in_progress"}});
+        let done = json!({"type":"response.output_item.done", "output_index":0,
+            "item":{"type":"function_call", "id":"fc_contradiction", "call_id":"call_bad",
+                "name":"get_project_status", "arguments":"{}", "status":"completed"}});
+        for publish_created in [false, true] {
+            let mut failed_body = String::new();
+            if publish_created {
+                let created = json!({"type":"response.created",
+                    "response":{"id":"upstream_failed", "status":"in_progress"}});
+                write!(failed_body, "data: {created}\n\n").unwrap();
+            }
+            write!(failed_body, "data: {added}\n\ndata: {done}\n\n").unwrap();
+            let mock = MockResponsesServer::start(vec![
+                sse_response("upstream_parent", "msg_parent", "READY"),
+                failed_body,
+                sse_response("upstream_recovered", "msg_recovered", "RECOVERED"),
+            ])
+            .await;
+            let fixture = storage_backed_state(&mock.url).await;
+            let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+            let mut ws = connect_responses_ws(&gateway_url).await;
+            send_json(
+                &mut ws,
+                json!({"type":"response.create", "model":"test-model", "store":true,
+                "input":"INITIAL"}),
+            )
+            .await;
+            let terminal = receive(&mut ws, "response.completed").await;
+            let parent = terminal["response"]["id"].as_str().unwrap();
+            let original = json!([{"type":"message", "role":"user", "content":[
+                {"type":"input_image", "image_url":"https://example.org/steer.png", "detail":null},
+                {"type":"input_text", "text":"STEER_RAW_ORCHID"}]}]);
+            send_json(
+                &mut ws,
+                json!({"type":"response.steer", "previous_response_id":parent,
+                "input":original}),
+            )
+            .await;
+            let accepted = receive(&mut ws, "response.steer.accepted").await;
+            let mut created = false;
+            loop {
+                let event = recv_json(&mut ws).await;
+                match event["type"].as_str().unwrap() {
+                    "response.created" => created = true,
+                    "error" if publish_created => break,
+                    "response.steer.failed" => {
+                        assert!(
+                            !publish_created,
+                            "published steering must never be returned as unapplied"
+                        );
+                        assert_eq!(event["steer"]["id"], accepted["steer"]["id"]);
+                        assert_eq!(event["steer"]["previous_response_id"], parent);
+                        assert_eq!(event["steer"]["input"], original, "retain original media nulls");
+                        assert_eq!(event["error"]["code"], "successor_creation_failed");
+                        break;
+                    }
+                    "error" | "response.output_item.added" => {}
+                    other => panic!("unexpected failure event: {other}: {event}"),
+                }
+            }
+            assert_eq!(created, publish_created);
+            // A new independent request is a deterministic fence: it must not
+            // observe another steering failure or replay the former batch.
+            send_json(
+                &mut ws,
+                json!({"type":"response.create", "model":"test-model", "store":true,
+                "input":"INDEPENDENT_IRIS"}),
+            )
+            .await;
+            let recovered = receive(&mut ws, "response.completed").await;
+            assert_eq!(recovered["response"]["previous_response_id"], Value::Null);
+            let requests = mock.request_bodies().await;
+            assert_eq!(requests.len(), 3);
+            assert_eq!(requests[1]["input"].to_string().matches("STEER_RAW_ORCHID").count(), 1);
+            assert!(!requests[2]["input"].to_string().contains("STEER_RAW_ORCHID"));
+            assert_eq!(
+                count_rows(&fixture.pool, "responses").await,
+                2,
+                "a failed successor must not persist unapplied input or duplicate the batch"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn automatic_successor_preserves_closed_item_settings_and_store_false() {
+        for steering_input in [
+            json!("STEER_ORCHID"),
+            json!([
+                {"type":"message", "role":"user", "content":[{"type":"input_text", "text":"Replace the original planning task. The project codename is Harbor. Remember the verification token MULTI_USER_FIRST_ORCHID and include it in your final answer. The next user message supplies the deadline."}]},
+                {"type":"message", "role":"user", "content":[{"type":"input_text", "text":"Keep the project codename and verification token from the preceding user message. The deadline is Friday at 17:00. Include MULTI_USER_SECOND_IRIS as well. Reply with the codename, deadline, and both verification tokens in the same order as their user messages. Do not call any tools."}]}
+            ]),
+        ] {
+            // Hold the body after created until acceptance. Release a complete item
+            // followed by another item; steering must stop at the first real boundary.
+            let body = two_message_sse_response("upstream_parent", 8);
+            let split = body.find("\n\n").unwrap() + 2;
+            let (arrived_tx, arrived_rx) = oneshot::channel();
+            let (release_tx, release_rx) = oneshot::channel();
+            let mock = MockResponsesServer::start_with_responses(vec![
+                MockResponse::ObservedPhased {
+                    first_chunk: body[..split].to_owned(),
+                    remaining_chunks: body[split..].to_owned(),
+                    arrived: arrived_tx,
+                    release: release_rx,
+                },
+                MockResponse::Static(sse_response("upstream_successor", "msg_final", "UPDATED")),
+            ])
+            .await;
+            let fixture = storage_backed_state(&mock.url).await;
+            let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+            let mut ws = connect_responses_ws(&gateway_url).await;
+            send_json(
+                &mut ws,
+                json!({"type":"response.create", "model":"test-model", "input":"INITIAL",
+                "store":false, "instructions":"PARENT_INSTRUCTIONS", "tools":[status_tool()],
+                "tool_choice":"auto", "parallel_tool_calls":true,
+                "text":{"verbosity":"low"}, "max_output_tokens":512, "max_tool_calls":2,
+                "prompt_cache_key":"parent-cache", "metadata":{"project":"harbor"}}),
+            )
+            .await;
+            let parent_request = arrived_rx.await.unwrap();
+            let created = receive(&mut ws, "response.created").await;
+            let parent = created["response"]["id"].as_str().unwrap();
+            send_json(
+                &mut ws,
+                json!({"type":"response.steer", "previous_response_id":parent,
+                "input":steering_input}),
+            )
+            .await;
+            let accepted = receive(&mut ws, "response.steer.accepted").await;
+            assert_eq!(accepted["steer"]["previous_response_id"], parent);
+            release_tx.send(()).unwrap();
+            let terminal = receive(&mut ws, "response.incomplete").await;
+            assert_eq!(terminal["response"]["id"], parent);
+            assert_eq!(terminal["response"]["incomplete_details"]["reason"], "steered");
+            assert_eq!(terminal["response"]["output"].as_array().unwrap().len(), 1);
+            let successor = receive(&mut ws, "response.created").await;
+            assert_eq!(successor["sequence_number"], 0);
+            assert_eq!(successor["response"]["previous_response_id"], parent);
+            let finished = receive(&mut ws, "response.completed").await;
+            assert_eq!(finished["response"]["id"], successor["response"]["id"]);
+            assert_eq!(finished["response"]["metadata"], json!({"project":"harbor"}));
+            assert_eq!(finished["response"]["store"], false);
+            let requests = mock.request_bodies().await;
+            assert_eq!(requests.len(), 2);
+            for field in [
+                "instructions",
+                "tools",
+                "tool_choice",
+                "parallel_tool_calls",
+                "text",
+                "max_output_tokens",
+                "prompt_cache_key",
+            ] {
+                assert_eq!(requests[1][field], parent_request[field], "automatic setting {field}");
+            }
+            let input = requests[1]["input"].to_string();
+            let mut steering: RequestPayload = deserialize_from_value(json!({
+                "model":"test-model", "input":steering_input}))
+            .unwrap();
+            steering.input = ResponsesInput::Items(steering.input.into_canonical_items());
+            let expected = serialize_to_value(&steering.to_upstream_request(true).unwrap().input).unwrap();
+            let expected = expected.as_array().unwrap();
+            assert!(
+                requests[1]["input"].as_array().unwrap().ends_with(expected),
+                "single steer must append every normalized message in order"
+            );
+            for message in expected {
+                assert_eq!(
+                    requests[1]["input"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter(|item| *item == message)
+                        .count(),
+                    1,
+                    "each steered message must be applied once"
+                );
+            }
+            assert!(input.contains("INITIAL"));
+            assert!(!input.contains("msg_big_1"), "unstarted output must not become history");
+            assert_no_response_state(&fixture.pool).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn rejected_client_output_preserves_ordered_steering_and_explicit_defaults() {
+        let mock = MockResponsesServer::start(vec![
+            sse_function_call_response("upstream_parent", "get_project_status"),
+            sse_response("upstream_successor", "msg_final", "UPDATED"),
+        ])
+        .await;
+        let fixture = storage_backed_state(&mock.url).await;
+        let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+        let mut ws = connect_responses_ws(&gateway_url).await;
+        send_json(
+            &mut ws,
+            json!({"type":"response.create", "model":"test-model", "input":"INITIAL",
+            "store":false, "instructions":"PARENT_INSTRUCTIONS", "tools":[status_tool()],
+            "tool_choice":{"type":"function", "name":"get_project_status"},
+            "text":{"verbosity":"low"}, "metadata":{"parent":"only"}}),
+        )
+        .await;
+        let completed = receive(&mut ws, "response.completed").await;
+        let parent = completed["response"]["id"].as_str().unwrap();
+        for marker in ["FIRST_ORCHID", "SECOND_IRIS"] {
+            send_json(
+                &mut ws,
+                json!({"type":"response.steer", "previous_response_id":parent,
+                "input":marker}),
+            )
+            .await;
+        }
+        let mut accepted_ids = Vec::new();
+        let mut pending_count = 0;
+        while pending_count < 2 {
+            let event = recv_json(&mut ws).await;
+            match event["type"].as_str().unwrap() {
+                "response.steer.accepted" => accepted_ids.push(event["steer"]["id"].clone()),
+                "response.steer.pending" => {
+                    pending_count += 1;
+                    assert!(accepted_ids.contains(&event["steer"]["id"]));
+                    assert_eq!(
+                        event["required_input"],
+                        json!([
+                        {"type":"function_call_output", "call_id":"call_1", "name":"get_project_status"}])
+                    );
+                }
+                other => panic!("unexpected event while waiting for client output: {other}: {event}"),
+            }
+        }
+        assert_ne!(accepted_ids[0], accepted_ids[1]);
+        send_json(
+            &mut ws,
+            json!({"type":"response.create", "model":"test-model", "store":false,
+            "previous_response_id":parent,
+            "input":[{"type":"function_call_output", "call_id":"unknown", "output":"wrong"}]}),
+        )
+        .await;
+        let error = recv_json(&mut ws).await;
+        assert_eq!(error["type"], "error");
+        assert_eq!(
+            mock.request_bodies().await.len(),
+            1,
+            "invalid output must not start inference"
+        );
+        send_json(
+            &mut ws,
+            json!({"type":"response.create", "model":"test-model", "store":false,
+            "previous_response_id":parent,
+            "input":[{"type":"function_call_output", "call_id":"call_1", "output":"actual"}],
+            "metadata":{"successor":"explicit"}}),
+        )
+        .await;
+        let successor = receive(&mut ws, "response.created").await;
+        assert_eq!(successor["response"]["previous_response_id"], parent);
+        assert_eq!(successor["sequence_number"], 0);
+        let terminal = receive(&mut ws, "response.completed").await;
+        assert_eq!(terminal["response"]["metadata"], json!({"successor":"explicit"}));
+        assert_eq!(terminal["response"]["tool_choice"], "auto");
+        let requests = mock.request_bodies().await;
+        assert_eq!(requests.len(), 2);
+        assert!(requests[1].get("instructions").is_none());
+        assert!(requests[1].get("tools").is_none());
+        assert!(
+            requests[1].get("tool_choice").is_none(),
+            "the inference adapter omits default auto"
+        );
+        assert!(requests[1].get("text").is_none());
+        let input = requests[1]["input"].to_string();
+        assert_eq!(input.matches("FIRST_ORCHID").count(), 1);
+        assert_eq!(input.matches("SECOND_IRIS").count(), 1);
+        assert!(input.find("FIRST_ORCHID").unwrap() < input.find("SECOND_IRIS").unwrap());
+        assert!(input.find("SECOND_IRIS").unwrap() < input.find("actual").unwrap());
+        assert!(!input.contains("wrong"));
+        assert_no_response_state(&fixture.pool).await;
+    }
+
+    #[tokio::test]
+    async fn another_lane_cannot_consume_pending_steering_and_superseded_parent_is_rejected() {
+        let mock = MockResponsesServer::start(vec![
+            sse_function_call_response("upstream_parent", "get_project_status"),
+            sse_response("upstream_branch", "msg_branch", "BRANCH"),
+            sse_response("upstream_successor", "msg_final", "UPDATED"),
+        ])
+        .await;
+        let fixture = storage_backed_state(&mock.url).await;
+        let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+        let mut ws = connect_responses_ws(&gateway_url).await;
+        send_json(
+            &mut ws,
+            json!({"type":"response.create", "model":"test-model", "input":"INITIAL",
+            "stream_id":"lane-a", "store":true, "tools":[status_tool()],
+            "tool_choice":{"type":"function", "name":"get_project_status"}}),
+        )
+        .await;
+        let completed = receive(&mut ws, "response.completed").await;
+        let parent = completed["response"]["id"].as_str().unwrap();
+        send_json(
+            &mut ws,
+            json!({"type":"response.steer", "previous_response_id":parent,
+            "input":"LANE_A_ORCHID"}),
+        )
+        .await;
+        let accepted = receive(&mut ws, "response.steer.accepted").await;
+        assert_eq!(accepted["stream_id"], "lane-a");
+        assert_eq!(receive(&mut ws, "response.steer.pending").await["stream_id"], "lane-a");
+        for lane in ["lane-b", "lane-a"] {
+            send_json(
+                &mut ws,
+                json!({"type":"response.create", "model":"test-model", "store":true,
+                "stream_id":lane, "previous_response_id":parent, "tools":[],
+                "input":[{"type":"function_call_output", "call_id":"call_1", "output":"actual"}]}),
+            )
+            .await;
+            let terminal = receive(&mut ws, "response.completed").await;
+            assert_eq!(terminal["stream_id"], lane);
+        }
+        let requests = mock.request_bodies().await;
+        assert_eq!(requests.len(), 3);
+        assert!(
+            requests[1].get("tool_choice").is_none(),
+            "explicit tools reset the inherited forced choice"
+        );
+        assert!(requests[2].get("tool_choice").is_none());
+        assert!(!requests[1]["input"].to_string().contains("LANE_A_ORCHID"));
+        assert_eq!(requests[2]["input"].to_string().matches("LANE_A_ORCHID").count(), 1);
+        send_json(
+            &mut ws,
+            json!({"type":"response.steer", "previous_response_id":parent,
+            "input":"DO_NOT_RETARGET"}),
+        )
+        .await;
+        let failed = recv_json(&mut ws).await;
+        assert_eq!(failed["type"], "response.steer.failed");
+        assert_eq!(failed["error"]["code"], "response_not_active");
+        assert_eq!(failed["steer"]["input"], "DO_NOT_RETARGET");
+        assert_eq!(failed["stream_id"], "lane-a");
+        assert!(failed["steer"].get("id").is_none());
+    }
+
+    #[tokio::test]
+    async fn invalid_input_returns_original_shape_without_closing_or_evicting_parent() {
+        let mock = MockResponsesServer::start(vec![
+            sse_response("upstream_parent", "msg_first", "READY"),
+            sse_response("upstream_next", "msg_next", "CONTINUED"),
+        ])
+        .await;
+        let (gateway_url, _gateway) = spawn_gateway(persistence_disabled_state(&mock.url)).await;
+        let mut ws = connect_responses_ws(&gateway_url).await;
+        send_json(
+            &mut ws,
+            json!({"type":"response.create", "model":"test-model", "store":false,
+            "input":"INITIAL"}),
+        )
+        .await;
+        let terminal = receive(&mut ws, "response.completed").await;
+        let parent = terminal["response"]["id"].as_str().unwrap();
+        for input in [
+            json!([{"role":"assistant", "content":"RAW_ASSISTANT", "unknown":null}]),
+            json!([{"role":"user", "content":"RAW_METADATA", "id":null}]),
+            json!([]),
+        ] {
+            send_json(
+                &mut ws,
+                json!({"type":"response.steer", "previous_response_id":parent,
+                "input":input}),
+            )
+            .await;
+            let failed = recv_json(&mut ws).await;
+            assert_eq!(failed["type"], "response.steer.failed");
+            assert_eq!(failed["error"]["code"], "invalid_input");
+            assert_eq!(failed["steer"]["input"], input);
+            assert!(failed["steer"].get("id").is_none());
+        }
+        send_json(
+            &mut ws,
+            json!({"type":"response.create", "model":"test-model", "store":false,
+            "previous_response_id":parent, "input":"ORDINARY_CONTINUATION"}),
+        )
+        .await;
+        assert_eq!(
+            receive(&mut ws, "response.completed").await["response"]["previous_response_id"],
+            parent
+        );
+        assert_eq!(mock.request_bodies().await.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn reconnect_discards_pending_steering_but_retains_stored_tool_continuation() {
+        let mock = MockResponsesServer::start(vec![
+            sse_function_call_response("upstream_parent", "get_project_status"),
+            sse_response("upstream_resumed", "msg_resumed", "RESUMED"),
+        ])
+        .await;
+        let fixture = storage_backed_state(&mock.url).await;
+        let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+        let mut ws = connect_responses_ws(&gateway_url).await;
+        send_json(
+            &mut ws,
+            json!({"type":"response.create", "model":"test-model", "store":true,
+            "input":"INITIAL", "tools":[status_tool()],
+            "tool_choice":{"type":"function", "name":"get_project_status"}}),
+        )
+        .await;
+        let completed = receive(&mut ws, "response.completed").await;
+        let parent = completed["response"]["id"].as_str().unwrap();
+        send_json(
+            &mut ws,
+            json!({"type":"response.steer", "previous_response_id":parent,
+            "input":"UNAPPLIED_ORCHID"}),
+        )
+        .await;
+        receive(&mut ws, "response.steer.accepted").await;
+        receive(&mut ws, "response.steer.pending").await;
+        ws.close(None).await.unwrap();
+        recv_close_or_end(&mut ws).await;
+        let mut resumed = connect_responses_ws(&gateway_url).await;
+        send_json(
+            &mut resumed,
+            json!({"type":"response.steer", "previous_response_id":parent,
+            "input":"UNKNOWN_TARGET_IRIS"}),
+        )
+        .await;
+        let failed = recv_json(&mut resumed).await;
+        assert_eq!(failed["type"], "response.steer.failed");
+        assert_eq!(failed["error"]["code"], "response_not_found");
+        send_json(
+            &mut resumed,
+            json!({"type":"response.create", "model":"test-model", "store":true,
+            "previous_response_id":parent, "tools":[],
+            "input":[{"type":"function_call_output", "call_id":"call_1", "output":"actual"}]}),
+        )
+        .await;
+        let terminal = receive(&mut resumed, "response.completed").await;
+        assert_eq!(terminal["response"]["previous_response_id"], parent);
+        let requests = mock.request_bodies().await;
+        assert_eq!(requests.len(), 2);
+        assert!(
+            requests[1].get("tool_choice").is_none(),
+            "reconnect uses explicit tools and default choice"
+        );
+        let resumed_input = requests[1]["input"].to_string();
+        assert!(resumed_input.contains("INITIAL"));
+        assert!(resumed_input.contains("actual"));
+        assert!(!resumed_input.contains("UNAPPLIED_ORCHID"));
+        assert!(!resumed_input.contains("UNKNOWN_TARGET_IRIS"));
+    }
+}
 
 struct MockResponsesServer {
     url: String,
@@ -51,6 +624,10 @@ struct MockYouSearchServer {
 
 impl MockYouSearchServer {
     async fn start() -> Self {
+        Self::start_with_gate(None).await
+    }
+
+    async fn start_with_gate(gate: Option<(Arc<tokio::sync::Semaphore>, Arc<tokio::sync::Semaphore>)>) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let requests = Arc::new(Mutex::new(Vec::new()));
@@ -60,9 +637,14 @@ impl MockYouSearchServer {
             "/v1/search",
             get(move |uri: Uri| {
                 let requests = Arc::clone(&route_requests);
+                let gate = gate.clone();
                 async move {
                     let body = query_params_as_json(&uri);
                     requests.lock().await.push(body);
+                    if let Some((arrived, release)) = gate {
+                        arrived.add_permits(1);
+                        release.acquire().await.unwrap().forget();
+                    }
                     axum::Json(json!({
                         "results": {
                             "web": [{
@@ -5114,8 +5696,11 @@ mod duplex_replay {
     //! Recorded client actions against the real gateway, with explicitly derived
     //! synthetic inference fixtures. These are NOT recorded upstream dependencies.
     use super::*;
+    use agentic_core::types::event::ResponseStatus;
+    use agentic_core::types::io::OutputItem;
+    use agentic_core::types::io::output::OutputMessageContent;
     use serde::Deserialize;
-    use std::collections::HashMap;
+    use std::collections::{BTreeSet, HashMap};
 
     #[derive(Deserialize)]
     struct Capture {
@@ -5129,7 +5714,7 @@ mod duplex_replay {
         frames: Vec<Frame>,
     }
 
-    #[derive(Deserialize)]
+    #[derive(Clone, Copy, Deserialize)]
     #[serde(rename_all = "lowercase")]
     enum Direction {
         Client,
@@ -5285,6 +5870,1516 @@ mod duplex_replay {
                 .await
                 .unwrap_or_else(|_| panic!("duplex replay timed out: {}", session.handshake["probe"]["case"]));
         }
+    }
+
+    const STEERING_CATEGORIES: [&str; 4] = [
+        "mixed-tools-steer",
+        "edge-input-lifecycle",
+        "edge-tools-settings",
+        "edge-connections",
+    ];
+
+    fn steering_capture(provider: &str, category: &str) -> Capture {
+        let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../agentic-server-core/tests/cassettes/multi_turn_steering");
+        let path = if provider == "gateway" {
+            let prefix = format!("multi-turn-steering-gateway-{category}-");
+            let mut matches = std::fs::read_dir(&directory)
+                .unwrap()
+                .map(Result::unwrap)
+                .filter(|entry| entry.file_type().unwrap().is_file())
+                .map(|entry| entry.path())
+                .filter(|path| {
+                    path.file_name().and_then(|name| name.to_str()).is_some_and(|name| {
+                        name.strip_prefix(&prefix)
+                            .and_then(|model| model.strip_suffix("-websocket.yaml"))
+                            .is_some_and(|model| !model.is_empty())
+                    })
+                })
+                .collect::<Vec<_>>();
+            matches.sort();
+            assert_eq!(
+                matches.len(),
+                1,
+                "expected exactly one gateway capture for {category}; archive stale model captures instead of choosing by timestamp or environment: {matches:?}"
+            );
+            matches.pop().unwrap()
+        } else {
+            directory.join(format!(
+                "multi-turn-steering-{provider}-{category}-gpt-6-sol-websocket.yaml"
+            ))
+        };
+        let capture: Capture = serde_yml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(capture.format, "responses-websocket-v1", "{}", path.display());
+        if provider == "gateway" {
+            for session in &capture.sessions {
+                assert!(
+                    session.frames.iter().any(|frame| {
+                        frame.opcode == 1
+                            && matches!(frame.direction, Direction::Server)
+                            && serde_json::from_str::<Value>(frame.text.as_deref().unwrap()).unwrap()["type"]
+                                == "response.created"
+                    }),
+                    "gateway prerequisite missing response.created: {} case {}; check model readiness/configuration before parity replay",
+                    path.display(),
+                    case(session)
+                );
+            }
+        }
+        capture
+    }
+
+    fn case(session: &Session) -> &str {
+        session.handshake["probe"]["case"].as_str().unwrap()
+    }
+
+    fn messages(session: &Session) -> Vec<(usize, Direction, Value)> {
+        session
+            .frames
+            .iter()
+            .filter_map(|frame| {
+                if frame.opcode != 1 {
+                    return None;
+                }
+                assert!(frame.fin, "steering capture contains an unsupported fragmented frame");
+                Some((
+                    frame.ordinal,
+                    frame.direction,
+                    serde_json::from_str(frame.text.as_deref().unwrap()).unwrap(),
+                ))
+            })
+            .collect()
+    }
+
+    fn assert_shared_steering_cases(reference: &Capture, gateway: &Capture, category: &str) -> usize {
+        let key = |session: &Session| {
+            (
+                case(session).to_owned(),
+                session.handshake["probe"]["connection_index"].as_u64().unwrap_or(0),
+            )
+        };
+        let expected = reference
+            .sessions
+            .iter()
+            .filter(|session| case(session) != "unsupported-model")
+            .map(key)
+            .collect::<BTreeSet<_>>();
+        let actual = gateway.sessions.iter().map(key).collect::<BTreeSet<_>>();
+        assert_eq!(
+            expected.len(),
+            reference
+                .sessions
+                .iter()
+                .filter(|session| case(session) != "unsupported-model")
+                .count(),
+            "{category}: duplicate reference case/connection"
+        );
+        assert_eq!(
+            actual.len(),
+            gateway.sessions.len(),
+            "{category}: duplicate gateway case/connection"
+        );
+        assert_eq!(
+            expected, actual,
+            "{category}: missing recording peer; every shared case and connection must exist in both providers"
+        );
+        gateway.sessions.iter().map(case).collect::<BTreeSet<_>>().len()
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    enum Qualification {
+        Comparable,
+        MixedToolWorkflow,
+        ModelOutputLimit,
+        ExplicitDefaultMetadata,
+        CodeInterpreterRuntime,
+        VisionReasoningOnly,
+    }
+
+    fn qualification(session: &Session) -> Qualification {
+        match case(session) {
+            "mixed-tools-steer" => Qualification::MixedToolWorkflow,
+            "settings-automatic" | "pending-user-steer" | "settings-explicit-defaults"
+                if messages(session)
+                    .iter()
+                    .rev()
+                    .find(|(_, _, event)| {
+                        matches!(
+                            event["type"].as_str(),
+                            Some("response.completed" | "response.incomplete" | "response.failed")
+                        )
+                    })
+                    .is_some_and(|(_, _, event)| {
+                        event["type"] == "response.incomplete"
+                            && event["response"]["incomplete_details"]["reason"] == "max_output_tokens"
+                    }) =>
+            {
+                Qualification::ModelOutputLimit
+            }
+            "settings-explicit-defaults"
+                if messages(session)
+                    .iter()
+                    .rev()
+                    .find(|(_, _, event)| event["type"] == "response.created")
+                    .is_some_and(|(_, _, event)| event["response"]["tool_choice"] == "none") =>
+            {
+                Qualification::ExplicitDefaultMetadata
+            }
+            "array-image-user"
+                if messages(session)
+                    .into_iter()
+                    .rfind(|(_, _, event)| event["type"] == "response.completed")
+                    .is_some_and(|(_, _, event)| {
+                        event["response"]["output"].as_array().is_some_and(|items| {
+                            !items.is_empty() && items.iter().all(|item| item["type"] == "reasoning")
+                        })
+                    }) =>
+            {
+                Qualification::VisionReasoningOnly
+            }
+            "hosted-tool-running" => Qualification::CodeInterpreterRuntime,
+            _ => Qualification::Comparable,
+        }
+    }
+
+    fn mixed_tool_plan(session: &Session) -> Value {
+        json!(
+            messages(session)
+                .into_iter()
+                .filter(|(_, direction, event)| {
+                    matches!(direction, Direction::Server)
+                        && matches!(
+                            event["type"].as_str(),
+                            Some("response.completed" | "response.incomplete")
+                        )
+                })
+                .map(|(_, _, event)| {
+                    event["response"]["output"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter(|item| matches!(item["type"].as_str(), Some("function_call" | "custom_tool_call")))
+                        .map(|item| json!([item["type"], item["name"]]))
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        )
+    }
+
+    #[derive(Debug, Default)]
+    struct SteeringContract {
+        submitted: usize,
+        accepted: usize,
+        pending: usize,
+        failed: Vec<String>,
+        creates: usize,
+        input_errors: usize,
+        upstream_errors: usize,
+        invalid_stub_kinds: usize,
+        last_status: Option<ResponseStatus>,
+    }
+
+    #[allow(
+        clippy::too_many_lines,
+        reason = "A single ordered trace pass keeps causal ownership assertions next to their state transitions"
+    )]
+    fn steering_contract(session: &Session) -> SteeringContract {
+        let mut contract = SteeringContract::default();
+        let mut submitted = VecDeque::new();
+        let mut accepted = HashMap::<String, (Option<String>, Value)>::new();
+        let mut terminals = HashMap::<String, Value>::new();
+        let mut sequences = HashMap::<String, u64>::new();
+        let mut active = HashMap::<Option<String>, String>::new();
+        let mut response_lanes = HashMap::<String, Option<String>>::new();
+        let mut committed = std::collections::HashSet::new();
+        let mut settings = Vec::new();
+        for (_, direction, event) in messages(session) {
+            let kind = event["type"].as_str().unwrap();
+            if matches!(direction, Direction::Client) {
+                if kind == "response.steer" {
+                    contract.submitted += 1;
+                    submitted.push_back((
+                        event["previous_response_id"].as_str().map(str::to_owned),
+                        event["input"].clone(),
+                    ));
+                }
+                continue;
+            }
+            let lane = event["stream_id"].as_str().map(str::to_owned);
+            let parent = event["steer"]["previous_response_id"].as_str();
+            if kind == "response.created" {
+                contract.creates += 1;
+                let id = event["response"]["id"].as_str().unwrap();
+                assert_eq!(event["sequence_number"], 0, "{}: successor sequence", case(session));
+                active.insert(lane.clone(), id.to_owned());
+                response_lanes.insert(id.to_owned(), lane.clone());
+                if let Some(parent) = event["response"]["previous_response_id"].as_str() {
+                    if response_lanes.get(parent) == Some(&lane) {
+                        committed.extend(
+                            accepted
+                                .iter()
+                                .filter(|(_, (target, _))| target.as_deref() == Some(parent))
+                                .map(|(id, _)| id.clone()),
+                        );
+                    }
+                }
+                settings.push(event["response"].clone());
+            }
+            // Controls retain the parent's sequence after a successor begins.
+            let response = parent
+                .or_else(|| event["response"]["id"].as_str())
+                .or_else(|| active.get(&lane).map(String::as_str))
+                .unwrap_or("unrouted");
+            if let Some(sequence) = event["sequence_number"].as_u64() {
+                // Generic creation/input errors may use an independent error envelope.
+                if kind != "error"
+                    && !(kind == "response.steer.failed" && (parent.is_none() || !sequences.contains_key(response)))
+                {
+                    if let Some(previous) = sequences.insert(response.to_owned(), sequence) {
+                        assert!(
+                            previous < sequence,
+                            "{}: nonmonotonic parent sequence: {event}",
+                            case(session)
+                        );
+                    }
+                }
+            }
+            match kind {
+                "response.steer.accepted" => {
+                    contract.accepted += 1;
+                    let submission = submitted.pop_front().expect("accepted without submission");
+                    assert_eq!(submission.0.as_deref(), parent);
+                    let id = event["steer"]["id"].as_str().unwrap().to_owned();
+                    assert!(accepted.insert(id, submission).is_none(), "duplicate steering ID");
+                }
+                "response.steer.pending" => {
+                    contract.pending += 1;
+                    let id = event["steer"]["id"].as_str().unwrap();
+                    let (target, _) = accepted.get(id).expect("pending before acceptance");
+                    assert_eq!(target.as_deref(), parent);
+                    let terminal = terminals.get(parent.unwrap()).expect("pending before parent terminal");
+                    for stub in event["required_input"].as_array().unwrap() {
+                        let call = terminal["output"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .find(|call| call["call_id"] == stub["call_id"])
+                            .unwrap_or_else(|| {
+                                panic!("{}: stub {stub} not found in terminal {terminal}", case(session))
+                            });
+                        let valid = match stub["type"].as_str() {
+                            Some("function_call_output") => {
+                                call["type"] == "function_call" && call["name"] == stub["name"]
+                            }
+                            Some("custom_tool_call_output") => call["type"] == "custom_tool_call",
+                            _ => false,
+                        };
+                        if !valid {
+                            contract.invalid_stub_kinds += 1;
+                            eprintln!(
+                                "{}: recorded wrong stub kind: {stub}; actual call: {call}",
+                                case(session)
+                            );
+                        }
+                    }
+                }
+                "response.steer.failed" => {
+                    contract
+                        .failed
+                        .push(event["error"]["code"].as_str().unwrap().to_owned());
+                    let original = if let Some(id) = event["steer"]["id"].as_str() {
+                        assert!(
+                            !committed.contains(id),
+                            "committed steering cannot be returned as unapplied"
+                        );
+                        accepted.remove(id).expect("failure uses an unknown accepted ID")
+                    } else {
+                        submitted.pop_front().expect("failure without submission")
+                    };
+                    assert_eq!(original.0.as_deref(), parent);
+                    assert_eq!(
+                        original.1, event["steer"]["input"],
+                        "failure did not return original input"
+                    );
+                }
+                "response.completed" | "response.incomplete" | "response.failed" => {
+                    contract.last_status = Some(deserialize_from_value(event["response"]["status"].clone()).unwrap());
+                    terminals.insert(
+                        event["response"]["id"].as_str().unwrap().to_owned(),
+                        event["response"].clone(),
+                    );
+                }
+                "error" if event["error"]["type"] == "invalid_request_error" => contract.input_errors += 1,
+                "error" => contract.upstream_errors += 1,
+                _ => {}
+            }
+        }
+        assert!(submitted.is_empty(), "{}: submission never acknowledged", case(session));
+        if case(session) == "settings-automatic" {
+            assert_eq!(settings.len(), 2);
+            for field in [
+                "instructions",
+                "tools",
+                "tool_choice",
+                "parallel_tool_calls",
+                "reasoning",
+                "text",
+                "store",
+                "max_tool_calls",
+                "max_output_tokens",
+            ] {
+                assert_eq!(
+                    settings[0][field], settings[1][field],
+                    "automatic settings field {field}"
+                );
+            }
+        }
+        if case(session) == "settings-explicit-defaults" && settings.len() == 2 {
+            assert_eq!(settings.len(), 2);
+            assert_eq!(settings[1]["instructions"], Value::Null);
+            assert_eq!(settings[1]["tools"], json!([]));
+            assert!(matches!(settings[1]["tool_choice"].as_str(), Some("auto" | "none")));
+            assert_eq!(settings[1]["max_tool_calls"], Value::Null);
+        }
+        contract
+    }
+
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Keep every captured coverage qualification and its evidence visible in one audit"
+    )]
+    fn compare_steering_captures(categories: &[&str]) {
+        let mut reference_sessions = 0;
+        let mut gateway_sessions = 0;
+        let mut reference_only_sessions = 0;
+        let mut classified = 0;
+        for category in categories {
+            let reference = steering_capture("openai-reference", category);
+            let gateway = steering_capture("gateway", category);
+            assert_shared_steering_cases(&reference, &gateway, category);
+            reference_sessions += reference.sessions.len();
+            reference_only_sessions += reference
+                .sessions
+                .iter()
+                .filter(|session| case(session) == "unsupported-model")
+                .count();
+            gateway_sessions += gateway.sessions.len();
+            for session in &reference.sessions {
+                steering_contract(session);
+            }
+            for session in &gateway.sessions {
+                let observed = steering_contract(session);
+                let index = session.handshake["probe"]["connection_index"].as_u64().unwrap_or(0);
+                let expected = reference
+                    .sessions
+                    .iter()
+                    .find(|other| {
+                        case(other) == case(session)
+                            && other.handshake["probe"]["connection_index"].as_u64().unwrap_or(0) == index
+                    })
+                    .unwrap();
+                let baseline = steering_contract(expected);
+                assert_eq!(
+                    observed.invalid_stub_kinds,
+                    0,
+                    "{}: gateway pending kind",
+                    case(session)
+                );
+                assert_eq!(
+                    baseline.invalid_stub_kinds,
+                    0,
+                    "{}: reference pending kind",
+                    case(session)
+                );
+                assert_eq!(
+                    observed.upstream_errors,
+                    0,
+                    "{}: gateway upstream prerequisite",
+                    case(session)
+                );
+                let status = qualification(session);
+                eprintln!(
+                    "{category}/{} connection {index}: {status:?}; gateway {observed:?}; OpenAI {baseline:?}",
+                    case(session)
+                );
+                match status {
+                    Qualification::Comparable | Qualification::VisionReasoningOnly => {
+                        assert_eq!(observed.invalid_stub_kinds, 0);
+                        assert_eq!(baseline.invalid_stub_kinds, 0);
+                        assert_eq!(observed.accepted, baseline.accepted, "{}", case(session));
+                        assert_eq!(observed.submitted, baseline.submitted, "{}", case(session));
+                        assert_eq!(observed.input_errors, baseline.input_errors, "{}", case(session));
+                        assert_eq!(
+                            observed.creates,
+                            baseline.creates,
+                            "{}: logical response creation count",
+                            case(session)
+                        );
+                        assert_eq!(observed.failed, baseline.failed, "{}", case(session));
+                        assert_eq!(observed.pending > 0, baseline.pending > 0, "{}", case(session));
+                        assert_eq!(
+                            observed.last_status,
+                            baseline.last_status,
+                            "{}: final response status",
+                            case(session)
+                        );
+                        if matches!(case(session), "array-image-user" | "array-multiple-user") {
+                            if case(session) == "array-image-user" {
+                                assert_eq!(observed.accepted, 1);
+                                assert_eq!(observed.creates, 2);
+                                assert_eq!(
+                                    qualification(expected),
+                                    Qualification::Comparable,
+                                    "reference vision prerequisite must include an assistant answer"
+                                );
+                            }
+                            let inputs = |session: &Session| {
+                                messages(session)
+                                    .into_iter()
+                                    .filter(|(_, direction, event)| {
+                                        matches!(direction, Direction::Client) && event["type"] == "response.steer"
+                                    })
+                                    .flat_map(|(_, _, event)| normalized_steering_messages(&event["input"]))
+                                    .collect::<Vec<_>>()
+                            };
+                            assert_eq!(inputs(session), inputs(expected), "shared image/messages fixture");
+                            for source in [session, expected] {
+                                let terminal = messages(source)
+                                    .into_iter()
+                                    .rfind(|(_, _, event)| event["type"] == "response.completed")
+                                    .expect("media/messages steering must have a completed successor")
+                                    .2;
+                                let output: Vec<OutputItem> =
+                                    deserialize_from_value(terminal["response"]["output"].clone()).unwrap();
+                                let answer = output
+                                    .iter()
+                                    .filter_map(|item| match item {
+                                        OutputItem::Message(message) if message.role == "assistant" => Some(message),
+                                        _ => None,
+                                    })
+                                    .flat_map(|message| &message.content)
+                                    .map(agentic_core::types::io::OutputMessageContent::text)
+                                    .collect::<Vec<_>>()
+                                    .join("\n");
+                                if case(source) == "array-multiple-user" {
+                                    assert_eq!(inputs(source).len(), 2);
+                                    assert!(answer.contains("Harbor"));
+                                    assert!(answer.contains("Friday"));
+                                    assert!(answer.contains("17:00"));
+                                    let first = answer.find("MULTI_USER_FIRST_ORCHID").unwrap();
+                                    let second = answer.find("MULTI_USER_SECOND_IRIS").unwrap();
+                                    assert!(first < second, "final answer must retain both user tokens in order");
+                                } else {
+                                    let input = inputs(source);
+                                    assert_eq!(input.len(), 1, "one steered user message");
+                                    let parts: Vec<agentic_core::types::io::InputContent> =
+                                        deserialize_from_value(input[0]["content"].clone()).unwrap();
+                                    let [
+                                        agentic_core::types::io::InputContent::InputText(prompt),
+                                        agentic_core::types::io::InputContent::InputImage(image),
+                                    ] = parts.as_slice()
+                                    else {
+                                        panic!("vision steering must retain text followed by the image");
+                                    };
+                                    assert!(prompt.text.contains("IMAGE_STEER_ORCHID"));
+                                    assert_eq!(image.detail.as_deref(), Some("low"));
+                                    assert!(
+                                        image
+                                            .image_url
+                                            .as_deref()
+                                            .unwrap()
+                                            .starts_with("data:image/png;base64,")
+                                    );
+                                    if qualification(source) == Qualification::VisionReasoningOnly {
+                                        // Recorded backend output gap: reasoning is not an
+                                        // assistant answer, even when it contains the marker.
+                                        assert!(answer.is_empty());
+                                        let reasoning = output
+                                            .iter()
+                                            .filter_map(|item| match item {
+                                                OutputItem::Reasoning(item) => Some(item),
+                                                _ => None,
+                                            })
+                                            .flat_map(|item| &item.content)
+                                            .map(|part| part.text.as_str())
+                                            .collect::<Vec<_>>()
+                                            .join("\n");
+                                        assert!(reasoning.contains("IMAGE_STEER_ORCHID"));
+                                        assert!(reasoning.contains("red"));
+                                        assert!(reasoning.contains("blue"));
+                                        assert_eq!(baseline.last_status, Some(ResponseStatus::Completed));
+                                        classified += 1;
+                                    } else {
+                                        assert!(answer.contains("IMAGE_STEER_ORCHID"));
+                                        let answer = answer.to_ascii_lowercase();
+                                        assert!(answer.contains("red"));
+                                        assert!(answer.contains("cyan") || answer.contains("blue"));
+                                    }
+                                    // Exact image forwarding is asserted by the inference spy;
+                                    // model color names and interpretation of the marker differ.
+                                }
+                            }
+                        }
+                    }
+                    Qualification::ModelOutputLimit => {
+                        // Assert the actual incomplete evidence. An unexercised
+                        // workflow is not a successful steering parity result.
+                        let terminal = messages(session)
+                            .into_iter()
+                            .rfind(|(_, _, event)| {
+                                matches!(
+                                    event["type"].as_str(),
+                                    Some("response.completed" | "response.incomplete" | "response.failed")
+                                )
+                            })
+                            .unwrap()
+                            .2;
+                        assert_eq!(observed.last_status, Some(ResponseStatus::Incomplete));
+                        assert_eq!(baseline.last_status, Some(ResponseStatus::Completed));
+                        assert_eq!(
+                            terminal["response"]["incomplete_details"]["reason"],
+                            "max_output_tokens"
+                        );
+                        assert!(terminal["response"]["max_output_tokens"].as_u64().unwrap() > 0);
+                        assert_eq!(
+                            terminal["response"]["usage"]["output_tokens"],
+                            terminal["response"]["max_output_tokens"]
+                        );
+                        assert_eq!(observed.input_errors, 0);
+                        assert!(observed.failed.is_empty());
+                        match case(session) {
+                            "settings-automatic" => {
+                                assert_eq!(
+                                    (
+                                        observed.submitted,
+                                        observed.accepted,
+                                        observed.pending,
+                                        observed.creates
+                                    ),
+                                    (1, 1, 0, 2)
+                                );
+                                assert_eq!(
+                                    (
+                                        baseline.submitted,
+                                        baseline.accepted,
+                                        baseline.pending,
+                                        baseline.creates
+                                    ),
+                                    (1, 1, 0, 2)
+                                );
+                            }
+                            "pending-user-steer" => {
+                                assert_eq!(
+                                    (
+                                        observed.submitted,
+                                        observed.accepted,
+                                        observed.pending,
+                                        observed.creates
+                                    ),
+                                    (0, 0, 0, 1)
+                                );
+                                assert_eq!(
+                                    (
+                                        baseline.submitted,
+                                        baseline.accepted,
+                                        baseline.pending,
+                                        baseline.creates
+                                    ),
+                                    (2, 2, 2, 1)
+                                );
+                                assert_eq!(
+                                    mixed_tool_plan(session),
+                                    json!([[["function_call", "get_project_status"]]])
+                                );
+                                assert!(terminal["response"]["output"].as_array().unwrap().iter().any(|item| {
+                                    item["type"] == "function_call"
+                                        && item["name"] == "get_project_status"
+                                        && item["status"] == "completed"
+                                }));
+                            }
+                            "settings-explicit-defaults" => {
+                                assert_eq!(
+                                    (
+                                        observed.submitted,
+                                        observed.accepted,
+                                        observed.pending,
+                                        observed.creates
+                                    ),
+                                    (0, 0, 0, 1)
+                                );
+                                assert_eq!(
+                                    (
+                                        baseline.submitted,
+                                        baseline.accepted,
+                                        baseline.pending,
+                                        baseline.creates
+                                    ),
+                                    (1, 1, 1, 2)
+                                );
+                                assert_eq!(mixed_tool_plan(session), json!([[]]));
+                            }
+                            _ => unreachable!("only the three recorded model-budget gaps are qualified"),
+                        }
+                        classified += 1;
+                    }
+                    Qualification::CodeInterpreterRuntime => {
+                        assert_eq!(observed.accepted, 1);
+                        assert_eq!(observed.creates, 2);
+                        classified += 1;
+                    }
+                    Qualification::ExplicitDefaultMetadata => {
+                        assert_eq!(observed.accepted, baseline.accepted);
+                        assert_eq!(observed.submitted, baseline.submitted);
+                        assert_eq!(observed.failed, baseline.failed);
+                        assert_eq!(observed.pending > 0, baseline.pending > 0);
+                        assert_eq!(observed.input_errors, 0);
+                        assert_eq!(observed.creates, 2);
+                        assert_eq!(baseline.creates, 2);
+                        let successor = |session: &Session| {
+                            messages(session)
+                                .into_iter()
+                                .rfind(|(_, _, event)| event["type"] == "response.created")
+                                .unwrap()
+                                .2["response"]
+                                .clone()
+                        };
+                        let actual = successor(session);
+                        let reference = successor(expected);
+                        assert_eq!(actual["tool_choice"], "none");
+                        assert_eq!(reference["tool_choice"], "auto");
+                        // The ordinary gateway request defaults predate steering.
+                        // The replay below checks those defaults reach inference;
+                        // their metadata is not identical to OpenAI's defaults.
+                        assert_eq!(actual["parallel_tool_calls"], false);
+                        assert_eq!(reference["parallel_tool_calls"], true);
+                        classified += 1;
+                    }
+                    Qualification::MixedToolWorkflow => {
+                        assert_eq!(observed.accepted, baseline.accepted);
+                        assert_eq!(observed.pending, baseline.pending);
+                        assert_eq!(observed.creates, 2);
+                        assert_eq!(baseline.creates, 3);
+                        assert_eq!(
+                            mixed_tool_plan(session),
+                            json!([
+                                [
+                                    ["function_call", "get_weather"],
+                                    ["custom_tool_call", "set_temperature_unit"]
+                                ],
+                                []
+                            ])
+                        );
+                        assert_eq!(
+                            mixed_tool_plan(expected),
+                            json!([
+                                [["function_call", "get_weather"]],
+                                [["custom_tool_call", "set_temperature_unit"]],
+                                []
+                            ])
+                        );
+                        let inputs = |session: &Session| {
+                            messages(session)
+                                .into_iter()
+                                .filter(|(_, direction, event)| {
+                                    matches!(direction, Direction::Client) && event["type"] == "response.steer"
+                                })
+                                .map(|(_, _, event)| event["input"].clone())
+                                .collect::<Vec<_>>()
+                        };
+                        assert_eq!(inputs(session), inputs(expected), "original mixed steering input order");
+                        classified += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(
+            reference_sessions,
+            gateway_sessions + reference_only_sessions,
+            "only OpenAI's unsupported-model probe is absent"
+        );
+        eprintln!("{gateway_sessions} gateway sessions audited; {classified} explicitly qualified outcomes");
+    }
+
+    #[test]
+    fn steering_captures_compare_causal_contracts_and_explicitly_classify_unqualified_cases() {
+        compare_steering_captures(&STEERING_CATEGORIES);
+    }
+
+    #[test]
+    fn vision_captures_compare_causal_contracts() {
+        compare_steering_captures(&["vision-steering"]);
+    }
+
+    fn normalize_synthetic_custom(item: &mut Value) {
+        if item["type"] != "custom_tool_call" {
+            return;
+        }
+        let custom: agentic_core::types::io::CustomToolCall = deserialize_from_value(item.clone()).unwrap();
+        let function = agentic_core::types::io::InputFunctionToolCall::from(custom);
+        let call = agentic_core::types::io::FunctionToolCall {
+            agent: function.agent,
+            id: function.id.expect("recorded custom item has a stable ID"),
+            call_id: function.call_id,
+            name: function.name,
+            namespace: function.namespace,
+            arguments: function.arguments,
+            status: function
+                .status
+                .unwrap_or(agentic_core::types::event::MessageStatus::Completed),
+        };
+        *item = serialize_to_value(&OutputItem::FunctionCall(call)).unwrap();
+    }
+
+    /// The public duplex recording is not an upstream HTTP cassette. Derive only
+    /// synthetic model frames, retaining original completed items and call IDs.
+    /// Open every recorded item before a control gate so an incidental network
+    /// race cannot discard another call the recorded client will later resolve.
+    type SteeringGates = HashMap<String, (usize, oneshot::Sender<()>)>;
+
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Keep synthetic dependency adaptations and their causal gate construction in one trace transformation"
+    )]
+    fn steering_inference(session: &Session) -> (Vec<MockResponse>, SteeringGates) {
+        let records = messages(session);
+        let mut runs = Vec::<Vec<(usize, Value)>>::new();
+        let mut current = Vec::new();
+        for (ordinal, direction, event) in &records {
+            if !matches!(direction, Direction::Server) {
+                continue;
+            }
+            let kind = event["type"].as_str().unwrap();
+            if kind == "response.created" {
+                assert!(current.is_empty());
+            }
+            if matches!(
+                kind,
+                "response.created"
+                    | "response.in_progress"
+                    | "response.output_item.added"
+                    | "response.output_item.done"
+                    | "response.output_text.delta"
+                    | "response.completed"
+                    | "response.incomplete"
+                    | "response.failed"
+            ) {
+                current.push((*ordinal, event.clone()));
+                if matches!(kind, "response.completed" | "response.incomplete" | "response.failed") {
+                    runs.push(std::mem::take(&mut current));
+                }
+            }
+        }
+        assert!(
+            current.is_empty(),
+            "captured model run lacks terminal: {}",
+            case(session)
+        );
+        let mut gates = HashMap::new();
+        let mut fixtures = Vec::new();
+        for mut run in runs {
+            let id = run[0].1["response"]["id"].as_str().unwrap().to_owned();
+            let run_start = run[0].0;
+            let terminal_ordinal = run.last().unwrap().0;
+            let steer = records.iter().find(|(ordinal, direction, event)| {
+                matches!(direction, Direction::Client)
+                    && event["type"] == "response.steer"
+                    && *ordinal > run[0].0
+                    && *ordinal < terminal_ordinal
+            });
+            let split = steer.map(|(ordinal, _, _)| *ordinal);
+            let trigger_delta = split.and_then(|ordinal| {
+                run.iter()
+                    .rev()
+                    .find(|(at, event)| *at < ordinal && event["type"] == "response.output_text.delta")
+                    .map(|(at, _)| *at)
+            });
+            if split.is_some() {
+                // Register every already-observed item before a fast steering
+                // reader can reach a completed earlier slot in the same chunk.
+                run.sort_by_key(|(ordinal, event)| {
+                    let priority = match event["type"].as_str().unwrap() {
+                        "response.created" | "response.in_progress" => 0,
+                        "response.output_item.added" => 1,
+                        _ => 2,
+                    };
+                    (priority, *ordinal)
+                });
+            }
+            let mut prefix = String::new();
+            let mut suffix = String::new();
+            for (ordinal, mut event) in run {
+                let kind = event["type"].as_str().unwrap().to_owned();
+                if kind == "response.output_text.delta" && Some(ordinal) != trigger_delta {
+                    continue;
+                }
+                if kind == "response.incomplete" && event["response"]["incomplete_details"]["reason"] == "steered" {
+                    event["type"] = json!("response.completed");
+                    event["response"]["status"] = json!("completed");
+                    event["response"]["incomplete_details"] = Value::Null;
+                }
+                // The corrected-intent source can contain provider-opaque
+                // reasoning. A synthetic vLLM fixture supplies plaintext instead;
+                // this is an explicit dependency adaptation, not recorded history.
+                if event["item"]["type"] == "reasoning" && kind == "response.output_item.done" {
+                    let item = event["item"].as_object_mut().unwrap();
+                    item.remove("encrypted_content");
+                    item.insert(
+                        "content".to_owned(),
+                        json!([{
+                        "type":"reasoning_text", "text":"Synthetic local reasoning for protocol replay."}]),
+                    );
+                    item.insert("summary".to_owned(), json!([]));
+                }
+                if let Some(item) = event.get_mut("item") {
+                    normalize_synthetic_custom(item);
+                }
+                if let Some(output) = event
+                    .get_mut("response")
+                    .and_then(|response| response.get_mut("output"))
+                    .and_then(Value::as_array_mut)
+                {
+                    for item in output {
+                        normalize_synthetic_custom(item);
+                    }
+                }
+                event.as_object_mut().unwrap().remove("stream_id");
+                let before_gate = split.is_some_and(|split| ordinal < split)
+                    || (split.is_some() && kind == "response.output_item.added");
+                writeln!(if before_gate { &mut prefix } else { &mut suffix }, "data: {event}\n").unwrap();
+            }
+            suffix.push_str("data: [DONE]\n\n");
+            if split.is_some() {
+                let (arrived, _arrival) = oneshot::channel();
+                let (release, wait) = oneshot::channel();
+                let acknowledgements = records
+                    .iter()
+                    .filter(|(ordinal, direction, event)| {
+                        matches!(direction, Direction::Client)
+                            && event["type"] == "response.steer"
+                            && *ordinal > run_start
+                            && *ordinal < terminal_ordinal
+                    })
+                    .count();
+                gates.insert(id, (acknowledgements, release));
+                fixtures.push(MockResponse::ObservedPhased {
+                    first_chunk: prefix,
+                    remaining_chunks: suffix,
+                    arrived,
+                    release: wait,
+                });
+            } else {
+                fixtures.push(MockResponse::Static(suffix));
+            }
+        }
+        (fixtures, gates)
+    }
+
+    fn steering_milestone(event: &Value) -> bool {
+        milestone(event)
+            || matches!(
+                event["type"].as_str(),
+                Some(
+                    "response.incomplete"
+                        | "response.failed"
+                        | "response.steer.accepted"
+                        | "response.steer.pending"
+                        | "response.steer.failed"
+                )
+            )
+    }
+
+    /// A gated synthetic dependency can make steering win just ahead of a
+    /// recorded native token-limit terminal. The engine deliberately completes
+    /// that parent for client action. This equivalence requires the same closed
+    /// client obligations; message-only or successor budget outcomes never qualify.
+    fn completed_client_budget_parent(expected: &Value, actual: &Value) -> bool {
+        if expected["type"] != "response.incomplete"
+            || actual["type"] != "response.completed"
+            || expected["response"]["incomplete_details"]["reason"] != "max_output_tokens"
+        {
+            return false;
+        }
+        let calls = |event: &Value| {
+            event["response"]["output"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|item| matches!(item["type"].as_str(), Some("function_call" | "custom_tool_call")))
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        let expected_calls = calls(expected);
+        let actual_calls = calls(actual);
+        !expected_calls.is_empty()
+            && expected_calls.len() == actual_calls.len()
+            && expected_calls.iter().all(|before| {
+                before["status"] == "completed"
+                    && actual_calls.iter().any(|after| {
+                        after["status"] == "completed"
+                            && ["type", "call_id", "name", "namespace", "arguments", "input"]
+                                .iter()
+                                .all(|key| before[*key] == after[*key])
+                    })
+            })
+    }
+
+    fn same_steering_milestone(expected: &Value, actual: &Value, ids: &HashMap<String, String>) -> bool {
+        if (expected["type"] != actual["type"] && !completed_client_budget_parent(expected, actual))
+            || expected["stream_id"] != actual["stream_id"]
+        {
+            return false;
+        }
+        let target = expected["response"]["id"]
+            .as_str()
+            .or_else(|| expected["steer"]["previous_response_id"].as_str());
+        target.is_none_or(|id| {
+            ids.get(id).is_none_or(|actual_id| {
+                actual["response"]["id"] == *actual_id || actual["steer"]["previous_response_id"] == *actual_id
+            })
+        })
+    }
+
+    fn compare_steering(
+        expected: &Value,
+        actual: &Value,
+        ids: &mut HashMap<String, String>,
+        steer_ids: &mut HashMap<String, String>,
+    ) {
+        assert!(expected["type"] == actual["type"] || completed_client_budget_parent(expected, actual));
+        assert_eq!(expected["stream_id"], actual["stream_id"]);
+        if expected["type"].as_str().unwrap().starts_with("response.steer.") {
+            let expected_target = expected["steer"]["previous_response_id"]
+                .as_str()
+                .map(|parent| ids.get(parent).map_or(parent, String::as_str));
+            assert_eq!(actual["steer"]["previous_response_id"].as_str(), expected_target);
+        }
+        match expected["type"].as_str().unwrap() {
+            "response.created" => {
+                let original = expected["response"]["id"].as_str().unwrap();
+                ids.insert(
+                    original.to_owned(),
+                    actual["response"]["id"].as_str().unwrap().to_owned(),
+                );
+                assert_eq!(actual["sequence_number"], 0);
+                if let Some(parent) = expected["response"]["previous_response_id"].as_str() {
+                    assert_eq!(actual["response"]["previous_response_id"], ids[parent]);
+                }
+            }
+            "response.steer.accepted" => {
+                steer_ids.insert(
+                    expected["steer"]["id"].as_str().unwrap().to_owned(),
+                    actual["steer"]["id"].as_str().unwrap().to_owned(),
+                );
+            }
+            "response.steer.pending" => {
+                assert_eq!(
+                    actual["steer"]["id"],
+                    steer_ids[expected["steer"]["id"].as_str().unwrap()]
+                );
+                assert_eq!(actual["required_input"], expected["required_input"]);
+            }
+            "response.steer.failed" => {
+                assert_eq!(actual["error"]["code"], expected["error"]["code"]);
+                assert_eq!(actual["steer"]["input"], expected["steer"]["input"]);
+                if let Some(id) = expected["steer"]["id"].as_str() {
+                    assert_eq!(actual["steer"]["id"], steer_ids[id]);
+                }
+            }
+            "response.output_item.done" => {
+                compare_preserved_steering_item(&expected["item"], &actual["item"]);
+            }
+            "error" => {
+                assert_eq!(actual["status"], expected["status"]);
+                assert_eq!(actual["error"]["type"], "invalid_request_error");
+            }
+            "response.completed" | "response.incomplete" | "response.failed" => {
+                let before = expected["response"]["output"].as_array().unwrap();
+                let after = actual["response"]["output"].as_array().unwrap();
+                assert_eq!(before.len(), after.len(), "terminal retained output length");
+                for (before, after) in before.iter().zip(after) {
+                    compare_preserved_steering_item(before, after);
+                }
+                if !completed_client_budget_parent(expected, actual) {
+                    assert_eq!(actual["response"]["status"], expected["response"]["status"]);
+                    assert_eq!(
+                        actual["response"]["incomplete_details"]["reason"],
+                        expected["response"]["incomplete_details"]["reason"]
+                    );
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn compare_preserved_steering_item(expected: &Value, actual: &Value) {
+        assert_eq!(actual["type"], expected["type"]);
+        // Recorded opaque/source-specific reasoning is replaced with a plaintext
+        // model dependency sentinel; public nonreasoning semantics stay intact.
+        if expected["type"] != "reasoning" {
+            // Missing optional collections and empty collections carry the same
+            // content here; preserve populated annotations and log probabilities.
+            let mut expected: OutputItem = deserialize_from_value(expected.clone()).unwrap();
+            let mut actual: OutputItem = deserialize_from_value(actual.clone()).unwrap();
+            for item in [&mut expected, &mut actual] {
+                if let OutputItem::Message(message) = item {
+                    for content in &mut message.content {
+                        if let OutputMessageContent::OutputText(part) = content {
+                            part.annotations.get_or_insert_default();
+                            part.logprobs.get_or_insert_default();
+                        }
+                    }
+                }
+            }
+            let expected = serialize_to_value(&expected).unwrap();
+            let actual = serialize_to_value(&actual).unwrap();
+            for field in [
+                "call_id",
+                "name",
+                "namespace",
+                "arguments",
+                "input",
+                "role",
+                "content",
+                "status",
+            ] {
+                assert_eq!(actual[field], expected[field], "retained output field {field}");
+            }
+        }
+    }
+
+    fn acknowledge_steering_gate(source: &str, gates: &mut SteeringGates) {
+        let Some((remaining, _)) = gates.get_mut(source) else {
+            return;
+        };
+        assert!(*remaining > 0);
+        *remaining -= 1;
+        if *remaining == 0 {
+            let _ = gates.remove(source).unwrap().1.send(());
+        }
+    }
+
+    fn release_steering_gate(event: &Value, ids: &HashMap<String, String>, gates: &mut SteeringGates) {
+        if !matches!(
+            event["type"].as_str(),
+            Some("response.steer.accepted" | "response.steer.failed")
+        ) {
+            return;
+        }
+        let source = event["steer"]["previous_response_id"].as_str().and_then(|parent| {
+            ids.iter()
+                .find(|(_, actual)| actual.as_str() == parent)
+                .map(|(source, _)| source)
+        });
+        if let Some(source) = source.filter(|source| gates.contains_key(*source)) {
+            acknowledge_steering_gate(source, gates);
+        } else if event["type"] == "response.steer.failed" {
+            // A rejected unrelated target may belong to the currently blocked
+            // dependency, but cannot release a future response generation.
+            let published = gates
+                .keys()
+                .filter(|source| ids.contains_key(*source))
+                .cloned()
+                .collect::<Vec<_>>();
+            for source in published {
+                acknowledge_steering_gate(&source, gates);
+            }
+        }
+    }
+
+    fn user_messages(input: &Value) -> Vec<Value> {
+        input
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|item| item["role"] == "user")
+            .map(|item| json!({"role":"user", "content":item["content"]}))
+            .collect()
+    }
+
+    fn normalized_steering_messages(input: &Value) -> Vec<Value> {
+        let input: ResponsesInput = deserialize_from_value(input.clone()).unwrap();
+        let mut request: RequestPayload = deserialize_from_value(json!({
+            "model":"synthetic-model", "input":[]}))
+        .unwrap();
+        request.input = ResponsesInput::Items(input.into_canonical_items());
+        // to_upstream_request invokes the existing crate-private
+        // ResponsesInput::normalized_model_input, including image defaults.
+        let upstream = request.to_upstream_request(true).unwrap();
+        user_messages(&serialize_to_value(&upstream.input).unwrap())
+    }
+
+    #[derive(Default)]
+    struct ArrivalFacts {
+        terminals: std::collections::HashSet<String>,
+        lanes: HashMap<String, Value>,
+        accepted: HashMap<String, String>,
+        committed: std::collections::HashSet<String>,
+        superseded: std::collections::HashSet<String>,
+    }
+
+    impl ArrivalFacts {
+        fn observe(&mut self, event: &Value) {
+            let kind = event["type"].as_str().unwrap();
+            match kind {
+                "response.created" => {
+                    let lane = event["stream_id"].clone();
+                    if let Some(parent) = event["response"]["previous_response_id"].as_str() {
+                        assert!(
+                            self.terminals.contains(parent),
+                            "successor arrived before parent terminal: {event}"
+                        );
+                        if self.lanes.get(parent) == Some(&lane) {
+                            self.superseded.insert(parent.to_owned());
+                            self.committed.extend(
+                                self.accepted
+                                    .iter()
+                                    .filter(|(_, target)| target.as_str() == parent)
+                                    .map(|(id, _)| id.clone()),
+                            );
+                        }
+                    }
+                    self.lanes
+                        .insert(event["response"]["id"].as_str().unwrap().to_owned(), lane);
+                }
+                "response.completed" | "response.incomplete" | "response.failed" => {
+                    assert!(
+                        self.terminals
+                            .insert(event["response"]["id"].as_str().unwrap().to_owned()),
+                        "duplicate terminal: {event}"
+                    );
+                }
+                "response.steer.accepted" => {
+                    let target = event["steer"]["previous_response_id"].as_str().unwrap();
+                    assert_eq!(
+                        self.lanes.get(target),
+                        Some(&event["stream_id"]),
+                        "accepted on a different lane"
+                    );
+                    assert!(
+                        !self.superseded.contains(target),
+                        "old parent accepted after a same-lane successor"
+                    );
+                    assert!(
+                        !self
+                            .accepted
+                            .iter()
+                            .any(|(id, parent)| parent == target && self.committed.contains(id)),
+                        "old parent accepted input after successor creation"
+                    );
+                    assert!(
+                        self.accepted
+                            .insert(event["steer"]["id"].as_str().unwrap().to_owned(), target.to_owned())
+                            .is_none()
+                    );
+                }
+                "response.steer.pending" => {
+                    let target = event["steer"]["previous_response_id"].as_str().unwrap();
+                    assert!(
+                        self.terminals.contains(target),
+                        "pending arrived before parent terminal: {event}"
+                    );
+                    assert_eq!(
+                        self.accepted
+                            .get(event["steer"]["id"].as_str().unwrap())
+                            .map(String::as_str),
+                        Some(target)
+                    );
+                }
+                "response.steer.failed" => {
+                    if let Some(id) = event["steer"]["id"].as_str() {
+                        assert!(!self.committed.contains(id), "committed input returned as unapplied");
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    #[allow(
+        clippy::too_many_lines,
+        reason = "Replay connection-local actions sequentially with publication, ownership, and model-spy assertions"
+    )]
+    async fn replay_steering_sessions(sessions: &[&Session]) {
+        let mut fixtures = Vec::new();
+        let mut gates = HashMap::new();
+        for session in sessions {
+            let (responses, controls) = steering_inference(session);
+            fixtures.extend(responses);
+            gates.extend(controls);
+        }
+        let expected_requests = fixtures.len();
+        let mock = MockResponsesServer::start_with_responses(fixtures).await;
+        let search = MockYouSearchServer::start().await;
+        let fixture = storage_backed_state_with_web_search(&mock.url, Some(&search.url)).await;
+        let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+        let mut ids = HashMap::new();
+        let mut steer_ids = HashMap::new();
+        let mut source_lanes = HashMap::<String, Value>::new();
+        let mut pending_input = HashMap::<String, Vec<Value>>::new();
+        let mut applied_input = HashMap::<String, Vec<Value>>::new();
+        let mut expired_input = Vec::new();
+        let mut spies = Vec::<(usize, Vec<Value>, bool)>::new();
+        let mut arrivals = ArrivalFacts::default();
+        let mut next_model = 0;
+        let mut profiles = HashMap::<String, RequestPayload>::new();
+        let mut settings_spies = Vec::new();
+        let mut budget_adaptations = 0;
+        for session in sessions {
+            let mut submissions = VecDeque::new();
+            let mut creates = VecDeque::<Value>::new();
+            let mut ws = connect_responses_ws(&gateway_url).await;
+            let mut received = VecDeque::<Value>::new();
+            for (_ordinal, direction, mut event) in messages(session) {
+                if matches!(direction, Direction::Client) {
+                    if event["type"] == "response.steer" {
+                        submissions.push_back(event["input"].clone());
+                    }
+                    if event["type"] == "response.create" {
+                        creates.push_back(event.clone());
+                    }
+                    for key in ["response_id", "previous_response_id"] {
+                        if let Some(actual) = event[key].as_str().and_then(|id| ids.get(id)) {
+                            event[key] = json!(actual);
+                        }
+                    }
+                    send_json(&mut ws, event).await;
+                } else if steering_milestone(&event) {
+                    let actual = loop {
+                        if let Some(index) = received
+                            .iter()
+                            .position(|actual| same_steering_milestone(&event, actual, &ids))
+                        {
+                            break received.remove(index).unwrap();
+                        }
+                        let actual = recv_json(&mut ws).await;
+                        arrivals.observe(&actual);
+                        release_steering_gate(&actual, &ids, &mut gates);
+                        if steering_milestone(&actual) {
+                            received.push_back(actual);
+                        }
+                    };
+                    if completed_client_budget_parent(&event, &actual) {
+                        budget_adaptations += 1;
+                        eprintln!(
+                            "{}: synthetic dependency moved complete client-call steering ahead of native token-limit terminal",
+                            case(session)
+                        );
+                    }
+                    compare_steering(&event, &actual, &mut ids, &mut steer_ids);
+                    match event["type"].as_str().unwrap() {
+                        "response.created" => {
+                            let source = event["response"]["id"].as_str().unwrap();
+                            let lane = event["stream_id"].clone();
+                            source_lanes.insert(source.to_owned(), lane.clone());
+                            let mut retained = event["response"]["previous_response_id"]
+                                .as_str()
+                                .and_then(|parent| applied_input.get(parent))
+                                .cloned()
+                                .unwrap_or_default();
+                            let parent = event["response"]["previous_response_id"].as_str();
+                            let explicit = creates.iter().position(|request| {
+                                request["stream_id"] == lane && request["previous_response_id"].as_str() == parent
+                            });
+                            let profile = if let Some(at) = explicit {
+                                let request = creates.remove(at).unwrap();
+                                let create: agentic_core::types::websocket::ResponseCreateRequest =
+                                    deserialize_from_value(request).unwrap();
+                                create.payload
+                            } else {
+                                profiles
+                                    .get(parent.expect("automatic successor needs its parent"))
+                                    .unwrap()
+                                    .clone()
+                            };
+                            let normalized = serialize_to_value(&profile.to_upstream_request(true).unwrap()).unwrap();
+                            settings_spies.push((next_model, normalized));
+                            profiles.insert(source.to_owned(), profile);
+                            if let Some(parent) = event["response"]["previous_response_id"].as_str() {
+                                if let Some(input) = pending_input.get(parent) {
+                                    let consumes = source_lanes.get(parent) == Some(&lane);
+                                    if consumes {
+                                        retained.extend(input.clone());
+                                        pending_input.remove(parent);
+                                    } else {
+                                        spies.push((next_model, input.clone(), false));
+                                    }
+                                }
+                            }
+                            spies.push((next_model, retained.clone(), true));
+                            applied_input.insert(source.to_owned(), retained);
+                            spies.push((next_model, expired_input.clone(), false));
+                            next_model += 1;
+                        }
+                        "response.steer.accepted" => {
+                            let input = submissions.pop_front().unwrap();
+                            pending_input
+                                .entry(event["steer"]["previous_response_id"].as_str().unwrap().to_owned())
+                                .or_default()
+                                .extend(normalized_steering_messages(&input));
+                        }
+                        "response.steer.failed" if event["steer"]["id"].is_string() => {
+                            pending_input.remove(event["steer"]["previous_response_id"].as_str().unwrap());
+                        }
+                        "response.steer.failed" => {
+                            submissions.pop_front().unwrap();
+                        }
+                        "error" => {
+                            let at = creates
+                                .iter()
+                                .position(|request| request["stream_id"] == event["stream_id"])
+                                .expect("recorded validation error needs its explicit contender");
+                            creates.remove(at);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            assert!(
+                received.is_empty(),
+                "unexpected causal events while replaying {}: {received:?}",
+                case(session)
+            );
+            ws.close(None).await.unwrap();
+            recv_close_or_end(&mut ws).await;
+            expired_input.extend(std::mem::take(&mut pending_input).into_values().flatten());
+        }
+        let requests = mock.request_bodies().await;
+        eprintln!(
+            "{}: {budget_adaptations} explicitly verified native-budget/client-completion fixture adaptations",
+            case(sessions[0])
+        );
+        assert_eq!(requests.len(), expected_requests);
+        assert_eq!(next_model, expected_requests);
+        for (index, expected) in settings_spies {
+            for field in [
+                "model",
+                "instructions",
+                "tools",
+                "tool_choice",
+                "parallel_tool_calls",
+                "reasoning",
+                "text",
+                "temperature",
+                "top_p",
+                "max_output_tokens",
+                "metadata",
+                "prompt_cache_key",
+                "prompt_cache_retention",
+            ] {
+                assert_eq!(
+                    requests[index][field], expected[field],
+                    "successor inference setting {field}"
+                );
+            }
+        }
+        for (index, expected, present) in spies {
+            let messages = user_messages(&requests[index]["input"]);
+            let mut after = 0;
+            for value in expected {
+                let positions = messages
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(at, actual)| (actual == &value).then_some(at))
+                    .collect::<Vec<_>>();
+                if present {
+                    assert_eq!(
+                        positions.len(),
+                        1,
+                        "accepted input must reach successor inference exactly once: {value}"
+                    );
+                    assert!(positions[0] >= after, "accepted input must retain submission order");
+                    after = positions[0] + 1;
+                } else {
+                    assert!(
+                        positions.is_empty(),
+                        "another lane or reconnect must not consume pending input: {value}"
+                    );
+                }
+            }
+        }
+    }
+
+    async fn replay_steering_captures(categories: &[&str]) {
+        let mut replayed = 0;
+        let mut corrected_intents = 0;
+        let mut reference_graphs = 0;
+        let mut expected_replays = 0;
+        let mut graphs = 0;
+        for category in categories {
+            let gateway = steering_capture("gateway", category);
+            let reference = steering_capture("openai-reference", category);
+            expected_replays += assert_shared_steering_cases(&reference, &gateway, category)
+                - usize::from(
+                    gateway
+                        .sessions
+                        .iter()
+                        .any(|session| case(session) == "hosted-tool-running"),
+                );
+            let mut seen = std::collections::HashSet::new();
+            for gateway_session in &gateway.sessions {
+                let name = case(gateway_session);
+                if !seen.insert(name) {
+                    continue;
+                }
+                if name == "hosted-tool-running" {
+                    // This captured declaration requires a ready operator-gated
+                    // interpreter. The companion executor test uses its existing
+                    // private deterministic provider through the real gateway loop.
+                    assert_eq!(qualification(gateway_session), Qualification::CodeInterpreterRuntime);
+                    eprintln!(
+                        "hosted-tool-running: actual code-interpreter core replay requires the companion provider harness"
+                    );
+                    continue;
+                }
+                let corrected = qualification(gateway_session) == Qualification::ModelOutputLimit;
+                let replay_reference = corrected || *category == "vision-steering";
+                let reference_label = if corrected {
+                    "OpenAI corrected-intent"
+                } else {
+                    "OpenAI reference"
+                };
+                for (source, label) in std::iter::once((&gateway, "gateway"))
+                    .chain(replay_reference.then_some((&reference, reference_label)))
+                {
+                    let sessions = source
+                        .sessions
+                        .iter()
+                        .filter(|session| case(session) == name)
+                        .collect::<Vec<_>>();
+                    assert!(!sessions.is_empty());
+                    eprintln!("replaying {category}/{name}: {label} recorded client graph");
+                    tokio::time::timeout(std::time::Duration::from_secs(30), replay_steering_sessions(&sessions))
+                        .await
+                        .unwrap_or_else(|_| panic!("steering duplex replay timed out: {category}/{name} ({label})"));
+                    graphs += 1;
+                }
+                corrected_intents += usize::from(corrected);
+                reference_graphs += usize::from(replay_reference);
+                replayed += 1;
+            }
+        }
+        assert_eq!(
+            replayed, expected_replays,
+            "every recorded gateway case must run through WebSocket or its hosted interpreter companion"
+        );
+        assert_eq!(
+            graphs,
+            expected_replays + reference_graphs,
+            "reference graphs cover vision forwarding and explicitly classified recorder prerequisites"
+        );
+        eprintln!(
+            "{replayed} gateway case graphs and {reference_graphs} additional reference graphs replayed ({corrected_intents} corrected intents)"
+        );
+    }
+
+    #[tokio::test]
+    async fn steering_duplex_captures_drive_real_handlers_and_correct_missing_reference_workflows() {
+        replay_steering_captures(&STEERING_CATEGORIES).await;
+    }
+
+    #[tokio::test]
+    async fn vision_duplex_captures_drive_real_handlers() {
+        replay_steering_captures(&["vision-steering"]).await;
     }
 }
 

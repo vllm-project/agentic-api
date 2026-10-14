@@ -11,6 +11,7 @@ use crate::executor::multi_agent::RunControlReceiver;
 use crate::executor::relay::{AgentRoundId, StreamRelay};
 use crate::executor::request::RequestContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
+use crate::executor::response_events::ResponseEventSink;
 use crate::executor::translate::{Translation, TranslationContext};
 use crate::tool::{ToolRegistry, ToolSearchMetadata, ToolSearchState};
 use crate::types::agent::AgentIdentity;
@@ -22,6 +23,7 @@ use tokio_util::sync::CancellationToken;
 /// Lives for the response, preserving gateway event numbering across inference rounds.
 pub(super) struct AgentPipeline {
     pub(super) control: Option<RunControlReceiver>,
+    pub(super) steering: Option<ResponseEventSink>,
     pub(super) request: RequestContext,
     tool_search_state: Option<ToolSearchState>,
     relay: StreamRelay,
@@ -33,6 +35,12 @@ pub(super) struct AgentPipeline {
 }
 
 impl AgentPipeline {
+    pub(super) fn steering_requested(&self) -> bool {
+        self.steering
+            .as_ref()
+            .is_some_and(ResponseEventSink::steering_requested)
+    }
+
     pub(super) fn set_agent_guidance(&mut self, guidance: InputMessage) {
         self.agent_guidance = Some(guidance);
     }
@@ -83,6 +91,7 @@ impl AgentPipeline {
             cancellation: CancellationToken::new(),
             agent_guidance: None,
             control: None,
+            steering: None,
             builtin_tools_withheld: false,
         }
     }
@@ -148,6 +157,9 @@ impl AgentPipeline {
             .round
             .take()
             .expect("body runner starts a round before finalization");
+        if self.steering_requested() {
+            round.ensure_steering_settled()?;
+        }
         let mut payload = round.finish(
             &self.request.enriched_request.model,
             self.request.original_request.previous_response_id.as_deref(),
@@ -170,7 +182,35 @@ impl AgentPipeline {
         self.relay.begin_round(output_offset)?;
         self.begin_round(validation, context, budget)?;
         futures::pin_mut!(body);
-        while let Some(line) = body.next().await {
+        loop {
+            let boundary = self
+                .round
+                .as_ref()
+                .expect("stream runner owns an active ingestion round")
+                .at_steering_boundary();
+            if boundary && self.steering_requested() {
+                self.round
+                    .as_mut()
+                    .expect("stream runner owns an active ingestion round")
+                    .finish_for_steering()?;
+                break;
+            }
+            let line = if let Some(steering) = self.steering.as_ref().filter(|_| boundary) {
+                // Only interrupt the wait when ingestion already owns a safe
+                // boundary. A requested steer during an open item waits for its
+                // completion instead of repeatedly waking this loop.
+                tokio::select! {
+                    biased;
+                    result = steering.wait_steering() => {
+                        result?;
+                        continue;
+                    }
+                    line = body.next() => line,
+                }
+            } else {
+                body.next().await
+            };
+            let Some(line) = line else { break };
             let translation = self.push(SseLine::parse(&line?))?;
             self.relay.accept(translation, &self.request, registry).await?;
         }

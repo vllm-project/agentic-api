@@ -47,7 +47,11 @@ pub(crate) fn validate_frame(frame: &EventFrame) -> Result<ValidatedFrame<'_>, E
         SSEEventType::OutputItemDone => {
             validate_output_item(frame, event_name, true).map(|item| ValidatedFrame { item: Some(item) })
         }
-        SSEEventType::Keepalive | SSEEventType::Other => Ok(ValidatedFrame { item: None }),
+        SSEEventType::Keepalive
+        | SSEEventType::ResponseSteerAccepted
+        | SSEEventType::ResponseSteerPending
+        | SSEEventType::ResponseSteerFailed
+        | SSEEventType::Other => Ok(ValidatedFrame { item: None }),
         event_type => {
             let output_index = required_output_index(frame, event_name)?;
             let item_id = validate_event_item_id(frame, event_name)?;
@@ -121,6 +125,9 @@ pub(crate) fn expected_item_type(frame: &EventFrame) -> Option<SSEItemType> {
         | SSEEventType::ResponseCompleted
         | SSEEventType::ResponseFailed
         | SSEEventType::ResponseIncomplete
+        | SSEEventType::ResponseSteerAccepted
+        | SSEEventType::ResponseSteerPending
+        | SSEEventType::ResponseSteerFailed
         | SSEEventType::OutputItemAdded
         | SSEEventType::OutputItemDone
         | SSEEventType::FileSearchCallSearching
@@ -297,6 +304,9 @@ fn validate_event_fields(
         | SSEEventType::ResponseCompleted
         | SSEEventType::ResponseFailed
         | SSEEventType::ResponseIncomplete
+        | SSEEventType::ResponseSteerAccepted
+        | SSEEventType::ResponseSteerPending
+        | SSEEventType::ResponseSteerFailed
         | SSEEventType::OutputItemAdded
         | SSEEventType::OutputItemDone
         | SSEEventType::FileSearchCallSearching
@@ -377,7 +387,38 @@ mod tests {
     use serde_json::json;
 
     use super::validate_frame;
-    use crate::events::normalize_sse_line;
+    use crate::events::{EventPayload, SSEEventType, normalize_sse_line};
+
+    #[test]
+    fn steering_controls_have_no_output_item_lifecycle() {
+        let descriptor = json!({"id": "steer_test", "previous_response_id": "resp_test"});
+        for (event, expected_type) in [
+            (
+                json!({"type": "response.steer.accepted", "steer": descriptor}),
+                SSEEventType::ResponseSteerAccepted,
+            ),
+            (
+                json!({"type": "response.steer.pending", "steer": descriptor,
+                "reason": "waiting_for_required_input",
+                "required_input": [{"type": "function_call_output", "call_id": "call_test", "name": "get_weather"}]}),
+                SSEEventType::ResponseSteerPending,
+            ),
+            (
+                json!({"type": "response.steer.failed",
+                "steer": {"id": "steer_test", "previous_response_id": "resp_test", "input": "Keep the revised scope."},
+                "error": {"type": "invalid_request_error", "code": "successor_creation_failed", "message": "Failed."}}),
+                SSEEventType::ResponseSteerFailed,
+            ),
+        ] {
+            let frame = normalize_sse_line(&format!("data: {event}")).unwrap();
+            assert_eq!(frame.event_type, expected_type);
+            assert!(matches!(frame.payload, EventPayload::None));
+            assert!(frame.wire.output_index.is_none());
+            assert_eq!(frame.wire.rest["steer"], event["steer"]);
+            assert!(validate_frame(&frame).unwrap().item.is_none());
+            assert_eq!(super::expected_item_type(&frame), None);
+        }
+    }
 
     #[test]
     fn only_native_shell_command_events_allow_omitted_item_id() {

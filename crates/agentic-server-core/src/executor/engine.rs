@@ -13,6 +13,7 @@ mod streaming;
 mod usage;
 
 pub use execute::{ExecuteRequest, execute, prepare_non_generating_turn};
+pub use retained::PreparedRetainedResponse;
 use usage::accumulate_usage;
 
 use std::num::NonZeroUsize;

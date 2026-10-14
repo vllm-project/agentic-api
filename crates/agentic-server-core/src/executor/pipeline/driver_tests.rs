@@ -19,6 +19,87 @@ fn search_context() -> TranslationContext {
 }
 
 #[tokio::test]
+async fn steering_wakes_an_idle_stream_at_a_completed_item_boundary() {
+    let (sink, _events) = ResponseEventSink::channel(4096);
+    let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
+    agent.steering = Some(sink.clone());
+    let item = json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"lookup",
+        "arguments":"{}", "status":"completed"});
+    let events = [
+        json!({"type":"response.created", "response":{"id":"upstream", "status":"in_progress"}}),
+        json!({"type":"response.in_progress", "response":{"id":"upstream", "status":"in_progress"}}),
+        json!({"type":"response.output_item.added", "output_index":0, "item":item}),
+        json!({"type":"response.output_item.done", "output_index":0, "item":item}),
+    ];
+    let body = futures::stream::iter(events.iter().map(|event| Ok(line(event)))).chain(futures::stream::pending());
+    let registry = ToolRegistry::default();
+    let mut run = Box::pin(agent.run_with_stream_body(
+        body,
+        Validation::Strict,
+        TranslationContext::default(),
+        &registry,
+        0,
+        None,
+    ));
+    assert!(futures::poll!(run.as_mut()).is_pending());
+    sink.request_steering_boundary();
+    let payload = run.await.unwrap();
+    assert_eq!(payload.status, "incomplete");
+    assert_eq!(payload.incomplete_details.unwrap().reason.as_deref(), Some("steered"));
+    assert_eq!(payload.output.len(), 1);
+}
+
+#[tokio::test]
+async fn steering_drains_all_open_items_before_dropping_the_upstream_body() {
+    let (sink, _events) = ResponseEventSink::channel(4096);
+    sink.request_steering_boundary();
+    let mut agent = AgentPipeline::new(request_context(), None, StreamRelay::detached());
+    agent.steering = Some(sink);
+    let item = |index| {
+        if index == 0 {
+            json!({"type":"function_call", "id":"fc_0", "call_id":"call_0",
+            "name":"lookup", "arguments":"{}", "status":"completed"})
+        } else {
+            json!({"type":"code_interpreter_call", "id":"ci_1", "container_id":"container_1",
+            "code":"print(42)", "outputs":[{"type":"logs", "logs":"42"}], "status":"completed"})
+        }
+    };
+    let mut hosted_open = item(1);
+    hosted_open["status"] = json!("in_progress");
+    hosted_open["outputs"] = json!([]);
+    let events = [
+        json!({"type":"response.created", "response":{"id":"upstream", "status":"in_progress"}}),
+        json!({"type":"response.in_progress", "response":{"id":"upstream", "status":"in_progress"}}),
+        json!({"type":"response.output_item.added", "output_index":0, "item":item(0)}),
+        json!({"type":"response.output_item.added", "output_index":1, "item":hosted_open}),
+        json!({"type":"response.output_item.done", "output_index":0, "item":item(0)}),
+        json!({"type":"response.output_item.done", "output_index":1, "item":item(1)}),
+    ];
+    let polled = AtomicUsize::new(0);
+    let body = futures::stream::iter(events.iter().map(|event| Ok(line(event))))
+        .chain(futures::stream::once(async {
+            Err(ExecutorError::StreamError("must not start another item".to_owned()))
+        }))
+        .inspect(|_| {
+            polled.fetch_add(1, Ordering::SeqCst);
+        });
+    let payload = agent
+        .run_with_stream_body(
+            body,
+            Validation::Strict,
+            TranslationContext::default(),
+            &ToolRegistry::default(),
+            0,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(polled.load(Ordering::SeqCst), events.len());
+    assert_eq!(payload.status, "incomplete");
+    assert_eq!(serde_json::to_value(payload.output).unwrap(), json!([item(0), item(1)]));
+}
+
+#[tokio::test]
 async fn live_delivery_applies_backpressure_and_disconnect_stops_input() {
     let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
     let mut agent = AgentPipeline::new(

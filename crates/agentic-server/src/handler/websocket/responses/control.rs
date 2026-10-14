@@ -1,23 +1,28 @@
 //! Connection-owned routes and bounded tasks. No agent history lives here.
 use super::{StreamId, WsError, WsEventLimit, WsOutboundEvent, stream_ws_response};
 use crate::auth::AuthenticatedPrincipal;
+mod injection;
+mod steering;
 use agentic_core::{
     executor::{
-        BoxStream, ResponseRunOwner, RunningResponse,
-        multi_agent::{
-            ClientCallError, RunControl,
-            control::{ControlAdmissionError, OutputDecision},
-        },
+        BoxStream, ResponseRunOwner, ResponseSession, RunningResponse,
+        multi_agent::RunControl,
         response_events::{ResponseCommitState, ResponseEventSink},
+        session::{ResponseCheckpointPin, SteeringQueue},
     },
     types::{
-        client_calls::ClientToolOutputBatch,
-        injection::{InjectionEvent, InjectionFailure, InjectionFailureCode, InjectionInput, ResponseInjectRequest},
+        injection::ResponseInjectRequest,
+        request_response::RequestPayload,
+        websocket::{AcceptedSteer, SteeringEvent, SteeringInputEcho},
     },
 };
+use injection::inject;
 use std::{
     collections::HashMap,
-    sync::Arc,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::{Duration, Instant},
 };
 use tokio::{
@@ -27,6 +32,8 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 const MAX_CONTROLS: usize = 32;
+// Each accepted steer may also need one pending outcome, plus a publication fence.
+const MAX_STEERING_OUTCOMES: usize = MAX_CONTROLS * 2 + 1;
 const MAX_CONTROL_BYTES: usize = 12 * 1024 * 1024;
 const MAX_ROUTES: usize = 128;
 const RETAIN_COMPLETED: Duration = Duration::from_secs(60);
@@ -34,15 +41,19 @@ const RETAIN_COMPLETED: Duration = Duration::from_secs(60);
 pub(super) struct Registration {
     pub(super) response: RunningResponse,
     pub(super) lane: Option<StreamId>,
-    pub(super) reply: oneshot::Sender<ResponseRunOwner>,
+    pub(super) reply: oneshot::Sender<(ResponseRunOwner, Arc<SteeringTarget>)>,
+    pub(super) session: Arc<ResponseSession>,
+    pub(super) steering_supported: bool,
 }
 struct Route {
     cancellation: CancellationToken,
     control: Option<RunControl>,
     sink: ResponseEventSink,
     lane: Option<StreamId>,
+    steering: Arc<SteeringTarget>,
 }
 struct RetainedRoute {
+    ordinal: usize,
     route: Arc<Route>,
     completed: Option<Instant>,
 }
@@ -57,6 +68,9 @@ pub(super) struct Controls {
     pub(super) register: mpsc::Sender<Registration>,
     pub(super) tasks: JoinSet<ControlCompletion>,
     pub(super) relays: JoinSet<Result<(), WsError>>,
+    pub(super) steering_workers: JoinSet<Result<(), WsError>>,
+    steering_bytes: Arc<AtomicUsize>,
+    next_ordinal: usize,
     bytes: usize,
     rejected_owner: Option<ResponseRunOwner>,
     outbound: mpsc::Sender<WsOutboundEvent>,
@@ -75,6 +89,9 @@ impl Controls {
             register,
             tasks: JoinSet::new(),
             relays: JoinSet::new(),
+            steering_workers: JoinSet::new(),
+            steering_bytes: Arc::new(AtomicUsize::new(0)),
+            next_ordinal: 0,
             bytes: 0,
             rejected_owner: None,
             outbound,
@@ -90,6 +107,27 @@ impl Controls {
         self.relays
             .spawn(async move { stream_ws_response(&outbound, events, lane.as_ref(), limit).await });
     }
+    fn spawn_steering_worker(&mut self, sink: ResponseEventSink) -> mpsc::Sender<SteeringOutcome> {
+        let (outcomes, mut receive_outcomes) = mpsc::channel(MAX_STEERING_OUTCOMES);
+        let worker_sink = sink;
+        self.steering_workers.spawn(async move {
+            while let Some(outcome) = receive_outcomes.recv().await {
+                match outcome {
+                    SteeringOutcome::Event { event, charge } => {
+                        worker_sink.emit_steering(event).await?;
+                        worker_sink.flush().await?;
+                        drop(charge);
+                    }
+                    SteeringOutcome::Barrier(reply) => {
+                        let _ = reply.send(());
+                    }
+                }
+            }
+            Ok(())
+        });
+        outcomes
+    }
+
     pub(super) fn cancel_live_controls(&self) {
         for entry in self.routes.values() {
             if entry.route.control.is_some() {
@@ -103,18 +141,34 @@ impl Controls {
         self.routes.retain(|_, entry| {
             if entry.route.sink.commit_state() != ResponseCommitState::Running {
                 let completed = entry.completed.get_or_insert(now);
-                return Arc::strong_count(&entry.route) > 1 || now.duration_since(*completed) < RETAIN_COMPLETED;
+                return entry.route.steering.retains_accepted()
+                    || Arc::strong_count(&entry.route) > 1
+                    || now.duration_since(*completed) < RETAIN_COMPLETED;
             }
             true
         });
     }
+    fn charge_metadata(&self, settings: &RequestPayload) -> Result<SteeringByteCharge, WsError> {
+        let fixed_bytes = std::mem::size_of::<SteeringTarget>();
+        let bytes =
+            agentic_core::utils::common::serialized_size_up_to(settings, MAX_CONTROL_BYTES.saturating_sub(fixed_bytes))
+                .map_err(WsError::SerializeJson)?
+                .ok_or(WsError::TooManyRequests)?
+                .saturating_add(fixed_bytes);
+        SteeringByteCharge::reserve(&self.steering_bytes, bytes).ok_or(WsError::TooManyRequests)
+    }
+
     pub(super) fn register(&mut self, registration: Registration) -> Result<(), WsError> {
         self.expire();
         if self.routes.len() == MAX_ROUTES {
             let oldest = self
                 .routes
                 .iter()
-                .filter(|(_, entry)| entry.completed.is_some() && Arc::strong_count(&entry.route) == 1)
+                .filter(|(_, entry)| {
+                    entry.completed.is_some()
+                        && Arc::strong_count(&entry.route) == 1
+                        && !entry.route.steering.retains_accepted()
+                })
                 .min_by_key(|(_, entry)| entry.completed)
                 .map(|(id, _)| id.clone());
             if let Some(id) = oldest {
@@ -127,29 +181,69 @@ impl Controls {
             self.rejected_owner = Some(registration.response.owner);
             return Err(WsError::TooManyRequests);
         }
-        let Registration { response, lane, reply } = registration;
+        let Some(ordinal) = self.next_ordinal.checked_add(1) else {
+            registration.response.owner.cancel();
+            self.rejected_owner = Some(registration.response.owner);
+            return Err(WsError::TooManyRequests);
+        };
+        self.next_ordinal = ordinal;
+        let Registration {
+            response,
+            lane,
+            reply,
+            session,
+            steering_supported,
+        } = registration;
         let RunningResponse {
             response_id,
+            settings,
             control,
             events,
             sink,
             owner,
         } = response;
+        let metadata_charge = match self.charge_metadata(&settings) {
+            Ok(charge) => charge,
+            Err(error) => {
+                owner.cancel();
+                self.rejected_owner = Some(owner);
+                return Err(error);
+            }
+        };
         let cancellation = owner.cancellation_token();
+        let outcomes = self.spawn_steering_worker(sink.clone());
+        let steering = Arc::new(SteeringTarget {
+            session,
+            settings,
+            supported: steering_supported,
+            _metadata_charge: metadata_charge,
+            lane: lane.clone(),
+            sink: sink.clone(),
+            outcomes,
+            state: Mutex::new(SteeringState {
+                queue: None,
+                echoes: Vec::new(),
+                pin: None,
+                phase: SteeringPhase::Running,
+                required_supported: true,
+            }),
+        });
         self.routes.insert(
             response_id,
             RetainedRoute {
+                ordinal,
                 route: Arc::new(Route {
                     cancellation,
                     control,
                     sink,
                     lane: lane.clone(),
+                    steering: Arc::clone(&steering),
                 }),
                 completed: None,
             },
         );
         self.spawn_relay(events, lane);
-        if let Err(owner) = reply.send(owner) {
+        if let Err((owner, _)) = reply.send((owner, steering)) {
             owner.cancel();
             self.rejected_owner = Some(owner);
             return Err(WsError::SendFailed);
@@ -243,6 +337,14 @@ impl Controls {
             }
         }
         self.routes.clear();
+        self.steering_workers.abort_all();
+        while let Some(result) = self.steering_workers.join_next().await {
+            if let Err(error) = result {
+                if !error.is_cancelled() {
+                    tracing::warn!(%error, "steering outcome worker failed during disposal");
+                }
+            }
+        }
         self.relays.abort_all();
         while let Some(completion) = self.relays.join_next().await {
             match completion {
@@ -255,109 +357,250 @@ impl Controls {
     }
 }
 
-fn failed(request: ResponseInjectRequest, code: InjectionFailureCode) -> InjectionEvent {
-    let message = match code {
-        InjectionFailureCode::ResponseNotFound => format!("Response '{}' was not found.", request.response_id),
-        InjectionFailureCode::ResponseAlreadyCompleted => {
-            format!("Response '{}' has already completed.", request.response_id)
+/// Connection-local admission and exact-input ownership for one published response.
+pub(super) struct SteeringTarget {
+    session: Arc<ResponseSession>,
+    settings: RequestPayload,
+    supported: bool,
+    _metadata_charge: SteeringByteCharge,
+    pub(super) lane: Option<StreamId>,
+    sink: ResponseEventSink,
+    outcomes: mpsc::Sender<SteeringOutcome>,
+    state: Mutex<SteeringState>,
+}
+
+struct SteeringState {
+    queue: Option<SteeringQueue>,
+    echoes: Vec<SteerEcho>,
+    pin: Option<ResponseCheckpointPin>,
+    phase: SteeringPhase,
+    required_supported: bool,
+}
+
+/// Parent completion and successor ownership are separate from execution status.
+/// A completed parent remains eligible until a successor reserves its input.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SteeringPhase {
+    Running,
+    Ready,
+    Reserved,
+    Closed,
+}
+
+impl SteeringPhase {
+    fn require_ready(self) -> Result<(), WsError> {
+        match self {
+            Self::Ready => Ok(()),
+            Self::Running | Self::Reserved | Self::Closed => {
+                Err(WsError::from(agentic_core::executor::ExecutorError::InvalidRequest(
+                    "steering parent is not ready for successor preparation".into(),
+                )))
+            }
         }
-        InjectionFailureCode::InvalidInput => "Invalid injection input.".into(),
-    };
-    InjectionEvent::Failed {
-        response_id: request.response_id,
-        input: request.input,
-        error: InjectionFailure { code, message },
     }
 }
 
-async fn inject(
-    route: Option<Arc<Route>>,
-    unrouted: ResponseEventSink,
-    request: ResponseInjectRequest,
-) -> Result<(), WsError> {
-    let Some(route) = route else {
-        return unrouted
-            .emit_local(failed(request, InjectionFailureCode::ResponseNotFound))
-            .await
-            .map_err(WsError::from);
-    };
-    match route.sink.commit_state() {
-        ResponseCommitState::Running => {}
-        ResponseCommitState::Committed | ResponseCommitState::Failed | ResponseCommitState::Aborted => {
-            return route
-                .sink
-                .emit_local(failed(request, InjectionFailureCode::ResponseAlreadyCompleted))
-                .await
-                .map_err(WsError::from);
-        }
+struct SteerEcho {
+    steer: AcceptedSteer,
+    input: SteeringInputEcho,
+    charge: SteeringByteCharge,
+}
+
+enum SteeringOutcome {
+    Event {
+        event: SteeringEvent,
+        charge: Option<SteeringByteCharge>,
+    },
+    Barrier(oneshot::Sender<()>),
+}
+
+struct SteeringByteCharge {
+    budget: Arc<AtomicUsize>,
+    bytes: usize,
+}
+impl SteeringByteCharge {
+    fn reserve(budget: &Arc<AtomicUsize>, bytes: usize) -> Option<Self> {
+        budget
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
+                used.checked_add(bytes).filter(|total| *total <= MAX_CONTROL_BYTES)
+            })
+            .ok()?;
+        Some(Self {
+            budget: Arc::clone(budget),
+            bytes,
+        })
     }
-    let Some(control) = &route.control else {
-        return route
-            .sink
-            .emit_local(failed(request, InjectionFailureCode::InvalidInput))
-            .await
-            .map_err(WsError::from);
-    };
-    let batch = ClientToolOutputBatch {
-        response_id: request.response_id,
-        outputs: request.input.into_iter().map(Into::into).collect(),
-    };
-    let response_id = batch.response_id.clone();
-    let decision = match control.try_submit_outputs(batch) {
-        Ok(submission) => submission.decision().await.map_err(|_| WsError::SendFailed)?,
-        Err(rejected) => match rejected.reason {
-            ControlAdmissionError::Closed => OutputDecision::Finalizing(rejected.input),
-            ControlAdmissionError::Full | ControlAdmissionError::TooLarge => return Err(WsError::TooManyRequests),
-        },
-    };
-    match decision {
-        OutputDecision::Accepted => {
-            route.sink.emit_local(InjectionEvent::Created { response_id }).await?;
+}
+impl Drop for SteeringByteCharge {
+    fn drop(&mut self) {
+        self.budget.fetch_sub(self.bytes, Ordering::AcqRel);
+    }
+}
+
+#[cfg(test)]
+mod steering_tests {
+    use super::*;
+
+    fn target_fixture() -> (SteeringTarget, Controls, mpsc::Receiver<WsOutboundEvent>) {
+        let (outbound, receive) = mpsc::channel(8);
+        let mut controls = Controls::new(outbound, WsEventLimit(4096));
+        let (sink, events) = ResponseEventSink::channel(4096);
+        controls.spawn_relay(events, None);
+        let outcomes = controls.spawn_steering_worker(sink.clone());
+        let settings = RequestPayload::default();
+        let target = SteeringTarget {
+            session: Arc::new(ResponseSession::new(
+                std::num::NonZeroUsize::new(16).unwrap(),
+                std::num::NonZeroUsize::new(4096).unwrap(),
+            )),
+            _metadata_charge: controls.charge_metadata(&settings).unwrap(),
+            settings,
+            supported: true,
+            lane: None,
+            sink,
+            outcomes,
+            state: Mutex::new(SteeringState {
+                queue: None,
+                echoes: Vec::new(),
+                pin: None,
+                phase: SteeringPhase::Running,
+                required_supported: true,
+            }),
+        };
+        (target, controls, receive)
+    }
+
+    #[tokio::test]
+    async fn unreserved_commit_preserves_input_and_closed_parent_cannot_reopen() {
+        use agentic_core::types::{io::ResponsesInput, websocket::SteeringInput};
+        let (target, mut controls, mut receive) = target_fixture();
+        let target = Arc::new(target);
+        let metadata_bytes = controls.steering_bytes.load(Ordering::Acquire);
+        let mut queue = SteeringQueue::new(
+            "resp_parent".into(),
+            std::num::NonZeroUsize::new(1).unwrap(),
+            std::num::NonZeroUsize::new(4096).unwrap(),
+        )
+        .unwrap();
+        let steer = queue
+            .try_accept(SteeringInput::try_from(ResponsesInput::Text("KEEP_PRIVATE_INPUT".into())).unwrap())
+            .unwrap()
+            .clone();
+        {
+            let mut state = target.state.lock().unwrap();
+            state.queue = Some(queue);
+            state.echoes.push(SteerEcho {
+                steer,
+                input: SteeringInputEcho::from_json("\"KEEP_PRIVATE_INPUT\"".into(), 4096).unwrap(),
+                charge: SteeringByteCharge::reserve(&controls.steering_bytes, 128).unwrap(),
+            });
         }
-        OutputDecision::Rejected(rejected) => {
-            let message = match rejected.reason {
-                ClientCallError::AlreadyResolved(call_id) | ClientCallError::DuplicateCall(call_id) => {
-                    format!("Tool call '{call_id}' already has an output.")
-                }
-                ClientCallError::UnknownCall(call_id) => {
-                    format!("Tool call '{call_id}' is not pending on response '{response_id}'.")
-                }
-                reason @ (ClientCallError::EmptyResponseId
-                | ClientCallError::WrongResponse
-                | ClientCallError::EmptyCallId
-                | ClientCallError::CallLimit
-                | ClientCallError::BatchLimit
-                | ClientCallError::InvalidOwner
-                | ClientCallError::KindMismatch { .. }
-                | ClientCallError::Budget(_)) => reason.to_string(),
-            };
-            route
-                .sink
-                .emit_local(InjectionEvent::Failed {
-                    response_id: rejected.input.response_id,
-                    input: rejected.input.outputs.into_iter().map(InjectionInput::from).collect(),
-                    error: InjectionFailure {
-                        code: InjectionFailureCode::InvalidInput,
-                        message,
+        assert!(target.commit_successor().is_err());
+        target.mark_ready("resp_parent").unwrap();
+        assert!(target.commit_successor().is_err());
+        {
+            let state = target.state.lock().unwrap();
+            assert_eq!(state.phase, SteeringPhase::Ready);
+            assert_eq!(state.queue.as_ref().unwrap().len(), 1);
+            assert_eq!(state.echoes[0].input.as_json(), "\"KEEP_PRIVATE_INPUT\"");
+            assert_eq!(controls.steering_bytes.load(Ordering::Acquire), metadata_bytes + 128);
+        }
+        controls.fail_automatic_admission(Arc::clone(&target)).unwrap();
+        // Admission closes before the deferred task drains the accepted record.
+        assert_eq!(target.state.lock().unwrap().phase, SteeringPhase::Closed);
+        assert!(target.state.lock().unwrap().phase.require_ready().is_err());
+        assert!(target.automatic_request().unwrap().is_none());
+        let completion = controls.tasks.join_next().await.unwrap();
+        assert!(controls.finish(completion));
+        let failure = receive.recv().await.unwrap();
+        let wire: serde_json::Value = agentic_core::utils::common::deserialize_from_str(&failure.0).unwrap();
+        assert_eq!(wire["error"]["code"], "successor_creation_failed");
+        assert_eq!(wire["steer"]["input"], "KEEP_PRIVATE_INPUT");
+        target.mark_ready("resp_parent").unwrap();
+        assert_eq!(target.state.lock().unwrap().phase, SteeringPhase::Closed);
+        assert_eq!(controls.steering_bytes.load(Ordering::Acquire), metadata_bytes);
+        assert!(target.commit_successor().is_err());
+        assert!(target.automatic_request().unwrap().is_none());
+        controls.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn failed_automatic_admission_closes_before_its_worker_is_polled() {
+        let (target, mut controls, _receive) = target_fixture();
+        let target = Arc::new(target);
+        target.mark_ready("resp_parent").unwrap();
+        controls.fail_automatic_admission(Arc::clone(&target)).unwrap();
+        // No await has given the deferred failure task a chance to own cleanup.
+        // The reader has already prevented a second automatic/prepared claimant.
+        assert_eq!(target.state.lock().unwrap().phase, SteeringPhase::Closed);
+        assert!(target.state.lock().unwrap().phase.require_ready().is_err());
+        assert!(target.automatic_request().unwrap().is_none());
+        let completion = controls.tasks.join_next().await.unwrap();
+        assert!(controls.finish(completion));
+        {
+            let mut state = target.state.lock().unwrap();
+            state.phase = SteeringPhase::Reserved;
+        }
+        // A stale admission failure cannot resolve a producer-owned reservation.
+        controls.fail_automatic_admission(Arc::clone(&target)).unwrap();
+        assert_eq!(target.state.lock().unwrap().phase, SteeringPhase::Reserved);
+        assert!(controls.tasks.is_empty());
+        for _ in 0..MAX_CONTROLS {
+            controls.tasks.spawn(std::future::pending());
+        }
+        assert!(matches!(
+            controls.fail_automatic_admission(Arc::clone(&target)),
+            Err(WsError::TooManyRequests)
+        ));
+        assert_eq!(target.state.lock().unwrap().phase, SteeringPhase::Reserved);
+        controls.shutdown().await;
+    }
+
+    #[test]
+    fn retained_steering_bytes_are_shared_and_refunded_once() {
+        let budget = Arc::new(AtomicUsize::new(0));
+        let first = SteeringByteCharge::reserve(&budget, MAX_CONTROL_BYTES - 2).unwrap();
+        let second = SteeringByteCharge::reserve(&budget, 2).unwrap();
+        assert!(SteeringByteCharge::reserve(&budget, 1).is_none());
+        drop(second);
+        assert_eq!(budget.load(Ordering::Acquire), MAX_CONTROL_BYTES - 2);
+        assert!(SteeringByteCharge::reserve(&budget, usize::MAX).is_none());
+        drop(first);
+        assert_eq!(budget.load(Ordering::Acquire), 0);
+    }
+
+    #[tokio::test]
+    async fn steering_outcomes_are_ordered_and_barrier_waits_for_relay() {
+        let (outbound, mut receive) = mpsc::channel(8);
+        let mut controls = Controls::new(outbound, WsEventLimit(4096));
+        let (sink, events) = ResponseEventSink::channel(4096);
+        controls.spawn_relay(events, None);
+        let outcomes = controls.spawn_steering_worker(sink);
+        for id in ["steer_first", "steer_second"] {
+            outcomes
+                .send(SteeringOutcome::Event {
+                    event: SteeringEvent::Accepted {
+                        steer: AcceptedSteer {
+                            id: id.into(),
+                            previous_response_id: "resp_parent".into(),
+                        },
                     },
+                    charge: None,
                 })
-                .await?;
+                .await
+                .unwrap();
         }
-        OutputDecision::Finalizing(input) => {
-            // Failed/aborted execution also terminates input admission. The
-            // acknowledgement still uses the retained response relay.
-            route.sink.wait_finished().await?;
-            route
-                .sink
-                .emit_local(failed(
-                    ResponseInjectRequest {
-                        response_id: input.response_id,
-                        input: input.outputs.into_iter().map(InjectionInput::from).collect(),
-                    },
-                    InjectionFailureCode::ResponseAlreadyCompleted,
-                ))
-                .await?;
+        let (reply, barrier) = oneshot::channel();
+        outcomes.send(SteeringOutcome::Barrier(reply)).await.unwrap();
+        barrier.await.unwrap();
+        for (number, id) in ["steer_first", "steer_second"].into_iter().enumerate() {
+            let wire = receive.recv().await.unwrap();
+            let event: serde_json::Value = agentic_core::utils::common::deserialize_from_str(&wire.0).unwrap();
+            assert_eq!(event["steer"]["id"], id);
+            assert_eq!(event["sequence_number"], number);
         }
+        controls.shutdown().await;
+        assert!(controls.steering_workers.is_empty());
+        assert!(controls.relays.is_empty());
     }
-    Ok(())
 }

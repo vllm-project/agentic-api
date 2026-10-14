@@ -1,12 +1,13 @@
-//! Cumulative retained-byte budget for one Responses request.
+//! Retained-size accounting and the cumulative budget for one Responses request.
 //!
 //! Two owners share this module. [`ExecutorResponseBudget`] is the per-request
 //! ceiling, charged by synchronous ingestion for retained output items and by
 //! the gateway for tool outputs. [`RetainedSize`] is the single measurement of
-//! how many bytes an output item keeps in memory; ingestion charges growth
-//! incrementally and reconciles against this measurement at completion, so a
-//! new variable-sized field is added in exactly one place.
+//! the logical retained size of output items and steering input. Ingestion
+//! charges growth incrementally and reconciles against this measurement at
+//! completion, so a new variable-sized field is added in exactly one place.
 mod client_outputs;
+mod input;
 mod reasoning;
 
 use std::sync::Arc;
@@ -31,7 +32,7 @@ pub use crate::config::DEFAULT_MAX_RETAINED_RESPONSE_BYTES;
 #[cfg(test)]
 pub(super) const MAX_EXECUTOR_RESPONSE_BYTES: usize = DEFAULT_MAX_RETAINED_RESPONSE_BYTES;
 
-/// Fixed charge for every retained container: an output item, a content part,
+/// Fixed charge for every retained container: an input message, output item, content part,
 /// a shell command, a JSON array or object. It bounds structural growth that
 /// carries no text, such as an empty content part.
 pub(super) const RETAINED_CONTAINER_OVERHEAD_BYTES: usize = 32;
@@ -451,15 +452,7 @@ impl RetainedSize for AgentMessageContent {
             Self::OutputText(part) => part.retained_bytes(),
             Self::InputImage(part) | Self::ComputerScreenshot(part) => part.retained_bytes(),
             Self::InputFile(part) => part.retained_bytes(),
-            Self::Refusal(part) => {
-                RETAINED_CONTAINER_OVERHEAD_BYTES
-                    + part.refusal.len()
-                    + part
-                        .extra
-                        .iter()
-                        .map(|(key, value)| key.len() + value.retained_bytes())
-                        .sum::<usize>()
-            }
+            Self::Refusal(part) => part.retained_bytes(),
             Self::EncryptedContent { encrypted_content } => RETAINED_CONTAINER_OVERHEAD_BYTES + encrypted_content.len(),
         }
     }
@@ -528,7 +521,106 @@ mod tests {
         McpListTool, McpListTools, ReasoningOutput, ReasoningTextContent, WebSearchActionOpenPage,
         WebSearchActionSearch, WebSearchCall, WebSearchCallStatus,
     };
-    use crate::types::io::{CodeInterpreterCallStatus, McpCall, McpCallStatus, OpaqueReasoning};
+    use crate::types::io::{
+        CodeInterpreterCallStatus, InputTextContent, McpCall, McpCallStatus, OpaqueReasoning, ToolOutputContent,
+    };
+    use crate::types::io::{InputContent, InputItem, InputMessage, InputMessageContent, ResponsesInput};
+    use crate::types::websocket::SteeringInput;
+    use crate::utils::common::deserialize_from_value;
+
+    fn steering_message(content: InputMessageContent) -> SteeringInput {
+        SteeringInput::try_from(ResponsesInput::Items(vec![InputItem::Message(InputMessage {
+            role: "user".to_owned(),
+            content,
+            ..InputMessage::default()
+        })]))
+        .unwrap()
+    }
+
+    #[test]
+    fn steering_text_counts_utf8_bytes_and_empty_input() {
+        let empty = SteeringInput::try_from(ResponsesInput::Text(String::new())).unwrap();
+        let text = "é🙂".repeat(256);
+        let expected_growth = text.len();
+        let input = SteeringInput::try_from(ResponsesInput::Text(text)).unwrap();
+        assert_eq!(empty.retained_bytes(), RETAINED_CONTAINER_OVERHEAD_BYTES);
+        assert_eq!(input.retained_bytes() - empty.retained_bytes(), expected_growth);
+    }
+
+    #[test]
+    fn steering_media_reuses_tool_output_sizes_and_counts_every_field() {
+        for (wire, fields) in [
+            (serde_json::json!({"type":"input_text", "text":""}), &["text"][..]),
+            (
+                serde_json::json!({"type":"input_image", "file_id":"", "image_url":"", "detail":""}),
+                &["file_id", "image_url", "detail"][..],
+            ),
+            (
+                serde_json::json!({"type":"input_file", "file_data":"", "file_id":"", "file_url":"",
+                    "filename":"", "detail":""}),
+                &["file_data", "file_id", "file_url", "filename", "detail"][..],
+            ),
+        ] {
+            let input_part: InputContent = deserialize_from_value(wire.clone()).unwrap();
+            let tool_part: ToolOutputContent = deserialize_from_value(wire.clone()).unwrap();
+            assert_eq!(input_part.retained_bytes(), tool_part.retained_bytes());
+            let small = steering_message(InputMessageContent::Parts(vec![input_part]));
+            for field in fields {
+                let mut larger_wire = wire.clone();
+                larger_wire[field] = Value::String("x".repeat(1024));
+                let input_part = deserialize_from_value(larger_wire).unwrap();
+                let large = steering_message(InputMessageContent::Parts(vec![input_part]));
+                assert_eq!(large.retained_bytes() - small.retained_bytes(), 1024, "field: {field}");
+            }
+        }
+    }
+
+    #[test]
+    fn steering_nested_extensions_cannot_bypass_the_measured_budget() {
+        for mut wire in [
+            serde_json::json!({"type":"input_text", "text":""}),
+            serde_json::json!({"type":"input_image", "image_url":""}),
+            serde_json::json!({"type":"input_file", "file_data":""}),
+        ] {
+            wire["extension"] = serde_json::json!({"nested":[{"payload":""}]});
+            let part = deserialize_from_value(wire.clone()).unwrap();
+            let small = steering_message(InputMessageContent::Parts(vec![part]));
+            wire["extension"]["nested"][0]["payload"] = Value::String("x".repeat(4096));
+            let part = deserialize_from_value(wire).unwrap();
+            let large = steering_message(InputMessageContent::Parts(vec![part]));
+            assert_eq!(large.retained_bytes() - small.retained_bytes(), 4096);
+            let budget = ExecutorResponseBudget::with_limit(small.retained_bytes());
+            assert!(matches!(
+                budget.consume(large.retained_bytes()),
+                Err(ExecutorError::ResourceLimitExceeded {
+                    limit: ResourceLimit::ResponseBudget,
+                    ..
+                })
+            ));
+            assert_eq!(budget.used(), 0);
+        }
+    }
+
+    #[test]
+    fn steering_empty_messages_and_parts_still_consume_retained_capacity() {
+        let message = InputItem::Message(InputMessage {
+            role: "user".to_owned(),
+            content: InputMessageContent::Text(String::new()),
+            ..InputMessage::default()
+        });
+        let one = SteeringInput::try_from(ResponsesInput::Items(vec![message.clone()])).unwrap();
+        let many = SteeringInput::try_from(ResponsesInput::Items(vec![message; 128])).unwrap();
+        assert!(one.retained_bytes() > RETAINED_CONTAINER_OVERHEAD_BYTES);
+        assert!(many.retained_bytes() - one.retained_bytes() >= 127 * RETAINED_CONTAINER_OVERHEAD_BYTES);
+
+        let empty_parts = steering_message(InputMessageContent::Parts(Vec::new()));
+        let many_parts = steering_message(InputMessageContent::Parts(
+            (0..128)
+                .map(|_| InputContent::InputText(InputTextContent::new("")))
+                .collect(),
+        ));
+        assert!(many_parts.retained_bytes() - empty_parts.retained_bytes() >= 128 * RETAINED_CONTAINER_OVERHEAD_BYTES);
+    }
 
     #[test]
     fn retained_accounting_for_code_interpreter_call_and_outputs() {

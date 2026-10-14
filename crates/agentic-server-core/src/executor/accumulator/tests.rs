@@ -965,6 +965,179 @@ fn retained_slot_debug_omits_completed_payloads() {
 }
 
 #[test]
+fn steering_waits_for_every_started_item_and_preserves_completed_order() {
+    use serde_json::json;
+
+    for strict in [false, true] {
+        let mut acc = lifecycle_accumulator(strict);
+        assert!(!acc.finish_for_steering().unwrap());
+        let item = |index| {
+            json!({"type":"function_call", "id":format!("fc_{index}"),
+            "call_id":format!("call_{index}"), "name":"lookup", "arguments":"{}", "status":"completed"})
+        };
+        for index in [0, 1] {
+            push_lifecycle_event(
+                &mut acc,
+                &json!({"type":"response.output_item.added",
+                "output_index":index, "item":item(index)}),
+                strict,
+            )
+            .unwrap();
+        }
+        push_lifecycle_event(
+            &mut acc,
+            &json!({"type":"response.output_item.done",
+            "output_index":1, "item":item(1)}),
+            strict,
+        )
+        .unwrap();
+        assert!(!acc.finish_for_steering().unwrap(), "the other item is still running");
+        assert_eq!(acc.status, ResponseStatus::InProgress);
+        push_lifecycle_event(
+            &mut acc,
+            &json!({"type":"response.output_item.done",
+            "output_index":0, "item":item(0)}),
+            strict,
+        )
+        .unwrap();
+        assert!(acc.finish_for_steering().unwrap());
+        let payload = acc.finish("model", Some("parent"), None).unwrap();
+        assert_eq!(payload.status, "incomplete");
+        assert_eq!(payload.incomplete_details.unwrap().reason.as_deref(), Some("steered"));
+        assert_eq!(serde_json::to_value(payload.output).unwrap(), json!([item(0), item(1)]));
+        assert!(
+            payload.usage.is_none(),
+            "cutting a stream must not fabricate terminal usage"
+        );
+    }
+}
+
+#[test]
+fn steering_does_not_replace_an_upstream_terminal_or_accept_changed_call_ids() {
+    use serde_json::json;
+
+    let mut completed = lifecycle_accumulator(true);
+    push_lifecycle_event(
+        &mut completed,
+        &json!({"type":"response.completed", "response":{
+        "id":"resp_1", "status":"completed", "output":[]}}),
+        true,
+    )
+    .unwrap();
+    assert!(!completed.finish_for_steering().unwrap());
+    assert_eq!(completed.finish("model", None, None).unwrap().status, "completed");
+
+    let mut invalid = lifecycle_accumulator(true);
+    for (event_type, call_id) in [
+        ("response.output_item.added", "before"),
+        ("response.output_item.done", "after"),
+    ] {
+        push_lifecycle_event(
+            &mut invalid,
+            &json!({"type":event_type, "output_index":0, "item":{
+            "type":"function_call", "id":"fc_1", "call_id":call_id, "name":"lookup", "arguments":"{}",
+            "status":"completed"}}),
+            true,
+        )
+        .unwrap();
+    }
+    assert!(!invalid.finish_for_steering().unwrap());
+    assert!(invalid.ensure_steering_settled().is_err());
+}
+
+#[test]
+fn steering_does_not_treat_lenient_fallback_or_running_hosted_items_as_settled() {
+    use serde_json::json;
+
+    for (opening, done) in [
+        (
+            json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"lookup",
+            "arguments":"{\"x\":", "status":"in_progress"}),
+            json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"lookup", "status":"completed"}),
+        ),
+        (
+            json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"lookup",
+            "arguments":"{\"x\":", "status":"in_progress"}),
+            json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"lookup",
+            "arguments":"", "status":"completed"}),
+        ),
+        (
+            json!({"type":"custom_tool_call", "id":"ct_1", "call_id":"call_1", "name":"lookup",
+            "input":"unfinished", "status":"in_progress"}),
+            json!({"type":"custom_tool_call", "id":"ct_1", "call_id":"call_1", "name":"lookup",
+            "input":"", "status":"completed"}),
+        ),
+        (
+            json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"lookup",
+            "arguments":"", "status":"in_progress"}),
+            json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"lookup", "arguments":"{}"}),
+        ),
+        (
+            json!({"type":"code_interpreter_call", "id":"ci_1", "container_id":"container",
+            "code":"print(42)", "status":"in_progress", "outputs":[]}),
+            json!({"type":"code_interpreter_call", "id":"ci_1", "container_id":"container",
+            "code":"print(42)", "status":"in_progress", "outputs":[]}),
+        ),
+    ] {
+        let mut acc = lifecycle_accumulator(false);
+        push_lifecycle_event(
+            &mut acc,
+            &json!({"type":"response.output_item.added", "output_index":0, "item":opening}),
+            false,
+        )
+        .unwrap();
+        let delta = match opening["type"].as_str() {
+            Some("function_call") => Some(("response.function_call_arguments.delta", &opening["arguments"])),
+            Some("custom_tool_call") => Some(("response.custom_tool_call_input.delta", &opening["input"])),
+            _ => None,
+        };
+        if let Some((kind, delta)) = delta {
+            push_lifecycle_event(
+                &mut acc,
+                &json!({"type":kind, "output_index":0, "item_id":opening["id"], "delta":delta}),
+                false,
+            )
+            .unwrap();
+        }
+        push_lifecycle_event(
+            &mut acc,
+            &json!({"type":"response.output_item.done", "output_index":0, "item":done}),
+            false,
+        )
+        .unwrap();
+        assert!(!acc.finish_for_steering().unwrap(), "unsafe done snapshot: {done}");
+        assert!(acc.ensure_steering_settled().is_err());
+    }
+}
+
+#[test]
+fn steering_waits_for_natural_terminal_after_done_only_recovery() {
+    use serde_json::json;
+
+    let mut acc = lifecycle_accumulator(false);
+    push_lifecycle_event(
+        &mut acc,
+        &json!({"type":"response.output_item.done", "output_index":0, "item":{
+            "type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"lookup",
+            "arguments":"{}", "status":"completed"}}),
+        false,
+    )
+    .unwrap();
+    assert!(!acc.finish_for_steering().unwrap());
+    assert!(acc.ensure_steering_settled().is_err());
+    push_lifecycle_event(
+        &mut acc,
+        &json!({"type":"response.completed", "response":{"id":"resp_1", "status":"completed"}}),
+        false,
+    )
+    .unwrap();
+    acc.ensure_steering_settled().unwrap();
+    let payload = acc.finish("model", None, None).unwrap();
+    assert_eq!(payload.status, "completed");
+    assert_eq!(payload.output.len(), 1);
+}
+
+#[test]
 fn test_accumulator_mark_incomplete() {
     let mut acc = ResponseAccumulator::new("resp_123".into(), None);
     acc.mark_incomplete("Stream interrupted");

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::types::io::{AgentAttribution, AgentMessageContent, OutputItem, ResponseUsage};
+use crate::types::websocket::SteeringEvent;
 
 /// Classification of SSE event types from the Responses API.
 ///
@@ -21,6 +22,11 @@ pub enum SSEEventType {
     ResponseIncomplete,
     /// Response-level liveness, with no output-item or agent lifecycle transition.
     Keepalive,
+
+    // Local steering controls; no response or output-item lifecycle transition.
+    ResponseSteerAccepted,
+    ResponseSteerPending,
+    ResponseSteerFailed,
 
     // Output item lifecycle
     OutputItemAdded,
@@ -73,6 +79,16 @@ pub enum SSEEventType {
     Other,
 }
 
+impl From<&SteeringEvent> for SSEEventType {
+    fn from(event: &SteeringEvent) -> Self {
+        match event {
+            SteeringEvent::Accepted { .. } => Self::ResponseSteerAccepted,
+            SteeringEvent::Pending { .. } => Self::ResponseSteerPending,
+            SteeringEvent::Failed { .. } => Self::ResponseSteerFailed,
+        }
+    }
+}
+
 impl From<&str> for SSEEventType {
     fn from(value: &str) -> Self {
         match value {
@@ -82,6 +98,9 @@ impl From<&str> for SSEEventType {
             "response.failed" => Self::ResponseFailed,
             "response.incomplete" => Self::ResponseIncomplete,
             "keepalive" => Self::Keepalive,
+            "response.steer.accepted" => Self::ResponseSteerAccepted,
+            "response.steer.pending" => Self::ResponseSteerPending,
+            "response.steer.failed" => Self::ResponseSteerFailed,
             "response.output_item.added" => Self::OutputItemAdded,
             "response.output_item.done" => Self::OutputItemDone,
             "response.output_text.delta" => Self::OutputTextDelta,
@@ -135,6 +154,9 @@ impl TryFrom<SSEEventType> for &'static str {
             SSEEventType::ResponseFailed => Ok("response.failed"),
             SSEEventType::ResponseIncomplete => Ok("response.incomplete"),
             SSEEventType::Keepalive => Ok("keepalive"),
+            SSEEventType::ResponseSteerAccepted => Ok("response.steer.accepted"),
+            SSEEventType::ResponseSteerPending => Ok("response.steer.pending"),
+            SSEEventType::ResponseSteerFailed => Ok("response.steer.failed"),
             SSEEventType::OutputItemAdded => Ok("response.output_item.added"),
             SSEEventType::OutputItemDone => Ok("response.output_item.done"),
             SSEEventType::OutputTextDelta => Ok("response.output_text.delta"),
@@ -504,6 +526,9 @@ mod tests {
             SSEEventType::ResponseFailed,
             SSEEventType::ResponseIncomplete,
             SSEEventType::Keepalive,
+            SSEEventType::ResponseSteerAccepted,
+            SSEEventType::ResponseSteerPending,
+            SSEEventType::ResponseSteerFailed,
             SSEEventType::OutputItemAdded,
             SSEEventType::OutputItemDone,
             SSEEventType::OutputTextDelta,

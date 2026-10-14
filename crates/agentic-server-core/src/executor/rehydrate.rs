@@ -342,7 +342,7 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
     ctx.enriched_request.tool_choice = Some(resolve_tool_choice(
         ctx.original_request.tool_choice.as_ref(),
         &parent.metadata.effective_tool_choice,
-        ctx.original_request.tool_choice.is_some(),
+        ctx.original_request.tool_choice.is_some() || ctx.original_request.tools.is_some(),
     ));
     if let Some(continuation) = ctx.continuation.as_mut() {
         continuation.parent = Some(parent);
@@ -403,7 +403,7 @@ pub(crate) fn apply_effective_settings(ctx: &mut RequestContext, stored: &Respon
     ctx.enriched_request.tool_choice = Some(resolve_tool_choice(
         ctx.original_request.tool_choice.as_ref(),
         &stored.effective_tool_choice,
-        ctx.original_request.tool_choice.is_some(),
+        ctx.original_request.tool_choice.is_some() || tools_explicitly_set,
     ));
 }
 

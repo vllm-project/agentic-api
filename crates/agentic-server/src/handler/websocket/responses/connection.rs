@@ -75,6 +75,9 @@ pub(super) async fn responses_ws_loop(
                     if !multiplexer.controls.finish(completion) { client_disconnected = true; break; }
                 }
             }
+            Some(worker) = multiplexer.controls.steering_workers.join_next(), if !multiplexer.controls.steering_workers.is_empty() => {
+                if !relay_completed(worker) { client_disconnected = true; break; }
+            }
             Some(relay) = multiplexer.controls.relays.join_next(), if !multiplexer.controls.relays.is_empty() => {
                 if !relay_completed(relay) { client_disconnected = true; break; }
             }
@@ -82,7 +85,8 @@ pub(super) async fn responses_ws_loop(
                 let Some(completion) = completion else {
                     continue;
                 };
-                if !multiplexer.finish(completion, draining) {
+                if let Err(error) = multiplexer.finish(completion, draining) {
+                    warn!(%error, "failed to advance websocket response lane");
                     client_disconnected = true;
                     break;
                 }
