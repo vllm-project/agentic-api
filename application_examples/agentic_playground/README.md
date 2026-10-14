@@ -33,13 +33,13 @@ Search keys belong to the gateway. Keep one `RUST_LOG` assignment; a second assi
 An HTTP 400 saying `code_interpreter is disabled; rebuild ...` requires rebuilding with the feature above and
 restarting the gateway with that binary. Disable Python execution in the page if you do not need it.
 
-In a second terminal:
+In a second terminal, serve the repository root so the page can load the shared logo assets:
 
 ```bash
-python3 -m http.server 8080 --bind 127.0.0.1 --directory application_examples/agentic_playground
+python3 -m http.server 8080 --bind 127.0.0.1 --directory .
 ```
 
-Open **http://localhost:8080**, enter **http://localhost:9000** as the gateway URL, and select **Load models**.
+Open **http://localhost:8080/application_examples/agentic_playground/**, enter **http://localhost:9000** as the gateway URL, and select **Load models**.
 Enter a bearer token if required. Gateway and MCP credentials stay in page memory; previews and downloads redact
 credential fields. Reloading the page clears configuration and history. Use matching HTTP/HTTPS schemes and allow
 the page's exact origin in gateway CORS configuration; `localhost` and `127.0.0.1` are different origins.
@@ -198,5 +198,5 @@ MCP connectivity still need verification against your gateway.
 
 `protocol.mjs` handles SSE framing and item state; `progress.mjs` projects progress; `settings.mjs` builds declarations
 and settings; `client-tools.mjs` handles continuation outputs and usage; `sandbox.mjs` isolates handlers; `transport.mjs` handles HTTP and WebSocket lifecycles; `markdown.mjs` renders answers; `app.mjs`
-connects them to the UI. The SVG assets are unchanged copies of the repository's `assets/Black-Main-Logo.svg` and
-`assets/Main-Brandmark.svg`.
+connects them to the UI. The page references the repository's `assets/Black-Main-Logo.svg` and
+`assets/Main-Brandmark.svg` directly through relative paths; no logo copies are maintained in the example.

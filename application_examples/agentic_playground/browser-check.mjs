@@ -5,7 +5,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
-const root = fileURLToPath(new URL('.', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 const requests = [];
 const message = { id:'answer', type:'message', role:'assistant', phase:'final_answer', content:[{type:'output_text',text:'# Result\n\nThe **average** is `7.5`.\n\n| Metric | Value |\n| --- | --- |\n| Average | 7.5 |\n\n```python\nprint(7.5)\n```\n\n- Verified example\n\n<script>window.unsafe = true</script>\n\n[unsafe](javascript:alert)'}] };
 const usage = {input_tokens:10, output_tokens:5, total_tokens:15};
@@ -33,7 +33,7 @@ const server = http.createServer(async (req,res) => {
       return res.end();
     }
     const pathname = new URL(req.url,'http://localhost').pathname;
-    const file = pathname==='/' ? '/index.html' : pathname;
+    const file = pathname.endsWith('/') ? `${pathname}index.html` : pathname;
     res.setHeader('Content-Type',file.endsWith('.mjs')?'text/javascript':file.endsWith('.css')?'text/css':file.endsWith('.svg')?'image/svg+xml':'text/html');
     res.end(await readFile(root+file));
   } catch(error) {res.statusCode=500;res.end(error.message);}
@@ -44,7 +44,7 @@ const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
 try {
   const page=await browser.newPage({viewport:{width:1440,height:1100}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(base);
+  await page.goto(`${base}/application_examples/agentic_playground/`);
   await page.locator('#mode').waitFor();
   assert.equal(await page.getByLabel('Enable multi-agent execution',{exact:true}).isChecked(),false);
   assert.equal(await page.locator('#concurrency').inputValue(),'1');
