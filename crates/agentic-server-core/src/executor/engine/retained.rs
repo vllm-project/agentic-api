@@ -12,7 +12,7 @@ use crate::executor::{
     request::{ExecutionContext, RequestContext},
     response_events::{ResponseCommitState, ResponseEventSink},
     session::SteeringQueue,
-    telemetry::ExecutionSpan,
+    telemetry::{ExecutionSpan, InstrumentedStream},
 };
 use crate::tool::ToolSearchState;
 use std::{num::NonZeroUsize, sync::Arc};
@@ -212,7 +212,7 @@ impl ResponseRunOwner {
         tokio::select! {
             biased;
             () = cancellation.cancelled() => return Err(ExecutorError::StreamError("response cancelled before commit".into())),
-            result = persist_if_needed(payload, ctx, metadata, exec.conv_handler.clone(), exec.resp_handler.clone()) => result?,
+            result = persist_if_needed(payload, ctx, metadata, exec.conv_handler.clone(), exec.resp_handler.clone(), &exec.metrics) => result?,
         }
         tokio::select! {
             () = cancellation.cancelled() => return Err(ExecutorError::StreamError("response delivery cancelled".into())),
@@ -295,6 +295,8 @@ pub(super) fn start(
             (Some(send), Some(receive))
         }
     };
+    let clock = execution.clock().clone();
+    pipeline.set_execution_clock(clock.clone());
     let control = if pipeline
         .request
         .enriched_request
@@ -359,21 +361,22 @@ pub(super) fn start(
         }
         result
     }.instrument(span));
-    let events = ResponseEventSink::stream(receiver);
-    let owner_sink = sink.clone();
     RunningResponse {
         response_id,
         control,
-        events,
-        sink,
+        events: Box::pin(InstrumentedStream::timing_delivery(
+            ResponseEventSink::stream(receiver, Some(clock.clone())),
+            clock,
+        )),
         owner: ResponseRunOwner {
             state: match activate {
                 Some(activate) => ResponseRunState::AwaitingRegistration { task, activate },
                 None => ResponseRunState::Running(task),
             },
             cancellation,
-            sink: owner_sink,
+            sink: sink.clone(),
         },
+        sink,
         settings,
     }
 }

@@ -240,7 +240,7 @@ async fn handle_ws_request(request: WsRequest, mut context: RequestExecution<'_>
         steering,
         automatic: _,
     } = request;
-    let mut execution = execution.unwrap_or_else(telemetry::QueuedExecution::new).dispatch();
+    let mut execution = telemetry::dispatch(execution, state);
 
     if generate == Some(false) {
         if steering.is_some() {

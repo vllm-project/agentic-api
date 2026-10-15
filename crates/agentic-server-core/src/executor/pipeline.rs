@@ -12,6 +12,7 @@ use crate::executor::relay::{AgentRoundId, StreamRelay};
 use crate::executor::request::RequestContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::response_events::ResponseEventSink;
+use crate::executor::telemetry::metrics::ExecutionClock;
 use crate::executor::translate::{Translation, TranslationContext};
 use crate::tool::{ToolRegistry, ToolSearchMetadata, ToolSearchState};
 use crate::types::agent::AgentIdentity;
@@ -32,6 +33,8 @@ pub(super) struct AgentPipeline {
     agent_guidance: Option<InputMessage>,
     /// Set after a `max_tool_calls` refusal; later rounds omit gateway-executed tools.
     builtin_tools_withheld: bool,
+    /// Timing state of the execution this pipeline serves, when it streams.
+    clock: Option<ExecutionClock>,
 }
 
 impl AgentPipeline {
@@ -39,6 +42,15 @@ impl AgentPipeline {
         self.steering
             .as_ref()
             .is_some_and(ResponseEventSink::steering_requested)
+    }
+
+    /// Report the first upstream line of the execution's streamed bodies to `clock`.
+    pub(super) fn set_execution_clock(&mut self, clock: ExecutionClock) {
+        self.clock = Some(clock);
+    }
+
+    pub(super) fn execution_clock(&self) -> Option<&ExecutionClock> {
+        self.clock.as_ref()
     }
 
     pub(super) fn set_agent_guidance(&mut self, guidance: InputMessage) {
@@ -93,6 +105,7 @@ impl AgentPipeline {
             control: None,
             steering: None,
             builtin_tools_withheld: false,
+            clock: None,
         }
     }
 
@@ -211,7 +224,11 @@ impl AgentPipeline {
                 body.next().await
             };
             let Some(line) = line else { break };
-            let translation = self.push(SseLine::parse(&line?))?;
+            let line = line?;
+            if let Some(clock) = &self.clock {
+                clock.upstream_data();
+            }
+            let translation = self.push(SseLine::parse(&line))?;
             self.relay.accept(translation, &self.request, registry).await?;
         }
         // Frames still deferred stay with the relay until the engine releases them

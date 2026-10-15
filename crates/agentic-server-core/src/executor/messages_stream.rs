@@ -36,6 +36,7 @@ use crate::executor::messages_context::MessagesRequestContext;
 use crate::executor::messages_tools::request_gateway_map;
 use crate::executor::messages_usage::MessagesUsageTotals;
 use crate::executor::request::ExecutionContext;
+use crate::executor::telemetry::metrics::{Stage, StageTimer};
 use crate::executor::telemetry::{Api, ExecutionSpan, FailureCategory, InstrumentedStream, Route};
 use crate::proxy::processed_response_headers;
 use crate::tool::ToolRegistry;
@@ -58,52 +59,69 @@ pub async fn run_messages_stream(
     upstream: MessagesUpstream,
 ) -> ExecutorResult<MessagesResponse<BoxStream>> {
     ctx.force_stream(true);
-    let mut execution = ExecutionSpan::start(Api::Messages, Route::Executor, true);
+    let mut execution = ExecutionSpan::start(Api::Messages, Route::Executor, true, &exec_ctx.metrics);
     let span = execution.span().clone();
-    let first_round = span.in_scope(|| super::telemetry::stages::inference_round(0));
-    let primed = prime_messages_stream(&ctx, &exec_ctx, &upstream)
-        .instrument(first_round.clone())
-        .await;
-    let first_response = match primed {
-        Ok(first_response) => first_response,
+    // Send the first upstream request before the handler commits an HTTP 200,
+    // so initial vLLM errors retain their original status and body.
+    let opened = open_round(&ctx, &exec_ctx, &upstream, 0).instrument(span.clone()).await;
+    let first_round = match opened {
+        Ok(first_round) => first_round,
         Err(error) => {
             execution.failed(&error);
             execution.not_delivered();
             return Err(error);
         }
     };
-    let response_headers = processed_response_headers(first_response.headers());
-    let body = messages_stream_body(
-        ctx,
-        registry,
-        exec_ctx,
-        upstream,
-        (first_response, first_round),
-        execution,
-    );
+    let response_headers = processed_response_headers(first_round.response.headers());
+    let clock = execution.clock().clone();
+    let body = messages_stream_body(ctx, registry, exec_ctx, upstream, first_round, execution);
     Ok(MessagesResponse {
-        body: Box::pin(InstrumentedStream::new(body, span)),
+        body: Box::pin(InstrumentedStream::delivering(body, span, clock)),
         headers: response_headers,
     })
 }
 
 /// Send the first upstream request before the handler commits an HTTP 200, so
 /// initial vLLM errors retain their original status and body.
-async fn prime_messages_stream(
+/// One upstream round whose response headers have arrived.
+struct OpenRound {
+    response: reqwest::Response,
+    span: tracing::Span,
+    stage: StageTimer,
+}
+
+/// Build and send one round's upstream request inside its
+/// `agentic.inference_round` span; the round's stage timer keeps running
+/// until its body has been read.
+async fn open_round(
     ctx: &MessagesRequestContext,
     exec_ctx: &ExecutionContext,
     upstream: &MessagesUpstream,
-) -> ExecutorResult<reqwest::Response> {
-    let first_body = ctx.upstream_body()?;
-    send_request(
-        &exec_ctx.client,
-        upstream.url(),
-        first_body,
-        None,
-        Some(upstream.headers()),
-        exec_ctx.streaming_timeout,
-    )
-    .await
+    round: usize,
+) -> ExecutorResult<OpenRound> {
+    let span = super::telemetry::stages::inference_round(round);
+    let stage = exec_ctx.metrics.stage(Stage::Inference);
+    let sent = async {
+        let body = ctx.upstream_body()?;
+        send_request(
+            &exec_ctx.client,
+            upstream.url(),
+            body,
+            None,
+            Some(upstream.headers()),
+            exec_ctx.streaming_timeout,
+        )
+        .await
+    }
+    .instrument(span.clone())
+    .await;
+    match sent {
+        Ok(response) => Ok(OpenRound { response, span, stage }),
+        Err(error) => {
+            stage.finish(Some(FailureCategory::from(&error)));
+            Err(error)
+        }
+    }
 }
 
 /// The client-facing frame stream. `execution` lives inside it: every exit
@@ -114,7 +132,7 @@ fn messages_stream_body(
     registry: Arc<ToolRegistry>,
     exec_ctx: Arc<ExecutionContext>,
     upstream: MessagesUpstream,
-    first_response: (reqwest::Response, tracing::Span),
+    first_round: OpenRound,
     mut execution: ExecutionSpan,
 ) -> BoxStream {
     Box::pin(stream! {
@@ -122,40 +140,23 @@ fn messages_stream_body(
             gateway_map: request_gateway_map(&exec_ctx.messages_gateway_tools, &registry),
             ..Default::default()
         };
-        let mut prepared_response = Some(first_response);
+        let mut prepared_response = Some(first_round);
+        let clock = execution.clock().clone();
+        let mut rounds = exec_ctx.metrics.rounds(Api::Messages);
 
         for round in 0..MAX_GATEWAY_TOOL_ROUNDS {
-            let (response, round_span) = if let Some(response) = prepared_response.take() {
-                response
-            } else {
-                let round_span = super::telemetry::stages::inference_round(round);
-                let body = match ctx.upstream_body() {
-                    Ok(b) => b,
-                    Err(e) => {
-                        execution.failed(&e);
-                        execution.delivered();
-                        yield executor_error_sse(&e);
-                        return;
-                    }
-                };
-                match send_request(
-                    &exec_ctx.client,
-                    upstream.url(),
-                    body,
-                    None,
-                    Some(upstream.headers()),
-                    exec_ctx.streaming_timeout,
-                )
-                .instrument(round_span.clone())
-                .await
-                {
-                    Ok(response) => (response, round_span),
-                    Err(e) => {
-                        execution.failed(&e);
-                        execution.delivered();
-                        yield executor_error_sse(&e);
-                        return;
-                    }
+            rounds.begin_round();
+            let opened = match prepared_response.take() {
+                Some(opened) => Ok(opened),
+                None => open_round(&ctx, &exec_ctx, &upstream, round).await,
+            };
+            let OpenRound { response, span: round_span, stage } = match opened {
+                Ok(opened) => opened,
+                Err(e) => {
+                    execution.failed(&e);
+                    execution.delivered();
+                    yield executor_error_sse(&e);
+                    return;
                 }
             };
             let mut response_stream = InstrumentedStream::new(Box::pin(response_lines(
@@ -169,16 +170,22 @@ fn messages_stream_body(
                 let line = match line {
                     Ok(l) => l,
                     Err(e) => {
+                        stage.finish(Some(FailureCategory::from(&e)));
                         execution.failed(&e);
                         execution.delivered();
                         yield error_sse(&e.to_string());
                         return;
                     }
                 };
-                for out in acc.push(&line) {
+                clock.upstream_data();
+                let frames = acc.push(&line);
+                let text = acc.pushed_text;
+                for out in frames {
+                    clock.client_event(text);
                     yield out;
                 }
                 if acc.has_error() {
+                    stage.finish(Some(acc.failure_category()));
                     execution.failed_with(acc.failure_category());
                     execution.delivered();
                     return;
@@ -190,6 +197,9 @@ fn messages_stream_body(
             // Release an upstream body that can remain open after its terminal,
             // including before awaiting gateway tool execution for the next round.
             drop(response_stream);
+            stage.finish(None);
+            let (input_tokens, output_tokens) = acc.usage.round_tokens();
+            exec_ctx.metrics.record_token_usage(Api::Messages, input_tokens, output_tokens);
 
             // Round finished. Continue only for a pure gateway-tool round; a
             // client-executed function tool makes the round terminal.
@@ -239,6 +249,8 @@ enum RoundState {
 
 /// State machine that turns per-round Anthropic SSE into one client-visible
 /// message. Fed line-by-line via [`Self::push`].
+// Each flag is independent per-round or per-push state, not a mode.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Default)]
 struct MessagesStreamAccumulator {
     message_started: bool,
@@ -267,6 +279,8 @@ struct MessagesStreamAccumulator {
     round_state: RoundState,
     /// Every consumed round's terminal `usage`, reported once in the final `message_delta`.
     usage: MessagesUsageTotals,
+    /// The last pushed line was forwarded as an output-text delta.
+    pushed_text: bool,
     /// Operator-configured client-tool → gateway-executor aliases, so a client
     /// tool like Claude Code's `WebSearch` is classified gateway-owned (and
     /// suppressed) the same way the built-in `web_search` is.

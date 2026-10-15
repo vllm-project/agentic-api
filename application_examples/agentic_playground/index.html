@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore agents, tools, live progress, token usage, and compaction with Agentic API.">
+  <meta name="theme-color" content="#f6f8fc">
+  <title>Agentic API · Playground</title>
+  <link rel="icon" type="image/svg+xml" href="../../assets/Main-Brandmark.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="Agentic API home"><img src="../../assets/Black-Main-Logo.svg" alt="Agentic API" width="140" height="64"></a>
+    <span class="header-divider"></span><span class="app-name">Playground</span>
+    <a class="source-link" href="https://github.com/vllm-project/agentic-api" target="_blank" rel="noreferrer">View source <span>↗</span></a>
+  </header>
+  <main>
+    <section class="intro">
+      <div><p class="eyebrow"><span></span> AGENTS · TOOLS · LIVE RESPONSES</p>
+        <h1>Your ideas.<br><span>Agents in action.</span></h1>
+        <p class="lede">Connect tools, give agents a task, and follow the work.<br class="desktop"> Every progress update comes from your API.</p>
+      </div>
+    </section>
+
+    <details class="connection" open>
+      <summary><span><span class="dot" id="connection-dot"></span>Connect your gateway</span><span id="connection-label">Configure your local gateway</span></summary>
+      <div class="connection-fields">
+        <label>Gateway URL<input id="base" type="url" value="http://localhost:9000" spellcheck="false"></label>
+        <label>Model<input id="model" list="models" placeholder="Your served model ID" spellcheck="false"><datalist id="models"></datalist></label>
+        <label>Bearer token <span class="muted">optional</span><input id="token" type="password" autocomplete="off" placeholder="Kept in this tab only"></label>
+        <button id="connect" class="secondary">Load models ↗</button>
+      </div>
+    </details>
+    <section class="api-session panel">
+      <div class="tabs api-tabs" role="tablist" aria-label="API mode">
+        <button role="tab" aria-selected="true" id="responses-tab" aria-controls="responses-session">Responses API</button>
+        <button role="tab" aria-selected="false" id="conversations-tab" aria-controls="conversations-session" tabindex="-1">Conversations API</button>
+      </div>
+      <div id="responses-session" role="tabpanel" aria-labelledby="responses-tab">
+        <p class="hint">Each prompt is a Responses request. Subsequent prompts always include the previous response ID. Start a new session to clear the chain.</p>
+        <div class="session-controls">
+          <label>Responses transport<select id="transport"><option value="http">HTTP · SSE</option><option value="websocket">WebSocket</option></select></label>
+          <label class="toggle"><input id="store" type="checkbox" checked>Store response (store)</label>
+        </div>
+        <p id="transport-hint" class="hint">store:true saves a response so its ID can be used by the next prompt.</p>
+      </div>
+      <div id="conversations-session" role="tabpanel" aria-labelledby="conversations-tab" hidden>
+        <p class="hint">Create or load a durable conversation. Prompts use HTTP Responses with conversation and store:true; they do not send previous_response_id.</p>
+        <div class="session-controls">
+          <label>Conversation ID<input id="conversation-id" placeholder="conv_…" spellcheck="false"></label>
+          <button id="create-conversation" class="secondary">Create conversation</button>
+          <button id="load-conversation" class="secondary">Load conversation</button>
+          <button id="refresh-items" class="text-button">Refresh items</button>
+        </div>
+        <p id="conversation-status" class="hint">No conversation selected.</p>
+        <details><summary>Stored conversation items</summary><div id="conversation-items"></div><button id="more-items" class="text-button" hidden>Load more items</button></details>
+      </div>
+      <div class="session-actions"><span id="session-checkpoint" class="hint">New Responses session</span><button id="new-session" class="text-button">New session</button></div>
+    </section>
+    <div id="notice" role="status" aria-live="polite" hidden></div>
+
+    <div class="workspace">
+      <section class="brief panel">
+        <div class="section-heading"><div><p class="eyebrow">01 / THE CHALLENGE</p><h2>Set the mission</h2></div><button id="example" class="text-button">Use example ↻</button></div>
+        <p class="section-description">Describe the goal once. Your coordinator takes it from here.</p>
+        <div id="tasks"></div>
+        <button id="add" class="add-button">＋ Add an agent</button>
+        <div class="tools">
+          <h3>Give your agents tools</h3>
+          <label class="toggle"><input id="search" type="checkbox" checked><span>Web search<small>Research the problem and find references</small></span><span class="tool-icon">↗</span></label>
+          <label class="toggle"><input id="code" type="checkbox" checked><span>Python execution<small>Run solutions and check test outputs</small></span><span class="tool-icon">&lt;/&gt;</span></label>
+          <label class="concurrency">Concurrent subagents<select id="concurrency"><option selected>1</option><option>2</option><option>3</option><option>4</option><option>8</option></select></label>
+          <p class="hint">Python runs in a fresh sandbox. Enable the interpreter on your gateway to execute code.</p>
+        </div>
+        <button id="run" class="primary">Send prompt <span>↗</span></button>
+        <p class="under-button">Powered directly by Agentic API</p>
+      </section>
+
+      <section class="results panel" data-running="false">
+        <div class="section-heading"><div><p class="eyebrow">02 / THE TEAM AT WORK</p><h2>Follow the progress</h2></div><span id="run-status" class="badge" role="status">Ready</span></div>
+        <div class="metrics">
+          <div><strong id="agent-count">0</strong><span>agents observed</span></div>
+          <div><strong id="tool-count">0</strong><span>tool calls</span></div>
+          <div><strong id="elapsed">—</strong><span>elapsed</span></div>
+        </div>
+        <div class="view-bar">
+          <div class="tabs" role="tablist" aria-label="Work views">
+            <button role="tab" aria-selected="true" data-view="activity">Agent progress</button>
+            <button role="tab" aria-selected="false" data-view="answer">Final answer</button>
+            <button role="tab" aria-selected="false" data-view="api">Debug</button>
+          </div>
+          <label class="agent-filter"><span class="sr-only">Filter by agent</span><select id="agent-filter"><option value="all">All agents</option></select></label>
+        </div>
+        <div id="activity" class="view" role="tabpanel">
+          <div class="empty">
+            <div class="empty-orbit"><img src="../../assets/Main-Brandmark.svg" alt="" width="58" height="58"></div>
+            <h3>Your team is ready for a challenge.</h3>
+            <p>Start a run to follow each agent’s thinking,<br class="desktop"> tool calls, and responses.</p>
+            <div class="empty-steps"><span><b>1</b> Research</span><span><b>2</b> Solve & test</span><span><b>3</b> Compare</span></div>
+          </div>
+        </div>
+        <div id="answer" class="view" role="tabpanel" hidden><p class="placeholder">The final answer will appear here.</p></div>
+        <div id="api" class="view" role="tabpanel" hidden>
+          <p class="hint">Optional developer view. Agent progress is available in the first tab.</p>
+          <details><summary id="request-label">Request · POST /v1/responses</summary><pre id="request-preview"></pre></details>
+          <details><summary>Raw streaming events · latest 250</summary><pre id="events-preview">No events yet.</pre></details>
+        </div>
+        <div class="result-actions"><button id="disconnect" class="text-button" disabled>Disconnect stream</button><button id="download" class="text-button" disabled>Download run ↓</button></div>
+        <form id="followup-form">
+          <label for="followup">Keep the conversation going</label>
+          <div class="followup-row"><input id="followup" placeholder="Try another edge case, or ask about a solution…" disabled><button id="send" class="secondary" disabled>Send ↗</button></div>
+          <p id="continuation" class="hint">Follow-ups become available when the run completes.</p>
+        </form>
+      </section>
+    </div>
+    <footer><span>Built with <strong>Agentic API</strong></span><span>Research. Reason. Run. Repeat.</span></footer>
+  </main>
+  <script type="module" src="app.mjs"></script>
+</body>
+</html>

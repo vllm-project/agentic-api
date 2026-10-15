@@ -239,7 +239,7 @@ impl ExecuteRequest {
         let mut execution = self
             .execution
             .take()
-            .unwrap_or_else(|| ExecutionSpan::start(Api::Responses, Route::Executor, true));
+            .unwrap_or_else(|| ExecutionSpan::start(Api::Responses, Route::Executor, true, &self.exec_ctx.metrics));
         let limit = self.effective_max_stream_event_bytes();
         let prepared = if self.control.is_some() {
             Err(ExecutorError::InvalidRequest(
@@ -299,10 +299,14 @@ impl ExecuteRequest {
     /// fails, or if steering input requires explicit retained preparation.
     pub async fn run(mut self) -> ExecutorResult<Either<ResponsePayload, BoxStream>> {
         self.validate_direct_execution()?;
-        let execution = self
-            .execution
-            .take()
-            .unwrap_or_else(|| ExecutionSpan::start(Api::Responses, Route::Executor, self.payload.stream));
+        let execution = self.execution.take().unwrap_or_else(|| {
+            ExecutionSpan::start(
+                Api::Responses,
+                Route::Executor,
+                self.payload.stream,
+                &self.exec_ctx.metrics,
+            )
+        });
         let span = execution.span().clone();
         Box::pin(self.run_traced(execution)).instrument(span).await
     }

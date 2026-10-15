@@ -459,7 +459,7 @@ mod tests {
             llm_api_base: Some("http://127.0.0.1:5050".to_owned()),
             web_search: WebSearchFileConfig {
                 provider: Some(WebSearchProviderKind::You),
-                base_url: Some("https://api.ydc-index.io".to_owned()),
+                base_url: Some("https://ydc-index.io".to_owned()),
                 api_key_env: Some("YOU_API_KEY".to_owned()),
                 max_concurrent_queries: None,
             },
