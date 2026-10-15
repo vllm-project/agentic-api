@@ -9,8 +9,9 @@ export function pendingCalls(response, resolved = new Set()) {
 export async function executeClientCall(call, settings, executeHandler, shellOutput, signal) {
   if (call.type === 'shell_call') return shellOutput(call, signal);
   if (call.type === 'tool_search_call') {
-    // A small client-side catalog: return configured deferred definitions. The gateway owns subsequent routing.
-    const tools = toolDeclarations({ functions: (settings.functions || []).filter(fn => fn.deferred).map(fn => ({ ...fn, deferred: false })) });
+    // Discovery returns public declarations unchanged; the gateway validates identity and activates them.
+    const tools = toolDeclarations(settings).filter(tool => tool.defer_loading
+      || (tool.type === 'namespace' && tool.tools.some(member => member.defer_loading)));
     return { type: 'tool_search_output', call_id: call.call_id, execution: 'client', status: 'completed', tools };
   }
   const fn = (settings.functions || []).find(fn => fn.name === call.name && (fn.namespace || '') === (call.namespace || '') && (fn.kind || 'function') === (call.type === 'custom_tool_call' ? 'custom' : 'function'));

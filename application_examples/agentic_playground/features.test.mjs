@@ -40,10 +40,37 @@ test('custom tools pass text, and discovery returns configured deferred definiti
   const output = await executeClientCall({ type: 'custom_tool_call', call_id: 'c2', name: 'echo', input: 'plain text' }, { functions: [{ ...fn, namespace: '', kind: 'custom', name: 'echo' }] }, async (_, args) => JSON.stringify(args));
   assert.equal(output.type, 'custom_tool_call_output');
   assert.equal(output.output, '"plain text"');
-  const discovery = await executeClientCall({ type: 'tool_search_call', call_id: 'find' }, { functions: [{ ...fn, deferred: true }] });
+  const discovery = await executeClientCall({ type: 'tool_search_call', call_id: 'find' }, { functions: [{ ...fn, deferred: true }], toolSearch: true });
   assert.equal(discovery.tools[0].tools[0].name, 'sum');
-  assert.equal(discovery.tools[0].tools[0].defer_loading, undefined);
+  assert.equal(discovery.tools[0].tools[0].defer_loading, true);
   assert.throws(() => toolDeclarations({ functions: [{ ...fn, deferred: true }] }), /discovery/);
+});
+
+test('discovery preserves complete declared functions and mixed namespaces without loading unrelated tools', async () => {
+  const settings = {
+    model: 'demo', mode: 'prompt', mission: 'Find a tool.', concurrency: 1, multiAgent: false,
+    toolSearch: true, shell: true,
+    functions: [
+      { ...fn, namespace: '', name: 'deferred_sum', deferred: true, strict: true, description: 'Add two numbers.' },
+      { ...fn, namespace: '', name: 'available_sum' },
+      { ...fn, deferred: true, strict: true, description: 'Namespaced sum.' },
+      { ...fn, name: 'available_member' },
+      { ...fn, namespace: 'other', name: 'unrelated' },
+    ],
+  };
+  const declared = buildRequest(settings).tools;
+  const before = structuredClone(settings);
+  const output = await executeClientCall({ type: 'tool_search_call', call_id: 'search1' }, settings);
+  assert.deepEqual(output, {
+    type: 'tool_search_output', call_id: 'search1', execution: 'client', status: 'completed',
+    tools: [declared.find(tool => tool.name === 'deferred_sum'), declared.find(tool => tool.name === 'math')],
+  });
+  assert.equal(output.tools[0].defer_loading, true);
+  assert.equal(output.tools[1].tools[0].defer_loading, true);
+  assert.equal(output.tools[1].tools[1].name, 'available_member');
+  assert.deepEqual(settings, before);
+  const empty = await executeClientCall({ type: 'tool_search_call', call_id: 'search2' }, { toolSearch: true, functions: [fn] });
+  assert.deepEqual(empty.tools, []);
 });
 
 test('browser concurrency is bounded and preserves output order', async () => {

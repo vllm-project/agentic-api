@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const requests = [];
+let discovery = null;
 const message = { id:'answer', type:'message', role:'assistant', phase:'final_answer', content:[{type:'output_text',text:'# Result\n\nThe **average** is `7.5`.\n\n| Metric | Value |\n| --- | --- |\n| Average | 7.5 |\n\n```python\nprint(7.5)\n```\n\n- Verified example\n\n<script>window.unsafe = true</script>\n\n[unsafe](javascript:alert)'}] };
 const usage = {input_tokens:10, output_tokens:5, total_tokens:15};
 const server = http.createServer(async (req,res) => {
@@ -24,7 +25,24 @@ const server = http.createServer(async (req,res) => {
       const first = requests.length===1;
       const compact = request.input?.[0]?.type === 'compaction_trigger';
       if (compact) assert.equal(request.store, true);
-      const item=compact ? {type:'compaction',id:'cp',encrypted_content:'The average is 7.5.'} : first ? {id:'fn1',type:'function_call',call_id:'call1',name:'summarize_numbers',arguments:'{"values":[2,4,8,16]}'} : message;
+      let item=compact ? {type:'compaction',id:'cp',encrypted_content:'The average is 7.5.'} : first ? {id:'fn1',type:'function_call',call_id:'call1',name:'summarize_numbers',arguments:'{"values":[2,4,8,16]}'} : message;
+      if (request.input === 'Discover and call summarize_numbers.') {
+        discovery = { definition: request.tools.find(tool => tool.name === 'summarize_numbers'), responseId: 'r'+requests.length, stage: 'search' };
+        assert.equal(discovery.definition.defer_loading, true);
+        assert.ok(request.tools.some(tool => tool.type === 'tool_search'));
+        item = { id: 'search1', type: 'tool_search_call', call_id: 'find_summary', execution: 'client', arguments: { query: 'summarize_numbers' } };
+      } else if (discovery?.stage === 'search') {
+        assert.equal(request.previous_response_id, discovery.responseId);
+        assert.deepEqual(request.input, [{ type: 'tool_search_output', call_id: 'find_summary', execution: 'client', status: 'completed', tools: [discovery.definition] }]);
+        discovery.stage = 'execute'; discovery.responseId = 'r'+requests.length;
+        item = { id: 'deferred1', type: 'function_call', call_id: 'deferred_summary', name: 'summarize_numbers', arguments: '{"values":[2,4,8,16]}' };
+      } else if (discovery?.stage === 'execute') {
+        assert.equal(request.previous_response_id, discovery.responseId);
+        assert.equal(request.input[0].type, 'function_call_output');
+        assert.equal(request.input[0].call_id, 'deferred_summary');
+        assert.equal(JSON.parse(request.input[0].output).average, 7.5);
+        discovery = null;
+      }
       send({type:'response.created',response:{id:'r'+requests.length}});
       send({type:'response.output_item.added',item});
       await new Promise(r=>setTimeout(r,200));
@@ -107,6 +125,21 @@ try {
   await page.waitForFunction(()=>document.getElementById('run-status').textContent==='Completed'&&!document.getElementById('run').disabled);
   assert.equal(requests.at(-1).previous_response_id,'r4');
 
+  // A loaded tool must match the declaration sent before discovery, including defer_loading.
+  await page.locator('#new-session').click();
+  await page.getByLabel('Enable client tool discovery (tool_search)',{exact:true}).check();
+  await page.getByLabel('Defer until client tool discovery',{exact:true}).check();
+  await page.locator('#mission').fill('Discover and call summarize_numbers.');
+  const discoveryStart = requests.length;
+  await page.locator('#run').click();
+  await page.waitForFunction(()=>['Completed','Error'].includes(document.getElementById('run-status').textContent)&&!document.getElementById('run').disabled);
+  assert.equal(await page.locator('#run-status').textContent(),'Completed',await page.locator('#notice').textContent());
+  assert.equal(requests.length-discoveryStart,3);
+  assert.equal(discovery,null);
+  assert.deepEqual(await page.locator('#usage-panel strong').allTextContents(),['30','15','45']);
+  await page.getByLabel('Defer until client tool discovery',{exact:true}).uncheck();
+  await page.getByLabel('Enable client tool discovery (tool_search)',{exact:true}).uncheck();
+
   // Browser-native WebSocket events, with a mocked server at the transport boundary.
   let connections=0, wsCount=0; const frames=[];
   await page.routeWebSocket('**/v1/responses', ws=> {
@@ -164,5 +197,5 @@ try {
   assert.match(await page.locator('#notice').textContent(),/no longer available/);
   assert.equal(connections,3);
   assert.deepEqual(errors,[]);
-  console.log('PASS browser: sandbox success/network isolation/timeout/abort, function continuation, usage, stored compaction, safe Markdown, API tab isolation, HTTP ID chaining, WebSocket continuity and injection, observed agent tree, mobile overflow');
+  console.log('PASS browser: sandbox success/network isolation/timeout/abort, function continuation, deferred discovery declaration equality, usage, stored compaction, safe Markdown, API tab isolation, HTTP ID chaining, WebSocket continuity and injection, observed agent tree, mobile overflow');
 } finally {await browser.close();server.close();}
