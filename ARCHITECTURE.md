@@ -1337,6 +1337,10 @@ the operator enables it, and Eryx runtime readiness succeeds.
   code interpreter normalizes to one fixed function contract in every build, while
   request validation rejects unavailable runtimes before upstream inference.
   Feature-enabled builds bind the ready private `CodeInterpreterExecutor` to the provider.
+  Custom tools use a string `input` parameter. Their typed Lark/regex formats are
+  included in model instructions, not converted into upstream constrained decoding.
+  The existing custom translator restores the raw input for client execution;
+  no separate stream or continuation path is introduced for grammar-formatted tools.
 - **`handler.rs`** — the two traits every tool type reasons about:
   ```rust
   pub trait ToolHandler: Send + Sync {

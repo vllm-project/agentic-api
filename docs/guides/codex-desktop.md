@@ -80,8 +80,8 @@ the prerequisites before running the remaining commands.
 
 ## Create the model catalog and provider configuration
 
-Request the gateway's Codex model catalog using the version of the runtime bundled with the desktop app. Select only
-the intended model and disable the incompatible freeform `apply_patch` declaration:
+Request Agentic API's Codex model catalog using the version of the runtime bundled with the desktop app. If using
+llm-d, this URL must route `/v1/models` to Agentic API, not directly to the inference gateway. Select the intended model:
 
 ```bash
 CLIENT_VERSION=$("$CODEX_BIN" --version | awk '{print $NF}')
@@ -89,7 +89,7 @@ set -o pipefail
 curl --fail --silent --show-error \
   "$GATEWAY_URL/v1/models?client_version=$CLIENT_VERSION" |
   jq --exit-status --arg model "$MODEL" '
-    {models: [.models[] | select(.slug == $model) | .apply_patch_tool_type = null]}
+    {models: [.models[] | select(.slug == $model)]}
     | if (.models | length) == 1 then .
       else error("expected exactly one matching model in the gateway catalog") end
   ' > "$DESKTOP_STATE/codex-home/model_catalog.json"
@@ -134,19 +134,21 @@ config = "\n".join([
 PY
 ```
 
-### Why disable `apply_patch`?
+### Native `apply_patch`
 
-The gateway's default catalog advertises `apply_patch_tool_type: "freeform"`. The tested desktop runtime then declares
-`apply_patch` as a grammar-constrained custom tool. The gateway's custom-tool normalization rejects that format before
-inference with:
+The gateway catalog enables `apply_patch_tool_type: "freeform"`. Codex declares the tool with its Lark grammar; Agentic
+API supplies the patch instructions and grammar to the upstream model as a function-tool description and restores raw
+patch input for Codex to execute. Grammar compliance depends on the model; this adapter does not configure constrained
+decoding upstream. Codex still validates patches and applies its normal sandbox and approval policy.
+
+Older gateway builds rejected this declaration before inference with:
 
 ```text
 tool error: invalid tool config: custom tool 'apply_patch' uses an unsupported format; gateway normalization cannot preserve constrained decoding
 ```
 
-Setting `apply_patch_tool_type` to `null` omits that tool and allows shell-based file editing. Do not set it to
-`"function"`: Codex `0.153.4` rejects that value. This is a compatibility workaround, not native `apply_patch` support.
-It does not disable Codex's sandbox or approvals.
+Upgrade the gateway and regenerate any catalog previously edited to set `apply_patch_tool_type` to `null`. That older
+workaround disables the native tool. Do not set the field to `"function"`: Codex `0.153.4` rejects that value.
 
 ## Launch the separate desktop instance
 
@@ -216,7 +218,7 @@ finished; starting it again with the same database path preserves its stored res
 | Symptom | Check |
 |---|---|
 | Normal app opens or the model is missing | Set both state-directory variables on the desktop process, check the bundled runtime path, and restart the isolated instance after changing its catalog. |
-| `invalid tool config` mentioning `apply_patch` | Confirm the selected catalog entry has `apply_patch_tool_type: null` and `model_catalog_json` points to that file. |
+| `invalid tool config` mentioning an unsupported `apply_patch` format | Upgrade the gateway to a build with grammar-formatted custom-tool adaptation. |
 | Model catalog generation fails | Check the gateway URL, runtime version, and exact model ID. Include the `client_version` query parameter to request Codex metadata. |
 | Connection refused | Start the gateway and upstream; make sure the provider's `base_url` ends in `/v1` and uses the configured gateway port. |
 | Catalog parse error after an app update | Regenerate the catalog using that app's bundled runtime version and check for model-metadata schema changes. |

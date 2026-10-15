@@ -4,6 +4,7 @@
 
 /// This module contains validated model-call argument types.
 pub mod code_interpreter;
+mod custom;
 /// Domain lists shared by the web tools' declarations.
 pub mod domain;
 /// This module contains only serde shapes (serialization/deserialization types).
@@ -12,6 +13,7 @@ pub mod params;
 pub mod web_fetch;
 
 pub use code_interpreter::{CodeInterpreterCallArguments, CodeInterpreterCallArgumentsError};
+pub use custom::{CustomToolGrammarSyntax, CustomToolInputFormat};
 pub use domain::DomainFilters;
 pub use params::{
     CodeInterpreterToolParam, CodexNamespaceMember, CodexNamespaceToolParam, CustomToolParam, EmptyToolNameError,

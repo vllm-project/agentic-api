@@ -19,11 +19,18 @@ concurrency:
 jobs:
   harness-cli-e2e:
     name: Claude Code and Codex through Agentic API
-    runs-on: ubuntu-latest
+    # Ubuntu 24.04's unprivileged-userns restrictions prevent Codex/bwrap
+    # from configuring loopback. Keep the real sandbox enabled on 22.04.
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Verify sandbox network namespaces
+        run: |
+          unshare --user --map-root-user --net sh -c \
+            'ip address add 127.0.0.1/8 dev lo && ip link set lo up'
 
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -47,9 +54,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          key: cargo-${{ runner.os }}-ubuntu-22.04-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            cargo-${{ runner.os }}-
+            cargo-${{ runner.os }}-ubuntu-22.04-
 
       - name: Install pinned test dependencies
         run: |

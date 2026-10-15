@@ -7,7 +7,7 @@
     "crates/agentic-server-core/src/tool/tool_search.rs": 1661,
     "crates/agentic-server-core/src/types/io/input.rs": 510,
     "crates/agentic-server-core/src/types/io/output.rs": 1074,
-    "crates/agentic-server-core/src/types/tools/params.rs": 537,
+    "crates/agentic-server-core/src/types/tools/params.rs": 536,
     "crates/agentic-server/src/agentic_process.rs": 557,
     "crates/agentic-server/src/auth.rs": 791
   },
@@ -49,7 +49,7 @@
       "reason": "Open Responses omits absent encrypted reasoning content; this adds one serialization attribute to the canonical item type."
     },
     "crates/agentic-server-core/src/types/tools/params.rs": {
-      "limit": 570,
+      "limit": 569,
       "reason": "The shared tagged tool declaration validates the OpenAI auto-container form and exposes its closed public schema."
     },
     "crates/agentic-server/src/main.rs": {

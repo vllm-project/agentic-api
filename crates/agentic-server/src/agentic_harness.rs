@@ -54,9 +54,7 @@ pub(crate) fn prepare_codex_home(
             ],
             "supports_reasoning_summaries": true,
             "supports_parallel_tool_calls": true,
-            // apply_patch_tool_type is intentionally omitted: Codex only supports
-            // "freeform", which the gateway cannot normalize while preserving
-            // constrained decoding. Codex falls back to editing via the shell tool.
+            "apply_patch_tool_type": "freeform",
             "web_search_tool_type": "text",
             "shell_type": "local",
             "context_window": 32768,
@@ -497,10 +495,7 @@ mod tests {
             model["shell_type"], "local",
             "the launcher runs Codex against a local shell"
         );
-        assert!(
-            model.get("apply_patch_tool_type").is_none(),
-            "the launcher omits apply_patch_tool_type so Codex edits through the shell tool"
-        );
+        assert_eq!(model["apply_patch_tool_type"], "freeform");
         assert_eq!(
             model["truncation_policy"],
             serde_json::json!({"limit": 32768, "mode": "tokens"})
