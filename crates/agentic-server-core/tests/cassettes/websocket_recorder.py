@@ -535,10 +535,11 @@ def steering_request_settings(case: str) -> dict:
 
 
 def steering_tool_outputs(case: str, calls: list[dict]) -> list[dict]:
-    from record_cassette import _load_tool_outputs_file, _build_tool_output_input
+    from record_cassette import _load_tools_file, _load_tool_outputs_file, _build_tool_output_input
 
     return _steering_tool_outputs(
-        case, calls, load_outputs=_load_tool_outputs_file, build_outputs=_build_tool_output_input,
+        case, calls, load_tools=_load_tools_file, load_outputs=_load_tool_outputs_file,
+        build_outputs=_build_tool_output_input,
     )
 
 STEERING_URL = "wss://api.openai.com/v1/responses"
@@ -546,6 +547,7 @@ STEERING_GUIDE = "https://developers.openai.com/api/docs/guides/steering"
 STEERING_TERMINALS = {"response.completed", "response.incomplete", "response.failed"}
 STEERING_SMOKE = ("mixed-tools-steer",)
 STEERING_CASES = {
+    "client-tools-steer": "Steer with client search, shell, custom and discovered function outputs withheld",
     "three-turn-steer": "Start a task, steer the initial response, then add a third user input to its automatic successor",
     "steer-delta": "Steer after the first output_text.delta; retain emitted output",
     "array-user": "Steer with a user-message array containing input_text",
@@ -592,8 +594,8 @@ STEERING_PENDING_MATRIX_CASES = {"pending-partial-outputs", "settings-explicit-d
 STEERING_EDGE_CASES = tuple(case for case in STEERING_CASES if case not in STEERING_SMOKE)
 STEERING_POST_TERMINAL_TOOL_CASES = {"pending-user-steer", "pending-steer-then-output"}
 STEERING_HOSTED_TOOL_CASES = {"hosted-tool-running"}
-STEERING_ADVANCED_CASES = STEERING_POST_TERMINAL_TOOL_CASES | STEERING_MIRRORED_CASES | STEERING_HOSTED_TOOL_CASES
-STEERING_SUITES = {"smoke", "edges", "all", "non-vision", "vision", "input-lifecycle", "tools-settings", "connections"}
+STEERING_ADVANCED_CASES = STEERING_POST_TERMINAL_TOOL_CASES | STEERING_MIRRORED_CASES | STEERING_HOSTED_TOOL_CASES | {"client-tools-steer"}
+STEERING_SUITES = {"smoke", "edges", "all", "non-vision", "vision", "client-tools", "input-lifecycle", "tools-settings", "connections"}
 STEERING_GROUPS = {"edge-cases", *("suite-" + suite for suite in STEERING_SUITES), *STEERING_CATEGORIES}
 STEERING_TOOL_CASES = {"pending-tool", "pending-withheld", "pending-wrong-output", "queue-pressure", "disconnect-pending"} | STEERING_POST_TERMINAL_TOOL_CASES
 STEERING_TOOL = {
@@ -1394,16 +1396,19 @@ class SteeringMixedToolsProbe(SteeringProbe):
             return
         target = self.created[-1]
         if target in self.terminals:
-            if self.continuations >= 10:
-                raise SteeringPrerequisiteMissing("client-tool continuation budget exhausted")
-            outputs, self.queued_outputs = self.queued_outputs, []
-            self.continuations += 1
-            self.findings["client_output_submissions"].append({"type": "response.create", "previous_response_id": target,
-                                                               "call_ids": [item.get("call_id") for item in outputs]})
-            self.awaiting_explicit_response = True
-            self.create(previous_response_id=target, input=outputs)
-            # Explicit continuation acceptance is observed through its response lifecycle.
-            self.outputs_returned.update(item.get("call_id") for item in outputs)
+            self.submit_outputs(target)
+
+    def submit_outputs(self, target):
+        if self.continuations >= 10:
+            raise SteeringPrerequisiteMissing("client-tool continuation budget exhausted")
+        outputs, self.queued_outputs = self.queued_outputs, []
+        self.continuations += 1
+        self.findings["client_output_submissions"].append({"type": "response.create", "previous_response_id": target,
+                                                           "call_ids": [item.get("call_id") for item in outputs]})
+        self.awaiting_explicit_response = True
+        self.create(previous_response_id=target, input=outputs)
+        # Explicit continuation acceptance is observed through its response lifecycle.
+        self.outputs_returned.update(item.get("call_id") for item in outputs)
 
     def complete_enough_to_observe(self):
         if not self.created or any(rid not in self.terminals for rid in self.created):
@@ -1467,6 +1472,73 @@ class SteeringMixedToolsProbe(SteeringProbe):
             self.flush_outputs()
 
 
+class SteeringClientToolsProbe(SteeringMixedToolsProbe):
+    """Steer each completed client-call batch before returning any of its outputs."""
+
+    CLIENT_CALLS = {"function_call", "custom_tool_call", "shell_call", "tool_search_call"}
+
+    def run(self, **_unused):
+        self.findings.update(client_call_types=[], pending_output_types=[], pending_obligations=[])
+        expected_required = {}
+        self.create()
+        while True:
+            ready = self.complete_enough_to_observe()
+            self.session.ws.sock.settimeout(self.args.quiet_seconds if ready else self.args.timeout)
+            try:
+                event = self.receive()
+            except socket.timeout:
+                if ready:
+                    self.findings["settled_for_seconds"] = self.args.quiet_seconds
+                    return None
+                raise
+            kind = event.get("type")
+            if kind == "error":
+                raise SteeringPrerequisiteMissing("client-tool workflow rejected; inspect captured error")
+            if kind == "response.steer.failed":
+                # Rejection is evidence, not a reason to fabricate a continuation.
+                return None
+            if kind in STEERING_TERMINALS:
+                response = event["response"]
+                calls = [item for item in response.get("output", []) if self.is_client_call(item)]
+                self.findings["client_call_types"] = sorted(set(self.findings["client_call_types"]) |
+                                                           {item["type"] for item in calls})
+                if kind != "response.completed":
+                    raise SteeringPrerequisiteMissing("client-tool response failed or ended incomplete")
+                self.queue_calls(calls)
+                if self.queued_outputs:
+                    if len(self.queued_outputs) != len(calls):
+                        raise SteeringPrerequisiteMissing("not every client call has a fixture output")
+                    expected_required = {
+                        output["call_id"]: {"type": output["type"], "call_id": output["call_id"]}
+                        for output in self.queued_outputs
+                    }
+                    for call in calls:
+                        stub = expected_required[call["call_id"]]
+                        if call["type"] == "function_call":
+                            stub["name"] = call["name"]
+                        if call["type"] == "tool_search_call":
+                            stub["execution"] = "client"
+                    self.record_trigger(event)
+                    self.findings["steering_trigger"].update(
+                        response_id=response["id"], parent_terminal_observed=True, client_outputs_withheld=True)
+                    self.findings["steering_triggers"].append(dict(self.findings["steering_trigger"]))
+                    self.steer(response["id"], kind,
+                               steering_prompt("client-tools-steer-update").format(index=self.sent + 1))
+            if kind == "response.steer.pending":
+                target = event.get("steer", {}).get("previous_response_id")
+                if not self.created or target != self.created[-1] or not self.queued_outputs:
+                    raise SteeringPrerequisiteMissing("pending event does not identify the withheld client batch")
+                required = event.get("required_input", [])
+                observed = {item.get("call_id"): item for item in required}
+                self.findings["pending_obligations"].append({
+                    "previous_response_id": target, "required_input": required,
+                    "matches_client_outputs": observed == expected_required and len(required) == len(expected_required),
+                })
+                self.findings["pending_output_types"] = sorted(set(self.findings["pending_output_types"]) |
+                                                              {str(item.get("type")) for item in required})
+                self.submit_outputs(target)
+
+
 def steering_arguments():
     parser = argparse.ArgumentParser(
         description="OpenAI or gateway mid-turn steering observations using the shared duplex recorder.", formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1477,7 +1549,7 @@ def steering_arguments():
   GATEWAY_URL             Gateway base URL (default http://localhost:9000)
   GATEWAY_MODEL           Served gateway model; MODEL fallback, required for gateway
   OPENAI_MODEL            Default gpt-6-sol
-  STEERING_SUITE          smoke, edges, all, non-vision, vision, or a category suite
+  STEERING_SUITE          smoke, edges, all, non-vision, vision, client-tools, or a category suite
   STEERING_CASE           One exact case name; overrides suite
   STEERING_TIMEOUT        Wall seconds per case, including reconnect (default 300)
   STEERING_QUIET_SECONDS  Settling window after candidate completion (default 3)
@@ -1494,7 +1566,8 @@ Stable YAML filenames are replaced on rerun. The single-agent mixed-tool workflo
 gets one YAML. Edge probes use three category YAMLs: input/lifecycle, tools/settings,
 and connections. Image steering uses its own vision-steering YAML.
 Turns, reconnect sessions, and repeats stay in their category.
---suite all writes five files; --suite non-vision writes the four text/tool files;
+--suite all writes six files; --suite non-vision writes the five text/tool files;
+--suite client-tools writes only the client-tools-steer file.
 --suite vision writes only the image file. --suite edges writes the three non-vision edge files.
 --case edge-cases is an alias for the three edge categories. Individual --case names
 remain available for debugging and replace their category file with that case only.
@@ -1585,6 +1658,13 @@ def steering_classify_observation(result, case):
             result.update(status="inconclusive", detail="advanced activity trigger was not observed")
         elif rejected:
             result.update(status="observed_rejection", detail="steering was explicitly rejected after the observed trigger; support is not established")
+    if case == "client-tools-steer" and result["status"] == "observed":
+        facts = connections[0]
+        expected = {"function_call_output", "custom_tool_call_output", "shell_call_output", "tool_search_output"}
+        if not expected.issubset(facts.get("pending_output_types", [])):
+            result.update(status="inconclusive", detail="not all four client output types reached pending steering")
+        elif not all(item["matches_client_outputs"] for item in facts.get("pending_obligations", [])):
+            result.update(status="observed_mismatch", detail="pending obligations differ from the actual withheld client calls")
     if case == "reconnect-target" and any(
         item.get("reconnect_bootstrap_completed") and item.get("reconnect_steer_rejection")
         for item in connections
@@ -1653,6 +1733,8 @@ def steering_selection(args):
         return {name: list(cases) for name, cases in categories.items() if name != "vision-steering"}
     if selection == "vision":
         return {"vision-steering": list(categories["vision-steering"])}
+    if selection == "client-tools":
+        return {"client-tools-steer": list(categories["client-tools-steer"])}
     if selection == "all":
         return {name: list(cases) for name, cases in categories.items()}
     if selection == "smoke":
@@ -1766,6 +1848,7 @@ def steering_main():
                         session.probe_result = findings
                         driver_type = (SteeringPendingMatrixProbe if case in STEERING_PENDING_MATRIX_CASES
                                        else SteeringExtendedProbe if case in STEERING_EXTENDED_CASES
+                                       else SteeringClientToolsProbe if case == "client-tools-steer"
                                        else SteeringMixedToolsProbe if case in STEERING_MIRRORED_CASES else SteeringProbe)
                         driver = driver_type(session, args, case, findings)
                         kwargs = {}

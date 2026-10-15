@@ -1,49 +1,39 @@
-//! Steering admission, pending outcomes, and successor handoff on retained routes.
+//! Accepted-batch lifecycle, pending outcomes, and successor handoff.
+mod admission;
 use super::super::{StreamId, WsError};
 use super::{
-    ControlCompletion, Controls, MAX_CONTROL_BYTES, MAX_CONTROLS, SteerEcho, SteeringByteCharge, SteeringOutcome,
-    SteeringPhase, SteeringState, SteeringTarget,
+    ControlCompletion, Controls, MAX_CONTROLS, SteeringBatch, SteeringOutcome, SteeringPhase, SteeringState,
+    SteeringTarget,
 };
 use agentic_core::{
-    executor::{
-        RunningResponse,
-        session::{ResponseCheckpointPin, SteeringQueue},
-    },
+    executor::{RunningResponse, session::ResponseCheckpointPin},
     types::{
         request_response::RequestPayload,
-        websocket::{
-            FailedSteer, SteeringEvent, SteeringFailure, SteeringFailureCode, SteeringInputEcho, SteeringPendingReason,
-        },
+        websocket::{AcceptedSteer, SteeringEvent, SteeringFailureCode, SteeringPendingReason, SteeringRequiredInput},
     },
 };
 use std::sync::Arc;
 use tokio::sync::oneshot;
 
-impl SteeringTarget {
-    fn rejection_code(&self, state: &SteeringState, valid_input: bool, active: bool) -> Option<SteeringFailureCode> {
-        if self.sink.created_receipt().is_none() {
-            Some(SteeringFailureCode::ResponseNotFound)
-        } else if !valid_input {
-            Some(SteeringFailureCode::InvalidInput)
-        } else if self.settings.multi_agent.as_ref().is_some_and(|config| config.enabled)
-            || !self.supported
-            || !state.required_supported
-            || self
-                .settings
-                .context_management
-                .as_ref()
-                .is_some_and(|settings| !settings.is_empty())
-        {
-            Some(SteeringFailureCode::SteeringNotSupported)
-        } else if matches!(state.phase, SteeringPhase::Reserved | SteeringPhase::Closed) || !active {
-            Some(SteeringFailureCode::ResponseNotActive)
-        } else if state.phase == SteeringPhase::Ready && state.queue.is_none() && state.pin.is_none() {
-            Some(SteeringFailureCode::ResponseAlreadyCompleted)
-        } else {
-            None
+impl Default for SteeringState {
+    fn default() -> Self {
+        Self {
+            batch: None,
+            phase: SteeringPhase::Running,
+            required_supported: true,
         }
     }
+}
 
+impl SteeringState {
+    /// Close admission and transfer the whole accepted batch to its final owner.
+    fn close(&mut self) -> Option<SteeringBatch> {
+        self.phase = SteeringPhase::Closed;
+        self.batch.take()
+    }
+}
+
+impl SteeringTarget {
     pub(in super::super) async fn prepare_successor(
         &self,
         payload: &RequestPayload,
@@ -61,14 +51,10 @@ impl SteeringTarget {
         let mut span = Some(span);
         loop {
             let builder = {
-                let mut state = self.state.lock().map_err(|_| WsError::SendFailed)?;
+                let state = self.state.lock().map_err(|_| WsError::SendFailed)?;
                 state.phase.require_ready()?;
-                if state.pin.is_none() {
-                    state.pin = self
-                        .session
-                        .pin_response(payload.previous_response_id.as_deref().ok_or(WsError::SendFailed)?)?;
-                }
-                let pin = state.pin.as_ref().ok_or_else(|| {
+                let batch = state.batch.as_ref().ok_or(WsError::SendFailed)?;
+                let pin = batch.pin.as_ref().ok_or_else(|| {
                     WsError::from(agentic_core::executor::ExecutorError::InvalidRequest(
                         "steering parent checkpoint is unavailable".into(),
                     ))
@@ -81,19 +67,15 @@ impl SteeringTarget {
                 if let Some(span) = span.take() {
                     builder = builder.with_execution_span(span);
                 }
-                match state.queue.as_ref() {
-                    Some(queue) if !queue.is_empty() => builder.with_steering(queue)?,
-                    _ => builder,
-                }
+                builder.with_steering(batch.queue.as_ref().ok_or(WsError::SendFailed)?)?
             };
             let prepared = builder.prepare_retained().await?;
             let mut state = self.state.lock().map_err(|_| WsError::SendFailed)?;
             // A failure callback may close this target while preparation awaits.
             // Never start the copied batch after its ownership was resolved.
             state.phase.require_ready()?;
-            let Some(queue) = state.queue.take() else {
-                return Ok((prepared.start_gated(), None));
-            };
+            let batch = state.batch.as_mut().ok_or(WsError::SendFailed)?;
+            let queue = batch.queue.take().ok_or(WsError::SendFailed)?;
             match queue.reserve_successor(prepared) {
                 Ok(reservation) => {
                     state.phase = SteeringPhase::Reserved;
@@ -102,7 +84,7 @@ impl SteeringTarget {
                 }
                 Err(rejected) => {
                     let (queue, prepared) = *rejected;
-                    state.queue = Some(queue);
+                    batch.queue = Some(queue);
                     drop(prepared);
                 }
             }
@@ -112,15 +94,13 @@ impl SteeringTarget {
     pub(in super::super) fn commit_successor(&self) -> Result<(), WsError> {
         let mut state = self.state.lock().map_err(|_| WsError::SendFailed)?;
         match state.phase {
-            SteeringPhase::Reserved => state.phase = SteeringPhase::Closed,
+            SteeringPhase::Reserved => drop(state.close()),
             SteeringPhase::Running | SteeringPhase::Ready | SteeringPhase::Closed => {
                 return Err(WsError::from(agentic_core::executor::ExecutorError::InvalidRequest(
                     "steering successor has no outstanding reservation".into(),
                 )));
             }
         }
-        state.echoes.clear();
-        state.pin = None;
         Ok(())
     }
 
@@ -162,15 +142,10 @@ impl SteeringTarget {
     pub(in super::super) async fn fail_successor(&self) -> Result<(), WsError> {
         let echoes = {
             let mut state = self.state.lock().map_err(|_| WsError::SendFailed)?;
-            match state.phase {
-                SteeringPhase::Closed if state.echoes.is_empty() => return Ok(()),
-                SteeringPhase::Running | SteeringPhase::Ready | SteeringPhase::Reserved | SteeringPhase::Closed => {
-                    state.phase = SteeringPhase::Closed;
-                }
-            }
-            state.pin = None;
-            state.queue = None;
-            std::mem::take(&mut state.echoes)
+            let Some(batch) = state.close() else {
+                return Ok(());
+            };
+            batch.echoes
         };
         for echo in echoes {
             self.outcomes
@@ -190,19 +165,23 @@ impl SteeringTarget {
     }
 
     pub(super) fn retains_accepted(&self) -> bool {
-        self.state.lock().map_or(true, |state| !state.echoes.is_empty())
+        self.state.lock().map_or(true, |state| state.batch.is_some())
     }
 
     pub(in super::super) fn has_pending_steers(&self) -> bool {
-        self.state
-            .lock()
-            .is_ok_and(|state| state.queue.as_ref().is_some_and(|queue| !queue.is_empty()))
+        self.state.lock().is_ok_and(|state| {
+            state
+                .batch
+                .as_ref()
+                .and_then(|batch| batch.queue.as_ref())
+                .is_some_and(|queue| !queue.is_empty())
+        })
     }
 
     pub(in super::super) fn missing_parent_for_steers(&self) -> bool {
         self.state
             .lock()
-            .is_ok_and(|state| !state.echoes.is_empty() && state.pin.is_none())
+            .is_ok_and(|state| state.batch.as_ref().is_some_and(|batch| batch.pin.is_none()))
     }
 
     pub(in super::super) fn mark_ready(&self, response_id: &str) -> Result<(), WsError> {
@@ -212,48 +191,48 @@ impl SteeringTarget {
             SteeringPhase::Running => state.phase = SteeringPhase::Ready,
             SteeringPhase::Ready | SteeringPhase::Reserved | SteeringPhase::Closed => return Ok(()),
         }
-        if state.pin.is_none() {
-            state.pin = pin;
-        }
-        let required = if let Ok(required) = state
-            .pin
+        let Ok(required) = pin
             .as_ref()
             .map(ResponseCheckpointPin::required_steering_input)
             .transpose()
-        {
-            required.unwrap_or_default()
-        } else {
-            // Steering qualification must not change ordinary client-call continuation.
+        else {
+            // A malformed obligation cannot qualify a successor. Accepted
+            // batches remain owned until finish_response reports failure.
             state.required_supported = false;
-            state.pin = None;
-            Vec::new()
+            return Ok(());
         };
-        if required.is_empty() && state.queue.is_none() {
-            state.pin = None;
-        }
-        if !required.is_empty() {
-            for echo in &state.echoes {
-                self.outcomes
-                    .try_send(SteeringOutcome::Event {
-                        event: SteeringEvent::Pending {
-                            steer: echo.steer.clone(),
-                            reason: SteeringPendingReason::WaitingForRequiredInput,
-                            required_input: required.clone(),
-                        },
-                        charge: None,
-                    })
-                    .map_err(|_| WsError::SendFailed)?;
+        let required = required.unwrap_or_default();
+        if let Some(batch) = state.batch.as_mut() {
+            batch.pin = pin;
+            for echo in &batch.echoes {
+                self.notify_pending(&echo.steer, &required)?;
             }
         }
         Ok(())
     }
 
+    fn notify_pending(&self, steer: &AcceptedSteer, required: &[SteeringRequiredInput]) -> Result<(), WsError> {
+        if required.is_empty() {
+            return Ok(());
+        }
+        self.outcomes
+            .try_send(SteeringOutcome::Event {
+                event: SteeringEvent::Pending {
+                    steer: steer.clone(),
+                    reason: SteeringPendingReason::WaitingForRequiredInput,
+                    required_input: required.to_vec(),
+                },
+                charge: None,
+            })
+            .map_err(|_| WsError::SendFailed)
+    }
+
     pub(in super::super) fn automatic_request(self: &Arc<Self>) -> Result<Option<super::super::WsRequest>, WsError> {
         let state = self.state.lock().map_err(|_| WsError::SendFailed)?;
-        if state.phase != SteeringPhase::Ready || state.queue.as_ref().is_none_or(SteeringQueue::is_empty) {
+        if state.phase != SteeringPhase::Ready {
             return Ok(None);
         }
-        let Some(pin) = &state.pin else {
+        let Some(pin) = state.batch.as_ref().and_then(|batch| batch.pin.as_ref()) else {
             return Ok(None);
         };
         if !pin.required_steering_input()?.is_empty() {
@@ -275,128 +254,6 @@ impl SteeringTarget {
 }
 
 impl Controls {
-    fn reject_unrouted_steering(
-        &mut self,
-        target: Option<String>,
-        input: SteeringInputEcho,
-        charge: SteeringByteCharge,
-    ) -> Result<(), WsError> {
-        if self.tasks.len() >= MAX_CONTROLS {
-            return Err(WsError::TooManyRequests);
-        }
-        let sink = self.unrouted.clone();
-        let event = SteeringOutcome::failed(None, target, input, SteeringFailureCode::ResponseNotFound);
-        self.tasks.spawn(async move {
-            let result = async {
-                sink.emit_steering(event).await?;
-                sink.flush().await?;
-                Ok(())
-            }
-            .await;
-            drop(charge);
-            ControlCompletion { bytes: 0, result }
-        });
-        Ok(())
-    }
-
-    pub(in super::super) fn dispatch_steering(&mut self, text: &str) -> Result<(), WsError> {
-        let submission = super::super::request::SteeringSubmission::parse(text, self.limit.bytes())?;
-        let charge = SteeringByteCharge::reserve(
-            &self.steering_bytes,
-            submission.echo.as_json().len().saturating_add(256),
-        )
-        .ok_or(WsError::TooManyRequests)?;
-        let super::super::request::SteeringSubmission {
-            previous_response_id: target_id,
-            echo: input_echo,
-            input: parsed,
-        } = submission;
-        let route = target_id.as_deref().and_then(|id| self.steering_target(id));
-        let Some(target) = route else {
-            return self.reject_unrouted_steering(target_id, input_echo, charge);
-        };
-        let mut state = target.state.lock().map_err(|_| WsError::SendFailed)?;
-        if state.phase == SteeringPhase::Ready && state.pin.is_none() && state.required_supported {
-            state.pin = target
-                .session
-                .pin_response(target_id.as_deref().ok_or(WsError::SendFailed)?)?;
-        }
-        let code = target.rejection_code(&state, parsed.is_some(), self.is_active_steering_target(&target));
-        if let Some(code) = code {
-            return target
-                .outcomes
-                .try_send(SteeringOutcome::Event {
-                    event: SteeringOutcome::failed(None, target_id, input_echo, code),
-                    charge: Some(charge),
-                })
-                .map_err(|_| WsError::SendFailed);
-        }
-        if state.queue.is_none() {
-            state.queue = Some(SteeringQueue::new(
-                target_id.clone().ok_or(WsError::SendFailed)?,
-                std::num::NonZeroUsize::new(MAX_CONTROLS).expect("positive steering count"),
-                std::num::NonZeroUsize::new(MAX_CONTROL_BYTES).expect("positive steering bytes"),
-            )?);
-        }
-        let descriptor = state
-            .queue
-            .as_mut()
-            .ok_or(WsError::SendFailed)?
-            .try_accept(parsed.ok_or(WsError::SendFailed)?)
-            .cloned();
-        match descriptor {
-            Ok(steer) => {
-                target
-                    .outcomes
-                    .try_send(SteeringOutcome::Event {
-                        event: SteeringEvent::Accepted { steer: steer.clone() },
-                        charge: None,
-                    })
-                    .map_err(|_| WsError::SendFailed)?;
-                if state.phase == SteeringPhase::Ready {
-                    let required = state
-                        .pin
-                        .as_ref()
-                        .map(ResponseCheckpointPin::required_steering_input)
-                        .transpose()?
-                        .unwrap_or_default();
-                    if !required.is_empty() {
-                        target
-                            .outcomes
-                            .try_send(SteeringOutcome::Event {
-                                event: SteeringEvent::Pending {
-                                    steer: steer.clone(),
-                                    reason: SteeringPendingReason::WaitingForRequiredInput,
-                                    required_input: required,
-                                },
-                                charge: None,
-                            })
-                            .map_err(|_| WsError::SendFailed)?;
-                    }
-                }
-                state.echoes.push(SteerEcho {
-                    steer,
-                    input: input_echo,
-                    charge,
-                });
-                target.sink.request_steering_boundary();
-                Ok(())
-            }
-            Err(_) => target
-                .outcomes
-                .try_send(SteeringOutcome::Event {
-                    event: SteeringOutcome::failed(
-                        None,
-                        target_id,
-                        input_echo,
-                        SteeringFailureCode::TooManyPendingSteers,
-                    ),
-                    charge: Some(charge),
-                })
-                .map_err(|_| WsError::SendFailed),
-        }
-    }
-
     pub(in super::super) fn fail_automatic_admission(&mut self, target: Arc<SteeringTarget>) -> Result<(), WsError> {
         if self.tasks.len() >= MAX_CONTROLS {
             return Err(WsError::TooManyRequests);
@@ -413,7 +270,7 @@ impl Controls {
         Ok(())
     }
 
-    fn is_active_steering_target(&self, target: &Arc<SteeringTarget>) -> bool {
+    fn is_active_steering_target(&self, target: &SteeringTarget) -> bool {
         // Lane execution is FIFO, so registration order also orders published
         // responses. Read the canonical creation receipt directly: the relay
         // may have delivered it before its execution task wakes to observe it.
@@ -421,7 +278,7 @@ impl Controls {
             .values()
             .filter(|entry| entry.route.lane == target.lane && entry.route.sink.created_receipt().is_some())
             .max_by_key(|entry| entry.ordinal)
-            .is_some_and(|entry| Arc::ptr_eq(&entry.route.steering, target))
+            .is_some_and(|entry| std::ptr::eq(entry.route.steering.as_ref(), target))
     }
 
     pub(in super::super) fn steering_target(&self, response_id: &str) -> Option<Arc<SteeringTarget>> {
@@ -442,35 +299,5 @@ impl Controls {
             }
         }
         Ok(None)
-    }
-}
-
-impl SteeringOutcome {
-    fn failed(
-        id: Option<String>,
-        previous_response_id: Option<String>,
-        input: SteeringInputEcho,
-        code: SteeringFailureCode,
-    ) -> SteeringEvent {
-        let message = match code {
-            SteeringFailureCode::ResponseNotFound => "The target response was not found on this connection.",
-            SteeringFailureCode::InvalidInput => {
-                "Steering requires a previous_response_id and user text or user messages."
-            }
-            SteeringFailureCode::SteeringNotSupported => "Steering is not supported for this response configuration.",
-            SteeringFailureCode::TooManyPendingSteers => "Too many pending steering inputs.",
-            SteeringFailureCode::ResponseAlreadyCompleted => "The target response has already completed.",
-            SteeringFailureCode::ResponseNotActive => "The target response is no longer active.",
-            SteeringFailureCode::SuccessorCreationFailed => "The steering successor could not be created.",
-        }
-        .to_owned();
-        SteeringEvent::Failed {
-            steer: FailedSteer {
-                id,
-                previous_response_id,
-                input,
-            },
-            error: SteeringFailure { code, message },
-        }
     }
 }

@@ -275,7 +275,12 @@ pub(super) fn start(
     mut execution: ExecutionSpan,
     mode: ResponseStartMode,
 ) -> RunningResponse {
-    let settings = ctx.enriched_request.continuation_settings();
+    let mut settings = ctx.enriched_request.continuation_settings();
+    if let Some(tools) = tools.as_ref().filter(|tools| tools.is_active()) {
+        // Preparation replaces the model-facing catalog. Successors must inherit
+        // public declarations, including definitions still deferred for discovery.
+        settings.tools = tools.public_effective_tools().map(<[_]>::to_vec);
+    }
     let response_id = ctx.response_id.clone();
     let failure_context = StreamFailureContext::from(&ctx);
     let (sender, receiver) = mpsc::channel(STREAM_EVENT_BUFFER);

@@ -45,7 +45,7 @@ impl ResponseCheckpointPin {
 
     /// Outstanding client obligations from the same canonical scanner used by
     /// ordinary continuation validation. Steering cannot supply these outputs.
-    /// Parent tool declarations restore public custom output types normalized
+    /// Parent tool declarations restore public custom and shell output types normalized
     /// into functions in canonical history.
     /// # Errors
     /// Rejects malformed call histories or obligation types not qualified for steering.

@@ -42,6 +42,256 @@ mod steering {
     use super::*;
 
     #[tokio::test]
+    async fn ordinary_responses_do_not_exhaust_steering_settings_budget() {
+        let mock = MockResponsesServer::start(
+            (0..10)
+                .map(|i| sse_response(&format!("upstream_{i}"), "msg_final", "OK"))
+                .collect(),
+        )
+        .await;
+        let fixture = storage_backed_state(&mock.url).await;
+        let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+        let mut ws = connect_responses_ws(&gateway_url).await;
+        for _ in 0..10 {
+            send_json(
+                &mut ws,
+                json!({"type":"response.create", "model":"test-model",
+                "input":"Hello", "store":false, "instructions":"x".repeat(1536 * 1024)}),
+            )
+            .await;
+            receive(&mut ws, "response.completed").await;
+        }
+        assert_eq!(mock.request_bodies().await.len(), 10);
+    }
+
+    #[tokio::test]
+    async fn unsteered_client_calls_do_not_pin_superseded_checkpoints() {
+        let mock = MockResponsesServer::start(
+            (0..24)
+                .map(|i| sse_function_call_response(&format!("upstream_{i}"), "get_project_status"))
+                .collect(),
+        )
+        .await;
+        let fixture = storage_backed_state(&mock.url).await;
+        let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+        let mut ws = connect_responses_ws(&gateway_url).await;
+        for _ in 0..24 {
+            send_json(
+                &mut ws,
+                json!({"type":"response.create", "model":"test-model",
+                "input":"x".repeat(1536 * 1024), "store":false, "tools":[status_tool()]}),
+            )
+            .await;
+            receive(&mut ws, "response.completed").await;
+        }
+        assert_eq!(mock.request_bodies().await.len(), 24);
+    }
+
+    #[tokio::test]
+    async fn steering_byte_overflow_returns_routed_failure_and_preserves_accepted_inputs() {
+        let mock = MockResponsesServer::start(vec![sse_function_call_response(
+            "upstream_parent",
+            "get_project_status",
+        )])
+        .await;
+        let fixture = storage_backed_state(&mock.url).await;
+        let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+        let mut ws = connect_responses_ws(&gateway_url).await;
+        send_json(
+            &mut ws,
+            json!({"type":"response.create", "stream_id":"lane-a",
+            "model":"test-model", "input":"INITIAL", "store":false, "tools":[status_tool()]}),
+        )
+        .await;
+        let completed = receive(&mut ws, "response.completed").await;
+        let parent = completed["response"]["id"].as_str().unwrap();
+        let input = "x".repeat(4 * 1024 * 1024);
+        for _ in 0..2 {
+            send_json(
+                &mut ws,
+                json!({"type":"response.steer", "previous_response_id":parent,
+                "input":input}),
+            )
+            .await;
+            receive(&mut ws, "response.steer.accepted").await;
+            receive(&mut ws, "response.steer.pending").await;
+        }
+        send_json(
+            &mut ws,
+            json!({"type":"response.steer", "previous_response_id":parent,
+            "input":input}),
+        )
+        .await;
+        let failure = recv_json(&mut ws).await;
+        assert_eq!(failure["type"], "response.steer.failed");
+        assert_eq!(failure["error"]["code"], "too_many_pending_steers");
+        assert_eq!(failure["stream_id"], "lane-a");
+        assert_eq!(failure["steer"]["previous_response_id"], parent);
+        assert_eq!(failure["steer"]["input"], input);
+        assert!(failure["steer"].get("id").is_none());
+        // A rejected large submission must leave admission and the socket usable.
+        send_json(
+            &mut ws,
+            json!({"type":"response.steer", "previous_response_id":parent,
+            "input":"SMALL_UPDATE"}),
+        )
+        .await;
+        receive(&mut ws, "response.steer.accepted").await;
+        receive(&mut ws, "response.steer.pending").await;
+        assert_eq!(mock.request_bodies().await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn automatic_successor_preserves_deferred_tool_catalog() {
+        let body = two_message_sse_response("upstream_parent", 8).replacen(
+            "\"status\":\"in_progress\"",
+            "\"status\":\"in_progress\",\"tools\":[]",
+            1,
+        );
+        let split = body.find("\n\n").unwrap() + 2;
+        let (arrived_tx, arrived_rx) = oneshot::channel();
+        let (release_tx, release_rx) = oneshot::channel();
+        let mock = MockResponsesServer::start_with_responses(vec![
+            MockResponse::ObservedPhased {
+                first_chunk: body[..split].to_owned(),
+                remaining_chunks: body[split..].to_owned(),
+                arrived: arrived_tx,
+                release: release_rx,
+            },
+            MockResponse::Static(sse_response("upstream_successor", "msg_final", "UPDATED").replacen(
+                "\"status\":\"in_progress\"",
+                "\"status\":\"in_progress\",\"tools\":[]",
+                1,
+            )),
+        ])
+        .await;
+        let fixture = storage_backed_state(&mock.url).await;
+        let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+        let mut ws = connect_responses_ws(&gateway_url).await;
+        let tools = json!([tool_search_declaration(), deferred_weather_function()]);
+        send_json(
+            &mut ws,
+            json!({"type":"response.create", "model":"test-model", "input":"INITIAL",
+            "store":false, "tools":tools}),
+        )
+        .await;
+        arrived_rx.await.unwrap();
+        let created = receive(&mut ws, "response.created").await;
+        let parent = created["response"]["id"].as_str().unwrap();
+        assert_eq!(created["response"]["tools"], tools);
+        send_json(
+            &mut ws,
+            json!({"type":"response.steer", "previous_response_id":parent,
+            "input":"USE_THE_SAME_CATALOG"}),
+        )
+        .await;
+        receive(&mut ws, "response.steer.accepted").await;
+        release_tx.send(()).unwrap();
+        let successor = receive(&mut ws, "response.created").await;
+        assert_eq!(successor["response"]["previous_response_id"], parent);
+        assert_eq!(successor["response"]["tools"], tools);
+        receive(&mut ws, "response.completed").await;
+        let requests = mock.request_bodies().await;
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0]["tools"], requests[1]["tools"]);
+        assert!(requests[1]["input"].to_string().contains("USE_THE_SAME_CATALOG"));
+    }
+
+    #[tokio::test]
+    async fn shell_and_search_outputs_preserve_pending_steering() {
+        for search in [false, true] {
+            let (body, tools, call_id, required, output) = if search {
+                (
+                    sse_tool_search_call_response(),
+                    json!([tool_search_declaration(), deferred_weather_function()]),
+                    "call_search",
+                    json!({"type":"tool_search_output", "call_id":"call_search", "execution":"client"}),
+                    json!({"type":"tool_search_output", "call_id":"call_search", "execution":"client", "tools":[]}),
+                )
+            } else {
+                (
+                    sse_function_call_response("upstream_shell", "shell")
+                        .replace("{\\\"numbers\\\":[8,0]}", "{\\\"commands\\\":[\\\"pwd\\\"]}"),
+                    json!([{"type":"shell", "environment":{"type":"local"}}]),
+                    "call_1",
+                    json!({"type":"shell_call_output", "call_id":"call_1"}),
+                    json!({"type":"shell_call_output", "call_id":"call_1", "output":[{
+                        "stdout":"/tmp", "stderr":"", "outcome":{"type":"exit", "exit_code":0}}]}),
+                )
+            };
+            let split = body.find("\n\n").unwrap() + 2;
+            let (arrived_tx, arrived_rx) = oneshot::channel();
+            let (release_tx, release_rx) = oneshot::channel();
+            let mock = MockResponsesServer::start_with_responses(vec![
+                MockResponse::ObservedPhased {
+                    first_chunk: body[..split].to_owned(),
+                    remaining_chunks: body[split..].to_owned(),
+                    arrived: arrived_tx,
+                    release: release_rx,
+                },
+                MockResponse::Static(sse_response("upstream_successor", "msg_final", "UPDATED")),
+            ])
+            .await;
+            let fixture = storage_backed_state(&mock.url).await;
+            let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+            let mut ws = connect_responses_ws(&gateway_url).await;
+            send_json(
+                &mut ws,
+                json!({"type":"response.create", "model":"test-model", "input":"INITIAL",
+                "store":false, "tools":tools}),
+            )
+            .await;
+            arrived_rx.await.unwrap();
+            let created = receive(&mut ws, "response.created").await;
+            let parent = created["response"]["id"].as_str().unwrap();
+            send_json(
+                &mut ws,
+                json!({"type":"response.steer", "previous_response_id":parent,
+                "input":"KEEP_BEFORE_OUTPUT"}),
+            )
+            .await;
+            let accepted = receive(&mut ws, "response.steer.accepted").await;
+            release_tx.send(()).unwrap();
+            let pending = receive(&mut ws, "response.steer.pending").await;
+            assert_eq!(pending["steer"], accepted["steer"]);
+            assert_eq!(pending["required_input"], json!([required]));
+            let mut wrong = output.clone();
+            wrong["call_id"] = json!("unknown");
+            send_json(
+                &mut ws,
+                json!({"type":"response.create", "model":"test-model", "store":false,
+                "previous_response_id":parent, "input":[wrong]}),
+            )
+            .await;
+            assert_eq!(recv_json(&mut ws).await["type"], "error");
+            assert_eq!(mock.request_bodies().await.len(), 1);
+            send_json(
+                &mut ws,
+                json!({"type":"response.create", "model":"test-model", "store":false,
+                "previous_response_id":parent, "input":[output]}),
+            )
+            .await;
+            let successor = receive(&mut ws, "response.created").await;
+            assert_eq!(successor["response"]["previous_response_id"], parent);
+            receive(&mut ws, "response.completed").await;
+            let requests = mock.request_bodies().await;
+            assert_eq!(requests.len(), 2);
+            let items = requests[1]["input"].as_array().unwrap();
+            let steers: Vec<_> = items
+                .iter()
+                .enumerate()
+                .filter(|(_, item)| item.to_string().contains("KEEP_BEFORE_OUTPUT"))
+                .collect();
+            assert_eq!(steers.len(), 1);
+            let output_index = items
+                .iter()
+                .position(|item| item["call_id"] == call_id && item["type"] == "function_call_output")
+                .unwrap();
+            assert!(steers[0].0 < output_index);
+        }
+    }
+
+    #[tokio::test]
     async fn steering_drains_active_gateway_batch_before_starting_successor() {
         let mut events = vec![json!({"type":"response.created",
             "response":{"id":"upstream_search", "status":"in_progress"}})];
@@ -5696,6 +5946,7 @@ mod duplex_replay {
     //! Recorded client actions against the real gateway, with explicitly derived
     //! synthetic inference fixtures. These are NOT recorded upstream dependencies.
     use super::*;
+    use agentic_core::tool::ToolSearchState;
     use agentic_core::types::event::ResponseStatus;
     use agentic_core::types::io::OutputItem;
     use agentic_core::types::io::output::OutputMessageContent;
@@ -6171,6 +6422,12 @@ mod duplex_replay {
                                 call["type"] == "function_call" && call["name"] == stub["name"]
                             }
                             Some("custom_tool_call_output") => call["type"] == "custom_tool_call",
+                            Some("shell_call_output") => call["type"] == "shell_call",
+                            Some("tool_search_output") => {
+                                call["type"] == "tool_search_call"
+                                    && call["execution"] == "client"
+                                    && stub["execution"] == "client"
+                            }
                             _ => false,
                         };
                         if !valid {
@@ -6937,6 +7194,8 @@ mod duplex_replay {
                 "namespace",
                 "arguments",
                 "input",
+                "action",
+                "execution",
                 "role",
                 "content",
                 "status",
@@ -7121,6 +7380,7 @@ mod duplex_replay {
         let mut arrivals = ArrivalFacts::default();
         let mut next_model = 0;
         let mut profiles = HashMap::<String, RequestPayload>::new();
+        let mut loaded_tool_profiles = HashMap::<String, Vec<ResponsesTool>>::new();
         let mut settings_spies = Vec::new();
         let mut budget_adaptations = 0;
         for session in sessions {
@@ -7190,7 +7450,33 @@ mod duplex_replay {
                                     .unwrap()
                                     .clone()
                             };
-                            let normalized = serialize_to_value(&profile.to_upstream_request(true).unwrap()).unwrap();
+                            let mut loaded_tools = parent
+                                .and_then(|parent| loaded_tool_profiles.get(parent))
+                                .cloned()
+                                .unwrap_or_default();
+                            if let ResponsesInput::Items(items) = &profile.input {
+                                for item in items {
+                                    if let InputItem::ToolSearchOutput(output) = item {
+                                        loaded_tools.extend(output.tools.clone());
+                                    }
+                                }
+                            }
+                            // Settings follow the same discovery preparation as inference.
+                            // Input ordering and exactly-once steering are checked by the
+                            // independent upstream history spies below.
+                            let mut inference_settings = RequestPayload {
+                                input: ResponsesInput::default(),
+                                ..profile.clone()
+                            };
+                            let mut search =
+                                ToolSearchState::build_with_loaded_tools(&inference_settings, &loaded_tools, false)
+                                    .unwrap();
+                            if search.is_active() {
+                                search.prepare_inference_request(&mut inference_settings).unwrap();
+                            }
+                            let normalized =
+                                serialize_to_value(&inference_settings.to_upstream_request(true).unwrap()).unwrap();
+                            loaded_tool_profiles.insert(source.to_owned(), loaded_tools);
                             settings_spies.push((next_model, normalized));
                             profiles.insert(source.to_owned(), profile);
                             if let Some(parent) = event["response"]["previous_response_id"].as_str()
@@ -7379,6 +7665,130 @@ mod duplex_replay {
     #[tokio::test]
     async fn vision_duplex_captures_drive_real_handlers() {
         replay_steering_captures(&["vision-steering"]).await;
+    }
+
+    fn assert_client_tool_steering(session: &Session) -> Vec<Value> {
+        let contract = steering_contract(session);
+        assert_eq!(contract.accepted, contract.submitted);
+        assert_eq!(contract.pending, contract.submitted);
+        assert_eq!(contract.creates, contract.submitted + 1);
+        assert!(contract.failed.is_empty());
+        assert_eq!(contract.invalid_stub_kinds, 0);
+        assert_eq!(contract.input_errors, 0);
+        assert_eq!(contract.upstream_errors, 0);
+        assert_eq!(contract.last_status, Some(ResponseStatus::Completed));
+        let records = messages(session);
+        let mut obligations = Vec::new();
+        for (ordinal, _, pending) in records
+            .iter()
+            .filter(|(_, _, event)| event["type"] == "response.steer.pending")
+        {
+            let parent = &pending["steer"]["previous_response_id"];
+            let continuations = records
+                .iter()
+                .filter(|(_, direction, event)| {
+                    matches!(direction, Direction::Client)
+                        && event["type"] == "response.create"
+                        && event["previous_response_id"] == *parent
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                continuations.len(),
+                1,
+                "each pending batch must have one output continuation"
+            );
+            let (continued_at, _, continuation) = continuations[0];
+            assert!(
+                ordinal < continued_at,
+                "client outputs must remain withheld until pending"
+            );
+            let required = pending["required_input"].as_array().unwrap();
+            let returned = continuation["input"].as_array().unwrap();
+            assert_eq!(required.len(), returned.len());
+            for (stub, output) in required.iter().zip(returned) {
+                assert_eq!(stub["call_id"], output["call_id"]);
+                assert_eq!(stub["type"], output["type"]);
+                obligations.push(json!([stub["type"], stub["name"], stub["execution"]]));
+            }
+        }
+        assert_eq!(
+            obligations,
+            vec![
+                json!(["tool_search_output", null, "client"]),
+                json!(["shell_call_output", null, null]),
+                json!(["custom_tool_call_output", null, null]),
+                json!(["function_call_output", "get_weather", null]),
+                json!(["function_call_output", "get_timezone", null]),
+            ]
+        );
+        let completed = records
+            .iter()
+            .filter(|(_, _, event)| event["type"] == "response.completed")
+            .count();
+        assert_eq!(completed, contract.creates, "every response must complete");
+        let terminal = &records
+            .iter()
+            .rfind(|(_, _, event)| event["type"] == "response.completed")
+            .unwrap()
+            .2;
+        let answer = terminal["response"]["output"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|item| item["type"] == "message")
+            .flat_map(|item| item["content"].as_array().unwrap())
+            .filter_map(|part| part["text"].as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        for index in 1..=contract.submitted {
+            assert!(answer.contains(&format!("CLIENT_STEER_{index:03}")));
+        }
+        for result in ["55", "CUSTOM_CASSETTE_OUTPUT_OK", "21", "Europe/Paris"] {
+            assert!(answer.contains(result), "missing client result {result}");
+        }
+        obligations
+    }
+
+    #[tokio::test]
+    async fn client_tools_captures_compare_obligations_and_drive_real_handlers() {
+        let reference = steering_capture("openai-reference", "client-tools-steer");
+        let gateway = steering_capture("gateway", "client-tools-steer");
+        assert_eq!(
+            assert_shared_steering_cases(&reference, &gateway, "client-tools-steer"),
+            1
+        );
+        assert_eq!(reference.sessions.len(), 1);
+        assert_eq!(gateway.sessions.len(), 1);
+        let reference_records = messages(&reference.sessions[0]);
+        let gateway_records = messages(&gateway.sessions[0]);
+        for field in [
+            "type",
+            "input",
+            "tools",
+            "tool_choice",
+            "parallel_tool_calls",
+            "store",
+            "max_output_tokens",
+        ] {
+            assert_eq!(
+                reference_records[0].2[field], gateway_records[0].2[field],
+                "shared initial {field}"
+            );
+        }
+        assert_eq!(
+            assert_client_tool_steering(&reference.sessions[0]),
+            assert_client_tool_steering(&gateway.sessions[0])
+        );
+        // Models group the two discovered function calls differently. Compare
+        // their obligations, then preserve each provider's exact client graph.
+        for capture in [&reference, &gateway] {
+            tokio::time::timeout(
+                std::time::Duration::from_secs(30),
+                replay_steering_sessions(&[&capture.sessions[0]]),
+            )
+            .await
+            .expect("client tools capture replay timed out");
+        }
     }
 }
 

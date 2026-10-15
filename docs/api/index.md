@@ -300,12 +300,18 @@ replayable. Control events can follow a parent's terminal event. Disconnect
 discards unapplied steering, even for a stored parent; storage remains available
 for ordinary continuation. Completed targets expire after 60 seconds and may be
 evicted sooner under capacity pressure. Each target permits 32 queued updates;
-the connection bounds retained steering input and settings at 12 MiB separately
-from ordinary request and checkpoint budgets.
+the connection bounds accepted steering echoes and their settings at 12 MiB separately
+from ordinary request and checkpoint budgets. Settings are charged when steering is
+accepted, so ordinary responses do not consume that allowance. Budget overflow
+returns `response.steer.failed` with `too_many_pending_steers` and the submitted input.
+A separate 12 MiB allowance bounds failure echoes awaiting delivery; exhausting
+failure-delivery capacity closes the connection.
 
 Steering is local to generating, single-agent WebSocket responses. Multi-agent
 responses, conversation-bound requests, compaction/context-management requests,
-and unsupported client call kinds are rejected. It uses complete upstream item
+and unsupported client call kinds are rejected. Function, custom-tool, shell, and
+client-executed tool-search calls report their required output stubs in
+`response.steer.pending`; normal output validation still applies. It uses complete upstream item
 lifecycle events as safe boundaries; a truncated or ambiguous stream cannot
 establish that started work has settled. Backend model capability is not inferred
 from its name. Non-generating prewarm responses and HTTP/SSE steering are outside

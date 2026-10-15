@@ -13,6 +13,7 @@ STEERING_MIXED_CASES = ("mixed-tools-steer",)
 # One source of truth for recording files, independent of transport I/O.
 STEERING_CATEGORIES = {
     "mixed-tools-steer": STEERING_MIXED_CASES,
+    "client-tools-steer": ("client-tools-steer",),
     "edge-input-lifecycle": (
         "three-turn-steer", "steer-delta", "array-user", "store-false", "late-completed", "burst",
         "unknown-response", "missing-target", "empty-input", "empty-array", "assistant-message",
@@ -96,6 +97,12 @@ def _steering_fixture_directory(case: str) -> Path:
 
 def steering_request_settings(case: str, *, load_tools) -> dict:
     """Original mixed-tool workflow settings; model and transport belong to the caller."""
+    if case == "client-tools-steer":
+        directory = Path(__file__).resolve().parents[1] / "multi_agent"
+        tools = load_tools(directory / "client_owned_tools.json")
+        tools.extend(tool for tool in load_tools(directory / "mixed_tools.json") if tool["type"] == "shell")
+        return {"input": steering_prompt(case), "store": True, "tools": tools,
+                "parallel_tool_calls": False, "tool_choice": "auto"}
     directory = _steering_fixture_directory(case)
     return {
         "input": steering_prompt(case),
@@ -106,8 +113,12 @@ def steering_request_settings(case: str, *, load_tools) -> dict:
     }
 
 
-def steering_tool_outputs(case: str, calls: list[dict], *, load_outputs, build_outputs) -> list[dict]:
+def steering_tool_outputs(case: str, calls: list[dict], *, load_tools, load_outputs, build_outputs) -> list[dict]:
     """Use the existing recorder handlers with captured calls; never execute generated commands."""
+    if case == "client-tools-steer":
+        directory = Path(__file__).resolve().parents[1]
+        return build_outputs(calls, load_outputs(directory / "multi_agent" / "mixed_tool_outputs.py"),
+                             user_prompt=None, tool_search_tools=load_tools(directory / "tool_search" / "returned_tools.json"))
     directory = _steering_fixture_directory(case)
     return build_outputs(calls, load_outputs(directory / "tool_outputs.py"), user_prompt=None)
 

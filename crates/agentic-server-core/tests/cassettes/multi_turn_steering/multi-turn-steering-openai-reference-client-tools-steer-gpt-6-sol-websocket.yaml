@@ -1,0 +1,1948 @@
+format: responses-websocket-v1
+sessions:
+  - handshake:
+      request:
+        method: GET
+        url: wss://api.openai.com/v1/responses
+        headers:
+          authorization: Bearer ***
+      probe:
+        case: client-tools-steer
+        category: client-tools-steer
+        attempt: 1
+        connection_index: 0
+        timeout_seconds: 300.0
+        model: gpt-6-sol
+        provider: openai
+        source: https://developers.openai.com/api/docs/guides/steering
+      response:
+        status_code: 101
+        headers:
+          date: Thu, 15 Oct 2026 06:26:53 GMT
+          upgrade: websocket
+          sec-websocket-accept: mx3pXJypiZ4+irD1y1BREGUjknI=
+          cf-ray: a4acc12fecd0fd14-SIN
+          cf-cache-status: DYNAMIC
+          server: cloudflare
+          strict-transport-security: max-age=31536000; includeSubDomains; preload
+          x-content-type-options: nosniff
+          access-control-expose-headers: CF-Ray
+          x-request-id: req_e163fd501dfc4b3a9d4798d7b98a7113
+          alt-svc: h3=":443"; ma=86400
+    frames:
+      - ordinal: 0
+        elapsed_ms: 6.06
+        direction: client
+        opcode: 1
+        fin: true
+        text: '{"type":"response.create","model":"gpt-6-sol","max_output_tokens":8192,"input":"Complete these steps in order, waiting
+          for each actual client tool result before continuing. First use tool_search to discover get_weather and travel.get_timezone
+          for Paris. Then call the local shell with exactly this command: python3 -c ''print(sum(range(1, 11)))''. Then call agentic_raw_echo
+          with exactly CUSTOM_CASSETTE_OK. Then use the discovered tools to get Paris weather and its time zone. Do not repeat completed
+          calls. Finish with a concise summary of the actual shell, custom, weather and time-zone results and every verification
+          marker requested during this task. Do not spawn agents.","store":true,"tools":[{"type":"tool_search","execution":"client","description":"Search
+          the client tool catalog for tools that can satisfy the request.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"function","name":"get_weather","description":"Get
+          the current weather for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"get_exchange_rate","description":"Get
+          the exchange rate between two currencies","parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"search_hotels","description":"Search
+          for hotels in a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"namespace","name":"travel","description":"Travel
+          location tools","tools":[{"type":"function","name":"get_timezone","description":"Get the IANA time zone for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"get_coordinates","description":"Get
+          latitude and longitude for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"calculate_distance","description":"Calculate
+          the distance between two cities","parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true,"defer_loading":true}]},{"type":"custom","name":"agentic_raw_echo","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK."},{"type":"shell","environment":{"type":"local"}}],"parallel_tool_calls":false,"tool_choice":"auto"}'
+      - ordinal: 1
+        elapsed_ms: 366.106
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.created","response":{"id":"resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33","object":"response","created_at":1792045613,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","defer_loading":true,"description":"Get the IANA time zone
+          for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}'
+      - ordinal: 2
+        elapsed_ms: 394.994
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.in_progress","response":{"id":"resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33","object":"response","created_at":1792045613,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","defer_loading":true,"description":"Get the IANA time zone
+          for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}'
+      - ordinal: 3
+        elapsed_ms: 1041.695
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.added","item":{"id":"rs_0bd76e143a399a9d006ad0722e5e6887d0bba8d26b59633e81","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0HIuzeFsm7_rqX3QwfKjWsYsfDiwv1cKCgASDyK-5bi6zkj6U491-_Xd5QSy4THkGIE0PietyUH5vuFnGo-cnTXUBb2jqchbYsqrFStg7Pr0D7qfHDx5Bzz2-g73u92fyulzD6bgVazBBZslQ0_WcGAMTxivnXjiGPEVNlCwMdCVGvKpebaUPJeEAEgxTL7e6_d0r-nw4XZOP98Zweab3o30oew14iW_JYoFWlnmgA-QXd8tcfagZKO9Pos1b9ndxOLCvreDkbv4nC7-IOB4oiNtCvQI9zAhFUlkaELjzZ_DmZgMq_91qZ0E1RsWA-6NBQpHqI1XzLGefrzkVuMsAdrqdbxzhvdTxVDjDwbRtkKXTVneQae29Rx1m4jR1C3MC3MY8PaNvsMqowvCz_xFH0xRRHFL-uccH-ZgA5zayF0yGKEx0g0rwpxcOFRw05G_gnoTCtB1IG7vUni11ATZ0znf_T2nIlp77fC3IwTZA1HuD44QXwmHCw8iOm2qN9dyHm9UKgv9SX8v_BCRiLivDNbTvHvvVoOgfBwRrmQ_9HyBr74hR8NgadAk7q4wAyYkclcZ0zS0-9RdOEZdVEde4L95oVJCJZmGM4ZQS_Gs0G1YOD3n3zDs8E__Cqj7iR_M6Gts7jVBPyPWq2IYbA2bnHXPctHgZzVSIDrP7O7kBVR4DwXleww0XzpZ2qrl86lXf5NNPTDsnLkJQPM6ibbPwyzPa_wu6nlyMBNAFfQJaYIkg50Hx3jGVEne4DJUdBRjzjDlJfiORGoqQkN5Z0b9n0Po-HYg-TZpdCYvRAr-ud5ijI3zNJk4UEcfhFF5ExlPWsnwpiw8vANP1JHpI4J2ALVnTQnRpN9ZZCuFw_aPSCBORO2C_GOS0Y1F2N9aaQRph2PmV_WHVfSVt_plIEHdLAUkGBDWDyaj4KauAHrzN3I8lCqJ7yl5-wCX5-wrsAX7L_JyikDXeVOXfnQBHc0cwp1-si1KQ6EwWH8GY7mp9CJNMUjYV9xrh_UF2eOi5PYZM_YsCF1DdyBeBf6GhjXTJmQmOphXIgdUJThLnTOzVr5fED-EiSqS8eX4F335fzmZZQsDo3bVZaYAWjOHgn-DySQ8rEU5CK72iXEGS56TXMdMsmne7Ga_WgMZ4sQjI941ddx9V2XUeyAaUgKWuzrvxETIUslsSN3LqcnflRPPnrpfWQeOmmrvvXFOoR8-7Vi1Pluh","summary":[]},"output_index":0,"sequence_number":2}'
+      - ordinal: 4
+        elapsed_ms: 1301.769
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.done","item":{"id":"rs_0bd76e143a399a9d006ad0722e5e6887d0bba8d26b59633e81","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0HIuO1CQb5azZV1ejT3kH2A6zmPVvNoECpHaOWfneYQG-GPdBrFzxzufuN1W0JLHRk37yK0SThhiUoHCzkdf-CAAcA72IHm0DiTallvweLcmdvx0ujYq3LOQFgbx8kbHnNMzTu0p-rIKzxnJdxId7qtUQ0gw918G13L7PhoieeMP7yiv1VxTXjTwHAveXji7QHKauz2Wk4EhBNlUbIP4Mn5Oa6iRv1oSkEj7B6Ou3SRWm-aV4_PWXjkxUszKzLaFqNFZkXTVuufkP76I3EuPNkvUCZjm5uI3gbWOvKuDZQmgPRzNdlnyV6huGsUXmhcone_9GxXxOTkX5L7wOSNZwN71MLYmotXc4l6l6sBYjUts0qjBWOyqSasatxqa4hFZVna07Mk119WVnka9XMx8ogGXtCvwBZKQz2EfZXS2pihwuaW3lWpNqU34ObQjrmeORx_LO_d2NdCICVdmcdy52ek1-bD-maL-vVqCTMnEwbaCvgQqYna3BumyjnSCjcPwmN08_AbnU1Nn2ofhSwH_OTO1n-T1bk5woqAWB-CAA_sb31GNoobwAwdMHQCV3hwtsNSKXNsyPMy1NEBKko3GV-uUtR87axId6Y8fDEbgDoswMgqMBVG3OPA2DCZ9QnLjYHQkICNZXN84uB6siKA9gazsMQacq5k6LUNd_IKp75PmDlBX3sI02Gk4ugT_mh_EK-56Hbu9eRkrAJfwdi12QfW52IrqMAEtnKHUiNR60C_4nsV8ZudEMatEDlo5AsWTHndz-Qr6DVBpS20jVqMovgUULCQLmeIMRv0-62sPiD3MD_BZ4gMGND9SmHPngwrlLtk0FOyDoQdar07NCgto3afN3dhBiu_ooyzo9xtL4rSqLRY4uor8JnVYtgSpII6So0bD_18sGkcApDp6glyP3i5xRjY5p2aCPQRUJpwtwC5g1z4FU_HmNfinh_Z068FfIjL7KBXuAONFOCCDj-cbvgrJB8TKeFVhkNgYieEtP4UaVd8nkeMDLjU1ZgGVPuVOH5Ccv5T5E2xK8BYwwlHtVYpdWJ-Y5711VhQmG0AHIqJ3XC5kR9ZIV3JQV9MCv_FwFdR9eWg6CPs_QZyGzBB403HymWlfQuGVHV_uO9AJ2hg5KZtxbznoO1AogE9R_K_ldlh8e1ipAfeQd87r6FqOsZKdTMGMOi9mtt94nsmG6pXtYQswtfwRQFNbO6hMIJK0aZXYRwZC1FHihhE4I1L87h6VrrbZVWiRZ8lGZJ6dmEJox3c_4iME1O5rfBE9DjqlFySphg9BgsBTG3hOXG7h_aH3s1fDHQ96m0eC8h2fKBbqgJlKFuTEMbJJEysQNj1CdQOBLBk7b5d6qhvcgb2pygINrtenEqB4802LBK9y64yS0KqLqjU1dGLRwPp4xA8PuYoq02t8d_wD6RgGwuLm4f3DLemTdQbCx74UZy3dqV22OUmPQoeCyT-zvBTVWAi2rjzahBARy9reswm9K2kwwhzPCqR__B_bj4EMFV_Oi0b6fpvlpTEJZOFEGM9prKkyufQoxVWYaVGqETa7qaR81APhbw==","summary":[]},"output_index":0,"sequence_number":3}'
+      - ordinal: 5
+        elapsed_ms: 1304.5
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.added","item":{"id":"tsc_0bd76e143a399a9d006ad0722ea14487d084c85006d7133621","type":"tool_search_call","status":"in_progress","arguments":{},"call_id":"call_GnRw2XdAPfQwuITVjoSzy1HS","execution":"client"},"output_index":1,"sequence_number":4}'
+      - ordinal: 6
+        elapsed_ms: 1567.718
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.done","item":{"id":"tsc_0bd76e143a399a9d006ad0722ea14487d084c85006d7133621","type":"tool_search_call","status":"completed","arguments":{"query":"Find
+          client tools get_weather and travel.get_timezone to retrieve current weather and time zone for Paris, France."},"call_id":"call_GnRw2XdAPfQwuITVjoSzy1HS","execution":"client"},"output_index":1,"sequence_number":5}'
+      - ordinal: 7
+        elapsed_ms: 1689.195
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.completed","response":{"id":"resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33","object":"response","created_at":1792045613,"status":"completed","access_programs":null,"background":false,"completed_at":1792045614,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[{"id":"rs_0bd76e143a399a9d006ad0722e5e6887d0bba8d26b59633e81","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0HIutDacsZ7GffTMpW8eotaw7mW3dK-c8DF23bdcRaoklFiNUV1u-0ImhhR0rcOLV5ngyBoe1g2FylCfKflbC0kmOXcJltWGe5KrWGuFJ4x1g1bW7OGKCkBhq39kkZtrAtKuvh3oTH6M-iVnCtHU4zxRuvNcZCVForJtz4up8MhpeicfKGgm31DsmZ-Wm2dBzM7Zkf2sa_XURiXf0GyxXZslMEy-tp6iv6yHor-LKf8PfffevUMih3lzP79jUp0dN-9LwPpPHFLzJ1zo258VbbMpcR2REeGrQnrCoXQEJDhoysV8ROyULA_gT4tVosV99DKgwOQH802X8NbI9uhGUA3HN2j1pS8WssedhTbNyz2sFQYS7yaE5agmONwlKkdSLfZ1Wvwkz2zuYRvoNarC-5rXZyLl05mpr6cv8Kuuy_xWBKc6VgOXfVu01xoIBjeORfAjbEqyu1rIYWUdFR2z4JeGq9h79DVpKf-TOOuaMv2GjxtBaFhWCpu3AjxwQY23S4AgLZ7lnEOiI4uhXP8gfyaBVOS_1pQad-FjqEaT5wGmIH3UihEoewgwqe9V8bHz-vDZAw030mbXdxC3jyqcYXL6KTZWmuhNox1I7CHq-Re5sgj3kQMZxGsu0aCF6u-dR2GyNpCs5fzsxGWdb4vi57cTKDhAkW4Nc5fnsnsdA2XuarWJSFji2SwNnRzrKSxUMJM1zWuvnMWjyx-6t7MGMhx1suDBU1A6BWE_QYS2SeslHlwOdsKbdjN04tNHoHpgKGfkTmGVoQrW6NqZV9yWD9lCUlhjxp99zb9mLdBVyHLb4AYtUTPcc7-2JcwSDk_wR4vj4mMWZyDYK55s5arfJXIIqehSJzZtLXMV5s4Nf78--vAAvgF5i60SyyOgMJ4_Is51dcCMWqlDGX9Ni-48X3gU-DM5aPwdHL6R-vD5XHmdW1B_ahFqSFYUAqJLujrt0SmBKhmxTS_XyNpwzyq54x_FmHK1TjaZGt5Aw4XYED3DcdehzxNrL36p5ebU2SoiMbuiEijQggQpprQWxuCqJZd9mftIHSgQPahCuXyvqj9DH5MS_sWyrF0fWPL2UUp3d8iviz-ydRf-iwqKLh9zABmSzjA_ZsNQiA3CqKAaaXDz8QxIbcu6wjn9DuuEUnNJhxeGPlq9oQhRr2HTeEI5r4fqGjPfnhW-3cdzKiHug0sSs_z_MACmjtcQ641I__UB9GdzB3eevgWv1G_Sxxm9gkER5lR58YoqZyW9vuC9nNdHq8kxUDuetCaVHxAgUmCSm-PttoX6eGWvoD_oBG2_xq0sbUKH606senMTvq0I37BFSAxAPHJpEo04aGEQWu_7YhVRljZQSjc4pmfEC1557jKE1r6VEf14AVrxq8ZO8wvDDPQQmFlUM5YXFSzWTw28wGYcOCBNCuGTApfSlbKtjiefPu6jP1HLfroOz3f8ULPAlBeLASwhIrASJOmQy9EbBA3pGqFlWiueMXWsjJEuymQVjMePuM4v2KD58hIXFQrASdnsd9mo-g41Q6P8-ymQSC4gfaMomHMUjebDwuzijg7ttQ==","summary":[]},{"id":"tsc_0bd76e143a399a9d006ad0722ea14487d084c85006d7133621","type":"tool_search_call","status":"completed","arguments":{"query":"Find
+          client tools get_weather and travel.get_timezone to retrieve current weather and time zone for Paris, France."},"call_id":"call_GnRw2XdAPfQwuITVjoSzy1HS","execution":"client"}],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","defer_loading":true,"description":"Get the IANA time zone
+          for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":544,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":53,"output_tokens_details":{"reasoning_tokens":11},"total_tokens":597},"user":null,"metadata":{}},"sequence_number":6}'
+      - ordinal: 8
+        elapsed_ms: 1698.264
+        direction: client
+        opcode: 1
+        fin: true
+        text: '{"type":"response.steer","previous_response_id":"resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33","input":"Keep
+          the remaining tool steps and use their actual results. Change the final answer to one short bullet per result. Preserve
+          every earlier verification marker and include CLIENT_STEER_001. This update is not a tool result: wait for the outstanding
+          client output before continuing. Do not repeat completed calls."}'
+      - ordinal: 9
+        elapsed_ms: 1888.801
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.steer.accepted","steer":{"id":"steer_e9c487bbdb6d444db96296da164822f1","previous_response_id":"resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33"},"sequence_number":7}'
+      - ordinal: 10
+        elapsed_ms: 1890.21
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.steer.pending","steer":{"id":"steer_e9c487bbdb6d444db96296da164822f1","previous_response_id":"resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33"},"reason":"waiting_for_required_input","required_input":[{"type":"tool_search_output","call_id":"call_GnRw2XdAPfQwuITVjoSzy1HS","execution":"client"}],"sequence_number":8}'
+      - ordinal: 11
+        elapsed_ms: 1893.033
+        direction: client
+        opcode: 1
+        fin: true
+        text: '{"type":"response.create","model":"gpt-6-sol","max_output_tokens":8192,"input":[{"type":"tool_search_output","call_id":"call_GnRw2XdAPfQwuITVjoSzy1HS","execution":"client","status":"completed","tools":[{"type":"function","name":"get_weather","description":"Get
+          the current weather for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"namespace","name":"travel","description":"Travel
+          location tools","tools":[{"type":"function","name":"get_timezone","description":"Get the IANA time zone for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true}]}]}],"store":true,"tools":[{"type":"tool_search","execution":"client","description":"Search
+          the client tool catalog for tools that can satisfy the request.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"function","name":"get_weather","description":"Get
+          the current weather for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"get_exchange_rate","description":"Get
+          the exchange rate between two currencies","parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"search_hotels","description":"Search
+          for hotels in a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"namespace","name":"travel","description":"Travel
+          location tools","tools":[{"type":"function","name":"get_timezone","description":"Get the IANA time zone for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"get_coordinates","description":"Get
+          latitude and longitude for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"calculate_distance","description":"Calculate
+          the distance between two cities","parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true,"defer_loading":true}]},{"type":"custom","name":"agentic_raw_echo","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK."},{"type":"shell","environment":{"type":"local"}}],"parallel_tool_calls":false,"tool_choice":"auto","previous_response_id":"resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33"}'
+      - ordinal: 12
+        elapsed_ms: 2172.895
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.created","response":{"id":"resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333","object":"response","created_at":1792045615,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","description":"Get the IANA time zone for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}'
+      - ordinal: 13
+        elapsed_ms: 2203.797
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.in_progress","response":{"id":"resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333","object":"response","created_at":1792045615,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","description":"Get the IANA time zone for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}'
+      - ordinal: 14
+        elapsed_ms: 2552.925
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.added","item":{"id":"rs_0bd76e143a399a9d006ad0722fe14887d0ace64206f0093f91","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0HIvmwrgQ7Yf7hMpTDe1piGpHuJ8te06Rt2NP1sZpQNTA4dWjdsn4V_9-XzktdTu7NqvXoMaTWBLAhPXXvnPZ85VKgC5lBa-jcXSLURnezml4UeT4Ohrn-ul8nh5ZXGqwhmRAt-L2D4lUSsLVWg_agsZalpMYIFt98mjJewU4OEMauuZU_aRW8mnOns56kPWJvXZt7_m7dgyyeZVMY4FUiPilmziodTCEwyVzsG95L91BzKGk0WEtwkyMbdA4haw2vtVkTJtVr_BM3GEqjx144Sl-QEZ-KLQFMrKgE6kn_K0KSwnwESpR6CZBqYfCf4K3WAHEdcv49EiN3cjtnsSbQo1a3rVpSqndrKpIUqv0lX1yIZyiFC-kWnMibH4vnVycEUi8kDZet6K7VH85jZzhT-MV-284FZbb6gcNYU3XC7jw_e5S--q7qjn8IH5d2EHt7bakb5minaT05yYhTIOMBAbtYkc_Cb6UgQCZJsYHStXOuKCeyRas6H_5gbF4BURon4d5WusTiwOPTOHppH5DVilMQSn2DkuIx9fuln-tdxl9JebLcCbWXoKEHF1QR47lLXvpNz9HAUTF8-0gKvm78lJ5qgJX-PQ9_svz3Nd1J_BqQsqrs-9szEBSouf0i2lFcuZMfLIlknY_APGHiQ9WlYXp0_OEFTQZDTI6qFQByb4r_XmIw85Gpfk-LuZQUlJCLhf21iyI8jmMtawtYFIG0XvWGES0Y8G00nknm9egUguKtowazpl6NFjJsOLfN7bjTtiFyhYSME-Q-B9ze2e_O1jySASmdDnN63Ztv5g0YlKiqOTeNFPimq0Qd6IWHqmTpgmtlIlCasubxbZS_cwa1fqrqDn1c6nrYRXxSHixgmGiO-_pyZVuCzWKqp23UGp-R3LFSz3g83cwaYZk2fYD4CRjqElHcjT6ri0NqcBl14HDv0p2pg4oS_9Uneu8HotgnmELp7RhUCDK2wExVgw8EcZdQcygLQYocgxOIJNYfLr8fogtSEleYe0qZ9jdGdiokxxOz9U6M0sVzvs6QtSIaF0bR2UUMfqLdy1gTnyOLUbbMHipUwR_Cyi5NIXwqaSwXmNdqXQaUwkyWvrC5txTwqXw8mzBqxDo-vGSp4MV7MKHJZmhZTqb6hnZDGV2DAeoXcxDggg9wD0tJsTJtsetEbhlDcjW4KeZ3bX2b2iYhjwcn5icex3vAH_V-tQhMiksP0b","summary":[]},"output_index":0,"sequence_number":2}'
+      - ordinal: 15
+        elapsed_ms: 2712.701
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.done","item":{"id":"rs_0bd76e143a399a9d006ad0722fe14887d0ace64206f0093f91","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0HIwAisqUtKDLMK4A8ufX_lYQaZy4be5c8KNbwUIaV7-Et2GMady-axW2I4F0N5O9eaSG_Q3f7QY47NV1SIWhDjMq0_SIXqegHkltLJfXrqEfisJucm5VDOoLgzpNEe3D5UNeTY_ztAOTdk7OEa7lrGLbJy13v1txlR4JPSjlTv4ZXYIc8UcOKYprQhYqipR0kL1bNWo0btUXAWwyf5rEbHtuRymyOZz-GOIf6D7z4AmoQObmsyPH3bquQe06TLOwhJWJUB24QeSFHvtTo2F3zB1vnH4RuIwS7tN14Wrz8iPf8J6850t7DnIwPYD6sUQOOoW3IUnj8hGYvhBS6O5uOrDNFNDL5zC8yAy7bVQYrzJr6rfxHMdu9r9hZSDFE1Y3zv0UUyT3sg2fhjdQkHGTJAjgd8m38NZPXlTEgvbhW_Rvpx1qa4S77SqbwlVCkCdcuh2pfgZyWeEnrpeT7vqoQHEpxKosi8WgXXF9Koe7wmhI4TEEkuV4TNm2ATT-xbMu15-BoV_1-jDMYr4hAtsY5A2FlqH2sYo0aZ1dOCTLCxLYOZw26RZ-MBWXLBCkDYChb-aGcLVU_L3vEofQnTcdYLjNp2rucuFkcclbwoQsqzrMqspkkgTttJdSAjgMGFvjk2sMBC-oKFrIvuH13d285SMLxRLxWgbWDInl6foR3MYv_8zfjrH1RAvuf1TptbuFvg-0G83zoj11tHxRYASFpoAmV4GKUizXC0AZa4SsdUJH-yq9yAMoVoLR1XawZAr8LMDAyyKgkkcAzRRyv_41XJdxvoINRp_EeiMKzV_N-1AgcvrKtLJEXanRckis5H7nBehKcbBRobt68EKI0jzxYHUYp296pQ96uR3EFsjjzXcBKdr4AxLvS_IutzFZHZkn9gXCx8w7HlShQ1gQI3-rgQfnwQ9Ss-Pl82qK8FMJ6B5VU1KGtmUpRDRoAW1uc6cPc0yBaLnw8pABS3wEtUbNGo9rjYsk3jbbaQxtkTf9nf-sYjY4-nOqoia_byG3Pzlx-WNW9fw7dtAA0jvpNL8pfQuO4YI9LJqCdq0droHM8QzB7XcjfNBrcC6oIXia5nDEXk95KFFtL-HWXqwOh4YLPDgyf3_XlCSzViUpQzBO6Z24kdiqW76i2aG1WP7VVtlM3Q5TyZY39Ix-aMsZGZGAw5xviXNhbWMvlTtHISPsZ4ojzemvHLHZm797Ac9s-3PI-m3rtPEy68DzthxMBDqh7guGvipa0I0WvdgiH-XeKThCWujRcey5skVFCrIbmq_XvMdpqMufKzctnJZhvbK7kF6EwXNYjTtncR0Laym3ikbAh0pulv9j5fowI7d2EqVRIOCV8RTjinpPdigCaJ0EMQQa42f-BLvhDHohL_zVi1_SOM1qmZSV1mn6hE7aRKqs1I-1xsLblFl9p3-s6zCedANMoNDfdneJyZWI8hXkhGvQMJn0AUnieRTB4W3J67zIeXWBFY-AlFuFFvwIECHeyihpmGnhnruo38Dz2ksbVJlT8s=","summary":[]},"output_index":0,"sequence_number":3}'
+      - ordinal: 16
+        elapsed_ms: 2715.641
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.added","item":{"id":"sh_0bd76e143a399a9d006ad072300a5c87d09297d937ee05914b","type":"shell_call","status":"in_progress","action":{"commands":[],"max_output_length":null,"timeout_ms":null},"call_id":"call_KqaOGLFFMRlSunH5yf6TtPJx","environment":null},"output_index":1,"sequence_number":4}'
+      - ordinal: 17
+        elapsed_ms: 2722.965
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.shell_call_command.added","command":"","command_index":0,"output_index":1,"sequence_number":5}'
+      - ordinal: 18
+        elapsed_ms: 2723.569
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.shell_call_command.delta","command_index":0,"delta":"python","obfuscation":"ZlC3Yu8iKE","output_index":1,"sequence_number":6}'
+      - ordinal: 19
+        elapsed_ms: 2744.043
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.shell_call_command.delta","command_index":0,"delta":"3","obfuscation":"HfLHmL89CfLaxVu","output_index":1,"sequence_number":7}'
+      - ordinal: 20
+        elapsed_ms: 2745.699
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.shell_call_command.delta","command_index":0,"delta":" -","obfuscation":"myFyg7iXx32vAK","output_index":1,"sequence_number":8}'
+      - ordinal: 21
+        elapsed_ms: 2747.309
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.shell_call_command.delta","command_index":0,"delta":"c","obfuscation":"uF4qtlJbFtkRZj2","output_index":1,"sequence_number":9}'
+      - ordinal: 22
+        elapsed_ms: 2748.898
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.shell_call_command.delta","command_index":0,"delta":" ''","obfuscation":"WfvbJgNKutx7Bl","output_index":1,"sequence_number":10}'
+      - ordinal: 23
+        elapsed_ms: 2750.658
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.shell_call_command.delta","command_index":0,"delta":"print","obfuscation":"PvJMF4X07zU","output_index":1,"sequence_number":11}'
+      - ordinal: 24
+        elapsed_ms: 2751.901
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.shell_call_command.delta","command_index":0,"delta":"(sum","obfuscation":"1RVi981RwV0f","output_index":1,"sequence_number":12}'
+      - ordinal: 25
+        elapsed_ms: 2753.572
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.shell_call_command.delta","command_index":0,"delta":"(range","obfuscation":"ochULbVCWA","output_index":1,"sequence_number":13}'
+      - ordinal: 26
+        elapsed_ms: 2754.669
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.shell_call_command.delta","command_index":0,"delta":"(","obfuscation":"cmRGc6eQ2iwiaHN","output_index":1,"sequence_number":14}'
+      - ordinal: 27
+        elapsed_ms: 2788.295
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.shell_call_command.delta","command_index":0,"delta":"1","obfuscation":"qY1sX1acTWuMiPH","output_index":1,"sequence_number":15}'
+      - ordinal: 28
+        elapsed_ms: 2878.861
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.shell_call_command.delta","command_index":0,"delta":",","obfuscation":"pyBr93bXpzdKkBa","output_index":1,"sequence_number":16}'
+      - ordinal: 29
+        elapsed_ms: 2879.737
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.shell_call_command.delta","command_index":0,"delta":" ","obfuscation":"HkbJnIjl6NRVwZl","output_index":1,"sequence_number":17}'
+      - ordinal: 30
+        elapsed_ms: 2880.265
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.shell_call_command.delta","command_index":0,"delta":"11","obfuscation":"je0POmh0GxkPvt","output_index":1,"sequence_number":18}'
+      - ordinal: 31
+        elapsed_ms: 2880.802
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.shell_call_command.delta","command_index":0,"delta":")))","obfuscation":"UYfSeSmID8kAW","output_index":1,"sequence_number":19}'
+      - ordinal: 32
+        elapsed_ms: 2881.349
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.shell_call_command.delta","command_index":0,"delta":"''","obfuscation":"6SBb6LQ2j4eoR7I","output_index":1,"sequence_number":20}'
+      - ordinal: 33
+        elapsed_ms: 2881.885
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.shell_call_command.done","command":"python3 -c ''print(sum(range(1, 11)))''","command_index":0,"output_index":1,"sequence_number":21}'
+      - ordinal: 34
+        elapsed_ms: 2882.415
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.done","item":{"id":"sh_0bd76e143a399a9d006ad072300a5c87d09297d937ee05914b","type":"shell_call","status":"completed","action":{"commands":["python3
+          -c ''print(sum(range(1, 11)))''"],"max_output_length":null,"timeout_ms":null},"call_id":"call_KqaOGLFFMRlSunH5yf6TtPJx","environment":null},"output_index":1,"sequence_number":22}'
+      - ordinal: 35
+        elapsed_ms: 2979.468
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.completed","response":{"id":"resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333","object":"response","created_at":1792045615,"status":"completed","access_programs":null,"background":false,"completed_at":1792045616,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[{"id":"rs_0bd76e143a399a9d006ad0722fe14887d0ace64206f0093f91","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0HIwlDAFiJ7femwBAC2KDFUj9es0a4ybKbcmK0HXrGvWXTy9sbGWpv-dKBoDxrPWH128eJMnxsiT8MV5gJnoa35NcJMobknPGitDqz3V3wZG2wFP-c7hYQ6p7Y4dSvHCXMpzs6PjaAos6mR8ydSsxHS8My3qHVMW5NnotbxFCdLawwwKC8uP3XlDlsse4LFurglDmCcmeT4AXCJDqv26evbHCjwGP4n56N4k_uK7SZ4i8Yvgz9OddRbaNNPUgtoS9DHLmegwNOmufTzoz0qNe0KwBUANtt6d5Bu8N871Yz4xZWtd1Z_TwbLP_X1iEkBfUsADS9EQ_RiEbaQ6gKFlKt6G4B7sIaD3-4vFkzfWveRsvj3jva-YTI5JrqtMFgGSBUXjkPJ3qtOeHsoTynywGK7qwJwOFN1RXX4e7RxjUIjpn1YEBRQd17W88E39Gnvsu_04kWRtzEFITX39-tEf-fWqwRMcZVQLM2s9c7Usqm97JpljOL7LjYxJoU9_4dbRhQyuSI0uCGG9_BhioslN_bo8o-YK3I3QiaZbUd9x53TFKlyqKafBp3KGmfSedB4oUCp21IdG0753xIxZ-Qr8h31BxqsKfDlJ5pgN5QdWCWamfFYOXSPB7FI0hUcyrdmNQJ30BsWTd-shmG3FwAcnBDxHJ7rLptyB9v7ZGWjFQ2ZbdeK9eO2b_iK7-0kylg2Z48wop2lTAdj4KdbMCBgRxjHcquCDaIRVTEH1JNiqJrEPo03eXqUHzUYzWD4x0SmRUAxAU6OVOp8iux6br3WbHqOKZyJW0FKeJnOZlKO8C9Kbu0MU2B0pPPizTs0RW86d2CZ-HP9bnrOePOWxx-ab0MAJREXqh7M4CT0ooQrf7OWCjo5nV_s1goF8NULNbUAdbHmw2x85VDEQX7h_0vvR894CutWCAPp6gFO7-45_x1rrQF42Pvznm75T2d6X2AK2lzOW7ueg7CYy6C0gwBJ4DubabHthB92fos-97OJ5gweAxGR8TgLK7AVN1Nr5-5lTA02Pw-G2qWoHPPesgBXEFgGenxZgkyaU7us0sm40M-XG8eNLtGOhV_JG8SFyLMAYOn_kv5snQ8-Q0OyqsGRUFfSCnJjUNwMkjJXA5YvCCXTRFtcAmHp-rQUSw-_zQWiSPKu4bClqgKTpeNy5ZejkDC4YcUREuxzjBTUYt4d2t0Ay6-i7JrPvkLrmmTSRrmCuCaOCBHEWOTiX7uLeM7L0kWvFVYV_SE3hB_QC0BkTRKY253KDlgf28PwPk14cOw1bn-FYF3ZzFnZl4sJEZoIfAD0vSSud9SRJcoccnqcEdWd4P5p8qqPflRP5ysDYIuK_Z-p1Mu4XNUH9oDCql5oZnJ8p5jlbxBrS-q6CNp6JjwLbL7e8qjlrblrEaEs-bUV__xUANqnTQIUmkAyAyIG90p1dkd6XM-lDZ1KIDvt8Gu0y9bTP69tD1IE8dL5NQIazV8lcsJX-EQ7puYPmCKFoy0xFGMyxKPhj8tFlBzxAAjH59U0=","summary":[]},{"id":"sh_0bd76e143a399a9d006ad072300a5c87d09297d937ee05914b","type":"shell_call","status":"completed","action":{"commands":["python3
+          -c ''print(sum(range(1, 11)))''"],"max_output_length":null,"timeout_ms":null},"call_id":"call_KqaOGLFFMRlSunH5yf6TtPJx","environment":null}],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","description":"Get the IANA time zone for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":851,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":43,"output_tokens_details":{"reasoning_tokens":9},"total_tokens":894},"user":null,"metadata":{}},"sequence_number":23}'
+      - ordinal: 36
+        elapsed_ms: 2987.358
+        direction: client
+        opcode: 1
+        fin: true
+        text: '{"type":"response.steer","previous_response_id":"resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333","input":"Keep
+          the remaining tool steps and use their actual results. Change the final answer to one short bullet per result. Preserve
+          every earlier verification marker and include CLIENT_STEER_002. This update is not a tool result: wait for the outstanding
+          client output before continuing. Do not repeat completed calls."}'
+      - ordinal: 37
+        elapsed_ms: 3172.93
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.steer.accepted","steer":{"id":"steer_9d25cc472d3f40e78b652a3407407708","previous_response_id":"resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333"},"sequence_number":24}'
+      - ordinal: 38
+        elapsed_ms: 3174.069
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.steer.pending","steer":{"id":"steer_9d25cc472d3f40e78b652a3407407708","previous_response_id":"resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333"},"reason":"waiting_for_required_input","required_input":[{"type":"shell_call_output","call_id":"call_KqaOGLFFMRlSunH5yf6TtPJx"}],"sequence_number":25}'
+      - ordinal: 39
+        elapsed_ms: 3176.117
+        direction: client
+        opcode: 1
+        fin: true
+        text: '{"type":"response.create","model":"gpt-6-sol","max_output_tokens":8192,"input":[{"type":"shell_call_output","call_id":"call_KqaOGLFFMRlSunH5yf6TtPJx","output":[{"stdout":"55\n","stderr":"","outcome":{"type":"exit","exit_code":0}}]}],"store":true,"tools":[{"type":"tool_search","execution":"client","description":"Search
+          the client tool catalog for tools that can satisfy the request.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"function","name":"get_weather","description":"Get
+          the current weather for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"get_exchange_rate","description":"Get
+          the exchange rate between two currencies","parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"search_hotels","description":"Search
+          for hotels in a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"namespace","name":"travel","description":"Travel
+          location tools","tools":[{"type":"function","name":"get_timezone","description":"Get the IANA time zone for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"get_coordinates","description":"Get
+          latitude and longitude for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"calculate_distance","description":"Calculate
+          the distance between two cities","parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true,"defer_loading":true}]},{"type":"custom","name":"agentic_raw_echo","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK."},{"type":"shell","environment":{"type":"local"}}],"parallel_tool_calls":false,"tool_choice":"auto","previous_response_id":"resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333"}'
+      - ordinal: 40
+        elapsed_ms: 3434.026
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.created","response":{"id":"resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec","object":"response","created_at":1792045616,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","description":"Get the IANA time zone for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}'
+      - ordinal: 41
+        elapsed_ms: 3475.796
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.in_progress","response":{"id":"resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec","object":"response","created_at":1792045616,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","description":"Get the IANA time zone for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}'
+      - ordinal: 42
+        elapsed_ms: 3923.188
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.added","item":{"id":"ctc_0bd76e143a399a9d006ad07231408887d0a971ba9f94764364","type":"custom_tool_call","status":"in_progress","call_id":"call_ILQ6V6UxAPBkvJTuAtg6enBK","input":"","name":"agentic_raw_echo"},"output_index":0,"sequence_number":2}'
+      - ordinal: 43
+        elapsed_ms: 3924.748
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.custom_tool_call_input.delta","delta":"CUSTOM","item_id":"ctc_0bd76e143a399a9d006ad07231408887d0a971ba9f94764364","obfuscation":"o3LLxZSrbi","output_index":0,"sequence_number":3}'
+      - ordinal: 44
+        elapsed_ms: 3926.027
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.custom_tool_call_input.delta","delta":"_C","item_id":"ctc_0bd76e143a399a9d006ad07231408887d0a971ba9f94764364","obfuscation":"dlMqXtYLXpgwik","output_index":0,"sequence_number":4}'
+      - ordinal: 45
+        elapsed_ms: 3928.048
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.custom_tool_call_input.delta","delta":"AS","item_id":"ctc_0bd76e143a399a9d006ad07231408887d0a971ba9f94764364","obfuscation":"qdLQ9zffPFvTC2","output_index":0,"sequence_number":5}'
+      - ordinal: 46
+        elapsed_ms: 3929.0
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.custom_tool_call_input.delta","delta":"SET","item_id":"ctc_0bd76e143a399a9d006ad07231408887d0a971ba9f94764364","obfuscation":"vyiViPmRvKJ0S","output_index":0,"sequence_number":6}'
+      - ordinal: 47
+        elapsed_ms: 3930.621
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.custom_tool_call_input.delta","delta":"TE","item_id":"ctc_0bd76e143a399a9d006ad07231408887d0a971ba9f94764364","obfuscation":"G4PyrcJWopiI1K","output_index":0,"sequence_number":7}'
+      - ordinal: 48
+        elapsed_ms: 3966.481
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.custom_tool_call_input.delta","delta":"_OK","item_id":"ctc_0bd76e143a399a9d006ad07231408887d0a971ba9f94764364","obfuscation":"InO8FlyO58dYI","output_index":0,"sequence_number":8}'
+      - ordinal: 49
+        elapsed_ms: 3972.257
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.custom_tool_call_input.delta","delta":"\n","item_id":"ctc_0bd76e143a399a9d006ad07231408887d0a971ba9f94764364","obfuscation":"QVhQeieUo0imfCw","output_index":0,"sequence_number":9}'
+      - ordinal: 50
+        elapsed_ms: 3995.093
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.custom_tool_call_input.done","input":"CUSTOM_CASSETTE_OK\n","item_id":"ctc_0bd76e143a399a9d006ad07231408887d0a971ba9f94764364","output_index":0,"sequence_number":10}'
+      - ordinal: 51
+        elapsed_ms: 3995.534
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.done","item":{"id":"ctc_0bd76e143a399a9d006ad07231408887d0a971ba9f94764364","type":"custom_tool_call","status":"completed","call_id":"call_ILQ6V6UxAPBkvJTuAtg6enBK","input":"CUSTOM_CASSETTE_OK\n","name":"agentic_raw_echo"},"output_index":0,"sequence_number":11}'
+      - ordinal: 52
+        elapsed_ms: 4120.155
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.completed","response":{"id":"resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec","object":"response","created_at":1792045616,"status":"completed","access_programs":null,"background":false,"completed_at":1792045617,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[{"id":"ctc_0bd76e143a399a9d006ad07231408887d0a971ba9f94764364","type":"custom_tool_call","status":"completed","call_id":"call_ILQ6V6UxAPBkvJTuAtg6enBK","input":"CUSTOM_CASSETTE_OK\n","name":"agentic_raw_echo"}],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","description":"Get the IANA time zone for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":983,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":20,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":1003},"user":null,"metadata":{}},"sequence_number":12}'
+      - ordinal: 53
+        elapsed_ms: 4126.611
+        direction: client
+        opcode: 1
+        fin: true
+        text: '{"type":"response.steer","previous_response_id":"resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec","input":"Keep
+          the remaining tool steps and use their actual results. Change the final answer to one short bullet per result. Preserve
+          every earlier verification marker and include CLIENT_STEER_003. This update is not a tool result: wait for the outstanding
+          client output before continuing. Do not repeat completed calls."}'
+      - ordinal: 54
+        elapsed_ms: 4311.427
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.steer.accepted","steer":{"id":"steer_0524a87859494bab873c667821f71d1f","previous_response_id":"resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec"},"sequence_number":13}'
+      - ordinal: 55
+        elapsed_ms: 4315.15
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.steer.pending","steer":{"id":"steer_0524a87859494bab873c667821f71d1f","previous_response_id":"resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec"},"reason":"waiting_for_required_input","required_input":[{"type":"custom_tool_call_output","call_id":"call_ILQ6V6UxAPBkvJTuAtg6enBK"}],"sequence_number":14}'
+      - ordinal: 56
+        elapsed_ms: 4317.12
+        direction: client
+        opcode: 1
+        fin: true
+        text: '{"type":"response.create","model":"gpt-6-sol","max_output_tokens":8192,"input":[{"type":"custom_tool_call_output","call_id":"call_ILQ6V6UxAPBkvJTuAtg6enBK","output":"CUSTOM_CASSETTE_OUTPUT_OK"}],"store":true,"tools":[{"type":"tool_search","execution":"client","description":"Search
+          the client tool catalog for tools that can satisfy the request.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"function","name":"get_weather","description":"Get
+          the current weather for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"get_exchange_rate","description":"Get
+          the exchange rate between two currencies","parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"search_hotels","description":"Search
+          for hotels in a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"namespace","name":"travel","description":"Travel
+          location tools","tools":[{"type":"function","name":"get_timezone","description":"Get the IANA time zone for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"get_coordinates","description":"Get
+          latitude and longitude for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"calculate_distance","description":"Calculate
+          the distance between two cities","parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true,"defer_loading":true}]},{"type":"custom","name":"agentic_raw_echo","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK."},{"type":"shell","environment":{"type":"local"}}],"parallel_tool_calls":false,"tool_choice":"auto","previous_response_id":"resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec"}'
+      - ordinal: 57
+        elapsed_ms: 4569.742
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.created","response":{"id":"resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081","object":"response","created_at":1792045617,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","description":"Get the IANA time zone for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}'
+      - ordinal: 58
+        elapsed_ms: 4597.509
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.in_progress","response":{"id":"resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081","object":"response","created_at":1792045617,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","description":"Get the IANA time zone for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}'
+      - ordinal: 59
+        elapsed_ms: 5081.446
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.added","item":{"id":"fc_0bd76e143a399a9d006ad07232688087d095789e1de811d940","type":"function_call","status":"in_progress","arguments":"","call_id":"call_Zj1aAVKuuZT2xe6LchTWhrfe","name":"get_weather"},"output_index":0,"sequence_number":2}'
+      - ordinal: 60
+        elapsed_ms: 5084.147
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.function_call_arguments.delta","delta":"{\"","item_id":"fc_0bd76e143a399a9d006ad07232688087d095789e1de811d940","obfuscation":"S5OsZ7VQCFNAX8","output_index":0,"sequence_number":3}'
+      - ordinal: 61
+        elapsed_ms: 5093.644
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.function_call_arguments.delta","delta":"city","item_id":"fc_0bd76e143a399a9d006ad07232688087d095789e1de811d940","obfuscation":"eXqVTQgbMF6I","output_index":0,"sequence_number":4}'
+      - ordinal: 62
+        elapsed_ms: 5097.553
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.function_call_arguments.delta","delta":"\":\"","item_id":"fc_0bd76e143a399a9d006ad07232688087d095789e1de811d940","obfuscation":"HZPI6mXfZiVjL","output_index":0,"sequence_number":5}'
+      - ordinal: 63
+        elapsed_ms: 5100.596
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.function_call_arguments.delta","delta":"Paris","item_id":"fc_0bd76e143a399a9d006ad07232688087d095789e1de811d940","obfuscation":"lOpH87LwjbK","output_index":0,"sequence_number":6}'
+      - ordinal: 64
+        elapsed_ms: 5103.316
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.function_call_arguments.delta","delta":"\"}","item_id":"fc_0bd76e143a399a9d006ad07232688087d095789e1de811d940","obfuscation":"8iFPae0PGOe2B9","output_index":0,"sequence_number":7}'
+      - ordinal: 65
+        elapsed_ms: 5133.79
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.function_call_arguments.done","arguments":"{\"city\":\"Paris\"}","item_id":"fc_0bd76e143a399a9d006ad07232688087d095789e1de811d940","output_index":0,"sequence_number":8}'
+      - ordinal: 66
+        elapsed_ms: 5135.81
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.done","item":{"id":"fc_0bd76e143a399a9d006ad07232688087d095789e1de811d940","type":"function_call","status":"completed","arguments":"{\"city\":\"Paris\"}","call_id":"call_Zj1aAVKuuZT2xe6LchTWhrfe","name":"get_weather"},"output_index":0,"sequence_number":9}'
+      - ordinal: 67
+        elapsed_ms: 5257.854
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.completed","response":{"id":"resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081","object":"response","created_at":1792045617,"status":"completed","access_programs":null,"background":false,"completed_at":1792045618,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[{"id":"fc_0bd76e143a399a9d006ad07232688087d095789e1de811d940","type":"function_call","status":"completed","arguments":"{\"city\":\"Paris\"}","call_id":"call_Zj1aAVKuuZT2xe6LchTWhrfe","name":"get_weather"}],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","description":"Get the IANA time zone for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":1086,"input_tokens_details":{"cache_write_tokens":1083,"cached_tokens":0},"output_tokens":18,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":1104},"user":null,"metadata":{}},"sequence_number":10}'
+      - ordinal: 68
+        elapsed_ms: 5265.17
+        direction: client
+        opcode: 1
+        fin: true
+        text: '{"type":"response.steer","previous_response_id":"resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081","input":"Keep
+          the remaining tool steps and use their actual results. Change the final answer to one short bullet per result. Preserve
+          every earlier verification marker and include CLIENT_STEER_004. This update is not a tool result: wait for the outstanding
+          client output before continuing. Do not repeat completed calls."}'
+      - ordinal: 69
+        elapsed_ms: 5450.478
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.steer.accepted","steer":{"id":"steer_138c3685ab3e42478da4a9b7d28cb5f5","previous_response_id":"resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081"},"sequence_number":11}'
+      - ordinal: 70
+        elapsed_ms: 5452.033
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.steer.pending","steer":{"id":"steer_138c3685ab3e42478da4a9b7d28cb5f5","previous_response_id":"resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081"},"reason":"waiting_for_required_input","required_input":[{"type":"function_call_output","call_id":"call_Zj1aAVKuuZT2xe6LchTWhrfe","name":"get_weather"}],"sequence_number":12}'
+      - ordinal: 71
+        elapsed_ms: 5454.831
+        direction: client
+        opcode: 1
+        fin: true
+        text: '{"type":"response.create","model":"gpt-6-sol","max_output_tokens":8192,"input":[{"type":"function_call_output","call_id":"call_Zj1aAVKuuZT2xe6LchTWhrfe","output":"{\"city\":\"Paris\",\"condition\":\"clear\",\"temperature_c\":21}"}],"store":true,"tools":[{"type":"tool_search","execution":"client","description":"Search
+          the client tool catalog for tools that can satisfy the request.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"function","name":"get_weather","description":"Get
+          the current weather for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"get_exchange_rate","description":"Get
+          the exchange rate between two currencies","parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"search_hotels","description":"Search
+          for hotels in a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"namespace","name":"travel","description":"Travel
+          location tools","tools":[{"type":"function","name":"get_timezone","description":"Get the IANA time zone for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"get_coordinates","description":"Get
+          latitude and longitude for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"calculate_distance","description":"Calculate
+          the distance between two cities","parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true,"defer_loading":true}]},{"type":"custom","name":"agentic_raw_echo","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK."},{"type":"shell","environment":{"type":"local"}}],"parallel_tool_calls":false,"tool_choice":"auto","previous_response_id":"resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081"}'
+      - ordinal: 72
+        elapsed_ms: 5705.295
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.created","response":{"id":"resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869","object":"response","created_at":1792045618,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","description":"Get the IANA time zone for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}'
+      - ordinal: 73
+        elapsed_ms: 5733.436
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.in_progress","response":{"id":"resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869","object":"response","created_at":1792045618,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","description":"Get the IANA time zone for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}'
+      - ordinal: 74
+        elapsed_ms: 6278.868
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.added","item":{"id":"fc_0bd76e143a399a9d006ad072339b8087d0955adc956d90a6dd","type":"function_call","status":"in_progress","arguments":"","call_id":"call_qxqLUjsGe3JwOcltjMGCDOJg","name":"get_timezone","namespace":"travel"},"output_index":0,"sequence_number":2}'
+      - ordinal: 75
+        elapsed_ms: 6284.392
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.function_call_arguments.delta","delta":"{\"","item_id":"fc_0bd76e143a399a9d006ad072339b8087d0955adc956d90a6dd","obfuscation":"dSmvJYkacEDYkM","output_index":0,"sequence_number":3}'
+      - ordinal: 76
+        elapsed_ms: 6296.826
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.function_call_arguments.delta","delta":"city","item_id":"fc_0bd76e143a399a9d006ad072339b8087d0955adc956d90a6dd","obfuscation":"ZLbaHws1ePrw","output_index":0,"sequence_number":4}'
+      - ordinal: 77
+        elapsed_ms: 6301.426
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.function_call_arguments.delta","delta":"\":\"","item_id":"fc_0bd76e143a399a9d006ad072339b8087d0955adc956d90a6dd","obfuscation":"HG3uHi3yTwKiV","output_index":0,"sequence_number":5}'
+      - ordinal: 78
+        elapsed_ms: 6307.212
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.function_call_arguments.delta","delta":"Paris","item_id":"fc_0bd76e143a399a9d006ad072339b8087d0955adc956d90a6dd","obfuscation":"5sDdGaPFrYW","output_index":0,"sequence_number":6}'
+      - ordinal: 79
+        elapsed_ms: 6315.196
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.function_call_arguments.delta","delta":"\"}","item_id":"fc_0bd76e143a399a9d006ad072339b8087d0955adc956d90a6dd","obfuscation":"uamO9hT0qnjdbj","output_index":0,"sequence_number":7}'
+      - ordinal: 80
+        elapsed_ms: 6363.943
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.function_call_arguments.done","arguments":"{\"city\":\"Paris\"}","item_id":"fc_0bd76e143a399a9d006ad072339b8087d0955adc956d90a6dd","output_index":0,"sequence_number":8}'
+      - ordinal: 81
+        elapsed_ms: 6364.703
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.done","item":{"id":"fc_0bd76e143a399a9d006ad072339b8087d0955adc956d90a6dd","type":"function_call","status":"completed","arguments":"{\"city\":\"Paris\"}","call_id":"call_qxqLUjsGe3JwOcltjMGCDOJg","name":"get_timezone","namespace":"travel"},"output_index":0,"sequence_number":9}'
+      - ordinal: 82
+        elapsed_ms: 6498.742
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.completed","response":{"id":"resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869","object":"response","created_at":1792045618,"status":"completed","access_programs":null,"background":false,"completed_at":1792045619,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[{"id":"fc_0bd76e143a399a9d006ad072339b8087d0955adc956d90a6dd","type":"function_call","status":"completed","arguments":"{\"city\":\"Paris\"}","call_id":"call_qxqLUjsGe3JwOcltjMGCDOJg","name":"get_timezone","namespace":"travel"}],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","description":"Get the IANA time zone for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":1192,"input_tokens_details":{"cache_write_tokens":106,"cached_tokens":1083},"output_tokens":18,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":1210},"user":null,"metadata":{}},"sequence_number":10}'
+      - ordinal: 83
+        elapsed_ms: 6505.203
+        direction: client
+        opcode: 1
+        fin: true
+        text: '{"type":"response.steer","previous_response_id":"resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869","input":"Keep
+          the remaining tool steps and use their actual results. Change the final answer to one short bullet per result. Preserve
+          every earlier verification marker and include CLIENT_STEER_005. This update is not a tool result: wait for the outstanding
+          client output before continuing. Do not repeat completed calls."}'
+      - ordinal: 84
+        elapsed_ms: 6689.723
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.steer.accepted","steer":{"id":"steer_5e31f2d8557e4a3b9b70ba74f484abe3","previous_response_id":"resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869"},"sequence_number":11}'
+      - ordinal: 85
+        elapsed_ms: 6690.798
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.steer.pending","steer":{"id":"steer_5e31f2d8557e4a3b9b70ba74f484abe3","previous_response_id":"resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869"},"reason":"waiting_for_required_input","required_input":[{"type":"function_call_output","call_id":"call_qxqLUjsGe3JwOcltjMGCDOJg","name":"get_timezone"}],"sequence_number":12}'
+      - ordinal: 86
+        elapsed_ms: 6693.008
+        direction: client
+        opcode: 1
+        fin: true
+        text: '{"type":"response.create","model":"gpt-6-sol","max_output_tokens":8192,"input":[{"type":"function_call_output","call_id":"call_qxqLUjsGe3JwOcltjMGCDOJg","output":"{\"city\":\"Paris\",\"iana_timezone\":\"Europe/Paris\"}"}],"store":true,"tools":[{"type":"tool_search","execution":"client","description":"Search
+          the client tool catalog for tools that can satisfy the request.","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"function","name":"get_weather","description":"Get
+          the current weather for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"get_exchange_rate","description":"Get
+          the exchange rate between two currencies","parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"search_hotels","description":"Search
+          for hotels in a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"namespace","name":"travel","description":"Travel
+          location tools","tools":[{"type":"function","name":"get_timezone","description":"Get the IANA time zone for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"get_coordinates","description":"Get
+          latitude and longitude for a city","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true,"defer_loading":true},{"type":"function","name":"calculate_distance","description":"Calculate
+          the distance between two cities","parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true,"defer_loading":true}]},{"type":"custom","name":"agentic_raw_echo","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK."},{"type":"shell","environment":{"type":"local"}}],"parallel_tool_calls":false,"tool_choice":"auto","previous_response_id":"resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869"}'
+      - ordinal: 87
+        elapsed_ms: 6955.119
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.created","response":{"id":"resp_0bd76e143a399a9d006ad07234367c87d092e65f077a0a7b66","object":"response","created_at":1792045620,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","description":"Get the IANA time zone for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}'
+      - ordinal: 88
+        elapsed_ms: 6985.41
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.in_progress","response":{"id":"resp_0bd76e143a399a9d006ad07234367c87d092e65f077a0a7b66","object":"response","created_at":1792045620,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","description":"Get the IANA time zone for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}'
+      - ordinal: 89
+        elapsed_ms: 7416.237
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.added","item":{"id":"rs_0bd76e143a399a9d006ad07234be9c87d0b1fe17efae75af8a","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0HI0o5xYjxTmsgHN1MoHypd8gxjARxACIeJOk_mRQXjWi9E8gArMIvIZ3ghheXo_5zpEMRJZlTKiF2FNdUwYTpzlZKIuFDkbUi3Yg4lv5UsKsesuZhmuolgOkC0i7HGeZuFNbs8CldY-v8tEkAJp6i74QKjeFiNuA9S3X4VDsXXpwdh0roOTYQPAOSumM7FKAimfaD3bI9id06o-UxTrYPVCpdPIm6xEW75SdWZ0vu5xzIPxY0NEMxwO1p_mzW76xhog4xaCCy2e0NiEx888piTOnYMeyPIlOjyJGwidDkRwOR2XHWjngBs8ogwl9WdXbcZ8KTxqL5NQweru8RUQG7F40p11vUw-Aa9V6w-rSICgTvV2A6S8Afqwqr941rhU2CiPM_QjkX1AmoguACUrZJ-EZ_A0EgDd1gQLT18VBIlmhAVVWOH8-NFDvLDXZ7VLxUN4CuHjtf6Yd3g3z2SDedtPkMuWZ5jsms5tCd5a9TjetcKiTFy4XJHDlZnpG2ZIEZQEOxuPFkLay5-lkpJe3WRQwHlulIzovDwxHKVwiPLzds-WsJnocA_ArqK96UhD42L4sEs-4vnmxIJdA3SdkZV0YZIUP8Fd45eGDSGCkPfbjWfYdMT7GWUfO9F15NEvKjqhNf7j8ZgKGCwaun9-Q7q_P_oWXeGRiv0cH133lqcVjlvdzK1d67ZPVxXhdngyCTmekHeSreaAwx12nwKJ9YLq5Jz1FFDSyzGp6dg_nvB7RRRar6zV6ySxoMn5wAHvuW38jbvpSJkrM-FC6GRkC9z1m6g0ntTfxApKwn4fEQmdkC8XbDqOYZbM-RxkSgxDu1DtxgE8uxpXxk9CCKyrakL4iHeATANG7kDPuyGEbanfkq7TkaX4NMFT-hnH-w064ojAy2yzLI1ac3GZyJYJ0T7gR56wNL0KJH8-ivPk38i4dHj4o7lSBKFR4qAZecKPXSJxnx3Rk1So8chZOPpKSvHf1oGtUWJe9TDzROP87iPVsWJl0CK6mA9u_kERPlxChNKK11klHZUNjhf6N_x4djian6Goow6X9-V6vbM41WCcmmAwcK6vd3UGb8rQYIghUsSp_ALjeB2vOxVR7-GutRlnnSb0IlHmMnHfWvEXQYtcfdtsi9E6sMCjYz9nqv1TwSJY9Dpt9lHn4YgUJul78pp4IZlSuFga5CvrX_8SPh8oRzNoSmnvDvSLxr6bm9iQAV2b","summary":[]},"output_index":0,"sequence_number":2}'
+      - ordinal: 90
+        elapsed_ms: 8149.424
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.done","item":{"id":"rs_0bd76e143a399a9d006ad07234be9c87d0b1fe17efae75af8a","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0HI1w4c9sKGnsrIdcl2O7J7_Ett6YwUFHBn8QOdnNrcMabgg1k_uM41zzUDiEk4REEVLPkNKRIeWwZVwjdUZhDf_l2V6f-ySyGpRizwo4GCllFOnxTMd1JhQ1zgWxaNp7UESlFTx44S4HGtXmneGX00v8ZCHmPkwttlqnGUwFsxW9N5-j4XpF5lhvMeRcOIeTx13WjpiymHu8ww3CF0EFvVg-SIqGnVZVjOaV3FC6lerxcfGoQmunPKwD_vuM6ncZfvRBYmctvNwPAEGzOvNfpUcjwa0-AhhIxmMm27BZAibM_DnKbwtpMGzKY5ofjtBL-zjNAy4Sga9I8lyj9bBb9bDsN_KYXJdg6vKwraGL66IJukE-L2M8ZFifC3YVz0vHKfY6tMCiynVqVjmhXwGIJXIzCZDZ6TyGTfH1hpNH9DHM4aBU63wB1XKD6oBzubOnC__DRTyMxzHDr4dP3dlKKS6Ge9HrvgYB5R1fQVqOWufKcfM4MRLRksyUkS1GhsctwRmgVzY7OZiM0MMuSUY89flk4hoprhFl4vgJmSHPYCfvXQmnomQduDlSBvDKl9Yhx1hllys18dPufjwV1yZ4NCSclIo1vZGbkmmkOX2svEtjlqgw7UkiLDUlT6B6aE7FWRLRVFy2ho0DWKszT1QrK1Ocu8sWWZ957wlqv4Af0vFRPcDoDjQaqPMahK8Vp4JfebJ0uVlvyY-e7AWNVQmXpuYGJ2PhP0zYW8XgTLbEC712BBUsDc4HCx0BvD1x6eCUtCD3KuEjluHd-kSCisr95ESQmb47D0jvFhCO68xEhdzCWjfExO0i9FlR8oOVto9ZSOQNqDBjOVuDy3fm5J9nYH2IscqU7eeBlpp5ULkV7DumBk0C43qas8V4q88DHRPgXwjvHsZ6CMLah0g_KKiYWuHx3_zS3qxk0hSD9L5ZSB6XDUURfqq8oLjlf11Q9ip2JtKzH_DCRbuk7gYY1d4cEFPwdm1KUTLQkQB6hQ5kdu-b1_5HY8Dtyi4y878loNqoNY1m5uhBDzurD9ExHsL7Ba5MbHUf23k0Sku7A1t_rJLZPRpOCMAbcn5aOKm1KGa4WlKwiJ9RgqOVYFZf0W_GJlQgOluUtyLSEHAytFpXL3zFeWwvcsgzhR230VWdLpg6y4UM8QeLQ00rtcQDY_11oKfPaYuzEG6jGDBTCJK5Wtsk3FshAY1FhJdIO9VkgPpS5UyLZ94P-dSZF3AafhSBxEyx2MZCFYJqcWLSkLF9yLfAB3_hOOKg_GyVomZDp3TDoRRqZCtnSgzPQ0Ek8wqzBRCg2BdID3wrzIik8SZmCUIMlbUA7KR9IorLisc-MlbfOmvSJH612Vv6GwjOztM2kbud71IaUXRjBh3MFkg-aUgzlw2z8oq87tZHxhFA1fbQJCNs2WujoaQNY7pNgTuH4vJYO9VLl8nWRWyXuKFswlzcXdn7K6e-hbe-sYVjlL7WGG_NQFO21dE8wVZuq-deua3tl1Hup-g5EMoAxmZDw7DxyCn8c7KA2McTFzqS-zJ8QEURN-4FFXNFb05RGaVsR0PZB4OquatcZ_-L7DNGBb6uYY3TXLtQZWKgp1MLYLAPJhxF8DWUaX3JONfBu67fSOFRs6CObTDLgwQuHDKcJp-lS-DLOe2x8tmQ-qizt-g34YzRLYcd9P9KZEVvgHpAAsrYfNW-DsX3yxWgl8n0wLgqGLSkLBdPJrPy2kUoaQ7-AY6sBLkjU9_gx9AaXrUsaACXiOEgdAUHOMj6FMf9Yty6dxDDDfm6uDswvvF0l1j5t3WEqz_2HzS3i9CNAgFoULZBSm8HAYOdPB56y_PYelJT9Dea7QOKNdMgl9n1zzqP0WXd8e6VKzXDX7Ps18RxT7_aIAgpSF31mVcVhf669-mrKDeDHR8ucyXJUCp7PeyJn3LdO1tlwCNLo-2VtuKGfAwJTit8b38_5xSDDmwAfgBsxULGZP6GeJlDTcD1QX7UA1FUJ0T1_JFjLYlYACI-GO3CSfPYttijlScp23-ZrBCfXuRps_Dmd7_FCPvD_KU4r4PHCStX7RFhhexbgAxff2hC_heX4fKPxRO3cy3LUT09b-sz5BL3K2AqwfxnOyOAVSDQLo_VyuG8scMajS7lEt9U3F-yZTwCO85fuksOinY1oL6DVek2W52daFdeOPugdv_13HKw33MXQa948V709_LvkbEovqDK-rE909Kv8_5a7LAkZMtFFHfn2GZwDi73go0I_-MU9tgeqj5BtLuWFHIAMjMLhfBNllW_c-Im9Txr6E7In1Ah3_OmC3-wfv0paxGxazmAw9Oqc7mdIdktRPEiTy1wHd6zVNaHuqivTe2OkmmBJxfqrvqDZnGi8dloUYSf6GeCfERBlL9GKI3W_zEXKmFVnvUoG-LfqHlY59gn1Gvab3s1OU3W03Safcg9Y_a","summary":[]},"output_index":0,"sequence_number":3}'
+      - ordinal: 91
+        elapsed_ms: 8152.908
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.added","item":{"id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"},"output_index":1,"sequence_number":4}'
+      - ordinal: 92
+        elapsed_ms: 8153.315
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.content_part.added","content_index":0,"item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","output_index":1,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":5}'
+      - ordinal: 93
+        elapsed_ms: 8153.75
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"-","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"67cu5PslgFgI6FH","output_index":1,"sequence_number":6}'
+      - ordinal: 94
+        elapsed_ms: 8184.358
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" Shell","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"P0xrJP5W3b","output_index":1,"sequence_number":7}'
+      - ordinal: 95
+        elapsed_ms: 8186.185
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":":","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"wA5rJ9ISm0c3aG7","output_index":1,"sequence_number":8}'
+      - ordinal: 96
+        elapsed_ms: 8188.704
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" `","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"EmHvFlNxilFPNt","output_index":1,"sequence_number":9}'
+      - ordinal: 97
+        elapsed_ms: 8192.706
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"55","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"OF1w1RLWCY9pLS","output_index":1,"sequence_number":10}'
+      - ordinal: 98
+        elapsed_ms: 8196.327
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"`","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"Qrf0SNMmbwqmawy","output_index":1,"sequence_number":11}'
+      - ordinal: 99
+        elapsed_ms: 8201.624
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" (","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"IsSI4vW7nLOPla","output_index":1,"sequence_number":12}'
+      - ordinal: 100
+        elapsed_ms: 8316.451
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"exit","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"miHz9OeS9El6","output_index":1,"sequence_number":13}'
+      - ordinal: 101
+        elapsed_ms: 8317.849
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" code","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"KDPHD4mgYyu","output_index":1,"sequence_number":14}'
+      - ordinal: 102
+        elapsed_ms: 8318.821
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" ","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"Ze7OObw4ZJEwZbZ","output_index":1,"sequence_number":15}'
+      - ordinal: 103
+        elapsed_ms: 8319.68
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"0","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"h5UsUiFv4uM4dg6","output_index":1,"sequence_number":16}'
+      - ordinal: 104
+        elapsed_ms: 8320.444
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":").\n","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"uw48SlTpFBiLq","output_index":1,"sequence_number":17}'
+      - ordinal: 105
+        elapsed_ms: 8320.946
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"-","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"q6Csb4puZx4FcoX","output_index":1,"sequence_number":18}'
+      - ordinal: 106
+        elapsed_ms: 8321.438
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" Custom","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"ay2Bb2GtN","output_index":1,"sequence_number":19}'
+      - ordinal: 107
+        elapsed_ms: 8321.84
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" echo","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"Mxryd4IgYIH","output_index":1,"sequence_number":20}'
+      - ordinal: 108
+        elapsed_ms: 8322.25
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":":","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"wkjyYqxDXocwPut","output_index":1,"sequence_number":21}'
+      - ordinal: 109
+        elapsed_ms: 8322.683
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" `","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"cGfEMGncz4rPUt","output_index":1,"sequence_number":22}'
+      - ordinal: 110
+        elapsed_ms: 8323.055
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"CUSTOM","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"hUnYbwUqLR","output_index":1,"sequence_number":23}'
+      - ordinal: 111
+        elapsed_ms: 8323.426
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"_C","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"PHADoGSZJJCV7k","output_index":1,"sequence_number":24}'
+      - ordinal: 112
+        elapsed_ms: 8323.809
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"AS","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"CqooN2RyM3caDP","output_index":1,"sequence_number":25}'
+      - ordinal: 113
+        elapsed_ms: 8324.18
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"SET","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"tjvGx3HZaiw2u","output_index":1,"sequence_number":26}'
+      - ordinal: 114
+        elapsed_ms: 8324.585
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"TE","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"EZqVNLcnfwZ3N1","output_index":1,"sequence_number":27}'
+      - ordinal: 115
+        elapsed_ms: 8324.96
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"_OK","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"K4blIERQUh3jU","output_index":1,"sequence_number":28}'
+      - ordinal: 116
+        elapsed_ms: 8325.333
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"`","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"TINzlczN3FvVvie","output_index":1,"sequence_number":29}'
+      - ordinal: 117
+        elapsed_ms: 8325.723
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" →","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"9RjURF9vsvKrSb","output_index":1,"sequence_number":30}'
+      - ordinal: 118
+        elapsed_ms: 8326.115
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" `","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"oBoi8zyoJC93l7","output_index":1,"sequence_number":31}'
+      - ordinal: 119
+        elapsed_ms: 8326.512
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"CUSTOM","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"kEqdC1uMSh","output_index":1,"sequence_number":32}'
+      - ordinal: 120
+        elapsed_ms: 8326.926
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"_C","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"trmqVWlnR1rWLl","output_index":1,"sequence_number":33}'
+      - ordinal: 121
+        elapsed_ms: 8327.32
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"AS","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"JGEagoq67lhhWY","output_index":1,"sequence_number":34}'
+      - ordinal: 122
+        elapsed_ms: 8328.34
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"SET","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"4Q7W3hFHfPCRa","output_index":1,"sequence_number":35}'
+      - ordinal: 123
+        elapsed_ms: 8352.373
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"TE","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"bjarjMms0GnU4T","output_index":1,"sequence_number":36}'
+      - ordinal: 124
+        elapsed_ms: 8354.075
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"_OUTPUT","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"PQfZ5Vet1","output_index":1,"sequence_number":37}'
+      - ordinal: 125
+        elapsed_ms: 8355.023
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"_OK","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"KRZ0ZWTpnIcsG","output_index":1,"sequence_number":38}'
+      - ordinal: 126
+        elapsed_ms: 8356.056
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"`.\n","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"uvpQ9suG2uVs9","output_index":1,"sequence_number":39}'
+      - ordinal: 127
+        elapsed_ms: 8358.811
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"-","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"U9roLAAkVAmHyeK","output_index":1,"sequence_number":40}'
+      - ordinal: 128
+        elapsed_ms: 8362.567
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" Paris","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"bHa9ez2XQ2","output_index":1,"sequence_number":41}'
+      - ordinal: 129
+        elapsed_ms: 8367.301
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" weather","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"GYMssnGG","output_index":1,"sequence_number":42}'
+      - ordinal: 130
+        elapsed_ms: 8367.909
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":":","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"lFH8OEUHFAsZDJs","output_index":1,"sequence_number":43}'
+      - ordinal: 131
+        elapsed_ms: 8372.997
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" clear","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"nkip8deDIk","output_index":1,"sequence_number":44}'
+      - ordinal: 132
+        elapsed_ms: 8375.298
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":",","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"f6YYvjDGUxkn3xq","output_index":1,"sequence_number":45}'
+      - ordinal: 133
+        elapsed_ms: 8375.781
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" ","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"PDrCuIWZcOEFwtP","output_index":1,"sequence_number":46}'
+      - ordinal: 134
+        elapsed_ms: 8394.782
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"21","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"4cEMgg92EYTKxD","output_index":1,"sequence_number":47}'
+      - ordinal: 135
+        elapsed_ms: 8397.88
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"°C","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"pBtvu5cECrleU9","output_index":1,"sequence_number":48}'
+      - ordinal: 136
+        elapsed_ms: 8483.343
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":".\n","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"t1AcLJht1Tm43a","output_index":1,"sequence_number":49}'
+      - ordinal: 137
+        elapsed_ms: 8484.549
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"-","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"LV0RcMei8ThyB0l","output_index":1,"sequence_number":50}'
+      - ordinal: 138
+        elapsed_ms: 8485.151
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" Paris","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"0anBRgJktK","output_index":1,"sequence_number":51}'
+      - ordinal: 139
+        elapsed_ms: 8485.708
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" time","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"DmeiV8BDM2A","output_index":1,"sequence_number":52}'
+      - ordinal: 140
+        elapsed_ms: 8486.231
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" zone","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"hVcqm1nCkAK","output_index":1,"sequence_number":53}'
+      - ordinal: 141
+        elapsed_ms: 8486.768
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":":","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"eXf3i61Mg3miTOf","output_index":1,"sequence_number":54}'
+      - ordinal: 142
+        elapsed_ms: 8487.256
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" `","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"WfdmaRg665p6T0","output_index":1,"sequence_number":55}'
+      - ordinal: 143
+        elapsed_ms: 8487.775
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"Europe","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"hFH1nV4zXd","output_index":1,"sequence_number":56}'
+      - ordinal: 144
+        elapsed_ms: 8488.293
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"/","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"LYDgYoliHlIgYuF","output_index":1,"sequence_number":57}'
+      - ordinal: 145
+        elapsed_ms: 8488.798
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"Paris","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"GOKejTKytUh","output_index":1,"sequence_number":58}'
+      - ordinal: 146
+        elapsed_ms: 8489.286
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"`.\n","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"Rkqe4zHK1wDpD","output_index":1,"sequence_number":59}'
+      - ordinal: 147
+        elapsed_ms: 8489.8
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"-","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"iXoYZqn0ucWYuM0","output_index":1,"sequence_number":60}'
+      - ordinal: 148
+        elapsed_ms: 8490.284
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" Verification","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"Jg8","output_index":1,"sequence_number":61}'
+      - ordinal: 149
+        elapsed_ms: 8490.807
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" markers","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"dgFgjlm6","output_index":1,"sequence_number":62}'
+      - ordinal: 150
+        elapsed_ms: 8491.304
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":":","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"kRQ4PKyTtaHnb9N","output_index":1,"sequence_number":63}'
+      - ordinal: 151
+        elapsed_ms: 8491.819
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" `","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"JfDrCnvSM1L00B","output_index":1,"sequence_number":64}'
+      - ordinal: 152
+        elapsed_ms: 8492.541
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"CLIENT","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"uArzIenazH","output_index":1,"sequence_number":65}'
+      - ordinal: 153
+        elapsed_ms: 8494.684
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"_ST","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"Ne9W90GXlCre0","output_index":1,"sequence_number":66}'
+      - ordinal: 154
+        elapsed_ms: 8497.817
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"E","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"69hzoif3AkT6v8c","output_index":1,"sequence_number":67}'
+      - ordinal: 155
+        elapsed_ms: 8501.01
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"ER","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"vZNNCcQvXytnm7","output_index":1,"sequence_number":68}'
+      - ordinal: 156
+        elapsed_ms: 8503.903
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"_","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"LqLeYlc1gkjsPqb","output_index":1,"sequence_number":69}'
+      - ordinal: 157
+        elapsed_ms: 8526.013
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"001","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"W9zH77If0dSQA","output_index":1,"sequence_number":70}'
+      - ordinal: 158
+        elapsed_ms: 8536.143
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"`,","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"KVecH55v9WaJJR","output_index":1,"sequence_number":71}'
+      - ordinal: 159
+        elapsed_ms: 8542.184
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" `","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"BIOFfC30mXBLGK","output_index":1,"sequence_number":72}'
+      - ordinal: 160
+        elapsed_ms: 8543.247
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"CLIENT","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"8gp7dqkLJL","output_index":1,"sequence_number":73}'
+      - ordinal: 161
+        elapsed_ms: 8546.442
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"_ST","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"em2qk1n2DUkBo","output_index":1,"sequence_number":74}'
+      - ordinal: 162
+        elapsed_ms: 8548.553
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"E","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"fq85cUMRa7eb3Iu","output_index":1,"sequence_number":75}'
+      - ordinal: 163
+        elapsed_ms: 8550.84
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"ER","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"FqpBPCIMtYuW10","output_index":1,"sequence_number":76}'
+      - ordinal: 164
+        elapsed_ms: 8555.315
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"_","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"eqlIt8v28aeRL7O","output_index":1,"sequence_number":77}'
+      - ordinal: 165
+        elapsed_ms: 8567.565
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"002","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"lZiNA720fuClL","output_index":1,"sequence_number":78}'
+      - ordinal: 166
+        elapsed_ms: 8579.736
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"`,","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"zqFBvgODZGlAkA","output_index":1,"sequence_number":79}'
+      - ordinal: 167
+        elapsed_ms: 8580.48
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" `","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"aVERbkNZMnRKOk","output_index":1,"sequence_number":80}'
+      - ordinal: 168
+        elapsed_ms: 8581.211
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"CLIENT","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"oHYmWLulUK","output_index":1,"sequence_number":81}'
+      - ordinal: 169
+        elapsed_ms: 8584.598
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"_ST","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"8PAJqGLPfuS1P","output_index":1,"sequence_number":82}'
+      - ordinal: 170
+        elapsed_ms: 8586.959
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"E","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"SHFNoeuupOecVeV","output_index":1,"sequence_number":83}'
+      - ordinal: 171
+        elapsed_ms: 8589.775
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"ER","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"kbIlMgg6amZmYA","output_index":1,"sequence_number":84}'
+      - ordinal: 172
+        elapsed_ms: 8591.611
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"_","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"9YYpgUUW2LxYqy2","output_index":1,"sequence_number":85}'
+      - ordinal: 173
+        elapsed_ms: 8610.15
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"003","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"SC5YKcvvzxyOz","output_index":1,"sequence_number":86}'
+      - ordinal: 174
+        elapsed_ms: 8620.173
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"`,","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"pphkdKSiQzYtsA","output_index":1,"sequence_number":87}'
+      - ordinal: 175
+        elapsed_ms: 8623.226
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" `","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"HHmVqB2TQtfIJe","output_index":1,"sequence_number":88}'
+      - ordinal: 176
+        elapsed_ms: 8625.429
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"CLIENT","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"OPLzoLHLRO","output_index":1,"sequence_number":89}'
+      - ordinal: 177
+        elapsed_ms: 8629.49
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"_ST","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"x9LFL32ZKvNT3","output_index":1,"sequence_number":90}'
+      - ordinal: 178
+        elapsed_ms: 8630.157
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"E","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"FxrKnhrvCAQOct0","output_index":1,"sequence_number":91}'
+      - ordinal: 179
+        elapsed_ms: 8633.138
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"ER","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"T3qDgpGv9IwpiL","output_index":1,"sequence_number":92}'
+      - ordinal: 180
+        elapsed_ms: 8634.871
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"_","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"AjFAWNzjvAjibg1","output_index":1,"sequence_number":93}'
+      - ordinal: 181
+        elapsed_ms: 8654.12
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"004","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"IwDokNWdjdx0i","output_index":1,"sequence_number":94}'
+      - ordinal: 182
+        elapsed_ms: 8663.124
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"`,","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"A024zhF16JOLPA","output_index":1,"sequence_number":95}'
+      - ordinal: 183
+        elapsed_ms: 8666.655
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":" `","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"f1VintBc2Jh1yS","output_index":1,"sequence_number":96}'
+      - ordinal: 184
+        elapsed_ms: 8668.571
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"CLIENT","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"LFNKX5e2aE","output_index":1,"sequence_number":97}'
+      - ordinal: 185
+        elapsed_ms: 8671.357
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"_ST","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"RlQAbYjfLZO87","output_index":1,"sequence_number":98}'
+      - ordinal: 186
+        elapsed_ms: 8675.247
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"E","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"DftYoOlOhp2HiTT","output_index":1,"sequence_number":99}'
+      - ordinal: 187
+        elapsed_ms: 8677.582
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"ER","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"2XnQHkEzqeLee8","output_index":1,"sequence_number":100}'
+      - ordinal: 188
+        elapsed_ms: 8680.794
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"_","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"FL5HqIW7XinHtmZ","output_index":1,"sequence_number":101}'
+      - ordinal: 189
+        elapsed_ms: 8697.085
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"005","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"GBsQRNfQkfoHv","output_index":1,"sequence_number":102}'
+      - ordinal: 190
+        elapsed_ms: 8705.141
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.delta","content_index":0,"delta":"`.","item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"obfuscation":"9yUGuuuEY4Idqt","output_index":1,"sequence_number":103}'
+      - ordinal: 191
+        elapsed_ms: 8745.165
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_text.done","content_index":0,"item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","logprobs":[],"output_index":1,"sequence_number":104,"text":"-
+          Shell: `55` (exit code 0).\n- Custom echo: `CUSTOM_CASSETTE_OK` → `CUSTOM_CASSETTE_OUTPUT_OK`.\n- Paris weather: clear,
+          21°C.\n- Paris time zone: `Europe/Paris`.\n- Verification markers: `CLIENT_STEER_001`, `CLIENT_STEER_002`, `CLIENT_STEER_003`,
+          `CLIENT_STEER_004`, `CLIENT_STEER_005`."}'
+      - ordinal: 192
+        elapsed_ms: 8746.506
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.content_part.done","content_index":0,"item_id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","output_index":1,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"-
+          Shell: `55` (exit code 0).\n- Custom echo: `CUSTOM_CASSETTE_OK` → `CUSTOM_CASSETTE_OUTPUT_OK`.\n- Paris weather: clear,
+          21°C.\n- Paris time zone: `Europe/Paris`.\n- Verification markers: `CLIENT_STEER_001`, `CLIENT_STEER_002`, `CLIENT_STEER_003`,
+          `CLIENT_STEER_004`, `CLIENT_STEER_005`."},"sequence_number":105}'
+      - ordinal: 193
+        elapsed_ms: 8747.626
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.output_item.done","item":{"id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"-
+          Shell: `55` (exit code 0).\n- Custom echo: `CUSTOM_CASSETTE_OK` → `CUSTOM_CASSETTE_OUTPUT_OK`.\n- Paris weather: clear,
+          21°C.\n- Paris time zone: `Europe/Paris`.\n- Verification markers: `CLIENT_STEER_001`, `CLIENT_STEER_002`, `CLIENT_STEER_003`,
+          `CLIENT_STEER_004`, `CLIENT_STEER_005`."}],"phase":"final_answer","role":"assistant"},"output_index":1,"sequence_number":106}'
+      - ordinal: 194
+        elapsed_ms: 8871.154
+        direction: server
+        opcode: 1
+        fin: true
+        text: '{"type":"response.completed","response":{"id":"resp_0bd76e143a399a9d006ad07234367c87d092e65f077a0a7b66","object":"response","created_at":1792045620,"status":"completed","access_programs":null,"background":false,"completed_at":1792045622,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":8192,"max_tool_calls":null,"model":"gpt-6-sol","moderation":null,"output":[{"id":"rs_0bd76e143a399a9d006ad07234be9c87d0b1fe17efae75af8a","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0HI2u7-VP8n2zRInjk9nPsusauPTKC-BkWEekUbOjAB3t5wYFv0ue5GSF-ffv96WXKMOPt783nQgCV0ioO5Kp8VouxVhf5HySaz_kXrpgWg5dHPynhH_cs4g6EaauQ7Y60voCBF52dOT8gafdbUxBgeSPsmj28N2G9incKAWptlZYBaRt6xRd3VZtl1x7RD_kQoY2tJNCuHINJGtM-btLw0e9VcsRRd7MRcsB7sFjv0Xnt07emWD560tViWZTiJ8VloXQukEw1IDfM65Y8lcL0fBLlOZzE7wmkjHpjxxqcyggB3zLwEWu9KbF4qHKdMqN0SlfRHhJvMMZM5giCEQ71J0Y0EDju0a9JWlZyomZpjGMFqdJpiq6u_z80SC0dujXGCPDJByh0Kmel24Ct6JwSZwkqpbXupYmkxlgh_AX4qiMjJgg25XwweK2iwZbUtLOBcUX1sS4BAW7qx_Qfadcuv8x7-IljSidC36juIpt1fEFRLdJ6sbNE-u1S3Ecux5WW4mSG0Be_mGp4YKqF-Gr79kGiFwTpcvzY6q_lWN3AkTR9M2h1ZrQkott8Bu6RjfafaUW2Cfd8CfbPjxcAWoUzMVjImml1rjt19Q6VwdA-81CJOxYFHAi4XLTU3_DHRIdfGMShHYR6TdqC0XbMNcXWVegntZt4R6e30AioznMyRtQd8l9wOhlNOWyCcl-0nmT9EZqi_zYuvF6nyYQ8RRrYgOHxVCw_DSGDY9CHgr5xyra0eK2JWf-kzPDEtPojh5hQrILW0fSzggFA0Emr9WP_gC7trETJ3NJ2VXr3R2sAtW8n5qGjwmsgNIzBflu2f9DqiRxaxfWSbf1DpzUCBEe2csze_u_5eL7-JhRej3VZPA5DXTAQ1jzuRrkY7zb6pR1J13lHhUQpF5mt0M_J_uQM5H3bH3rINjqYCW6PjcsBHevnENnt2nAnC0mF8yipSsYzY46BhUmT6VQED_ihvqgi8dcudTM1TD-5qa56NHaZl3amNvIrrC7Yb3S5AoOfI9G9Z4rvba9l4irvl6SPvMxxddxwKLCI7U5o0tTq8lIOMuq_DTxKFZ9bwZazE0u_IPBM5iMr10nLuvV6sGvfy7LuuiKXB6qBKyVSbX8NMTY_vBy2og4pxxkUtFCbF-WoKkYUGBoc5MozT1l4D8_ydE3Hug1KCIqX3aFWJZ4EB1QTTj8Q-U_GSkxLdkznZz1Zzvu3Mlzb_m9cKG4cat-LDTNGqUUi64s-LFYDVcXlee82uh3CPoi0bVlcetSHewQetTGE-rpuHyhcPNISjMQQ4-YVVuFILidhxc5cdd1fi3FtC3ueLx8Uv7QjJeSQ2NWD7B5KQg_Q1FKBVKTw6wmERh64pGOtkS4Vb-kgLDU2Lvkk_eueAULb6XyJW5QGTlgCopBzuVY5HmmNgWBF4WXWaYooaNcsxTlWPNnfD6POrUaNtuFDbGH9O3MIcxvYWV2FwLGpy_2EoSlyePcmjaVZh8iYLRGtSdfcxVwNwwn69Ebbl6L_4rrp-GnFEUBoolAQ5uZYmgXXwhvQUZgZNYmCBxoU-Ekf5S-qvIlqkKggmreOcDbiiBzmly-Byxbd9ii1ZNPauzXZnimveb6dgGqmJUaXkI9rThue4IxE13PYSdukYfLFIuLFCvQ31ni6eICokCsAxSKCfHYxZI9AP1WYwa5o7MuRuDHiZXX1-oWZSln00n5GsnIlzsEV_SCDk_t2qOJbmsgN8gWvq0ViRzJs_6LrFMEjoir5Mox8UCgktLgOGkUesmm-Q-696abaviU-5HjQs7xswjNP1DJuGEA28hBreJgLHj7ND6Zha-8fvVBnHqTZ1Ay1mEtNE5PV5T7jNv3OHVHj7VzAqb-pLfjccr4hzTj0Yitf8i-J_dHu3a0NUc55xKS3dao2SxT9dAWJLO7DQ1RSK770paJqFIBZ29elQknFdIzxkUJIujBK1ejU8ycCAIWy07SjcS84h1xAPfnGgPVCdn8pxPXitVI7Mzx47Qqs3ceL379zuA4BSPtjXolKGqjDkZV0kb6ihkA2Zy8GzSuMRGPma329j8vBaGrZ1dyq-XEWc94WNpzLHOmY3RWPx4DMb38sQ7h_8SvfGWB9yOxzKC82zTodSNyWHP4LW2IGjjz4v4x2I5kv4Pfdjfber3ZmOEk6EcO4GIkSBaqArsO9m-E1ddni2MsqcMS7hQXLkX_vDqYe2mxaP9Oc_izI9Y68PSEpVC0SsYe-V0_j0W6AkFa2trPMzL9-PA8-qHDMxXuH9vKWp9hqpOuMAQPXh3whCTHNhnKODSoyT6rXCzVuKMn021pX9PNy5JTV1cWfkn-X8x35mfqWcAnPz2DlV_Vg1bdLSeSqE4oR7-JbE0g7E7najkDttBMaQiS0QXhiWaae6ji3QxcG1ZBeSRUjvzrQPmKcfMtKRPmlC3zTqS","summary":[]},{"id":"msg_0bd76e143a399a9d006ad0723579e487d0b3c51ab02b394bbb","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"-
+          Shell: `55` (exit code 0).\n- Custom echo: `CUSTOM_CASSETTE_OK` → `CUSTOM_CASSETTE_OUTPUT_OK`.\n- Paris weather: clear,
+          21°C.\n- Paris time zone: `Europe/Paris`.\n- Verification markers: `CLIENT_STEER_001`, `CLIENT_STEER_002`, `CLIENT_STEER_003`,
+          `CLIENT_STEER_004`, `CLIENT_STEER_005`."}],"phase":"final_answer","role":"assistant"}],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":"resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869","prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Get
+          the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Search
+          for hotels in a city","name":"search_hotels","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"shell","environment":{"type":"local"}},{"type":"custom","description":"Emit
+          the requested cassette token as raw text. The input must be exactly CUSTOM_CASSETTE_OK.","format":{"type":"text"},"name":"agentic_raw_echo"},{"type":"tool_search","description":"Search
+          the client tool catalog for tools that can satisfy the request.","execution":"client","parameters":{"type":"object","properties":{"query":{"type":"string","description":"A
+          concise description of the needed capabilities."}},"required":["query"],"additionalProperties":false}},{"type":"namespace","description":"Travel
+          location tools","name":"travel","tools":[{"type":"function","description":"Get the IANA time zone for a city","name":"get_timezone","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+          latitude and longitude for a city","name":"get_coordinates","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Calculate
+          the distance between two cities","name":"calculate_distance","output_schema":null,"parameters":{"type":"object","properties":{"origin":{"type":"string"},"destination":{"type":"string"}},"required":["origin","destination"],"additionalProperties":false},"strict":true}]}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":1296,"input_tokens_details":{"cache_write_tokens":104,"cached_tokens":1189},"output_tokens":181,"output_tokens_details":{"reasoning_tokens":77},"total_tokens":1477},"user":null,"metadata":{}},"sequence_number":107}'
+      - ordinal: 195
+        elapsed_ms: 11881.838
+        direction: client
+        opcode: 8
+        fin: true
+        payload_base64: ''
+      - ordinal: 196
+        elapsed_ms: 12062.742
+        direction: server
+        opcode: 8
+        fin: true
+        payload_base64: ''
+    close_outcome:
+      kind: completed
+      probe:
+        connection_index: 0
+        created:
+        - resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33
+        - resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333
+        - resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec
+        - resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081
+        - resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869
+        - resp_0bd76e143a399a9d006ad07234367c87d092e65f077a0a7b66
+        terminals:
+          resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33:
+            type: response.completed
+            status: completed
+            incomplete_details: null
+            previous_response_id: null
+            usage:
+              input_tokens: 544
+              input_tokens_details:
+                cache_write_tokens: 0
+                cached_tokens: 0
+              output_tokens: 53
+              output_tokens_details:
+                reasoning_tokens: 11
+              total_tokens: 597
+            output_types:
+            - reasoning
+            - tool_search_call
+          resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333:
+            type: response.completed
+            status: completed
+            incomplete_details: null
+            previous_response_id: resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33
+            usage:
+              input_tokens: 851
+              input_tokens_details:
+                cache_write_tokens: 0
+                cached_tokens: 0
+              output_tokens: 43
+              output_tokens_details:
+                reasoning_tokens: 9
+              total_tokens: 894
+            output_types:
+            - reasoning
+            - shell_call
+          resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec:
+            type: response.completed
+            status: completed
+            incomplete_details: null
+            previous_response_id: resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333
+            usage:
+              input_tokens: 983
+              input_tokens_details:
+                cache_write_tokens: 0
+                cached_tokens: 0
+              output_tokens: 20
+              output_tokens_details:
+                reasoning_tokens: 0
+              total_tokens: 1003
+            output_types:
+            - custom_tool_call
+          resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081:
+            type: response.completed
+            status: completed
+            incomplete_details: null
+            previous_response_id: resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec
+            usage:
+              input_tokens: 1086
+              input_tokens_details:
+                cache_write_tokens: 1083
+                cached_tokens: 0
+              output_tokens: 18
+              output_tokens_details:
+                reasoning_tokens: 0
+              total_tokens: 1104
+            output_types:
+            - function_call
+          resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869:
+            type: response.completed
+            status: completed
+            incomplete_details: null
+            previous_response_id: resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081
+            usage:
+              input_tokens: 1192
+              input_tokens_details:
+                cache_write_tokens: 106
+                cached_tokens: 1083
+              output_tokens: 18
+              output_tokens_details:
+                reasoning_tokens: 0
+              total_tokens: 1210
+            output_types:
+            - function_call
+          resp_0bd76e143a399a9d006ad07234367c87d092e65f077a0a7b66:
+            type: response.completed
+            status: completed
+            incomplete_details: null
+            previous_response_id: resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869
+            usage:
+              input_tokens: 1296
+              input_tokens_details:
+                cache_write_tokens: 104
+                cached_tokens: 1189
+              output_tokens: 181
+              output_tokens_details:
+                reasoning_tokens: 77
+              total_tokens: 1477
+            output_types:
+            - reasoning
+            - message
+        controls:
+        - frame_ordinal: 9
+          event:
+            type: response.steer.accepted
+            steer:
+              id: steer_e9c487bbdb6d444db96296da164822f1
+              previous_response_id: resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33
+            sequence_number: 7
+        - frame_ordinal: 10
+          event:
+            type: response.steer.pending
+            steer:
+              id: steer_e9c487bbdb6d444db96296da164822f1
+              previous_response_id: resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33
+            reason: waiting_for_required_input
+            required_input:
+            - type: tool_search_output
+              call_id: call_GnRw2XdAPfQwuITVjoSzy1HS
+              execution: client
+            sequence_number: 8
+        - frame_ordinal: 37
+          event:
+            type: response.steer.accepted
+            steer:
+              id: steer_9d25cc472d3f40e78b652a3407407708
+              previous_response_id: resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333
+            sequence_number: 24
+        - frame_ordinal: 38
+          event:
+            type: response.steer.pending
+            steer:
+              id: steer_9d25cc472d3f40e78b652a3407407708
+              previous_response_id: resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333
+            reason: waiting_for_required_input
+            required_input:
+            - type: shell_call_output
+              call_id: call_KqaOGLFFMRlSunH5yf6TtPJx
+            sequence_number: 25
+        - frame_ordinal: 54
+          event:
+            type: response.steer.accepted
+            steer:
+              id: steer_0524a87859494bab873c667821f71d1f
+              previous_response_id: resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec
+            sequence_number: 13
+        - frame_ordinal: 55
+          event:
+            type: response.steer.pending
+            steer:
+              id: steer_0524a87859494bab873c667821f71d1f
+              previous_response_id: resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec
+            reason: waiting_for_required_input
+            required_input:
+            - type: custom_tool_call_output
+              call_id: call_ILQ6V6UxAPBkvJTuAtg6enBK
+            sequence_number: 14
+        - frame_ordinal: 69
+          event:
+            type: response.steer.accepted
+            steer:
+              id: steer_138c3685ab3e42478da4a9b7d28cb5f5
+              previous_response_id: resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081
+            sequence_number: 11
+        - frame_ordinal: 70
+          event:
+            type: response.steer.pending
+            steer:
+              id: steer_138c3685ab3e42478da4a9b7d28cb5f5
+              previous_response_id: resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081
+            reason: waiting_for_required_input
+            required_input:
+            - type: function_call_output
+              call_id: call_Zj1aAVKuuZT2xe6LchTWhrfe
+              name: get_weather
+            sequence_number: 12
+        - frame_ordinal: 84
+          event:
+            type: response.steer.accepted
+            steer:
+              id: steer_5e31f2d8557e4a3b9b70ba74f484abe3
+              previous_response_id: resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869
+            sequence_number: 11
+        - frame_ordinal: 85
+          event:
+            type: response.steer.pending
+            steer:
+              id: steer_5e31f2d8557e4a3b9b70ba74f484abe3
+              previous_response_id: resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869
+            reason: waiting_for_required_input
+            required_input:
+            - type: function_call_output
+              call_id: call_qxqLUjsGe3JwOcltjMGCDOJg
+              name: get_timezone
+            sequence_number: 12
+        submissions:
+        - trigger: initial
+          type: response.create
+          previous_response_id: null
+          frame_ordinal_before_send: 0
+        - trigger: response.completed
+          type: response.steer
+          previous_response_id: resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33
+          frame_ordinal_before_send: 8
+        - trigger: client-output-continuation
+          type: response.create
+          previous_response_id: resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33
+          frame_ordinal_before_send: 11
+        - trigger: response.completed
+          type: response.steer
+          previous_response_id: resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333
+          frame_ordinal_before_send: 36
+        - trigger: client-output-continuation
+          type: response.create
+          previous_response_id: resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333
+          frame_ordinal_before_send: 39
+        - trigger: response.completed
+          type: response.steer
+          previous_response_id: resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec
+          frame_ordinal_before_send: 53
+        - trigger: client-output-continuation
+          type: response.create
+          previous_response_id: resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec
+          frame_ordinal_before_send: 56
+        - trigger: response.completed
+          type: response.steer
+          previous_response_id: resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081
+          frame_ordinal_before_send: 68
+        - trigger: client-output-continuation
+          type: response.create
+          previous_response_id: resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081
+          frame_ordinal_before_send: 71
+        - trigger: response.completed
+          type: response.steer
+          previous_response_id: resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869
+          frame_ordinal_before_send: 83
+        - trigger: client-output-continuation
+          type: response.create
+          previous_response_id: resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869
+          frame_ordinal_before_send: 86
+        event_counts:
+          response.created: 6
+          response.in_progress: 6
+          response.output_item.added: 9
+          response.output_item.done: 9
+          response.completed: 6
+          response.steer.accepted: 5
+          response.steer.pending: 5
+          response.shell_call_command.added: 1
+          response.shell_call_command.delta: 15
+          response.shell_call_command.done: 1
+          response.custom_tool_call_input.delta: 7
+          response.custom_tool_call_input.done: 1
+          response.function_call_arguments.delta: 10
+          response.function_call_arguments.done: 2
+          response.content_part.added: 1
+          response.output_text.delta: 98
+          response.output_text.done: 1
+          response.content_part.done: 1
+        steer_outcomes:
+          steer_e9c487bbdb6d444db96296da164822f1:
+            events:
+            - response.steer.accepted
+            - response.steer.pending
+            acknowledged: true
+            latest_event: response.steer.pending
+          steer_9d25cc472d3f40e78b652a3407407708:
+            events:
+            - response.steer.accepted
+            - response.steer.pending
+            acknowledged: true
+            latest_event: response.steer.pending
+          steer_0524a87859494bab873c667821f71d1f:
+            events:
+            - response.steer.accepted
+            - response.steer.pending
+            acknowledged: true
+            latest_event: response.steer.pending
+          steer_138c3685ab3e42478da4a9b7d28cb5f5:
+            events:
+            - response.steer.accepted
+            - response.steer.pending
+            acknowledged: true
+            latest_event: response.steer.pending
+          steer_5e31f2d8557e4a3b9b70ba74f484abe3:
+            events:
+            - response.steer.accepted
+            - response.steer.pending
+            acknowledged: true
+            latest_event: response.steer.pending
+        steering_submissions:
+        - input: 'Keep the remaining tool steps and use their actual results. Change the final answer to one short bullet per result.
+            Preserve every earlier verification marker and include CLIENT_STEER_001. This update is not a tool result: wait for
+            the outstanding client output before continuing. Do not repeat completed calls.'
+          previous_response_id: resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33
+          acknowledged: true
+          steer_id: steer_e9c487bbdb6d444db96296da164822f1
+          events:
+          - response.steer.accepted
+          - response.steer.pending
+          latest_event: response.steer.pending
+          correlation: steer_id
+        - input: 'Keep the remaining tool steps and use their actual results. Change the final answer to one short bullet per result.
+            Preserve every earlier verification marker and include CLIENT_STEER_002. This update is not a tool result: wait for
+            the outstanding client output before continuing. Do not repeat completed calls.'
+          previous_response_id: resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333
+          acknowledged: true
+          steer_id: steer_9d25cc472d3f40e78b652a3407407708
+          events:
+          - response.steer.accepted
+          - response.steer.pending
+          latest_event: response.steer.pending
+          correlation: steer_id
+        - input: 'Keep the remaining tool steps and use their actual results. Change the final answer to one short bullet per result.
+            Preserve every earlier verification marker and include CLIENT_STEER_003. This update is not a tool result: wait for
+            the outstanding client output before continuing. Do not repeat completed calls.'
+          previous_response_id: resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec
+          acknowledged: true
+          steer_id: steer_0524a87859494bab873c667821f71d1f
+          events:
+          - response.steer.accepted
+          - response.steer.pending
+          latest_event: response.steer.pending
+          correlation: steer_id
+        - input: 'Keep the remaining tool steps and use their actual results. Change the final answer to one short bullet per result.
+            Preserve every earlier verification marker and include CLIENT_STEER_004. This update is not a tool result: wait for
+            the outstanding client output before continuing. Do not repeat completed calls.'
+          previous_response_id: resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081
+          acknowledged: true
+          steer_id: steer_138c3685ab3e42478da4a9b7d28cb5f5
+          events:
+          - response.steer.accepted
+          - response.steer.pending
+          latest_event: response.steer.pending
+          correlation: steer_id
+        - input: 'Keep the remaining tool steps and use their actual results. Change the final answer to one short bullet per result.
+            Preserve every earlier verification marker and include CLIENT_STEER_005. This update is not a tool result: wait for
+            the outstanding client output before continuing. Do not repeat completed calls.'
+          previous_response_id: resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869
+          acknowledged: true
+          steer_id: steer_5e31f2d8557e4a3b9b70ba74f484abe3
+          events:
+          - response.steer.accepted
+          - response.steer.pending
+          latest_event: response.steer.pending
+          correlation: steer_id
+        trigger_reached: true
+        hosted_tools: {}
+        steering_triggers:
+        - event: response.completed
+          ordinal: 7
+          item_id: null
+          output_index: null
+          agent: ''
+          response_id: resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33
+          parent_terminal_observed: true
+          ordering_only: A received activity event does not prove server execution was still active when steering arrived.
+          client_outputs_withheld: true
+        - event: response.completed
+          ordinal: 35
+          item_id: null
+          output_index: null
+          agent: ''
+          response_id: resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333
+          parent_terminal_observed: true
+          ordering_only: A received activity event does not prove server execution was still active when steering arrived.
+          client_outputs_withheld: true
+        - event: response.completed
+          ordinal: 52
+          item_id: null
+          output_index: null
+          agent: ''
+          response_id: resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec
+          parent_terminal_observed: true
+          ordering_only: A received activity event does not prove server execution was still active when steering arrived.
+          client_outputs_withheld: true
+        - event: response.completed
+          ordinal: 67
+          item_id: null
+          output_index: null
+          agent: ''
+          response_id: resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081
+          parent_terminal_observed: true
+          ordering_only: A received activity event does not prove server execution was still active when steering arrived.
+          client_outputs_withheld: true
+        - event: response.completed
+          ordinal: 82
+          item_id: null
+          output_index: null
+          agent: ''
+          response_id: resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869
+          parent_terminal_observed: true
+          ordering_only: A received activity event does not prove server execution was still active when steering arrived.
+          client_outputs_withheld: true
+        client_output_submissions:
+        - type: response.create
+          previous_response_id: resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33
+          call_ids:
+          - call_GnRw2XdAPfQwuITVjoSzy1HS
+        - type: response.create
+          previous_response_id: resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333
+          call_ids:
+          - call_KqaOGLFFMRlSunH5yf6TtPJx
+        - type: response.create
+          previous_response_id: resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec
+          call_ids:
+          - call_ILQ6V6UxAPBkvJTuAtg6enBK
+        - type: response.create
+          previous_response_id: resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081
+          call_ids:
+          - call_Zj1aAVKuuZT2xe6LchTWhrfe
+        - type: response.create
+          previous_response_id: resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869
+          call_ids:
+          - call_qxqLUjsGe3JwOcltjMGCDOJg
+        client_call_types:
+        - custom_tool_call
+        - function_call
+        - shell_call
+        - tool_search_call
+        pending_output_types:
+        - custom_tool_call_output
+        - function_call_output
+        - shell_call_output
+        - tool_search_output
+        pending_obligations:
+        - previous_response_id: resp_0bd76e143a399a9d006ad0722d87cc87d08a5a14044a7bdd33
+          required_input:
+          - type: tool_search_output
+            call_id: call_GnRw2XdAPfQwuITVjoSzy1HS
+            execution: client
+          matches_client_outputs: true
+        - previous_response_id: resp_0bd76e143a399a9d006ad0722f69f487d09c8e837fa5d73333
+          required_input:
+          - type: shell_call_output
+            call_id: call_KqaOGLFFMRlSunH5yf6TtPJx
+          matches_client_outputs: true
+        - previous_response_id: resp_0bd76e143a399a9d006ad07230b26087d09330a90a1f9339ec
+          required_input:
+          - type: custom_tool_call_output
+            call_id: call_ILQ6V6UxAPBkvJTuAtg6enBK
+          matches_client_outputs: true
+        - previous_response_id: resp_0bd76e143a399a9d006ad07231d66887d08695ef5310978081
+          required_input:
+          - type: function_call_output
+            call_id: call_Zj1aAVKuuZT2xe6LchTWhrfe
+            name: get_weather
+          matches_client_outputs: true
+        - previous_response_id: resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869
+          required_input:
+          - type: function_call_output
+            call_id: call_qxqLUjsGe3JwOcltjMGCDOJg
+            name: get_timezone
+          matches_client_outputs: true
+        unacknowledged_submission_count: 0
+        steering_trigger:
+          event: response.completed
+          ordinal: 82
+          item_id: null
+          output_index: null
+          agent: ''
+          response_id: resp_0bd76e143a399a9d006ad07232f90887d0baedf3a4e2520869
+          parent_terminal_observed: true
+          ordering_only: A received activity event does not prove server execution was still active when steering arrived.
+          client_outputs_withheld: true
+        settled_for_seconds: 3.0
+      peer_close_received: true

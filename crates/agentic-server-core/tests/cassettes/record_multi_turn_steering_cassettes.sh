@@ -24,16 +24,17 @@ usage() {
   cat <<'HELP'
 Usage: bash record_multi_turn_steering_cassettes.sh [options]
 
-Steering uses only websocket_recorder.py steering. Five categories produce five
+Steering uses only websocket_recorder.py steering. Six categories produce six
 YAML files per provider under multi_turn_steering/:
   mixed-tools-steer     Original single-agent mixed tools with two steering updates
+  client-tools-steer    Client search, shell, custom and discovered function outputs
   edge-input-lifecycle Input validation, timing, repeated steering, old targets
   edge-tools-settings  Pending outputs, recovery, running tools, settings inheritance
   edge-connections     Reconnect, connection-local pending input, lane matching
   vision-steering      Image steering only; requires a vision-capable backend
 
 Options (environment defaults in parentheses):
-  --suite smoke|edges|all|non-vision|vision|input-lifecycle|tools-settings|connections
+  --suite smoke|edges|all|non-vision|vision|client-tools|input-lifecycle|tools-settings|connections
                                    (STEERING_SUITE=smoke)
   --case NAME                      One scenario or category (STEERING_CASE)
   --record-set openai|gateway|all   (STEERING_RECORD_SET=openai)
@@ -54,7 +55,8 @@ Options (environment defaults in parentheses):
   --help
 
 smoke records mixed-tools-steer; edges records the three edge categories;
-all records all five. non-vision records the four text/tool categories;
+all records all six. non-vision records the five text/tool categories;
+client-tools records only client-tools-steer;
 vision records only vision-steering. --case edge-cases selects the three non-vision
 edge categories. --case array-image-user also selects the vision-steering file.
 An individual case still writes its category filename. Reruns replace selected
@@ -74,6 +76,7 @@ Examples:
     --record-set gateway --suite all --dry-run
   bash record_multi_turn_steering_cassettes.sh --suite edges
   bash record_multi_turn_steering_cassettes.sh --suite tools-settings
+  bash record_multi_turn_steering_cassettes.sh --suite client-tools
   GATEWAY_MODEL=Qwen/Qwen3.6-35B-A3B-FP8 bash record_multi_turn_steering_cassettes.sh \
     --record-set gateway --suite non-vision
   GATEWAY_MODEL=Qwen/Qwen3-VL-30B-A3B-Instruct bash record_multi_turn_steering_cassettes.sh \

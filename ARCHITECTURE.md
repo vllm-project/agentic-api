@@ -195,8 +195,10 @@ doesn't wait for upgraded connections, `AppState` carries a separate
 `WebSocketTracker` so shutdown can drain in-flight sessions. `connection.rs` owns socket
 reading, writing, and shutdown; `multiplexer.rs` owns bounded create admission and lane FIFO;
 `control.rs` owns retained response routes and bounded task lifetimes. Its private
-`control/injection.rs` handles live client tool outputs; `control/steering.rs` implements
-steering admission, pending outcomes, and successor handoff against the same route state.
+`control/injection.rs` handles live client tool outputs; `control/steering.rs` owns
+accepted-batch lifecycle, pending outcomes, and successor handoff. Its private
+`steering/admission.rs` decodes and resolves submissions, validates eligibility,
+reserves capacity, and delivers acceptance or rejection against the same route state.
 Lane advancement and automatic scheduling return `Result<(), WsError>`; successful idle scheduling is
 `Ok(())`. The socket loop owns the disconnect decision and logs scheduling or task-join failures.
 An automatic admission failure closes the unprepared target before its deferred cleanup runs.
@@ -228,7 +230,10 @@ message decoding can discard or normalize. Accepted input becomes ordinary user
 preserves submitted item variants; `normalized_model_input()` still runs at the
 ordinary upstream request boundary.
 
-The existing `SteeringTarget` owns `SteeringState` in `control.rs`. Its admission
+The existing `SteeringTarget` owns `SteeringState` in `control.rs`. An optional
+`SteeringBatch` groups its accepted queue, original-input echoes, parent pin, and
+settings charge. Closing the state transfers or drops that whole batch; terminal
+paths do not clear its resources independently. Its admission
 lifecycle is independent of the response task and terminal delivery:
 
 | `SteeringPhase` | Meaning |
@@ -271,9 +276,9 @@ further inference. An intentional cut ends the parent as incomplete with reason
 ordinary completed parent and its required-output obligation.
 
 The adapter uses the existing pending-call scanner to emit
-`response.steer.pending` with function/custom call stubs. A matching same-lane
+`response.steer.pending` with function, custom, shell, and client tool-search output stubs. A matching same-lane
 `response.create` supplies all required outputs without resending steering.
-Pending stubs use the pinned parent's public tool declarations to distinguish custom calls from their
+Pending stubs use the pinned parent's public tool declarations to distinguish custom and shell calls from their
 normalized model-facing function representation. Namespaced functions retain their function obligation.
 Rejected outputs preserve the queue and pinned parent for a corrected attempt;
 partial rejected batches are not accumulated. Accepted updates are prepended in
@@ -283,11 +288,20 @@ or its default; a removed tool cannot retain the parent's forced selector. When 
 an automatic successor inherits the
 immutable snapshot captured by `RequestPayload::continuation_settings()`, with
 fresh execution budgets. The snapshot excludes canonical input and parent/conversation
-routing. Original configuration qualifies conversation and compaction restrictions
+routing. Active tool-search preparation restores this snapshot's tools from the public
+effective catalog, including deferred definitions, rather than its private inference view.
+Original configuration qualifies conversation and compaction restrictions
 before those fields are removed.
 
 Each target admits at most 32 steering inputs, with a 65-entry ordered outcome
-queue and a shared 12 MiB connection budget for raw input echoes and settings.
+queue and a shared 12 MiB connection budget for accepted raw input echoes and settings.
+Settings are charged on first acceptance and refunded on successor publication or failure;
+ordinary responses do not consume this budget. Unaccepted settings snapshots remain
+bounded by the 128-route cap, inbound request ceiling, and route expiry. Only accepted
+steering pins checkpoints beyond the session's ordinary latest-parent retention.
+Overflow returns a routed `response.steer.failed` with `too_many_pending_steers`.
+A separate 12 MiB allowance bounds failure echoes when the accepted-input budget is
+full; outcome queue or failure-delivery exhaustion remains a transport overload.
 `response.steer.accepted` acknowledges retained ownership, not application.
 Typed accepted/pending/failed outcomes reuse `ResponseEventSink` and its sequence/flush barriers,
 including after terminal delivery. Routes with accepted input remain retained;

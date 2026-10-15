@@ -49,19 +49,20 @@ The shared `multi_turn_steering/fixtures.py` supplies prompts, category membersh
 the main recorder. All prompts are documented in
 [multi_turn_steering/prompts.txt](multi_turn_steering/prompts.txt). No findings JSON or extra recorder test files are generated.
 
-Five categories produce **five YAML files per provider** under `multi_turn_steering/`.
-Image steering is separate so the other four categories can use a text model:
+Six categories produce **six YAML files per provider** under `multi_turn_steering/`.
+Image steering is separate so the other five categories can use a text model:
 
 | Category / filename scenario | Coverage | Selection |
 | --- | --- | --- |
 | `mixed-tools-steer` | Original [parallel mixed-tools](parallel_tool_calls/parallel-mixed-openai-reference-gpt-5.6-nonstreaming.yaml) workflow; web search, weather function and custom temperature-unit call, with two steering updates | `--suite smoke` (default) |
+| `client-tools-steer` | Client-only search, shell, custom and discovered function calls; steer each completed call batch before returning its outputs | `--suite client-tools` |
 | `edge-input-lifecycle` | 18 cases: input validation, repeated steering, timing, completed targets, old-parent admission timing, store:false and two ordered user messages in one steer | `--suite input-lifecycle` |
 | `edge-tools-settings` | 13 cases: pending/withheld outputs, wrong/partial-output recovery, running hosted tools, queue pressure, automatic/explicit/default settings and store:false recovery | `--suite tools-settings` |
 | `edge-connections` | Three cases: old target after reconnect, disconnect with pending steering, and parent/lane matching | `--suite connections` |
 | `vision-steering` | One case: `array-image-user`, using the existing red/blue PNG in a steering message | `--suite vision` |
 
-`--suite non-vision` selects the four text/tool categories. `--suite vision` selects only image steering.
-`--suite edges` selects the three non-vision edge categories; `--suite all` selects all five categories.
+`--suite non-vision` selects the five text/tool categories. `--suite vision` selects only image steering.
+`--suite edges` selects the three non-vision edge categories; `--suite all` selects all six categories.
 `--case edge-input-lifecycle`, `edge-tools-settings`, `edge-connections`, or `vision-steering` selects that category.
 `--case edge-cases` remains an umbrella alias selecting the three edge files. An individual `--case NAME`
 records only that scenario in its category filename, replacing that category's previous capture.
@@ -73,7 +74,7 @@ Run from the repository root with `OPENAI_API_KEY` exported:
 uv run --no-project --with click --with fastapi --with httpx --with uvicorn --with pyyaml \
   bash crates/agentic-server-core/tests/cassettes/record_multi_turn_steering_cassettes.sh --suite all --dry-run
 
-# Record all five categories, including the separate vision-steering file.
+# Record all six categories, including the separate vision-steering file.
 uv run --no-project --with click --with fastapi --with httpx --with uvicorn --with pyyaml \
   bash crates/agentic-server-core/tests/cassettes/record_multi_turn_steering_cassettes.sh --suite all
 
@@ -85,7 +86,7 @@ uv run --no-project --with click --with fastapi --with httpx --with uvicorn --wi
 To record the running gateway, use its served model name:
 
 ```bash
-# Serve Qwen3.6, then record the four text/tool categories.
+# Serve Qwen3.6, then record the five text/tool categories.
 GATEWAY_URL=http://localhost:9000 GATEWAY_MODEL=Qwen/Qwen3.6-35B-A3B-FP8 \
   uv run --no-project --with click --with fastapi --with httpx --with uvicorn --with pyyaml \
   bash crates/agentic-server-core/tests/cassettes/record_multi_turn_steering_cassettes.sh \
@@ -113,7 +114,7 @@ capability needed by a probe; its actual failure or missing trigger remains visi
 `--timeout` defaults to 300 seconds per scenario, including both sockets for reconnect cases; close cleanup has
 its own maximum five-second budget. The default per-response output cap is 8192 tokens. Live calls incur usage.
 `--repeat` labels fresh attempts inside the same category file. Reruns replace selected category files.
-The vision-only command leaves all four text/tool category files untouched; `--suite non-vision` leaves
+The vision-only command leaves all five text/tool category files untouched; `--suite non-vision` leaves
 the vision file untouched. `--case array-image-user` writes the same separate vision filename.
 Use `--help` or `--list-cases` for selection. HTTP transport/stream-mode/timeout flags are absent from this wrapper.
 
@@ -123,6 +124,32 @@ frames and close outcomes. Stable filenames follow
 `multi-turn-steering-gateway-CATEGORY-MODEL-websocket.yaml` (model names are sanitized for filenames).
 Gateway runs preserve reference filenames. No simulated provider events are written.
 Tool outputs come from existing local fixtures; generated commands are never executed by the recorder.
+
+The `client-tools-steer` OpenAI and Qwen3.6 gateway captures both complete successfully.
+Select it alone with `--suite client-tools`. It uses the existing multi-agent client tool
+catalog, local shell declaration and simulated output handlers in a **single-agent** request. It discovers
+Paris weather/time-zone tools, requests shell and custom calls, then uses the discovered functions.
+After each completed response with client calls, it withholds outputs, submits a marked steering update,
+waits for pending obligations and returns the actual matching outputs. A ten-continuation budget bounds
+the workflow. Missing any of the four pending output kinds is inconclusive; mismatched call IDs or kinds
+are reported separately. Raw frames retain names, execution fields, markers and final answers for parity
+review. The OpenAI capture completes six responses and accepts five steering updates, each followed by
+pending obligations for search, shell, custom, weather or time-zone output. All output types and call IDs
+match the withheld calls. The final assistant answer includes the actual fixture results and all five
+`CLIENT_STEER_001` through `CLIENT_STEER_005` markers, with no rejected or incomplete responses.
+Qwen groups weather and time zone in one response, despite the shared `parallel_tool_calls:false` setting,
+so its workflow has five responses and four steering updates. Its final assistant answer includes all
+four submitted markers and the same fixture results. Both providers preserve the five client obligations;
+batch sizes and raw reasoning events differ. The batching difference is not a steering-control mismatch.
+The `client_tools_captures_compare_obligations_and_drive_real_handlers` integration test compares the
+shared initial settings, pending output kinds/names, call-ID linkage, withheld-output ordering and final
+results. It replays both complete client graphs through current gateway handlers and asserts that accepted
+steering reaches successor inference exactly once and in order. Mock upstream settings follow tool
+discovery, so deferred declarations are checked before and after discovery.
+
+```bash
+cargo test --offline -p agentic-server --test responses_websocket_test client_tools_captures_
+```
 
 The current OpenAI references include the following additional probes:
 

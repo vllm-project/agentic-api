@@ -18,6 +18,20 @@ Keep my preferred unit as fahrenheit, but change the final answer to a short wea
 [mixed-tools-steer-update-2]
 Now report Tokyo's current temperature using the unit I just told you to prefer.
 
+# CLIENT-TOOLS — one agent, every call executed by the recorder's fixed output fixtures.
+# Dedicated client-tools-steer YAML; no multi_agent setting or hosted tools.
+# Reuses multi_agent/client_owned_tools.json, its local shell declaration, and
+# mixed_tool_outputs.py; discovery returns tool_search/returned_tools.json.
+# After each completed response with client calls: withhold outputs, steer once,
+# wait for response.steer.pending, then return all actual outputs together.
+# Each steering update has a distinct CLIENT_STEER_NNN marker. Missing search,
+# shell, custom or function pending obligations makes the recording inconclusive.
+[client-tools-steer]
+Complete these steps in order, waiting for each actual client tool result before continuing. First use tool_search to discover get_weather and travel.get_timezone for Paris. Then call the local shell with exactly this command: python3 -c 'print(sum(range(1, 11)))'. Then call agentic_raw_echo with exactly CUSTOM_CASSETTE_OK. Then use the discovered tools to get Paris weather and its time zone. Do not repeat completed calls. Finish with a concise summary of the actual shell, custom, weather and time-zone results and every verification marker requested during this task. Do not spawn agents.
+
+[client-tools-steer-update]
+Keep the remaining tool steps and use their actual results. Change the final answer to one short bullet per result. Preserve every earlier verification marker and include CLIENT_STEER_{index:03d}. This update is not a tool result: wait for the outstanding client output before continuing. Do not repeat completed calls.
+
 # SHARED CONTROL PROMPTS AND FUNCTION FIXTURE
 
 # Internal prerequisite for late-target/reconnect cases; not a separate recording.

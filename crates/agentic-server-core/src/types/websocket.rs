@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use super::client_calls::ClientCallId;
 use super::io::{InputContent, InputItem, InputMessageContent, ResponsesInput};
+use super::tools::ToolSearchExecution;
 use super::{injection::ResponseInjectRequest, request_response::RequestPayload};
 
 /// Create uses the Responses request fields at the top level of the event.
@@ -221,6 +222,13 @@ pub enum SteeringRequiredInput {
     Function { call_id: ClientCallId, name: String },
     #[serde(rename = "custom_tool_call_output")]
     Custom { call_id: ClientCallId },
+    #[serde(rename = "shell_call_output")]
+    Shell { call_id: ClientCallId },
+    #[serde(rename = "tool_search_output")]
+    ToolSearch {
+        call_id: ClientCallId,
+        execution: ToolSearchExecution,
+    },
 }
 
 /// Documented codes; support decisions and failure precedence belong to core policy.
