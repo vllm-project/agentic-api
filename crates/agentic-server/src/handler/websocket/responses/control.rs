@@ -17,7 +17,6 @@ use agentic_core::{
             AcceptedSteer, FailedSteer, SteeringEvent, SteeringFailure, SteeringFailureCode, SteeringInputEcho,
         },
     },
-    utils::common::serialized_size_up_to,
 };
 use injection::inject;
 use std::{
@@ -73,6 +72,8 @@ pub(super) struct Controls {
     pub(super) relays: JoinSet<Result<(), WsError>>,
     pub(super) steering_workers: JoinSet<Result<(), WsError>>,
     steering_bytes: Arc<AtomicUsize>,
+    // Settings are bounded even when no steering input has been accepted.
+    steering_settings_bytes: Arc<AtomicUsize>,
     // Rejections must remain deliverable when accepted steering fills its budget.
     // A second bounded allowance covers failure echoes until their relay flushes.
     steering_rejection_bytes: Arc<AtomicUsize>,
@@ -97,6 +98,7 @@ impl Controls {
             relays: JoinSet::new(),
             steering_workers: JoinSet::new(),
             steering_bytes: Arc::new(AtomicUsize::new(0)),
+            steering_settings_bytes: Arc::new(AtomicUsize::new(0)),
             steering_rejection_bytes: Arc::new(AtomicUsize::new(0)),
             next_ordinal: 0,
             bytes: 0,
@@ -144,6 +146,7 @@ impl Controls {
     }
 
     pub(super) fn expire(&mut self) {
+        self.release_inactive_settings();
         let now = Instant::now();
         self.routes.retain(|_, entry| {
             if entry.route.sink.commit_state() != ResponseCommitState::Running {
@@ -155,19 +158,6 @@ impl Controls {
             true
         });
     }
-    fn charge_metadata(&self, settings: &RequestPayload) -> Result<Option<SteeringByteCharge>, WsError> {
-        let fixed_bytes = std::mem::size_of::<SteeringTarget>();
-        let Some(bytes) = serialized_size_up_to(settings, MAX_CONTROL_BYTES.saturating_sub(fixed_bytes))
-            .map_err(WsError::SerializeJson)?
-        else {
-            return Ok(None);
-        };
-        Ok(SteeringByteCharge::reserve(
-            &self.steering_bytes,
-            bytes.saturating_add(fixed_bytes),
-        ))
-    }
-
     pub(super) fn register(&mut self, registration: Registration) -> Result<(), WsError> {
         self.expire();
         if self.routes.len() == MAX_ROUTES {
@@ -212,16 +202,22 @@ impl Controls {
             sink,
             owner,
         } = response;
+        let state = match SteeringState::new(settings, steering_supported, &self.steering_settings_bytes) {
+            Ok(state) => state,
+            Err(error) => {
+                owner.cancel();
+                self.rejected_owner = Some(owner);
+                return Err(error);
+            }
+        };
         let cancellation = owner.cancellation_token();
         let outcomes = self.spawn_steering_worker(sink.clone());
         let steering = Arc::new(SteeringTarget {
             session,
-            settings,
-            supported: steering_supported,
             lane: lane.clone(),
             sink: sink.clone(),
             outcomes,
-            state: Mutex::new(SteeringState::default()),
+            state: Mutex::new(state),
         });
         self.routes.insert(
             response_id,
@@ -355,8 +351,6 @@ impl Controls {
 /// Connection-local admission and exact-input ownership for one published response.
 pub(super) struct SteeringTarget {
     session: Arc<ResponseSession>,
-    settings: RequestPayload,
-    supported: bool,
     pub(super) lane: Option<StreamId>,
     sink: ResponseEventSink,
     outcomes: mpsc::Sender<SteeringOutcome>,
@@ -364,9 +358,17 @@ pub(super) struct SteeringTarget {
 }
 
 struct SteeringState {
+    settings: Option<SteeringSettings>,
+    supported: bool,
     batch: Option<SteeringBatch>,
     phase: SteeringPhase,
     required_supported: bool,
+}
+
+/// Settings and their connection-level reservation have the same lifetime.
+struct SteeringSettings {
+    payload: RequestPayload,
+    _charge: SteeringByteCharge,
 }
 
 /// Resources owned by one accepted batch, released together on commitment or failure.
@@ -375,7 +377,6 @@ struct SteeringBatch {
     queue: Option<SteeringQueue>,
     echoes: Vec<SteerEcho>,
     pin: Option<ResponseCheckpointPin>,
-    _metadata_charge: SteeringByteCharge,
 }
 
 /// Parent completion and successor ownership are separate from execution status.
@@ -472,6 +473,44 @@ impl Drop for SteeringByteCharge {
 mod steering_tests {
     use super::*;
 
+    #[test]
+    fn settings_budget_bounds_unsteered_targets_and_refunds_dropped_snapshots() {
+        let budget = Arc::new(AtomicUsize::new(0));
+        let settings = || RequestPayload {
+            instructions: Some("x".repeat(MAX_CONTROL_BYTES / 2)),
+            ..RequestPayload::default()
+        };
+        let first = SteeringState::new(settings(), true, &budget).unwrap();
+        assert!(first.settings.is_some());
+        let used = budget.load(Ordering::Acquire);
+        assert!(used > MAX_CONTROL_BYTES / 2 && used <= MAX_CONTROL_BYTES);
+        for _ in 0..60 {
+            let full = SteeringState::new(settings(), true, &budget).unwrap();
+            assert!(full.settings.is_none());
+            assert!(full.supported, "budget exhaustion is not a configuration rejection");
+            assert_eq!(budget.load(Ordering::Acquire), used);
+        }
+        drop(first);
+        assert_eq!(budget.load(Ordering::Acquire), 0);
+        let available = SteeringState::new(settings(), true, &budget).unwrap();
+        assert!(available.settings.is_some());
+        drop(available);
+        let unsupported = SteeringState::new(settings(), false, &budget).unwrap();
+        assert!(unsupported.settings.is_none());
+        assert_eq!(budget.load(Ordering::Acquire), 0);
+        let oversized = SteeringState::new(
+            RequestPayload {
+                instructions: Some("x".repeat(MAX_CONTROL_BYTES)),
+                ..RequestPayload::default()
+            },
+            true,
+            &budget,
+        )
+        .unwrap();
+        assert!(oversized.settings.is_none());
+        assert_eq!(budget.load(Ordering::Acquire), 0);
+    }
+
     fn target_fixture() -> (SteeringTarget, Controls, mpsc::Receiver<WsOutboundEvent>) {
         let (outbound, receive) = mpsc::channel(8);
         let mut controls = Controls::new(outbound, WsEventLimit(4096));
@@ -484,12 +523,10 @@ mod steering_tests {
                 std::num::NonZeroUsize::new(16).unwrap(),
                 std::num::NonZeroUsize::new(4096).unwrap(),
             )),
-            settings,
-            supported: true,
             lane: None,
             sink,
             outcomes,
-            state: Mutex::new(SteeringState::default()),
+            state: Mutex::new(SteeringState::new(settings, true, &controls.steering_settings_bytes).unwrap()),
         };
         (target, controls, receive)
     }
@@ -499,8 +536,7 @@ mod steering_tests {
         use agentic_core::types::{io::ResponsesInput, websocket::SteeringInput};
         let (target, mut controls, mut receive) = target_fixture();
         let target = Arc::new(target);
-        let metadata_charge = controls.charge_metadata(&target.settings).unwrap().unwrap();
-        let metadata_bytes = controls.steering_bytes.load(Ordering::Acquire);
+        assert!(controls.steering_settings_bytes.load(Ordering::Acquire) > 0);
         let mut queue = SteeringQueue::new(
             "resp_parent".into(),
             std::num::NonZeroUsize::new(1).unwrap(),
@@ -516,7 +552,6 @@ mod steering_tests {
             state.batch = Some(SteeringBatch {
                 queue: Some(queue),
                 pin: None,
-                _metadata_charge: metadata_charge,
                 echoes: vec![SteerEcho {
                     steer,
                     input: SteeringInputEcho::from_json("\"KEEP_PRIVATE_INPUT\"".into(), 4096).unwrap(),
@@ -535,7 +570,7 @@ mod steering_tests {
                 state.batch.as_ref().unwrap().echoes[0].input.as_json(),
                 "\"KEEP_PRIVATE_INPUT\""
             );
-            assert_eq!(controls.steering_bytes.load(Ordering::Acquire), metadata_bytes + 128);
+            assert_eq!(controls.steering_bytes.load(Ordering::Acquire), 128);
         }
         controls.fail_automatic_admission(Arc::clone(&target)).unwrap();
         // Admission closes before the deferred task drains the accepted record.
@@ -551,6 +586,7 @@ mod steering_tests {
         target.mark_ready("resp_parent").unwrap();
         assert_eq!(target.state.lock().unwrap().phase, SteeringPhase::Closed);
         assert_eq!(controls.steering_bytes.load(Ordering::Acquire), 0);
+        assert_eq!(controls.steering_settings_bytes.load(Ordering::Acquire), 0);
         assert!(target.commit_successor().is_err());
         assert!(target.automatic_request().unwrap().is_none());
         controls.shutdown().await;

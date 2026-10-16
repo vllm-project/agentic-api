@@ -2,8 +2,8 @@
 mod admission;
 use super::super::{StreamId, WsError};
 use super::{
-    ControlCompletion, Controls, MAX_CONTROLS, SteeringBatch, SteeringOutcome, SteeringPhase, SteeringState,
-    SteeringTarget,
+    ControlCompletion, Controls, MAX_CONTROL_BYTES, MAX_CONTROLS, SteeringBatch, SteeringByteCharge, SteeringOutcome,
+    SteeringPhase, SteeringSettings, SteeringState, SteeringTarget,
 };
 use agentic_core::{
     executor::{RunningResponse, session::ResponseCheckpointPin},
@@ -11,24 +11,41 @@ use agentic_core::{
         request_response::RequestPayload,
         websocket::{AcceptedSteer, SteeringEvent, SteeringFailureCode, SteeringPendingReason, SteeringRequiredInput},
     },
+    utils::common::serialized_size_up_to,
 };
-use std::sync::Arc;
+use std::sync::{Arc, atomic::AtomicUsize};
 use tokio::sync::oneshot;
 
-impl Default for SteeringState {
-    fn default() -> Self {
-        Self {
+impl SteeringState {
+    pub(super) fn new(settings: RequestPayload, supported: bool, budget: &Arc<AtomicUsize>) -> Result<Self, WsError> {
+        let supported = supported
+            && !settings.multi_agent.as_ref().is_some_and(|config| config.enabled)
+            && settings.context_management.as_ref().is_none_or(Vec::is_empty);
+        let settings = if supported {
+            let fixed_bytes = std::mem::size_of::<SteeringTarget>();
+            serialized_size_up_to(&settings, MAX_CONTROL_BYTES.saturating_sub(fixed_bytes))
+                .map_err(WsError::SerializeJson)?
+                .and_then(|bytes| SteeringByteCharge::reserve(budget, bytes.saturating_add(fixed_bytes)))
+                .map(|charge| SteeringSettings {
+                    payload: settings,
+                    _charge: charge,
+                })
+        } else {
+            None
+        };
+        Ok(Self {
+            settings,
+            supported,
             batch: None,
             phase: SteeringPhase::Running,
             required_supported: true,
-        }
+        })
     }
-}
 
-impl SteeringState {
     /// Close admission and transfer the whole accepted batch to its final owner.
     fn close(&mut self) -> Option<SteeringBatch> {
         self.phase = SteeringPhase::Closed;
+        self.settings = None;
         self.batch.take()
     }
 }
@@ -238,7 +255,7 @@ impl SteeringTarget {
         if !pin.required_steering_input()?.is_empty() {
             return Ok(None);
         }
-        let mut payload = self.settings.clone();
+        let mut payload = state.settings.as_ref().ok_or(WsError::SendFailed)?.payload.clone();
         payload.input = agentic_core::types::io::ResponsesInput::Items(Vec::new());
         payload.previous_response_id = Some(pin.response_id().to_owned());
         payload.stream = true;
@@ -268,6 +285,21 @@ impl Controls {
             }
         });
         Ok(())
+    }
+
+    /// Registration may precede (or fail before) publication. Only a newer
+    /// creation receipt retires a target. Accepted batches keep their settings
+    /// until commitment/failure, including while their producer owns a reservation.
+    pub(super) fn release_inactive_settings(&self) {
+        for entry in self.routes.values() {
+            if entry.route.sink.created_receipt().is_some()
+                && !self.is_active_steering_target(&entry.route.steering)
+                && let Ok(mut state) = entry.route.steering.state.lock()
+                && state.batch.is_none()
+            {
+                state.settings = None;
+            }
+        }
     }
 
     fn is_active_steering_target(&self, target: &SteeringTarget) -> bool {

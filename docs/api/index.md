@@ -300,10 +300,14 @@ replayable. Control events can follow a parent's terminal event. Disconnect
 discards unapplied steering, even for a stored parent; storage remains available
 for ordinary continuation. Completed targets expire after 60 seconds and may be
 evicted sooner under capacity pressure. Each target permits 32 queued updates;
-the connection bounds accepted steering echoes and their settings at 12 MiB separately
-from ordinary request and checkpoint budgets. Settings are charged when steering is
-accepted, so ordinary responses do not consume that allowance. Budget overflow
-returns `response.steer.failed` with `too_many_pending_steers` and the submitted input.
+the connection bounds accepted steering echoes at 12 MiB separately from ordinary
+request and checkpoint budgets. Input-budget overflow returns `response.steer.failed`
+with `too_many_pending_steers` and the submitted input. A separate 12 MiB budget bounds
+retained settings, including targets without accepted steering. Settings are released
+when the connection observes a newer `response.created` on the same lane, unless an
+accepted batch still needs them. Targets whose settings exceed the remaining budget
+continue normally but reject steering with `response_not_active`; ordinary continuation
+is unaffected.
 A separate 12 MiB allowance bounds failure echoes awaiting delivery; exhausting
 failure-delivery capacity closes the connection.
 

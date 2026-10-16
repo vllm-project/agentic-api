@@ -44,7 +44,7 @@ mod steering {
     #[tokio::test]
     async fn ordinary_responses_do_not_exhaust_steering_settings_budget() {
         let mock = MockResponsesServer::start(
-            (0..10)
+            (0..11)
                 .map(|i| sse_response(&format!("upstream_{i}"), "msg_final", "OK"))
                 .collect(),
         )
@@ -52,6 +52,7 @@ mod steering {
         let fixture = storage_backed_state(&mock.url).await;
         let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
         let mut ws = connect_responses_ws(&gateway_url).await;
+        let mut parent = Value::Null;
         for _ in 0..10 {
             send_json(
                 &mut ws,
@@ -59,9 +60,137 @@ mod steering {
                 "input":"Hello", "store":false, "instructions":"x".repeat(1536 * 1024)}),
             )
             .await;
-            receive(&mut ws, "response.completed").await;
+            parent = receive(&mut ws, "response.completed").await["response"]["id"].clone();
         }
-        assert_eq!(mock.request_bodies().await.len(), 10);
+        send_json(
+            &mut ws,
+            json!({"type":"response.steer", "previous_response_id":parent,
+            "input":"STEER_LATEST"}),
+        )
+        .await;
+        receive(&mut ws, "response.steer.accepted").await;
+        receive(&mut ws, "response.completed").await;
+        let requests = mock.request_bodies().await;
+        assert_eq!(requests.len(), 11);
+        assert!(requests[10]["input"].to_string().contains("STEER_LATEST"));
+        assert_eq!(requests[10]["instructions"].as_str().unwrap().len(), 1536 * 1024);
+    }
+
+    #[tokio::test]
+    async fn settings_retention_overflow_disables_only_steering_and_allows_ordinary_continuation() {
+        let mut responses: Vec<_> = (0..8)
+            .map(|i| sse_function_call_response(&format!("parent_{i}"), "get_project_status"))
+            .collect();
+        responses.push(sse_response("continued", "msg_final", "OK"));
+        let mock = MockResponsesServer::start(responses).await;
+        let fixture = storage_backed_state(&mock.url).await;
+        let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+        let mut ws = connect_responses_ws(&gateway_url).await;
+        let mut parents = Vec::new();
+        for i in 0..8 {
+            let lane = format!("lane-{i}");
+            send_json(
+                &mut ws,
+                json!({"type":"response.create", "model":"test-model", "stream_id":lane,
+                "input":"Hello", "store":false, "instructions":"x".repeat(1536 * 1024),
+                "tools":[status_tool()]}),
+            )
+            .await;
+            parents.push(receive(&mut ws, "response.completed").await["response"]["id"].clone());
+        }
+        for (i, parent) in [&parents[0], &parents[7]].into_iter().enumerate() {
+            send_json(
+                &mut ws,
+                json!({"type":"response.steer", "previous_response_id":parent, "input":"UPDATE"}),
+            )
+            .await;
+            let event = recv_json(&mut ws).await;
+            if i == 0 {
+                assert_eq!(event["type"], "response.steer.accepted");
+                receive(&mut ws, "response.steer.pending").await;
+            } else {
+                assert_eq!(event["type"], "response.steer.failed");
+                assert_eq!(event["error"]["code"], "response_not_active");
+                assert_eq!(event["stream_id"], "lane-7");
+                assert_eq!(event["steer"]["input"], "UPDATE");
+            }
+        }
+        send_json(
+            &mut ws,
+            json!({"type":"response.create", "model":"test-model", "stream_id":"lane-7",
+            "previous_response_id":parents[7], "store":false,
+            "input":[{"type":"function_call_output", "call_id":"call_1", "output":"done"}]}),
+        )
+        .await;
+        receive(&mut ws, "response.completed").await;
+        let requests = mock.request_bodies().await;
+        assert_eq!(requests.len(), 9);
+        assert!(!requests[8]["input"].to_string().contains("UPDATE"));
+    }
+
+    #[tokio::test]
+    async fn failed_new_response_retires_previous_settings_only_if_creation_was_published() {
+        for publish_created in [false, true] {
+            let mut failure = String::new();
+            if publish_created {
+                let created = json!({"type":"response.created",
+                    "response":{"id":"failed", "status":"in_progress"}});
+                write!(failure, "data: {created}\n\n").unwrap();
+            }
+            let added = json!({"type":"response.output_item.added", "output_index":0,
+                "item":{"type":"function_call", "id":"original", "call_id":"call_bad",
+                    "name":"get_project_status", "arguments":"", "status":"in_progress"}});
+            let done = json!({"type":"response.output_item.done", "output_index":0,
+                "item":{"type":"function_call", "id":"contradiction", "call_id":"call_bad",
+                    "name":"get_project_status", "arguments":"{}", "status":"completed"}});
+            write!(failure, "data: {added}\n\ndata: {done}\n\n").unwrap();
+            let mock = MockResponsesServer::start(vec![
+                sse_function_call_response("parent", "get_project_status"),
+                failure,
+            ])
+            .await;
+            let fixture = storage_backed_state(&mock.url).await;
+            let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+            let mut ws = connect_responses_ws(&gateway_url).await;
+            send_json(
+                &mut ws,
+                json!({"type":"response.create", "model":"test-model",
+                "input":"INITIAL", "store":false, "tools":[status_tool()]}),
+            )
+            .await;
+            let parent = receive(&mut ws, "response.completed").await["response"]["id"].clone();
+            send_json(
+                &mut ws,
+                json!({"type":"response.create", "model":"test-model",
+                "input":"INDEPENDENT", "store":false, "tools":[status_tool()]}),
+            )
+            .await;
+            let mut created = false;
+            loop {
+                let event = recv_json(&mut ws).await;
+                match event["type"].as_str().unwrap() {
+                    "response.created" => created = true,
+                    "error" => break,
+                    "response.output_item.added" => {}
+                    other => panic!("unexpected event: {other}: {event}"),
+                }
+            }
+            assert_eq!(created, publish_created);
+            send_json(
+                &mut ws,
+                json!({"type":"response.steer", "previous_response_id":parent,
+                "input":"KEEP_PARENT"}),
+            )
+            .await;
+            let result = recv_json(&mut ws).await;
+            if publish_created {
+                assert_eq!(result["type"], "response.steer.failed");
+                assert_eq!(result["error"]["code"], "response_not_active");
+            } else {
+                assert_eq!(result["type"], "response.steer.accepted");
+                receive(&mut ws, "response.steer.pending").await;
+            }
+        }
     }
 
     #[tokio::test]

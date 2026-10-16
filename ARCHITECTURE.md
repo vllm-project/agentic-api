@@ -231,8 +231,13 @@ preserves submitted item variants; `normalized_model_input()` still runs at the
 ordinary upstream request boundary.
 
 The existing `SteeringTarget` owns `SteeringState` in `control.rs`. An optional
-`SteeringBatch` groups its accepted queue, original-input echoes, parent pin, and
-settings charge. Closing the state transfers or drops that whole batch; terminal
+`SteeringBatch` groups its accepted queue, original-input echoes, and parent pin.
+The state also owns an optional settings snapshot with a separate connection-level
+12 MiB reservation, acquired even for unsteered targets. Periodic expiry and steering
+admission release superseded snapshots only after observing a newer creation receipt
+on the same lane; accepted batches keep theirs through commitment or failure. Settings
+overflow disables steering for that target without cancelling the response. Closing
+the state drops its settings reservation and transfers or drops the whole batch; terminal
 paths do not clear its resources independently. Its admission
 lifecycle is independent of the response task and terminal delivery:
 

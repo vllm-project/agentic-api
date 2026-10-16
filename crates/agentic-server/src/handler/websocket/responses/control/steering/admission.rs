@@ -12,6 +12,7 @@ use std::num::NonZeroUsize;
 
 impl Controls {
     pub(in super::super::super) fn dispatch_steering(&mut self, text: &str) -> Result<(), WsError> {
+        self.release_inactive_settings();
         let submission = SteeringSubmission::parse(text, self.limit.bytes())?;
         let target = submission
             .previous_response_id
@@ -38,8 +39,7 @@ impl Controls {
         ) else {
             return self.reject_steering(Some(target), submission, SteeringFailureCode::TooManyPendingSteers);
         };
-        if let Some(code) = self.reserve_steering_batch(
-            target,
+        if let Some(code) = target.reserve_batch(
             &mut state,
             submission.previous_response_id.as_deref().ok_or(WsError::SendFailed)?,
         )? {
@@ -53,7 +53,7 @@ impl Controls {
             .try_accept(submission.input.take().ok_or(WsError::SendFailed)?)
             .cloned();
         let Ok(steer) = accepted else {
-            // A rejected first update must not retain settings or a parent pin.
+            // A rejected first update must not retain a parent pin.
             state
                 .batch
                 .take_if(|batch| batch.queue.as_ref().is_none_or(SteeringQueue::is_empty));
@@ -67,34 +67,6 @@ impl Controls {
         target.notify_accepted(batch, &steer)?;
         target.sink.request_steering_boundary();
         Ok(())
-    }
-
-    /// Reserve settings and a completed parent only for the first accepted batch.
-    /// Later updates share that ownership; an unsteered response retains neither.
-    fn reserve_steering_batch(
-        &self,
-        target: &SteeringTarget,
-        state: &mut SteeringState,
-        response_id: &str,
-    ) -> Result<Option<SteeringFailureCode>, WsError> {
-        if state.batch.is_some() {
-            return Ok(None);
-        }
-        let pin = match state.phase {
-            SteeringPhase::Running => None,
-            SteeringPhase::Ready => {
-                let Some(pin) = target.session.pin_response(response_id)? else {
-                    return Ok(Some(SteeringFailureCode::ResponseAlreadyCompleted));
-                };
-                Some(pin)
-            }
-            SteeringPhase::Reserved | SteeringPhase::Closed => return Ok(Some(SteeringFailureCode::ResponseNotActive)),
-        };
-        let Some(metadata_charge) = self.charge_metadata(&target.settings)? else {
-            return Ok(Some(SteeringFailureCode::TooManyPendingSteers));
-        };
-        state.batch = Some(SteeringBatch::new(response_id, pin, metadata_charge)?);
-        Ok(None)
     }
 
     /// Rejection has its own bounded delivery allowance, independent of admission.
@@ -138,11 +110,7 @@ impl Controls {
 }
 
 impl SteeringBatch {
-    fn new(
-        response_id: &str,
-        pin: Option<ResponseCheckpointPin>,
-        metadata_charge: SteeringByteCharge,
-    ) -> Result<Self, WsError> {
+    fn new(response_id: &str, pin: Option<ResponseCheckpointPin>) -> Result<Self, WsError> {
         let queue = SteeringQueue::new(
             response_id.to_owned(),
             NonZeroUsize::new(MAX_CONTROLS).expect("positive steering count"),
@@ -152,12 +120,35 @@ impl SteeringBatch {
             queue: Some(queue),
             echoes: Vec::new(),
             pin,
-            _metadata_charge: metadata_charge,
         })
     }
 }
 
 impl SteeringTarget {
+    /// Pin a completed parent only for the first accepted batch.
+    /// Later updates share that ownership; unsteered responses never pin history.
+    fn reserve_batch(
+        &self,
+        state: &mut SteeringState,
+        response_id: &str,
+    ) -> Result<Option<SteeringFailureCode>, WsError> {
+        if state.batch.is_some() {
+            return Ok(None);
+        }
+        let pin = match state.phase {
+            SteeringPhase::Running => None,
+            SteeringPhase::Ready => {
+                let Some(pin) = self.session.pin_response(response_id)? else {
+                    return Ok(Some(SteeringFailureCode::ResponseAlreadyCompleted));
+                };
+                Some(pin)
+            }
+            SteeringPhase::Reserved | SteeringPhase::Closed => return Ok(Some(SteeringFailureCode::ResponseNotActive)),
+        };
+        state.batch = Some(SteeringBatch::new(response_id, pin)?);
+        Ok(None)
+    }
+
     fn rejection_code(&self, state: &SteeringState, valid_input: bool, active: bool) -> Option<SteeringFailureCode> {
         if self.sink.created_receipt().is_none() {
             return Some(SteeringFailureCode::ResponseNotFound);
@@ -165,18 +156,11 @@ impl SteeringTarget {
         if !valid_input {
             return Some(SteeringFailureCode::InvalidInput);
         }
-        if !self.supported
-            || !state.required_supported
-            || self.settings.multi_agent.as_ref().is_some_and(|config| config.enabled)
-            || self
-                .settings
-                .context_management
-                .as_ref()
-                .is_some_and(|settings| !settings.is_empty())
-        {
+        if !state.supported || !state.required_supported {
             return Some(SteeringFailureCode::SteeringNotSupported);
         }
-        if !active || matches!(state.phase, SteeringPhase::Reserved | SteeringPhase::Closed) {
+        if !active || state.settings.is_none() || matches!(state.phase, SteeringPhase::Reserved | SteeringPhase::Closed)
+        {
             return Some(SteeringFailureCode::ResponseNotActive);
         }
         None
