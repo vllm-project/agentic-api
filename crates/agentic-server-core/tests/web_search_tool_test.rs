@@ -1316,6 +1316,184 @@ async fn execute_runs_web_search_and_sends_tool_output_back_to_model() {
     );
 }
 
+/// The internal function schema vLLM receives for a `web_search_preview` declaration.
+fn lowered_web_search_tools() -> serde_json::Value {
+    serde_json::json!([{
+        "type": "function",
+        "name": "web_search",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}
+    }])
+}
+
+/// Model servers echo the declarations they received. Lifecycle snapshots that carry a
+/// `response` object echo the lowered schemas, and terminal snapshots may omit the keys.
+fn with_lowered_tool_echo(response: support::MockResponse, lowered: &serde_json::Value) -> support::MockResponse {
+    let support::MockResponse::Sse(body) = response else {
+        panic!("expected an SSE fixture");
+    };
+    let mut out = String::new();
+    for line in body.lines() {
+        let Some(payload) = line.strip_prefix("data: ") else {
+            continue;
+        };
+        if payload == "[DONE]" {
+            continue;
+        }
+        let mut event: serde_json::Value = serde_json::from_str(payload).expect("SSE data is JSON");
+        if event["type"] == "response.created" || event["type"] == "response.in_progress" {
+            let response = event["response"].as_object_mut().expect("response object");
+            response.insert("tools".to_owned(), lowered.clone());
+            response.insert("tool_choice".to_owned(), serde_json::json!("auto"));
+        }
+        out.push_str("data: ");
+        out.push_str(&serde_json::to_string(&event).unwrap());
+        out.push_str("\n\n");
+    }
+    out.push_str("data: [DONE]\n\n");
+    support::MockResponse::Sse(out)
+}
+
+fn builtin_tool_payload(stream: bool) -> RequestPayload {
+    serde_json::from_value(serde_json::json!({
+        "model": "test-model",
+        "input": "look up rust async",
+        "store": true,
+        "stream": stream,
+        "tool_choice": "required",
+        "tools": [
+            {"type": "web_search_preview"},
+            {
+                "type": "function",
+                "name": "get_weather",
+                "description": "Get the current weather for a city.",
+                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}
+            }
+        ]
+    }))
+    .expect("built-in tool request")
+}
+
+fn assert_public_tool_metadata(response: &serde_json::Value, public_tools: &serde_json::Value, context: &str) {
+    assert_eq!(response["tools"], *public_tools, "{context} tools");
+    assert!(
+        !response["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|tool| tool["type"] == "function" && tool["name"] == "web_search"),
+        "the internal web_search function schema must not reach the client: {context}"
+    );
+}
+
+#[tokio::test]
+async fn builtin_tool_declarations_stay_public_in_streaming_lifecycle() {
+    let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
+    let lowered = lowered_web_search_tools();
+    let llm = support::MockServer::start_deque(vec![
+        with_lowered_tool_echo(web_search_function_call_sse_response("call_search"), &lowered),
+        with_lowered_tool_echo(text_sse_response("Use async carefully."), &lowered),
+    ])
+    .await;
+    let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
+    let payload = builtin_tool_payload(true);
+    let public_tools = serde_json::to_value(&payload.tools).unwrap();
+
+    let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();
+    let Either::Right(stream) = result else {
+        panic!("expected streaming response");
+    };
+    let chunks: Vec<String> = stream.collect().await;
+    captured_you
+        .recv()
+        .await
+        .expect("mock You.com should receive the search");
+
+    let events = streamed_sse_events(&chunks);
+    let mut snapshots = 0;
+    for event in &events {
+        let Some(response) = event.get("response") else {
+            continue;
+        };
+        snapshots += 1;
+        let context = event["type"].as_str().unwrap_or_default().to_owned();
+        assert_public_tool_metadata(response, &public_tools, &context);
+        if context != "response.completed" {
+            // The gateway relaxes a forced selector to `auto` before the round that answers
+            // the tool result, so only the first-round snapshots report the submitted one.
+            // Which round is authoritative for a single public response is #434.
+            assert_eq!(
+                response["tool_choice"],
+                serde_json::json!("required"),
+                "the submitted selector must be reported: {context}"
+            );
+        }
+    }
+    assert!(snapshots >= 2, "expected creation and terminal snapshots");
+
+    // Inference still receives the lowered function schema, so routing is unchanged.
+    let request_bodies = llm.request_bodies().await;
+    assert_eq!(request_bodies.len(), 2);
+    assert_eq!(request_bodies[0]["tools"][0]["name"], "web_search");
+}
+
+#[tokio::test]
+async fn builtin_tool_declarations_are_inserted_when_the_model_server_omits_them() {
+    let (you_url, _captured_you, _you_handle) = spawn_mock_you().await;
+    // Recorded gateway turns exist where the terminal frame carries no `tools` key at all,
+    // for example `cassettes/web_search/web-search-gateway-*-streaming.yaml`.
+    let llm = support::MockServer::start_deque(vec![text_sse_response("Use async carefully.")]).await;
+    let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
+    let payload = builtin_tool_payload(true);
+    let public_tools = serde_json::to_value(&payload.tools).unwrap();
+
+    let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();
+    let Either::Right(stream) = result else {
+        panic!("expected streaming response");
+    };
+    let chunks: Vec<String> = stream.collect().await;
+
+    let events = streamed_sse_events(&chunks);
+    let mut snapshots = 0;
+    for event in &events {
+        let Some(response) = event.get("response") else {
+            continue;
+        };
+        snapshots += 1;
+        assert_public_tool_metadata(response, &public_tools, event["type"].as_str().unwrap_or_default());
+    }
+    assert!(snapshots >= 2, "expected creation and terminal snapshots");
+}
+
+#[tokio::test]
+async fn builtin_tool_declarations_stay_public_in_json_and_stored_responses() {
+    let (you_url, _captured_you, _you_handle) = spawn_mock_you().await;
+    let llm = support::MockServer::start_deque(vec![
+        web_search_function_call_response(),
+        support::text_response("Use async carefully."),
+    ])
+    .await;
+    let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
+    let payload = builtin_tool_payload(false);
+    let public_tools = serde_json::to_value(&payload.tools).unwrap();
+
+    let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();
+    let Either::Left(response) = result else {
+        panic!("expected non-streaming response");
+    };
+
+    assert_public_tool_metadata(
+        &serde_json::to_value(&response).unwrap(),
+        &public_tools,
+        "terminal payload",
+    );
+    let stored = exec_ctx.resp_handler.retrieve(&response.id).await.unwrap();
+    assert_public_tool_metadata(
+        &serde_json::to_value(&stored).unwrap(),
+        &public_tools,
+        "stored response",
+    );
+}
+
 #[tokio::test]
 async fn execute_relaxes_forced_tool_choice_after_web_search_result() {
     let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;

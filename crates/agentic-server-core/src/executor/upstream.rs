@@ -9,10 +9,9 @@ use crate::executor::relay::StreamRelay;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::translate::TranslationContext;
-use crate::tool::{ToolRegistry, ToolSearchState, declares_async};
+use crate::tool::{ToolRegistry, ToolSearchState};
 use crate::types::io::{InputItem, InputMessage, MultiAgentAction};
 use crate::types::request_response::{ResponsePayload, UpstreamTool};
-use crate::types::tools::ResponsesTool;
 use crate::utils::common::serialize_to_string;
 use std::sync::Arc;
 
@@ -52,20 +51,10 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
             .filter(|state| state.is_active())
             .map(ToolSearchState::public_response_tools)
             .or_else(|| {
-                // The model server echoes its own tool declarations; restore the public ones
-                // where they differ: shell, and async tools, whose model-visible description
-                // carries the background-execution hint and no `async` marker.
-                agent
-                    .request
-                    .enriched_request
-                    .tools
-                    .as_ref()
-                    .filter(|tools| {
-                        tools
-                            .iter()
-                            .any(|tool| matches!(tool, ResponsesTool::Shell(_)) || declares_async(tool))
-                    })
-                    .cloned()
+                // The model server echoes its own tool declarations, and built-in tools are
+                // lowered to function schemas before inference. Always restore the public
+                // declarations the client submitted; internal schemas stay upstream-only.
+                agent.request.enriched_request.tools.clone()
             }),
         agent.request.enriched_request.tool_choice.clone(),
     )
@@ -368,6 +357,71 @@ pub(super) mod tests {
         assert_eq!(
             serde_json::to_value(&stream_payload.tool_choice).unwrap(),
             serde_json::to_value(&json_payload.tool_choice).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn builtin_tool_declarations_stay_public_in_stream_and_json_metadata() {
+        use crate::types::io::ToolChoice;
+        let mut request = request_context();
+        request.enriched_request.tools = Some(
+            serde_json::from_value(serde_json::json!([
+                {"type":"web_search_preview"},
+                {
+                    "type":"function","name":"get_weather","description":"Get the current weather for a city.",
+                    "parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}
+                }
+            ]))
+            .unwrap(),
+        );
+        request.enriched_request.tool_choice = Some(ToolChoice::Required);
+        let public_tools = serde_json::to_value(&request.enriched_request.tools).unwrap();
+        let registry = ToolRegistry::from_tool_types(std::collections::HashMap::new());
+        let mut agent = AgentPipeline::new(request, None, StreamRelay::detached());
+        let stream_context = translation_context(&registry, &agent);
+        let json_context = translation_context(&registry, &agent);
+        drop(registry);
+
+        // The model server echoes the lowered function schemas it received, and lifecycle
+        // snapshots may omit the declaration fields entirely.
+        let lowered = serde_json::json!([
+            {"type":"function","name":"web_search","parameters":{"type":"object","properties":{"query":{"type":"string"}}}}
+        ]);
+        let mut ingestion = RoundIngestion::new("resp_1".to_owned(), None, Validation::Lenient, stream_context, None);
+        for frame in [
+            serde_json::json!({"type":"response.created","response":{
+                "id":"upstream","status":"in_progress","tools":lowered,"tool_choice":"auto"
+            }}),
+            serde_json::json!({"type":"response.completed","response":{
+                "id":"upstream","status":"completed","output":[]
+            }}),
+        ] {
+            let translated = ingestion.push(SseLine::parse(&format!("data: {frame}"))).unwrap();
+            let response = &translated.frames[0].wire.rest["response"];
+            assert_eq!(response["tools"], public_tools, "public declarations for {frame}");
+            assert_eq!(
+                response["tool_choice"],
+                serde_json::json!("required"),
+                "selector for {frame}"
+            );
+            assert!(
+                !response["tools"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|tool| tool["type"] == "function" && tool["name"] == "web_search"),
+                "internal web_search function schema must not reach the client"
+            );
+        }
+
+        let body = serde_json::json!({"id":"upstream","status":"completed","output":[]}).to_string();
+        let json_payload = agent
+            .run_with_json_body(&body, Validation::Lenient, json_context, None)
+            .unwrap();
+        assert_eq!(serde_json::to_value(&json_payload.tools).unwrap(), public_tools);
+        assert_eq!(
+            serde_json::to_value(&json_payload.tool_choice).unwrap(),
+            serde_json::json!("required")
         );
     }
 
