@@ -10,8 +10,8 @@
   },
   "exceptions": {
     "crates/agentic-server-core/src/config.rs": {
-      "limit": 643,
-      "reason": "The gateway-executed web_fetch settings join the shared tool runtime configuration beside the web-search provider and code-interpreter limits, and the web_search provider enum now also selects SearXNG."
+      "limit": 648,
+      "reason": "The gateway-executed web_fetch settings join the shared tool runtime configuration beside the web-search provider and code-interpreter limits, and the web_search provider enum now also selects SearXNG and Serply."
     },
     "crates/agentic-server-core/src/tool/registry.rs": {
       "limit": 567,

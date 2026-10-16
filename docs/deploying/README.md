@@ -447,6 +447,9 @@ kubectl create secret generic agentic-api-secrets \
   --from-literal=tavily-api-key="$TAVILY_API_KEY"
 ```
 
+Serply works the same way with `value: serply`, a `SERPLY_API_KEY` variable read from a `serply-api-key` secret key,
+and the default endpoint `https://api.serply.io`.
+
 To avoid a search vendor account altogether, point the gateway at a self-hosted
 [SearXNG](https://docs.searxng.org/) Service instead. The gateway only talks to that
 instance; SearXNG forwards queries to the engines enabled in its `settings.yml`, so an

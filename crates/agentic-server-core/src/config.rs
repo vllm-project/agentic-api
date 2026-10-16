@@ -389,11 +389,12 @@ pub enum WebSearchProviderKind {
     Brave,
     Tavily,
     Searxng,
+    Serply,
 }
 
 impl WebSearchProviderKind {
     /// Every selectable provider, in the order operator-facing messages list them.
-    pub const ALL: &'static [Self] = &[Self::You, Self::Brave, Self::Tavily, Self::Searxng];
+    pub const ALL: &'static [Self] = &[Self::You, Self::Brave, Self::Tavily, Self::Searxng, Self::Serply];
 
     /// Environment variable that conventionally carries this provider's API key.
     #[must_use]
@@ -403,6 +404,7 @@ impl WebSearchProviderKind {
             Self::Brave => "BRAVE_API_KEY",
             Self::Tavily => "TAVILY_API_KEY",
             Self::Searxng => "SEARXNG_API_KEY",
+            Self::Serply => "SERPLY_API_KEY",
         }
     }
 
@@ -416,18 +418,19 @@ impl WebSearchProviderKind {
             Self::You | Self::Searxng => None,
             Self::Brave => Some("https://api.search.brave.com"),
             Self::Tavily => Some("https://api.tavily.com"),
+            Self::Serply => Some("https://api.serply.io"),
         }
     }
 
     /// Provider-imposed default ceiling on concurrent search requests. `None`
     /// inherits the gateway-wide limit. Brave's free plan allows roughly one
     /// request per second, so it defaults to serial queries; Tavily's plans
-    /// are metered per minute and SearXNG is operator-hosted, so both inherit
-    /// the gateway limit.
+    /// are metered per minute, Serply's per request, and SearXNG is
+    /// operator-hosted, so all three inherit the gateway limit.
     #[must_use]
     pub const fn default_max_concurrent_queries(self) -> Option<NonZeroUsize> {
         match self {
-            Self::You | Self::Tavily | Self::Searxng => None,
+            Self::You | Self::Tavily | Self::Searxng | Self::Serply => None,
             Self::Brave => Some(DEFAULT_BRAVE_MAX_CONCURRENT_QUERIES),
         }
     }
@@ -440,10 +443,11 @@ impl WebSearchProviderKind {
             Self::Brave => "Brave Search",
             Self::Tavily => "Tavily",
             Self::Searxng => "SearXNG",
+            Self::Serply => "Serply",
         }
     }
 
-    /// Configuration label (`you`, `brave`, `tavily`, `searxng`) matching the serialized form.
+    /// Configuration label (`you`, `brave`, `tavily`, `searxng`, `serply`) matching the serialized form.
     #[must_use]
     pub const fn config_name(self) -> &'static str {
         match self {
@@ -451,6 +455,7 @@ impl WebSearchProviderKind {
             Self::Brave => "brave",
             Self::Tavily => "tavily",
             Self::Searxng => "searxng",
+            Self::Serply => "serply",
         }
     }
 
@@ -772,6 +777,15 @@ mod tests {
         assert_eq!(WebSearchProviderKind::Searxng.default_base_url(), None);
         assert_eq!(WebSearchProviderKind::Searxng.default_max_concurrent_queries(), None);
         assert!(!WebSearchProviderKind::Searxng.is_you());
+
+        assert_eq!(WebSearchProviderKind::Serply.to_string(), "Serply");
+        assert_eq!(WebSearchProviderKind::Serply.default_api_key_env(), "SERPLY_API_KEY");
+        assert_eq!(
+            WebSearchProviderKind::Serply.default_base_url(),
+            Some("https://api.serply.io")
+        );
+        assert_eq!(WebSearchProviderKind::Serply.default_max_concurrent_queries(), None);
+        assert!(!WebSearchProviderKind::Serply.is_you());
     }
 
     #[test]
@@ -797,7 +811,7 @@ mod tests {
         let error = "bing".parse::<WebSearchProviderKind>().unwrap_err();
         assert_eq!(
             error.to_string(),
-            "unknown web_search provider \"bing\"; expected one of: you, brave, tavily, searxng"
+            "unknown web_search provider \"bing\"; expected one of: you, brave, tavily, searxng, serply"
         );
 
         assert_eq!(

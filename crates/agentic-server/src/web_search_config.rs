@@ -8,7 +8,7 @@ use agentic_core::tool::validate_searxng_base_url;
 
 use crate::config_file::WebSearchFileConfig;
 
-/// Environment override for the `web_search` backend (`you`, `brave`, `tavily`, or `searxng`).
+/// Environment override for the `web_search` backend (`you`, `brave`, `tavily`, `searxng`, or `serply`).
 const WEB_SEARCH_PROVIDER_ENV: &str = "AGENTIC_WEB_SEARCH_PROVIDER";
 /// Provider-neutral environment override for the `web_search` endpoint.
 const WEB_SEARCH_BASE_URL_ENV: &str = "AGENTIC_WEB_SEARCH_BASE_URL";
@@ -209,6 +209,28 @@ mod tests {
     }
 
     #[test]
+    fn web_search_config_selects_serply_from_environment() {
+        let config = resolve_web_search_config(
+            &WebSearchFileConfig::default(),
+            env_from(&[
+                ("AGENTIC_WEB_SEARCH_PROVIDER", "Serply"),
+                ("SERPLY_API_KEY", "serply-secret"),
+                ("YOU_API_KEY", "you-secret"),
+                ("YOU_API_BASE_URL", "https://you.example"),
+            ]),
+        )
+        .expect("resolve serply");
+        assert_eq!(config.provider, WebSearchProviderKind::Serply);
+        assert_eq!(config.api_key.as_deref(), Some("serply-secret"));
+        assert_eq!(
+            config.base_url.as_deref(),
+            Some("https://api.serply.io"),
+            "YOU_API_BASE_URL must not leak into the Serply endpoint"
+        );
+        assert_eq!(config.max_concurrent_queries, None);
+    }
+
+    #[test]
     fn web_search_config_selects_searxng_and_requires_its_endpoint() {
         let config = resolve_web_search_config(
             &WebSearchFileConfig::default(),
@@ -318,7 +340,7 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "AGENTIC_WEB_SEARCH_PROVIDER: unknown web_search provider \"bing\"; \
-             expected one of: you, brave, tavily, searxng"
+             expected one of: you, brave, tavily, searxng, serply"
         );
 
         let error = resolve_web_search_config(
@@ -379,6 +401,8 @@ mod tests {
             ("brave", "tavily", "TAVILY_API_KEY"),
             ("tavily", "you", "YOU_API_KEY"),
             ("you", "searxng", "SEARXNG_API_KEY"),
+            ("tavily", "serply", "SERPLY_API_KEY"),
+            ("serply", "you", "YOU_API_KEY"),
         ] {
             let generated = generated_web_search_file_config(env_from(&[("AGENTIC_WEB_SEARCH_PROVIDER", initial)]));
             let config = resolve_web_search_config(

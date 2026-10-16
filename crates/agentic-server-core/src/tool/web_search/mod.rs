@@ -3,13 +3,14 @@
 //! `mod.rs` owns the OpenAI-facing adapter: the [`WebSearchHandler`], the
 //! mapping to public `web_search_call` output items. [`provider`] defines the
 //! private provider contract, normalized result types, and the response helpers every provider shares. [`args`]
-//! parses the model's arguments; provider modules ([`you`], [`brave`], [`tavily`], [`searxng`]) shape requests and
-//! map responses.
+//! parses the model's arguments; provider modules ([`you`], [`brave`], [`tavily`], [`searxng`],
+//! [`serply`]) shape requests and map responses.
 
 pub(crate) mod args;
 pub(crate) mod brave;
 mod provider;
 pub(crate) mod searxng;
+pub(crate) mod serply;
 pub(crate) mod tavily;
 pub(crate) mod you;
 
@@ -32,6 +33,7 @@ use self::provider::{
     null_as_default, read_response_limited,
 };
 use self::searxng::SearxngSearchProvider;
+use self::serply::SerplySearchProvider;
 use self::tavily::TavilySearchProvider;
 use self::you::{YOU_API_BASE_URL, YOU_API_KEY, YouSearchProvider};
 use super::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
@@ -252,6 +254,15 @@ impl WebSearchHandler {
                 config
                     .max_concurrent_queries
                     .or(WebSearchProviderKind::Searxng.default_max_concurrent_queries())
+                    .unwrap_or(max_concurrent_gateway_calls),
+            )),
+            WebSearchProviderKind::Serply => Arc::new(SerplySearchProvider::from_values(
+                client,
+                config.api_key.clone(),
+                config.base_url.clone(),
+                config
+                    .max_concurrent_queries
+                    .or(WebSearchProviderKind::Serply.default_max_concurrent_queries())
                     .unwrap_or(max_concurrent_gateway_calls),
             )),
         };

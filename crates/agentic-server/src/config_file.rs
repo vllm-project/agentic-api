@@ -13,15 +13,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct WebSearchFileConfig {
-    /// Search backend (`you`, `brave`, `tavily`, or `searxng`); unset selects You.com.
+    /// Search backend (`you`, `brave`, `tavily`, `searxng`, or `serply`); unset selects You.com.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<WebSearchProviderKind>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
     /// Environment variable holding the provider's API key; unset uses the
     /// provider's conventional variable (`YOU_API_KEY`, `BRAVE_API_KEY`,
-    /// `TAVILY_API_KEY`, `SEARXNG_API_KEY`); SearXNG needs no key unless a
-    /// proxy demands one.
+    /// `TAVILY_API_KEY`, `SEARXNG_API_KEY`, `SERPLY_API_KEY`); SearXNG needs no
+    /// key unless a proxy demands one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key_env: Option<String>,
     /// Ceiling on concurrent provider requests within one batched search.
