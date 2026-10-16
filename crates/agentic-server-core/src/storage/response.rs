@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-use super::models::{item, response};
+use super::models::{item, response, response_history};
 use super::pool::DbPool;
 use super::types::{InOutItem, ResponseData, ResponseMetadata, StorageError, StoreResult};
 use crate::utils::common::serialize_to_string;
@@ -128,13 +128,12 @@ impl ResponseStore {
             None => Vec::new(),
         };
         let items_ = item::serialize_new_items(new_items, item::ItemSource::ResponseHistory)?;
-        item_ids.extend(items_.iter().map(|(id, _)| id.clone()));
-        let history_item_ids_json = serialize_to_string(&item_ids)?;
         let metadata_json = String::try_from(metadata)?;
 
         let mut tx = pool.begin().await?;
 
-        item::create_in_tx(&mut tx, items_, None).await?;
+        item_ids.extend(response_history::create_in_tx(&mut tx, &items_).await?);
+        let history_item_ids_json = serialize_to_string(&item_ids)?;
 
         response::create_in_tx(
             &mut tx,
