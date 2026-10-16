@@ -16,7 +16,6 @@ use agentic_core::config::{
     normalize_base_url,
 };
 use agentic_core::error::Error;
-use agentic_server::app::DEFAULT_MAX_REQUEST_BODY_SIZE;
 use agentic_server::auth::OidcConfig;
 use agentic_server::telemetry::{self, DEFAULT_SHUTDOWN_TIMEOUT, TelemetryConfig, TelemetryError, TelemetryGuard};
 use tracing::warn;
@@ -26,19 +25,16 @@ mod code_interpreter_startup;
 mod config_file;
 mod responses_config;
 mod server;
+mod server_settings;
 mod web_fetch_config;
 mod web_search_config;
 use responses_config::{generated_responses_file_config, resolve_responses_config};
 
-use config_file::{
-    CodeInterpreterFileConfig, FileConfig, McpFileConfig, MessagesGatewayFileConfig, ServerFileConfig, ToolsFileConfig,
-};
+use config_file::{CodeInterpreterFileConfig, FileConfig, McpFileConfig, MessagesGatewayFileConfig, ToolsFileConfig};
 use server::GatewayOptions;
+use server_settings::{RateLimitArgs, generated_server_file_config, resolve_max_request_body_size, resolve_rate_limit};
 use web_fetch_config::resolve_web_fetch_config;
 use web_search_config::{generated_web_search_file_config, resolve_web_search_config};
-
-/// Environment override for the serialized request-size ceiling.
-const MAX_REQUEST_BODY_SIZE_ENV: &str = "AGENTIC_MAX_REQUEST_BODY_SIZE_BYTES";
 
 #[derive(Args, Clone)]
 struct CommonArgs {
@@ -75,6 +71,9 @@ struct CommonArgs {
     /// `server.max_request_body_size_bytes` in the configuration file.
     #[arg(long, global = true)]
     max_request_body_size_bytes: Option<NonZeroUsize>,
+
+    #[command(flatten)]
+    rate_limit: RateLimitArgs,
 
     /// `SQLite` or `PostgreSQL` URL for conversation and response storage.
     /// Defaults to `agentic_api.db` in the Agentic API home directory.
@@ -268,31 +267,6 @@ impl CodeInterpreterEnvironmentValues {
             max_aggregate_worker_memory_bytes: Err(std::env::VarError::NotPresent),
         }
     }
-}
-
-/// Resolves the request-size ceiling as CLI argument > environment variable >
-/// configuration file > default.
-///
-/// An explicit CLI argument short-circuits the lower-priority sources, so a
-/// stale or malformed `AGENTIC_MAX_REQUEST_BODY_SIZE_BYTES` inherited from the
-/// environment cannot block startup when the operator names a valid value.
-fn resolve_max_request_body_size(cli: Option<NonZeroUsize>, file: Option<NonZeroUsize>) -> Result<NonZeroUsize, Error> {
-    resolve_max_request_body_size_value(cli, file, std::env::var(MAX_REQUEST_BODY_SIZE_ENV))
-}
-
-fn resolve_max_request_body_size_value(
-    cli: Option<NonZeroUsize>,
-    file: Option<NonZeroUsize>,
-    value: Result<String, std::env::VarError>,
-) -> Result<NonZeroUsize, Error> {
-    if let Some(cli) = cli {
-        return Ok(cli);
-    }
-    parse_env_nonzero_usize_value(
-        MAX_REQUEST_BODY_SIZE_ENV,
-        value,
-        file.unwrap_or(DEFAULT_MAX_REQUEST_BODY_SIZE),
-    )
 }
 
 fn parse_env_duration(name: &str, default_seconds: u64) -> Result<Duration, Error> {
@@ -514,6 +488,7 @@ fn gateway_options<'a>(
             common.max_request_body_size_bytes,
             file.server.max_request_body_size_bytes,
         )?,
+        rate_limit: resolve_rate_limit(&common.rate_limit, &file.server)?,
         oidc,
     })
 }
@@ -526,10 +501,7 @@ fn generated_file_config(llm_api_base: String) -> FileConfig {
             allowed_hosts: environment_value("AGENTIC_MCP_ALLOWED_HOSTS")
                 .map_or_else(Vec::new, |value| parse_comma_separated(&value)),
         },
-        server: ServerFileConfig {
-            max_request_body_size_bytes: environment_value(MAX_REQUEST_BODY_SIZE_ENV)
-                .and_then(|value| value.parse::<NonZeroUsize>().ok()),
-        },
+        server: generated_server_file_config(environment_value),
         tools: ToolsFileConfig {
             max_concurrent_gateway_calls: environment_value("AGENTIC_MAX_CONCURRENT_GATEWAY_CALLS")
                 .and_then(|value| value.parse::<NonZeroUsize>().ok()),
@@ -666,11 +638,12 @@ mod tests {
     use clap::{CommandFactory, Parser};
 
     use super::config_file::FileConfig;
+    use super::server_settings::resolve_max_request_body_size_value;
     use super::{
         Cli, CodeInterpreterEnvironmentValues, Commands, code_interpreter_config_from_operator_values,
         database_configs_from_env, oidc_config_from_values, parse_env_bool_value, parse_env_duration_value,
         parse_env_nonzero_u64_value, parse_env_nonzero_usize_value, parse_env_optional_duration_value,
-        parse_env_temp_store_value, parse_env_u32_value, parse_env_u64_value, resolve_max_request_body_size_value,
+        parse_env_temp_store_value, parse_env_u32_value, parse_env_u64_value,
     };
     use agentic_core::config::{
         DEFAULT_POSTGRES_ACQUIRE_TIMEOUT_SECONDS, DEFAULT_POSTGRES_IDLE_TIMEOUT_SECONDS,

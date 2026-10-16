@@ -364,6 +364,10 @@ development cluster unschedulable. Use hard topology-spread constraints across n
 availability requires them. The PodDisruptionBudget only limits voluntary disruptions; it cannot prevent simultaneous
 loss of co-located replicas during a node failure.
 
+Per-caller rate limits (`AGENTIC_RATE_LIMIT_REQUESTS_PER_MINUTE`) are enforced by each replica separately, so with the
+base's two replicas a caller can send up to twice the configured rate. With OIDC enabled, a caller is identified by its
+token's issuer and subject. See [Rate limits](../api/index.md#rate-limits).
+
 ## Verify persistence and transport
 
 Reach the private Service through a temporary port-forward in a separate terminal:

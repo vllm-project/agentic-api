@@ -14,6 +14,7 @@ use agentic_server::app::{
 };
 use agentic_server::auth::{OidcAuthError, OidcAuthenticator, OidcConfig};
 use agentic_server::model_capabilities::ModelCapabilities;
+use agentic_server::rate_limit::RateLimitConfig;
 use agentic_server::telemetry::TelemetryError;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
@@ -32,6 +33,8 @@ pub struct GatewayOptions<'a> {
     /// Ceiling on serialized inbound request bytes for HTTP bodies and
     /// WebSocket messages and frames.
     pub max_request_body_size: NonZeroUsize,
+    /// Per-caller request rate; `None` disables rate limiting.
+    pub rate_limit: Option<RateLimitConfig>,
     pub oidc: Option<OidcConfig>,
 }
 
@@ -82,9 +85,13 @@ async fn serve_gateway(
     host: &str,
     port: u16,
     authenticator: Option<OidcAuthenticator>,
+    rate_limit: Option<RateLimitConfig>,
 ) -> Result<(), ServerError> {
     let addr = format!("{host}:{port}");
-    let server_config = ServerConfig::from_env();
+    let server_config = ServerConfig {
+        rate_limit,
+        ..ServerConfig::from_env()
+    };
     let shutdown_token = state.shutdown_token.clone();
     let websocket_tracker = state.websocket_tracker.clone();
     let router = build_router_with_auth(state, &server_config, authenticator);
@@ -104,9 +111,10 @@ async fn serve_gateway_until_signal(
     host: &str,
     port: u16,
     authenticator: Option<OidcAuthenticator>,
+    rate_limit: Option<RateLimitConfig>,
 ) -> Result<(), ServerError> {
     let shutdown_token = state.shutdown_token.clone();
-    let gateway = serve_gateway(state, host, port, authenticator);
+    let gateway = serve_gateway(state, host, port, authenticator, rate_limit);
     tokio::pin!(gateway);
 
     tokio::select! {
@@ -177,6 +185,7 @@ pub async fn run(config: Config, gateway: GatewayOptions<'_>) -> Result<(), Serv
         host,
         port,
         max_request_body_size,
+        rate_limit,
         oidc,
         model_capabilities,
     } = gateway;
@@ -192,7 +201,7 @@ pub async fn run(config: Config, gateway: GatewayOptions<'_>) -> Result<(), Serv
         model_capabilities,
     )
     .await?;
-    serve_gateway_until_signal(state, host, port, authenticator).await
+    serve_gateway_until_signal(state, host, port, authenticator, rate_limit).await
 }
 
 /// Spawn vLLM as a subprocess and run the gateway in the foreground.
@@ -210,6 +219,7 @@ pub async fn run_with_llm(
         host,
         port,
         max_request_body_size,
+        rate_limit,
         oidc,
         model_capabilities,
     } = gateway;
@@ -247,7 +257,7 @@ pub async fn run_with_llm(
             } => state?,
         };
 
-        let gateway = serve_gateway(state, host, port, authenticator);
+        let gateway = serve_gateway(state, host, port, authenticator, rate_limit);
         tokio::pin!(gateway);
 
         tokio::select! {

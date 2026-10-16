@@ -75,6 +75,26 @@ async fn spawn_gateway(authenticator: OidcAuthenticator, upstream_url: &str) -> 
             cors_allowed_origins: Vec::new(),
             #[cfg(feature = "openapi")]
             enable_openapi_docs: false,
+            rate_limit: None,
+        },
+        Some(authenticator),
+    );
+    spawn_router(router).await
+}
+
+async fn spawn_rate_limited_gateway(
+    authenticator: OidcAuthenticator,
+    upstream_url: &str,
+    rate_limit: agentic_server::rate_limit::RateLimitConfig,
+) -> TestGateway {
+    let config = test_config(upstream_url);
+    let router = build_router_with_auth(
+        test_state(&config),
+        &ServerConfig {
+            cors_allowed_origins: Vec::new(),
+            #[cfg(feature = "openapi")]
+            enable_openapi_docs: false,
+            rate_limit: Some(rate_limit),
         },
         Some(authenticator),
     );
@@ -600,6 +620,50 @@ async fn configured_oidc_accepts_valid_identity_and_uses_service_upstream_creden
     assert!(
         headers.get("x-api-key").is_none(),
         "caller-supplied OpenAI API key must not reach the upstream"
+    );
+}
+
+#[tokio::test]
+async fn rate_limits_key_oidc_callers_by_subject_not_token() {
+    let (issuer, private_key_der, _public_jwk, _jwks_requests, _provider) = spawn_oidc_provider().await;
+    let authenticator = discover_test_authenticator(&issuer).await;
+    let (upstream_url, _observed_headers, _upstream) = spawn_models_upstream().await;
+    let one_per_minute =
+        agentic_server::rate_limit::RateLimitConfig::new(std::num::NonZeroU32::MIN, None).expect("valid rate limit");
+    let gateway = spawn_rate_limited_gateway(authenticator, &upstream_url, one_per_minute).await;
+    let now = jsonwebtoken::get_current_timestamp();
+    let token = |subject: &str, expires_in: u64| {
+        let mut header = Header::new(Algorithm::RS256);
+        header.kid = Some("test-key".to_owned());
+        custom_identity_token(
+            &header,
+            &json!({"iss": issuer, "sub": subject, "aud": "agentic-api", "exp": now + expires_in}),
+            &private_key_der,
+        )
+    };
+    let status = |token: String| {
+        let url = format!("http://{}/v1/models", gateway.address);
+        async move {
+            reqwest::Client::new()
+                .get(url)
+                .bearer_auth(token)
+                .send()
+                .await
+                .expect("request gateway")
+                .status()
+        }
+    };
+
+    assert_eq!(status(token("alice", 300)).await, reqwest::StatusCode::OK);
+    assert_eq!(
+        status(token("alice", 301)).await,
+        reqwest::StatusCode::TOO_MANY_REQUESTS,
+        "a different token for the same subject shares its bucket"
+    );
+    assert_eq!(
+        status(token("bob", 300)).await,
+        reqwest::StatusCode::OK,
+        "another subject has its own bucket"
     );
 }
 

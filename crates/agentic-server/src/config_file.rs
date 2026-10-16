@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::io::Write;
-use std::num::{NonZeroU64, NonZeroUsize};
+use std::num::{NonZeroU32, NonZeroU64, NonZeroUsize};
 use std::path::Path;
 use std::time::Duration;
 
@@ -82,11 +82,17 @@ impl McpFileConfig {
 pub(crate) struct ServerFileConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_request_body_size_bytes: Option<NonZeroUsize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_limit_requests_per_minute: Option<NonZeroU32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_limit_burst: Option<NonZeroU32>,
 }
 
 impl ServerFileConfig {
     fn is_empty(&self) -> bool {
         self.max_request_body_size_bytes.is_none()
+            && self.rate_limit_requests_per_minute.is_none()
+            && self.rate_limit_burst.is_none()
     }
 }
 
@@ -468,6 +474,8 @@ mod tests {
             },
             server: ServerFileConfig {
                 max_request_body_size_bytes: std::num::NonZeroUsize::new(20 * 1024 * 1024),
+                rate_limit_requests_per_minute: std::num::NonZeroU32::new(120),
+                rate_limit_burst: None,
             },
             ..FileConfig::default()
         };
@@ -484,6 +492,8 @@ mod tests {
         assert!(contents.contains("allowed_hosts = [\"mcp.example.com\"]"));
         assert!(contents.contains("[server]"));
         assert!(contents.contains("max_request_body_size_bytes = 20971520"));
+        assert!(contents.contains("rate_limit_requests_per_minute = 120"));
+        assert!(!contents.contains("rate_limit_burst"), "an unset burst is not written");
         assert!(!contents.contains("YOU_API_KEY ="));
         assert!(!contents.contains("[mcp_servers]"));
         assert!(!contents.contains("[models"));
@@ -798,6 +808,33 @@ mod tests {
                 .map(std::num::NonZeroUsize::get),
             Some(1_048_576)
         );
+    }
+
+    #[test]
+    fn rate_limit_settings_parse_and_reject_zero() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[server]\nrate_limit_requests_per_minute = 600\nrate_limit_burst = 20\n",
+        )
+        .expect("write config");
+        let config = FileConfig::load(home.path())
+            .expect("rate limit settings parse")
+            .expect("existing config");
+        assert_eq!(
+            config
+                .server
+                .rate_limit_requests_per_minute
+                .map(std::num::NonZeroU32::get),
+            Some(600)
+        );
+        assert_eq!(config.server.rate_limit_burst.map(std::num::NonZeroU32::get), Some(20));
+
+        for key in ["rate_limit_requests_per_minute", "rate_limit_burst"] {
+            fs::write(home.path().join("config.toml"), format!("[server]\n{key} = 0\n")).expect("write config");
+            let error = FileConfig::load(home.path()).expect_err("zero must fail");
+            assert!(error.to_string().contains(key), "{error}");
+        }
     }
 
     #[test]

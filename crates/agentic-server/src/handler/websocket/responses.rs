@@ -21,6 +21,7 @@ use agentic_core::types::injection::ResponseInjectRequest;
 use super::error::WsError;
 use crate::app::AppState;
 use crate::auth::AuthenticatedPrincipal;
+use crate::rate_limit::{Decision, RateLimitCharge, rate_limited_message};
 
 mod connection;
 mod control;
@@ -47,16 +48,24 @@ type WsSender = mpsc::Sender<WsOutboundEvent>;
 const WS_OUTBOUND_BUFFER: usize = 64;
 
 pub async fn responses_ws(State(state): State<AppState>, headers: HeaderMap, ws: WebSocketUpgrade) -> Response {
-    upgrade_responses_ws(state, headers, ws, None)
+    upgrade_responses_ws(state, headers, ws, None, None)
 }
 
 pub(crate) async fn responses_ws_with_auth(
     State(state): State<AppState>,
     principal: Option<Extension<AuthenticatedPrincipal>>,
+    rate_limit: Option<Extension<RateLimitCharge>>,
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Response {
-    upgrade_responses_ws(state, headers, ws, principal.map(|Extension(principal)| principal))
+    let principal = principal.map(|Extension(principal)| principal);
+    upgrade_responses_ws(
+        state,
+        headers,
+        ws,
+        principal,
+        rate_limit.map(|Extension(charge)| charge),
+    )
 }
 
 fn upgrade_responses_ws(
@@ -64,6 +73,7 @@ fn upgrade_responses_ws(
     headers: HeaderMap,
     ws: WebSocketUpgrade,
     principal: Option<AuthenticatedPrincipal>,
+    rate_limit: Option<RateLimitCharge>,
 ) -> Response {
     let websocket_guard = state.websocket_tracker.track();
     // Read before `state` moves into the upgrade closure. Messages and frames
@@ -74,7 +84,7 @@ fn upgrade_responses_ws(
         .max_frame_size(max_request_body_size)
         .on_upgrade(move |socket| async move {
             let _websocket_guard = websocket_guard;
-            Box::pin(responses_ws_loop(socket, state, headers, principal)).await;
+            Box::pin(responses_ws_loop(socket, state, headers, principal, rate_limit)).await;
         })
 }
 
@@ -140,6 +150,19 @@ fn handle_ws_client_message(
                         return false;
                     }
                 }
+            }
+            // Charged before any capacity is reserved, so a limited create holds nothing.
+            if let Some(Decision::Limited { retry_after, .. }) =
+                multiplexer.rate_limit.as_ref().map(RateLimitCharge::check)
+            {
+                let message = rate_limited_message(retry_after);
+                let stream_id = stream_id_from_text(&text);
+                return handle_ws_error(
+                    sender,
+                    WsError::RateLimited { message },
+                    stream_id.as_ref(),
+                    multiplexer.event_limit(),
+                );
             }
             let input_bytes = text.len();
             if !multiplexer.has_capacity_for(input_bytes) {

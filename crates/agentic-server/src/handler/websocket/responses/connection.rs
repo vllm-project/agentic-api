@@ -14,6 +14,7 @@ use super::{WS_OUTBOUND_BUFFER, WsError, WsMultiplexer, WsOutboundEvent, WsSende
 use crate::app::AppState;
 use crate::auth::AuthenticatedPrincipal;
 use crate::handler::common::extract_bearer;
+use crate::rate_limit::RateLimitCharge;
 
 pub(super) fn begin_ws_draining(multiplexer: &mut WsMultiplexer, draining: &mut bool) {
     *draining = true;
@@ -31,6 +32,7 @@ pub(super) async fn responses_ws_loop(
     state: AppState,
     headers: HeaderMap,
     principal: Option<AuthenticatedPrincipal>,
+    rate_limit: Option<RateLimitCharge>,
 ) {
     let shutdown_token = state.shutdown_token.clone();
     let state = Arc::new(state);
@@ -41,7 +43,7 @@ pub(super) async fn responses_ws_loop(
     let mut writer = spawn_writer(socket_sender, outbound_rx);
     let mut writer_finished = false;
     let mut expiry = tokio::time::interval(std::time::Duration::from_secs(1));
-    let mut multiplexer = WsMultiplexer::new(state, auth, principal, outbound_tx, shutdown_token.clone());
+    let mut multiplexer = WsMultiplexer::new(state, auth, principal, rate_limit, outbound_tx, shutdown_token.clone());
     let mut draining = false;
     let mut client_disconnected = false;
 

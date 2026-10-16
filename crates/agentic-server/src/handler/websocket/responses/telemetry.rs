@@ -78,7 +78,13 @@ pub(super) fn finish_local(execution: &mut ExecutionSpan, result: &Result<(), Ws
             }
             execution.not_delivered();
         }
-        Err(WsError::InvalidJson(_) | WsError::UnexpectedType | WsError::BinaryFrame | WsError::TooManyRequests) => {
+        Err(
+            WsError::InvalidJson(_)
+            | WsError::UnexpectedType
+            | WsError::BinaryFrame
+            | WsError::TooManyRequests
+            | WsError::RateLimited { .. },
+        ) => {
             execution.failed_with(FailureCategory::InvalidRequest);
             execution.not_delivered();
         }

@@ -16,6 +16,7 @@ use super::{
 };
 use crate::app::AppState;
 use crate::auth::AuthenticatedPrincipal;
+use crate::rate_limit::RateLimitCharge;
 
 const WS_MAX_OUTSTANDING_REQUESTS: usize = 64;
 const WS_MAX_OUTSTANDING_BYTES: usize = 12 * 1024 * 1024;
@@ -93,6 +94,8 @@ pub(super) struct WsMultiplexer {
     pub(super) state: Arc<AppState>,
     auth: Option<String>,
     pub(super) principal: Option<Arc<AuthenticatedPrincipal>>,
+    /// The caller's bucket, charged for each client `response.create`.
+    pub(super) rate_limit: Option<RateLimitCharge>,
     outbound_tx: mpsc::Sender<WsOutboundEvent>,
     lanes: HashMap<Option<StreamId>, VecDeque<WsWorkItem>>,
     // Idle lanes retain their latest checkpoint until the connection closes.
@@ -109,6 +112,7 @@ impl WsMultiplexer {
         state: Arc<AppState>,
         auth: Option<String>,
         principal: Option<AuthenticatedPrincipal>,
+        rate_limit: Option<RateLimitCharge>,
         outbound_tx: mpsc::Sender<WsOutboundEvent>,
         shutdown_token: CancellationToken,
     ) -> Self {
@@ -118,6 +122,7 @@ impl WsMultiplexer {
             state,
             auth,
             principal: principal.map(Arc::new),
+            rate_limit,
             outbound_tx,
             lanes: HashMap::new(),
             sessions: HashMap::new(),

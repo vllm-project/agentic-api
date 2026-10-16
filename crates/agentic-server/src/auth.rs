@@ -389,13 +389,13 @@ pub async fn require_oidc(
 }
 
 #[derive(Clone, Copy)]
-enum AuthErrorFormat {
+pub(crate) enum AuthErrorFormat {
     OpenAi,
     Anthropic,
 }
 
 impl AuthErrorFormat {
-    fn for_path(path: &str) -> Self {
+    pub(crate) fn for_path(path: &str) -> Self {
         if matches!(path, ANTHROPIC_MESSAGES_PATH | ANTHROPIC_COUNT_TOKENS_PATH) {
             Self::Anthropic
         } else {

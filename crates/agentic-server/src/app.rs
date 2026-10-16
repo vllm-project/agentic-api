@@ -27,6 +27,7 @@ use crate::handler::{
     update_conversation,
 };
 use crate::model_capabilities::ModelCapabilities;
+use crate::rate_limit::{RateLimitConfig, RateLimiter, enforce_rate_limit};
 use crate::telemetry::http::{HttpMetrics, track_request};
 use crate::telemetry::websocket::WebSocketMetrics;
 
@@ -225,6 +226,8 @@ pub struct ServerConfig {
     /// Controlled by `ENABLE_OPENAPI_DOCS=true`; disabled by default.
     #[cfg(feature = "openapi")]
     pub enable_openapi_docs: bool,
+    /// Per-caller request rate on protected routes; `None` disables it.
+    pub rate_limit: Option<RateLimitConfig>,
 }
 
 impl ServerConfig {
@@ -247,6 +250,7 @@ impl ServerConfig {
             cors_allowed_origins,
             #[cfg(feature = "openapi")]
             enable_openapi_docs,
+            rate_limit: None,
         }
     }
 
@@ -375,6 +379,14 @@ pub fn build_router_with_auth(
         .route("/v1/responses", post(responses).get(responses_ws_with_auth))
         .route("/v1/responses/compact", post(compact_response))
         .route("/v1/responses/{response_id}", retrieval_route);
+    // Layered before authentication, so it runs after it and sees the principal.
+    let protected_routes = match server_config.rate_limit {
+        Some(config) => protected_routes.route_layer(middleware::from_fn_with_state(
+            Arc::new(RateLimiter::new(config)),
+            enforce_rate_limit,
+        )),
+        None => protected_routes,
+    };
     let protected_routes = match authenticator {
         Some(authenticator) => {
             protected_routes.route_layer(middleware::from_fn_with_state(authenticator, require_oidc))

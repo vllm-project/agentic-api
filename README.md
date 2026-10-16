@@ -295,6 +295,9 @@ allowed_hosts = ["mcp.example.com"]
 # Maximum serialized request size in bytes for HTTP bodies and WebSocket
 # messages and frames. Must be greater than zero.
 max_request_body_size_bytes = 10485760
+# Optional per-caller request rate limit; unset disables it.
+# rate_limit_requests_per_minute = 600
+# rate_limit_burst = 600
 
 [tools]
 # Upper bound for gateway-owned calls within one Responses round and for
@@ -351,12 +354,19 @@ oversized WebSocket messages and frames are rejected by the transport, which clo
 parsed. Order of precedence is `--max-request-body-size-bytes`, then `AGENTIC_MAX_REQUEST_BODY_SIZE_BYTES`, then this
 file setting.
 
+`rate_limit_requests_per_minute` turns on a per-caller request rate limit on every API route and on each WebSocket
+`response.create`; it is off when unset. `rate_limit_burst` sets how many requests a caller may send at once
+and defaults to the per-minute rate. A caller over its limit receives `429` with `retry-after`. The limit is per
+process, so N replicas allow N times the rate. Order of precedence is `--rate-limit-requests-per-minute` and
+`--rate-limit-burst`, then `AGENTIC_RATE_LIMIT_REQUESTS_PER_MINUTE` and `AGENTIC_RATE_LIMIT_BURST`, then these file
+settings. See [Rate limits](docs/api/index.md#rate-limits) for how callers are identified.
+
 `api_key_env` names the process environment variable containing the web-search credential; it does not contain the
 credential itself. When it is unset, the selected provider's conventional variable is read (`YOU_API_KEY`,
 `BRAVE_API_KEY`, or `TAVILY_API_KEY`). Newly generated files leave `api_key_env` unset so changing providers also changes the default
 credential variable. `AGENTIC_WEB_SEARCH_PROVIDER`, `AGENTIC_WEB_SEARCH_BASE_URL`, `AGENTIC_WEB_SEARCH_MAX_CONCURRENT_QUERIES`,
-`AGENTIC_MCP_ALLOWED_HOSTS`, `AGENTIC_MAX_REQUEST_BODY_SIZE_BYTES`, and `AGENTIC_MAX_CONCURRENT_GATEWAY_CALLS` can
-override their typed file settings; `YOU_API_BASE_URL` is still honored as the endpoint override when the provider is
+`AGENTIC_MCP_ALLOWED_HOSTS`, `AGENTIC_MAX_REQUEST_BODY_SIZE_BYTES`, `AGENTIC_RATE_LIMIT_REQUESTS_PER_MINUTE`,
+`AGENTIC_RATE_LIMIT_BURST`, and `AGENTIC_MAX_CONCURRENT_GATEWAY_CALLS` can override their typed file settings; `YOU_API_BASE_URL` is still honored as the endpoint override when the provider is
 `you`. The concurrency values are sliding-window upper bounds; handlers may further serialize calls to the same tool
 name. The MCP allowlist is used only for request-declared remote MCP URLs; configured `[mcp_servers]` entries are trusted
 operator configuration.
