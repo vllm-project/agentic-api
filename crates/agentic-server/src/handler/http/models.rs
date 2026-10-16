@@ -11,10 +11,13 @@ use tracing::{debug, info, warn};
 
 use agentic_core::proxy::{ProxyBody, ProxyResponse, error_response, processed_response_headers, proxy_get};
 use agentic_core::readiness::{LLM_READINESS_PROBE_TIMEOUT, LlmReadiness, probe_llm_readiness};
+use agentic_core::types::messages::ReasoningEffortLevel;
 
 use super::super::common::convert_response;
 use crate::app::AppState;
-use crate::model_capabilities::{InputModalities, ModelCapabilities, UpstreamCapabilities};
+use crate::model_capabilities::{
+    CodexReasoningLevel, DEFAULT_REASONING_LEVELS, InputModalities, ModelCapabilities, UpstreamCapabilities,
+};
 
 /// One model entry of an upstream OpenAI-compatible `/v1/models` payload.
 ///
@@ -54,20 +57,9 @@ struct UpstreamModelId {
     id: Option<String>,
 }
 
-/// Reasoning effort levels Codex offers for a model.
-#[derive(Clone, Copy, Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum ReasoningEffort {
-    Low,
-    Medium,
-    High,
-}
-
-/// One selectable reasoning level with its Codex-facing description.
-#[derive(Debug, Serialize)]
-struct SupportedReasoningLevel {
-    effort: ReasoningEffort,
-    description: &'static str,
+/// Describe `levels` in the order the catalog lists them.
+fn supported_reasoning_levels(levels: &[ReasoningEffortLevel]) -> Vec<CodexReasoningLevel> {
+    levels.iter().copied().map(CodexReasoningLevel::from_effort).collect()
 }
 
 /// How Codex truncates oversized tool output for a model.
@@ -100,7 +92,7 @@ struct CodexModelInfo {
     shell_type: &'static str,
     visibility: &'static str,
     base_instructions: &'static str,
-    supported_reasoning_levels: Vec<SupportedReasoningLevel>,
+    supported_reasoning_levels: Vec<CodexReasoningLevel>,
     supports_reasoning_summaries: bool,
     default_reasoning_summary: &'static str,
     support_verbosity: bool,
@@ -138,20 +130,7 @@ impl Default for CodexModelInfo {
             shell_type: "shell_command",
             visibility: "list",
             base_instructions: "",
-            supported_reasoning_levels: vec![
-                SupportedReasoningLevel {
-                    effort: ReasoningEffort::Low,
-                    description: "Fast responses with lighter reasoning",
-                },
-                SupportedReasoningLevel {
-                    effort: ReasoningEffort::Medium,
-                    description: "Balances speed and reasoning depth",
-                },
-                SupportedReasoningLevel {
-                    effort: ReasoningEffort::High,
-                    description: "Greater reasoning depth for complex problems",
-                },
-            ],
+            supported_reasoning_levels: supported_reasoning_levels(DEFAULT_REASONING_LEVELS),
             supports_reasoning_summaries: false,
             default_reasoning_summary: "auto",
             support_verbosity: false,
@@ -197,6 +176,7 @@ fn upstream_model_to_codex(model: &UpstreamModel, capabilities: &ModelCapabiliti
         auto_review_model_override: id.to_owned(),
         supports_reasoning_summaries: upstream.reasoning,
         input_modalities: capabilities.resolve(id, upstream),
+        supported_reasoning_levels: supported_reasoning_levels(capabilities.resolve_reasoning_levels(id)),
         context_window,
         max_context_window: context_window,
         ..CodexModelInfo::default()
@@ -499,9 +479,11 @@ mod tests {
 
     use serde_json::{Value, json};
 
+    use agentic_core::types::messages::ReasoningEffortLevel;
+
     use super::{build_codex_models_response, dependencies_are_ready, find_upstream_model};
     use crate::app::ReadinessTracker;
-    use crate::model_capabilities::{InputModalities, ModelCapabilities};
+    use crate::model_capabilities::{InputModalities, ModelCapabilities, ModelOverride, SupportedReasoningLevels};
 
     const UPSTREAM_MODELS: &str = r#"{
         "object": "list",
@@ -513,10 +495,28 @@ mod tests {
         ]
     }"#;
 
+    /// An override carrying only the listed input modalities.
+    fn modalities(modalities: InputModalities) -> ModelOverride {
+        ModelOverride {
+            input_modalities: Some(modalities),
+            ..ModelOverride::default()
+        }
+    }
+
+    /// An override carrying only the listed reasoning levels.
+    fn levels(levels: &[ReasoningEffortLevel]) -> ModelOverride {
+        ModelOverride {
+            supported_reasoning_levels: Some(
+                SupportedReasoningLevels::try_new(levels).expect("valid reasoning levels"),
+            ),
+            ..ModelOverride::default()
+        }
+    }
+
     fn configured_capabilities() -> ModelCapabilities {
         ModelCapabilities::new(BTreeMap::from([
-            ("vision-model".to_owned(), InputModalities::TextAndImage),
-            ("pinned-text-model".to_owned(), InputModalities::Text),
+            ("vision-model".to_owned(), modalities(InputModalities::TextAndImage)),
+            ("pinned-text-model".to_owned(), modalities(InputModalities::Text)),
         ]))
     }
 
@@ -557,6 +557,44 @@ mod tests {
             entry(&models, "plain-model")["input_modalities"],
             json!(["text"]),
             "an unknown model without metadata must stay text-only"
+        );
+    }
+
+    #[test]
+    fn catalog_lists_configured_reasoning_levels_in_order() {
+        let capabilities = ModelCapabilities::new(BTreeMap::from([(
+            "plain-model".to_owned(),
+            levels(&[
+                ReasoningEffortLevel::Low,
+                ReasoningEffortLevel::High,
+                ReasoningEffortLevel::Max,
+            ]),
+        )]));
+        let models = catalog(UPSTREAM_MODELS, &capabilities);
+
+        assert_eq!(
+            entry(&models, "plain-model")["supported_reasoning_levels"],
+            json!([
+                {"effort": "low", "description": "Fast responses with lighter reasoning"},
+                {"effort": "high", "description": "Greater reasoning depth for complex problems"},
+                {"effort": "max", "description": "Maximum reasoning depth for the hardest problems"}
+            ]),
+            "a configured model must advertise its levels in the configured order"
+        );
+    }
+
+    #[test]
+    fn catalog_keeps_the_default_reasoning_levels_without_configuration() {
+        let models = catalog(UPSTREAM_MODELS, &ModelCapabilities::default());
+
+        assert_eq!(
+            entry(&models, "plain-model")["supported_reasoning_levels"],
+            json!([
+                {"effort": "low", "description": "Fast responses with lighter reasoning"},
+                {"effort": "medium", "description": "Balances speed and reasoning depth"},
+                {"effort": "high", "description": "Greater reasoning depth for complex problems"}
+            ]),
+            "an unconfigured model must keep the default levels"
         );
     }
 

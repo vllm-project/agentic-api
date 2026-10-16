@@ -15,3 +15,6 @@ require_approval = "never"
 
 [models."Qwen/Qwen3-VL-8B-Instruct"]
 input_modalities = ["text", "image"]
+
+[models."zai-org/GLM-5.3-Flash"]
+supported_reasoning_levels = ["low", "high", "max"]

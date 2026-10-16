@@ -324,6 +324,11 @@ max_stream_event_bytes = 16777216
 # Accepted values are "text" and "text" + "image"; text is always required.
 input_modalities = ["text", "image"]
 
+[models."zai-org/GLM-5.3-Flash"]
+# Reasoning effort levels to offer for this served model ID, in the order Codex lists them.
+# Accepted values are "low", "medium", "high", "xhigh", and "max".
+supported_reasoning_levels = ["low", "high", "max"]
+
 [mcp_servers.counter]
 url = "https://mcp.example.com/mcp"
 allowed_tools = ["tool_1_name", "tool_2_name"]
@@ -340,6 +345,12 @@ offending file and line.
 This matters because Codex reads its local model catalog and strips image content from a request before sending it
 when the catalog says the model is text-only, so a missing override blocks image input even against a vision-capable
 upstream.
+
+`supported_reasoning_levels` lists the reasoning effort levels Codex offers for that served model, in the order the
+catalog advertises them. A model without the setting keeps `["low", "medium", "high"]`, so existing catalogs are
+unchanged. Levels use the shared effort vocabulary (`low`, `medium`, `high`, `xhigh`, and `max`); unknown level names,
+empty lists, and repeated levels are rejected at startup with the offending file and line. Each level's Codex-facing
+description comes from a fixed per-level table rather than from the configuration file.
 
 `max_request_body_size_bytes` bounds the serialized request the gateway accepts on `/v1/responses`,
 `/v1/responses/compact`, `/v1/conversations`, the Anthropic Messages endpoints, and the Responses WebSocket. It counts

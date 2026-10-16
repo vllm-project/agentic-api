@@ -345,7 +345,7 @@ fn harness_environment(
             session_root,
             gateway_url,
             &selection.model,
-            selection.input_modalities,
+            &selection.capabilities,
             options.common.api_key.as_deref(),
         )
         .map_err(Error::from),
@@ -421,7 +421,7 @@ fn prepare_attached_harness_environment(
             session_root,
             gateway_url,
             &selection.model,
-            selection.input_modalities,
+            &selection.capabilities,
             api_key,
         )
         .map_err(Error::from),
@@ -563,7 +563,9 @@ mod tests {
 
     use super::{CodexModelSelection, DEFAULT_CLAUDE_EFFORT, HarnessModel, harness_launch_args, server_args};
     use crate::agentic_cli::{CommonOptions, Harness, SourceOptions};
-    use crate::model_capabilities::InputModalities;
+    use agentic_core::types::messages::ReasoningEffortLevel;
+
+    use crate::model_capabilities::{CodexModelCapabilities, InputModalities};
 
     /// A gateway that answers catalog requests from a scripted queue and records what it was asked.
     struct MockGateway {
@@ -662,7 +664,7 @@ mod tests {
             .expect("the catalog lists the requested model");
 
         assert_eq!(selection.model, "vision-model");
-        assert_eq!(selection.input_modalities, InputModalities::TextAndImage);
+        assert_eq!(selection.capabilities.input_modalities, InputModalities::TextAndImage);
         let request = gateway.first_request();
         assert!(
             request.starts_with("GET /v1/models?client_version=9.9.9 "),
@@ -674,6 +676,55 @@ mod tests {
         );
     }
 
+    fn catalog_body_with_reasoning_levels() -> String {
+        r#"{"models":[
+            {"slug":"glm-model","input_modalities":["text"],
+             "supported_reasoning_levels":[{"effort":"low","description":"Fast"},{"effort":"max","description":"Deepest"}]}
+        ]}"#
+        .to_owned()
+    }
+
+    #[tokio::test]
+    async fn catalog_selection_reads_the_advertised_reasoning_levels() {
+        let gateway = spawn_mock_gateway(vec![("200 OK", catalog_body_with_reasoning_levels())]).await;
+
+        let selection = select(&gateway, Some("glm-model"), None)
+            .await
+            .expect("the catalog lists the requested model");
+
+        let levels = selection.capabilities.reasoning_levels();
+        assert_eq!(
+            levels.iter().map(|level| level.effort).collect::<Vec<_>>(),
+            [ReasoningEffortLevel::Low, ReasoningEffortLevel::Max],
+            "the launcher keeps the order the gateway advertised"
+        );
+        assert_eq!(levels[1].description, "Deepest");
+        assert_eq!(
+            selection.capabilities.default_reasoning_level(),
+            ReasoningEffortLevel::Low,
+            "a catalog without medium starts on its first level"
+        );
+    }
+
+    #[tokio::test]
+    async fn catalog_selection_falls_back_to_the_default_reasoning_levels() {
+        let gateway = spawn_mock_gateway(vec![("200 OK", catalog_body())]).await;
+
+        let selection = select(&gateway, Some("first-model"), None)
+            .await
+            .expect("the catalog lists the requested model");
+
+        assert_eq!(
+            selection.capabilities.reasoning_levels(),
+            crate::model_capabilities::default_codex_reasoning_levels(),
+            "a gateway without advertised levels keeps the default catalog"
+        );
+        assert_eq!(
+            selection.capabilities.default_reasoning_level(),
+            ReasoningEffortLevel::Medium
+        );
+    }
+
     #[tokio::test]
     async fn catalog_selection_defaults_to_the_first_advertised_model() {
         let gateway = spawn_mock_gateway(vec![("200 OK", catalog_body())]).await;
@@ -681,7 +732,7 @@ mod tests {
         let selection = select(&gateway, None, None).await.expect("a catalog entry is selected");
 
         assert_eq!(selection.model, "first-model");
-        assert_eq!(selection.input_modalities, InputModalities::Text);
+        assert_eq!(selection.capabilities.input_modalities, InputModalities::Text);
     }
 
     #[tokio::test]
@@ -744,7 +795,7 @@ mod tests {
             .await
             .expect("a warming gateway must be retried");
 
-        assert_eq!(selection.input_modalities, InputModalities::TextAndImage);
+        assert_eq!(selection.capabilities.input_modalities, InputModalities::TextAndImage);
         assert_eq!(gateway.request_count(), 2);
     }
 
@@ -801,7 +852,7 @@ mod tests {
         .expect("a slow warm-up must not consume the model-missing grace");
 
         assert_eq!(selection.model, "vision-model");
-        assert_eq!(selection.input_modalities, InputModalities::TextAndImage);
+        assert_eq!(selection.capabilities.input_modalities, InputModalities::TextAndImage);
         assert_eq!(
             gateway.request_count(),
             8,
@@ -1098,7 +1149,11 @@ mod tests {
         let environment = super::prepare_attached_harness_environment(
             &HarnessModel::Codex(CodexModelSelection {
                 model: "Qwen/Qwen3-8B".to_owned(),
-                input_modalities: InputModalities::TextAndImage,
+                capabilities: CodexModelCapabilities {
+                    slug: "vision-model".to_owned(),
+                    input_modalities: InputModalities::TextAndImage,
+                    supported_reasoning_levels: Vec::new(),
+                },
             }),
             &root,
             &root,

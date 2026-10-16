@@ -129,7 +129,11 @@ def validate_capture(records: list[dict[str, Any]], expected_model: str | None =
 
 
 def validate_responses_capture(
-    records: list[dict[str, Any]], expected_model: str, *, expected_images: list[Path] | None = None
+    records: list[dict[str, Any]],
+    expected_model: str,
+    *,
+    expected_images: list[Path] | None = None,
+    expected_reasoning_effort: str | None = None,
 ) -> None:
     responses = [record["body"] for record in records if record["kind"] == "responses"]
     transports = [record["body"] for record in records if record["kind"] == "responses_transport"]
@@ -141,6 +145,13 @@ def validate_responses_capture(
     assert request.get("model") == expected_model, f"expected requested model {expected_model!r}, got {request.get('model')!r}"
     assert request.get("stream") is True, "expected Codex to request a streaming response"
     assert request.get("input"), "expected a non-empty Responses input"
+
+    if expected_reasoning_effort is not None:
+        reasoning = request.get("reasoning")
+        assert isinstance(reasoning, dict), f"expected a Responses reasoning object, got {reasoning!r}"
+        assert reasoning.get("effort") == expected_reasoning_effort, (
+            f"expected reasoning.effort {expected_reasoning_effort!r}, got {reasoning.get('effort')!r}"
+        )
 
     if expected_images is not None:
         items = request["input"]
@@ -322,9 +333,12 @@ def parse_args() -> argparse.Namespace:
     images = assert_capture.add_mutually_exclusive_group()
     images.add_argument("--expect-image", type=Path, action="append", help="Require these exact PNG attachments in order")
     images.add_argument("--expect-no-images", action="store_true", help="Require no user image attachments")
+    assert_capture.add_argument("--expect-reasoning-effort", help="Require this reasoning.effort on the Responses request")
     args = parser.parse_args()
-    if args.command == "assert-capture" and args.api != "responses" and (args.expect_image or args.expect_no_images):
-        parser.error("image assertions require --api responses")
+    if args.command == "assert-capture" and args.api != "responses" and (
+        args.expect_image or args.expect_no_images or args.expect_reasoning_effort
+    ):
+        parser.error("image and reasoning assertions require --api responses")
     return args
 
 
@@ -334,7 +348,12 @@ def main() -> None:
         records = load_capture(args.capture)
         if args.api == "responses":
             expected_images = [] if args.expect_no_images else args.expect_image
-            validate_responses_capture(records, args.model, expected_images=expected_images)
+            validate_responses_capture(
+                records,
+                args.model,
+                expected_images=expected_images,
+                expected_reasoning_effort=args.expect_reasoning_effort,
+            )
             responses = sum(record["kind"] == "responses" for record in records)
             transports = sum(record["kind"] == "responses_transport" for record in records)
             print(f"capture valid: responses={responses} transports={transports}")

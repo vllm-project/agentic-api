@@ -132,8 +132,8 @@ a coding harness (Codex or Claude Code) as subprocesses for local, single-comman
 (`agentic serve <model>`), and never touch the request path.
 
 `model_capabilities.rs` is the one deliberate exception: it is the shared contract both
-sides speak. The gateway resolves each model's `InputModalities` there and serves them in
-the Codex catalog; the launcher parses that same catalog back through
+sides speak. The gateway resolves each model's `InputModalities` and reasoning effort levels
+there and serves them in the Codex catalog; the launcher parses that same catalog back through
 `CodexCatalogCapabilities` before writing an isolated Codex home. Keeping one definition is
 what stops the HTTP catalog and a launcher catalog from disagreeing about image support.
 
