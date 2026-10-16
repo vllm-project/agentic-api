@@ -73,6 +73,18 @@ contain `/`, such as `meta-llama/Llama-3.1-8B-Instruct`, work with the slash enc
 does not list returns 404 with the error code `model_not_found`, and an upstream error is returned unchanged.
 Both routes are stateless and use the same authentication as every other `/v1/*` route.
 
+## Audio
+
+### `POST /v1/audio/transcriptions` · `POST /v1/audio/translations`
+
+Both routes forward the client's multipart upload to `{LLM_API_BASE}` verbatim, with its boundary and every form
+field unchanged, and relay the upstream's answer as is: JSON or text according to `response_format`, and server-sent
+events as they arrive when the form sets `stream=true`. The upload is streamed to the upstream rather than held in
+memory, but the request-body ceiling still applies to the whole multipart body: an upload whose declared length is
+over the limit is rejected with `413` before the upstream is called, and one sent without a declared length is cut
+off with `413` once it passes the limit. Raise `max_request_body_size_bytes` for audio files above the 10 MiB
+default. These routes are stateless pass-through, with the same authentication as every other `/v1/*` route.
+
 ## Responses
 
 ### `POST /v1/responses`

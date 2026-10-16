@@ -165,6 +165,10 @@ what stops the HTTP catalog and a launcher catalog from disagreeing about image 
 | `POST /v1/messages` | `messages` | `handler/http/messages.rs` |
 | `POST /v1/messages/count_tokens` | `count_tokens` | `handler/http/messages.rs` |
 | `GET /v1/models` | `models` | `handler/http/models.rs` |
+| `GET /v1/models/{model}` | `retrieve_model` | `handler/http/models.rs` |
+| `POST /v1/chat/completions` · `POST /v1/completions` | `chat_completions` · `completions` | `handler/http/chat_completions.rs` |
+| `POST /v1/embeddings` | `embeddings` | `handler/http/embeddings.rs` |
+| `POST /v1/audio/transcriptions` · `POST /v1/audio/translations` | `transcriptions` · `translations` | `handler/http/audio.rs` |
 | `GET /health` | `health` | `handler/http/models.rs` |
 | `GET /ready` | `ready` | `handler/http/models.rs` |
 

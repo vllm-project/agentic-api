@@ -11,6 +11,8 @@ use utoipa::OpenApi;
         license(name = "Apache-2.0"),
     ),
     paths(
+        crate::handler::http::audio::transcriptions,
+        crate::handler::http::audio::translations,
         crate::handler::http::chat_completions::chat_completions,
         crate::handler::http::chat_completions::completions,
         crate::handler::http::embeddings::embeddings,
@@ -275,6 +277,20 @@ pub struct ModelObject {
     pub owned_by: Option<String>,
 }
 
+/// Multipart form for the audio routes, forwarded to the upstream unchanged.
+///
+/// Only the common fields are listed; every other form field passes through as sent.
+#[derive(serde::Serialize, utoipa::ToSchema)]
+pub struct AudioUploadForm {
+    /// The audio file.
+    #[schema(value_type = String, format = Binary)]
+    pub file: Vec<u8>,
+    /// Model ID served by the upstream.
+    pub model: String,
+    /// When `true`, the result is streamed as server-sent events.
+    pub stream: Option<bool>,
+}
+
 /// Codex-compatible model list returned when `client_version` is present.
 #[derive(serde::Serialize, utoipa::ToSchema)]
 pub struct CodexModelsResponse {
@@ -319,6 +335,8 @@ mod tests {
         for expected in [
             "/health",
             "/ready",
+            "/v1/audio/transcriptions",
+            "/v1/audio/translations",
             "/v1/embeddings",
             "/v1/models",
             "/v1/models/{model}",
@@ -452,6 +470,17 @@ mod tests {
             &spec["paths"]["/v1/models/{model}"]["get"]["responses"]["200"]["content"]["application/json"]["schema"];
 
         assert_eq!(response_schema["$ref"], "#/components/schemas/ModelObject");
+    }
+
+    #[test]
+    fn audio_routes_declare_a_multipart_upload() {
+        let spec = serde_json::to_value(ApiDoc::openapi()).expect("spec must serialize");
+
+        for path in ["/v1/audio/transcriptions", "/v1/audio/translations"] {
+            let request_schema =
+                &spec["paths"][path]["post"]["requestBody"]["content"]["multipart/form-data"]["schema"];
+            assert_eq!(request_schema["$ref"], "#/components/schemas/AudioUploadForm", "{path}");
+        }
     }
 
     #[test]

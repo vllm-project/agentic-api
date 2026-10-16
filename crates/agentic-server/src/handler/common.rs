@@ -1,18 +1,23 @@
 use std::num::NonZeroUsize;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::task::{Context, Poll, ready};
 
-use axum::body::Body;
+use axum::body::{Body, BodyDataStream};
 use axum::extract::Request;
 use axum::http::HeaderMap;
 use axum::response::Response;
 use bytes::Bytes;
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use http::StatusCode;
 use serde::de::DeserializeOwned;
 use tracing::warn;
 
 use agentic_core::executor::{BoxStream, ExecutorError};
 use agentic_core::proxy::{
-    ProxyAuth, ProxyBody, ProxyRequest, ProxyResponse, error_response_for_auth, proxy_request_with_path,
+    ProxyAuth, ProxyBody, ProxyRequest, ProxyResponse, ProxyStreamRequest, error_response_for_auth,
+    proxy_request_with_path, proxy_stream_with_path,
 };
 
 use crate::app::AppState;
@@ -70,14 +75,18 @@ pub(super) async fn read_bytes(body: Body, limit: NonZeroUsize) -> Result<Bytes,
 
 #[allow(clippy::result_large_err)]
 pub(super) async fn read_bytes_with_auth(body: Body, auth: ProxyAuth, limit: NonZeroUsize) -> Result<Bytes, Response> {
-    axum::body::to_bytes(body, limit.get()).await.map_err(|_| {
-        convert_response(error_response_for_auth(
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "body_too_large",
-            "request body too large",
-            auth,
-        ))
-    })
+    axum::body::to_bytes(body, limit.get())
+        .await
+        .map_err(|_| body_too_large(auth))
+}
+
+fn body_too_large(auth: ProxyAuth) -> Response {
+    convert_response(error_response_for_auth(
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "body_too_large",
+        "request body too large",
+        auth,
+    ))
 }
 
 /// Forward one request body to `path` on the configured upstream, unchanged.
@@ -103,6 +112,100 @@ pub(super) async fn passthrough(state: &AppState, req: Request, path: &'static s
         )
         .await,
     )
+}
+
+/// Forward one request to `path` on the configured upstream, streaming its body as it arrives.
+///
+/// For uploads the gateway does not own, such as multipart audio: the body is never held in
+/// memory whole, yet the same request-size limit applies. A declared length over the limit is
+/// rejected before the upstream is called; an undeclared one is cut off once it passes it.
+pub(super) async fn stream_passthrough(state: &AppState, req: Request, path: &'static str) -> Response {
+    let limit = state.max_request_body_size.get();
+    let (parts, body) = req.into_parts();
+    let content_length = parts
+        .headers
+        .get(http::header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok()?.parse::<u64>().ok());
+    if content_length.is_some_and(|length| length > u64::try_from(limit).unwrap_or(u64::MAX)) {
+        return body_too_large(ProxyAuth::OpenAiBearer);
+    }
+
+    let (upload, overflow) = LimitedUpload::new(body, limit);
+    let response = proxy_stream_with_path(
+        ProxyStreamRequest {
+            headers: parts.headers,
+            body: upload,
+            content_length,
+            query: parts.uri.query().map(str::to_owned),
+        },
+        path,
+        ProxyAuth::OpenAiBearer,
+        &state.proxy_state,
+    )
+    .await;
+    // The upstream request fails once the limit trips; report that as the client's error.
+    if overflow.occurred() {
+        return body_too_large(ProxyAuth::OpenAiBearer);
+    }
+    convert_response(response)
+}
+
+/// A request body streamed upstream as it arrives, which fails once more than `limit` bytes have
+/// passed through it.
+///
+/// The byte count and the overflow signal stay private: [`LimitedUpload::new`] hands the caller a
+/// read-only [`UploadOverflow`] that can only observe this stream's limit.
+struct LimitedUpload {
+    body: BodyDataStream,
+    limit: usize,
+    received: usize,
+    overflow: Arc<AtomicBool>,
+}
+
+impl LimitedUpload {
+    /// Wrap `body`, returning the stream to forward and the handle that reports its overflow.
+    fn new(body: Body, limit: usize) -> (Self, UploadOverflow) {
+        let overflow = Arc::new(AtomicBool::new(false));
+        let upload = Self {
+            body: body.into_data_stream(),
+            limit,
+            received: 0,
+            overflow: Arc::clone(&overflow),
+        };
+        (upload, UploadOverflow(overflow))
+    }
+}
+
+impl Stream for LimitedUpload {
+    type Item = Result<Bytes, std::io::Error>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        if this.overflow.load(Ordering::Acquire) {
+            return Poll::Ready(None);
+        }
+        let chunk = match ready!(this.body.poll_next_unpin(cx)) {
+            Some(Ok(chunk)) => chunk,
+            Some(Err(error)) => return Poll::Ready(Some(Err(std::io::Error::other(error)))),
+            None => return Poll::Ready(None),
+        };
+        this.received = this.received.saturating_add(chunk.len());
+        if this.received > this.limit {
+            // The chunk that crosses the limit is never forwarded.
+            this.overflow.store(true, Ordering::Release);
+            return Poll::Ready(Some(Err(std::io::Error::other("request body too large"))));
+        }
+        Poll::Ready(Some(Ok(chunk)))
+    }
+}
+
+/// Read-only view of whether a [`LimitedUpload`] passed its limit.
+struct UploadOverflow(Arc<AtomicBool>);
+
+impl UploadOverflow {
+    fn occurred(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
 }
 
 #[allow(clippy::result_large_err)]
