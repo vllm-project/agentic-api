@@ -63,11 +63,11 @@ fn append_str(block: &mut Value, field: &str, fragment: Option<&Value>) {
     let Some(fragment) = fragment.and_then(Value::as_str) else {
         return;
     };
-    let combined = match block.get(field).and_then(Value::as_str) {
-        Some(existing) => format!("{existing}{fragment}"),
-        None => fragment.to_owned(),
-    };
-    block[field] = Value::from(combined);
+    if let Some(Value::String(existing)) = block.get_mut(field) {
+        existing.push_str(fragment);
+    } else {
+        block[field] = Value::from(fragment);
+    }
 }
 
 /// Execute reconstructed gateway calls through the dispatcher shared with the
@@ -93,4 +93,42 @@ pub(super) async fn execute_gateway_calls(
         })
         .collect();
     messages_tools::execute_gateway_calls(tool_uses, ctx, registry, gateway_map).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fragments_reuse_available_string_capacity() {
+        let mut text = String::with_capacity(1024);
+        text.push_str("prefix");
+        let mut block = json!({});
+        block["text"] = Value::String(text);
+        let pointer = block["text"].as_str().unwrap().as_ptr();
+        append_str(&mut block, "text", Some(&json!("追加")));
+        assert_eq!(block["text"], "prefix追加");
+        assert_eq!(block["text"].as_str().unwrap().as_ptr(), pointer);
+    }
+
+    #[test]
+    fn many_small_fragments_preserve_content() {
+        for (kind, field) in [
+            ("text_delta", "text"),
+            ("thinking_delta", "thinking"),
+            ("signature_delta", "signature"),
+        ] {
+            let mut buffered = BufferedBlock {
+                closed: false,
+                block: json!({field: "prefix"}),
+                input_json: String::new(),
+                is_gateway_tool: false,
+            };
+            let delta = json!({"type": kind, field: "é🦀"});
+            for _ in 0..16_384 {
+                buffered.apply_delta(&delta);
+            }
+            assert_eq!(buffered.block[field], format!("prefix{}", "é🦀".repeat(16_384)));
+        }
+    }
 }
