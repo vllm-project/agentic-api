@@ -4,7 +4,7 @@
 //! The Messages-native loop never touches `RequestPayload`/`ResponsePayload`; it
 //! only needs to (1) classify declared tools as gateway-owned vs client-owned so
 //! it knows what to execute, (2) turn an assistant `tool_use` block into the
-//! `FunctionToolCall` that `ToolRegistry::dispatch` consumes, and (3) turn the
+//! `FunctionToolCall` used to resolve a typed gateway binding, and (3) turn the
 //! resulting `ToolOutput` back into a `tool_result` block to feed the next round.
 //! Mapping declared tools to the registry's declarations is the tool layer's
 //! (`tool::registry_tools`).

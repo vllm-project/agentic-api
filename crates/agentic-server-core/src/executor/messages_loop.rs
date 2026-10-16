@@ -10,7 +10,7 @@
 //! carrying the `usage` of every round.
 //!
 //! This never touches `RequestPayload`/`ResponsePayload`; it reuses only the
-//! protocol-neutral tool layer (`ToolRegistry::dispatch`) via
+//! protocol-neutral tool bindings and scheduling policy via
 //! [`crate::types::messages::tool_seam`]. Non-streaming only; streaming lives in
 //! `messages_stream`.
 
@@ -197,7 +197,14 @@ async fn run_messages_loop_traced(
         // assistant turn (thinking/text/tool_use, order preserved — F3) plus the
         // tool_results back for the next round. Gateway blocks stay internal.
         usage.record(message.get("usage"));
-        let tool_results = execute_gateway_calls(tool_uses(&gateway_calls), &mut ctx, registry, &gateway_map).await;
+        let tool_results = execute_gateway_calls(
+            tool_uses(&gateway_calls),
+            &mut ctx,
+            registry,
+            &gateway_map,
+            &exec_ctx.gateway_scheduler_policy,
+        )
+        .await;
         ctx.append_round(content, tool_results)?;
     }
 

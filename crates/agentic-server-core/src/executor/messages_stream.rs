@@ -222,6 +222,7 @@ fn messages_stream_body(
                 &mut ctx,
                 &registry,
                 &acc.gateway_map,
+                &exec_ctx.gateway_scheduler_policy,
             ).await;
             if let Err(e) = ctx.append_round(&assistant_content, tool_results) {
                 execution.failed(&e);
@@ -862,6 +863,7 @@ mod tests {
             &mut context(),
             &no_op_registry().await,
             &tool_seam::GatewayToolMap::default(),
+            &crate::executor::gateway::GatewaySchedulerPolicy::default(),
         )
         .await;
         let content = &resolved[0].content;

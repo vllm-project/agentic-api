@@ -285,7 +285,7 @@ impl GatewayScheduler {
         &mut self,
         response_budget: &ExecutorResponseBudget,
     ) -> ExecutorResult<Vec<GatewayCallResult>> {
-        let execution_slots = Semaphore::new(self.policy.max_concurrent_calls.get());
+        let execution_slots = self.policy.execution_slots();
         let results = join_all(
             self.calls
                 .iter()
@@ -349,12 +349,7 @@ impl GatewayScheduler {
                 .map(|result| (result, GatewayCallStatus::Failed));
         };
 
-        let _permit = match &binding.self_exclusion {
-            Some(semaphore) => Some(semaphore.acquire().await.expect("semaphore is never closed")),
-            None => None,
-        };
-        let _execution_slot = execution_slots.acquire().await.expect("semaphore is never closed");
-        let _materialization_permit = self.policy.acquire_materialization_permit().await;
+        let _permits = self.policy.acquire_execution_permits(&binding, execution_slots).await;
 
         let dispatched = if self.timeout.is_zero() {
             binding.execute(&call.call_id, &call.name, &call.arguments).await

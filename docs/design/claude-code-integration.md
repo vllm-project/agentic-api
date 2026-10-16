@@ -193,6 +193,18 @@ Recommendation: ship A.
 | `tool_choice` (`auto`/`any`/`tool`/`none`, `disable_parallel_tool_use`) | forwarded on the first round; a fulfilled forced choice becomes `auto` after gateway tool results are appended; parallel-use settings remain unchanged |
 | `usage` | after hidden gateway rounds, the returned message (JSON) and the terminal `message_delta` (SSE) report the saturating sum of `input_tokens`, `output_tokens`, `cache_creation_input_tokens`, and `cache_read_input_tokens` across every inference round, each streamed round being its `message_start.usage` overlaid by its `message_delta.usage`; a counter no round reported stays absent, other fields pass through from the final round, `message_start.usage` is the first round's snapshot, a single-round turn is unchanged, and a final round that omits `usage` still reports the hidden rounds' counters |
 
+Both Messages tool loops enforce `tools.max_concurrent_gateway_calls` (default 5,
+overridden by `AGENTIC_MAX_CONCURRENT_GATEWAY_CALLS`) for each inference round.
+Calls to the same bound handler overlap only when it declares parallel execution safe;
+aliases of that handler share the same exclusion. A call waiting for same-tool exclusion
+does not occupy a round slot. Messages also shares the execution context's 16-permit
+materialization window with Responses and MCP discovery. The 60-second per-call timeout
+starts after permit acquisition; it does not bound time spent waiting for capacity.
+Results enter the next upstream request in model call order, regardless of completion order.
+Dropping the loop cancels its local active and waiting calls and releases their permits.
+This bounds active executions; aggregate retained content, tool outputs, and pending-call
+limits remain separate work in [#313](https://github.com/vllm-project/agentic-api/issues/313).
+
 vLLM may label a completed named tool call `end_turn`. The gateway accepts that stop only when the explicitly
 selected gateway tool appears in the round; streaming also requires `message_stop`. Rounds containing
 client-executed function tools return control to the client with `stop_reason: tool_use`, including when vLLM

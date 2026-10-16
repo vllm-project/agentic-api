@@ -1152,7 +1152,7 @@ the Anthropic-native analogue of `GatewayStreamAccumulator`, kept deliberately p
 for a future consolidation" — it never touches `RequestPayload`/`ResponsePayload`/
 `AgentPipeline`/`ResponseAccumulator`/`GatewayStreamAccumulator`/`TranslationDispatcher`, operating
 directly on Anthropic-shaped JSON. The two loops share only the protocol-neutral
-pieces: `ToolRegistry::dispatch` and `types::messages::tool_seam`. The round/timeout
+pieces: typed gateway bindings, `GatewaySchedulerPolicy`, and `types::messages::tool_seam`. The round/timeout
 constants (`MAX_GATEWAY_TOOL_ROUNDS`, `GATEWAY_TOOL_TIMEOUT`) are duplicated and
 manually kept in sync with the Responses-side ones rather than shared — a known seam,
 not an oversight, per the future-consolidation note.
@@ -1160,8 +1160,22 @@ not an oversight, per the future-consolidation note.
 The JSON and SSE loops read a model turn differently but dispatch its gateway calls
 through one function, `messages_tools.rs`'s `execute_gateway_calls`, so admission,
 execution, and the fed-back `tool_result`s cannot differ between them. Calls are
-admitted sequentially in model order before any of them starts, then run concurrently
-under the per-call timeout.
+admitted sequentially in model order before any of them starts, then execute through
+the same permit-acquisition path as Responses. Each round has a fresh window of
+`tools.max_concurrent_gateway_calls` executions (default 5). Calls acquire their
+binding's same-tool exclusion before a round slot, then a materialization permit from
+the policy shared by the `ExecutionContext`. Aliases resolve to the same binding and
+therefore share its exclusion. The 60-second execution timeout starts after all three
+permits are acquired; permit waits are not part of that timeout. Refused calls and
+missing handlers return error `tool_result`s without acquiring execution capacity.
+Results remain in model call order even when later calls finish first, and a completed
+call immediately releases capacity for a waiting call. The owning loop polls these
+futures directly; dropping it releases active and partially acquired permits and drops
+pending executions. Remote side effects are not undone by local cancellation.
+
+This bounds active execution, not the number of waiting call futures, accumulated
+content, or retained tool outputs. Those Messages resource limits remain tracked in
+[#313](https://github.com/vllm-project/agentic-api/issues/313).
 
 A native `web_search` declaration's `max_uses` is a request-wide budget of
 searches, not of calls. The normalized tool sent upstream lets one call batch several
@@ -1485,10 +1499,12 @@ the operator enables it, and Eryx runtime readiness succeeds.
   change**. It resolves namespace
   members, inserts one entry per declared/discovered tool, and for `Mcp`/`WebSearch`
   pulls the actual executor from `GatewayExecutors` (discovering live MCP tools via
-  `tools/list` in the process). `ToolRegistry::dispatch(call)` is the per-call routing
-  method the Messages loop uses; the Responses `GatewayScheduler` resolves the same
-  binding into one call plan so execution, self-exclusion, item position, and lifecycle
-  hooks cannot drift apart. After construction, consumers query this catalog for
+  `tools/list` in the process). The Messages dispatcher resolves the normalized call
+  name to a binding and acquires the shared scheduler policy's permits before execution.
+  The Responses `GatewayScheduler` resolves that binding into one call plan so
+  execution, self-exclusion, item position, and lifecycle hooks cannot drift apart.
+  `ToolRegistry::dispatch(call)` remains a direct, unscheduled routing helper.
+  After construction, consumers query this catalog for
   classification, ownership, and gateway bindings. `upstream.rs` snapshots its
   classification facts into a per-round `TranslationContext`, which translators use
   when restoring client-owned tool calls.
