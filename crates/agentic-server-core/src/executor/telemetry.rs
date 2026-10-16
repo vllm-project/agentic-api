@@ -202,6 +202,7 @@ impl From<&ExecutorError> for FailureCategory {
             ExecutorError::NotFound { .. } | ExecutorError::PreviousResponseNotFound { .. } => Self::NotFound,
             ExecutorError::InvalidRequest(_)
             | ExecutorError::InvalidMaxToolCalls(_)
+            | ExecutorError::InvalidPromptCacheOptions(_)
             | ExecutorError::UnsupportedValue { .. } => Self::InvalidRequest,
             ExecutorError::PayloadTooLarge(_) => Self::PayloadTooLarge,
             ExecutorError::ResourceLimitExceeded { .. } => Self::ResourceLimit,

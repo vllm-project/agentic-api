@@ -1,5 +1,7 @@
 #[allow(dead_code)]
 mod common;
+#[path = "responses_websocket/prompt_cache_options.rs"]
+mod prompt_cache_options;
 
 use std::collections::VecDeque;
 use std::convert::Infallible;

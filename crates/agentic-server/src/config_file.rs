@@ -205,6 +205,8 @@ impl ModelFileConfig {
 #[allow(clippy::struct_field_names)]
 pub(crate) struct ResponsesFileConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_options_supported: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub max_retained_bytes: Option<NonZeroUsize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_upstream_json_bytes: Option<NonZeroUsize>,
@@ -216,7 +218,8 @@ pub(crate) struct ResponsesFileConfig {
 
 impl ResponsesFileConfig {
     fn is_empty(&self) -> bool {
-        self.max_retained_bytes.is_none()
+        self.prompt_cache_options_supported.is_none()
+            && self.max_retained_bytes.is_none()
             && self.max_upstream_json_bytes.is_none()
             && self.max_upstream_sse_line_bytes.is_none()
             && self.max_stream_event_bytes.is_none()

@@ -100,6 +100,7 @@ fn request_payload(model: String, input: ResponsesInput, instructions: Option<St
         parallel_tool_calls: None,
         prompt_cache_key: None,
         prompt_cache_retention: None,
+        prompt_cache_options: None,
         service_tier: None,
         cache_salt: None,
         multi_agent: None,
@@ -144,6 +145,7 @@ async fn summarize_items(
     exec_ctx: &ExecutionContext,
     auth: Option<&str>,
 ) -> ExecutorResult<(Vec<InputItem>, ResponseUsage, Option<String>)> {
+    request.validate_prompt_cache_options(exec_ctx.responses_config.prompt_cache_options_supported)?;
     let original_items = Vec::from(input);
     if !original_items.iter().any(item_has_meaningful_context) {
         return Err(ExecutorError::InvalidRequest(
@@ -174,6 +176,7 @@ async fn summarize_items(
     );
     enriched_request.prompt_cache_key.clone_from(&request.prompt_cache_key);
     enriched_request.prompt_cache_retention = request.prompt_cache_retention;
+    enriched_request.prompt_cache_options = request.prompt_cache_options;
     enriched_request.service_tier.clone_from(&request.service_tier);
     let ctx = RequestContext {
         multi_agent_tree: None,
@@ -313,6 +316,7 @@ pub async fn compact_response(
     payload.previous_response_id = request.previous_response_id;
     payload.service_tier = request.service_tier;
     payload.prompt_cache_retention = request.prompt_cache_retention;
+    payload.prompt_cache_options = request.prompt_cache_options;
     payload.prompt_cache_key = request.prompt_cache_key;
     let ctx = rehydrate_conversation(payload, exec_ctx).await?;
     let (mut ctx, tool_search_state) =
@@ -1020,6 +1024,39 @@ mod tests {
         let requests = requests.lock().unwrap();
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0]["prompt_cache_retention"], "24h");
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn prompt_cache_options_survive_automatic_and_snapshot_compaction() {
+        use crate::executor::multi_agent::CompactionPlan;
+        use crate::types::agent::AgentIdentity;
+        let (mut exec, requests, server) = mock_execution_context(ResponseStore::disabled()).await;
+        exec.responses_config.prompt_cache_options_supported = true;
+        let options = serde_json::from_value(serde_json::json!({"mode":"explicit","ttl":"30m"})).unwrap();
+        let mut ctx = context_with_threshold(ResponsesInput::Items(vec![user_message(&"context ".repeat(100))]), 1);
+        ctx.enriched_request.prompt_cache_options = Some(options);
+        assert!(maybe_compact_context(&mut ctx, &exec, None).await.unwrap().is_some());
+        assert_eq!(ctx.enriched_request.prompt_cache_options, Some(options));
+        let plan = CompactionPlan::prepare_explicit(
+            &AgentIdentity::root(),
+            0,
+            &[user_message("remember context")],
+            &ctx.enriched_request,
+        )
+        .unwrap()
+        .unwrap();
+        ctx.enriched_request.prompt_cache_options =
+            Some(serde_json::from_value(serde_json::json!({"mode":"implicit"})).unwrap());
+        plan.execute(&exec, None).await.unwrap();
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        for request in requests.iter() {
+            assert_eq!(
+                request["prompt_cache_options"],
+                serde_json::json!({"mode":"explicit","ttl":"30m"})
+            );
+        }
         server.abort();
     }
 

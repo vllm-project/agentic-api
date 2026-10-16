@@ -33,6 +33,9 @@ use utoipa::OpenApi;
         crate::handler::http::messages::count_tokens,
     ),
     components(schemas(
+        agentic_core::types::request_response::PromptCacheOptions,
+        agentic_core::types::request_response::PromptCacheMode,
+        agentic_core::types::request_response::PromptCacheTtl,
         agentic_core::types::request_response::RequestPayload,
         agentic_core::types::request_response::ResponsePayload,
         agentic_core::types::request_response::CompactRequest,

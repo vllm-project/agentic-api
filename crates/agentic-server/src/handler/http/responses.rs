@@ -12,14 +12,15 @@ use agentic_core::executor::telemetry::Api;
 use agentic_core::executor::{ExecuteRequest, compact_response as execute_compaction};
 use agentic_core::proxy::ProxyRequest;
 use agentic_core::tool::ToolSearchHandler;
-use agentic_core::types::request_response::{CompactRequest, RequestPayload, ResponseTextConfig};
+use agentic_core::types::request_response::{CompactRequest, PromptCacheOptions, RequestPayload, ResponseTextConfig};
 
 use super::super::common::{
     convert_response, executor_error_response, extract_bearer, read_bytes, read_json, sse_response,
 };
 use crate::app::AppState;
 
-type RoutingPayload = RequestPayload<RawValue>;
+// Only executor requests interpret text and prompt-cache options. Proxy requests retain their raw body.
+type RoutingPayload = RequestPayload<RawValue, Box<RawValue>>;
 
 async fn proxy_responses(state: &AppState, parts: Parts, body: Bytes) -> Response {
     let proxy_req = ProxyRequest {
@@ -92,9 +93,10 @@ pub async fn responses(State(state): State<AppState>, req: Request) -> Response 
     );
 
     if should_execute {
-        let payload = match routing_payload
-            .try_map_text(|text| serde_json::from_str::<ResponseTextConfig>(text.get()).map(Box::new))
-        {
+        let payload = match routing_payload.try_map_configs(
+            |text| serde_json::from_str::<ResponseTextConfig>(text.get()).map(Box::new),
+            |options| serde_json::from_str::<PromptCacheOptions>(options.get()),
+        ) {
             Ok(payload) => payload,
             Err(error) => return executor_error_response(error.into()),
         };

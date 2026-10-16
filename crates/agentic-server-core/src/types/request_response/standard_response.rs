@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use super::{RequestPayload, ResponseTextConfig, ResponseTextFormat};
+use super::{PromptCacheOptions, RequestPayload, ResponseTextConfig, ResponseTextFormat};
 use crate::types::io::ToolChoice;
 use crate::types::tools::ResponsesTool;
 
@@ -53,6 +53,8 @@ pub struct StandardResponseFields {
     pub metadata: HashMap<String, Value>,
     pub safety_identifier: Option<String>,
     pub prompt_cache_key: Option<String>,
+    /// Current request settings, echoed consistently across response lifecycle and storage.
+    pub prompt_cache_options: Option<PromptCacheOptions>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,6 +87,7 @@ impl Default for StandardResponseFields {
             metadata: HashMap::new(),
             safety_identifier: None,
             prompt_cache_key: None,
+            prompt_cache_options: None,
         }
     }
 }
@@ -123,5 +126,28 @@ impl StandardResponseFields {
             })
             .unwrap_or_default();
         self.prompt_cache_key.clone_from(&request.prompt_cache_key);
+        self.prompt_cache_options = request.prompt_cache_options;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_snapshot_defaults_and_current_request_options_round_trip() {
+        let mut fields: StandardResponseFields = serde_json::from_str("{}").unwrap();
+        assert!(fields.prompt_cache_options.is_none());
+        let request = RequestPayload {
+            prompt_cache_options: Some(PromptCacheOptions::default()),
+            ..Default::default()
+        };
+        fields.apply_request(&request);
+        let serialized = serde_json::to_value(&fields).unwrap();
+        assert_eq!(serialized["prompt_cache_options"], serde_json::json!({}));
+        let restored: StandardResponseFields = serde_json::from_value(serialized).unwrap();
+        assert_eq!(restored.prompt_cache_options, request.prompt_cache_options);
+        fields.apply_request(&RequestPayload::default());
+        assert!(fields.prompt_cache_options.is_none());
     }
 }

@@ -29,6 +29,26 @@ async fn fetch_spec() -> serde_json::Value {
 }
 
 #[tokio::test]
+async fn prompt_cache_options_schema_exposes_the_closed_mode_ttl_contract() {
+    let spec = fetch_spec().await;
+    let schemas = &spec["components"]["schemas"];
+    assert_eq!(
+        schemas["PromptCacheMode"]["enum"],
+        serde_json::json!(["implicit", "explicit"])
+    );
+    assert_eq!(schemas["PromptCacheTtl"]["enum"], serde_json::json!(["30m"]));
+    let options = &schemas["PromptCacheOptions"];
+    assert_eq!(options["additionalProperties"], false);
+    let properties = options["properties"].as_object().unwrap();
+    assert_eq!(properties.len(), 2);
+    assert!(properties.contains_key("mode"));
+    assert!(properties.contains_key("ttl"));
+    for name in ["RequestPayload", "CompactRequest", "ResponsePayload"] {
+        assert!(!schemas[name]["properties"]["prompt_cache_options"].is_null());
+    }
+}
+
+#[tokio::test]
 async fn openapi_json_returns_valid_spec() {
     let body = fetch_spec().await;
 

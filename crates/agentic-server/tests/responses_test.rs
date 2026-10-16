@@ -1,4 +1,6 @@
 mod common;
+#[path = "responses/prompt_cache_options.rs"]
+mod prompt_cache_options;
 
 use axum::Router;
 use axum::body::Bytes;

@@ -1200,6 +1200,56 @@ fn json_object_text_config() -> ResponseTextConfig {
     .unwrap()
 }
 
+#[tokio::test]
+async fn prompt_cache_options_survive_every_gateway_tool_round() {
+    for stream in [false, true] {
+        let (you_url, mut captured_you, you) = spawn_mock_you().await;
+        let responses = if stream {
+            vec![
+                web_search_function_call_sse_response("call_search"),
+                text_sse_response("done"),
+            ]
+        } else {
+            vec![web_search_function_call_response(), support::text_response("done")]
+        };
+        let model = support::MockServer::start_deque(responses).await;
+        let mut exec = build_exec_ctx(model.url(), you_url).await;
+        Arc::get_mut(&mut exec)
+            .unwrap()
+            .responses_config
+            .prompt_cache_options_supported = true;
+        let options = serde_json::json!({"mode":"explicit","ttl":"30m"});
+        let request: RequestPayload = serde_json::from_value(serde_json::json!({
+            "model":"test-model", "input":"look up rust async", "store":true, "stream":stream,
+            "tools":[{"type":"web_search_preview"}], "prompt_cache_options":options, "prompt_cache_retention":"24h"
+        }))
+        .unwrap();
+        match ExecuteRequest::new(request, exec).run().await.unwrap() {
+            Either::Left(response) => assert_eq!(response.status, "completed"),
+            Either::Right(events) => {
+                let events: Vec<_> = events.collect().await;
+                assert!(events.iter().any(|event| event.contains("response.completed")));
+                assert!(!events.iter().any(|event| event.contains("\"type\":\"error\"")));
+            }
+        }
+        captured_you.recv().await.unwrap();
+        let requests = model.request_bodies().await;
+        assert_eq!(requests.len(), 2);
+        for request in &requests {
+            assert_eq!(request["prompt_cache_options"], options);
+            assert_eq!(request["prompt_cache_retention"], "24h");
+        }
+        assert!(
+            requests[1]["input"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item["type"] == "function_call_output")
+        );
+        you.abort();
+    }
+}
+
 fn assert_request_config_is_preserved(request_bodies: &[serde_json::Value]) {
     assert_eq!(request_bodies[0]["tools"][0]["name"], "web_search");
     assert_eq!(request_bodies[0]["max_output_tokens"], 1024);

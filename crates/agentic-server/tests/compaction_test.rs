@@ -123,6 +123,104 @@ async fn spawn_compaction_model() -> (String, Arc<Mutex<Vec<serde_json::Value>>>
     (format!("http://{address}"), requests, handle)
 }
 
+#[tokio::test]
+async fn compact_endpoint_preserves_request_scoped_prompt_cache_options() {
+    let (model_url, captured, model) = spawn_compaction_model().await;
+    let pool = agentic_core::storage::create_pool_with_schema(Some("sqlite::memory:"))
+        .await
+        .unwrap();
+    let mut config = test_config(&model_url);
+    config.responses.prompt_cache_options_supported = true;
+    let mut state = test_state(&config);
+    state.exec_ctx = Arc::new(
+        agentic_core::executor::ExecutionContext::new(
+            agentic_core::executor::ConversationHandler::new(agentic_core::storage::ConversationStore::new(
+                pool.clone(),
+            )),
+            agentic_core::executor::ResponseHandler::new(agentic_core::storage::ResponseStore::new(pool)),
+            Arc::new(reqwest::Client::new()),
+            model_url,
+        )
+        .with_responses_config(config.responses),
+    );
+    let (url, gateway) = spawn_gateway(state).await;
+    let client = reqwest::Client::new();
+    let options = serde_json::json!({"mode":"explicit","ttl":"30m"});
+    let parent: serde_json::Value = client
+        .post(format!("{url}/v1/responses"))
+        .json(
+            &serde_json::json!({"model":"test-model","input":"parent context","store":true,
+            "prompt_cache_options":options}),
+        )
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    for option in [None, Some(serde_json::Value::Null), Some(options.clone())] {
+        let mut request = serde_json::json!({"model":"test-model","previous_response_id":parent["id"],"prompt_cache_retention":"24h"});
+        if let Some(option) = option {
+            request["prompt_cache_options"] = option;
+        }
+        let response = client
+            .post(format!("{url}/v1/responses/compact"))
+            .json(&request)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(body["object"], "response.compaction");
+        assert!(body.get("prompt_cache_options").is_none());
+    }
+    for options in [serde_json::json!({"mode":"auto"}), serde_json::json!({"prewarm":true})] {
+        let response = client
+            .post(format!("{url}/v1/responses/compact"))
+            .json(&serde_json::json!({"model":"test-model","input":"hi","prompt_cache_options":options}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::BAD_REQUEST);
+    }
+    let requests = captured.lock().await;
+    assert_eq!(requests.len(), 4);
+    assert_eq!(requests[0]["prompt_cache_options"], options);
+    assert!(requests[1].get("prompt_cache_options").is_none());
+    assert!(requests[2].get("prompt_cache_options").is_none());
+    assert_eq!(requests[3]["prompt_cache_options"], options);
+    for request in &requests[1..] {
+        assert_eq!(request["prompt_cache_retention"], "24h");
+        assert_eq!(request["input"][0]["content"], "parent context");
+    }
+    gateway.abort();
+    model.abort();
+}
+
+#[tokio::test]
+async fn compact_endpoint_rejects_unqualified_options_before_history_lookup() {
+    let (model_url, captured, model) = spawn_compaction_model().await;
+    let (url, gateway) = spawn_gateway(test_state(&test_config(&model_url))).await;
+    let response = reqwest::Client::new()
+        .post(format!("{url}/v1/responses/compact"))
+        .json(
+            &serde_json::json!({"model":"test-model","previous_response_id":"resp_missing",
+            "prompt_cache_options":{"mode":"explicit"}}),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::BAD_REQUEST);
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(body["error"]["param"], "prompt_cache_options");
+    assert_eq!(body["error"]["code"], "unsupported_parameter");
+    assert!(captured.lock().await.is_empty());
+    gateway.abort();
+    model.abort();
+}
+
 async fn spawn_sequential_model(
     responses: Vec<(&str, i64)>,
 ) -> (String, Arc<Mutex<Vec<serde_json::Value>>>, tokio::task::JoinHandle<()>) {

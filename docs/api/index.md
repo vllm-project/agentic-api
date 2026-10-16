@@ -179,6 +179,67 @@ a `compaction_trigger` input item.
 
 The configured upstream decides whether a request receives a cache hit.
 
+Typed execution supports the mode/TTL subset of `prompt_cache_options` from the
+[OpenAI SDK request contract](https://github.com/openai/openai-python/blob/b7a1990353baec896ee5e04b40b9f2dc2925a4f5/src/openai/types/responses/response_create_params.py),
+checked on October 11, 2026. The object accepts optional `mode` (`"implicit"` or
+`"explicit"`) and `ttl` (`"30m"`) members. Omitted members remain omitted, including
+an empty object; the gateway inserts no defaults. Present members must be non-null.
+The top-level absent or `null` object is treated as unset by typed execution.
+
+Direct HTTP pass-through preserves the original request body, including options,
+explicit `null`, prewarming, diagnostics, and future members. The upstream decides
+whether to accept these values; the gateway does not apply its typed options parser
+or capability switch to that route. `store: false` alone does not ensure pass-through:
+a previous response ID, conversation, built-in tool, or another executor feature
+still selects typed execution.
+
+For typed execution, the configured upstream must implement these semantics for
+every served model. Options are rejected by default on that path. After verifying
+that contract, an operator can enable forwarding in `config.toml`:
+
+```toml
+[responses]
+prompt_cache_options_supported = true
+```
+
+This switch is an operator assertion, not model-name detection or a capability probe.
+Unsupported typed options return `400` with `param: "prompt_cache_options"` and
+`code: "unsupported_parameter"` before history lookup, tool discovery, or inference.
+Enabling the switch does not add typed support for prewarming, diagnostics, or future
+members: `prewarm`, `comparison_response_id`, unknown members, invalid mode/TTL
+values, and non-object options return `400` on executor routes.
+`prompt_cache_options` and `prompt_cache_retention` are independent: both may be
+provided and are forwarded without translating either into the other.
+
+An accepted typed object is forwarded through HTTP JSON/SSE, WebSocket execution,
+gateway tool rounds, multi-agent execution, automatic compaction,
+`compaction_trigger` summary inference, and standalone `/v1/responses/compact`.
+Options are request-scoped: a continuation restores items but does not inherit its
+parent's top-level options. Send them again when needed. Existing
+`prompt_cache_breakpoint` fields on modeled content parts are preserved; the
+gateway does not insert or relocate breakpoints or replace explicit mode with
+implicit mode. In the upstream explicit-mode contract, a request without explicit
+breakpoints does not use prompt caching. Cache writes, TTL enforcement, and cache
+reuse remain upstream responsibilities.
+
+Typed Responses objects echo the current request's options in JSON, response-bearing
+SSE/WebSocket events, and stored response snapshots. An absent or top-level `null`
+request value is echoed as `null`; an empty object stays empty. This is request
+metadata, not proof of upstream acceptance or a cache hit. Direct HTTP responses
+remain upstream pass-through, and standalone compaction objects do not echo options.
+
+| Path | Mode/TTL handling | Continuation behavior |
+| --- | --- | --- |
+| Direct HTTP JSON/SSE | Original options preserved; upstream validation; no gateway capability check | No gateway history resolution |
+| Typed HTTP JSON/SSE and WebSocket | Object forwarded; absent/null omitted upstream; current request echoed in Responses objects | Top-level options are not inherited |
+| Gateway tool rounds and multi-agent execution | Current request's options retained in every inference round | Current request scope |
+| Automatic, trigger, and standalone compaction | Current request's options forwarded to summary inference | Loading a previous response does not inherit its options |
+
+This matrix contributes to [#314](https://github.com/vllm-project/agentic-api/issues/314)
+and [#330](https://github.com/vllm-project/agentic-api/issues/330). Qualification of all
+content-part breakpoint lifecycles, model-specific capability profiles, and
+upstream-reported cache diagnostics remain follow-ups.
+
 `prompt_cache_retention` accepts the legacy `"in_memory"` and `"24h"` values.
 An explicit value is forwarded through HTTP JSON/SSE, WebSocket execution,
 gateway tool rounds, multi-agent execution, automatic compaction,
@@ -196,8 +257,8 @@ retention into `cache_salt` or `prompt_cache_options.ttl`. See the
 Forwarding is not a capability guarantee: the
 [vLLM Responses request contract](https://github.com/vllm-project/vllm/blob/840c7c2f4bc72c7c55edb2dea6d23f9a9c9734e0/vllm/entrypoints/openai/responses/protocol.py)
 checked on October 1, 2026 does not define `prompt_cache_retention`, so this field should not be
-used to configure vLLM cache lifetime. Backend capability enforcement and
-`prompt_cache_options` remain follow-ups in
+used to configure vLLM cache lifetime. Model-specific backend capability enforcement
+remains a follow-up in
 [#330](https://github.com/vllm-project/agentic-api/issues/330).
 
 `service_tier` is also request-scoped. Direct and executor-backed HTTP requests,
@@ -271,8 +332,9 @@ rate or billing amount.
 This matrix covers usage preservation under
 [#330](https://github.com/vllm-project/agentic-api/issues/330) and
 [#314](https://github.com/vllm-project/agentic-api/issues/314).
-Cache mode, TTL, breakpoint qualification, and backend capability enforcement
-remain separate acceptance items; this matrix does not claim support for them.
+The mode/TTL forwarding matrix above covers request preservation with an operator
+capability assertion. Full breakpoint qualification and model-specific backend
+capability enforcement remain separate acceptance items.
 
 ### `GET /v1/responses/{response_id}`
 

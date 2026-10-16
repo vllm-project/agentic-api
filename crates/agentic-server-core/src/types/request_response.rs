@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::num::NonZeroU64;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use super::io::{FunctionTool, InputItem, MultiAgentConfig, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
 use super::tools::ResponsesTool;
@@ -12,16 +12,20 @@ use crate::tool::{
     CodexNamespaceHandler, CustomHandler, ToolDeclaration, ToolError, declares_async, responses_declarations,
 };
 
+mod prompt_cache;
+pub use prompt_cache::{PromptCacheMode, PromptCacheOptions, PromptCacheOptionsError, PromptCacheTtl};
 mod max_tool_calls;
 mod response_stream;
 mod serde_helpers;
 mod standard_response;
+mod text_config;
 pub use max_tool_calls::{JsonKind, MAX_TOOL_CALLS_PARAM, MaxToolCalls, MaxToolCallsError, OutOfRangeInteger};
 use serde_helpers::{
     default_true, deserialize_conversation, is_absent_or_default_tool_choice, serialize_conversation_object,
     serialize_upstream_tool_choice,
 };
 pub use standard_response::{ResponseReasoning, StandardResponseFields};
+pub use text_config::{ResponseTextConfig, ResponseTextFormat};
 #[cfg(feature = "openapi")]
 mod schema;
 
@@ -41,51 +45,6 @@ pub struct ReasoningConfig {
     pub summary: Option<String>,
 }
 
-/// Responses text-generation settings forwarded to the upstream service.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct ResponseTextConfig {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub format: Option<ResponseTextFormat>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub verbosity: Option<String>,
-    /// Unmodeled extension fields preserved for upstream compatibility.
-    #[serde(default)]
-    #[serde(flatten)]
-    pub extra: Map<String, Value>,
-}
-
-/// Output format requested through [`ResponseTextConfig`].
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[non_exhaustive]
-pub enum ResponseTextFormat {
-    Text {
-        /// Unmodeled extension fields preserved for upstream compatibility.
-        #[serde(default)]
-        #[serde(flatten)]
-        extra: Map<String, Value>,
-    },
-    JsonObject {
-        /// Unmodeled extension fields preserved for upstream compatibility.
-        #[serde(default)]
-        #[serde(flatten)]
-        extra: Map<String, Value>,
-    },
-    JsonSchema {
-        name: String,
-        schema: serde_json::Map<String, Value>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        description: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        strict: Option<bool>,
-        /// Unmodeled extension fields preserved for upstream compatibility.
-        #[serde(default)]
-        #[serde(flatten)]
-        extra: Map<String, Value>,
-    },
-}
-
 /// Legacy upstream prompt-cache retention policy. Cache lifetime remains upstream-owned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -100,8 +59,11 @@ pub enum PromptCacheRetention {
 /// uses `store: true` when storage is not specified. Set `store` explicitly when constructing
 /// a stored request with struct update syntax.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(bound(serialize = "Box<T>: Serialize", deserialize = "Box<T>: Deserialize<'de>"))]
-pub struct RequestPayload<T: ?Sized = ResponseTextConfig> {
+#[serde(bound(
+    serialize = "Box<T>: Serialize, C: Serialize",
+    deserialize = "Box<T>: Deserialize<'de>, C: Deserialize<'de>"
+))]
+pub struct RequestPayload<T: ?Sized = ResponseTextConfig, C = PromptCacheOptions> {
     pub model: String,
     pub input: ResponsesInput,
     pub instructions: Option<String>,
@@ -141,6 +103,8 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig> {
     pub prompt_cache_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_cache_retention: Option<PromptCacheRetention>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_options: Option<C>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -191,6 +155,8 @@ pub struct UpstreamRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_retention: Option<PromptCacheRetention>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_options: Option<&'a PromptCacheOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_salt: Option<&'a str>,
@@ -206,7 +172,7 @@ pub enum UpstreamTool {
     Function(FunctionTool),
 }
 
-impl<T: ?Sized> RequestPayload<T> {
+impl<T: ?Sized, C> RequestPayload<T, C> {
     /// The validated `max_tool_calls` limit; `None` means no limit.
     ///
     /// # Errors
@@ -269,7 +235,20 @@ impl<T: ?Sized> RequestPayload<T> {
     pub fn try_map_text<U: ?Sized, E>(
         self,
         map: impl FnOnce(Box<T>) -> Result<Box<U>, E>,
-    ) -> Result<RequestPayload<U>, E> {
+    ) -> Result<RequestPayload<U, C>, E> {
+        self.try_map_configs(map, Ok)
+    }
+
+    /// Transform transport configuration views into typed execution settings.
+    /// All other request fields are moved without reparsing or reallocating them.
+    ///
+    /// # Errors
+    /// Returns either mapping function's error when a configuration cannot be transformed.
+    pub fn try_map_configs<U: ?Sized, D, E>(
+        self,
+        map_text: impl FnOnce(Box<T>) -> Result<Box<U>, E>,
+        map_cache: impl FnOnce(C) -> Result<D, E>,
+    ) -> Result<RequestPayload<U, D>, E> {
         Ok(RequestPayload {
             model: self.model,
             input: self.input,
@@ -282,7 +261,7 @@ impl<T: ?Sized> RequestPayload<T> {
             store: self.store,
             include: self.include,
             reasoning: self.reasoning,
-            text: self.text.map(map).transpose()?,
+            text: self.text.map(map_text).transpose()?,
             temperature: self.temperature,
             top_p: self.top_p,
             max_output_tokens: self.max_output_tokens,
@@ -293,6 +272,7 @@ impl<T: ?Sized> RequestPayload<T> {
             parallel_tool_calls: self.parallel_tool_calls,
             prompt_cache_key: self.prompt_cache_key,
             prompt_cache_retention: self.prompt_cache_retention,
+            prompt_cache_options: self.prompt_cache_options.map(map_cache).transpose()?,
             service_tier: self.service_tier,
             multi_agent: self.multi_agent,
             cache_salt: self.cache_salt,
@@ -387,6 +367,7 @@ impl RequestPayload {
             parallel_tool_calls,
             prompt_cache_key: self.prompt_cache_key.as_deref(),
             prompt_cache_retention: self.prompt_cache_retention,
+            prompt_cache_options: self.prompt_cache_options.as_ref(),
             service_tier: self.service_tier.as_deref(),
             cache_salt: self.cache_salt.as_deref(),
         })
@@ -418,6 +399,8 @@ pub struct CompactRequest {
     pub service_tier: Option<String>,
     #[serde(default)]
     pub prompt_cache_retention: Option<PromptCacheRetention>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_options: Option<PromptCacheOptions>,
     #[serde(default)]
     pub prompt_cache_key: Option<String>,
     /// Compatibility fields sent by current SDK and Codex clients.
