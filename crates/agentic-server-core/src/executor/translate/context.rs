@@ -101,10 +101,11 @@ impl TranslationContext {
 
     pub(super) fn restore_stream_event_wire(&self, wire: &mut WireEvent) -> ExecutorResult<()> {
         super::tool_search::restore_response_tools(wire, self.response_tools.as_deref())?;
+        // Report the selector the client submitted on every lifecycle snapshot, including
+        // terminal ones that omit it, instead of letting a gateway default stand in for it.
         if self.response_tools.is_some()
             && let Some(choice) = self.response_tool_choice.as_ref()
             && let Some(response) = wire.rest.get_mut("response").and_then(serde_json::Value::as_object_mut)
-            && response.contains_key("tool_choice")
         {
             response.insert("tool_choice".to_owned(), serde_json::to_value(choice)?);
         }

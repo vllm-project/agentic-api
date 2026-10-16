@@ -2924,3 +2924,108 @@ async fn cache_usage_is_scoped_to_http_continuation_with_restored_history() {
         assert!(requests[1].get("previous_response_id").is_none());
     }
 }
+
+/// Replays the recorded mixed-tool capture through the blocking HTTP transport. The client
+/// sees the declarations it submitted on the terminal payload and on retrieval, while
+/// inference keeps the lowered function schemas the capture recorded.
+#[tokio::test]
+async fn recorded_mixed_tool_capture_stays_public_over_http_json() {
+    let capture = common::load_mixed_gateway_capture(false);
+    let public_tools = common::mixed_capture_public_tools(&capture);
+    let upstream: serde_json::Value =
+        serde_json::from_str(&common::mixed_capture_upstream_fixture(&capture)).expect("recorded body is JSON");
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_sequence(vec![upstream]).await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(format!("{gateway_url}/v1/responses"))
+        .bearer_auth("test-key")
+        .json(&common::mixed_capture_client_request(&capture))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value = response.json().await.unwrap();
+    common::assert_public_mixed_tools(&body, &public_tools, "terminal payload");
+    common::assert_recorded_mixed_output_kinds(&body, &capture, "terminal payload");
+
+    let id = body["id"].as_str().expect("response id");
+    let stored: serde_json::Value = client
+        .get(format!("{gateway_url}/v1/responses/{id}"))
+        .bearer_auth("test-key")
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(stored, body, "retrieval returns the stored response");
+    common::assert_public_mixed_tools(&stored, &public_tools, "stored response");
+
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 1, "the replayed turn runs one inference round");
+    common::assert_lowered_mixed_upstream(&requests[0]);
+}
+
+/// Replays the same capture through the SSE transport: every lifecycle snapshot that carries
+/// a `response` object reports the submitted declarations, including the terminal frame that
+/// omits them, and retrieval returns them too.
+#[tokio::test]
+async fn recorded_mixed_tool_capture_stays_public_over_http_sse() {
+    let capture = common::load_mixed_gateway_capture(true);
+    let public_tools = common::mixed_capture_public_tools(&capture);
+    let upstream = common::mixed_capture_upstream_fixture(&capture);
+    let (llm_url, requests, _llm) = spawn_tool_search_sse_sequence(vec![upstream]).await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(format!("{gateway_url}/v1/responses"))
+        .bearer_auth("test-key")
+        .json(&common::mixed_capture_client_request(&capture))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let events = sse_events(&response.text().await.unwrap());
+
+    let lifecycle: Vec<&str> = events
+        .iter()
+        .filter(|event| event.get("response").is_some())
+        .filter_map(|event| event["type"].as_str())
+        .collect();
+    assert_eq!(
+        lifecycle,
+        ["response.created", "response.in_progress", "response.completed"],
+        "the replay covers the three lifecycle snapshots"
+    );
+    for event in &events {
+        if let Some(terminal) = event.get("response") {
+            common::assert_public_mixed_tools(terminal, &public_tools, event["type"].as_str().unwrap_or_default());
+        }
+    }
+
+    let terminal = events
+        .iter()
+        .find(|event| event["type"] == "response.completed")
+        .expect("completed snapshot");
+    common::assert_recorded_mixed_output_kinds(&terminal["response"], &capture, "terminal snapshot");
+    let id = terminal["response"]["id"].as_str().expect("response id");
+    let stored: serde_json::Value = client
+        .get(format!("{gateway_url}/v1/responses/{id}"))
+        .bearer_auth("test-key")
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    common::assert_public_mixed_tools(&stored, &public_tools, "stored response");
+
+    let requests = requests.lock().await;
+    assert_eq!(requests.len(), 1, "the replayed turn runs one inference round");
+    common::assert_lowered_mixed_upstream(&requests[0]);
+}
