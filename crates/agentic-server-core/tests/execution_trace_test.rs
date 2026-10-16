@@ -33,6 +33,10 @@ use tracing_subscriber::layer::SubscriberExt as _;
 
 #[path = "execution_trace/compaction.rs"]
 mod compaction;
+#[path = "support/messages_gateway_tools.rs"]
+mod messages_gateway_tools;
+#[path = "execution_trace/messages_tools.rs"]
+mod messages_tools;
 #[path = "execution_trace/stages.rs"]
 mod stages;
 mod support;

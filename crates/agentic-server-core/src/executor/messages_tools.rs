@@ -13,6 +13,8 @@ use crate::executor::messages_context::MessagesRequestContext;
 use crate::executor::messages_request::{
     web_fetch_budget_exhausted_result, web_fetch_refused_result, web_search_budget_exhausted_result,
 };
+use crate::executor::telemetry::FailureCategory;
+use crate::executor::telemetry::metrics::{ExecutorMetrics, Stage};
 use crate::tool::web_fetch::{WebFetchArguments, WebFetchErrorCode};
 use crate::tool::web_search::args::requested_searches;
 use crate::tool::{ToolRegistry, ToolType};
@@ -53,7 +55,8 @@ pub(super) fn request_gateway_map(
 }
 
 /// Execute one round's gateway calls concurrently, each bounded by the per-call
-/// timeout. A failure or timeout becomes an error `tool_result` (E5).
+/// timeout. A failure or timeout becomes an error `tool_result` (E5). Each
+/// call that runs is traced and timed as a `tool` stage; a refused call is not.
 ///
 /// Returns one `tool_result` block per call, in model order, fed back next
 /// round. (The model's own `tool_use` block is carried forward via the preserved
@@ -64,6 +67,7 @@ pub(super) async fn execute_gateway_calls(
     ctx: &mut MessagesRequestContext,
     registry: &ToolRegistry,
     gateway_map: &tool_seam::GatewayToolMap,
+    metrics: &ExecutorMetrics,
 ) -> Vec<GatewayToolResult> {
     // Admission is sequential and in model order, before any call starts: the
     // budgets belong to the whole request, so they cannot be decided while
@@ -72,7 +76,12 @@ pub(super) async fn execute_gateway_calls(
         .into_iter()
         .map(|tool_use| admit(tool_use, ctx, gateway_map))
         .collect();
-    join_all(admissions.into_iter().map(|admission| run(admission, registry))).await
+    join_all(
+        admissions
+            .into_iter()
+            .map(|admission| run(admission, registry, metrics)),
+    )
+    .await
 }
 
 /// Decide whether one call may run. `max_uses` limits uses, not calls: a
@@ -138,12 +147,28 @@ fn admit_fetch(id: &str, arguments: &str, ctx: &mut MessagesRequestContext) -> R
     }
 }
 
-async fn run(admission: Admission<'_>, registry: &ToolRegistry) -> GatewayToolResult {
+async fn run(admission: Admission<'_>, registry: &ToolRegistry, metrics: &ExecutorMetrics) -> GatewayToolResult {
     let (call, name) = match admission {
         Admission::Run { call, name } => (call, name),
+        // Answered without running: there is no tool stage to record.
         Admission::Refused(result) => return result,
     };
-    let (output, is_error) = match tokio::time::timeout(GATEWAY_TOOL_TIMEOUT, registry.dispatch(&call)).await {
+    // Typed by the registry entry that serves the call, never by the name
+    // the model supplied.
+    let tool_type = registry.tool_type(&call.name);
+    let timer = metrics.stage(Stage::Tool(tool_type));
+    let (output, is_error) = dispatch(&call, name, registry, tool_type).await;
+    // An error result is a failed stage even though the loop continues.
+    timer.finish(is_error.then_some(FailureCategory::Tool));
+    tool_seam::tool_result_block(&call.call_id, output, is_error)
+}
+
+/// Run one admitted call; returns its output and whether it is an error.
+#[tracing::instrument(name = "agentic.tool.execute", skip_all, fields(
+    agentic.tool.r#type = super::telemetry::stages::tool_type(tool_type)
+))]
+async fn dispatch(call: &FunctionToolCall, name: &str, registry: &ToolRegistry, tool_type: ToolType) -> (String, bool) {
+    match tokio::time::timeout(GATEWAY_TOOL_TIMEOUT, registry.dispatch(call)).await {
         Ok(Some(result)) => match result.output {
             // A documented failure is the tool's answer, carried with the
             // output's status so the model knows the call did not succeed.
@@ -158,6 +183,5 @@ async fn run(admission: Admission<'_>, registry: &ToolRegistry) -> GatewayToolRe
             format!("gateway tool '{name}' timed out after {GATEWAY_TOOL_TIMEOUT:?}"),
             true,
         ),
-    };
-    tool_seam::tool_result_block(&call.call_id, output, is_error)
+    }
 }
