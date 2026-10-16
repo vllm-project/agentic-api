@@ -1,11 +1,20 @@
+use agentic_core::executor::ExecuteRequest;
 use agentic_core::executor::accumulator::ResponseAccumulator;
 use agentic_core::tool::ToolDeclaration;
 use agentic_core::tool::{GatewayExecutors, ToolOwnership, ToolRegistry, ToolType};
 use agentic_core::types::io::output::McpListTools;
 use agentic_core::types::io::{McpCall, OutputItem};
+use agentic_core::types::request_response::RequestPayload;
 use agentic_core::types::tools::ResponsesTool;
+use axum::Router;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::routing::post;
+use either::Either;
+use futures::StreamExt;
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 mod support;
 
@@ -38,6 +47,193 @@ fn native_mcp_declaration() -> ResponsesTool {
         "require_approval": "never"
     }))
     .expect("native MCP declaration")
+}
+
+/// Minimal stateless MCP server over streamable HTTP exposing one `forecast` tool.
+async fn spawn_forecast_mcp() -> String {
+    let app = Router::new().route(
+        "/mcp",
+        post(|axum::Json(request): axum::Json<Value>| async move {
+            let id = request["id"].clone();
+            if id.is_null() {
+                // A notification such as `notifications/initialized`.
+                return StatusCode::ACCEPTED.into_response();
+            }
+            let reply = match request["method"].as_str() {
+                Some("initialize") => json!({"result": {
+                    "protocolVersion": "2025-06-18", "capabilities": {"tools": {}},
+                    "serverInfo": {"name": "stub", "version": "0"}
+                }}),
+                Some("tools/list") => json!({"result": {"tools": [{
+                    "name": "forecast", "description": "Forecast a city.",
+                    "inputSchema": {"type": "object", "properties": {"city": {"type": "string"}}}
+                }]}}),
+                _ => json!({"error": {"code": -32601, "message": "method not found"}}),
+            };
+            let mut body = json!({"jsonrpc": "2.0", "id": id});
+            body.as_object_mut().unwrap().extend(reply.as_object().unwrap().clone());
+            axum::Json(body).into_response()
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("mock MCP socket");
+    let address = listener.local_addr().expect("mock MCP address");
+    tokio::spawn(async move { axum::serve(listener, app).await.expect("mock MCP server") });
+    format!("http://{address}/mcp")
+}
+
+/// The declaration a client submits, including the request-scoped credentials that the
+/// gateway strips from every client-facing tools value.
+fn forecast_declaration(server_url: &str) -> Value {
+    json!([{
+        "type": "mcp",
+        "server_label": "stub",
+        "server_url": server_url,
+        "headers": {"Authorization": "Bearer header-secret"},
+        "authorization": "field-secret",
+        "allowed_tools": ["forecast"],
+        "require_approval": "never"
+    }])
+}
+
+fn forecast_request(stream: bool, server_url: &str) -> RequestPayload {
+    serde_json::from_value(json!({
+        "model": "test-model",
+        "input": "forecast Tokyo",
+        "stream": stream,
+        "store": true,
+        "tool_choice": "required",
+        "tools": forecast_declaration(server_url)
+    }))
+    .expect("MCP request")
+}
+
+fn assert_public_forecast_metadata(value: &Value, server_url: &str, context: &str) {
+    assert_eq!(
+        value["tools"],
+        json!([{
+            "type": "mcp",
+            "server_label": "stub",
+            "server_url": server_url,
+            "allowed_tools": ["forecast"],
+            "require_approval": "never"
+        }]),
+        "{context} tools"
+    );
+    let client_tools = value["tools"].to_string();
+    for internal in [
+        "header-secret",
+        "field-secret",
+        "_agentic_discovered_tools",
+        "mcp__stub__forecast",
+    ] {
+        assert!(
+            !client_tools.contains(internal),
+            "{internal} must never reach a client tools value: {context}"
+        );
+    }
+}
+
+/// Asserts the upstream receives exactly the lowered schema the discovered tool normalizes
+/// to, without the credentials or the internal discovery result.
+fn assert_lowered_forecast_upstream(body: &Value, context: &str) {
+    let tools = body["tools"].as_array().expect("upstream tools");
+    assert_eq!(tools.len(), 1, "{context} upstream tool count");
+    assert_eq!(tools[0]["type"], "function", "{context} upstream tool kind");
+    assert_eq!(tools[0]["name"], "mcp__stub__forecast", "{context} upstream tool name");
+    assert_eq!(
+        tools[0]["parameters"],
+        json!({"type": "object", "properties": {"city": {"type": "string"}}}),
+        "{context} upstream tool parameters"
+    );
+    let serialized = body.to_string();
+    for internal in ["header-secret", "field-secret", "_agentic_discovered_tools"] {
+        assert!(
+            !serialized.contains(internal),
+            "{internal} must stay out of the upstream request: {context}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn mcp_declarations_stay_public_on_streaming_lifecycle_snapshots() {
+    let mcp_url = spawn_forecast_mcp().await;
+    let fixture = support::TestFixture::new_with_responses(vec![support::sse_omitting_tool_declarations(
+        support::text_sse_response("Tokyo is mild."),
+    )])
+    .await;
+
+    let payload = forecast_request(true, &mcp_url);
+    let result = ExecuteRequest::new(payload, Arc::clone(&fixture.exec_ctx))
+        .run()
+        .await
+        .expect("MCP turn executes");
+    let Either::Right(stream) = result else {
+        panic!("expected a streaming response");
+    };
+    let chunks: Vec<String> = stream.collect().await;
+
+    let mut snapshots = 0;
+    for event in support::streamed_sse_events(&chunks) {
+        let Some(response) = event.get("response") else {
+            continue;
+        };
+        snapshots += 1;
+        let context = event["type"].as_str().unwrap_or_default().to_owned();
+        assert_public_forecast_metadata(response, &mcp_url, &context);
+        assert_eq!(
+            response["tool_choice"],
+            json!("required"),
+            "the submitted selector must be reported: {context}"
+        );
+    }
+    assert!(snapshots >= 2, "expected creation and terminal snapshots");
+
+    // Inference keeps the lowered schema the discovered tool normalizes to.
+    let bodies = fixture.request_bodies().await;
+    assert_eq!(bodies.len(), 1);
+    assert_lowered_forecast_upstream(&bodies[0], "streaming turn");
+}
+
+#[tokio::test]
+async fn mcp_declarations_stay_public_in_json_and_stored_responses() {
+    let mcp_url = spawn_forecast_mcp().await;
+    let fixture = support::TestFixture::new_with_responses(vec![support::text_response("Tokyo is mild.")]).await;
+
+    let payload = forecast_request(false, &mcp_url);
+    let result = ExecuteRequest::new(payload, Arc::clone(&fixture.exec_ctx))
+        .run()
+        .await
+        .expect("MCP turn executes");
+    let Either::Left(response) = result else {
+        panic!("expected a non-streaming response");
+    };
+
+    assert_public_forecast_metadata(
+        &serde_json::to_value(&response).expect("response serializes"),
+        &mcp_url,
+        "terminal payload",
+    );
+    assert_eq!(
+        serde_json::to_value(&response.tool_choice).expect("selector serializes"),
+        json!("required")
+    );
+    let stored = fixture
+        .exec_ctx
+        .resp_handler
+        .retrieve(&response.id)
+        .await
+        .expect("stored response");
+    assert_public_forecast_metadata(
+        &serde_json::to_value(&stored).expect("stored response serializes"),
+        &mcp_url,
+        "stored response",
+    );
+
+    let bodies = fixture.request_bodies().await;
+    assert_eq!(bodies.len(), 1);
+    assert_lowered_forecast_upstream(&bodies[0], "blocking turn");
 }
 
 #[test]

@@ -6,13 +6,13 @@ use std::time::Duration;
 
 use agentic_core::executor::{ConversationHandler, ExecuteRequest, ExecutionContext, ResponseHandler};
 use agentic_core::storage::{ConversationStore, ResponseStore};
-use agentic_core::tool::{GatewayExecutor, ToolOutput, WebSearchHandler};
+use agentic_core::tool::{GatewayExecutor, ToolOutput, WebSearchHandler, model_visible_namespace_member_name};
 use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus};
 use agentic_core::types::io::{
     FunctionToolResultMessage, InputItem, OutputItem, ResponsesInput, ToolCallOutput, ToolChoice,
 };
-use agentic_core::types::request_response::{RequestPayload, ResponseTextConfig};
+use agentic_core::types::request_response::{RequestPayload, ResponsePayload, ResponseTextConfig};
 use agentic_core::types::tools::{ResponsesTool, WebSearchToolParam};
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, Uri};
@@ -1492,6 +1492,268 @@ async fn builtin_tool_declarations_stay_public_in_json_and_stored_responses() {
         &public_tools,
         "stored response",
     );
+}
+
+/// One client request that declares a built-in, a function, a custom, and a namespace tool.
+fn mixed_kind_payload(stream: bool) -> RequestPayload {
+    serde_json::from_value(serde_json::json!({
+        "model": "test-model",
+        "input": "look up rust async",
+        "store": true,
+        "stream": stream,
+        "tools": [
+            {"type": "web_search_preview"},
+            {
+                "type": "function",
+                "name": "get_weather",
+                "description": "Get the current weather for a city.",
+                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}
+            },
+            {"type": "custom", "name": "set_temperature_unit", "description": "Set the preferred temperature unit."},
+            {
+                "type": "namespace",
+                "name": "weather_tools",
+                "description": "Demo weather tools.",
+                "tools": [{
+                    "type": "function",
+                    "name": "get_forecast",
+                    "parameters": {"type": "object", "properties": {"city": {"type": "string"}}}
+                }]
+            }
+        ]
+    }))
+    .expect("mixed-kind request")
+}
+
+/// The lowered function schemas the model server receives and echoes for [`mixed_kind_payload`].
+fn lowered_mixed_kind_tools() -> serde_json::Value {
+    serde_json::json!([
+        {
+            "type": "function", "name": "web_search",
+            "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}
+        },
+        {
+            "type": "function", "name": "get_weather",
+            "parameters": {"type": "object", "properties": {"city": {"type": "string"}}}
+        },
+        {"type": "function", "name": "set_temperature_unit", "parameters": {"type": "object"}},
+        {
+            "type": "function",
+            "name": model_visible_namespace_member_name("weather_tools", "get_forecast"),
+            "parameters": {"type": "object", "properties": {"city": {"type": "string"}}}
+        }
+    ])
+}
+
+#[tokio::test]
+async fn builtin_tool_declarations_stay_public_for_mixed_tool_kinds() {
+    let (you_url, mut captured_you, _you_handle) = spawn_mock_you().await;
+    let lowered = lowered_mixed_kind_tools();
+    let llm = support::MockServer::start_deque(vec![
+        with_lowered_tool_echo(web_search_function_call_sse_response("call_search"), &lowered),
+        with_lowered_tool_echo(text_sse_response("Use async carefully."), &lowered),
+    ])
+    .await;
+    let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
+    let payload = mixed_kind_payload(true);
+    let public_tools = serde_json::to_value(&payload.tools).unwrap();
+    let public_kinds: Vec<&str> = public_tools
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tool| tool["type"].as_str().expect("declaration kind"))
+        .collect();
+    assert_eq!(public_kinds, ["web_search_preview", "function", "custom", "namespace"]);
+
+    let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();
+    let Either::Right(stream) = result else {
+        panic!("expected streaming response");
+    };
+    let chunks: Vec<String> = stream.collect().await;
+    captured_you
+        .recv()
+        .await
+        .expect("mock You.com should receive the search");
+
+    let events = streamed_sse_events(&chunks);
+    let mut snapshots = 0;
+    let mut terminal = None;
+    for event in &events {
+        let Some(response) = event.get("response") else {
+            continue;
+        };
+        snapshots += 1;
+        let context = event["type"].as_str().unwrap_or_default();
+        assert_eq!(response["tools"], public_tools, "{context} tools");
+        if context == "response.completed" {
+            terminal = Some(response.clone());
+        }
+    }
+    assert!(snapshots >= 2, "expected creation and terminal snapshots");
+
+    // The public output keeps the built-in call and the answer, and never the internal
+    // `web_search` function call.
+    let terminal = terminal.expect("completed snapshot");
+    let output = terminal["output"].as_array().expect("terminal output");
+    let public_output_kinds: Vec<&str> = output
+        .iter()
+        .filter_map(|item| item["type"].as_str())
+        .filter(|kind| *kind != "reasoning")
+        .collect();
+    assert_eq!(public_output_kinds, ["web_search_call", "message"]);
+    let payload: ResponsePayload = serde_json::from_value(terminal).expect("terminal payload");
+    let stored = exec_ctx.resp_handler.retrieve(&payload.id).await.unwrap();
+    assert_eq!(
+        serde_json::to_value(&stored).unwrap()["tools"],
+        public_tools,
+        "stored response tools"
+    );
+
+    // Inference receives one lowered function schema per declaration, including the
+    // flattened namespace member, and never the public declaration forms.
+    let request_bodies = llm.request_bodies().await;
+    assert_eq!(request_bodies.len(), 2);
+    let upstream_names: Vec<&str> = request_bodies[0]["tools"]
+        .as_array()
+        .expect("upstream tools")
+        .iter()
+        .filter_map(|tool| tool["name"].as_str())
+        .collect();
+    assert_eq!(
+        upstream_names,
+        [
+            "web_search",
+            "get_weather",
+            "set_temperature_unit",
+            &model_visible_namespace_member_name("weather_tools", "get_forecast")
+        ]
+    );
+    assert!(
+        request_bodies[0]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|tool| tool["type"] == "function"),
+        "every declaration is lowered to a function schema upstream"
+    );
+}
+
+/// An upstream turn that stops on an output-token limit. Its lifecycle snapshots omit the
+/// declaration fields entirely, so the gateway has to report the submitted ones itself.
+fn incomplete_terminal_sse_response() -> support::MockResponse {
+    support::sse_omitting_tool_declarations(sse_response([
+        serde_json::json!({
+            "type": "response.created",
+            "response": {"id": "resp_incomplete", "status": "in_progress", "usage": null}
+        }),
+        serde_json::json!({
+            "type": "response.in_progress",
+            "response": {"id": "resp_incomplete", "status": "in_progress", "usage": null}
+        }),
+        serde_json::json!({
+            "type": "response.incomplete",
+            "response": {
+                "id": "resp_incomplete", "status": "incomplete", "output": [],
+                "incomplete_details": {"reason": "max_output_tokens"}, "usage": null
+            }
+        }),
+    ]))
+}
+
+#[tokio::test]
+async fn builtin_tool_declarations_stay_public_on_incomplete_terminal_frames() {
+    let (you_url, _captured_you, _you_handle) = spawn_mock_you().await;
+    let llm = support::MockServer::start_deque(vec![incomplete_terminal_sse_response()]).await;
+    let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
+    let mut payload = builtin_tool_payload(true);
+    payload.tool_choice = Some(ToolChoice::Required);
+    let public_tools = serde_json::to_value(&payload.tools).unwrap();
+
+    let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();
+    let Either::Right(stream) = result else {
+        panic!("expected streaming response");
+    };
+    let chunks: Vec<String> = stream.collect().await;
+
+    let events = streamed_sse_events(&chunks);
+    let terminal = events.last().expect("terminal frame");
+    assert_eq!(terminal["type"], "response.incomplete");
+    assert_eq!(terminal["response"]["status"], "incomplete");
+    assert_eq!(
+        terminal["response"]["incomplete_details"]["reason"],
+        "max_output_tokens"
+    );
+    for event in &events {
+        let Some(response) = event.get("response") else {
+            continue;
+        };
+        let context = event["type"].as_str().unwrap_or_default();
+        assert_public_tool_metadata(response, &public_tools, context);
+        assert_eq!(
+            response["tool_choice"],
+            serde_json::json!("required"),
+            "the submitted selector must be reported: {context}"
+        );
+    }
+    assert_eq!(llm.request_bodies().await.len(), 1);
+}
+
+/// An upstream turn that fails before producing output. The relayed failure frame still
+/// carries the response object whose declarations must stay public.
+fn failed_terminal_sse_response() -> support::MockResponse {
+    support::sse_omitting_tool_declarations(sse_response([
+        serde_json::json!({
+            "type": "response.created",
+            "response": {"id": "resp_failed", "status": "in_progress", "usage": null}
+        }),
+        serde_json::json!({
+            "type": "response.in_progress",
+            "response": {"id": "resp_failed", "status": "in_progress", "usage": null}
+        }),
+        serde_json::json!({
+            "type": "response.failed",
+            "response": {
+                "id": "resp_failed", "status": "failed", "output": [],
+                "error": {"code": "server_error", "message": "upstream failure"}
+            }
+        }),
+    ]))
+}
+
+#[tokio::test]
+async fn builtin_tool_declarations_stay_public_on_failed_terminal_frames() {
+    let (you_url, _captured_you, _you_handle) = spawn_mock_you().await;
+    let llm = support::MockServer::start_deque(vec![failed_terminal_sse_response()]).await;
+    let exec_ctx = build_exec_ctx(llm.url(), you_url).await;
+    let mut payload = builtin_tool_payload(true);
+    payload.tool_choice = Some(ToolChoice::Required);
+    let public_tools = serde_json::to_value(&payload.tools).unwrap();
+
+    let result = ExecuteRequest::new(payload, Arc::clone(&exec_ctx)).run().await.unwrap();
+    let Either::Right(stream) = result else {
+        panic!("expected streaming response");
+    };
+    let chunks: Vec<String> = stream.collect().await;
+
+    let events = streamed_sse_events(&chunks);
+    let terminal = events
+        .iter()
+        .find(|event| event["type"] == "response.failed")
+        .expect("relayed failure frame");
+    assert_eq!(terminal["response"]["error"]["message"], "upstream failure");
+    for event in &events {
+        let Some(response) = event.get("response") else {
+            continue;
+        };
+        let context = event["type"].as_str().unwrap_or_default();
+        assert_public_tool_metadata(response, &public_tools, context);
+        assert_eq!(
+            response["tool_choice"],
+            serde_json::json!("required"),
+            "the submitted selector must be reported: {context}"
+        );
+    }
+    assert_eq!(llm.request_bodies().await.len(), 1);
 }
 
 #[tokio::test]

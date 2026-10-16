@@ -425,6 +425,126 @@ pub(super) mod tests {
         );
     }
 
+    /// A client declaration set for a gateway code interpreter and a request-scoped MCP
+    /// server, with the credentials and the server's discovered tools attached the way
+    /// request normalization attaches them before lowering.
+    fn code_interpreter_and_mcp_request() -> (RequestContext, Value) {
+        use crate::types::io::ToolChoice;
+        use crate::types::tools::{McpDiscoveredToolParam, ResponsesTool};
+        let mut request = request_context();
+        let mut tools: Vec<ResponsesTool> = serde_json::from_value(serde_json::json!([
+            {"type":"code_interpreter","container":{"type":"auto"}},
+            {
+                "type":"mcp","server_label":"weather","server_url":"https://mcp.example.test/mcp",
+                "headers":{"Authorization":"Bearer header-secret"},
+                "authorization":"field-secret",
+                "allowed_tools":["forecast"],"require_approval":"never"
+            }
+        ]))
+        .expect("valid declarations");
+        let ResponsesTool::Mcp(mcp) = &mut tools[1] else {
+            panic!("the second declaration is an MCP server");
+        };
+        mcp.discovered_tools.push(
+            serde_json::from_value::<McpDiscoveredToolParam>(serde_json::json!({
+                "server_label":"weather",
+                "tool_name":"forecast",
+                "internal_name":"mcp__weather__forecast",
+                "tool":{
+                    "name":"forecast",
+                    "description":"Forecast a city.",
+                    "inputSchema":{"type":"object","properties":{"city":{"type":"string"}}}
+                }
+            }))
+            .expect("discovered MCP tool"),
+        );
+        request.enriched_request.tools = Some(tools);
+        request.enriched_request.tool_choice = Some(ToolChoice::Required);
+        let public = serde_json::json!([
+            {"type":"code_interpreter","container":{"type":"auto"}},
+            {
+                "type":"mcp","server_label":"weather","server_url":"https://mcp.example.test/mcp",
+                "allowed_tools":["forecast"],"require_approval":"never"
+            }
+        ]);
+        (request, public)
+    }
+
+    #[tokio::test]
+    async fn code_interpreter_and_mcp_declarations_stay_public_without_internal_fields() {
+        let (request, public_tools) = code_interpreter_and_mcp_request();
+
+        // Inference keeps the lowered function schemas, and never carries request-scoped
+        // credentials or the discovered `tools/list` result.
+        let upstream: Value = serde_json::from_str(&upstream_request(&request, false).expect("upstream body")).unwrap();
+        let upstream_names: Vec<&str> = upstream["tools"]
+            .as_array()
+            .expect("lowered function schemas")
+            .iter()
+            .filter_map(|tool| tool["name"].as_str())
+            .collect();
+        assert_eq!(upstream_names, ["code_interpreter", "mcp__weather__forecast"]);
+        for internal in ["header-secret", "field-secret", "_agentic_discovered_tools"] {
+            assert!(
+                !upstream.to_string().contains(internal),
+                "{internal} must stay out of the upstream request"
+            );
+        }
+
+        let registry = ToolRegistry::from_tool_types(std::collections::HashMap::new());
+        let mut agent = AgentPipeline::new(request, None, StreamRelay::detached());
+        let stream_context = translation_context(&registry, &agent);
+        let json_context = translation_context(&registry, &agent);
+        drop(registry);
+
+        // The model server echoes the lowered schemas it received, and terminal lifecycle
+        // snapshots omit the declaration fields entirely.
+        let lowered = serde_json::json!([
+            {"type":"function","name":"code_interpreter","parameters":{"type":"object"}},
+            {"type":"function","name":"mcp__weather__forecast","parameters":{"type":"object"}}
+        ]);
+        let mut ingestion = RoundIngestion::new("resp_1".to_owned(), None, Validation::Lenient, stream_context, None);
+        for frame in [
+            serde_json::json!({"type":"response.created","response":{
+                "id":"upstream","status":"in_progress","tools":lowered,"tool_choice":"auto"
+            }}),
+            serde_json::json!({"type":"response.completed","response":{
+                "id":"upstream","status":"completed","output":[]
+            }}),
+        ] {
+            let translated = ingestion.push(SseLine::parse(&format!("data: {frame}"))).unwrap();
+            let response = &translated.frames[0].wire.rest["response"];
+            assert_eq!(response["tools"], public_tools, "public declarations for {frame}");
+            assert_eq!(
+                response["tool_choice"],
+                serde_json::json!("required"),
+                "selector for {frame}"
+            );
+            let client_tools = response["tools"].to_string();
+            for internal in [
+                "header-secret",
+                "field-secret",
+                "_agentic_discovered_tools",
+                "mcp__weather__forecast",
+            ] {
+                assert!(
+                    !client_tools.contains(internal),
+                    "{internal} must never reach a client tools value: {frame}"
+                );
+            }
+        }
+
+        let body = serde_json::json!({"id":"upstream","status":"completed","output":[]}).to_string();
+        let json_payload = agent
+            .run_with_json_body(&body, Validation::Lenient, json_context, None)
+            .unwrap();
+        assert_eq!(serde_json::to_value(&json_payload.tools).unwrap(), public_tools);
+        assert_eq!(
+            serde_json::to_value(&json_payload.tool_choice).unwrap(),
+            serde_json::json!("required")
+        );
+    }
+
     pub(in crate::executor) fn request_context() -> RequestContext {
         let request = RequestPayload {
             model: "test".into(),

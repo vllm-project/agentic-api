@@ -422,6 +422,68 @@ pub fn text_response(text: &str) -> MockResponse {
     )
 }
 
+/// A minimal SSE response that streams one assistant message and completes.
+pub fn text_sse_response(text: &str) -> MockResponse {
+    let events = [
+        serde_json::json!({
+            "type": "response.created",
+            "response": {"id": "resp_upstream_final", "status": "in_progress", "usage": null}
+        }),
+        serde_json::json!({
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {
+                "id": "msg_upstream_final", "type": "message", "role": "assistant",
+                "status": "in_progress", "content": []
+            }
+        }),
+        serde_json::json!({
+            "type": "response.output_text.delta", "item_id": "msg_upstream_final",
+            "output_index": 0, "content_index": 0, "delta": text
+        }),
+        serde_json::json!({
+            "type": "response.completed",
+            "response": {"id": "resp_upstream_final", "status": "completed", "usage": null}
+        }),
+    ];
+    let mut body = String::new();
+    for event in events {
+        body.push_str("data: ");
+        body.push_str(&serde_json::to_string(&event).expect("event serializes"));
+        body.push_str("\n\n");
+    }
+    body.push_str("data: [DONE]\n\n");
+    MockResponse::Sse(body)
+}
+
+/// A model server whose lifecycle snapshots omit `tools` and `tool_choice` entirely. The
+/// gateway has to report the declarations the client submitted on those frames itself.
+pub fn sse_omitting_tool_declarations(response: MockResponse) -> MockResponse {
+    let MockResponse::Sse(body) = response else {
+        panic!("expected an SSE fixture");
+    };
+    let mut out = String::new();
+    for line in body.lines() {
+        let Some(payload) = line.strip_prefix("data: ") else {
+            continue;
+        };
+        if payload == "[DONE]" {
+            continue;
+        }
+        let mut event: Value = serde_json::from_str(payload).expect("SSE data is JSON");
+        if event["type"] == "response.created" || event["type"] == "response.in_progress" {
+            let response = event["response"].as_object_mut().expect("response object");
+            response.remove("tools");
+            response.remove("tool_choice");
+        }
+        out.push_str("data: ");
+        out.push_str(&serde_json::to_string(&event).expect("event serializes"));
+        out.push_str("\n\n");
+    }
+    out.push_str("data: [DONE]\n\n");
+    MockResponse::Sse(out)
+}
+
 pub fn function_call_response(id: &str, call_id: &str, name: &str, arguments: &str) -> MockResponse {
     MockResponse::Json(
         serde_json::json!({
