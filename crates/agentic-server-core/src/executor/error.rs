@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use crate::StorageError;
 use crate::tool::ToolError;
-use crate::types::request_response::{MAX_TOOL_CALLS_PARAM, MaxToolCallsError};
+use crate::types::request_response::{MAX_TOOL_CALLS_PARAM, MaxToolCallsError, UnsupportedParameterError};
 use crate::utils::common::serialize_to_vec_or_default;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,6 +115,9 @@ pub enum ExecutorError {
     /// `code: unsupported_value` and the offending request parameter.
     #[error("{message}")]
     UnsupportedValue { param: &'static str, message: &'static str },
+    /// A recognized request member this gateway cannot honour (`background: true`, `prompt`).
+    #[error(transparent)]
+    UnsupportedParameter(#[from] UnsupportedParameterError),
 
     /// The request exceeds a documented transport or component size budget.
     #[error("{0}")]
@@ -175,6 +178,7 @@ impl ExecutorError {
             | Self::InvalidRequest(_)
             | Self::InvalidMaxToolCalls(_)
             | Self::UnsupportedValue { .. }
+            | Self::UnsupportedParameter(_)
             | Self::PreviousResponseNotFound { .. }
             | Self::JsonError(_) => StatusCode::BAD_REQUEST,
             Self::Tool(
@@ -208,6 +212,7 @@ impl ExecutorError {
             | Self::InvalidRequest(_)
             | Self::InvalidMaxToolCalls(_)
             | Self::UnsupportedValue { .. }
+            | Self::UnsupportedParameter(_)
             | Self::PreviousResponseNotFound { .. }
             | Self::ParseError(_)
             | Self::JsonError(_)
@@ -243,6 +248,7 @@ impl ExecutorError {
             Self::ResourceLimitExceeded { .. } => "response_resource_limit_exceeded",
             Self::InvalidMaxToolCalls(error) => error.code(),
             Self::UnsupportedValue { .. } => "unsupported_value",
+            Self::UnsupportedParameter(error) => error.code(),
             Self::Tool(ToolError::UnknownParameter { .. }) => "unknown_parameter",
             other => other.error_type(),
         }
@@ -261,6 +267,7 @@ impl ExecutorError {
             Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. }) => Some("input"),
             Self::InvalidMaxToolCalls(_) => Some(MAX_TOOL_CALLS_PARAM),
             Self::UnsupportedValue { param, .. } => Some(param),
+            Self::UnsupportedParameter(error) => Some(error.param()),
             _ => None,
         }
     }
@@ -547,6 +554,30 @@ mod tests {
                     "code": "unsupported_value"
                 }
             })
+        );
+    }
+
+    #[test]
+    fn unsupported_parameters_match_openai_error_envelopes() {
+        let background = ExecutorError::from(UnsupportedParameterError::BackgroundMode);
+        assert_eq!(background.http_status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            envelope(background),
+            serde_json::json!({"error": {
+                "message": "background mode is not supported; omit `background` or set it to false",
+                "type": "invalid_request_error",
+                "code": "unsupported_value",
+                "param": "background"
+            }})
+        );
+        assert_eq!(
+            envelope(ExecutorError::from(UnsupportedParameterError::PromptTemplate)),
+            serde_json::json!({"error": {
+                "message": "reusable prompt templates are not supported; send `instructions` and `input` instead of `prompt`",
+                "type": "invalid_request_error",
+                "code": "unsupported_parameter",
+                "param": "prompt"
+            }})
         );
     }
 }

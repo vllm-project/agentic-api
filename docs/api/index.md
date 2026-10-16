@@ -236,6 +236,32 @@ OpenAI reference recordings under `crates/agentic-server-core/tests/cassettes/ma
   it upstream; direct requests are passed through unchanged. Multi-agent
   requests reject it.
 
+#### Unsupported request parameters
+
+Typed execution cannot honour `background: true` or a reusable `prompt`
+reference, so it rejects them with `400` and `type: "invalid_request_error"`
+instead of silently dropping them. The check runs before history lookup, tool
+discovery, storage, or inference. Direct HTTP pass-through preserves the original
+request body, and the upstream decides whether to accept these members.
+`store: false` alone does not ensure pass-through: a previous response ID,
+conversation, built-in tool, or another executor feature still selects typed
+execution.
+
+| Path | `background` | `prompt` |
+| --- | --- | --- |
+| Direct HTTP JSON/SSE | Forwarded unchanged; upstream validation | Forwarded unchanged; upstream validation |
+| Typed HTTP JSON/SSE, WebSocket, and split-execution hydration | Absent, `null`, or `false` accepted and not forwarded; `true` returns `code: "unsupported_value"`, `param: "background"` | Absent or `null` accepted; any other value returns `code: "unsupported_parameter"`, `param: "prompt"` |
+
+Background mode is tracked in
+[#357](https://github.com/vllm-project/agentic-api/issues/357). This matrix
+contributes to [#314](https://github.com/vllm-project/agentic-api/issues/314).
+
+Typed execution still ignores other members the gateway does not model,
+including `top_logprobs`, `user`, `safety_identifier`, `stream_options`, and vLLM
+sampling extensions such as `top_k`, `min_p`, `seed`, and `stop`. Direct requests
+forward them unchanged. Reporting effective parameters is tracked in
+[#434](https://github.com/vllm-project/agentic-api/issues/434).
+
 #### Prompt-cache usage compatibility
 
 Cache-read usage is reported in `usage.input_tokens_details.cached_tokens`;

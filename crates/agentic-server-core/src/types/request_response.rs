@@ -16,12 +16,14 @@ mod max_tool_calls;
 mod response_stream;
 mod serde_helpers;
 mod standard_response;
+mod unsupported;
 pub use max_tool_calls::{JsonKind, MAX_TOOL_CALLS_PARAM, MaxToolCalls, MaxToolCallsError, OutOfRangeInteger};
 use serde_helpers::{
     default_true, deserialize_conversation, is_absent_or_default_tool_choice, serialize_conversation_object,
     serialize_upstream_tool_choice,
 };
 pub use standard_response::{ResponseReasoning, StandardResponseFields};
+pub use unsupported::{BACKGROUND_PARAM, PROMPT_PARAM, RejectedValue, UnsupportedParameterError};
 #[cfg(feature = "openapi")]
 mod schema;
 
@@ -147,6 +149,12 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig> {
     pub cache_salt: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_management: Option<Vec<ContextManagement>>,
+    /// Detection only, never serialized: typed execution rejects `true` (background mode is #357).
+    #[serde(default, skip_serializing)]
+    pub background: Option<bool>,
+    /// Detection only, never serialized: typed execution rejects any non-null value.
+    #[serde(default, skip_serializing)]
+    pub prompt: Option<RejectedValue>,
 }
 
 #[derive(Debug, Serialize)]
@@ -297,6 +305,8 @@ impl<T: ?Sized> RequestPayload<T> {
             multi_agent: self.multi_agent,
             cache_salt: self.cache_salt,
             context_management: self.context_management,
+            background: self.background,
+            prompt: self.prompt,
         })
     }
 }

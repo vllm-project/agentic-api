@@ -181,6 +181,8 @@ async fn rehydrate_request(
     exec_ctx: &ExecutionContext,
     continuation: Option<ResponseContinuation>,
 ) -> ExecutorResult<RequestContext> {
+    // Every typed entry point reaches this check: executor-routed HTTP, WebSocket, split execution, embedders.
+    request.ensure_supported_parameters()?;
     validate_multi_agent_request(&request)?;
     // Stored turns never supply `max_tool_calls`, so the request value is final here.
     request.max_tool_calls_limit()?;
