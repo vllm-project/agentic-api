@@ -1615,6 +1615,7 @@ mod tests {
         let item = crate::storage::models::item::Item {
             id: "ci_1".to_owned(),
             reference_id: None,
+            public_id: None,
             data: stored,
             created_at: 0,
             conversation_id: None,

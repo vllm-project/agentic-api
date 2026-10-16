@@ -30,6 +30,9 @@ pub struct Item {
     /// Original public item identity when this row references an existing item.
     pub reference_id: Option<String>,
 
+    /// Public identity of an independent history row, which keeps its own copy of the item data.
+    pub public_id: Option<String>,
+
     /// Item data stored as JSON text.
     /// Deserialized based on context (`message`, `tool_call`, etc.)
     pub data: String,
@@ -51,7 +54,10 @@ impl Item {
     /// Public identity, shared by every reference to the original item.
     #[must_use]
     pub fn public_id(&self) -> &str {
-        self.reference_id.as_deref().unwrap_or(&self.id)
+        self.public_id
+            .as_deref()
+            .or(self.reference_id.as_deref())
+            .unwrap_or(&self.id)
     }
 
     fn data_without_storage_marker(&self) -> Option<(Value, bool)> {
@@ -280,17 +286,27 @@ async fn create_in_tx_with_next_conversation_seq(
              VALUES {values_clause} \
          ), owner AS ( \
              SELECT COALESCE(tenant_id, 'default_tenant') AS tenant_id FROM conversations WHERE id = $1 \
+         ), source_rows AS ( \
+             SELECT incoming.seq AS incoming_seq, \
+                    COALESCE(MIN(CASE WHEN source.id = incoming.id THEN source.id END), MIN(source.id)) AS source_id \
+             FROM incoming CROSS JOIN owner JOIN items source \
+                 ON COALESCE(source.public_id, source.reference_id, source.id) = incoming.id \
+                AND source.tenant_id = owner.tenant_id \
+                AND (CAST($2 AS BIGINT) IS NULL OR source.conversation_id IS NULL \
+                     OR source.conversation_id <> $1 OR source.seq < $2) \
+             GROUP BY incoming.seq \
          ) \
-         INSERT INTO items (id, data, created_at, conversation_id, seq, reference_id, tenant_id) \
+         INSERT INTO items (id, data, created_at, conversation_id, seq, reference_id, public_id, tenant_id) \
          SELECT CASE WHEN source.id IS NULL THEN incoming.id ELSE incoming.entry_id END, \
                 COALESCE(source.data, incoming.data), COALESCE(source.created_at, incoming.created_at), \
-                incoming.conversation_id, incoming.seq, source.id, owner.tenant_id \
+                incoming.conversation_id, incoming.seq, source.id, \
+                COALESCE(source.public_id, source.reference_id, source.id, incoming.id), owner.tenant_id \
          FROM incoming CROSS JOIN owner \
-         LEFT JOIN items source ON source.id = incoming.id AND source.tenant_id = owner.tenant_id \
-             AND (CAST($2 AS BIGINT) IS NULL OR source.conversation_id IS NULL \
-                  OR source.conversation_id <> $1 OR source.seq < $2) \
+         LEFT JOIN source_rows ON source_rows.incoming_seq = incoming.seq \
+         LEFT JOIN items source ON source.id = source_rows.source_id \
          WHERE NOT EXISTS ( \
-             SELECT 1 FROM items existing JOIN incoming ON incoming.id = COALESCE(existing.reference_id, existing.id) \
+             SELECT 1 FROM items existing \
+             JOIN incoming ON incoming.id = COALESCE(existing.public_id, existing.reference_id, existing.id) \
              WHERE existing.conversation_id = $1 \
                AND (CAST($2 AS BIGINT) IS NULL OR existing.seq < $2) \
          ) \
@@ -405,7 +421,7 @@ pub async fn list_for_conversation(
         // occurrence in this ordering so the public cursor cannot loop forever.
         let cursor_direction = if order == ItemOrder::Asc { "DESC" } else { "ASC" };
         let cursor_query = format!(
-            "{base} AND COALESCE(items.reference_id, items.id) = $3 \
+            "{base} AND COALESCE(items.public_id, items.reference_id, items.id) = $3 \
              ORDER BY items.seq {cursor_direction}, items.id {cursor_direction} LIMIT 1"
         );
         let cursor = sqlx::query_as::<_, Item>(&cursor_query)
@@ -447,7 +463,8 @@ pub async fn get_for_conversation(
 ) -> DbResult<Option<Item>> {
     sqlx::query_as(
         "SELECT items.* FROM items JOIN conversations ON conversations.id = items.conversation_id \
-         WHERE conversations.id = $1 AND conversations.tenant_id = $2 AND COALESCE(items.reference_id, items.id) = $3 \
+         WHERE conversations.id = $1 AND conversations.tenant_id = $2 \
+           AND COALESCE(items.public_id, items.reference_id, items.id) = $3 \
          ORDER BY items.seq ASC LIMIT 1",
     )
     .bind(conversation_id)
@@ -468,7 +485,7 @@ pub async fn detach_from_conversation_in_tx(
 ) -> DbResult<u64> {
     let result = sqlx::query(
         "UPDATE items SET conversation_id = NULL, seq = NULL \
-         WHERE conversation_id = $1 AND (CAST($2 AS TEXT) IS NULL OR COALESCE(reference_id, id) = $2)",
+         WHERE conversation_id = $1 AND (CAST($2 AS TEXT) IS NULL OR COALESCE(public_id, reference_id, id) = $2)",
     )
     .bind(conversation_id)
     .bind(item_id)
@@ -597,6 +614,7 @@ mod tests {
                     seq: None,
                     tenant_id: None,
                     reference_id: None,
+                    public_id: None,
                 }
                 .as_inout()
                 .expect("rehydrate stored item")
@@ -728,6 +746,7 @@ mod tests {
             seq: Some(1),
             tenant_id: None,
             reference_id: None,
+            public_id: None,
         };
 
         assert_eq!(item.id, "item_123");
@@ -745,6 +764,7 @@ mod tests {
             seq: None,
             tenant_id: None,
             reference_id: None,
+            public_id: None,
         };
 
         assert!(item.conversation_id.is_none());
@@ -774,6 +794,7 @@ mod tests {
             seq: None,
             tenant_id: None,
             reference_id: None,
+            public_id: None,
         };
 
         let Some(InOutItem::Output(OutputItem::Reasoning(reasoning))) = item.as_inout() else {
@@ -812,6 +833,7 @@ mod tests {
             seq: None,
             tenant_id: None,
             reference_id: None,
+            public_id: None,
         };
 
         let stored = item.as_inout().expect("stored item");
@@ -841,6 +863,7 @@ mod tests {
             seq: None,
             tenant_id: None,
             reference_id: None,
+            public_id: None,
         };
 
         let inputs = InOutItem::into_input_items(vec![item.as_inout().expect("stored item")]);
@@ -878,6 +901,7 @@ mod tests {
             seq: None,
             tenant_id: None,
             reference_id: None,
+            public_id: None,
         };
 
         let inputs = InOutItem::into_input_items(vec![item.as_inout().expect("stored shell item")]);
@@ -926,6 +950,7 @@ mod tests {
                 seq: Some(idx.try_into().expect("seq")),
                 tenant_id: None,
                 reference_id: None,
+                public_id: None,
             })
             .map(|item| item.as_inout().expect("stored item"))
             .collect();
@@ -961,6 +986,7 @@ mod tests {
             seq: None,
             tenant_id: None,
             reference_id: None,
+            public_id: None,
         };
 
         let inputs = InOutItem::into_input_items(vec![item.as_inout().expect("stored item")]);
