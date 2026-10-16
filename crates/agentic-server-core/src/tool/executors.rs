@@ -202,7 +202,12 @@ impl GatewayExecutors {
             return Ok(());
         };
         CodeInterpreterHandler::validate_declarations(tools)?;
-        for tool in tools {
+        for (index, tool) in tools.iter().enumerate() {
+            if tool.declares_unsupported_async() {
+                return Err(ToolError::UnknownParameter {
+                    param: format!("tools[{index}].async"),
+                });
+            }
             tool.validate()?;
         }
         if tools

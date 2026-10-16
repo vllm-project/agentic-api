@@ -21,13 +21,16 @@ use crate::types::io::output::FunctionToolCall;
 
 use super::request::{GatewayToolResult, ToolParam};
 
+// Preserve the public import paths for the shared version policy.
+pub use super::tools::{NATIVE_WEB_FETCH_VERSIONS, NATIVE_WEB_SEARCH_VERSIONS, NativeToolVersion};
+
 /// The built-in gateway executor every `/v1/messages` request may name. The
 /// registry keys it under this exact name (`tool::web_search`).
 pub const WEB_SEARCH_EXECUTOR: &str = "web_search";
 
 /// Claude's basic native web-search server tool version. Every version the
 /// gateway executes is listed in [`NATIVE_WEB_SEARCH_VERSIONS`].
-pub const NATIVE_WEB_SEARCH_TYPE: &str = "web_search_20250305";
+pub use super::tools::NATIVE_WEB_SEARCH_TYPE;
 
 /// The second built-in gateway executor on `/v1/messages`, reachable only
 /// through a native `web_fetch_*` declaration (`tool::web_fetch`).
@@ -35,88 +38,7 @@ pub const WEB_FETCH_EXECUTOR: &str = "web_fetch";
 
 /// Claude's basic native web-fetch server tool version. Every version the
 /// gateway executes is listed in [`NATIVE_WEB_FETCH_VERSIONS`].
-pub const NATIVE_WEB_FETCH_TYPE: &str = "web_fetch_20250910";
-
-/// One version of a native server tool that the Messages gateway executes, and
-/// what it defines beyond its tool's basic version, as Anthropic documents
-/// each version. The Messages adapter (`executor::messages_request`) accepts a
-/// setting only on a version that defines it and rewrites every listed version
-/// into the basic version's function tool.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct NativeToolVersion {
-    /// The declared `type`, such as `web_search_20260209`.
-    pub type_name: &'static str,
-    /// Dynamic filtering: the version's default caller is code execution
-    /// rather than the model, so a declaration runs here only when its
-    /// `allowed_callers` includes `"direct"`.
-    pub dynamic_filtering: bool,
-    /// Whether the version defines `use_cache`.
-    pub use_cache: bool,
-    /// Whether the version defines `response_inclusion`.
-    pub response_inclusion: bool,
-}
-
-impl NativeToolVersion {
-    /// The version in `versions` that a declared tool `type` names, if any.
-    #[must_use]
-    pub fn find(versions: &[Self], tool_type: Option<&str>) -> Option<Self> {
-        versions
-            .iter()
-            .copied()
-            .find(|version| Some(version.type_name) == tool_type)
-    }
-}
-
-/// Every native web-search version the Messages gateway executes, oldest first.
-pub const NATIVE_WEB_SEARCH_VERSIONS: &[NativeToolVersion] = &[
-    NativeToolVersion {
-        type_name: NATIVE_WEB_SEARCH_TYPE,
-        dynamic_filtering: false,
-        use_cache: false,
-        response_inclusion: false,
-    },
-    NativeToolVersion {
-        type_name: "web_search_20260209",
-        dynamic_filtering: true,
-        use_cache: false,
-        response_inclusion: false,
-    },
-    NativeToolVersion {
-        type_name: "web_search_20260318",
-        dynamic_filtering: true,
-        use_cache: false,
-        response_inclusion: true,
-    },
-];
-
-/// Every native web-fetch version the Messages gateway executes, oldest first.
-pub const NATIVE_WEB_FETCH_VERSIONS: &[NativeToolVersion] = &[
-    NativeToolVersion {
-        type_name: NATIVE_WEB_FETCH_TYPE,
-        dynamic_filtering: false,
-        use_cache: false,
-        response_inclusion: false,
-    },
-    NativeToolVersion {
-        type_name: "web_fetch_20260209",
-        dynamic_filtering: true,
-        use_cache: false,
-        response_inclusion: false,
-    },
-    NativeToolVersion {
-        type_name: "web_fetch_20260309",
-        dynamic_filtering: true,
-        use_cache: true,
-        response_inclusion: false,
-    },
-    NativeToolVersion {
-        type_name: "web_fetch_20260318",
-        dynamic_filtering: true,
-        use_cache: true,
-        response_inclusion: true,
-    },
-];
+pub use super::tools::NATIVE_WEB_FETCH_TYPE;
 
 /// Whether a declared tool `type` names a native web-fetch server tool, of
 /// any version. Version support is decided when the request is normalized.
@@ -213,7 +135,7 @@ pub fn has_gateway_tool(tools: Option<&Vec<ToolParam>>, map: &GatewayToolMap) ->
     tools.is_some_and(|tools| {
         tools
             .iter()
-            .any(|t| map.is_gateway_owned(&t.name) || is_native_web_fetch_type(t.type_.as_deref()))
+            .any(|t| map.is_gateway_owned(t.name()) || is_native_web_fetch_type(t.tool_type()))
     })
 }
 
@@ -235,6 +157,7 @@ pub fn tool_use_to_call(id: &str, name: &str, input: &Value, map: &GatewayToolMa
         input.clone()
     };
     FunctionToolCall {
+        async_execution: false,
         agent: None,
         id: id.to_owned(),
         call_id: id.to_owned(),

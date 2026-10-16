@@ -108,6 +108,7 @@ async fn live_discovery_does_not_recharge_mcp_metadata_on_ordinary_rounds() {
                 owner: ClientCallOwner {
                     agent_turn: turn.clone(),
                     kind: ClientCallKind::ToolSearch,
+                    async_execution: false,
                 },
             }],
         )
@@ -350,6 +351,7 @@ async fn partial_input_waits_for_all_owner_calls_and_does_not_revive_interrupted
         owner: ClientCallOwner {
             agent_turn: turn.clone(),
             kind: ClientCallKind::Function,
+            async_execution: false,
         },
     });
     run.pending.register_calls(&run.registry, &registrations[..2]).unwrap();
@@ -383,6 +385,264 @@ async fn partial_input_waits_for_all_owner_calls_and_does_not_revive_interrupted
     assert_eq!(run.registry.get(&root).unwrap().state, AgentState::Interrupted);
     assert_eq!(run.contexts[&root].generation, generation + 3);
     assert_eq!(run.pending.pending().count(), 0);
+    server.abort();
+}
+
+/// A pending async call never holds its owner: the synchronous output alone resumes it. A late
+/// async output then wakes an idle root, as it does in a continuation request.
+#[tokio::test]
+async fn live_async_outputs_do_not_hold_their_owner_and_wake_an_idle_root() {
+    use crate::types::agent::AgentCompletion;
+    let (exec, server) = setup().await;
+    let ctx = rehydrate_conversation(request(), &exec).await.unwrap();
+    let mut pipeline = AgentPipeline::new(ctx, None, StreamRelay::detached());
+    let mut run = MultiAgentRun::new(&mut pipeline, &exec).await.unwrap();
+    let root = AgentIdentity::root();
+    let turn = AgentTurnKey {
+        agent: root.clone(),
+        turn: run.registry.get(&root).unwrap().turn,
+    };
+    let registrations =
+        [("sync_call", false), ("async_call", true)].map(|(id, async_execution)| ClientCallRegistration {
+            call_id: ClientCallId::try_from(id.to_owned()).unwrap(),
+            owner: ClientCallOwner {
+                agent_turn: turn.clone(),
+                kind: ClientCallKind::Function,
+                async_execution,
+            },
+        });
+    run.pending.register_calls(&run.registry, &registrations).unwrap();
+    run.registry
+        .set_phase(&turn, AgentPhase::WaitingForClientOutputs)
+        .unwrap();
+
+    assert!(matches!(
+        run.accept_live_outputs(batch(&run.payload.id, &["sync_call"])),
+        OutputDecision::Accepted
+    ));
+    assert_eq!(
+        run.registry.get(&root).unwrap().state,
+        AgentState::Active(AgentPhase::Runnable),
+        "the pending async call must not hold its owner"
+    );
+
+    run.registry
+        .settle_turn(&turn, &AgentCompletion::Finished("done".into()))
+        .unwrap();
+    assert_eq!(run.registry.get(&root).unwrap().state, AgentState::Idle);
+    run.contexts.get_mut(&root).unwrap().stored.final_answer = Some("done".into());
+    assert!(matches!(
+        run.accept_live_outputs(batch(&run.payload.id, &["async_call"])),
+        OutputDecision::Accepted
+    ));
+    let resumed = run.registry.get(&root).unwrap();
+    assert_eq!(resumed.state, AgentState::Active(AgentPhase::Runnable));
+    assert_ne!(resumed.turn, turn.turn, "the late output starts a new root turn");
+    assert_eq!(
+        run.contexts[&root].stored.final_answer, None,
+        "the new turn starts without the previous answer"
+    );
+    assert!(
+        run.contexts[&root]
+            .stored
+            .history
+            .iter()
+            .any(|item| matches!(item, InputItem::FunctionCallOutput(output) if output.call_id == "async_call"))
+    );
+    server.abort();
+}
+
+/// A live async output for an idle subagent starts that subagent's next turn once a subagent slot
+/// is free: at the limit it waits, and the turn starts when a busy sibling settles. An interrupted
+/// subagent is not revived.
+#[tokio::test]
+async fn live_async_output_wakes_an_idle_subagent_when_a_slot_frees() {
+    use crate::types::agent::AgentCompletion;
+    use crate::types::agent_commands::SpawnAgent;
+    let (exec, server) = setup().await;
+    let ctx = rehydrate_conversation(request(), &exec).await.unwrap();
+    let mut pipeline = AgentPipeline::new(ctx, None, StreamRelay::detached());
+    let mut run = MultiAgentRun::new(&mut pipeline, &exec).await.unwrap();
+    let root = AgentIdentity::root();
+    let root_turn = AgentTurnKey {
+        agent: root.clone(),
+        turn: run.registry.get(&root).unwrap().turn,
+    };
+    run.limit = 3;
+    let mut agents = Vec::new();
+    for name in ["worker", "stopped", "busy"] {
+        let task = SpawnAgent {
+            task_name: name.to_owned(),
+            message: "Poll the job.".to_owned(),
+            fork_turns: "none".to_owned(),
+        };
+        run.spawn_agent(&root_turn, task, &mut pipeline).await.unwrap();
+        let identity = root.child(name).unwrap();
+        agents.push(AgentTurnKey {
+            agent: identity.clone(),
+            turn: run.registry.get(&identity).unwrap().turn,
+        });
+    }
+    let [worker, stopped, busy] = agents.try_into().unwrap();
+    let registrations =
+        [("worker_call", &worker), ("stopped_call", &stopped)].map(|(id, turn)| ClientCallRegistration {
+            call_id: ClientCallId::try_from(id.to_owned()).unwrap(),
+            owner: ClientCallOwner {
+                agent_turn: turn.clone(),
+                kind: ClientCallKind::Function,
+                async_execution: true,
+            },
+        });
+    run.pending.register_calls(&run.registry, &registrations).unwrap();
+    run.registry
+        .settle_turn(&worker, &AgentCompletion::Finished("started".into()))
+        .unwrap();
+    run.registry
+        .settle_turn(&stopped, &AgentCompletion::Interrupted)
+        .unwrap();
+    run.contexts.get_mut(&worker.agent).unwrap().stored.final_answer = Some("started".into());
+    // The busy sibling holds the only slot.
+    run.limit = 1;
+
+    assert!(matches!(
+        run.accept_live_outputs(batch(&run.payload.id, &["worker_call", "stopped_call"])),
+        OutputDecision::Accepted
+    ));
+    assert_eq!(
+        run.registry.get(&worker.agent).unwrap().state,
+        AgentState::Idle,
+        "at the limit the output waits"
+    );
+
+    // The busy sibling reads its task, as its round would, then settles and frees the slot.
+    run.registry.take_mailbox(&busy).unwrap();
+    run.settle_turn(&busy, &AgentCompletion::Finished("done".into()))
+        .unwrap();
+    let resumed = run.registry.get(&worker.agent).unwrap();
+    assert_eq!(
+        resumed.state,
+        AgentState::Active(AgentPhase::Runnable),
+        "the freed slot starts its turn"
+    );
+    assert_ne!(resumed.turn, worker.turn, "the late output starts a new turn");
+    assert_eq!(run.contexts[&worker.agent].stored.final_answer, None);
+    assert_eq!(
+        run.registry.get(&stopped.agent).unwrap().state,
+        AgentState::Interrupted,
+        "an interrupted subagent stays interrupted"
+    );
+    for (owner, call_id) in [(&worker, "worker_call"), (&stopped, "stopped_call")] {
+        assert!(
+            run.contexts[&owner.agent]
+                .stored
+                .history
+                .iter()
+                .any(|item| matches!(item, InputItem::FunctionCallOutput(output) if output.call_id == call_id)),
+            "the output is stored for its owner"
+        );
+    }
+    server.abort();
+}
+
+/// An async output accepted while its owner's round is inferring survives the round's completion,
+/// which replaces the history with the round's own input.
+#[tokio::test]
+async fn async_output_accepted_during_a_round_survives_its_completion() {
+    let (exec, server) = setup().await;
+    let ctx = rehydrate_conversation(request(), &exec).await.unwrap();
+    let mut pipeline = AgentPipeline::new(ctx, None, StreamRelay::detached());
+    let mut run = MultiAgentRun::new(&mut pipeline, &exec).await.unwrap();
+    let root = AgentIdentity::root();
+    let turn = AgentTurnKey {
+        agent: root.clone(),
+        turn: run.registry.get(&root).unwrap().turn,
+    };
+    let registration = ClientCallRegistration {
+        call_id: ClientCallId::try_from("async_call".to_owned()).unwrap(),
+        owner: ClientCallOwner {
+            agent_turn: turn.clone(),
+            kind: ClientCallKind::Function,
+            async_execution: true,
+        },
+    };
+    run.pending.register_calls(&run.registry, &[registration]).unwrap();
+
+    run.spawn_round(&turn, &exec, None, &pipeline).unwrap();
+    assert_eq!(
+        run.registry.get(&root).unwrap().state,
+        AgentState::Active(AgentPhase::Inferring)
+    );
+    assert!(matches!(
+        run.accept_live_outputs(batch(&run.payload.id, &["async_call"])),
+        OutputDecision::Accepted
+    ));
+    let completion = run.tasks.join_next().await.unwrap();
+    run.complete(completion, &mut pipeline).await.unwrap();
+
+    let outputs = run.contexts[&root]
+        .stored
+        .history
+        .iter()
+        .filter(|item| matches!(item, InputItem::FunctionCallOutput(output) if output.call_id == "async_call"))
+        .count();
+    assert_eq!(outputs, 1, "the accepted output is in history exactly once");
+    server.abort();
+}
+
+/// An async output accepted while the root's final-answer round is inferring is read: that round
+/// used the older input, so the root runs again and the next upstream input carries the output.
+#[tokio::test]
+async fn async_output_accepted_during_the_roots_final_round_is_read_next() {
+    let (exec, server) = setup().await;
+    let mut request = request();
+    request.input = ResponsesInput::Text("simple compaction test".into());
+    let ctx = rehydrate_conversation(request, &exec).await.unwrap();
+    let mut pipeline = AgentPipeline::new(ctx, None, StreamRelay::detached());
+    let mut run = MultiAgentRun::new(&mut pipeline, &exec).await.unwrap();
+    let root = AgentIdentity::root();
+    let turn = AgentTurnKey {
+        agent: root.clone(),
+        turn: run.registry.get(&root).unwrap().turn,
+    };
+    let registration = ClientCallRegistration {
+        call_id: ClientCallId::try_from("async_call".to_owned()).unwrap(),
+        owner: ClientCallOwner {
+            agent_turn: turn.clone(),
+            kind: ClientCallKind::Function,
+            async_execution: true,
+        },
+    };
+    run.pending.register_calls(&run.registry, &[registration]).unwrap();
+
+    run.spawn_round(&turn, &exec, None, &pipeline).unwrap();
+    assert!(matches!(
+        run.accept_live_outputs(batch(&run.payload.id, &["async_call"])),
+        OutputDecision::Accepted
+    ));
+    let completion = run.tasks.join_next().await.unwrap();
+    run.complete(completion, &mut pipeline).await.unwrap();
+    assert_eq!(
+        run.registry.get(&root).unwrap().state,
+        AgentState::Active(AgentPhase::Runnable),
+        "the root has not read the output yet"
+    );
+
+    run.schedule(&exec, None, &pipeline).unwrap();
+    let completion = run.tasks.join_next().await.unwrap();
+    run.complete(completion, &mut pipeline).await.unwrap();
+    let ResponsesInput::Items(sent) = &run.contexts[&root].request.input else {
+        panic!("the round input is items");
+    };
+    let copies = sent
+        .iter()
+        .filter(|item| matches!(item, InputItem::FunctionCallOutput(output) if output.call_id == "async_call"))
+        .count();
+    assert_eq!(copies, 1, "the next upstream input carries the output once");
+    assert_eq!(
+        run.registry.get(&root).unwrap().state,
+        AgentState::Idle,
+        "and then the root settles"
+    );
     server.abort();
 }
 
@@ -448,6 +708,7 @@ async fn accepted_output_invalidates_inflight_compaction_without_losing_history(
                 owner: ClientCallOwner {
                     agent_turn: turn,
                     kind: ClientCallKind::Function,
+                    async_execution: false,
                 },
             }],
         )
@@ -559,6 +820,7 @@ fn register_race_call(run: &mut MultiAgentRun, agent: &AgentIdentity) -> AgentTu
                 owner: ClientCallOwner {
                     agent_turn: turn.clone(),
                     kind: ClientCallKind::Function,
+                    async_execution: false,
                 },
             }],
         )

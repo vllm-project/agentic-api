@@ -8,6 +8,7 @@ use crate::executor::multi_agent::{
 use crate::types::{
     agent::AgentTurnKey,
     client_calls::{ClientToolOutput, ClientToolOutputBatch},
+    io::InputItem,
 };
 
 pub(super) async fn receive(control: &mut Option<RunControlReceiver>) -> Option<OutputCommand> {
@@ -33,31 +34,40 @@ impl MultiAgentRun {
                 .take_accepted(&id)
                 .expect("validated output remains until transfer");
             let identity = routed.owner.agent_turn.agent;
+            let agent = self.registry.get(&identity).expect("registered call owner exists");
+            let (state, turn) = (agent.state, agent.turn);
             let context = self
                 .contexts
                 .get_mut(&identity)
                 .expect("registered call owner has context");
             context.discovery_dirty |= matches!(routed.output, ClientToolOutput::ToolSearch(_));
-            context.stored.history.push(routed.output.into());
+            let item = InputItem::from(routed.output);
+            // A running round's completion replaces history with its own input; keep this output
+            // for after that. A compaction is discarded instead (see `generation`).
+            if state == AgentState::Active(AgentPhase::Inferring) && !context.compacting {
+                context.inputs_during_round.push(item.clone());
+            }
+            context.stored.history.push(item);
             // Invalidate an in-flight summary snapshot; never overwrite new input.
             context.generation += 1;
-            let agent = self.registry.get(&identity).expect("registered call owner exists");
-            if agent.state == AgentState::Active(AgentPhase::WaitingForClientOutputs)
+            // Pending async calls never hold their owner; it resumes once its synchronous calls resolve.
+            if state == AgentState::Active(AgentPhase::WaitingForClientOutputs)
                 && !self
                     .pending
-                    .pending()
+                    .awaiting_outputs()
                     .any(|call| call.owner.agent_turn.agent == identity)
             {
-                let turn = AgentTurnKey {
-                    agent: identity,
-                    turn: agent.turn,
-                };
+                let turn = AgentTurnKey { agent: identity, turn };
                 // Membership, current turn, and active phase were checked above.
                 self.registry
                     .set_phase(&turn, AgentPhase::Runnable)
                     .expect("validated active owner");
             }
         }
+        // As in a continuation request, a late async output is new information for its idle owner,
+        // which reads it in a new turn (a subagent within the concurrency limit). A busy or waiting
+        // owner reads it at its next turn.
+        self.resume_unread_agents();
         OutputDecision::Accepted
     }
 }

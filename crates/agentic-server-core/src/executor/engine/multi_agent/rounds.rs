@@ -48,7 +48,7 @@ impl MultiAgentRun {
             }
             if self
                 .pending
-                .pending()
+                .awaiting_outputs()
                 .any(|call| call.owner.agent_turn.agent == turn.agent)
             {
                 self.registry
@@ -109,6 +109,10 @@ impl MultiAgentRun {
         auth: Option<&str>,
         pipeline: &AgentPipeline,
     ) -> ExecutorResult<()> {
+        if let Some(context) = self.contexts.get_mut(&turn.agent) {
+            // This round reads the whole history, so earlier accepted outputs need no reapplying.
+            context.inputs_during_round.clear();
+        }
         let context = &self.contexts[&turn.agent];
         let mut request = context.request.clone();
         request.input = ResponsesInput::Items(context.stored.history.clone());
@@ -200,6 +204,8 @@ impl MultiAgentRun {
                 self.registry
                     .settle_turn(&turn, &AgentCompletion::Interrupted)
                     .map_err(registry_error)?;
+                // The interrupted turn frees a subagent slot.
+                self.resume_unread_agents();
                 return Ok(());
             }
             AgentTaskOutcome::Finished(Err(error)) => {
@@ -278,6 +284,7 @@ impl MultiAgentRun {
             ResponsesInput::Items(items) => items.clone(),
             ResponsesInput::Text(_) => Vec::from(&request.input),
         };
+        context.stored.history.append(&mut context.inputs_during_round);
         context.generation += 1;
         context.request = request;
         context.tool_search = tool_search;
@@ -286,7 +293,8 @@ impl MultiAgentRun {
             context.stored.loaded_tools = state.into_public_metadata().loaded_tools;
         }
         context.stored.rounds += 1;
-        let has_client_calls = self.register_client_calls(turn, &payload.output)?;
+        let client_calls = self.register_client_calls(turn, &payload.output)?;
+        let has_client_calls = client_calls.synchronous;
         let mut collaboration = false;
         let mut final_answer = String::new();
         let mut has_final_answer = false;
@@ -335,7 +343,12 @@ impl MultiAgentRun {
                 &AgentCompletion::Failed("agent inference did not complete".into()),
             )
             .map_err(registry_error)?;
-        } else if !collaboration && matches!(decision, RoundDecision::Done) && has_final_answer {
+        } else if !collaboration
+            && matches!(decision, RoundDecision::Done)
+            && (has_final_answer || client_calls.asynchronous)
+        {
+            // An async-only round is `Done` only at the async continuation cap or the last round. It
+            // finishes the turn, with the calls pending, as it completes a single-agent response.
             self.contexts
                 .get_mut(&turn.agent)
                 .expect("agent exists")
@@ -350,21 +363,29 @@ impl MultiAgentRun {
         Ok(())
     }
 
-    pub(super) fn register_client_calls(&mut self, turn: &AgentTurnKey, output: &[OutputItem]) -> ExecutorResult<bool> {
+    /// Registers this round's client calls for output routing. A synchronous call makes the agent
+    /// wait for client outputs; an async call does not.
+    pub(super) fn register_client_calls(
+        &mut self,
+        turn: &AgentTurnKey,
+        output: &[OutputItem],
+    ) -> ExecutorResult<RegisteredClientCalls> {
         let context = &self.contexts[&turn.agent];
         let mut registrations = Vec::new();
         for item in output {
             if !context.execution.requires_client_action(item) {
                 continue;
             }
-            let (call_id, kind) = match item {
+            let (call_id, kind, async_execution) = match item {
                 OutputItem::FunctionCall(call) if MultiAgentAction::from_tool_name(&call.name).is_none() => {
-                    (call.call_id.as_str(), ClientCallKind::Function)
+                    (call.call_id.as_str(), ClientCallKind::Function, call.async_execution)
                 }
-                OutputItem::ShellCall(call) => (call.call_id.as_str(), ClientCallKind::Shell),
-                OutputItem::CustomToolCall(call) => (call.call_id.as_str(), ClientCallKind::Custom),
+                OutputItem::ShellCall(call) => (call.call_id.as_str(), ClientCallKind::Shell, false),
+                OutputItem::CustomToolCall(call) => {
+                    (call.call_id.as_str(), ClientCallKind::Custom, call.async_execution)
+                }
                 OutputItem::ToolSearchCall(call) if call.status == ToolSearchStatus::Completed => {
-                    (call.call_id.as_str(), ClientCallKind::ToolSearch)
+                    (call.call_id.as_str(), ClientCallKind::ToolSearch, false)
                 }
                 _ => continue,
             };
@@ -373,13 +394,21 @@ impl MultiAgentRun {
                 owner: ClientCallOwner {
                     agent_turn: turn.clone(),
                     kind,
+                    async_execution,
                 },
             });
         }
         self.pending
             .register_calls(&self.registry, &registrations)
             .map_err(call_error)?;
-        Ok(!registrations.is_empty())
+        Ok(RegisteredClientCalls {
+            synchronous: registrations
+                .iter()
+                .any(|registration| !registration.owner.async_execution),
+            asynchronous: registrations
+                .iter()
+                .any(|registration| registration.owner.async_execution),
+        })
     }
 
     pub(super) async fn try_commit_compaction(
@@ -412,4 +441,11 @@ impl MultiAgentRun {
         }
         Ok(commit)
     }
+}
+
+/// The kinds of client calls one round registered.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct RegisteredClientCalls {
+    pub(super) synchronous: bool,
+    pub(super) asynchronous: bool,
 }

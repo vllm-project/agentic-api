@@ -430,6 +430,7 @@ mod tests {
     use super::*;
     use crate::executor::{ConversationHandler, ResponseHandler, commit, rehydrate_in_session};
     use crate::storage::{ConversationStore, ResponseStore};
+    use crate::tool::ToolError;
     use crate::types::io::{InputItem, InputMessageContent, ResponsesInput};
     use crate::utils::common::deserialize_from_value;
 
@@ -612,11 +613,13 @@ mod tests {
                 .prepare_retained()
                 .await;
             if wrong {
-                assert!(matches!(result, Err(ExecutorError::InvalidRequest(message))
-                    if message.contains("without a pending call")));
+                assert!(
+                    matches!(result, Err(ExecutorError::Tool(ToolError::UnknownCallOutput { call_id }))
+                    if call_id == "unknown")
+                );
             } else {
                 assert!(
-                    matches!(result, Err(ExecutorError::Tool(crate::tool::ToolError::MissingOutput { call_id }))
+                    matches!(result, Err(ExecutorError::Tool(ToolError::MissingOutput { call_id }))
                     if call_id == "humidity")
                 );
             }
@@ -890,8 +893,10 @@ mod tests {
             } else {
                 builder.run().await.err().unwrap()
             };
-            assert!(matches!(error, ExecutorError::InvalidRequest(message)
-                if message.contains("without a pending call")));
+            assert!(
+                matches!(error, ExecutorError::Tool(ToolError::UnknownCallOutput { call_id })
+                if call_id == "unknown")
+            );
             assert!(session.pin_response(pin.response_id()).unwrap().is_none());
         }
 

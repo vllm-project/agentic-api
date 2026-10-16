@@ -1,0 +1,371 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Look up the prices of WIDGET and GADGET, then tell me which one is cheaper.
+      instructions: Start each price lookup without waiting. Call wait_for_tasks only
+        when your next step needs pending results. Never invent prices.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Look up a product price in the background. Choose a fresh task_handle
+          unique within this conversation, including completed tasks.
+        name: lookup_price
+        parameters:
+          additionalProperties: false
+          properties:
+            sku:
+              type: string
+            task_handle:
+              type: string
+          required:
+          - sku
+          - task_handle
+          type: object
+        strict: true
+        type: function
+      - description: Wait for selected tasks whose results you need. Pass a nonempty
+          list of distinct task_handles from your earlier async tool calls. Results
+          arrive on their original calls; this tool returns status only. Do not wait
+          again for results that have already arrived.
+        name: wait_for_tasks
+        parameters:
+          additionalProperties: false
+          properties:
+            task_handles:
+              items:
+                type: string
+              type: array
+          required:
+          - task_handles
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: wait-tool/t1-start
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790836529
+      created_at: 1790836525
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0b97de66f8690d07006abdff2dc2c487d181a5eebc6764bd51
+      incomplete_details: null
+      instructions: Start each price lookup without waiting. Call wait_for_tasks only
+        when your next step needs pending results. Never invent prices.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - arguments: '{"sku":"WIDGET","task_handle":"price_widget_1"}'
+        async: true
+        call_id: call_htv12XZm8uwYGnj0byR81ln2
+        id: fc_0b97de66f8690d07006abdff2fb89887d19ef9bc616b788672
+        name: lookup_price
+        status: completed
+        type: function_call
+      - arguments: '{"sku":"GADGET","task_handle":"price_gadget_1"}'
+        async: true
+        call_id: call_RDG5gLHhHhfuf97kv0Tmx4Pm
+        id: fc_0b97de66f8690d07006abdff2fb8ac87d1978878d999fa2a92
+        name: lookup_price
+        status: completed
+        type: function_call
+      - arguments: '{"task_handles":["price_widget_1","price_gadget_1"]}'
+        call_id: call_o0sePQcP1S6uoLuAagCVMZAJ
+        id: fc_0b97de66f8690d07006abdff3088ac87d1a0d825b0849ba762
+        name: wait_for_tasks
+        status: completed
+        type: function_call
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Look up a product price in the background. Choose a fresh task_handle
+          unique within this conversation, including completed tasks.
+        name: lookup_price
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            sku:
+              type: string
+            task_handle:
+              type: string
+          required:
+          - sku
+          - task_handle
+          type: object
+        strict: true
+        type: function
+      - description: Wait for selected tasks whose results you need. Pass a nonempty
+          list of distinct task_handles from your earlier async tool calls. Results
+          arrive on their original calls; this tool returns status only. Do not wait
+          again for results that have already arrived.
+        name: wait_for_tasks
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            task_handles:
+              items:
+                type: string
+              type: array
+          required:
+          - task_handles
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 284
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 98
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 382
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - call_id: call_htv12XZm8uwYGnj0byR81ln2
+        output: '{"task_handle": "price_widget_1", "sku": "WIDGET", "price_cents":
+          1200, "currency": "USD"}'
+        type: function_call_output
+      - call_id: call_RDG5gLHhHhfuf97kv0Tmx4Pm
+        output: '{"task_handle": "price_gadget_1", "sku": "GADGET", "price_cents":
+          1500, "currency": "USD"}'
+        type: function_call_output
+      - call_id: call_o0sePQcP1S6uoLuAagCVMZAJ
+        output: '{"status": "completed", "completed_task_handles": ["price_widget_1",
+          "price_gadget_1"]}'
+        type: function_call_output
+      instructions: Start each price lookup without waiting. Call wait_for_tasks only
+        when your next step needs pending results. Never invent prices.
+      max_output_tokens: 4096
+      model: gpt-6-astra
+      previous_response_id: resp_0b97de66f8690d07006abdff2dc2c487d181a5eebc6764bd51
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Look up a product price in the background. Choose a fresh task_handle
+          unique within this conversation, including completed tasks.
+        name: lookup_price
+        parameters:
+          additionalProperties: false
+          properties:
+            sku:
+              type: string
+            task_handle:
+              type: string
+          required:
+          - sku
+          - task_handle
+          type: object
+        strict: true
+        type: function
+      - description: Wait for selected tasks whose results you need. Pass a nonempty
+          list of distinct task_handles from your earlier async tool calls. Results
+          arrive on their original calls; this tool returns status only. Do not wait
+          again for results that have already arrived.
+        name: wait_for_tasks
+        parameters:
+          additionalProperties: false
+          properties:
+            task_handles:
+              items:
+                type: string
+              type: array
+          required:
+          - task_handles
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: wait-tool/t2-deliver-results
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1790836532
+      created_at: 1790836529
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0b97de66f8690d07006abdff31a9d087d19650b542c4be8d4f
+      incomplete_details: null
+      instructions: Start each price lookup without waiting. Call wait_for_tasks only
+        when your next step needs pending results. Never invent prices.
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-6-astra
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '- **WIDGET:** $12.00 USD
+
+            - **GADGET:** $15.00 USD
+
+
+            **WIDGET is cheaper by $3.00.**'
+          type: output_text
+        id: msg_0b97de66f8690d07006abdff34208487d1aff35d36f3c59f9c
+        phase: final_answer
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_0b97de66f8690d07006abdff2dc2c487d181a5eebc6764bd51
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - async: true
+        description: Look up a product price in the background. Choose a fresh task_handle
+          unique within this conversation, including completed tasks.
+        name: lookup_price
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            sku:
+              type: string
+            task_handle:
+              type: string
+          required:
+          - sku
+          - task_handle
+          type: object
+        strict: true
+        type: function
+      - description: Wait for selected tasks whose results you need. Pass a nonempty
+          list of distinct task_handles from your earlier async tool calls. Results
+          arrive on their original calls; this tool returns status only. Do not wait
+          again for results that have already arrived.
+        name: wait_for_tasks
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            task_handles:
+              items:
+                type: string
+              type: array
+          required:
+          - task_handles
+          type: object
+        strict: true
+        type: function
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 393
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 39
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 432
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

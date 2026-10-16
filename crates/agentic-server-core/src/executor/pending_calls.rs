@@ -4,13 +4,16 @@
 //! output is appended before the turn ends), so anything still unresolved
 //! after scanning a full item sequence is, by construction, something the
 //! *client* owed a resolution for.
-
-use std::collections::HashSet;
+//!
+//! An async call (`async: true` on its call item) may stay unresolved across
+//! requests, and later outputs for it are accepted again, as `OpenAI` does. Its
+//! marker is read from the call item, so re-declaring the tool without `async`
+//! does not change a call already made.
 
 use indexmap::IndexMap;
 
 use super::{ExecutorError, ExecutorResult};
-use crate::tool::shell::SHELL_FUNCTION_NAME;
+use crate::tool::{ToolError, shell::SHELL_FUNCTION_NAME};
 use crate::types::client_calls::ClientCallId;
 use crate::types::io::InputItem;
 use crate::types::tools::{ResponsesTool, ToolSearchExecution};
@@ -52,6 +55,8 @@ pub(super) struct PendingCall {
     pub(super) kind: CallKind,
     function_name: Option<String>,
     namespaced: bool,
+    /// The call is async: the conversation may continue without its output.
+    pub(super) async_execution: bool,
 }
 
 impl PendingCall {
@@ -103,76 +108,156 @@ impl PendingCall {
 }
 
 /// Scans `items` in order and returns every call left unresolved, in emission
-/// order. Calls and outputs must have non-empty IDs and form a one-to-one,
-/// same-kind relationship. Namespace member calls are represented as
-/// `InputItem::FunctionCall`, so they're covered by the plain function check.
+/// order. Calls and outputs must have non-empty IDs and the same kind. A
+/// synchronous call takes exactly one output; an async call accepts repeated
+/// outputs. An output whose `call_id` matches no call is rejected. Namespace
+/// member calls are represented as `InputItem::FunctionCall`, so they're
+/// covered by the plain function check.
 pub(super) fn pending_calls(items: &[InputItem]) -> ExecutorResult<Vec<PendingCall>> {
-    scan_calls(items).map(|(pending, _)| pending)
+    scan_calls(items).map(|ledger| ledger.pending().collect())
 }
 
-/// Largest prefix whose tool calls all have matching outputs inside it.
+/// The first synchronous call left unresolved, which the client must answer
+/// before the conversation can continue. Pending async calls do not count.
+pub(super) fn first_unanswered_sync_call(items: &[InputItem]) -> ExecutorResult<Option<PendingCall>> {
+    scan_calls(items).map(|ledger| ledger.pending().find(|call| !call.async_execution))
+}
+
+/// Largest prefix whose synchronous calls all have matching outputs inside it.
+/// Pending async calls do not end the prefix; see [`open_async_calls`](crate::types::io::input::open_async_calls).
 pub(super) fn resolved_prefix_len(items: &[InputItem]) -> ExecutorResult<usize> {
-    scan_calls(items).map(|(_, prefix)| prefix)
+    scan_calls(items).map(|ledger| ledger.resolved_prefix)
 }
 
-fn scan_calls(items: &[InputItem]) -> ExecutorResult<(Vec<PendingCall>, usize)> {
-    let mut seen_call_ids = HashSet::new();
-    let mut pending = IndexMap::new();
-    let mut resolved_prefix = 0;
+#[derive(Debug)]
+struct CallRecord {
+    kind: CallKind,
+    function_name: Option<String>,
+    namespaced: bool,
+    async_execution: bool,
+    resolved: bool,
+}
+
+/// Every call seen so far, in emission order, with its resolution state.
+#[derive(Debug, Default)]
+struct CallLedger {
+    calls: IndexMap<String, CallRecord>,
+    unresolved_sync: usize,
+    resolved_prefix: usize,
+}
+
+impl CallLedger {
+    fn pending(self) -> impl Iterator<Item = PendingCall> {
+        self.calls
+            .into_iter()
+            .filter(|(_, record)| !record.resolved)
+            .map(|(call_id, record)| PendingCall {
+                call_id,
+                kind: record.kind,
+                function_name: record.function_name,
+                namespaced: record.namespaced,
+                async_execution: record.async_execution,
+            })
+    }
+
+    fn add_call(
+        &mut self,
+        call_id: &str,
+        kind: CallKind,
+        async_execution: bool,
+        function_name: Option<&str>,
+        namespaced: bool,
+    ) -> ExecutorResult<()> {
+        if call_id.is_empty() {
+            return Err(ExecutorError::InvalidRequest(format!(
+                "{} call_id must not be empty",
+                kind.call_item_name()
+            )));
+        }
+        if self.calls.contains_key(call_id) {
+            return Err(ExecutorError::InvalidRequest(format!(
+                "duplicate call_id '{call_id}' in {}",
+                kind.call_item_name()
+            )));
+        }
+        self.calls.insert(
+            call_id.to_owned(),
+            CallRecord {
+                kind,
+                function_name: function_name.map(str::to_owned),
+                namespaced,
+                async_execution,
+                resolved: false,
+            },
+        );
+        if !async_execution {
+            self.unresolved_sync += 1;
+        }
+        Ok(())
+    }
+
+    fn resolve_call(&mut self, call_id: &str, output_kind: CallKind) -> ExecutorResult<()> {
+        if call_id.is_empty() {
+            return Err(ExecutorError::InvalidRequest(format!(
+                "{} call_id must not be empty",
+                output_kind.output_item_name()
+            )));
+        }
+        let Some(record) = self.calls.get_mut(call_id) else {
+            return Err(ToolError::UnknownCallOutput {
+                call_id: call_id.to_owned(),
+            }
+            .into());
+        };
+        if record.kind != output_kind {
+            return Err(ExecutorError::InvalidRequest(format!(
+                "{} cannot resolve {} call_id '{call_id}'",
+                output_kind.output_item_name(),
+                record.kind.call_item_name()
+            )));
+        }
+        match (record.resolved, record.async_execution) {
+            (false, async_execution) => {
+                record.resolved = true;
+                if !async_execution {
+                    self.unresolved_sync -= 1;
+                }
+                Ok(())
+            }
+            // OpenAI accepts repeated and conflicting outputs for an async call.
+            (true, true) => Ok(()),
+            (true, false) => Err(ExecutorError::InvalidRequest(format!(
+                "{} references call_id '{call_id}' without a pending call",
+                output_kind.output_item_name()
+            ))),
+        }
+    }
+}
+
+fn scan_calls(items: &[InputItem]) -> ExecutorResult<CallLedger> {
+    let mut ledger = CallLedger::default();
     for (index, item) in items.iter().enumerate() {
         match item {
             InputItem::FunctionCall(call) => {
-                add_call(
+                ledger.add_call(
                     &call.call_id,
                     CallKind::Function,
+                    call.async_execution,
                     Some(&call.name),
                     call.namespace.is_some(),
-                    &mut seen_call_ids,
-                    &mut pending,
                 )?;
             }
             InputItem::CustomToolCall(call) => {
-                add_call(
-                    &call.call_id,
-                    CallKind::Custom,
-                    None,
-                    false,
-                    &mut seen_call_ids,
-                    &mut pending,
-                )?;
+                ledger.add_call(&call.call_id, CallKind::Custom, call.async_execution, None, false)?;
             }
-            InputItem::FunctionCallOutput(output) => {
-                resolve_call(&output.call_id, CallKind::Function, &mut pending)?;
-            }
-            InputItem::CustomToolCallOutput(output) => {
-                resolve_call(&output.call_id, CallKind::Custom, &mut pending)?;
-            }
-            InputItem::ShellCall(call) => {
-                add_call(
-                    &call.call_id,
-                    CallKind::Shell,
-                    None,
-                    false,
-                    &mut seen_call_ids,
-                    &mut pending,
-                )?;
-            }
-            InputItem::ShellCallOutput(output) => {
-                resolve_call(&output.call_id, CallKind::Shell, &mut pending)?;
-            }
+            InputItem::FunctionCallOutput(output) => ledger.resolve_call(&output.call_id, CallKind::Function)?,
+            InputItem::CustomToolCallOutput(output) => ledger.resolve_call(&output.call_id, CallKind::Custom)?,
+            InputItem::ShellCall(call) => ledger.add_call(&call.call_id, CallKind::Shell, false, None, false)?,
+            InputItem::ShellCallOutput(output) => ledger.resolve_call(&output.call_id, CallKind::Shell)?,
             InputItem::ToolSearchCall(call) => {
-                add_call(
-                    &call.call_id,
-                    CallKind::ToolSearch,
-                    None,
-                    false,
-                    &mut seen_call_ids,
-                    &mut pending,
-                )?;
+                ledger.add_call(&call.call_id, CallKind::ToolSearch, false, None, false)?;
             }
-            InputItem::ToolSearchOutput(output) => {
-                resolve_call(&output.call_id, CallKind::ToolSearch, &mut pending)?;
-            }
+            InputItem::ToolSearchOutput(output) => ledger.resolve_call(&output.call_id, CallKind::ToolSearch)?,
             InputItem::Message(_)
             | InputItem::CodeInterpreterCall(_)
             | InputItem::Reasoning(_)
@@ -184,78 +269,19 @@ fn scan_calls(items: &[InputItem]) -> ExecutorResult<(Vec<PendingCall>, usize)> 
             | InputItem::AgentMessage(_)
             | InputItem::Unknown => {}
         }
-        if pending.is_empty() {
-            resolved_prefix = index + 1;
+        if ledger.unresolved_sync == 0 {
+            ledger.resolved_prefix = index + 1;
         }
     }
-    Ok((
-        pending
-            .into_iter()
-            .map(|(call_id, (kind, function_name, namespaced))| PendingCall {
-                call_id: call_id.to_owned(),
-                kind,
-                function_name: function_name.map(str::to_owned),
-                namespaced,
-            })
-            .collect(),
-        resolved_prefix,
-    ))
-}
-
-fn add_call<'a>(
-    call_id: &'a str,
-    kind: CallKind,
-    function_name: Option<&'a str>,
-    namespaced: bool,
-    seen_call_ids: &mut HashSet<&'a str>,
-    pending: &mut IndexMap<&'a str, (CallKind, Option<&'a str>, bool)>,
-) -> ExecutorResult<()> {
-    if call_id.is_empty() {
-        return Err(ExecutorError::InvalidRequest(format!(
-            "{} call_id must not be empty",
-            kind.call_item_name()
-        )));
-    }
-    if !seen_call_ids.insert(call_id) {
-        return Err(ExecutorError::InvalidRequest(format!(
-            "duplicate call_id '{call_id}' in {}",
-            kind.call_item_name()
-        )));
-    }
-    pending.insert(call_id, (kind, function_name, namespaced));
-    Ok(())
-}
-
-fn resolve_call(
-    call_id: &str,
-    output_kind: CallKind,
-    pending: &mut IndexMap<&str, (CallKind, Option<&str>, bool)>,
-) -> ExecutorResult<()> {
-    if call_id.is_empty() {
-        return Err(ExecutorError::InvalidRequest(format!(
-            "{} call_id must not be empty",
-            output_kind.output_item_name()
-        )));
-    }
-    let Some((call_kind, _, _)) = pending.shift_remove(call_id) else {
-        return Err(ExecutorError::InvalidRequest(format!(
-            "{} references call_id '{call_id}' without a pending call",
-            output_kind.output_item_name()
-        )));
-    };
-    if call_kind != output_kind {
-        return Err(ExecutorError::InvalidRequest(format!(
-            "{} cannot resolve {} call_id '{call_id}'",
-            output_kind.output_item_name(),
-            call_kind.call_item_name()
-        )));
-    }
-    Ok(())
+    Ok(ledger)
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
+    use crate::types::io::input::{async_records, open_async_call_ids};
 
     #[test]
     fn compaction_prefix_never_splits_interleaved_calls_and_outputs() {
@@ -283,6 +309,7 @@ mod tests {
 
     fn named_function_call(call_id: &str, name: &str, namespace: Option<&str>) -> InputItem {
         InputItem::FunctionCall(InputFunctionToolCall {
+            async_execution: false,
             agent: None,
             id: None,
             call_id: call_id.to_owned(),
@@ -302,6 +329,7 @@ mod tests {
 
     fn custom_tool_call(call_id: &str) -> InputItem {
         InputItem::CustomToolCall(CustomToolCall {
+            async_execution: false,
             agent: None,
             id: String::new(),
             status: None,
@@ -497,6 +525,7 @@ mod tests {
             (CallKind::Custom, "", None),
         ] {
             let rejected = PendingCall {
+                async_execution: false,
                 call_id: call_id.to_owned(),
                 kind,
                 function_name: function_name.map(str::to_owned),
@@ -635,7 +664,11 @@ mod tests {
             &[function_call_output("")],
             "function_call_output call_id must not be empty",
         );
-        assert_invalid(&[function_call_output("call_1")], "without a pending call");
+        // OpenAI's wording for an output whose call does not exist.
+        assert_invalid(
+            &[function_call_output("call_1")],
+            "No tool call found for function call output with call_id call_1.",
+        );
         assert_invalid(
             &[
                 function_call("call_1"),
@@ -651,6 +684,130 @@ mod tests {
         assert_invalid(
             &[shell_call("call_1"), function_call_output("call_1")],
             "cannot resolve shell_call call_id 'call_1'",
+        );
+    }
+
+    fn async_function_call(call_id: &str) -> InputItem {
+        let InputItem::FunctionCall(mut call) = function_call(call_id) else {
+            unreachable!("function call helper");
+        };
+        call.async_execution = true;
+        InputItem::FunctionCall(call)
+    }
+
+    fn async_custom_tool_call(call_id: &str) -> InputItem {
+        let InputItem::CustomToolCall(mut call) = custom_tool_call(call_id) else {
+            unreachable!("custom call helper");
+        };
+        call.async_execution = true;
+        InputItem::CustomToolCall(call)
+    }
+
+    /// A pending async call does not block a follow-up; a synchronous one still does.
+    #[test]
+    fn only_synchronous_calls_must_be_answered_before_continuing() {
+        let items = vec![async_function_call("call_async"), async_custom_tool_call("call_custom")];
+        let pending = pending_calls(&items).unwrap();
+        assert_eq!(pending.len(), 2);
+        assert!(pending.iter().all(|call| call.async_execution));
+        assert!(first_unanswered_sync_call(&items).unwrap().is_none());
+
+        let mut with_sync = items;
+        with_sync.push(function_call("call_sync"));
+        let unanswered = first_unanswered_sync_call(&with_sync).unwrap().expect("sync call");
+        assert_eq!(unanswered.call_id, "call_sync");
+    }
+
+    /// Recorded `OpenAI` behavior: repeated and conflicting outputs for an async call are accepted.
+    #[test]
+    fn async_calls_accept_repeated_outputs() {
+        let items = vec![
+            async_function_call("call_1"),
+            function_call_output("call_1"),
+            function_call_output("call_1"),
+            async_custom_tool_call("call_2"),
+            custom_tool_call_output("call_2"),
+            custom_tool_call_output("call_2"),
+        ];
+        assert!(pending_calls(&items).unwrap().is_empty());
+        assert_invalid(
+            &[async_function_call("call_1"), custom_tool_call_output("call_1")],
+            "cannot resolve function_call call_id 'call_1'",
+        );
+    }
+
+    #[test]
+    fn unknown_output_is_reported_as_an_unknown_call() {
+        let error = pending_calls(&[async_function_call("call_1"), function_call_output("call_other")]).unwrap_err();
+        assert!(matches!(
+            error,
+            ExecutorError::Tool(ToolError::UnknownCallOutput { call_id }) if call_id == "call_other"
+        ));
+    }
+
+    #[test]
+    fn pending_async_calls_do_not_end_the_resolved_prefix() {
+        let items = vec![
+            InputItem::Unknown,
+            async_function_call("call_async"),
+            InputItem::Unknown,
+            function_call("call_sync"),
+            InputItem::Unknown,
+        ];
+        assert_eq!(
+            resolved_prefix_len(&items).unwrap(),
+            3,
+            "only the sync call ends the prefix"
+        );
+    }
+
+    /// Repeated outputs for one async call do not accumulate across compactions: a retained history
+    /// keeps the call and its latest output, so its size stays bounded per call.
+    #[test]
+    fn retained_history_keeps_one_output_per_async_call_across_compactions() {
+        let compaction = |id: &str| -> InputItem {
+            serde_json::from_value(serde_json::json!({"type": "compaction", "id": id, "encrypted_content": "summary"}))
+                .unwrap()
+        };
+        let mut history = vec![async_function_call("call_poll")];
+        for round in 0..20 {
+            history.push(function_call_output("call_poll"));
+            history.push(compaction(&format!("cmp_{round}")));
+            history = crate::types::io::input::retain_window(history, |_| false);
+        }
+        let kinds: Vec<&str> = history
+            .iter()
+            .map(|item| match item {
+                InputItem::FunctionCall(_) => "call",
+                InputItem::FunctionCallOutput(_) => "output",
+                InputItem::Compaction(_) => "compaction",
+                _ => "other",
+            })
+            .collect();
+        assert_eq!(kinds, ["call", "output", "compaction"]);
+    }
+
+    /// Compaction keeps every async call and the last output that answers it; the open ones are
+    /// those without an output in the prefix.
+    #[test]
+    fn async_records_and_open_calls_in_a_prefix() {
+        let prefix = vec![
+            async_function_call("call_open"),
+            async_function_call("call_answered"),
+            function_call_output("call_answered"),
+            function_call_output("call_answered"),
+            function_call("call_sync"),
+            function_call_output("call_sync"),
+            async_custom_tool_call("call_custom_open"),
+        ];
+        assert_eq!(
+            open_async_call_ids(&prefix),
+            HashSet::from(["call_open", "call_custom_open"])
+        );
+        assert_eq!(
+            async_records(&prefix),
+            [true, true, false, true, false, false, true],
+            "only the last output of the answered call is kept"
         );
     }
 }

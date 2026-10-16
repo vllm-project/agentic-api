@@ -95,6 +95,7 @@ impl CustomHandler {
             call_id: call.call_id.clone(),
             name: call.name.clone(),
             input: input_from_arguments(&call.arguments),
+            async_execution: call.async_execution,
         })
     }
 }
@@ -129,7 +130,12 @@ fn model_visible_description(param: &CustomToolParam) -> String {
         ));
     }
 
-    fragments.join("\n\n")
+    let description = fragments.join("\n\n");
+    if param.is_async() {
+        super::async_execution::async_description(Some(&description))
+    } else {
+        description
+    }
 }
 
 impl ToolHandler for CustomHandler {
@@ -167,7 +173,7 @@ impl ToolHandler for CustomHandler {
 pub(crate) fn insert_custom_entry(entries: &mut HashMap<String, ToolEntry>, param: &CustomToolParam) {
     entries.insert(
         param.name.as_str().to_owned(),
-        ToolEntry::client(ToolType::Custom, None),
+        ToolEntry::client(ToolType::Custom, None).with_async_execution(param.is_async()),
     );
 }
 
@@ -216,6 +222,7 @@ mod tests {
     #[test]
     fn function_fallback_uses_public_custom_tool_shape() {
         let call = FunctionToolCall {
+            async_execution: false,
             agent: None,
             id: "fc_1".to_owned(),
             call_id: "call_1".to_owned(),

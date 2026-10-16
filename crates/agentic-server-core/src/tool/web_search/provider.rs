@@ -7,7 +7,7 @@ use std::num::NonZeroUsize;
 use std::pin::Pin;
 
 use futures::StreamExt;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 use super::args::WebSearchArguments;
 use crate::config::WebSearchProviderKind;
@@ -113,13 +113,7 @@ pub(crate) struct WebSearchProviderResponse {
 
 /// Deserializes an explicit JSON `null` as the field's default instead of
 /// failing, so a degenerate provider response cannot fail the whole search.
-pub(crate) fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Default + Deserialize<'de>,
-{
-    Option::<T>::deserialize(deserializer).map(Option::unwrap_or_default)
-}
+pub(crate) use crate::utils::common::null_as_default;
 
 /// Reads a provider HTTP response body, failing as soon as it exceeds
 /// [`MAX_GATEWAY_TOOL_OUTPUT_BYTES`] so an oversized provider reply is never

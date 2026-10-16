@@ -194,6 +194,30 @@ impl AgentRegistry {
         }
     }
 
+    /// Starts a new turn for an agent that finished its last one. `None` leaves an active,
+    /// interrupted, failed or unknown agent unchanged.
+    pub(in crate::executor) fn resume_idle(&mut self, identity: &AgentIdentity) -> Option<AgentTurnKey> {
+        let record = self.agents.get_mut(identity)?;
+        if record.state != AgentState::Idle {
+            return None;
+        }
+        record.turn = AgentTurnId::new();
+        record.state = AgentState::Active(AgentPhase::Runnable);
+        Some(AgentTurnKey {
+            agent: identity.clone(),
+            turn: record.turn,
+        })
+    }
+
+    /// The number of subagents with an active turn, which `max_concurrent_subagents` bounds.
+    #[must_use]
+    pub(in crate::executor) fn active_subagents(&self) -> usize {
+        self.agents
+            .iter()
+            .filter(|(identity, record)| !identity.is_root() && matches!(record.state, AgentState::Active(_)))
+            .count()
+    }
+
     #[must_use]
     pub fn get(&self, identity: &AgentIdentity) -> Option<AgentView<'_>> {
         self.agents

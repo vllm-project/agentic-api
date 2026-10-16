@@ -317,42 +317,47 @@ async fn every_native_web_search_version_runs_as_the_basic_search() {
     let mut upstream_tools = Vec::new();
     for version in NATIVE_WEB_SEARCH_VERSIONS {
         let tool_type = version.type_name;
-        let (vllm_url, upstream, _v) = spawn_mock_vllm_messages(cassette_turn_bodies()).await;
-        let (search_url, mut captured, _s) = spawn_mock_search().await;
-        let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
-        let mut tool = serde_json::json!({
-            "type": tool_type,
-            "name": "web_search",
-            "allowed_callers": ["direct"],
-            "allowed_domains": ["rust-lang.org"],
-            "user_location": {"type": "approximate", "country": "ca"}
-        });
-        if version.response_inclusion {
-            tool["response_inclusion"] = "excluded".into();
+        for (domain_field, backend_field) in [
+            ("allowed_domains", "include_domains"),
+            ("blocked_domains", "exclude_domains"),
+        ] {
+            let (vllm_url, upstream, _v) = spawn_mock_vllm_messages(cassette_turn_bodies()).await;
+            let (search_url, mut captured, _s) = spawn_mock_search().await;
+            let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
+            let mut tool = serde_json::json!({
+                "type": tool_type,
+                "name": "web_search",
+                "allowed_callers": ["direct"],
+                "user_location": {"type": "approximate", "country": "ca"}
+            });
+            tool[domain_field] = serde_json::json!(["rust-lang.org"]);
+            if version.response_inclusion {
+                tool["response_inclusion"] = "excluded".into();
+            }
+            let request = serde_json::json!({
+                "model": "qwen3", "max_tokens": 1024, "stream": false,
+                "messages": [{"role": "user", "content": "Search Rust's official site."}],
+                "tools": [tool]
+            });
+            let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
+            let registry = build_tool_registry(&tools, &exec_ctx).await;
+
+            let message = run_test_messages_loop(request, &registry, &exec_ctx)
+                .await
+                .unwrap_or_else(|error| panic!("{tool_type}: {error}"));
+
+            let search = recv_search(&mut captured, tool_type).await;
+            assert_eq!(search.body[backend_field], "rust-lang.org", "{tool_type}");
+            assert_eq!(search.body["country"], "CA", "{tool_type}");
+            assert_eq!(upstream.calls.load(Ordering::SeqCst), 2, "{tool_type}");
+            let content = message["content"].as_array().expect("final content");
+            assert!(
+                !content.iter().any(|block| block["type"] == "tool_use"),
+                "{tool_type}: {content:?}"
+            );
+            assert_eq!(message["stop_reason"], "end_turn", "{tool_type}");
+            upstream_tools.push(upstream.requests.lock().await[0]["tools"].clone());
         }
-        let request = serde_json::json!({
-            "model": "qwen3", "max_tokens": 1024, "stream": false,
-            "messages": [{"role": "user", "content": "Search Rust's official site."}],
-            "tools": [tool]
-        });
-        let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
-        let registry = build_tool_registry(&tools, &exec_ctx).await;
-
-        let message = run_test_messages_loop(request, &registry, &exec_ctx)
-            .await
-            .unwrap_or_else(|error| panic!("{tool_type}: {error}"));
-
-        let search = recv_search(&mut captured, tool_type).await;
-        assert_eq!(search.body["include_domains"], "rust-lang.org", "{tool_type}");
-        assert_eq!(search.body["country"], "CA", "{tool_type}");
-        assert_eq!(upstream.calls.load(Ordering::SeqCst), 2, "{tool_type}");
-        let content = message["content"].as_array().expect("final content");
-        assert!(
-            !content.iter().any(|block| block["type"] == "tool_use"),
-            "{tool_type}: {content:?}"
-        );
-        assert_eq!(message["stop_reason"], "end_turn", "{tool_type}");
-        upstream_tools.push(upstream.requests.lock().await[0]["tools"].clone());
     }
     assert!(
         upstream_tools[0][0].get("type").is_none() && upstream_tools[0][0].get("input_schema").is_some(),

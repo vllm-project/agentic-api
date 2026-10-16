@@ -10,7 +10,7 @@ use tokio::sync::Notify;
 use super::{CheckpointBudget, CheckpointReservation, ExecutorError, ExecutorResult, SessionState};
 use super::{aggregate_budget_error, lock_state};
 use crate::storage::{InOutItem, ResponseMetadata};
-use crate::types::io::input::latest_compaction_window;
+use crate::types::io::input::{async_records, retain_window};
 use crate::types::io::{InputItem, OutputItem};
 use crate::types::websocket::SteeringRequiredInput;
 use crate::utils::common::serialized_size_up_to;
@@ -52,6 +52,7 @@ impl ResponseCheckpointPin {
     pub fn required_steering_input(&self) -> ExecutorResult<Vec<SteeringRequiredInput>> {
         crate::executor::pending_calls::pending_calls(self.history())?
             .into_iter()
+            .filter(|pending| !pending.async_execution)
             .map(|pending| {
                 pending
                     .into_steering_required_input(
@@ -121,19 +122,8 @@ impl Deref for RetainedCheckpoint {
 /// can still reference superseded parent rows; those must not consume the session
 /// checkpoint budget or introduce obsolete pending calls after reconnecting.
 pub(in crate::executor) fn canonical_session_history(history: Vec<InputItem>) -> Vec<InputItem> {
-    let Some(window) = latest_compaction_window(&history) else {
-        return history;
-    };
-    history
-        .into_iter()
-        .enumerate()
-        .filter(|(index, item)| {
-            *index >= window.latest_index()
-                || window.retains_user_item(*index, item)
-                || matches!(item, InputItem::McpListTools(_))
-        })
-        .map(|(_, item)| item)
-        .collect()
+    // MCP discovery records stay so the registry knows which servers were already listed.
+    retain_window(history, |item| matches!(item, InputItem::McpListTools(_)))
 }
 
 impl ResponseContinuation {
@@ -153,12 +143,19 @@ impl ResponseContinuation {
     }
 
     /// Retain orchestration records across compaction without restoring the old
-    /// model context. MCP discovery still needs to know which servers were listed.
+    /// model context. MCP discovery still needs to know which servers were listed,
+    /// and async calls with their outputs remain so a later output finds its call.
     pub(crate) fn parent_items(&self) -> impl Iterator<Item = &InputItem> {
-        self.parent
-            .iter()
-            .flat_map(|parent| parent.history.iter())
-            .filter(|item| !self.history_replaced || matches!(item, InputItem::McpListTools(_)))
+        let history = self.parent.as_ref().map_or(&[][..], |parent| parent.history.as_slice());
+        let records = if self.history_replaced {
+            async_records(history)
+        } else {
+            Vec::new()
+        };
+        history.iter().enumerate().filter_map(move |(index, item)| {
+            let kept = !self.history_replaced || matches!(item, InputItem::McpListTools(_)) || records[index];
+            kept.then_some(item)
+        })
     }
 
     pub(crate) fn checkpoint(

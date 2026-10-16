@@ -62,6 +62,10 @@ pub enum ClientCallKind {
 pub struct ClientCallOwner {
     pub agent_turn: AgentTurnKey,
     pub kind: ClientCallKind,
+    /// The call is async: its owner does not wait for the output, and repeated outputs are
+    /// accepted. Absent in checkpoints written before async tools, which therefore read as false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub async_execution: bool,
 }
 
 /// Registered only after tool ownership classification: built-in calls and

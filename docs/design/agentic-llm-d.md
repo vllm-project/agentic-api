@@ -50,7 +50,8 @@ limits, so sharing one predicate stops them drifting apart as features are added
 ## Boundary
 
 `ensure_splittable` names the feature that prevents a request being split: `conversation_id`, gateway-executed built-in tools,
-compaction input, or `context_management`. Each needs state that the in-process executor keeps between steps.
+an async tool or replayed async call, compaction input, or `context_management`. Each needs state that the in-process
+executor keeps between steps; async tools need the executor's extra inference round with the call pending.
 
 ## The crate
 

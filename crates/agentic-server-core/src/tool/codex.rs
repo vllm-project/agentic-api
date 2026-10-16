@@ -52,7 +52,8 @@ pub(crate) fn insert_namespace_entries(entries: &mut HashMap<String, ToolEntry>,
         if entries
             .insert(
                 name.clone(),
-                ToolEntry::client(ToolType::CodexNamespace, Some(p.name.clone())),
+                ToolEntry::client(ToolType::CodexNamespace, Some(p.name.clone()))
+                    .with_async_execution(function.is_async()),
             )
             .is_some()
         {
@@ -327,7 +328,9 @@ impl ToolHandler for CodexNamespaceHandler {
             .tools
             .iter()
             .filter_map(|member| match member {
-                CodexNamespaceMember::Function(function) => Some(FunctionTool::from(function)),
+                CodexNamespaceMember::Function(function) => {
+                    Some(super::function::FunctionHandler::model_visible_tool(function))
+                }
                 CodexNamespaceMember::Unknown => None,
             })
             .collect()

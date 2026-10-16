@@ -257,6 +257,7 @@ mod tests {
     fn test_into_input_items_preserves_function_calls() {
         use crate::types::event::MessageStatus;
         let fc = FunctionToolCall {
+            async_execution: false,
             agent: None,
             id: "fc_1".to_string(),
             call_id: "call_abc".to_string(),

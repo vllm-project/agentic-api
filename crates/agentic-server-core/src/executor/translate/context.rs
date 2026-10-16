@@ -1,5 +1,5 @@
 use crate::events::WireEvent;
-use crate::executor::error::ExecutorResult;
+use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::tool::custom::CustomToolMap;
 use crate::tool::{NamespaceMap, ToolType};
 use crate::types::event::ResponseStatus;
@@ -16,6 +16,7 @@ use std::collections::{HashMap, HashSet};
 pub(in crate::executor) struct TranslationContext {
     tool_types: HashMap<String, ToolType>,
     gateway_owned_names: HashSet<String>,
+    async_tool_names: HashSet<String>,
     withheld_function_names: HashSet<String>,
     tool_search_active: bool,
     collaboration_enabled: bool,
@@ -66,6 +67,16 @@ impl TranslationContext {
 
     pub(super) fn is_gateway_owned(&self, name: &str) -> bool {
         self.gateway_owned_names.contains(name)
+    }
+
+    /// Model-visible names of async client tools, copied from the registry.
+    pub(in crate::executor) fn with_async_tool_names(mut self, names: HashSet<String>) -> Self {
+        self.async_tool_names = names;
+        self
+    }
+
+    pub(super) fn is_async_tool(&self, name: &str) -> bool {
+        self.async_tool_names.contains(name)
     }
 
     /// Owned public mappings; construction performs no registry lookups.
@@ -155,9 +166,44 @@ impl TranslationContext {
         unfinished_stream_item_ids: &HashSet<String>,
     ) -> ExecutorResult<()> {
         super::tool_search::normalize_response_output(self, output, status, unfinished_stream_item_ids)?;
+        // Mark before namespace restoration, while calls still carry their model-visible names.
+        for item in output.iter_mut() {
+            if let OutputItem::FunctionCall(call) = item
+                && self.is_async_tool(&call.name)
+            {
+                mark_async_call(item)?;
+            }
+        }
         super::namespace::CodexNamespaceTranslator::restore_output_items(output, self.namespace_map.as_ref());
         Ok(())
     }
+}
+
+/// Sets the public `async` flag on a call to an async tool. Streamed item events and the final
+/// output are both marked here; only function and custom calls are client calls that can be async.
+pub(super) fn mark_async_call(item: &mut OutputItem) -> ExecutorResult<()> {
+    match item {
+        OutputItem::FunctionCall(call) => call.async_execution = true,
+        OutputItem::CustomToolCall(call) => call.async_execution = true,
+        OutputItem::MultiAgentCall(_)
+        | OutputItem::MultiAgentCallOutput(_)
+        | OutputItem::AgentMessage(_)
+        | OutputItem::Message(_)
+        | OutputItem::CodeInterpreterCall(_)
+        | OutputItem::ToolSearchCall(_)
+        | OutputItem::ShellCall(_)
+        | OutputItem::WebSearchCall(_)
+        | OutputItem::McpCall(_)
+        | OutputItem::McpListTools(_)
+        | OutputItem::Reasoning(_)
+        | OutputItem::Compaction(_)
+        | OutputItem::Unknown => {
+            return Err(ExecutorError::StreamError(
+                "an async tool call translated to an item that is not a function or custom call".to_owned(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn complete_response_fields(response: &mut Map<String, Value>, fields: &StandardResponseFields) -> ExecutorResult<()> {

@@ -82,6 +82,7 @@ fn normalization_uses_safe_defaults() {
 #[test]
 fn synthetic_public_call_construction_is_validated_in_tool_layer() {
     let valid = FunctionToolCall {
+        async_execution: false,
         agent: None,
         id: "fc_search".to_owned(),
         call_id: "call_search".to_owned(),
@@ -121,6 +122,7 @@ fn synthetic_public_call_construction_is_validated_in_tool_layer() {
 #[test]
 fn terminal_projection_preserves_incomplete_and_discards_failed_calls() {
     let synthetic = FunctionToolCall {
+        async_execution: false,
         agent: None,
         id: "fc_search".to_owned(),
         call_id: "call_search".to_owned(),

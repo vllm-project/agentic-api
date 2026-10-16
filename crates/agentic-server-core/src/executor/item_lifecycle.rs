@@ -99,6 +99,7 @@ impl<'a> Lifecycle<'a> {
                 content: Vec::new(),
             })),
             Self::FunctionCall(call) => to_value(&OutputItem::FunctionCall(FunctionToolCall {
+                async_execution: call.async_execution,
                 agent: call.agent.clone(),
                 id: call.id.clone(),
                 call_id: call.call_id.clone(),

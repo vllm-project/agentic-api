@@ -641,6 +641,7 @@ mod tests {
     #[test]
     fn discovered_tool_output_uses_public_mcp_identity() {
         let call = FunctionToolCall {
+            async_execution: false,
             agent: None,
             id: "fc_1".to_owned(),
             call_id: "call_1".to_owned(),
@@ -666,6 +667,7 @@ mod tests {
     #[test]
     fn prefixless_function_ids_reuse_public_mcp_id_across_lifecycle() {
         let call = FunctionToolCall {
+            async_execution: false,
             agent: None,
             id: "provider-item-1".to_owned(),
             call_id: "provider-call-1".to_owned(),
@@ -767,6 +769,7 @@ mod tests {
     #[test]
     fn failed_mcp_output_uses_openai_structured_error() {
         let call = FunctionToolCall {
+            async_execution: false,
             agent: None,
             id: "fc_1".to_owned(),
             call_id: "call_1".to_owned(),

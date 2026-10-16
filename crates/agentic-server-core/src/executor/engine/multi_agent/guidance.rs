@@ -1,6 +1,6 @@
 //! Fresh, model-only ownership context; never part of the durable agent history.
 use super::MultiAgentRun;
-use crate::executor::multi_agent::{AgentState, collaboration::instructions};
+use crate::executor::multi_agent::collaboration::instructions;
 use crate::types::agent::AgentTurnKey;
 use crate::types::io::{InputMessage, InputMessageContent};
 
@@ -27,11 +27,7 @@ impl MultiAgentRun {
                 children.join("\n")
             )
         };
-        let active_subagents = self
-            .registry
-            .agents()
-            .filter(|agent| !agent.identity.is_root() && matches!(agent.state, AgentState::Active(_)))
-            .count();
+        let active_subagents = self.registry.active_subagents();
         let available_slots = self.limit.saturating_sub(active_subagents);
         let task = if turn.agent.is_root() {
             "Your assignment is the user's overall request."

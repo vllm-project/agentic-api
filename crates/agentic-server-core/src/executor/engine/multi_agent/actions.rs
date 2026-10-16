@@ -179,6 +179,7 @@ impl MultiAgentRun {
                 generation: 0,
                 compacted_generation: None,
                 compacting: false,
+                inputs_during_round: Vec::new(),
                 stored: StoredAgent {
                     identity: child.agent.clone(),
                     parent: Some(turn.agent.clone()),
@@ -254,12 +255,7 @@ impl MultiAgentRun {
     }
 
     pub(super) fn check_admission(&self) -> ExecutorResult<()> {
-        let active = self
-            .registry
-            .agents()
-            .filter(|agent| !agent.identity.is_root() && matches!(agent.state, AgentState::Active(_)))
-            .count();
-        if active >= self.limit {
+        if self.registry.active_subagents() >= self.limit {
             return Err(invalid("maximum concurrent subagent turns reached"));
         }
         Ok(())

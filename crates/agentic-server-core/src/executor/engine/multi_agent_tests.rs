@@ -21,7 +21,6 @@ use crate::executor::{
 use crate::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
 use crate::types::io::{FunctionToolResultMessage, InputItem, MessagePhase, ResponsesInput, ToolCallOutput};
 use crate::types::request_response::ContextManagement;
-use crate::types::tools::{FunctionToolParam, ResponsesTool};
 use crate::utils::common::uuid7_str;
 use axum::body::Body;
 use axum::response::IntoResponse;
@@ -31,8 +30,8 @@ use futures::StreamExt;
 use root_completion::{reasoning_only_recovery_output, root_completion_output};
 use serde_json::{Value, json};
 use shell_continuation::shell_review_output;
+use std::fmt::Write;
 use std::sync::Arc;
-use std::{collections::HashMap, fmt::Write};
 use tokio::sync::{Barrier, Semaphore};
 
 #[test]
@@ -455,14 +454,11 @@ async fn concurrent_children_pause_and_resume_from_durable_tree_json_and_sse() {
                     enabled: true,
                     max_concurrent_subagents: Some(2),
                 }),
-                tools: Some(vec![ResponsesTool::Function(FunctionToolParam {
-                    name: "get_proposal".try_into().unwrap(),
-                    description: None,
-                    parameters: Some(json!({"type":"object","properties":{"proposal":{"type":"string"}}})),
-                    strict: None,
-                    defer_loading: None,
-                    extra: HashMap::default(),
-                })]),
+                tools: Some(vec![
+                    serde_json::from_value(json!({"type":"function","name":"get_proposal",
+                    "parameters":{"type":"object","properties":{"proposal":{"type":"string"}}}}))
+                    .unwrap(),
+                ]),
                 ..Default::default()
             };
             let first = response(request, exec.clone()).await;

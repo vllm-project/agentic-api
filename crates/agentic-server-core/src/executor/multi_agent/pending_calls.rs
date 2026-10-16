@@ -5,7 +5,7 @@
 //! output acceptance; it neither reparses item history nor changes agent phases.
 //! Its batch decisions are internal policy, not new HTTP/WebSocket error schemas.
 
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::num::NonZeroUsize;
 
 use indexmap::IndexMap;
@@ -66,10 +66,12 @@ pub struct RejectedClientOutputs {
 
 enum Resolution {
     Pending,
-    /// `None` means the accepted output was moved into canonical context. The
-    /// ownership record remains, preventing duplicate acceptance and ID reuse.
+    /// Accepted outputs not yet moved into canonical context, oldest first. Empty
+    /// means every accepted output was transferred. The ownership record remains,
+    /// preventing duplicate acceptance for synchronous calls and ID reuse. An
+    /// async call accepts further outputs, as `OpenAI` does.
     Resolved {
-        output: Option<Box<ClientToolOutput>>,
+        outputs: VecDeque<ClientToolOutput>,
     },
 }
 
@@ -199,7 +201,9 @@ impl PendingClientCalls {
                 CallRecord {
                     owner: call.owner.clone(),
                     resolution: if call.resolved {
-                        Resolution::Resolved { output: None }
+                        Resolution::Resolved {
+                            outputs: VecDeque::new(),
+                        }
                     } else {
                         Resolution::Pending
                     },
@@ -233,6 +237,12 @@ impl PendingClientCalls {
             .map(|(id, record)| view(id, record))
     }
 
+    /// Outstanding synchronous calls: their owners wait for these outputs, and a
+    /// continuation must supply them. Pending async calls are not included.
+    pub fn awaiting_outputs(&self) -> impl Iterator<Item = ClientCallView<'_>> {
+        self.pending().filter(|call| !call.owner.async_execution)
+    }
+
     /// Validate the whole batch, reserve bytes, then retain every output exactly
     /// once. A partial batch may resolve a subset of pending calls. No current
     /// agent-state lookup or implicit resumption occurs here; transport policy
@@ -259,10 +269,10 @@ impl PendingClientCalls {
     /// `None`; this method never restarts a cancelled task.
     pub fn take_accepted(&mut self, call_id: &str) -> Option<RoutedClientOutput> {
         let record = self.calls.get_mut(call_id)?;
-        let Resolution::Resolved { output } = &mut record.resolution else {
+        let Resolution::Resolved { outputs } = &mut record.resolution else {
             return None;
         };
-        let output = *output.take()?;
+        let output = outputs.pop_front()?;
         Some(RoutedClientOutput {
             owner: record.owner.clone(),
             output,
@@ -283,15 +293,18 @@ impl PendingClientCalls {
             if id.is_empty() {
                 return Err(ClientCallError::EmptyCallId);
             }
-            if !seen.insert(id) {
-                return Err(ClientCallError::DuplicateCall(id.into()));
-            }
             let record = self
                 .calls
                 .get(id)
                 .ok_or_else(|| ClientCallError::UnknownCall(id.into()))?;
-            if !matches!(record.resolution, Resolution::Pending) {
-                return Err(ClientCallError::AlreadyResolved(id.into()));
+            // A synchronous call takes exactly one output; an async call accepts repeats.
+            if !record.owner.async_execution {
+                if !seen.insert(id) {
+                    return Err(ClientCallError::DuplicateCall(id.into()));
+                }
+                if !matches!(record.resolution, Resolution::Pending) {
+                    return Err(ClientCallError::AlreadyResolved(id.into()));
+                }
             }
             if record.owner.kind != output.kind() {
                 return Err(ClientCallError::KindMismatch {
@@ -311,9 +324,14 @@ impl PendingClientCalls {
                 .calls
                 .get_mut(output.call_id())
                 .expect("validated batch retains its registered calls");
-            record.resolution = Resolution::Resolved {
-                output: Some(Box::new(output)),
-            };
+            match &mut record.resolution {
+                Resolution::Pending => {
+                    record.resolution = Resolution::Resolved {
+                        outputs: VecDeque::from([output]),
+                    };
+                }
+                Resolution::Resolved { outputs } => outputs.push_back(output),
+            }
         }
     }
 }
@@ -321,8 +339,10 @@ impl PendingClientCalls {
 fn view<'a>(call_id: &'a ClientCallId, record: &'a CallRecord) -> ClientCallView<'a> {
     let (resolution, output) = match &record.resolution {
         Resolution::Pending => (ClientCallResolution::Pending, None),
-        Resolution::Resolved { output: Some(output) } => (ClientCallResolution::Accepted, Some(output.as_ref())),
-        Resolution::Resolved { output: None } => (ClientCallResolution::Transferred, None),
+        Resolution::Resolved { outputs } => match outputs.front() {
+            Some(output) => (ClientCallResolution::Accepted, Some(output)),
+            None => (ClientCallResolution::Transferred, None),
+        },
     };
     ClientCallView {
         call_id,
@@ -375,6 +395,7 @@ mod tests {
             owner: ClientCallOwner {
                 agent_turn: turn.clone(),
                 kind,
+                async_execution: false,
             },
         }
     }
@@ -411,6 +432,76 @@ mod tests {
 
     fn table() -> PendingClientCalls {
         PendingClientCalls::new("resp_test".into(), NonZeroUsize::new(8).unwrap(), 65_536).unwrap()
+    }
+
+    fn async_call(id: &str, turn: &AgentTurnKey) -> ClientCallRegistration {
+        let mut registration = call(id, turn, ClientCallKind::Function);
+        registration.owner.async_execution = true;
+        registration
+    }
+
+    /// Async calls do not hold their owners; repeated outputs, in one batch or across batches,
+    /// are retained and transferred oldest first, as `OpenAI` passes every output to the model.
+    #[test]
+    fn async_calls_accept_repeated_outputs_and_are_not_awaited() {
+        let (agents, root, child) = registry();
+        let mut calls = table();
+        calls
+            .register_calls(
+                &agents,
+                &[async_call("a1", &root), call("f1", &child, ClientCallKind::Function)],
+            )
+            .unwrap();
+        assert_eq!(calls.pending().count(), 2);
+        assert_eq!(
+            calls
+                .awaiting_outputs()
+                .map(|call| call.call_id.as_str())
+                .collect::<Vec<_>>(),
+            ["f1"]
+        );
+
+        calls
+            .accept_outputs(batch(vec![function("a1"), function("a1")]))
+            .unwrap();
+        calls.accept_outputs(batch(vec![function("a1")])).unwrap();
+        for _ in 0..3 {
+            let routed = calls.take_accepted("a1").expect("each accepted output is transferred");
+            assert!(routed.owner.async_execution);
+        }
+        assert!(calls.take_accepted("a1").is_none());
+        assert_eq!(calls.get("a1").unwrap().resolution, ClientCallResolution::Transferred);
+        calls.accept_outputs(batch(vec![function("a1")])).unwrap();
+
+        // Synchronous calls keep exactly-once acceptance.
+        assert!(matches!(
+            calls
+                .accept_outputs(batch(vec![function("f1"), function("f1")]))
+                .unwrap_err()
+                .reason,
+            ClientCallError::DuplicateCall(_)
+        ));
+    }
+
+    #[test]
+    fn checkpoints_without_async_markers_restore_as_synchronous_calls() {
+        let (_, root, _) = registry();
+        let stored = serde_json::to_value(call("f1", &root, ClientCallKind::Function).owner).unwrap();
+        assert_eq!(
+            stored.as_object().unwrap().keys().collect::<Vec<_>>(),
+            ["agent_turn", "kind"],
+            "synchronous owners keep the previous checkpoint shape"
+        );
+        let owner: ClientCallOwner = serde_json::from_value(stored).unwrap();
+        assert!(!owner.async_execution);
+
+        let async_owner = serde_json::to_value(async_call("a1", &root).owner).unwrap();
+        assert_eq!(async_owner["async_execution"], true);
+        assert!(
+            serde_json::from_value::<ClientCallOwner>(async_owner)
+                .unwrap()
+                .async_execution
+        );
     }
 
     #[test]

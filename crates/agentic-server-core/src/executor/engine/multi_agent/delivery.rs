@@ -130,7 +130,36 @@ impl MultiAgentRun {
             context.generation += 1;
             context.stored.final_answer = None;
         }
+        // A settled agent may not have read an output that arrived during its last round, and a
+        // settled subagent frees a slot for one with an unread late output.
+        self.resume_unread_agents();
         Ok(())
+    }
+
+    /// Starts a turn for each idle agent with client outputs it has not read: late async outputs,
+    /// including one that arrived while its last round ran on older input. A subagent starts only
+    /// while `max_concurrent_subagents` allows; the root is not counted. The rule reads the stored
+    /// history, so an output waits only for a free slot, whichever request or live input delivered
+    /// it. Interrupted and failed agents are not restarted.
+    pub(super) fn resume_unread_agents(&mut self) {
+        let unread = self
+            .registry
+            .agents()
+            .filter(|agent| agent.state == AgentState::Idle)
+            .filter(|agent| has_unread_output(&self.contexts[agent.identity].stored.history))
+            .map(|agent| agent.identity.clone())
+            .collect::<Vec<_>>();
+        for identity in unread {
+            if !identity.is_root() && self.registry.active_subagents() >= self.limit {
+                continue;
+            }
+            if self.registry.resume_idle(&identity).is_some() {
+                let context = self.contexts.get_mut(&identity).expect("registered agent has context");
+                context.execution.restart();
+                context.generation += 1;
+                context.stored.final_answer = None;
+            }
+        }
     }
 
     pub(super) async fn publish_mail(
@@ -191,4 +220,18 @@ impl MultiAgentRun {
         let _ = delivered.send(());
         Ok(())
     }
+}
+
+/// Whether a client tool output follows the last item the agent produced (a message, call,
+/// reasoning or compaction), so the agent has not read it yet.
+fn has_unread_output(history: &[InputItem]) -> bool {
+    history
+        .iter()
+        .rev()
+        .take_while(|item| {
+            !(item.call_id().is_some()
+                || matches!(item, InputItem::Message(message) if message.role == "assistant")
+                || matches!(item, InputItem::Reasoning(_) | InputItem::Compaction(_)))
+        })
+        .any(|item| item.output_call_id().is_some())
 }

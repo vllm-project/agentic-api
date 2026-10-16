@@ -1,0 +1,338 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Start the echo job with input ASYNC_CUSTOM_OK. Meanwhile, tell me the
+        capital of France in one sentence.
+      instructions: Start the echo job and answer the independent question without
+        waiting. Use the echo result when it arrives; never invent it.
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Start a background echo job. The raw text input must be exactly
+          ASYNC_CUSTOM_OK.
+        name: agentic_async_echo
+        type: custom
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: custom-delayed-result/t1-start
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1791453326
+      error: null
+      id: resp_01a11af0-62f6-7e60-ba67-9503be147247
+      incomplete_details: null
+      instructions: Start the echo job and answer the independent question without
+        waiting. Use the echo result when it arrives; never invent it.
+      max_tool_calls: null
+      model: Qwen/Qwen3.6-35B-A3B
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to do two things:
+
+            1. Start an echo job with the specific input "ASYNC_CUSTOM_OK".
+
+            2. Tell them the capital of France in one sentence.
+
+
+            I will execute the tool call `agentic_async_echo` with the input "ASYNC_CUSTOM_OK".
+
+            I will also immediately answer the question about the capital of France.
+            The capital of France is Paris.
+
+
+            Plan:
+
+            1. Call `agentic_async_echo` with `input` set to "ASYNC_CUSTOM_OK".
+
+            2. State "The capital of France is Paris." in the response.
+
+            3. Wait for the result of the echo job in a future turn (though the prompt
+            asks to answer the independent question without waiting, implying I should
+            do both now). I don''t need to answer with the echo result yet, just acknowledge
+            the question about France.
+
+
+            Let''s make the tool call.
+
+            Then provide the answer about France.
+
+
+            Input to tool: "ASYNC_CUSTOM_OK"
+
+            Question answer: Paris.
+
+
+            Let''s proceed.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a11af0-68a1-7632-ad04-3100041d20e5
+        summary: []
+        type: reasoning
+      - async: true
+        call_id: chatcmpl-tool-b24f4007b1fa8aeb
+        id: ctc_01a11af0-68cb-7123-9629-c7f01793ab81
+        input: ASYNC_CUSTOM_OK
+        name: agentic_async_echo
+        status: completed
+        type: custom_tool_call
+      - content:
+        - text: 'The user has provided a second turn where the system instructs me
+            to continue with the rest of the request while the async job is running.
+
+            1.  **Echo Job:** I have already called `agentic_async_echo` in the first
+            turn. The system message says the result has not arrived yet. I must not
+            call it again.
+
+            2.  **Independent Question:** The user asked "tell me the capital of France
+            in one sentence." I need to answer this now.
+
+
+            I will output the answer to the question. I will not mention the echo
+            job result since I don''t have it yet, and I won''t repeat the tool call.
+
+
+            Answer: The capital of France is Paris.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a11af0-6d38-76b0-9637-2761445feddf
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            The capital of France is Paris.'
+          type: output_text
+        id: msg_01a11af0-6d53-7f52-b4cd-15f9db7e2b81
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: null
+      service_tier: default
+      status: completed
+      tool_choice: auto
+      tools:
+      - async: true
+        description: Start a background echo job. The raw text input must be exactly
+          ASYNC_CUSTOM_OK.
+        name: agentic_async_echo
+        type: custom
+      usage:
+        input_tokens: 1102
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 403
+        output_tokens_details:
+          reasoning_tokens: 360
+        total_tokens: 1505
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: Name one river in France. Answer in one sentence.
+      instructions: Start the echo job and answer the independent question without
+        waiting. Use the echo result when it arrives; never invent it.
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B
+      previous_response_id: resp_01a11af0-62f6-7e60-ba67-9503be147247
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Start a background echo job. The raw text input must be exactly
+          ASYNC_CUSTOM_OK.
+        name: agentic_async_echo
+        type: custom
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: custom-delayed-result/t2-follow-up-without-output
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1791453327
+      error: null
+      id: resp_01a11af0-6d8f-71f2-91eb-12affe0d8873
+      incomplete_details: null
+      instructions: Start the echo job and answer the independent question without
+        waiting. Use the echo result when it arrives; never invent it.
+      max_tool_calls: null
+      model: Qwen/Qwen3.6-35B-A3B
+      object: response
+      output:
+      - content:
+        - text: 'The user wants to know the name of one river in France in one sentence.
+
+            I should not call any tools.
+
+            I will answer the question directly.
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a11af0-6f94-73b3-8fba-9983ef556771
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            The Loire is the longest river in France.'
+          type: output_text
+        id: msg_01a11af0-6f9b-7ee3-9ba9-833223d1ef0c
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: resp_01a11af0-62f6-7e60-ba67-9503be147247
+      service_tier: default
+      status: completed
+      tool_choice: auto
+      tools:
+      - async: true
+        description: Start a background echo job. The raw text input must be exactly
+          ASYNC_CUSTOM_OK.
+        name: agentic_async_echo
+        type: custom
+      usage:
+        input_tokens: 515
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 45
+        output_tokens_details:
+          reasoning_tokens: 33
+        total_tokens: 560
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - call_id: chatcmpl-tool-b24f4007b1fa8aeb
+        output: ASYNC_CUSTOM_RESULT_OK
+        type: custom_tool_call_output
+      - content: What did the echo job return? Reply with only its result.
+        role: user
+        type: message
+      instructions: Start the echo job and answer the independent question without
+        waiting. Use the echo result when it arrives; never invent it.
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B
+      previous_response_id: resp_01a11af0-6d8f-71f2-91eb-12affe0d8873
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Start a background echo job. The raw text input must be exactly
+          ASYNC_CUSTOM_OK.
+        name: agentic_async_echo
+        type: custom
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+      x-run-id: custom-delayed-result/t3-late-output
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      conversation_id: null
+      created_at: 1791453329
+      error: null
+      id: resp_01a11af0-7019-7c53-b314-5f4aa6633724
+      incomplete_details: null
+      instructions: Start the echo job and answer the independent question without
+        waiting. Use the echo result when it arrives; never invent it.
+      max_tool_calls: null
+      model: Qwen/Qwen3.6-35B-A3B
+      object: response
+      output:
+      - content:
+        - text: "The user is asking for the result of the echo job started in the\
+            \ previous turns.\nLooking at the conversation history, I called `agentic_async_echo`\
+            \ with the input `ASYNC_CUSTOM_OK`.\nThe system returned the result `ASYNC_CUSTOM_RESULT_OK`\
+            \ in a previous turn (implied by the user providing the context `ASYNC_CUSTOM_RESULT_OK`\
+            \ in their prompt history or just asking about it now).\nThe user explicitly\
+            \ asks: \"What did the echo job return? Reply with only its result.\"\n\
+            The result provided in the context (which corresponds to the output of\
+            \ the tool) is `ASYNC_CUSTOM_RESULT_OK`.\nI need to output exactly that\
+            \ string.\n\nWait, looking at the conversation flow provided in the prompt:\n\
+            1. User: \"Start the echo job...\"\n2. Model: \"The capital of France\
+            \ is Paris. [Tool Call]\"\n3. User: \"Name one river in France...\"\n\
+            4. Model: \"The Loire is the longest river in France.\"\n5. User: \"ASYNC_CUSTOM_RESULT_OK\"\
+            \ (This looks like the system injecting the tool output here? Or is it\
+            \ part of the prompt?)\n   - Actually, the user prompt shows:\n     `User:\
+            \ What did the echo job return? Reply with only its result.`\n   - But\
+            \ before that, there is a block:\n     `User:` (empty)\n     `Result:\
+            \ ASYNC_CUSTOM_RESULT_OK`\n     This block usually signifies the tool\
+            \ output arriving.\n   - However, looking at the provided text, the user\
+            \ just sent \"What did the echo job return? Reply with only its result.\"\
+            \n   - I need to check the \"tool output\" section or the message history.\n\
+            \   - In the provided block:\n     `User:`\n     `Result: ASYNC_CUSTOM_RESULT_OK`\n\
+            \     This is formatted as if the user is pasting the tool output to me.\n\
+            \   - So the result of the echo job is `ASYNC_CUSTOM_RESULT_OK`.\n\nI\
+            \ will reply with just the result string.\n"
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_01a11af0-79af-7140-b618-43e788e69c8f
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: []
+          text: '
+
+
+            ASYNC_CUSTOM_RESULT_OK'
+          type: output_text
+        id: msg_01a11af0-79f5-7c12-9ca6-5c3382f35655
+        role: assistant
+        status: completed
+        type: message
+      previous_response_id: resp_01a11af0-6d8f-71f2-91eb-12affe0d8873
+      service_tier: default
+      status: completed
+      tool_choice: auto
+      tools:
+      - async: true
+        description: Start a background echo job. The raw text input must be exactly
+          ASYNC_CUSTOM_OK.
+        name: agentic_async_echo
+        type: custom
+      usage:
+        input_tokens: 500
+        input_tokens_details:
+          cached_tokens: 0
+        output_tokens: 435
+        output_tokens_details:
+          reasoning_tokens: 427
+        total_tokens: 935
+    headers:
+      content-type: application/json
+    status_code: 200

@@ -408,7 +408,9 @@ fn steering_requirements_use_pinned_parent_custom_tool_metadata() {
     };
     let history: Vec<InputItem> = deserialize_from_value(json!([
         {"type":"function_call", "call_id":"custom", "name":"set_temperature_unit", "arguments":"{}"},
-        {"type":"function_call", "call_id":"weather", "name":"get_weather", "arguments":"{}"}
+        {"type":"function_call", "call_id":"weather", "name":"get_weather", "arguments":"{}"},
+        {"type":"function_call", "call_id":"async_weather", "name":"get_weather", "arguments":"{}", "async":true},
+        {"type":"custom_tool_call", "id":"ct_async", "call_id":"async_custom", "name":"set_temperature_unit", "input":"C", "async":true}
     ]))
     .unwrap();
     let items = history.into_iter().map(InOutItem::Input).collect::<Vec<_>>();
@@ -418,7 +420,8 @@ fn steering_requirements_use_pinned_parent_custom_tool_metadata() {
     lease.publish(checkpoint).unwrap();
     let pin = session.pin_response("resp_parent").unwrap().unwrap();
     let required = pin.required_steering_input().unwrap();
-    assert_eq!(required.len(), 2);
+    assert_eq!(pin.history().len(), 4, "async calls remain in canonical history");
+    assert_eq!(required.len(), 2, "only synchronous calls require outputs for steering");
     assert!(matches!(&required[0], SteeringRequiredInput::Custom { call_id }
         if call_id.as_str() == "custom"));
     assert!(matches!(&required[1], SteeringRequiredInput::Function { call_id, name }

@@ -1,4 +1,5 @@
-use super::{ToolEvent, ToolTranslator, ensure_function_call_size};
+use super::context::mark_async_call;
+use super::{CallExecution, ToolEvent, ToolTranslator, ensure_function_call_size};
 use crate::events::WireEvent;
 use crate::events::{EventFrame, SSEEventType};
 use crate::executor::accumulator::AccumulatedFunctionCall;
@@ -20,9 +21,12 @@ struct CustomCallState {
     input_done: bool,
 }
 
-#[derive(Debug, Default)]
+/// Custom calls are built from the typed accumulated call; an async call's items carry the shared
+/// async marker.
+#[derive(Debug)]
 pub(super) struct CustomTranslator {
     state: Option<CustomCallState>,
+    execution: CallExecution,
 }
 
 impl ToolTranslator for CustomTranslator {
@@ -48,7 +52,7 @@ impl ToolTranslator for CustomTranslator {
                     input_done: false,
                 });
                 Ok(call
-                    .map(|call| custom_added_frame(&call))
+                    .map(|call| custom_added_frame(&call, self.execution))
                     .transpose()?
                     .into_iter()
                     .collect())
@@ -66,7 +70,7 @@ impl ToolTranslator for CustomTranslator {
                     ToolEvent::ArgumentsDone(_) => finish_custom_input(state, call.arguments()),
                     ToolEvent::Done(_) => {
                         let mut frames = finish_custom_input(state, call.arguments())?;
-                        frames.push(custom_done_frame(state, &call)?);
+                        frames.push(custom_done_frame(state, &call, self.execution)?);
                         Ok(frames)
                     }
                     ToolEvent::Added { .. } => unreachable!("handled above"),
@@ -76,22 +80,29 @@ impl ToolTranslator for CustomTranslator {
     }
 }
 
-fn custom_added_frame(call: &AccumulatedFunctionCall<'_>) -> ExecutorResult<EventFrame> {
+fn custom_added_frame(call: &AccumulatedFunctionCall<'_>, execution: CallExecution) -> ExecutorResult<EventFrame> {
+    let item = OutputItem::CustomToolCall(CustomToolCall {
+        agent: call.item.agent.clone(),
+        id: crate::tool::custom::public_item_id(&call.item.id),
+        status: Some(MessageStatus::InProgress),
+        call_id: call.item.call_id.clone(),
+        input: String::new(),
+        name: call.item.name.clone(),
+        async_execution: call.item.async_execution,
+    });
     custom_frame(
         SSEEventType::OutputItemAdded,
         call.output_index,
-        [(
-            "item".to_owned(),
-            serde_json::to_value(OutputItem::CustomToolCall(CustomToolCall {
-                agent: call.item.agent.clone(),
-                id: crate::tool::custom::public_item_id(&call.item.id),
-                status: Some(MessageStatus::InProgress),
-                call_id: call.item.call_id.clone(),
-                input: String::new(),
-                name: call.item.name.clone(),
-            }))?,
-        )],
+        [("item".to_owned(), custom_item_value(item, execution)?)],
     )
+}
+
+/// The serialized custom call item, with the shared async marker for a call to an async tool.
+fn custom_item_value(mut item: OutputItem, execution: CallExecution) -> ExecutorResult<Value> {
+    if execution == CallExecution::Async {
+        mark_async_call(&mut item)?;
+    }
+    Ok(serde_json::to_value(item)?)
 }
 
 fn incremental_custom_delta(state: &mut CustomCallState, arguments: &str) -> ExecutorResult<Option<EventFrame>> {
@@ -148,21 +159,24 @@ fn finish_custom_input(state: &mut CustomCallState, arguments: &str) -> Executor
     Ok(frames)
 }
 
-fn custom_done_frame(state: &CustomCallState, call: &AccumulatedFunctionCall<'_>) -> ExecutorResult<EventFrame> {
+fn custom_done_frame(
+    state: &CustomCallState,
+    call: &AccumulatedFunctionCall<'_>,
+    execution: CallExecution,
+) -> ExecutorResult<EventFrame> {
+    let item = OutputItem::CustomToolCall(CustomToolCall {
+        agent: call.item.agent.clone(),
+        id: state.public_item_id.clone(),
+        status: Some(MessageStatus::Completed),
+        call_id: call.item.call_id.clone(),
+        input: state.emitted_input.clone(),
+        name: call.item.name.clone(),
+        async_execution: call.item.async_execution,
+    });
     custom_frame(
         SSEEventType::OutputItemDone,
         state.output_index,
-        [(
-            "item".to_owned(),
-            serde_json::to_value(OutputItem::CustomToolCall(CustomToolCall {
-                agent: call.item.agent.clone(),
-                id: state.public_item_id.clone(),
-                status: Some(MessageStatus::Completed),
-                call_id: call.item.call_id.clone(),
-                input: state.emitted_input.clone(),
-                name: call.item.name.clone(),
-            }))?,
-        )],
+        [("item".to_owned(), custom_item_value(item, execution)?)],
     )
 }
 
@@ -271,6 +285,10 @@ fn custom_input_start(arguments: &str) -> Option<usize> {
 }
 
 impl CustomTranslator {
+    pub(super) const fn new(execution: CallExecution) -> Self {
+        Self { state: None, execution }
+    }
+
     /// Restores normalized custom-tool declarations in response lifecycle
     /// metadata before the event is emitted to the client.
     pub(super) fn restore_response_wire(wire: &mut WireEvent, map: Option<&CustomToolMap>) -> bool {

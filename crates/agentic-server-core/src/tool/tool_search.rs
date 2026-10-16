@@ -722,6 +722,7 @@ pub(crate) fn strict_function_call(item: &Value) -> Result<FunctionToolCall, Too
         return Err(invalid_upstream_search_call());
     }
     let call = FunctionToolCall {
+        async_execution: false,
         agent: call.agent,
         id: call.id,
         call_id: call.call_id,
@@ -1122,6 +1123,7 @@ fn prepare_search_call(
     let canonical_arguments = serialize_to_string(&call.arguments)
         .map_err(|_| ToolError::Config("tool_search_call arguments could not be canonicalized safely".to_owned()))?;
     Ok(InputItem::FunctionCall(InputFunctionToolCall {
+        async_execution: false,
         agent: call.agent.clone(),
         id: Some(call.id.clone()),
         call_id: call.call_id.clone(),

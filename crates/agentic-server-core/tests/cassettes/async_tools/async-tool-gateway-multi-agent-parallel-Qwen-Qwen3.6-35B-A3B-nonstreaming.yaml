@@ -1,0 +1,50 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Check the demo weather snapshot for Paris. Meanwhile, list three essentials
+        for any city trip.
+      instructions: Handle this request yourself; do not start subagents. Start the
+        weather lookup and answer the independent question without waiting. Use the
+        demo weather result when it arrives; never invent it.
+      max_output_tokens: 16384
+      model: Qwen/Qwen3.6-35B-A3B
+      multi_agent:
+        enabled: true
+        max_concurrent_subagents: 1
+      parallel_tool_calls: true
+      store: true
+      stream: false
+      tools:
+      - async: true
+        description: Read a demo weather snapshot for a city.
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+    headers:
+      accept: '*/*'
+      content-type: application/json
+      openai-beta: responses_multi_agent=v1
+      user-agent: python-httpx/0.28.1
+      x-run-id: multi-agent-parallel/t1-start
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: unsupported_value
+        message: Async parallel tool calls are not yet supported in multi-agent mode.
+        param: multi_agent
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400

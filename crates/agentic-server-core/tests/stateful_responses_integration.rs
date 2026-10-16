@@ -1020,6 +1020,7 @@ async fn test_previous_response_id_persists_inherited_tools_and_choice() {
         })),
         strict: Some(true),
         defer_loading: None,
+        async_execution: None,
         extra: std::collections::HashMap::new(),
     });
 

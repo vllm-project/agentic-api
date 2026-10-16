@@ -40,6 +40,60 @@ use common::{spawn_gateway, test_config};
 
 mod steering {
     use super::*;
+    use agentic_core::tool::async_execution::pending_call_note;
+
+    #[tokio::test]
+    async fn pending_async_tool_does_not_block_automatic_steering_successor() {
+        let mock = MockResponsesServer::start(vec![
+            sse_function_call_response("async_call", "get_project_status"),
+            sse_response("parent_final", "msg_parent", "Working on it"),
+            sse_response("successor", "msg_final", "UPDATED"),
+        ])
+        .await;
+        let fixture = storage_backed_state(&mock.url).await;
+        let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+        let mut ws = connect_responses_ws(&gateway_url).await;
+        let mut tool = status_tool();
+        tool["async"] = json!(true);
+        send_json(
+            &mut ws,
+            json!({"type":"response.create", "model":"test-model",
+            "input":"INITIAL", "store":false, "tools":[tool]}),
+        )
+        .await;
+        let parent = receive(&mut ws, "response.completed").await;
+        assert_eq!(parent["response"]["output"][0]["async"], true);
+        send_json(
+            &mut ws,
+            json!({"type":"response.steer",
+            "previous_response_id":parent["response"]["id"], "input":"ASYNC_STEER"}),
+        )
+        .await;
+        receive(&mut ws, "response.steer.accepted").await;
+        let created = recv_json(&mut ws).await;
+        assert_eq!(
+            created["type"], "response.created",
+            "async outputs must not produce a pending barrier"
+        );
+        assert_eq!(created["response"]["previous_response_id"], parent["response"]["id"]);
+        receive(&mut ws, "response.completed").await;
+        let requests = mock.request_bodies().await;
+        assert_eq!(requests.len(), 3);
+        let input = requests[2]["input"].as_array().unwrap();
+        let call = input.iter().find(|item| item["type"] == "function_call").unwrap();
+        assert_eq!(call["call_id"], parent["response"]["output"][0]["call_id"]);
+        assert_eq!(call["name"], "get_project_status");
+        assert!(
+            call.get("async").is_none(),
+            "the public marker is lowered for the model server"
+        );
+        assert!(input.iter().any(|item| {
+            item["role"] == "developer"
+                && item["content"] == pending_call_note("get_project_status", call["call_id"].as_str().unwrap())
+        }));
+        assert!(!input.iter().any(|item| item["type"] == "function_call_output"));
+        assert!(requests[2]["input"].to_string().contains("ASYNC_STEER"));
+    }
 
     #[tokio::test]
     async fn ordinary_responses_do_not_exhaust_steering_settings_budget() {
@@ -7002,6 +7056,7 @@ mod duplex_replay {
         let custom: agentic_core::types::io::CustomToolCall = deserialize_from_value(item.clone()).unwrap();
         let function = agentic_core::types::io::InputFunctionToolCall::from(custom);
         let call = agentic_core::types::io::FunctionToolCall {
+            async_execution: false,
             agent: function.agent,
             id: function.id.expect("recorded custom item has a stable ID"),
             call_id: function.call_id,
@@ -7991,5 +8046,68 @@ async fn cache_usage_survives_websocket_storage_without_carrying_into_next_turn(
             previous = Some(id.to_owned());
         }
         assert_eq!(mock.request_bodies().await.len(), 2);
+    }
+}
+
+/// Async client tools behave over WebSocket as over HTTP: the gateway continues the response
+/// after the async call, and a follow-up on the same socket may omit the pending output.
+#[tokio::test]
+async fn websocket_async_tool_call_continues_and_accepts_follow_ups_without_output() {
+    let mock = MockResponsesServer::start(vec![
+        sse_function_call_response("resp_upstream_1", "get_weather"),
+        sse_response("resp_upstream_2", "msg_upstream_2", "Essentials: shoes."),
+        sse_response("resp_upstream_3", "msg_upstream_3", "A compact umbrella."),
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+    let tools = json!([{"type": "function", "name": "get_weather", "async": true,
+        "parameters": {"type": "object", "properties": {"numbers": {"type": "array"}}}}]);
+
+    send_json(
+        &mut ws,
+        json!({"type": "response.create", "model": "test-model", "input": "Check the weather; list essentials.",
+            "tools": tools, "store": false, "stream": true}),
+    )
+    .await;
+    let first = recv_until_completed(&mut ws).await;
+    let lifecycle: Vec<&Value> = first
+        .iter()
+        .filter(|event| {
+            matches!(
+                event["type"].as_str(),
+                Some("response.output_item.added" | "response.output_item.done")
+            ) && event["item"]["type"] == "function_call"
+        })
+        .collect();
+    assert_eq!(lifecycle.len(), 2, "the call's added and done events");
+    assert!(lifecycle.iter().all(|event| event["item"]["async"] == true));
+    let response = &first.last().expect("terminal event")["response"];
+    let output = response["output"].as_array().expect("output");
+    assert_eq!(output[0]["type"], "function_call");
+    assert_eq!(output[0]["async"], true);
+    assert_eq!(output[1]["type"], "message", "the answer follows in the same response");
+    let response_id = response["id"].as_str().expect("response id");
+
+    send_json(
+        &mut ws,
+        json!({"type": "response.create", "model": "test-model", "input": "Which umbrella?",
+            "tools": tools, "previous_response_id": response_id, "store": false, "stream": true}),
+    )
+    .await;
+    let second = recv_until_completed(&mut ws).await;
+    assert_eq!(second.last().expect("terminal event")["type"], "response.completed");
+
+    let requests = mock.request_bodies().await;
+    assert_eq!(requests.len(), 3);
+    for request in &requests[1..] {
+        let notes = request["input"]
+            .as_array()
+            .expect("input items")
+            .iter()
+            .filter(|item| item["role"] == "developer")
+            .count();
+        assert_eq!(notes, 1, "the pending call carries its note upstream");
     }
 }

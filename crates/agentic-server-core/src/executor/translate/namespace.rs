@@ -1,5 +1,5 @@
 use super::function::FunctionTranslator;
-use super::{ToolEvent, ToolTranslator};
+use super::{CallExecution, ToolEvent, ToolTranslator};
 use crate::events::{EventFrame, WireEvent};
 use crate::executor::accumulator::AccumulatedFunctionCall;
 use crate::executor::error::ExecutorResult;
@@ -9,7 +9,9 @@ use serde_json::{Map, Value};
 
 /// Namespace calls retain function-call events; the dispatcher applies their public mapping.
 #[derive(Debug)]
-pub(super) struct CodexNamespaceTranslator;
+pub(super) struct CodexNamespaceTranslator {
+    function: FunctionTranslator,
+}
 
 impl ToolTranslator for CodexNamespaceTranslator {
     fn translate(
@@ -17,11 +19,17 @@ impl ToolTranslator for CodexNamespaceTranslator {
         event: ToolEvent<'_>,
         call: Option<AccumulatedFunctionCall<'_>>,
     ) -> ExecutorResult<Vec<EventFrame>> {
-        FunctionTranslator.translate(event, call)
+        self.function.translate(event, call)
     }
 }
 
 impl CodexNamespaceTranslator {
+    pub(super) const fn new(execution: CallExecution) -> Self {
+        Self {
+            function: FunctionTranslator::new(execution),
+        }
+    }
+
     pub(super) fn restore_output_items(output: &mut [OutputItem], map: Option<&NamespaceMap>) {
         let Some(map) = map else {
             return;
@@ -175,6 +183,7 @@ mod tests {
     use crate::types::tools::{CodexNamespaceMember, NonEmptyToolName, ResponsesTool};
     fn completed_call(name: &str, arguments: &str) -> OutputItem {
         OutputItem::FunctionCall(FunctionToolCall {
+            async_execution: false,
             agent: None,
             id: "fc_1".to_string(),
             call_id: "call_1".to_string(),

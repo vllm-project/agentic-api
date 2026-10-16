@@ -474,73 +474,74 @@ async fn every_native_web_search_version_streams_as_the_basic_search() {
     let mut upstream_tools = Vec::new();
     for version in NATIVE_WEB_SEARCH_VERSIONS {
         let tool_type = version.type_name;
-        let streams = vec![
-            round_stream(&[("t1", serde_json::json!({"query": "rust release"}))]),
-            round_stream(&[]),
-        ];
-        let (vllm_url, upstream, _v) = spawn_mock_vllm_stream(streams).await;
-        let (search_url, searches, _s) = spawn_recording_search().await;
-        let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
-        let mut tool = serde_json::json!({
-            "type": tool_type,
-            "name": "web_search",
-            "allowed_callers": ["direct"],
-            "allowed_domains": ["rust-lang.org"],
-            "user_location": {"type": "approximate", "country": "ca"}
-        });
-        if version.response_inclusion {
-            tool["response_inclusion"] = "full".into();
-        }
-        let request = serde_json::json!({
-            "model": "qwen3", "max_tokens": 1024, "stream": true,
-            "messages": [{"role": "user", "content": "Search Rust's official site."}],
-            "tools": [tool]
-        });
-        let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
-        let mut params = registry_tools(Some(&tools), &GatewayToolMap::default());
-        let mut executors = exec_ctx.gateway_executors.clone();
-        let registry = Arc::new(
-            ToolRegistry::build_with_handlers(&mut params, &mut executors)
-                .await
-                .unwrap(),
-        );
-
-        let sse = run_test_messages_stream(request, registry, Arc::clone(&exec_ctx))
-            .await
-            .collect::<Vec<_>>()
-            .await
-            .join("");
-
-        assert_eq!(upstream.calls.load(Ordering::SeqCst), 2, "{tool_type}");
-        let received = searches.lock().unwrap().clone();
-        let [search] = received.as_slice() else {
-            panic!("{tool_type}: expected one search, got {received:?}");
-        };
-        let param = |key: &str| {
-            search
-                .iter()
-                .find(|(name, _)| name == key)
-                .map(|(_, value)| value.as_str())
-        };
-        assert_eq!(
-            param("include_domains"),
-            Some("rust-lang.org"),
-            "{tool_type}: {search:?}"
-        );
-        assert_eq!(param("country"), Some("CA"), "{tool_type}: {search:?}");
-        assert!(sse.contains("Done."), "{tool_type}: final answer streams:\n{sse}");
-        assert!(
-            !sse.contains(r#""type":"tool_use""#),
-            "{tool_type}: gateway tool_use surfaced:\n{sse}"
-        );
-        for kind in ["message_start", "message_delta", "message_stop"] {
-            assert_eq!(
-                sse.matches(&format!("event: {kind}")).count(),
-                1,
-                "{tool_type}: one {kind}"
+        for (domain_field, backend_field) in [
+            ("allowed_domains", "include_domains"),
+            ("blocked_domains", "exclude_domains"),
+        ] {
+            let streams = vec![
+                round_stream(&[("t1", serde_json::json!({"query": "rust release"}))]),
+                round_stream(&[]),
+            ];
+            let (vllm_url, upstream, _v) = spawn_mock_vllm_stream(streams).await;
+            let (search_url, searches, _s) = spawn_recording_search().await;
+            let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
+            let mut tool = serde_json::json!({
+                "type": tool_type,
+                "name": "web_search",
+                "allowed_callers": ["direct"],
+                "user_location": {"type": "approximate", "country": "ca"}
+            });
+            tool[domain_field] = serde_json::json!(["rust-lang.org"]);
+            if version.response_inclusion {
+                tool["response_inclusion"] = "full".into();
+            }
+            let request = serde_json::json!({
+                "model": "qwen3", "max_tokens": 1024, "stream": true,
+                "messages": [{"role": "user", "content": "Search Rust's official site."}],
+                "tools": [tool]
+            });
+            let tools: Vec<ToolParam> = serde_json::from_value(request["tools"].clone()).unwrap();
+            let mut params = registry_tools(Some(&tools), &GatewayToolMap::default());
+            let mut executors = exec_ctx.gateway_executors.clone();
+            let registry = Arc::new(
+                ToolRegistry::build_with_handlers(&mut params, &mut executors)
+                    .await
+                    .unwrap(),
             );
+
+            let sse = run_test_messages_stream(request, registry, Arc::clone(&exec_ctx))
+                .await
+                .collect::<Vec<_>>()
+                .await
+                .join("");
+
+            assert_eq!(upstream.calls.load(Ordering::SeqCst), 2, "{tool_type}");
+            let received = searches.lock().unwrap().clone();
+            let [search] = received.as_slice() else {
+                panic!("{tool_type}: expected one search, got {received:?}");
+            };
+            let param = |key: &str| {
+                search
+                    .iter()
+                    .find(|(name, _)| name == key)
+                    .map(|(_, value)| value.as_str())
+            };
+            assert_eq!(param(backend_field), Some("rust-lang.org"), "{tool_type}: {search:?}");
+            assert_eq!(param("country"), Some("CA"), "{tool_type}: {search:?}");
+            assert!(sse.contains("Done."), "{tool_type}: final answer streams:\n{sse}");
+            assert!(
+                !sse.contains(r#""type":"tool_use""#),
+                "{tool_type}: gateway tool_use surfaced:\n{sse}"
+            );
+            for kind in ["message_start", "message_delta", "message_stop"] {
+                assert_eq!(
+                    sse.matches(&format!("event: {kind}")).count(),
+                    1,
+                    "{tool_type}: one {kind}"
+                );
+            }
+            upstream_tools.push(upstream.requests.lock().await[0]["tools"].clone());
         }
-        upstream_tools.push(upstream.requests.lock().await[0]["tools"].clone());
     }
     assert!(
         upstream_tools.windows(2).all(|pair| pair[0] == pair[1]),
