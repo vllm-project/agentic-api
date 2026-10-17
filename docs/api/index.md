@@ -94,7 +94,8 @@ open. `response.steer` and `response.inject` act on a response that was already 
 continuations the gateway starts itself.
 
 The limit is kept in each process's memory: with N replicas, a caller can send up to N times the configured rate. The
-gateway tracks up to 100,000 active callers; while all of them are active, new callers share one bucket.
+gateway tracks up to 100,000 callers. When that many are tracked, it forgets idle callers at most once a second, and new
+callers share one bucket until a sweep frees room.
 
 ## Chat Completions and Embeddings
 

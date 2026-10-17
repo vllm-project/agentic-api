@@ -4,7 +4,8 @@
 //! (GCRA, equivalent to a token bucket): a caller may send `burst` requests at
 //! once and then one request every `60 s / requests_per_minute`. A bucket is a
 //! single theoretical arrival time, so an idle caller holds no state and is
-//! pruned when the key map is full. The limit is per process.
+//! pruned when the key map is full, at most once per sweep interval. The limit
+//! is per process.
 
 use std::collections::HashMap;
 use std::hash::{BuildHasher, RandomState};
@@ -28,6 +29,8 @@ use crate::auth::{AuthErrorFormat, AuthenticatedPrincipal};
 const MAX_KEYS: usize = 100_000;
 /// Minimum spacing between warnings that new callers share the overflow bucket.
 const OVERFLOW_WARNING_INTERVAL: Duration = Duration::from_secs(60);
+/// Minimum spacing between sweeps of a full key map for idle callers.
+const SWEEP_INTERVAL: Duration = Duration::from_secs(1);
 
 /// A validated per-caller request rate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,6 +126,8 @@ pub struct RateLimiter {
 struct LimiterState {
     /// Each tracked caller's theoretical arrival time for its next request.
     arrivals: HashMap<RateLimitKey, Instant>,
+    /// When a full map may next be swept; a sweep is due when unset.
+    next_sweep: Option<Instant>,
     last_overflow_warning: Option<Instant>,
 }
 
@@ -190,15 +195,22 @@ impl RateLimiter {
         Decision::Allowed
     }
 
-    /// `key` itself, unless it is new and the map is full of active callers.
+    /// `key` itself, unless it is new and the map is full.
+    ///
+    /// Sweeping a full map scans every caller under the lock, so it runs at
+    /// most once per [`SWEEP_INTERVAL`]; new callers in between share the
+    /// overflow bucket instead of each paying for a scan.
     fn admit_key(&self, state: &mut LimiterState, key: RateLimitKey, now: Instant) -> RateLimitKey {
         if state.arrivals.len() < self.max_keys || state.arrivals.contains_key(&key) {
             return key;
         }
-        // An idle caller's bucket is full again, so forgetting it changes nothing.
-        state.arrivals.retain(|_, arrival| *arrival > now);
-        if state.arrivals.len() < self.max_keys {
-            return key;
+        if state.next_sweep.is_none_or(|due| now >= due) {
+            state.next_sweep = Some(now + SWEEP_INTERVAL);
+            // An idle caller's bucket is full again, so forgetting it changes nothing.
+            state.arrivals.retain(|_, arrival| *arrival > now);
+            if state.arrivals.len() < self.max_keys {
+                return key;
+            }
         }
         if state
             .last_overflow_warning
@@ -416,6 +428,45 @@ mod tests {
         tokio::time::advance(Duration::from_secs(1)).await;
         assert_eq!(limiter.check(key("c")), Decision::Allowed);
         assert!(!limiter.state.lock().unwrap().arrivals.contains_key(&key("a")));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_full_map_is_swept_at_most_once_per_interval() {
+        // 100 ms per request, so callers go idle long before the next sweep is due.
+        let limiter = RateLimiter::with_max_keys(config(600, 1), 2);
+        assert_eq!(limiter.check(key("a")), Decision::Allowed);
+        assert_eq!(limiter.check(key("b")), Decision::Allowed);
+        // Every tracked caller is active, so this sweep frees nothing.
+        assert_eq!(
+            limiter.check(key("new-0")),
+            Decision::Allowed,
+            "charged to the overflow bucket"
+        );
+
+        // a and b are idle now, but no sweep is due: a stream of new callers
+        // shares the overflow bucket without scanning the map.
+        tokio::time::advance(Duration::from_millis(200)).await;
+        let allowed = (1..=1000)
+            .filter(|index| limiter.check(key(&format!("new-{index}"))) == Decision::Allowed)
+            .count();
+        assert_eq!(allowed, 1, "new callers between sweeps share one bucket");
+        {
+            let state = limiter.state.lock().unwrap();
+            assert!(state.arrivals.contains_key(&key("a")), "no sweep ran before it was due");
+            assert_eq!(state.arrivals.len(), 3, "a, b, and the overflow bucket");
+        }
+
+        tokio::time::advance(SWEEP_INTERVAL).await;
+        assert_eq!(limiter.check(key("late")), Decision::Allowed);
+        let state = limiter.state.lock().unwrap();
+        assert!(
+            !state.arrivals.contains_key(&key("a")),
+            "the due sweep forgot idle callers"
+        );
+        assert!(
+            state.arrivals.contains_key(&key("late")),
+            "and gave the new caller its own bucket"
+        );
     }
 
     #[test]
