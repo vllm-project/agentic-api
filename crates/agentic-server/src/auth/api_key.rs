@@ -6,14 +6,15 @@ use axum::middleware::Next;
 use axum::response::Response;
 use subtle::ConstantTimeEq;
 
-use super::{AuthErrorFormat, authentication_error};
+use super::authentication_error;
+use crate::error_response::ErrorFormat;
 
 pub(crate) async fn require_api_key(State(key): State<String>, request: Request, next: Next) -> Response {
     let Some(token) = bearer_token(request.headers()) else {
-        return authentication_error(AuthErrorFormat::OpenAi, "missing_bearer_token", "missing bearer token");
+        return authentication_error(ErrorFormat::OpenAi, "missing_bearer_token", "missing bearer token");
     };
     if !bool::from(token.as_bytes().ct_eq(key.as_bytes())) {
-        return authentication_error(AuthErrorFormat::OpenAi, "invalid_token", "invalid bearer token");
+        return authentication_error(ErrorFormat::OpenAi, "invalid_token", "invalid bearer token");
     }
     next.run(request).await
 }

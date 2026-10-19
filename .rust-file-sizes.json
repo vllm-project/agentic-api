@@ -6,7 +6,7 @@
     "crates/agentic-server-core/src/types/io/output.rs": 1074,
     "crates/agentic-server-core/src/types/tools/params.rs": 537,
     "crates/agentic-server/src/agentic_process.rs": 557,
-    "crates/agentic-server/src/auth.rs": 791
+    "crates/agentic-server/src/auth.rs": 727
   },
   "exceptions": {
     "crates/agentic-server-core/src/config.rs": {

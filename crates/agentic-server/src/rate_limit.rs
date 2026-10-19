@@ -13,22 +13,24 @@ use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use agentic_core::utils::common::uuid7_str;
-use axum::body::Body;
 use axum::extract::{Request, State};
-use axum::http::{HeaderMap, StatusCode, header};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::Response;
-use serde_json::json;
 use tokio::time::Instant;
 use tracing::warn;
 
-use crate::auth::{AuthErrorFormat, AuthenticatedPrincipal};
+use crate::auth::AuthenticatedPrincipal;
+use crate::error_response::{ErrorFormat, GatewayError};
 
 /// Most distinct callers tracked at once before new ones share one bucket.
 const MAX_KEYS: usize = 100_000;
 /// Minimum spacing between warnings that new callers share the overflow bucket.
 const OVERFLOW_WARNING_INTERVAL: Duration = Duration::from_secs(60);
+const RETRY_AFTER_MS: HeaderName = HeaderName::from_static("retry-after-ms");
+const LIMIT_REQUESTS: HeaderName = HeaderName::from_static("x-ratelimit-limit-requests");
+const REMAINING_REQUESTS: HeaderName = HeaderName::from_static("x-ratelimit-remaining-requests");
+const RESET_REQUESTS: HeaderName = HeaderName::from_static("x-ratelimit-reset-requests");
 /// Minimum spacing between sweeps of a full key map for idle callers.
 const SWEEP_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -257,7 +259,7 @@ pub(crate) async fn enforce_rate_limit(
             next.run(request).await
         }
         Decision::Limited { retry_after, reset } => {
-            let format = AuthErrorFormat::for_path(request.uri().path());
+            let format = ErrorFormat::for_path(request.uri().path());
             rate_limited_response(format, limiter.config, retry_after, reset)
         }
     }
@@ -272,37 +274,28 @@ pub(crate) fn rate_limited_message(retry_after: Duration) -> String {
 }
 
 fn rate_limited_response(
-    format: AuthErrorFormat,
+    format: ErrorFormat,
     config: RateLimitConfig,
     retry_after: Duration,
     reset: Duration,
 ) -> Response {
     let message = rate_limited_message(retry_after);
-    let mut builder = Response::builder()
-        .status(StatusCode::TOO_MANY_REQUESTS)
-        .header(header::CONTENT_TYPE, "application/json")
-        .header(header::RETRY_AFTER, retry_after_seconds(retry_after))
-        .header("retry-after-ms", retry_after_millis(retry_after))
-        .header("x-ratelimit-limit-requests", config.requests_per_minute().get())
-        .header("x-ratelimit-remaining-requests", 0)
-        .header("x-ratelimit-reset-requests", reset_duration(reset));
-    let body = match format {
-        AuthErrorFormat::OpenAi => json!({"error": {
-            "message": message, "type": "rate_limit_error", "param": null, "code": "rate_limit_exceeded"
-        }}),
-        AuthErrorFormat::Anthropic => {
-            let request_id = uuid7_str("req_");
-            builder = builder.header("request-id", &request_id);
-            json!({
-                "type": "error",
-                "error": {"type": "rate_limit_error", "message": message},
-                "request_id": request_id
-            })
-        }
-    };
-    builder
-        .body(Body::from(body.to_string()))
-        .expect("valid rate limit response")
+    let mut response = GatewayError {
+        status: StatusCode::TOO_MANY_REQUESTS,
+        openai_type: "rate_limit_error",
+        anthropic_type: "rate_limit_error",
+        code: "rate_limit_exceeded",
+        message: &message,
+    }
+    .into_response(format);
+    let headers = response.headers_mut();
+    headers.insert(header::RETRY_AFTER, HeaderValue::from(retry_after_seconds(retry_after)));
+    headers.insert(RETRY_AFTER_MS, HeaderValue::from(retry_after_millis(retry_after)));
+    headers.insert(LIMIT_REQUESTS, HeaderValue::from(config.requests_per_minute().get()));
+    headers.insert(REMAINING_REQUESTS, HeaderValue::from_static("0"));
+    let reset = HeaderValue::try_from(reset_duration(reset)).expect("a formatted duration is a valid header value");
+    headers.insert(RESET_REQUESTS, reset);
+    response
 }
 
 /// Whole seconds a client should wait, for `retry-after`; never zero.
