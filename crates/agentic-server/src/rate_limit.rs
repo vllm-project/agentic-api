@@ -307,19 +307,19 @@ fn rate_limited_response(
 
 /// Whole seconds a client should wait, for `retry-after`; never zero.
 pub(crate) fn retry_after_seconds(retry_after: Duration) -> u64 {
-    retry_after
-        .as_millis()
-        .div_ceil(1000)
-        .max(1)
-        .try_into()
-        .unwrap_or(u64::MAX)
+    ceiling(retry_after, Duration::from_secs(1))
 }
 
 /// Milliseconds a client should wait, for `retry-after-ms`; never zero.
 pub(crate) fn retry_after_millis(retry_after: Duration) -> u64 {
-    retry_after
-        .as_micros()
-        .div_ceil(1000)
+    ceiling(retry_after, Duration::from_millis(1))
+}
+
+/// Whole `unit`s covering `wait`, rounded up from nanoseconds so the hint is
+/// never shorter than the limiter requires; never zero.
+fn ceiling(wait: Duration, unit: Duration) -> u64 {
+    wait.as_nanos()
+        .div_ceil(unit.as_nanos())
         .max(1)
         .try_into()
         .unwrap_or(u64::MAX)
@@ -503,6 +503,14 @@ mod tests {
         assert_eq!(retry_after_seconds(Duration::from_millis(1000)), 1);
         assert_eq!(retry_after_seconds(Duration::from_millis(1001)), 2);
         assert_eq!(retry_after_millis(Duration::from_micros(1500)), 2);
+        assert_eq!(retry_after_seconds(Duration::ZERO), 1, "never zero");
+        assert_eq!(retry_after_millis(Duration::ZERO), 1, "never zero");
+        // A wait just past a boundary must not be advertised as shorter than it is.
+        let nanosecond = Duration::from_nanos(1);
+        assert_eq!(retry_after_seconds(Duration::from_secs(1) + nanosecond), 2);
+        assert_eq!(retry_after_millis(Duration::from_millis(1) + nanosecond), 2);
+        assert_eq!(retry_after_millis(Duration::from_millis(1)), 1);
+        assert_eq!(reset_duration(Duration::from_secs(2) + nanosecond), "2.001s");
         assert_eq!(reset_duration(Duration::from_millis(250)), "250ms");
         assert_eq!(reset_duration(Duration::from_millis(1500)), "1.5s");
         assert_eq!(reset_duration(Duration::from_secs(2)), "2s");
