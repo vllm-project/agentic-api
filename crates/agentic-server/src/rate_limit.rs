@@ -469,6 +469,28 @@ mod tests {
         );
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn repeated_rejected_requests_at_capacity_do_not_rescan() {
+        let limiter = RateLimiter::with_max_keys(config(600, 1), 2);
+        assert_eq!(limiter.check(key("a")), Decision::Allowed);
+        assert_eq!(limiter.check(key("b")), Decision::Allowed);
+        // The untracked caller's first request sweeps once and uses the overflow bucket.
+        assert_eq!(limiter.check(key("untracked")), Decision::Allowed);
+
+        // a and b are idle now. The same untracked caller keeps sending, and
+        // the overflow bucket rejects all but one of its requests.
+        tokio::time::advance(Duration::from_millis(200)).await;
+        let rejected = (0..1000)
+            .filter(|_| matches!(limiter.check(key("untracked")), Decision::Limited { .. }))
+            .count();
+        assert_eq!(rejected, 999);
+        let state = limiter.state.lock().unwrap();
+        assert!(
+            state.arrivals.contains_key(&key("a")),
+            "no rejected request rescanned the full map"
+        );
+    }
+
     #[test]
     fn credentials_are_keyed_by_hash_only() {
         let limiter = RateLimiter::new(config(60, 1));
