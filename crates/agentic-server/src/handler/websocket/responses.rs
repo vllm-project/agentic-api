@@ -242,6 +242,14 @@ async fn handle_ws_request(request: WsRequest, mut context: RequestExecution<'_>
     } = request;
     let mut execution = telemetry::dispatch(execution, state);
 
+    if let Err(error) =
+        payload.validate_prompt_cache_options(state.exec_ctx.responses_config.prompt_cache_options_supported)
+    {
+        let result = Err(WsError::from(agentic_core::executor::ExecutorError::from(error)));
+        telemetry::finish_local(&mut execution, &result);
+        return result;
+    }
+
     if generate == Some(false) {
         if steering.is_some() {
             return Err(WsError::from(ExecutorError::InvalidRequest(

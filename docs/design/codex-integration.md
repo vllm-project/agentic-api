@@ -372,6 +372,33 @@ Codex will keep reading the stale text-only entry.
 
 ---
 
+## Reasoning Level Resolution
+
+Codex offers the reasoning effort levels its **local** model catalog lists. The gateway resolves
+`supported_reasoning_levels` for every served model:
+
+1. An explicit `[models."<served-model-id>"] supported_reasoning_levels` override in `~/.agentic-api/config.toml`.
+2. The default `["low", "medium", "high"]` for a model without an override.
+
+A configured list is advertised in the order it is written, so a model whose chat template accepts `low`, `high`, and
+`max` declares exactly those:
+
+```toml
+[models."zai-org/GLM-5.3-Flash"]
+supported_reasoning_levels = ["low", "high", "max"]
+```
+
+Levels use the shared effort vocabulary (`low`, `medium`, `high`, `xhigh`, `max`). Each level's Codex-facing
+description comes from a fixed per-level table in `model_capabilities.rs`, not from configuration. An empty list, a
+repeated level, and an unknown level name are rejected at startup with the offending file and line.
+
+A launcher reads `input_modalities` and `supported_reasoning_levels` from the same gateway catalog response and writes
+them into the isolated catalog, so `agentic run codex` offers what the gateway advertises. A gateway that predates
+`supported_reasoning_levels` keeps working: the launcher writes the default levels. The isolated catalog's
+`default_reasoning_level` is `medium` when the advertised levels include it, otherwise the first advertised level.
+
+---
+
 ## Out Of Scope
 
 - Raw proxy namespace flatten/restore.

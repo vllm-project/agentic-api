@@ -132,8 +132,8 @@ a coding harness (Codex or Claude Code) as subprocesses for local, single-comman
 (`agentic serve <model>`), and never touch the request path.
 
 `model_capabilities.rs` is the one deliberate exception: it is the shared contract both
-sides speak. The gateway resolves each model's `InputModalities` there and serves them in
-the Codex catalog; the launcher parses that same catalog back through
+sides speak. The gateway resolves each model's `InputModalities` and reasoning effort levels
+there and serves them in the Codex catalog; the launcher parses that same catalog back through
 `CodexCatalogCapabilities` before writing an isolated Codex home. Keeping one definition is
 what stops the HTTP catalog and a launcher catalog from disagreeing about image support.
 
@@ -165,6 +165,10 @@ what stops the HTTP catalog and a launcher catalog from disagreeing about image 
 | `POST /v1/messages` | `messages` | `handler/http/messages.rs` |
 | `POST /v1/messages/count_tokens` | `count_tokens` | `handler/http/messages.rs` |
 | `GET /v1/models` | `models` | `handler/http/models.rs` |
+| `GET /v1/models/{model}` | `retrieve_model` | `handler/http/models.rs` |
+| `POST /v1/chat/completions` · `POST /v1/completions` | `chat_completions` · `completions` | `handler/http/chat_completions.rs` |
+| `POST /v1/embeddings` | `embeddings` | `handler/http/embeddings.rs` |
+| `POST /v1/audio/transcriptions` · `POST /v1/audio/translations` | `transcriptions` · `translations` | `handler/http/audio.rs` |
 | `GET /health` | `health` | `handler/http/models.rs` |
 | `GET /ready` | `ready` | `handler/http/models.rs` |
 
@@ -690,7 +694,8 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   response/conversation IDs) and `ExecutionContext` (long-lived deps: storage
   handlers, HTTP client, gateway tool executors, LLM base URL). `ExecutionContext` is
   what `AppState` holds; it exposes `conv_handler`/`resp_handler` (the `modes/`
-  handlers below), never the raw stores.
+  handlers below), never the raw stores. See [original and enriched requests](#original-and-enriched-requests)
+  for the two request copies' responsibilities.
 - **`rehydrate.rs`** — `rehydrate_conversation()` loads prior history from either the
   conversation store or the response store depending on which ID the request carries,
   and builds the enriched `RequestContext`. Rehydration retains internal
@@ -816,6 +821,104 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   beyond persist/rehydrate belongs here**, added as a new method that delegates to the corresponding store.
 - **`error.rs`** — `ExecutorError`, with the mapping methods (`http_status()`,
   `error_type()`, `into_response_body()`, ...) handlers use to render errors.
+
+#### Original and enriched requests
+
+`RequestContext` holds two `RequestPayload` values. Rehydration starts them from
+the same client request. Choose the copy according to the operation:
+
+- Use **`original_request`** for the current client's input and request policy:
+  what the client supplied, whether to store the response, which response or
+  conversation to continue, and which request settings to report publicly.
+- Use **`enriched_request`** for the effective execution state: resolved history,
+  inherited settings, prepared tool declarations, and the settings for the next
+  model invocation. This copy changes as the tool loop progresses.
+
+Neither rule means that all public metadata comes from the original copy or that
+all persisted data comes from the enriched copy. Use the field-specific rules below.
+
+##### Which source to use
+
+| Operation | Read or modify | Reason and implementation |
+|---|---|---|
+| Validate the client's submitted fields and new input | The incoming `RequestPayload`, then `original_request` during rehydration | Check request policy before loading state. For example, reject simultaneous `conversation` and `previous_response_id`. |
+| Decide whether a setting was omitted and may be inherited | `original_request.tools` and `original_request.tool_choice` during rehydration | An explicit tool list selects the client's own selector or its default. An omitted list may inherit stored tools. See `resolve_tools` and `resolve_tool_choice`. |
+| Validate what will actually execute | `enriched_request` after rehydration and tool preparation | Inherited tools and restored history must also be valid; validating only the submitted fields misses them. |
+| Append the current client's input to restored history | Read `original_request.input`; write the combined history to `enriched_request.input` | The original input contains this request's submission; the enriched input contains the model context. |
+| Append tool calls/results, prepare reasoning, estimate context size, or compact model input | `enriched_request.input` | These operations affect the next inference round. Use the existing history/compaction helpers so canonical persistence state is updated consistently too. |
+| Build the model request | `enriched_request.to_upstream_request(stream)` | The model needs resolved history, tools, and the current round's selector. Converting the original copy would omit inherited history and tool results. |
+| Decide storage policy and route persistence | `original_request.store` and `original_request.conversation`, together with `ctx.continuation` | `should_persist` handles session and conversation exceptions to `store: false`. Use that helper rather than checking either request's `store` field alone. |
+| Identify the parent response publicly or in stored metadata | `original_request.previous_response_id` | Rehydration clears the enriched copy's parent ID after inlining its history. The public response still identifies its parent. Generated response/conversation IDs come from `RequestContext`. |
+| Populate ordinary request-derived response fields | `original_request` through `StandardResponseFields::apply_request` and `RequestContext::inject_ids` | This covers fields such as `store`, `metadata`, `text`, and `max_output_tokens`; use the existing field-specific defaulting. Upstream-derived fields such as usage and the delivered `service_tier` come from execution results. |
+| Populate public response `tools` | Active `ToolSearchState::public_response_tools()`, otherwise `enriched_request.tools`, through response metadata sanitization | Use effective public declarations, including inherited tools. Remove private MCP discovery/auth fields. The original list can be absent; the upstream list contains lowered function schemas. |
+| Populate public response `tool_choice` | `RequestContext::public_tool_choice()`: `original_request.tool_choice`, falling back to `enriched_request.tool_choice` when absent | Preserve the submitted or inherited selector across the public lifecycle. Retain an inherited value on the original copy before relaxing the enriched selector; see below. |
+| Store items/history | `new_input_items`, finalized output items, and the existing session/conversation persistence helpers | Neither request's entire `input` is a generic list of new rows to insert. Persisting enriched history wholesale would repeat prior items. |
+| Store the selector for later continuation | Move `original_request.tool_choice`, falling back to `enriched_request.tool_choice`, in every response/conversation metadata writer | Use the same precedence as `RequestContext::public_tool_choice()`, taking ownership because execution is complete. Never save the temporary `auto` introduced by internal tool execution as the next request's default. |
+| Store other effective settings for later continuation | `enriched_request.model`, `.tools`, and `.instructions` in `persist_prepared_turn` | Tool-search metadata supplies its own effective tools and loaded definitions. Persisting the original request wholesale would lose inherited settings and prepared tools. |
+| Retrieve an already stored public response | The stored `response_snapshot` when present | Preserve the public payload that was returned. Do not rebuild its selector from a later-round inference setting. |
+
+##### Mutation and conversion boundaries
+
+`original_request` retains the client input and request policy, but it is not an
+immutable wire capture. The deliberate selector exception is
+`RequestContext::relax_tool_choice()`: it replaces the enriched selector with
+`"auto"` and moves the previous resolved selector into the original request if that
+field was absent. This transition does not clone the selector. After this step,
+`original_request.tool_choice.is_some()` no longer proves that the client explicitly
+supplied the field. Make inheritance and omission decisions during rehydration,
+before this mutation. Persistence may also
+move fields out of the context once execution is complete.
+
+Apply per-round inference changes to `enriched_request` before calling
+`to_upstream_request`. The conversion reads `self.tool_choice` and the other fields
+on that payload; it does not accept a second selector argument. It creates a
+separate `UpstreamRequest`, lowering tool declarations and selectors into the forms
+the model understands and omitting gateway-managed state fields. It does not replace
+`enriched_request.tools` with those lowered schemas. `upstream.rs` can then filter
+withheld tools or append agent guidance to the temporary upstream request without
+changing the retained public declarations or canonical history.
+
+`AgentPipeline` owns ingestion and delivery across inference rounds. Request settings
+remain on `RequestContext`; the pipeline has no separate `tool_choice` field.
+
+##### Example: required tool choice across two inference rounds
+
+For a client request with `tool_choice: "required"`, a gateway-executed tool can
+run in the first round and the model can answer in the second:
+
+| Stage | `original_request.tool_choice` | `enriched_request.tool_choice` | Public response selector |
+|---|---|---|---|
+| First inference | `required` | `required` | `required` on creation events |
+| After `relax_tool_choice()` | `required` | `auto` | `required` |
+| Follow-up inference and completion | `required` | `auto` | `required` on the terminal event and final JSON payload |
+
+If the client omitted the selector and inherited `required`, the original field
+starts as `None`. Translation initially falls back to the enriched `required`.
+Before the second round, `relax_tool_choice()` retains `required` on the original
+copy, giving the same final two rows above. The JSON and streaming paths use the
+same translation rule.
+
+The stored response snapshot and `ResponseMetadata.effective_tool_choice` both retain
+`required`. A new client request starts with fresh original and enriched copies. If
+it continues this response and omits both `tools` and `tool_choice`, rehydration
+restores `required`; its first model invocation must not inherit the previous
+request's temporary `auto`. An explicit selector on the new request overrides the
+stored value. An explicit replacement tool list with no selector uses the default
+`auto`, so an inherited selector cannot refer to removed tools. These rules apply
+to durable response continuation and transient session checkpoints; no previously
+mutated request context is reused.
+
+##### Example: inherited tools in public response metadata
+
+A continuation can omit `tools`, leaving `original_request.tools == None`, while
+rehydration restores a `web_search_preview` declaration into `enriched_request.tools`.
+The next upstream request lowers that declaration to a function schema. Public
+response metadata must still show `web_search_preview`: reading the original copy
+would lose the inherited tool, and echoing `UpstreamRequest.tools` would expose the
+internal function schema. This is why public `tools` uses the enriched declarations
+(or the active tool-search projection), while public `tool_choice` prefers the
+retained original selector. Always apply the existing metadata sanitization before
+exposing those declarations.
 
 #### HTTP multi-agent execution
 

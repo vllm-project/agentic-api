@@ -1,11 +1,20 @@
+use agentic_core::executor::ExecuteRequest;
 use agentic_core::executor::accumulator::ResponseAccumulator;
 use agentic_core::tool::ToolDeclaration;
 use agentic_core::tool::{GatewayExecutors, ToolOwnership, ToolRegistry, ToolType};
 use agentic_core::types::io::output::McpListTools;
-use agentic_core::types::io::{McpCall, OutputItem};
+use agentic_core::types::io::{McpCall, OutputItem, ToolChoice};
+use agentic_core::types::request_response::RequestPayload;
 use agentic_core::types::tools::ResponsesTool;
+use axum::Router;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::routing::post;
+use either::Either;
+use futures::StreamExt;
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 mod support;
 
@@ -38,6 +47,365 @@ fn native_mcp_declaration() -> ResponsesTool {
         "require_approval": "never"
     }))
     .expect("native MCP declaration")
+}
+
+/// Minimal stateless MCP server over streamable HTTP exposing one `forecast` tool.
+async fn spawn_forecast_mcp() -> String {
+    let app = Router::new().route(
+        "/mcp",
+        post(|axum::Json(request): axum::Json<Value>| async move {
+            let id = request["id"].clone();
+            if id.is_null() {
+                // A notification such as `notifications/initialized`.
+                return StatusCode::ACCEPTED.into_response();
+            }
+            let reply = match request["method"].as_str() {
+                Some("initialize") => json!({"result": {
+                    "protocolVersion": "2025-06-18", "capabilities": {"tools": {}},
+                    "serverInfo": {"name": "stub", "version": "0"}
+                }}),
+                Some("tools/list") => json!({"result": {"tools": [{
+                    "name": "forecast", "description": "Forecast a city.",
+                    "inputSchema": {"type": "object", "properties": {"city": {"type": "string"}}}
+                }]}}),
+                Some("tools/call") => json!({"result": {
+                    "content": [{"type": "text", "text": "forecast result"}],
+                    "isError": request["params"]["arguments"]["city"] == "Unavailable"
+                }}),
+                _ => json!({"error": {"code": -32601, "message": "method not found"}}),
+            };
+            let mut body = json!({"jsonrpc": "2.0", "id": id});
+            body.as_object_mut().unwrap().extend(reply.as_object().unwrap().clone());
+            axum::Json(body).into_response()
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("mock MCP socket");
+    let address = listener.local_addr().expect("mock MCP address");
+    tokio::spawn(async move { axum::serve(listener, app).await.expect("mock MCP server") });
+    format!("http://{address}/mcp")
+}
+
+/// The declaration a client submits, including the request-scoped credentials that the
+/// gateway strips from every client-facing tools value.
+fn forecast_declaration(server_url: &str) -> Value {
+    json!([{
+        "type": "mcp",
+        "server_label": "stub",
+        "server_url": server_url,
+        "headers": {"Authorization": "Bearer header-secret"},
+        "authorization": "field-secret",
+        "allowed_tools": ["forecast"],
+        "require_approval": "never"
+    }])
+}
+
+fn forecast_request(stream: bool, server_url: &str) -> RequestPayload {
+    serde_json::from_value(json!({
+        "model": "test-model",
+        "input": "forecast Tokyo",
+        "stream": stream,
+        "store": true,
+        "tool_choice": "required",
+        "tools": forecast_declaration(server_url)
+    }))
+    .expect("MCP request")
+}
+
+fn assert_public_forecast_metadata(value: &Value, server_url: &str, context: &str) {
+    assert_eq!(
+        value["tools"],
+        json!([{
+            "type": "mcp",
+            "server_label": "stub",
+            "server_url": server_url,
+            "allowed_tools": ["forecast"],
+            "require_approval": "never"
+        }]),
+        "{context} tools"
+    );
+    let client_tools = value["tools"].to_string();
+    for internal in [
+        "header-secret",
+        "field-secret",
+        "_agentic_discovered_tools",
+        "mcp__stub__forecast",
+    ] {
+        assert!(
+            !client_tools.contains(internal),
+            "{internal} must never reach a client tools value: {context}"
+        );
+    }
+}
+
+/// Asserts the upstream receives exactly the lowered schema the discovered tool normalizes
+/// to, without the credentials or the internal discovery result.
+fn assert_lowered_forecast_upstream(body: &Value, context: &str) {
+    let tools = body["tools"].as_array().expect("upstream tools");
+    assert_eq!(tools.len(), 1, "{context} upstream tool count");
+    assert_eq!(tools[0]["type"], "function", "{context} upstream tool kind");
+    assert_eq!(tools[0]["name"], "mcp__stub__forecast", "{context} upstream tool name");
+    assert_eq!(
+        tools[0]["parameters"],
+        json!({"type": "object", "properties": {"city": {"type": "string"}}}),
+        "{context} upstream tool parameters"
+    );
+    let serialized = body.to_string();
+    for internal in ["header-secret", "field-secret", "_agentic_discovered_tools"] {
+        assert!(
+            !serialized.contains(internal),
+            "{internal} must stay out of the upstream request: {context}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn mcp_declarations_stay_public_on_streaming_lifecycle_snapshots() {
+    let mcp_url = spawn_forecast_mcp().await;
+    let fixture = support::TestFixture::new_with_responses(vec![support::sse_omitting_tool_declarations(
+        support::text_sse_response("Tokyo is mild."),
+    )])
+    .await;
+
+    let payload = forecast_request(true, &mcp_url);
+    let result = ExecuteRequest::new(payload, Arc::clone(&fixture.exec_ctx))
+        .run()
+        .await
+        .expect("MCP turn executes");
+    let Either::Right(stream) = result else {
+        panic!("expected a streaming response");
+    };
+    let chunks: Vec<String> = stream.collect().await;
+
+    let mut snapshots = 0;
+    for event in support::streamed_sse_events(&chunks) {
+        let Some(response) = event.get("response") else {
+            continue;
+        };
+        snapshots += 1;
+        let context = event["type"].as_str().unwrap_or_default().to_owned();
+        assert_public_forecast_metadata(response, &mcp_url, &context);
+        assert_eq!(
+            response["tool_choice"],
+            json!("required"),
+            "the submitted selector must be reported: {context}"
+        );
+    }
+    assert!(snapshots >= 2, "expected creation and terminal snapshots");
+
+    // Inference keeps the lowered schema the discovered tool normalizes to.
+    let bodies = fixture.request_bodies().await;
+    assert_eq!(bodies.len(), 1);
+    assert_lowered_forecast_upstream(&bodies[0], "streaming turn");
+}
+
+#[tokio::test]
+async fn mcp_declarations_stay_public_in_json_and_stored_responses() {
+    let mcp_url = spawn_forecast_mcp().await;
+    let fixture = support::TestFixture::new_with_responses(vec![support::text_response("Tokyo is mild.")]).await;
+
+    let payload = forecast_request(false, &mcp_url);
+    let result = ExecuteRequest::new(payload, Arc::clone(&fixture.exec_ctx))
+        .run()
+        .await
+        .expect("MCP turn executes");
+    let Either::Left(response) = result else {
+        panic!("expected a non-streaming response");
+    };
+
+    assert_public_forecast_metadata(
+        &serde_json::to_value(&response).expect("response serializes"),
+        &mcp_url,
+        "terminal payload",
+    );
+    assert_eq!(
+        serde_json::to_value(&response.tool_choice).expect("selector serializes"),
+        json!("required")
+    );
+    let stored = fixture
+        .exec_ctx
+        .resp_handler
+        .retrieve(&response.id)
+        .await
+        .expect("stored response");
+    assert_public_forecast_metadata(
+        &serde_json::to_value(&stored).expect("stored response serializes"),
+        &mcp_url,
+        "stored response",
+    );
+
+    let bodies = fixture.request_bodies().await;
+    assert_eq!(bodies.len(), 1);
+    assert_lowered_forecast_upstream(&bodies[0], "blocking turn");
+}
+
+fn forecast_inference_responses(stream: bool, city: &str) -> Vec<support::MockResponse> {
+    let call = support::function_call_response(
+        "fc_forecast",
+        "call_forecast",
+        "mcp__stub__forecast",
+        &json!({"city": city}).to_string(),
+    );
+    if !stream {
+        return vec![call, support::text_response("Forecast handled.")];
+    }
+    let support::MockResponse::Json(body) = call else {
+        panic!("function call fixture is JSON");
+    };
+    let response: Value = serde_json::from_str(&body).unwrap();
+    let item = &response["output"][0];
+    let mut added = item.clone();
+    added["status"] = json!("in_progress");
+    added["arguments"] = json!("");
+    let events = [
+        json!({"type":"response.created", "response":{"id":response["id"], "status":"in_progress"}}),
+        json!({"type":"response.in_progress", "response":{"id":response["id"], "status":"in_progress"}}),
+        json!({"type":"response.output_item.added", "output_index":0, "item":added}),
+        json!({"type":"response.function_call_arguments.delta", "output_index":0,
+            "item_id":item["id"], "delta":item["arguments"]}),
+        json!({"type":"response.function_call_arguments.done", "output_index":0,
+            "item_id":item["id"], "arguments":item["arguments"]}),
+        json!({"type":"response.output_item.done", "output_index":0, "item":item}),
+        json!({"type":"response.completed", "response":response}),
+    ];
+    let mut sse = String::new();
+    for event in events {
+        use std::fmt::Write as _;
+        write!(sse, "data: {event}\n\n").unwrap();
+    }
+    sse.push_str("data: [DONE]\n\n");
+    vec![
+        support::MockResponse::Sse(sse),
+        support::text_sse_response("Forecast handled."),
+    ]
+}
+
+async fn assert_continuation_tool_choice(fixture: &support::TestFixture, parent: &str) {
+    for choice in [None, Some(ToolChoice::Auto), Some(ToolChoice::None)] {
+        let mut request: RequestPayload = serde_json::from_value(json!({
+            "model": "test-model", "input": "Continue", "previous_response_id": parent
+        }))
+        .unwrap();
+        request.tool_choice = choice.clone();
+        let ctx = agentic_core::executor::rehydrate_conversation(request, &fixture.exec_ctx)
+            .await
+            .unwrap();
+        assert_eq!(
+            ctx.enriched_request.tool_choice,
+            Some(choice.unwrap_or(ToolChoice::Required)),
+            "a new request must inherit the public selector or use its explicit override"
+        );
+        assert!(ctx.enriched_request.tools.is_some(), "omitted tools must still inherit");
+    }
+}
+
+async fn assert_mcp_tool_choice_after_execution(stream: bool, city: &str, inherit_selector: bool) {
+    let mcp_url = spawn_forecast_mcp().await;
+    let mut responses = forecast_inference_responses(stream, city);
+    if inherit_selector {
+        responses.insert(0, support::text_response("Seed inherited tool settings."));
+    }
+    let fixture = support::TestFixture::new_with_responses(responses).await;
+    let mut request = forecast_request(stream, &mcp_url);
+    if inherit_selector {
+        let seed = ExecuteRequest::new(forecast_request(false, &mcp_url), Arc::clone(&fixture.exec_ctx))
+            .run()
+            .await
+            .unwrap();
+        let Either::Left(seed) = seed else {
+            panic!("seed request is non-streaming");
+        };
+        request.previous_response_id = Some(seed.id);
+        request.tools = None;
+        request.tool_choice = None;
+    }
+    let result = ExecuteRequest::new(request, Arc::clone(&fixture.exec_ctx))
+        .run()
+        .await
+        .expect("MCP execution completes");
+    let response = match result {
+        Either::Left(response) => serde_json::to_value(response).unwrap(),
+        Either::Right(stream) => {
+            let chunks: Vec<String> = stream.collect().await;
+            let events = support::streamed_sse_events(&chunks);
+            let lifecycle: Vec<&Value> = events.iter().filter(|event| event.get("response").is_some()).collect();
+            assert_eq!(
+                lifecycle
+                    .iter()
+                    .map(|event| event["type"].as_str().unwrap())
+                    .collect::<Vec<_>>(),
+                ["response.created", "response.in_progress", "response.completed"]
+            );
+            for event in &lifecycle {
+                assert_public_forecast_metadata(&event["response"], &mcp_url, event["type"].as_str().unwrap());
+                assert_eq!(
+                    event["response"]["tool_choice"],
+                    json!("required"),
+                    "{} selector",
+                    event["type"]
+                );
+            }
+            lifecycle.last().unwrap()["response"].clone()
+        }
+    };
+    assert_public_forecast_metadata(&response, &mcp_url, "terminal response");
+    assert_eq!(response["status"], "completed");
+    assert_eq!(response["tool_choice"], json!("required"));
+    let call = response["output"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["type"] == "mcp_call")
+        .unwrap();
+    assert_eq!(
+        call["status"],
+        if city == "Unavailable" { "failed" } else { "completed" }
+    );
+    let stored = fixture
+        .exec_ctx
+        .resp_handler
+        .retrieve(response["id"].as_str().unwrap())
+        .await
+        .unwrap();
+    let stored = serde_json::to_value(stored).unwrap();
+    assert_public_forecast_metadata(&stored, &mcp_url, "stored response");
+    assert_eq!(stored["tool_choice"], json!("required"));
+    assert_continuation_tool_choice(&fixture, response["id"].as_str().unwrap()).await;
+
+    let bodies = fixture.request_bodies().await;
+    let bodies = &bodies[usize::from(inherit_selector)..];
+    assert_eq!(bodies.len(), 2, "the gateway must execute the tool and infer again");
+    assert_eq!(bodies[0]["tool_choice"], json!("required"));
+    assert!(
+        bodies[1].get("tool_choice").is_none(),
+        "the second inference must still relax the selector"
+    );
+    assert!(bodies[1]["input"].as_array().unwrap().iter().any(|item| {
+        item["type"] == "function_call_output"
+            && item["call_id"] == "call_forecast"
+            && item["output"]
+                .as_str()
+                .is_some_and(|output| output.contains("forecast result"))
+    }));
+}
+
+#[tokio::test]
+async fn mcp_tool_choice_survives_execution_in_streaming_and_storage() {
+    for city in ["Tokyo", "Unavailable"] {
+        for inherit_selector in [false, true] {
+            assert_mcp_tool_choice_after_execution(true, city, inherit_selector).await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn mcp_tool_choice_survives_execution_in_json_and_storage() {
+    for city in ["Tokyo", "Unavailable"] {
+        for inherit_selector in [false, true] {
+            assert_mcp_tool_choice_after_execution(false, city, inherit_selector).await;
+        }
+    }
 }
 
 #[test]
@@ -162,6 +530,21 @@ fn assert_matching_native_mcp_requests(
         .remove("server_url");
     assert_eq!(openai_declaration, gateway_declaration);
     assert_eq!(openai_request.body.tool_choice, gateway_request.body.tool_choice);
+
+    let turn = &gateway.turns[0];
+    let snapshots = if let Some(body) = &turn.response.body {
+        vec![body.clone()]
+    } else {
+        streaming_events(turn)
+            .into_iter()
+            .filter_map(|event| event.get("response").cloned())
+            .collect()
+    };
+    assert_eq!(snapshots.len(), if streaming { 3 } else { 1 });
+    for snapshot in snapshots {
+        assert_eq!(snapshot["tools"], json!(gateway_request.body.tools));
+        assert_eq!(snapshot["tool_choice"], json!(gateway_request.body.tool_choice));
+    }
 }
 
 fn streaming_events(turn: &support::Turn) -> Vec<Value> {

@@ -7,7 +7,7 @@ use std::time::Duration;
 use agentic_core::McpServerEntry;
 use agentic_core::config::{CONFIG_FILE_NAME, CodeInterpreterRuntimeConfig, WebSearchProviderKind};
 use agentic_core::error::Error;
-use agentic_server::model_capabilities::{InputModalities, ModelCapabilities};
+use agentic_server::model_capabilities::{InputModalities, ModelCapabilities, ModelOverride, SupportedReasoningLevels};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -192,11 +192,14 @@ impl MessagesGatewayFileConfig {
 pub(crate) struct ModelFileConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub input_modalities: Option<InputModalities>,
+    /// Reasoning effort levels to advertise for this model, in catalog order.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supported_reasoning_levels: Option<SupportedReasoningLevels>,
 }
 
 impl ModelFileConfig {
     fn is_empty(&self) -> bool {
-        self.input_modalities.is_none()
+        self.input_modalities.is_none() && self.supported_reasoning_levels.is_none()
     }
 }
 
@@ -204,6 +207,8 @@ impl ModelFileConfig {
 #[serde(default, deny_unknown_fields)]
 #[allow(clippy::struct_field_names)]
 pub(crate) struct ResponsesFileConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_options_supported: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_retained_bytes: Option<NonZeroUsize>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -216,7 +221,8 @@ pub(crate) struct ResponsesFileConfig {
 
 impl ResponsesFileConfig {
     fn is_empty(&self) -> bool {
-        self.max_retained_bytes.is_none()
+        self.prompt_cache_options_supported.is_none()
+            && self.max_retained_bytes.is_none()
             && self.max_upstream_json_bytes.is_none()
             && self.max_upstream_sse_line_bytes.is_none()
             && self.max_stream_event_bytes.is_none()
@@ -355,7 +361,16 @@ impl FileConfig {
         ModelCapabilities::new(
             self.models
                 .iter()
-                .filter_map(|(model_id, model)| Some((model_id.clone(), model.input_modalities?)))
+                .filter(|(_, model)| !model.is_empty())
+                .map(|(model_id, model)| {
+                    (
+                        model_id.clone(),
+                        ModelOverride {
+                            input_modalities: model.input_modalities,
+                            supported_reasoning_levels: model.supported_reasoning_levels.clone(),
+                        },
+                    )
+                })
                 .collect(),
         )
     }
@@ -387,7 +402,7 @@ impl FileConfig {
             }
             if model.is_empty() {
                 return Err(Error::Config(format!(
-                    "configuration file {} contains no settings for model {model_id:?}; set input_modalities",
+                    "configuration file {} contains no settings for model {model_id:?}; set input_modalities or supported_reasoning_levels",
                     path.display()
                 )));
             }
@@ -436,7 +451,8 @@ mod tests {
     use std::num::{NonZeroU64, NonZeroUsize};
 
     use agentic_core::McpServerEntry;
-    use agentic_server::model_capabilities::{InputModalities, UpstreamCapabilities};
+    use agentic_core::types::messages::ReasoningEffortLevel;
+    use agentic_server::model_capabilities::{DEFAULT_REASONING_LEVELS, InputModalities, UpstreamCapabilities};
     use tempfile::tempdir;
 
     use super::{
@@ -525,6 +541,18 @@ mod tests {
             config.models["Qwen/Qwen3-VL-8B-Instruct"].input_modalities,
             Some(InputModalities::TextAndImage)
         );
+        assert_eq!(
+            config.models["zai-org/GLM-5.3-Flash"]
+                .supported_reasoning_levels
+                .as_ref()
+                .expect("configured reasoning levels")
+                .as_slice(),
+            [
+                ReasoningEffortLevel::Low,
+                ReasoningEffortLevel::High,
+                ReasoningEffortLevel::Max
+            ]
+        );
     }
 
     #[test]
@@ -564,6 +592,110 @@ mod tests {
             capabilities.resolve("unconfigured-model", UpstreamCapabilities::default()),
             InputModalities::Text
         );
+    }
+
+    #[test]
+    fn model_reasoning_levels_are_resolved_from_configuration() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            concat!(
+                "[models.\"glm-model\"]\nsupported_reasoning_levels = [\"low\", \"high\", \"max\"]\n\n",
+                "[models.\"vision-model\"]\ninput_modalities = [\"text\", \"image\"]\n",
+            ),
+        )
+        .expect("write config");
+
+        let capabilities = FileConfig::load(home.path())
+            .expect("per-model reasoning levels must parse")
+            .expect("existing config")
+            .model_capabilities();
+
+        assert_eq!(
+            capabilities.resolve_reasoning_levels("glm-model"),
+            [
+                ReasoningEffortLevel::Low,
+                ReasoningEffortLevel::High,
+                ReasoningEffortLevel::Max
+            ],
+            "configured levels must be advertised in the configured order"
+        );
+        assert_eq!(
+            capabilities.resolve_reasoning_levels("vision-model"),
+            DEFAULT_REASONING_LEVELS,
+            "an override that sets only input modalities must not change the advertised levels"
+        );
+        assert_eq!(
+            capabilities.resolve_reasoning_levels("unconfigured-model"),
+            DEFAULT_REASONING_LEVELS
+        );
+    }
+
+    #[test]
+    fn accepts_model_section_with_only_reasoning_levels() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[models.\"glm-model\"]\nsupported_reasoning_levels = [\"low\", \"high\", \"max\"]\n",
+        )
+        .expect("write config");
+
+        let capabilities = FileConfig::load(home.path())
+            .expect("a model that sets only reasoning levels must parse")
+            .expect("existing config")
+            .model_capabilities();
+
+        assert_eq!(
+            capabilities.resolve_reasoning_levels("glm-model"),
+            [
+                ReasoningEffortLevel::Low,
+                ReasoningEffortLevel::High,
+                ReasoningEffortLevel::Max
+            ]
+        );
+        assert_eq!(
+            capabilities.resolve("glm-model", UpstreamCapabilities::default()),
+            InputModalities::Text,
+            "a model without a modality override keeps the text-only fallback"
+        );
+    }
+
+    #[test]
+    fn rejects_unusable_reasoning_level_lists() {
+        for (levels, expected) in [
+            ("[]", "at least one level"),
+            ("[\"low\", \"low\"]", "lists \"low\" more than once"),
+        ] {
+            let home = tempdir().expect("temp home");
+            fs::write(
+                home.path().join("config.toml"),
+                format!("[models.\"glm-model\"]\nsupported_reasoning_levels = {levels}\n"),
+            )
+            .expect("write config");
+
+            let error = FileConfig::load(home.path()).expect_err("an unusable level list must fail");
+            let message = error.to_string();
+
+            assert!(message.contains("supported_reasoning_levels"), "{levels}: {message}");
+            assert!(message.contains(expected), "{levels}: {message}");
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_reasoning_level() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[models.\"glm-model\"]\nsupported_reasoning_levels = [\"low\", \"ultra\"]\n",
+        )
+        .expect("write config");
+
+        let error = FileConfig::load(home.path()).expect_err("an unknown level must fail");
+        let message = error.to_string();
+
+        assert!(message.contains("config.toml"), "{message}");
+        assert!(message.contains("ultra"), "{message}");
+        assert!(message.contains("max"), "{message}");
     }
 
     #[test]
@@ -625,6 +757,7 @@ mod tests {
 
         assert!(message.contains("no settings for model \"a-model\""), "{message}");
         assert!(message.contains("input_modalities"), "{message}");
+        assert!(message.contains("supported_reasoning_levels"), "{message}");
     }
 
     #[test]

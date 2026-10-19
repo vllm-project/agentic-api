@@ -113,7 +113,12 @@ impl ResponseHandler {
             effective_tools: ctx.enriched_request.tools.take(),
             tool_search_loaded_tools: None,
             response_snapshot: None,
-            effective_tool_choice: ctx.enriched_request.tool_choice.take().unwrap_or_default(),
+            effective_tool_choice: ctx
+                .original_request
+                .tool_choice
+                .take()
+                .or_else(|| ctx.enriched_request.tool_choice.take())
+                .unwrap_or_default(),
             effective_instructions: ctx.enriched_request.instructions.take(),
         };
 
@@ -267,5 +272,24 @@ mod tests {
     async fn test_execute_turn_disabled_store_returns_error() {
         let result = disabled_handler().execute_turn(make_ctx(None), vec![]).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn execute_turn_persists_public_selector_after_inference_relaxation() {
+        use crate::storage::create_pool_with_schema;
+        use crate::types::io::ToolChoice;
+
+        let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await.unwrap();
+        let store = ResponseStore::new(pool);
+        let handler = ResponseHandler::new(store.clone());
+        let mut ctx = make_ctx(None);
+        ctx.enriched_request.tool_choice = Some(ToolChoice::Required);
+        ctx.relax_tool_choice();
+        assert_eq!(ctx.enriched_request.tool_choice, Some(ToolChoice::Auto));
+
+        handler.execute_turn(ctx, vec![]).await.unwrap();
+
+        let stored = store.get("resp_test").await.unwrap();
+        assert_eq!(stored.metadata.effective_tool_choice, ToolChoice::Required);
     }
 }

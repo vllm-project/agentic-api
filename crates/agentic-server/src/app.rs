@@ -23,8 +23,8 @@ use crate::auth::{ANTHROPIC_COUNT_TOKENS_PATH, ANTHROPIC_MESSAGES_PATH, OidcAuth
 use crate::handler::{
     chat_completions, compact_response, completions, count_tokens, create_conversation, create_item,
     delete_conversation, delete_item, embeddings, health, list_items, messages, models, ready, responses,
-    responses_ws_with_auth, retrieve_conversation, retrieve_item, retrieve_model, retrieve_response,
-    update_conversation,
+    responses_ws_with_auth, retrieve_conversation, retrieve_item, retrieve_model, retrieve_response, transcriptions,
+    translations, update_conversation,
 };
 use crate::model_capabilities::ModelCapabilities;
 use crate::telemetry::http::{HttpMetrics, track_request};
@@ -367,6 +367,8 @@ pub fn build_router_with_auth(
         .route("/v1/chat/completions", post(chat_completions))
         .route("/v1/completions", post(completions))
         .route("/v1/embeddings", post(embeddings))
+        .route("/v1/audio/transcriptions", post(transcriptions))
+        .route("/v1/audio/translations", post(translations))
         .route("/v1/models", get(models))
         // A wildcard, because model IDs such as `org/name` contain slashes.
         .route("/v1/models/{*model}", get(retrieve_model))

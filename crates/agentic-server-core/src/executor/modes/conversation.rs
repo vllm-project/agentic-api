@@ -321,7 +321,12 @@ impl ConversationHandler {
             effective_tools: ctx.enriched_request.tools.take(),
             tool_search_loaded_tools: None,
             response_snapshot: None,
-            effective_tool_choice: ctx.enriched_request.tool_choice.take().unwrap_or_default(),
+            effective_tool_choice: ctx
+                .original_request
+                .tool_choice
+                .take()
+                .or_else(|| ctx.enriched_request.tool_choice.take())
+                .unwrap_or_default(),
             effective_instructions: ctx.enriched_request.instructions.take(),
         };
 
@@ -478,6 +483,8 @@ mod tests {
 
     #[tokio::test]
     async fn execute_turn_persists_with_captured_conversation_version() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::types::io::ToolChoice;
+
         let pool = create_pool_with_schema(Some("sqlite://?mode=memory")).await?;
         let store = ConversationStore::new(pool);
         let conversation = store.create().await?;
@@ -485,10 +492,17 @@ mod tests {
         let mut ctx = make_ctx(Some(&conversation.conversation_id));
         ctx.new_input_items = Vec::from(&ctx.original_request.input);
         ctx.conversation_version = Some(ConversationVersion::default());
+        ctx.enriched_request.tool_choice = Some(ToolChoice::Required);
+        ctx.relax_tool_choice();
 
         handler.execute_turn(ctx, vec![]).await?;
 
         let snapshot = store.rehydrate_snapshot(&conversation.conversation_id).await?;
+        let metadata = store
+            .response_metadata_at_version(&conversation.conversation_id, &snapshot.version)
+            .await?
+            .expect("persisted turn metadata");
+        assert_eq!(metadata.effective_tool_choice, ToolChoice::Required);
         assert_eq!(snapshot.items.len(), 1);
         assert_eq!(
             snapshot.version,

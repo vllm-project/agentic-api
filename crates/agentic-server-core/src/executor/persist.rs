@@ -166,7 +166,12 @@ pub(crate) async fn persist_prepared_turn(
         effective_tools: ctx.enriched_request.tools.take(),
         tool_search_loaded_tools: None,
         response_snapshot,
-        effective_tool_choice: ctx.enriched_request.tool_choice.take().unwrap_or_default(),
+        effective_tool_choice: ctx
+            .original_request
+            .tool_choice
+            .take()
+            .or_else(|| ctx.enriched_request.tool_choice.take())
+            .unwrap_or_default(),
         effective_instructions: ctx.enriched_request.instructions.take(),
     };
     if let Some(tool_search_metadata) = tool_search_metadata {

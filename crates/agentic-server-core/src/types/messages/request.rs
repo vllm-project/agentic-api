@@ -82,6 +82,26 @@ pub enum ReasoningEffortLevel {
     Max,
 }
 
+impl ReasoningEffortLevel {
+    /// The wire spelling of this level, matching its serialized form.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Xhigh => "xhigh",
+            Self::Max => "max",
+        }
+    }
+}
+
+impl std::fmt::Display for ReasoningEffortLevel {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 #[cfg(feature = "openapi")]
 impl utoipa::PartialSchema for ReasoningEffort {
     fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {

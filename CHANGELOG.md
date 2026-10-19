@@ -6,6 +6,13 @@ All notable changes to Agentic API are documented here.
 
 ### Added
 
+- Made the reasoning effort levels of the Codex model catalog configurable per model
+  (`[models."<served-model-id>"] supported_reasoning_levels = ["low", "high", "max"]`), instead of
+  hard-coding `low`/`medium`/`high` for every model (#358). The configured order is preserved,
+  descriptions come from a fixed per-level table, and a model without the setting keeps
+  `["low", "medium", "high"]`. Empty lists, repeated levels, and unknown level names are rejected
+  at startup with the offending file and line. The launcher reads the advertised levels from the
+  same gateway catalog response, so `agentic run codex` offers them too.
 - Accepted the later versions of Claude's native server tools on `/v1/messages` and `/v1/messages/count_tokens`:
   `web_search_20260209` and `web_search_20260318`, and `web_fetch_20260209`, `web_fetch_20260309`, and
   `web_fetch_20260318` (#419). These versions add dynamic filtering, which calls the tool from Anthropic's code

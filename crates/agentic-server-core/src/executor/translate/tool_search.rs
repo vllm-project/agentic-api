@@ -396,9 +396,9 @@ pub(super) fn restore_response_tools(
     let Some(response) = wire.rest.get_mut("response").and_then(Value::as_object_mut) else {
         return Ok(());
     };
-    if !response.contains_key("tools") {
-        return Ok(());
-    }
+    // The model server echoes its own declarations, and built-in tools reach it as lowered
+    // function schemas. Replace that internal form with the public declarations, and insert
+    // them on lifecycle snapshots that omit `tools` so every public frame stays complete.
     if let Some(tools) = tools {
         response.insert(
             "tools".to_owned(),

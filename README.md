@@ -74,6 +74,7 @@ flowchart LR
 | `POST /v1/messages` · `POST /v1/messages/count_tokens` | Anthropic Messages API forwarded to the upstream, with a server-side loop for gateway-owned tools | ✅ |
 | `GET /v1/models` · `GET /v1/models/{model}` | Model listing proxied from vLLM; a single model is answered from that list | ✅ |
 | `POST /v1/chat/completions` · `POST /v1/completions` · `POST /v1/embeddings` | Forwarded to the upstream verbatim, so clients on those endpoints keep working when the gateway is the entry point | ✅ |
+| `POST /v1/audio/transcriptions` · `POST /v1/audio/translations` | Forwarded to the upstream verbatim; the multipart upload is streamed rather than buffered | ✅ |
 | `GET /health` · `GET /ready` | Liveness and readiness probes | ✅ |
 | `GET /swagger-ui` · `GET /openapi.json` | Generated OpenAPI spec and Swagger UI, served when `ENABLE_OPENAPI_DOCS=true` | ✅ |
 | Stateful Messages | Messages continuation on the shared persistence primitives | ⏳ Planned |
@@ -324,6 +325,11 @@ max_stream_event_bytes = 16777216
 # Accepted values are "text" and "text" + "image"; text is always required.
 input_modalities = ["text", "image"]
 
+[models."zai-org/GLM-5.3-Flash"]
+# Reasoning effort levels to offer for this served model ID, in the order Codex lists them.
+# Accepted values are "low", "medium", "high", "xhigh", and "max".
+supported_reasoning_levels = ["low", "high", "max"]
+
 [mcp_servers.counter]
 url = "https://mcp.example.com/mcp"
 allowed_tools = ["tool_1_name", "tool_2_name"]
@@ -341,12 +347,20 @@ This matters because Codex reads its local model catalog and strips image conten
 when the catalog says the model is text-only, so a missing override blocks image input even against a vision-capable
 upstream.
 
+`supported_reasoning_levels` lists the reasoning effort levels Codex offers for that served model, in the order the
+catalog advertises them. A model without the setting keeps `["low", "medium", "high"]`, so existing catalogs are
+unchanged. Levels use the shared effort vocabulary (`low`, `medium`, `high`, `xhigh`, and `max`); unknown level names,
+empty lists, and repeated levels are rejected at startup with the offending file and line. Each level's Codex-facing
+description comes from a fixed per-level table rather than from the configuration file.
+
 `max_request_body_size_bytes` bounds the serialized request the gateway accepts on `/v1/responses`,
-`/v1/responses/compact`, `/v1/conversations`, the Anthropic Messages endpoints, and the Responses WebSocket. It counts
+`/v1/responses/compact`, `/v1/conversations`, the Anthropic Messages endpoints, the Responses WebSocket, and the
+pass-through routes (Chat Completions, Completions, Embeddings, and the audio uploads). It counts
 encoded bytes — JSON overhead, replayed conversation history, and base64 image attachments included — and is unrelated
 to the model's token context limit, so raising it does not raise what the upstream will accept. It defaults to
 10 MiB (10485760); inline base64 attachments cost roughly a third more than the source image, so conversations that
-replay several images may need a higher value. Oversized HTTP requests are answered with `413 Payload Too Large`;
+replay several images may need a higher value, and an audio upload counts its whole multipart body, so larger audio
+files need one too. Oversized HTTP requests are answered with `413 Payload Too Large`;
 oversized WebSocket messages and frames are rejected by the transport, which closes the connection before any JSON is
 parsed. Order of precedence is `--max-request-body-size-bytes`, then `AGENTIC_MAX_REQUEST_BODY_SIZE_BYTES`, then this
 file setting.

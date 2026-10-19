@@ -1,14 +1,17 @@
-//! Model input-modality capabilities shared by the Codex catalog handler, the gateway
-//! configuration loader, and the harness launcher.
+//! Model capabilities shared by the Codex catalog handler, the gateway configuration loader,
+//! and the harness launcher.
 //!
-//! Codex strips image content from a request when its local model catalog says the selected
-//! model accepts text only, so the catalog served over HTTP and the isolated catalog written
-//! by a launcher must advertise the same resolved modalities. This module owns that contract:
-//! the validated modality set, the upstream metadata the gateway recognizes, the local
-//! override table, and the resolution order between them.
+//! Codex decides which reasoning effort levels to offer and whether image content may be sent
+//! from its local model catalog, so the catalog the gateway serves and the isolated catalog a
+//! launcher writes must not disagree about a served model. This module owns the gateway-side
+//! contract: the validated modality set, the validated reasoning-level list, the upstream
+//! metadata the gateway recognizes, the local override table, and the resolution order between
+//! them.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
+use agentic_core::types::messages::ReasoningEffortLevel;
 use serde::{Deserialize, Serialize};
 
 /// Upstream capability string recognized as image input support.
@@ -133,6 +136,74 @@ impl From<InputModalities> for Vec<Modality> {
     }
 }
 
+/// Rejected reasoning-level configuration.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum ReasoningLevelsError {
+    /// The list held no levels.
+    #[error("supported_reasoning_levels must list at least one level; expected [\"low\", \"medium\", \"high\"]")]
+    Empty,
+    /// The list repeated a level.
+    #[error("supported_reasoning_levels lists \"{}\" more than once", .0.as_str())]
+    Duplicate(ReasoningEffortLevel),
+}
+
+/// The reasoning effort levels Codex offers for a model that configures none.
+pub const DEFAULT_REASONING_LEVELS: &[ReasoningEffortLevel] = &[
+    ReasoningEffortLevel::Low,
+    ReasoningEffortLevel::Medium,
+    ReasoningEffortLevel::High,
+];
+
+/// The validated reasoning effort levels advertised for one served model.
+///
+/// Declaration order is preserved, because Codex lists the levels in catalog order. An empty
+/// list and a repeated level are rejected while parsing, which keeps those states
+/// unrepresentable.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(try_from = "Vec<ReasoningEffortLevel>", into = "Vec<ReasoningEffortLevel>")]
+pub struct SupportedReasoningLevels(Vec<ReasoningEffortLevel>);
+
+impl SupportedReasoningLevels {
+    /// The levels in configured order.
+    #[must_use]
+    pub fn as_slice(&self) -> &[ReasoningEffortLevel] {
+        &self.0
+    }
+
+    /// Validate a level list.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReasoningLevelsError`] when the list is empty or repeats a level.
+    pub fn try_new(values: &[ReasoningEffortLevel]) -> Result<Self, ReasoningLevelsError> {
+        let mut unique = Vec::with_capacity(values.len());
+        for value in values {
+            if unique.contains(value) {
+                return Err(ReasoningLevelsError::Duplicate(*value));
+            }
+            unique.push(*value);
+        }
+        if unique.is_empty() {
+            return Err(ReasoningLevelsError::Empty);
+        }
+        Ok(Self(unique))
+    }
+}
+
+impl TryFrom<Vec<ReasoningEffortLevel>> for SupportedReasoningLevels {
+    type Error = ReasoningLevelsError;
+
+    fn try_from(values: Vec<ReasoningEffortLevel>) -> Result<Self, Self::Error> {
+        Self::try_new(&values)
+    }
+}
+
+impl From<SupportedReasoningLevels> for Vec<ReasoningEffortLevel> {
+    fn from(levels: SupportedReasoningLevels) -> Self {
+        levels.0
+    }
+}
+
 /// Capabilities an upstream `/v1/models` entry advertises.
 ///
 /// Unrecognized capability strings are ignored: the upstream vocabulary is vendor-defined and
@@ -165,16 +236,25 @@ impl UpstreamCapabilities {
     }
 }
 
-/// Local input-modality overrides, keyed by served model ID.
+/// Capability overrides configured for one served model.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ModelOverride {
+    /// Input modalities to advertise, or `None` to infer them.
+    pub input_modalities: Option<InputModalities>,
+    /// Reasoning effort levels to advertise in catalog order, or `None` for the default.
+    pub supported_reasoning_levels: Option<SupportedReasoningLevels>,
+}
+
+/// Local capability overrides, keyed by served model ID.
 #[derive(Clone, Debug, Default)]
 pub struct ModelCapabilities {
-    overrides: BTreeMap<String, InputModalities>,
+    overrides: BTreeMap<String, ModelOverride>,
 }
 
 impl ModelCapabilities {
     /// Build a resolver from configured per-model overrides.
     #[must_use]
-    pub fn new(overrides: BTreeMap<String, InputModalities>) -> Self {
+    pub fn new(overrides: BTreeMap<String, ModelOverride>) -> Self {
         Self { overrides }
     }
 
@@ -186,14 +266,30 @@ impl ModelCapabilities {
     /// text-only rather than being guessed from its name.
     #[must_use]
     pub fn resolve(&self, model_id: &str, upstream: UpstreamCapabilities) -> InputModalities {
-        if let Some(modalities) = self.overrides.get(model_id) {
-            return *modalities;
+        if let Some(modalities) = self
+            .overrides
+            .get(model_id)
+            .and_then(|overrides| overrides.input_modalities)
+        {
+            return modalities;
         }
         if upstream.image {
             InputModalities::TextAndImage
         } else {
             InputModalities::Text
         }
+    }
+
+    /// Resolve the reasoning effort levels advertised for `model_id`, in catalog order.
+    ///
+    /// Unlike input modalities, levels are not inferred from upstream metadata: a model with no
+    /// override keeps [`DEFAULT_REASONING_LEVELS`].
+    #[must_use]
+    pub fn resolve_reasoning_levels(&self, model_id: &str) -> &[ReasoningEffortLevel] {
+        self.overrides
+            .get(model_id)
+            .and_then(|overrides| overrides.supported_reasoning_levels.as_ref())
+            .map_or(DEFAULT_REASONING_LEVELS, SupportedReasoningLevels::as_slice)
     }
 }
 
@@ -207,13 +303,101 @@ pub struct CodexCatalogCapabilities {
     pub models: Vec<CodexModelCapabilities>,
 }
 
-/// One catalog entry's model identity and resolved input modalities.
-#[derive(Debug, Deserialize)]
+/// One reasoning level as the gateway advertises it.
+///
+/// The description is carried rather than re-derived, so a launcher catalog and the HTTP catalog
+/// describe a level the same way.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CodexReasoningLevel {
+    /// The effort the model accepts.
+    pub effort: ReasoningEffortLevel,
+    /// The Codex-facing description of the level.
+    pub description: Cow<'static, str>,
+}
+
+impl CodexReasoningLevel {
+    /// Describe `effort` with the gateway's standard Codex-facing description.
+    ///
+    /// Used when a level comes from configuration or from the defaults. A description decoded
+    /// from a gateway catalog is kept as advertised instead.
+    #[must_use]
+    pub fn from_effort(effort: ReasoningEffortLevel) -> Self {
+        Self {
+            effort,
+            description: Cow::Borrowed(reasoning_level_description(effort)),
+        }
+    }
+}
+
+/// The Codex-facing description of a reasoning effort level.
+#[must_use]
+pub const fn reasoning_level_description(level: ReasoningEffortLevel) -> &'static str {
+    match level {
+        ReasoningEffortLevel::Low => "Fast responses with lighter reasoning",
+        ReasoningEffortLevel::Medium => "Balances speed and reasoning depth",
+        ReasoningEffortLevel::High => "Greater reasoning depth for complex problems",
+        ReasoningEffortLevel::Xhigh => "Extended reasoning depth for demanding problems",
+        ReasoningEffortLevel::Max => "Maximum reasoning depth for the hardest problems",
+    }
+}
+
+/// Describe the default levels in the order they are advertised.
+#[must_use]
+pub fn default_codex_reasoning_levels() -> Vec<CodexReasoningLevel> {
+    DEFAULT_REASONING_LEVELS
+        .iter()
+        .copied()
+        .map(CodexReasoningLevel::from_effort)
+        .collect()
+}
+
+/// One catalog entry's model identity and resolved capabilities.
+#[derive(Clone, Debug, Deserialize)]
 pub struct CodexModelCapabilities {
     /// Served model ID, matched exactly and case-sensitively.
     pub slug: String,
     /// The modalities the gateway resolved for this model.
     pub input_modalities: InputModalities,
+    /// The reasoning levels the gateway advertised, in catalog order.
+    #[serde(default)]
+    pub supported_reasoning_levels: Vec<CodexReasoningLevel>,
+}
+
+impl CodexModelCapabilities {
+    /// The advertised reasoning levels, or the gateway defaults when the catalog omits them.
+    ///
+    /// A gateway older than `supported_reasoning_levels` keeps working: the launcher falls back
+    /// to the default levels instead of writing a catalog without any.
+    #[must_use]
+    pub fn reasoning_levels(&self) -> Cow<'_, [CodexReasoningLevel]> {
+        if self.supported_reasoning_levels.is_empty() {
+            Cow::Owned(default_codex_reasoning_levels())
+        } else {
+            Cow::Borrowed(&self.supported_reasoning_levels)
+        }
+    }
+
+    /// The level Codex starts on: `medium` when it is advertised, otherwise the first level.
+    #[must_use]
+    pub fn default_reasoning_level(&self) -> ReasoningEffortLevel {
+        if self.supported_reasoning_levels.is_empty() {
+            first_or_medium(DEFAULT_REASONING_LEVELS.iter().copied())
+        } else {
+            first_or_medium(self.supported_reasoning_levels.iter().map(|level| level.effort))
+        }
+    }
+}
+
+/// `medium` when it appears in `levels`, otherwise the first level, otherwise `medium`.
+fn first_or_medium(levels: impl Iterator<Item = ReasoningEffortLevel>) -> ReasoningEffortLevel {
+    let mut first = None;
+    for level in levels {
+        first.get_or_insert(level);
+        if level == ReasoningEffortLevel::Medium {
+            return level;
+        }
+    }
+    first.unwrap_or(ReasoningEffortLevel::Medium)
 }
 
 impl CodexCatalogCapabilities {
@@ -231,15 +415,40 @@ impl CodexCatalogCapabilities {
 mod tests {
     use std::collections::BTreeMap;
 
+    use agentic_core::types::messages::ReasoningEffortLevel;
     use serde::Deserialize;
 
     use super::{
-        CodexCatalogCapabilities, InputModalities, Modality, ModalityError, ModelCapabilities, UpstreamCapabilities,
+        CodexCatalogCapabilities, DEFAULT_REASONING_LEVELS, InputModalities, Modality, ModalityError,
+        ModelCapabilities, ModelOverride, ReasoningLevelsError, SupportedReasoningLevels, UpstreamCapabilities,
     };
 
     #[derive(Debug, Deserialize)]
     struct ModelSection {
         input_modalities: InputModalities,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct ReasoningSection {
+        supported_reasoning_levels: SupportedReasoningLevels,
+    }
+
+    /// An override carrying only the listed input modalities.
+    fn modalities(modalities: InputModalities) -> ModelOverride {
+        ModelOverride {
+            input_modalities: Some(modalities),
+            ..ModelOverride::default()
+        }
+    }
+
+    /// An override carrying only the listed reasoning levels.
+    fn levels(levels: &[ReasoningEffortLevel]) -> ModelOverride {
+        ModelOverride {
+            supported_reasoning_levels: Some(
+                SupportedReasoningLevels::try_new(levels).expect("valid reasoning levels"),
+            ),
+            ..ModelOverride::default()
+        }
     }
 
     #[test]
@@ -332,6 +541,86 @@ mod tests {
     }
 
     #[test]
+    fn validation_keeps_accepted_reasoning_levels_in_order() {
+        assert_eq!(
+            SupportedReasoningLevels::try_new(&[ReasoningEffortLevel::Max, ReasoningEffortLevel::Low])
+                .expect("valid levels")
+                .as_slice(),
+            [ReasoningEffortLevel::Max, ReasoningEffortLevel::Low],
+            "declaration order must be preserved"
+        );
+        assert!(SupportedReasoningLevels::try_new(&[ReasoningEffortLevel::Xhigh]).is_ok());
+    }
+
+    #[test]
+    fn validation_rejects_unusable_reasoning_level_lists() {
+        assert_eq!(SupportedReasoningLevels::try_new(&[]), Err(ReasoningLevelsError::Empty));
+        assert_eq!(
+            SupportedReasoningLevels::try_new(&[ReasoningEffortLevel::High, ReasoningEffortLevel::High]),
+            Err(ReasoningLevelsError::Duplicate(ReasoningEffortLevel::High))
+        );
+    }
+
+    #[test]
+    fn reasoning_level_errors_name_the_wire_values() {
+        assert!(
+            ReasoningLevelsError::Empty
+                .to_string()
+                .contains("[\"low\", \"medium\", \"high\"]")
+        );
+        assert_eq!(
+            ReasoningLevelsError::Duplicate(ReasoningEffortLevel::Xhigh).to_string(),
+            "supported_reasoning_levels lists \"xhigh\" more than once"
+        );
+    }
+
+    #[test]
+    fn reasoning_levels_round_trip_through_json_and_toml() {
+        let parsed: SupportedReasoningLevels = serde_json::from_str("[\"max\",\"low\"]").expect("parse JSON levels");
+        assert_eq!(
+            parsed.as_slice(),
+            [ReasoningEffortLevel::Max, ReasoningEffortLevel::Low]
+        );
+        assert_eq!(
+            serde_json::to_string(&parsed).expect("serialize levels"),
+            "[\"max\",\"low\"]"
+        );
+
+        let section: ReasoningSection =
+            toml::from_str("supported_reasoning_levels = [\"low\", \"high\", \"max\"]").expect("parse TOML levels");
+        assert_eq!(
+            section.supported_reasoning_levels.as_slice(),
+            [
+                ReasoningEffortLevel::Low,
+                ReasoningEffortLevel::High,
+                ReasoningEffortLevel::Max
+            ]
+        );
+    }
+
+    #[test]
+    fn unknown_reasoning_level_names_the_accepted_values() {
+        let error = toml::from_str::<ReasoningSection>("supported_reasoning_levels = [\"ultra\"]")
+            .expect_err("an unknown level must be rejected");
+        let message = error.to_string();
+
+        assert!(message.contains("ultra"), "{message}");
+        assert!(message.contains("xhigh"), "{message}");
+        assert!(message.contains("max"), "{message}");
+    }
+
+    #[test]
+    fn invalid_reasoning_level_lists_are_rejected_while_parsing() {
+        let error = toml::from_str::<ReasoningSection>("supported_reasoning_levels = []")
+            .expect_err("an empty list must be rejected");
+        assert!(error.to_string().contains("at least one level"), "{error}");
+
+        let error = toml::from_str::<ReasoningSection>("supported_reasoning_levels = [\"low\", \"low\"]")
+            .expect_err("a duplicated level must be rejected");
+        assert!(error.to_string().contains("more than once"), "{error}");
+    }
+
+    #[test]
     fn modalities_report_their_members() {
         assert_eq!(InputModalities::Text.as_slice(), [Modality::Text]);
         assert_eq!(
@@ -368,8 +657,8 @@ mod tests {
     #[test]
     fn resolution_prefers_configuration_over_upstream_metadata() {
         let capabilities = ModelCapabilities::new(BTreeMap::from([
-            ("vision-model".to_owned(), InputModalities::TextAndImage),
-            ("pinned-text-model".to_owned(), InputModalities::Text),
+            ("vision-model".to_owned(), modalities(InputModalities::TextAndImage)),
+            ("pinned-text-model".to_owned(), modalities(InputModalities::Text)),
         ]));
         let advertises_image = UpstreamCapabilities {
             image: true,
@@ -400,6 +689,36 @@ mod tests {
         assert_eq!(
             ModelCapabilities::default().resolve("vision-model", advertises_nothing),
             InputModalities::Text
+        );
+    }
+
+    #[test]
+    fn resolution_keeps_configured_reasoning_levels_and_defaults_the_rest() {
+        let capabilities = ModelCapabilities::new(BTreeMap::from([(
+            "glm-model".to_owned(),
+            levels(&[
+                ReasoningEffortLevel::Low,
+                ReasoningEffortLevel::High,
+                ReasoningEffortLevel::Max,
+            ]),
+        )]));
+
+        assert_eq!(
+            capabilities.resolve_reasoning_levels("glm-model"),
+            [
+                ReasoningEffortLevel::Low,
+                ReasoningEffortLevel::High,
+                ReasoningEffortLevel::Max
+            ],
+            "configured levels must be advertised in the configured order"
+        );
+        assert_eq!(
+            capabilities.resolve_reasoning_levels("unconfigured-model"),
+            DEFAULT_REASONING_LEVELS
+        );
+        assert_eq!(
+            ModelCapabilities::default().resolve_reasoning_levels("glm-model"),
+            DEFAULT_REASONING_LEVELS
         );
     }
 

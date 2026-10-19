@@ -44,8 +44,8 @@ pub(super) fn validate_tool_search_request(
     Ok(true)
 }
 
-pub(super) fn request_contains_tool_search_state<T: ?Sized>(
-    request: &RequestPayload<T>,
+pub(super) fn request_contains_tool_search_state<T: ?Sized, C>(
+    request: &RequestPayload<T, C>,
     input: &ResponsesInput,
 ) -> bool {
     input_contains_tool_search_state(input)

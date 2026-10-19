@@ -29,7 +29,7 @@ use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::telemetry::metrics::Stage;
 use crate::executor::upstream::{fetch_blocking_payload, fetch_stream_payload};
 use crate::tool::{ToolRegistry, mcp, record_discovered_mcp_tools, responses_declarations};
-use crate::types::io::{InputItem, OutputItem, ResponsesInput, ToolChoice};
+use crate::types::io::{InputItem, OutputItem, ResponsesInput};
 use crate::types::request_response::ResponsePayload;
 
 /// Outcome of inspecting one inference round's output, deciding whether the
@@ -382,7 +382,7 @@ impl<'a> AgentTurn<'a> {
     }
 
     fn append_round_input(&mut self, output: &[OutputItem], public: &[OutputItem], multi_agent: bool) {
-        self.pipeline.request.enriched_request.tool_choice = Some(ToolChoice::Auto);
+        self.pipeline.request.relax_tool_choice();
         if multi_agent {
             // Preserve client-call kinds for checkpoint validation and output routing.
             // Reuse the public projection; built-in calls retain their canonical history.

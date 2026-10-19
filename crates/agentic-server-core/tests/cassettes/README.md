@@ -285,6 +285,11 @@ model requested by Codex 0.149.1. It then runs `scripts/codex_image_smoke.py`, w
 run explicitly advertises text-only and requires the image to be absent. These cases replay the existing Qwen2.5-VL
 single-image SSE recording unchanged; they validate client/catalog propagation, not fresh model inference.
 
+The Codex job also runs `scripts/codex_reasoning_smoke.py`, which replays the reasoning cassette for a served model
+advertised as `["low", "high", "max"]` and for a model without configured levels. It asserts the `reasoning.effort` the
+pinned client put on the upstream request: `low` with no explicit selection because `medium` is not advertised, `max`
+when selected with `-c model_reasoning_effort=max`, and `medium` for the model that keeps the default levels.
+
 ## Messages web fetch cassettes
 
 `messages/messages-web-fetch-Qwen-Qwen3-8B-{nonstreaming,streaming}.yaml` record the upstream turns of a request that

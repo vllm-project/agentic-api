@@ -9,7 +9,7 @@ use tokio::time::{Instant, sleep};
 
 use crate::agentic_cli::{Harness, SourceOptions};
 use crate::agentic_output::redact_url;
-use crate::model_capabilities::{CodexCatalogCapabilities, InputModalities};
+use crate::model_capabilities::{CodexCatalogCapabilities, CodexModelCapabilities};
 
 use super::{PLACEHOLDER_MODEL, harness_binary};
 
@@ -94,11 +94,11 @@ pub async fn resolve_model(client: &Client, source: &SourceOptions, api_key: Opt
     Ok(model)
 }
 
-/// The Codex model the launcher runs and the input modalities the gateway resolved for it.
+/// The Codex model the launcher runs and the capabilities the gateway resolved for it.
 #[derive(Debug)]
 pub(super) struct CodexModelSelection {
     pub(super) model: String,
-    pub(super) input_modalities: InputModalities,
+    pub(super) capabilities: CodexModelCapabilities,
 }
 
 /// The polling budget for one catalog resolution.
@@ -336,11 +336,11 @@ async fn catalog_attempt(
     }
     CatalogAttempt::Resolved(CodexModelSelection {
         model: entry.slug.clone(),
-        input_modalities: entry.input_modalities,
+        capabilities: entry.clone(),
     })
 }
 
-/// Resolve the Codex model and its input modalities from one gateway catalog snapshot.
+/// Resolve the Codex model and its capabilities from one gateway catalog snapshot.
 ///
 /// Selecting the model and reading its capabilities from the same response keeps the isolated
 /// Codex catalog consistent with what the gateway serves over HTTP. Transient failures are

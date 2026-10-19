@@ -1,5 +1,7 @@
 #[allow(dead_code)]
 mod common;
+#[path = "responses_websocket/prompt_cache_options.rs"]
+mod prompt_cache_options;
 
 use std::collections::VecDeque;
 use std::convert::Infallible;
@@ -8158,4 +8160,62 @@ async fn websocket_async_tool_call_continues_and_accepts_follow_ups_without_outp
             .count();
         assert_eq!(notes, 1, "the pending call carries its note upstream");
     }
+}
+
+/// Replays the recorded mixed-tool capture through the WebSocket transport: every lifecycle
+/// frame reports the declarations the client submitted rather than the lowered function
+/// schema the model server echoed, and retrieval returns them too.
+#[tokio::test]
+async fn recorded_mixed_tool_capture_stays_public_over_websocket() {
+    let capture = common::load_mixed_gateway_capture(true);
+    let public_tools = common::mixed_capture_public_tools(&capture);
+    let mock = MockResponsesServer::start(vec![common::mixed_capture_upstream_fixture(&capture)]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    let mut create = common::mixed_capture_client_request(&capture);
+    create["type"] = json!("response.create");
+    send_json(&mut ws, create).await;
+
+    let events = recv_until_completed(&mut ws).await;
+    assert_eq!(events.last().expect("terminal frame")["type"], "response.completed");
+    let snapshots: Vec<&str> = events
+        .iter()
+        .filter(|event| event.get("response").is_some())
+        .filter_map(|event| event["type"].as_str())
+        .collect();
+    assert_eq!(
+        snapshots,
+        ["response.created", "response.in_progress", "response.completed"],
+        "the replay covers the three lifecycle snapshots"
+    );
+    for event in &events {
+        if let Some(response) = event.get("response") {
+            common::assert_public_mixed_tools(response, &public_tools, event["type"].as_str().unwrap_or_default());
+        }
+    }
+    common::assert_recorded_mixed_output_kinds(
+        &events.last().expect("terminal frame")["response"],
+        &capture,
+        "terminal snapshot",
+    );
+
+    let id = events.last().expect("terminal frame")["response"]["id"]
+        .as_str()
+        .expect("response id");
+    let stored: Value = reqwest::Client::new()
+        .get(format!("{gateway_url}/v1/responses/{id}"))
+        .bearer_auth("test-key")
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    common::assert_public_mixed_tools(&stored, &public_tools, "stored response");
+
+    let requests = mock.request_bodies().await;
+    assert_eq!(requests.len(), 1, "the replayed turn runs one inference round");
+    common::assert_lowered_mixed_upstream(&requests[0]);
 }

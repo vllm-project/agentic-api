@@ -1007,6 +1007,8 @@ async fn every_v1_route_rejects_missing_credentials() {
     let client = reqwest::Client::new();
 
     for path in [
+        "/v1/audio/transcriptions",
+        "/v1/audio/translations",
         "/v1/chat/completions",
         "/v1/completions",
         "/v1/conversations",

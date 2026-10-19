@@ -181,6 +181,7 @@ async fn rehydrate_request(
     exec_ctx: &ExecutionContext,
     continuation: Option<ResponseContinuation>,
 ) -> ExecutorResult<RequestContext> {
+    request.validate_prompt_cache_options(exec_ctx.responses_config.prompt_cache_options_supported)?;
     // Every typed entry point reaches this check: executor-routed HTTP, WebSocket, split execution, embedders.
     request.ensure_supported_parameters()?;
     validate_multi_agent_request(&request)?;

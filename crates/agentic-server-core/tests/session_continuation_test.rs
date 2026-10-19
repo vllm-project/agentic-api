@@ -177,6 +177,45 @@ fn search_request() -> RequestPayload {
     payload
 }
 
+#[tokio::test]
+async fn session_tool_choice_inherits_request_policy_after_internal_relaxation() {
+    use agentic_core::types::io::ToolChoice;
+
+    let mut model = LocalModel::start(vec![
+        search_round("first_search", "searching"),
+        model_message("first_answer", "first answer"),
+        search_round("second_search", "searching again"),
+        model_message("second_answer", "second answer"),
+    ])
+    .await;
+    let calls = with_local_search(&mut model);
+    let session = session();
+    let mut first_request = search_request();
+    first_request.tool_choice = Some(ToolChoice::Required);
+    let first = execute_local(&model, &session, first_request).await;
+    session.wait_until_idle().await.unwrap();
+    let second = execute_local(&model, &session, request(Some(&first.id), json!("Search again"))).await;
+    session.wait_until_idle().await.unwrap();
+
+    assert_eq!(first.tool_choice, Some(ToolChoice::Required));
+    assert_eq!(second.tool_choice, Some(ToolChoice::Required));
+    assert_eq!(calls.load(Ordering::Relaxed), 2);
+    let requests = model.requests.lock().await;
+    assert_eq!(requests.len(), 4);
+    for round in [0, 2] {
+        assert_eq!(
+            requests[round]["tool_choice"], "required",
+            "first round of each client request"
+        );
+        assert!(
+            requests[round + 1].get("tool_choice").is_none(),
+            "internal round still uses auto"
+        );
+    }
+    drop(requests);
+    model.close().await;
+}
+
 async fn execute_local(model: &LocalModel, session: &ResponseSession, payload: RequestPayload) -> ResponsePayload {
     let result = ExecuteRequest::new(payload, Arc::new(model.exec.clone()))
         .with_session(session, None)

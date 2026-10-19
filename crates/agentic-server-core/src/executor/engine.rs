@@ -705,6 +705,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn prompt_cache_options_survive_compaction_trigger_json_and_sse() {
+        for stream in [false, true] {
+            let captured = Arc::new(Mutex::new(None));
+            let (mut exec, server) = trigger_execution_context(Arc::clone(&captured)).await;
+            exec.responses_config.prompt_cache_options_supported = true;
+            let options = serde_json::json!({"mode":"explicit","ttl":"30m"});
+            let request = serde_json::from_value(serde_json::json!({
+                "model":"test-model", "store":false, "stream":stream, "prompt_cache_options":options,
+                "input":[{"role":"user","content":"remember context"},{"type":"compaction_trigger"}]
+            }))
+            .unwrap();
+            match ExecuteRequest::new(request, Arc::new(exec)).run().await.unwrap() {
+                Either::Left(response) => assert_eq!(response.status, "completed"),
+                Either::Right(events) => {
+                    let events: Vec<_> = events.collect().await;
+                    assert!(events.iter().any(|event| event.contains("response.completed")));
+                }
+            }
+            assert_eq!(captured.lock().await.as_ref().unwrap()["prompt_cache_options"], options);
+            server.abort();
+        }
+    }
+
+    #[tokio::test]
     async fn compaction_trigger_persists_checkpoint_only_as_output() {
         let captured = Arc::new(Mutex::new(None));
         let (mut exec_ctx, server) = trigger_execution_context(Arc::clone(&captured)).await;
