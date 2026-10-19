@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use agentic_core::executor::{ExecuteRequest, ExecutorError, rehydrate_conversation};
-use agentic_core::types::request_response::{RequestPayload, UnsupportedParameterError};
+use agentic_core::types::request_response::{JsonKind, RequestPayload, UnsupportedParameterError};
 use serde_json::{Value, json};
 
 mod support;
@@ -18,9 +18,17 @@ fn request(extra: &Value) -> RequestPayload {
     serde_json::from_value(body).unwrap()
 }
 
-fn cases() -> [(Value, UnsupportedParameterError); 4] {
+fn cases() -> [(Value, UnsupportedParameterError); 6] {
     [
         (json!({"background": true}), UnsupportedParameterError::BackgroundMode),
+        (
+            json!({"background": "false"}),
+            UnsupportedParameterError::BackgroundType(JsonKind::String),
+        ),
+        (
+            json!({"background": 0, "stream": true}),
+            UnsupportedParameterError::BackgroundType(JsonKind::Integer),
+        ),
         (
             json!({"background": true, "stream": true}),
             UnsupportedParameterError::BackgroundMode,

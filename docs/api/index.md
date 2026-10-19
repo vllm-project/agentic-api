@@ -315,7 +315,8 @@ Typed execution cannot honour `background: true` or a reusable `prompt`
 reference, so it rejects them with `400` and `type: "invalid_request_error"`
 instead of silently dropping them. The check runs before history lookup, tool
 discovery, storage, or inference. Direct HTTP pass-through preserves the original
-request body, and the upstream decides whether to accept these members.
+request body, and the upstream decides whether to accept these members, whatever
+their values.
 `store: false` alone does not ensure pass-through: a previous response ID,
 conversation, built-in tool, or another executor feature still selects typed
 execution.
@@ -323,7 +324,7 @@ execution.
 | Path | `background` | `prompt` |
 | --- | --- | --- |
 | Direct HTTP JSON/SSE | Forwarded unchanged; upstream validation | Forwarded unchanged; upstream validation |
-| Typed HTTP JSON/SSE, WebSocket, and split-execution hydration | Absent, `null`, or `false` accepted and not forwarded; `true` returns `code: "unsupported_value"`, `param: "background"` | Absent or `null` accepted; any other value returns `code: "unsupported_parameter"`, `param: "prompt"` |
+| Typed HTTP JSON/SSE, WebSocket, and split-execution hydration | Absent, `null`, or `false` accepted and not forwarded; `true` returns `code: "unsupported_value"`, and any other value returns `code: "invalid_type"`, both with `param: "background"` | Absent or `null` accepted; any other value returns `code: "unsupported_parameter"`, `param: "prompt"` |
 
 Background mode is tracked in
 [#357](https://github.com/vllm-project/agentic-api/issues/357). This matrix

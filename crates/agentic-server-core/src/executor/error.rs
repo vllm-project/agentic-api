@@ -588,6 +588,17 @@ mod tests {
                 "param": "prompt"
             }})
         );
+        assert_eq!(
+            envelope(ExecutorError::from(UnsupportedParameterError::BackgroundType(
+                crate::types::request_response::JsonKind::Object
+            ))),
+            serde_json::json!({"error": {
+                "message": "Invalid type for 'background': expected a boolean, but got an object instead.",
+                "type": "invalid_request_error",
+                "code": "invalid_type",
+                "param": "background"
+            }})
+        );
     }
 }
 

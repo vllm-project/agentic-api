@@ -27,7 +27,7 @@ use serde_helpers::{
 };
 pub use standard_response::{ResponseReasoning, StandardResponseFields};
 pub use text_config::{ResponseTextConfig, ResponseTextFormat};
-pub use unsupported::{BACKGROUND_PARAM, PROMPT_PARAM, RejectedValue, UnsupportedParameterError};
+pub use unsupported::{BACKGROUND_PARAM, Background, PROMPT_PARAM, RejectedValue, UnsupportedParameterError};
 #[cfg(feature = "openapi")]
 mod schema;
 
@@ -113,9 +113,10 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig, C = PromptCacheOptions
     pub cache_salt: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_management: Option<Vec<ContextManagement>>,
-    /// Detection only, never serialized: typed execution rejects `true` (background mode is #357).
+    /// Detection only, never serialized: typed execution rejects `true` (background mode is #357)
+    /// and a non-boolean value.
     #[serde(default, skip_serializing)]
-    pub background: Option<bool>,
+    pub background: Option<Background>,
     /// Detection only, never serialized: typed execution rejects any non-null value.
     #[serde(default, skip_serializing)]
     pub prompt: Option<RejectedValue>,
