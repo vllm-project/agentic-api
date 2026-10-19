@@ -115,7 +115,7 @@ pub(crate) enum Decision {
 
 /// Per-caller request buckets for one process.
 #[derive(Debug)]
-pub struct RateLimiter {
+pub(crate) struct RateLimiter {
     config: RateLimitConfig,
     interval: Duration,
     tolerance: Duration,
@@ -135,7 +135,7 @@ struct LimiterState {
 
 impl RateLimiter {
     #[must_use]
-    pub fn new(config: RateLimitConfig) -> Self {
+    pub(crate) fn new(config: RateLimitConfig) -> Self {
         Self::with_max_keys(config, MAX_KEYS)
     }
 
@@ -149,11 +149,6 @@ impl RateLimiter {
             hasher: RandomState::new(),
             state: Mutex::default(),
         }
-    }
-
-    #[must_use]
-    pub fn config(&self) -> RateLimitConfig {
-        self.config
     }
 
     /// The bucket for a request: its authenticated principal, else its bearer
