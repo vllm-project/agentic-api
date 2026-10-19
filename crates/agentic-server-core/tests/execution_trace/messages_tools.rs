@@ -17,7 +17,7 @@ async fn messages_stream_gateway_tool_is_a_typed_stage_between_rounds() {
 
 async fn assert_one_typed_tool_stage(stream: bool) {
     let traces = Traces::new();
-    let (search_url, search_task) = gateway_tools::search_server(gateway_tools::Search::Answers).await;
+    let (search_url, search_task) = support::search_server(support::Search::Answers).await;
     let fixture = messages_fixture(vec![
         gateway_tools::tool_round(stream, Offer::Native),
         gateway_tools::final_round(stream),

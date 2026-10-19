@@ -7,6 +7,7 @@
 
 use std::fmt::Write as _;
 use std::sync::Arc;
+use std::time::Duration;
 
 use agentic_core::executor::{
     BoxStream, ExecuteRequest, ExecutionContext, ExecutorResult, MessagesRequestContext, MessagesUpstream,
@@ -25,8 +26,8 @@ mod harness;
 mod messages_gateway_tools;
 mod support;
 use harness::{Metrics, histogram_sum, int_histogram_sum, recorded, total};
-use messages_gateway_tools::{self as gateway_tools, Offer, Search};
-use support::{MockResponse, MockServer, TestFixture, text_response};
+use messages_gateway_tools::{self as gateway_tools, Offer};
+use support::{MockResponse, MockServer, Search, TestFixture, search_server, text_response};
 
 const RESPONSES_EXECUTOR: &[(&str, &str)] = &[("agentic.api", "responses"), ("agentic.route", "executor")];
 
@@ -291,7 +292,7 @@ async fn gateway_tool_round_counts_rounds_and_times_the_tool() {
         "/tests/cassettes/codex/codex-openai-web-search-then-namespace-gpt-4o-streaming.yaml"
     ));
     let fixture = TestFixture::new(&support::responses_turns(&cassette)).await;
-    let search = search_server().await;
+    let search = search_server(Search::Answers).await;
     let exec_ctx = ExecutionContext::clone(&fixture.exec_ctx)
         .with_gateway_executor(Arc::new(agentic_core::tool::WebSearchHandler::with_api_key(
             Arc::new(reqwest::Client::new()),
@@ -380,19 +381,6 @@ async fn explicit_compaction_times_its_stages_and_usage_without_an_execution() {
         !recorded(&points, "agentic.execution.count"),
         "compaction has no agentic.execute span"
     );
-}
-
-async fn search_server() -> (String, tokio::task::JoinHandle<()>) {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let url = format!("http://{}", listener.local_addr().unwrap());
-    let router = axum::Router::new().route(
-        "/v1/search",
-        axum::routing::get(|| async {
-            axum::Json(json!({"results":{"web":[{"url":"https://example.com","title":"result"}],"news":[]}}))
-        }),
-    );
-    let task = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-    (url, task)
 }
 
 struct MessagesFixture {
@@ -586,7 +574,7 @@ async fn messages_stream_rejected_before_headers_is_never_delivered() {
 /// search exchange.
 async fn messages_gateway_tool_points(stream: bool, offer: Offer, search: Search) -> Vec<harness::Point> {
     let metrics = Metrics::new();
-    let (search_url, search_task) = gateway_tools::search_server(search).await;
+    let (search_url, search_task) = search_server(search).await;
     let fixture = messages_fixture(
         &metrics,
         vec![
@@ -746,7 +734,7 @@ async fn messages_web_fetch_is_a_web_fetch_tool_stage() {
 async fn messages_stream_dropped_while_a_gateway_tool_runs_cancels_its_stage() {
     let metrics = Metrics::new();
     let arrived = Arc::new(tokio::sync::Notify::new());
-    let (search_url, search_task) = gateway_tools::search_server(Search::Hangs(Arc::clone(&arrived))).await;
+    let (search_url, search_task) = search_server(Search::Hangs(Arc::clone(&arrived))).await;
     let fixture = messages_fixture(&metrics, vec![gateway_tools::tool_round(true, Offer::Native)]).await;
     let (exec_ctx, registry) =
         gateway_tools::with_web_search(ExecutionContext::clone(&fixture.exec_ctx), &search_url, Offer::Native).await;
@@ -758,8 +746,14 @@ async fn messages_stream_dropped_while_a_gateway_tool_runs_cancels_its_stage() {
     )
     .await
     .unwrap();
-    let client = tokio::spawn(response.body.collect::<Vec<_>>());
-    arrived.notified().await;
+    let mut client = tokio::spawn(response.body.collect::<Vec<_>>());
+    // Fail rather than hang if the search is never reached, for example
+    // because the call was not dispatched and the stream already ended.
+    tokio::select! {
+        () = arrived.notified() => {}
+        frames = &mut client => panic!("the stream ended before the search started: {frames:?}"),
+        () = tokio::time::sleep(Duration::from_secs(5)) => panic!("the search was not reached within five seconds"),
+    }
     client.abort();
     assert!(client.await.unwrap_err().is_cancelled());
     search_task.abort();

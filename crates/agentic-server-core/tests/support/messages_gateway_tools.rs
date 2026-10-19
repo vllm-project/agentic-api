@@ -2,19 +2,17 @@
 //! executor twice, followed by a final text turn. Shared by the trace and
 //! metrics tests.
 
-// Each test binary uses only the offers and search backends it needs.
+// Each test binary uses only the offers it needs.
 #![allow(dead_code)]
 
-use std::fmt::Write as _;
 use std::sync::Arc;
 
 use agentic_core::executor::{ExecutionContext, MessagesRequestContext};
 use agentic_core::tool::{ToolRegistry, WebSearchHandler, registry_tools};
 use agentic_core::types::messages::{GatewayToolMap, ToolParam};
-use axum::response::IntoResponse as _;
 use serde_json::{Value, json};
 
-use crate::support::MockResponse;
+use crate::support::{MockResponse, messages_json_response, messages_sse, messages_sse_response, messages_start_event};
 
 /// The model's search queries. They must never become span or metric data.
 pub const QUERIES: [&str; 2] = ["private query one", "private query two"];
@@ -56,21 +54,6 @@ pub fn request(stream: bool, offer: Offer) -> MessagesRequestContext {
     .unwrap()
 }
 
-fn sse(events: &[Value]) -> MockResponse {
-    let mut body = String::new();
-    for event in events {
-        writeln!(body, "event: {}\ndata: {event}\n", event["type"].as_str().unwrap()).unwrap();
-    }
-    MockResponse::Sse(body)
-}
-
-fn message_start() -> Value {
-    json!({"type": "message_start", "message": {
-        "id": "msg_upstream", "type": "message", "role": "assistant", "model": "test-model",
-        "content": [], "stop_reason": null, "stop_sequence": null,
-        "usage": {"input_tokens": 3, "output_tokens": 0}}})
-}
-
 /// The model turn that calls the offered search tool once per query.
 pub fn tool_round(stream: bool, offer: Offer) -> MockResponse {
     let calls = QUERIES
@@ -90,7 +73,7 @@ pub fn tool_round(stream: bool, offer: Offer) -> MockResponse {
             .to_string(),
         );
     }
-    let mut events = vec![message_start()];
+    let mut events = vec![messages_start_event()];
     for (index, (id, input)) in calls.enumerate() {
         events.extend([
             json!({"type": "content_block_start", "index": index,
@@ -105,67 +88,16 @@ pub fn tool_round(stream: bool, offer: Offer) -> MockResponse {
             "usage": {"output_tokens": 2}}),
         json!({"type": "message_stop"}),
     ]);
-    sse(&events)
+    messages_sse(&events)
 }
 
 /// The model's final text turn.
 pub fn final_round(stream: bool) -> MockResponse {
-    if !stream {
-        return MockResponse::Json(
-            json!({
-                "id": "msg_upstream", "type": "message", "role": "assistant", "model": "test-model",
-                "content": [{"type": "text", "text": "hello"}], "stop_reason": "end_turn", "stop_sequence": null,
-                "usage": {"input_tokens": 3, "output_tokens": 1}
-            })
-            .to_string(),
-        );
+    if stream {
+        messages_sse_response("end_turn")
+    } else {
+        messages_json_response("end_turn")
     }
-    sse(&[
-        message_start(),
-        json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
-        json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "hello"}}),
-        json!({"type": "content_block_stop", "index": 0}),
-        json!({"type": "message_delta", "delta": {"stop_reason": "end_turn", "stop_sequence": null},
-            "usage": {"output_tokens": 1}}),
-        json!({"type": "message_stop"}),
-    ])
-}
-
-/// How the search backend behind `web_search` answers.
-#[derive(Clone)]
-pub enum Search {
-    Answers,
-    Fails,
-    /// Signals that a search arrived, then never answers it.
-    Hangs(Arc<tokio::sync::Notify>),
-}
-
-pub async fn search_server(search: Search) -> (String, tokio::task::JoinHandle<()>) {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let url = format!("http://{}", listener.local_addr().unwrap());
-    let router = axum::Router::new().route(
-        "/v1/search",
-        axum::routing::get(move || {
-            let search = search.clone();
-            async move {
-                match search {
-                    Search::Answers => axum::Json(
-                        json!({"results": {"web": [{"url": "https://example.com", "title": "result"}], "news": []}}),
-                    )
-                    .into_response(),
-                    Search::Fails => {
-                        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "search backend down").into_response()
-                    }
-                    Search::Hangs(arrived) => {
-                        arrived.notify_one();
-                        std::future::pending().await
-                    }
-                }
-            }
-        }),
-    );
-    let task = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-    (url, task)
 }
 
 /// Bind `web_search` to the gateway against `search_url` and resolve the

@@ -397,6 +397,7 @@ mod tests {
     use std::fmt::Write as _;
 
     use super::*;
+    use crate::executor::telemetry::metrics::ExecutorMetrics;
 
     fn line(v: &Value) -> String {
         format!("data: {v}")
@@ -863,7 +864,7 @@ mod tests {
             &mut context(),
             &no_op_registry().await,
             &tool_seam::GatewayToolMap::default(),
-            &crate::executor::telemetry::metrics::ExecutorMetrics::from_global(),
+            &ExecutorMetrics::from_global(),
         )
         .await;
         let content = &resolved[0].content;
