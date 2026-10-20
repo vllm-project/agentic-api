@@ -61,8 +61,10 @@ Each request is charged to the first matching caller:
 4. otherwise one bucket shared by every caller without credentials.
 
 The gateway keeps only a keyed hash of a token or API key, never the credential. Without OIDC, the gateway does not
-verify these credentials (the upstream does), so they identify callers for rate limiting only. A WebSocket is charged
-to the caller of its upgrade request, never to the server's `OPENAI_API_KEY`.
+verify these credentials, so the limit only binds clients that reuse one: a client gets a fresh bucket by sending a
+different bearer token or `x-api-key`, and a client without credentials leaves the shared bucket by adding any. Enable
+OIDC to enforce per-caller limits against untrusted clients. A WebSocket is charged to the caller of its upgrade
+request, never to the server's `OPENAI_API_KEY`.
 
 Every API route is limited except `/health`, `/ready`, and Swagger. A limited request never reaches the upstream.
 It receives `429 Too Many Requests` with these headers:
