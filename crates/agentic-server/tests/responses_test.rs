@@ -1541,6 +1541,143 @@ async fn test_max_tool_calls_is_validated_on_proxy_and_executor_routes() {
 }
 
 #[tokio::test]
+async fn test_unsupported_parameters_are_rejected_by_typed_execution_and_passed_through_directly() {
+    let (llm_url, requests, llm) = spawn_mock_vllm_json_capture().await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
+    let client = reqwest::Client::new();
+    let post = |request: serde_json::Value| client.post(format!("{gateway_url}/v1/responses")).json(&request).send();
+    let unsupported = [
+        (
+            "background",
+            serde_json::json!(true),
+            "unsupported_value",
+            "background mode is not supported; omit `background` or set it to false",
+        ),
+        (
+            "prompt",
+            serde_json::json!({"id": "pmpt_1", "version": "2"}),
+            "unsupported_parameter",
+            "reusable prompt templates are not supported; send `instructions` and `input` instead of `prompt`",
+        ),
+    ];
+
+    // Storage, a continuation, or any other executor feature selects typed
+    // execution, which rejects before history lookup or inference.
+    for route in [
+        serde_json::json!({"store": true, "stream": false}),
+        serde_json::json!({"store": true, "stream": true}),
+        serde_json::json!({"store": false, "previous_response_id": "resp_missing"}),
+    ] {
+        for (param, value, code, message) in &unsupported {
+            let mut request = serde_json::json!({"model": "test", "input": "hi"});
+            request
+                .as_object_mut()
+                .unwrap()
+                .extend(route.as_object().unwrap().clone());
+            request[*param] = value.clone();
+            let response = post(request.clone()).await.expect("response request");
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{request}");
+            let body: serde_json::Value = response.json().await.expect("error body");
+            assert_eq!(
+                body,
+                serde_json::json!({"error": {
+                    "message": message, "type": "invalid_request_error", "code": code, "param": param
+                }}),
+                "{request}"
+            );
+        }
+    }
+    assert!(
+        requests.lock().await.is_empty(),
+        "typed execution rejects before any upstream call"
+    );
+
+    // Direct pass-through keeps the original body; the upstream decides.
+    for (param, value, ..) in &unsupported {
+        let mut request = serde_json::json!({"model": "test", "input": "hi", "store": false});
+        request[*param] = value.clone();
+        let response = post(request.clone()).await.expect("response request");
+        assert_eq!(response.status(), StatusCode::OK, "{request}");
+        let forwarded = requests.lock().await.last().cloned().expect("forwarded request");
+        assert_eq!(forwarded, request, "the direct route forwards the body unchanged");
+    }
+
+    // Typed execution accepts the explicit defaults and does not forward them.
+    let response = post(serde_json::json!({
+        "model": "test", "input": "hi", "store": true, "background": false, "prompt": null
+    }))
+    .await
+    .expect("response request");
+    assert_eq!(response.status(), StatusCode::OK);
+    let forwarded = requests.lock().await.last().cloned().expect("forwarded request");
+    assert!(
+        forwarded.get("background").is_none() && forwarded.get("prompt").is_none(),
+        "{forwarded}"
+    );
+    gateway.abort();
+    llm.abort();
+}
+
+#[tokio::test]
+async fn test_non_boolean_background_is_forwarded_directly_and_rejected_by_typed_execution() {
+    let (llm_url, requests, llm) = spawn_mock_vllm_json_capture().await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
+    let client = reqwest::Client::new();
+    let post = |request: serde_json::Value| client.post(format!("{gateway_url}/v1/responses")).json(&request).send();
+    let values = [
+        (serde_json::json!(0), "an integer"),
+        (serde_json::json!("false"), "a string"),
+        (serde_json::json!({}), "an object"),
+        (serde_json::json!([]), "an array"),
+        (serde_json::json!(0.5), "a decimal number"),
+    ];
+
+    // Direct pass-through keeps the original body: the upstream decides.
+    for stream in [false, true] {
+        for (value, _) in &values {
+            let request = serde_json::json!({
+                "model": "test", "input": "hi", "store": false, "stream": stream, "background": value
+            });
+            let response = post(request.clone()).await.expect("response request");
+            assert_eq!(response.status(), StatusCode::OK, "{request}");
+            let forwarded = requests.lock().await.last().cloned().expect("forwarded request");
+            assert_eq!(forwarded, request, "the direct route forwards the body unchanged");
+        }
+    }
+    let forwarded = requests.lock().await.len();
+
+    // Typed execution rejects the value before any upstream call.
+    for stream in [false, true] {
+        for (value, kind) in &values {
+            let request = serde_json::json!({
+                "model": "test", "input": "hi", "store": true, "stream": stream, "background": value
+            });
+            let response = post(request.clone()).await.expect("response request");
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{request}");
+            assert_eq!(
+                response.json::<serde_json::Value>().await.expect("error body"),
+                serde_json::json!({"error": {
+                    "message": format!("Invalid type for 'background': expected a boolean, but got {kind} instead."),
+                    "type": "invalid_request_error",
+                    "code": "invalid_type",
+                    "param": "background"
+                }}),
+                "{request}"
+            );
+        }
+    }
+    assert_eq!(
+        requests.lock().await.len(),
+        forwarded,
+        "typed execution never reaches the upstream"
+    );
+    gateway.abort();
+    llm.abort();
+}
+
+#[tokio::test]
 async fn test_stateful_request_forwards_text_configuration() {
     let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
     let fixture = storage_backed_state(&llm_url).await;

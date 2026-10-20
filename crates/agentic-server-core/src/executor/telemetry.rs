@@ -204,7 +204,8 @@ impl From<&ExecutorError> for FailureCategory {
             | ExecutorError::InvalidInput(_)
             | ExecutorError::InvalidMaxToolCalls(_)
             | ExecutorError::InvalidPromptCacheOptions(_)
-            | ExecutorError::UnsupportedValue { .. } => Self::InvalidRequest,
+            | ExecutorError::UnsupportedValue { .. }
+            | ExecutorError::UnsupportedParameter(_) => Self::InvalidRequest,
             ExecutorError::PayloadTooLarge(_) => Self::PayloadTooLarge,
             ExecutorError::ResourceLimitExceeded { .. } => Self::ResourceLimit,
             ExecutorError::Conflict(_) => Self::Conflict,

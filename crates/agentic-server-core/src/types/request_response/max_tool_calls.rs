@@ -92,6 +92,7 @@ impl fmt::Display for OutOfRangeInteger {
 pub enum JsonKind {
     String,
     Boolean,
+    Integer,
     Decimal,
     Object,
     Array,
@@ -102,6 +103,7 @@ impl fmt::Display for JsonKind {
         f.write_str(match self {
             Self::String => "a string",
             Self::Boolean => "a boolean",
+            Self::Integer => "an integer",
             Self::Decimal => "a decimal number",
             Self::Object => "an object",
             Self::Array => "an array",

@@ -109,6 +109,8 @@ fn request_payload(model: String, input: ResponsesInput, instructions: Option<St
         cache_salt: None,
         multi_agent: None,
         context_management: None,
+        background: None,
+        prompt: None,
     }
 }
 

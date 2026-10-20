@@ -1707,6 +1707,54 @@ async fn websocket_echoes_max_tool_calls_without_inheriting_it_and_rejects_inval
     assert!(requests.iter().all(|request| request.get("max_tool_calls").is_none()));
 }
 
+#[tokio::test]
+async fn websocket_rejects_unsupported_parameters_and_keeps_the_connection() {
+    let mock = MockResponsesServer::start(vec![sse_response("resp_upstream_1", "msg_upstream_1", "first")]).await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    for (param, value, code, message) in [
+        (
+            "background",
+            json!(true),
+            "unsupported_value",
+            "background mode is not supported; omit `background` or set it to false",
+        ),
+        (
+            "prompt",
+            json!({"id": "pmpt_1"}),
+            "unsupported_parameter",
+            "reusable prompt templates are not supported; send `instructions` and `input` instead of `prompt`",
+        ),
+    ] {
+        let mut request = json!({"type": "response.create", "model": "test-model", "input": "bad"});
+        request[param] = value;
+        send_json(&mut ws, request).await;
+        assert_eq!(
+            recv_json(&mut ws).await,
+            json!({
+                "type": "error",
+                "status": 400,
+                "error": {"message": message, "type": "invalid_request_error", "code": code, "param": param}
+            })
+        );
+    }
+
+    send_json(
+        &mut ws,
+        json!({"type": "response.create", "model": "test-model", "input": "first", "background": false}),
+    )
+    .await;
+    let events = recv_until_completed(&mut ws).await;
+    assert_eq!(events.last().expect("terminal event")["type"], "response.completed");
+    assert_eq!(
+        mock.request_bodies().await.len(),
+        1,
+        "only the supported request reaches the upstream"
+    );
+}
+
 /// Two message items whose combined text is larger than any single delta, so
 /// the terminal `response.completed` snapshot is the largest event of the stream.
 fn two_message_sse_response(response_id: &str, text_bytes: usize) -> String {
