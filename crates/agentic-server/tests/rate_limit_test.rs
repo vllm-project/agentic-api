@@ -9,6 +9,7 @@
 #[allow(dead_code)]
 mod common;
 
+use std::net::SocketAddr;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -17,6 +18,9 @@ use std::time::{Duration, Instant};
 use agentic_server::app::{ServerConfig, build_router};
 use agentic_server::rate_limit::RateLimitConfig;
 use axum::Router;
+use axum::body::Body;
+use axum::extract::ConnectInfo;
+use axum::http::Request;
 use axum::http::StatusCode;
 use futures::{SinkExt, StreamExt};
 use serde_json::{Value, json};
@@ -24,6 +28,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::{Error as WsError, Message};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
+use tower::ServiceExt as _;
 
 use common::{test_config, test_state};
 
@@ -66,7 +71,9 @@ async fn gateway_with_server_key(
     );
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
-    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    // As in production, each request carries its connection's peer address.
+    let service = router.into_make_service_with_connect_info::<SocketAddr>();
+    tokio::spawn(async move { axum::serve(listener, service).await.unwrap() });
     url
 }
 
@@ -180,24 +187,83 @@ async fn a_caller_over_its_limit_gets_an_openai_429_with_retry_headers() {
         2,
         "the limited request never reached the upstream"
     );
+}
 
-    let other = models(&gateway, Some("caller-b")).send().await.unwrap();
-    assert_eq!(other.status(), StatusCode::OK, "another bearer has its own bucket");
+/// A credential the gateway does not verify must not choose the bucket: on the
+/// executor route the gateway calls the upstream with its own key, so nothing
+/// would ever check a made-up `x-api-key` or a lowercase `bearer` token.
+#[tokio::test]
+async fn changing_the_credential_does_not_reset_the_bucket() {
+    let (upstream, calls) = counting_upstream().await;
+    let gateway = gateway_with_server_key(&upstream, Some(per_minute(1)), Some("server-key")).await;
+    let create = |credential: Option<(&str, String)>| {
+        let request = reqwest::Client::new()
+            .post(format!("{gateway}/v1/responses"))
+            .json(&json!({"model": "m", "input": "hi"}));
+        match credential {
+            Some((name, value)) => request.header(name, value),
+            None => request,
+        }
+    };
+
+    let first = create(Some(("x-api-key", "made-up-0".to_owned())))
+        .send()
+        .await
+        .unwrap();
+    assert_ne!(first.status(), StatusCode::TOO_MANY_REQUESTS);
+    for credential in [
+        Some(("x-api-key", "made-up-1".to_owned())),
+        Some(("authorization", "Bearer made-up-2".to_owned())),
+        Some(("authorization", "bearer made-up-3".to_owned())),
+        None,
+    ] {
+        let response = create(credential.clone()).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS, "{credential:?}");
+    }
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "only the first request reached the upstream"
+    );
+}
+
+/// The status of `GET /v1/models` from `peer`, through the router directly.
+async fn status_from(router: &Router, peer: &str) -> StatusCode {
+    let request = Request::builder()
+        .uri("/v1/models")
+        .extension(ConnectInfo(peer.parse::<SocketAddr>().unwrap()))
+        .body(Body::empty())
+        .unwrap();
+    router.clone().oneshot(request).await.unwrap().status()
 }
 
 #[tokio::test]
-async fn callers_without_credentials_share_one_bucket() {
+async fn separate_peer_addresses_have_separate_buckets() {
     let (upstream, _calls) = counting_upstream().await;
-    let gateway = gateway(&upstream, Some(per_minute(1))).await;
+    let router = build_router(
+        test_state(&test_config(&upstream)),
+        &ServerConfig {
+            rate_limit: Some(per_minute(1)),
+            ..ServerConfig::from_env()
+        },
+    );
 
-    assert_eq!(models(&gateway, None).send().await.unwrap().status(), StatusCode::OK);
+    assert_eq!(status_from(&router, "192.0.2.1:4000").await, StatusCode::OK);
     assert_eq!(
-        models(&gateway, None).send().await.unwrap().status(),
-        StatusCode::TOO_MANY_REQUESTS
+        status_from(&router, "192.0.2.1:4001").await,
+        StatusCode::TOO_MANY_REQUESTS,
+        "a new connection from the same address is the same caller"
     );
     assert_eq!(
-        models(&gateway, Some("caller-a")).send().await.unwrap().status(),
-        StatusCode::OK
+        status_from(&router, "192.0.2.2:4000").await,
+        StatusCode::OK,
+        "another address has its own bucket"
+    );
+    assert_eq!(status_from(&router, "[2001:db8::1]:4000").await, StatusCode::OK);
+    assert_eq!(
+        status_from(&router, "[2001:db8::2]:4000").await,
+        StatusCode::TOO_MANY_REQUESTS,
+        "one IPv6 /64 is one caller"
     );
 }
 
@@ -217,7 +283,7 @@ async fn health_endpoints_are_never_limited() {
 }
 
 #[tokio::test]
-async fn messages_routes_answer_in_the_anthropic_format_and_key_by_api_key() {
+async fn messages_routes_answer_in_the_anthropic_format() {
     let (upstream, calls) = counting_upstream().await;
     let gateway = gateway(&upstream, Some(per_minute(1))).await;
     let message = || {
@@ -356,35 +422,18 @@ async fn http_and_websocket_share_a_bucket_and_the_upgrade_is_charged() {
     let (upstream, _calls) = counting_upstream().await;
     let gateway = gateway(&upstream, Some(per_minute(2))).await;
 
+    // Different credentials, one peer: the WebSocket shares the HTTP caller's bucket.
     let started = Instant::now();
     assert_eq!(
-        models(&gateway, Some("shared")).send().await.unwrap().status(),
+        models(&gateway, Some("http-credential")).send().await.unwrap().status(),
         StatusCode::OK
     );
-    let mut socket = connect(&gateway, Some("shared")).await.unwrap();
+    let mut socket = connect(&gateway, Some("websocket-credential")).await.unwrap();
     send(&mut socket, local_create()).await;
     assert_ws_rate_limit_error(&recv(&mut socket).await, started.elapsed());
 
-    match connect(&gateway, Some("shared")).await {
+    match connect(&gateway, None).await {
         Err(WsError::Http(response)) => assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS),
         other => panic!("a limited upgrade is rejected before switching protocols: {other:?}"),
     }
-}
-
-#[tokio::test]
-async fn a_websocket_without_credentials_is_not_charged_to_the_server_key() {
-    let (upstream, _calls) = counting_upstream().await;
-    let gateway = gateway_with_server_key(&upstream, Some(per_minute(2)), Some("server-key")).await;
-
-    for _ in 0..2 {
-        models(&gateway, Some("server-key")).send().await.unwrap();
-    }
-    assert_eq!(
-        models(&gateway, Some("server-key")).send().await.unwrap().status(),
-        StatusCode::TOO_MANY_REQUESTS
-    );
-    // The connection falls back to the server key upstream, but it is charged
-    // to the anonymous bucket.
-    let mut socket = connect(&gateway, None).await.unwrap();
-    create_completes(&mut socket).await;
 }

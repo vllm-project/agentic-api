@@ -1,4 +1,3 @@
-use std::net::SocketAddr;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
@@ -6,7 +5,7 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use axum::Router;
 use axum::middleware;
 use axum::routing::{get, post};
-use axum::serve::{Listener, ListenerExt as _};
+use axum::serve::{ListenerExt as _, TapIo};
 use http::HeaderValue;
 use tokio::net::{TcpListener, TcpStream};
 #[cfg(debug_assertions)]
@@ -321,12 +320,17 @@ pub struct AppState {
 /// acknowledgement (about 40 ms on Linux), which stalled every streamed
 /// response and WebSocket turn. A connection whose option cannot be set is
 /// still served.
-pub fn gateway_listener(listener: TcpListener) -> impl Listener<Io = TcpStream, Addr = SocketAddr> {
-    listener.tap_io(|stream: &mut TcpStream| {
-        if let Err(error) = stream.set_nodelay(true) {
-            tracing::warn!(%error, "failed to disable Nagle's algorithm on an accepted connection");
-        }
-    })
+///
+/// The concrete type lets the server record each connection's peer address,
+/// which rate limiting uses to tell callers apart.
+pub fn gateway_listener(listener: TcpListener) -> TapIo<TcpListener, fn(&mut TcpStream)> {
+    listener.tap_io(disable_nagle as fn(&mut TcpStream))
+}
+
+fn disable_nagle(stream: &mut TcpStream) {
+    if let Err(error) = stream.set_nodelay(true) {
+        tracing::warn!(%error, "failed to disable Nagle's algorithm on an accepted connection");
+    }
 }
 
 pub fn build_router(state: AppState, server_config: &ServerConfig) -> Router {

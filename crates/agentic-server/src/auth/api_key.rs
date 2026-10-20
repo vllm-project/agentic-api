@@ -19,7 +19,7 @@ pub(crate) async fn require_api_key(State(key): State<String>, request: Request,
     next.run(request).await
 }
 
-pub(crate) fn bearer_token(headers: &axum::http::HeaderMap) -> Option<&str> {
+pub(super) fn bearer_token(headers: &axum::http::HeaderMap) -> Option<&str> {
     headers
         .get(header::AUTHORIZATION)?
         .to_str()

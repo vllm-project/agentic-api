@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::net::SocketAddr;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -97,11 +98,15 @@ async fn serve_gateway(
     let router = build_router_with_auth(state, &server_config, authenticator);
     let listener = TcpListener::bind(&addr).await?;
     info!("gateway listening on {addr}");
-    axum::serve(gateway_listener(listener), router)
-        .with_graceful_shutdown(async move {
-            shutdown_token.cancelled().await;
-        })
-        .await?;
+    // Rate limiting tells callers apart by peer address when OIDC is off.
+    axum::serve(
+        gateway_listener(listener),
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(async move {
+        shutdown_token.cancelled().await;
+    })
+    .await?;
     websocket_tracker.wait_until_idle().await;
     Ok(())
 }

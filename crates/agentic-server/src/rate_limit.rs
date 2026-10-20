@@ -8,13 +8,13 @@
 //! is per process.
 
 use std::collections::HashMap;
-use std::hash::{BuildHasher, RandomState};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use axum::extract::{Request, State};
-use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
+use axum::extract::{ConnectInfo, Request, State};
+use axum::http::{HeaderName, HeaderValue, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::Response;
 use tokio::time::Instant;
@@ -87,18 +87,45 @@ impl RateLimitConfig {
     }
 }
 
-/// Whose bucket a request is charged to. Credentials are kept only as a keyed
-/// hash, so neither the map nor a log line can reveal one.
+/// Whose bucket a request is charged to.
+///
+/// Never a credential the gateway does not verify, such as a bearer token or
+/// `x-api-key` without OIDC: a client could send a fresh one with every
+/// request, and on the executor route the gateway may call the upstream with
+/// its own key, so nothing would ever check it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum RateLimitKey {
-    Principal {
-        issuer: String,
-        subject: String,
-    },
-    Credential(u64),
+    /// The verified OIDC token's issuer and subject.
+    Principal { issuer: String, subject: String },
+    /// The connection's peer: an IPv4 address, or an IPv6 /64 network.
+    Peer(IpAddr),
+    /// A request whose peer address is unknown, because the router was served
+    /// without connection information.
     Anonymous,
     /// Shared by new callers while every tracked caller is active.
     Overflow,
+}
+
+impl RateLimitKey {
+    /// The bucket for a request: its verified principal, else its peer address.
+    pub(crate) fn for_caller(principal: Option<&AuthenticatedPrincipal>, peer: Option<SocketAddr>) -> Self {
+        if let Some(principal) = principal {
+            return Self::Principal {
+                issuer: principal.issuer().to_owned(),
+                subject: principal.subject().to_owned(),
+            };
+        }
+        peer.map_or(Self::Anonymous, |peer| Self::Peer(caller_network(peer.ip())))
+    }
+}
+
+/// An IPv4 address as it is; an IPv6 address as its /64 network, since one
+/// host commonly holds a whole /64. An IPv4-mapped IPv6 address is its IPv4 caller.
+fn caller_network(ip: IpAddr) -> IpAddr {
+    match ip.to_canonical() {
+        IpAddr::V4(v4) => IpAddr::V4(v4),
+        IpAddr::V6(v6) => IpAddr::V6(Ipv6Addr::from_bits(v6.to_bits() & (u128::MAX << 64))),
+    }
 }
 
 /// The outcome of charging one request.
@@ -120,7 +147,6 @@ pub(crate) struct RateLimiter {
     interval: Duration,
     tolerance: Duration,
     max_keys: usize,
-    hasher: RandomState,
     state: Mutex<LimiterState>,
 }
 
@@ -146,32 +172,8 @@ impl RateLimiter {
             interval,
             tolerance: interval * (config.burst().get() - 1),
             max_keys,
-            hasher: RandomState::new(),
             state: Mutex::default(),
         }
-    }
-
-    /// The bucket for a request: its authenticated principal, else its bearer
-    /// token, else its `x-api-key`, else the shared anonymous bucket.
-    pub(crate) fn key_for(&self, principal: Option<&AuthenticatedPrincipal>, headers: &HeaderMap) -> RateLimitKey {
-        if let Some(principal) = principal {
-            return RateLimitKey::Principal {
-                issuer: principal.issuer().to_owned(),
-                subject: principal.subject().to_owned(),
-            };
-        }
-        let api_key = || {
-            headers
-                .get("x-api-key")
-                .and_then(|value| value.to_str().ok())
-                .map(str::trim)
-                .filter(|key| !key.is_empty())
-        };
-        crate::auth::api_key::bearer_token(headers)
-            .or_else(api_key)
-            .map_or(RateLimitKey::Anonymous, |secret| {
-                RateLimitKey::Credential(self.hasher.hash_one(secret))
-            })
     }
 
     /// Charge one request to `key`.
@@ -247,7 +249,11 @@ pub(crate) async fn enforce_rate_limit(
     mut request: Request,
     next: Next,
 ) -> Response {
-    let key = limiter.key_for(request.extensions().get::<AuthenticatedPrincipal>(), request.headers());
+    let peer = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|ConnectInfo(peer)| *peer);
+    let key = RateLimitKey::for_caller(request.extensions().get::<AuthenticatedPrincipal>(), peer);
     match limiter.check(key.clone()) {
         Decision::Allowed => {
             request.extensions_mut().insert(RateLimitCharge { limiter, key });
@@ -331,8 +337,6 @@ pub(crate) fn reset_duration(retry_after: Duration) -> String {
 
 #[cfg(test)]
 mod tests {
-    use axum::http::HeaderValue;
-
     use super::*;
 
     fn config(requests_per_minute: u32, burst: u32) -> RateLimitConfig {
@@ -480,31 +484,32 @@ mod tests {
     }
 
     #[test]
-    fn credentials_are_keyed_by_hash_only() {
-        let limiter = RateLimiter::new(config(60, 1));
-        let headers = |name: &str, value: &str| {
-            let mut headers = HeaderMap::new();
-            headers.insert(
-                axum::http::HeaderName::from_bytes(name.as_bytes()).unwrap(),
-                HeaderValue::from_str(value).unwrap(),
-            );
-            headers
-        };
-        let token = "sk-private-token-123";
-        let bearer = limiter.key_for(None, &headers("authorization", &format!("Bearer {token}")));
-        assert!(matches!(bearer, RateLimitKey::Credential(_)));
-        assert!(!format!("{bearer:?}").contains(token));
-        assert_eq!(bearer, limiter.key_for(None, &headers("x-api-key", token)));
-        assert_ne!(
-            bearer,
-            limiter.key_for(None, &headers("authorization", "Bearer another-token"))
-        );
-        assert_eq!(limiter.key_for(None, &HeaderMap::new()), RateLimitKey::Anonymous);
+    fn callers_are_keyed_by_principal_else_peer_network() {
+        let from = |peer: &str| RateLimitKey::for_caller(None, Some(peer.parse().unwrap()));
+        assert_eq!(from("192.0.2.7:4000"), RateLimitKey::Peer("192.0.2.7".parse().unwrap()));
         assert_eq!(
-            limiter.key_for(None, &headers("authorization", "Basic abc")),
-            RateLimitKey::Anonymous,
-            "only bearer credentials identify a caller"
+            from("192.0.2.7:4000"),
+            from("192.0.2.7:5000"),
+            "a new connection is the same caller"
         );
+        assert_ne!(from("192.0.2.7:4000"), from("192.0.2.8:4000"));
+        assert_eq!(
+            from("[2001:db8:1:2::1]:4000"),
+            from("[2001:db8:1:2:ffff::9]:4000"),
+            "one IPv6 /64 is one caller"
+        );
+        assert_ne!(from("[2001:db8:1:2::1]:4000"), from("[2001:db8:1:3::1]:4000"));
+        assert_eq!(from("[::ffff:192.0.2.7]:4000"), from("192.0.2.7:4000"));
+        let principal = AuthenticatedPrincipal::expired_for_test();
+        assert_eq!(
+            RateLimitKey::for_caller(Some(&principal), Some("192.0.2.7:4000".parse().unwrap())),
+            RateLimitKey::Principal {
+                issuer: principal.issuer().to_owned(),
+                subject: principal.subject().to_owned()
+            },
+            "a verified principal wins over the address"
+        );
+        assert_eq!(RateLimitKey::for_caller(None, None), RateLimitKey::Anonymous);
     }
 
     #[test]
