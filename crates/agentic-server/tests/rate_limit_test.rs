@@ -1,7 +1,10 @@
 //! Per-caller request rate limiting on the gateway's HTTP and WebSocket routes.
 //!
 //! Each test uses a rate of one request per minute, so a bucket cannot refill
-//! while the test runs and every outcome is deterministic.
+//! while the test runs and every admit or reject is deterministic. The advertised
+//! wait shrinks by however long the test takes, so the tests bound it by the
+//! measured elapsed time; the exact rounding is covered by the limiter's
+//! paused-time unit tests.
 
 #[allow(dead_code)]
 mod common;
@@ -9,6 +12,7 @@ mod common;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 
 use agentic_server::app::{ServerConfig, build_router};
 use agentic_server::rate_limit::RateLimitConfig;
@@ -66,9 +70,65 @@ async fn gateway_with_server_key(
     url
 }
 
+/// The spacing between requests at one request per minute.
+const INTERVAL: Duration = Duration::from_secs(60);
+
 /// One request per minute, with `burst` allowed at once.
 fn per_minute(burst: u32) -> RateLimitConfig {
     RateLimitConfig::new(NonZeroU32::MIN, NonZeroU32::new(burst)).unwrap()
+}
+
+/// The bounds on a limited request's whole-second wait, given the time since
+/// just before its bucket's first request.
+///
+/// The next request is due one interval after the bucket's first, so the wait
+/// is the interval less the time that has passed since then: at most the
+/// interval, and at least the interval less `elapsed`.
+fn wait_seconds_bounds(elapsed: Duration) -> std::ops::RangeInclusive<u64> {
+    INTERVAL.saturating_sub(elapsed).as_secs()..=INTERVAL.as_secs()
+}
+
+/// Milliseconds in an `x-ratelimit-reset-requests` value such as `250ms`,
+/// `1.5s`, or `1m59.996s`.
+fn reset_millis(value: &str) -> u64 {
+    if let Some(millis) = value.strip_suffix("ms") {
+        return millis.parse().unwrap();
+    }
+    let value = value.strip_suffix('s').unwrap();
+    let (minutes, seconds) = value.split_once('m').unwrap_or(("0", value));
+    let (whole, fraction) = seconds.split_once('.').unwrap_or((seconds, ""));
+    let fraction: u64 = format!("{fraction:0<3}").parse().unwrap();
+    minutes.parse::<u64>().unwrap() * 60_000 + whole.parse::<u64>().unwrap() * 1000 + fraction
+}
+
+/// Checks a limited response's retry headers, given the time since just before
+/// its bucket's first request, and returns `retry-after`.
+///
+/// The headers describe one wait, so they agree exactly whatever the timing:
+/// `retry-after` is `retry-after-ms` rounded up to whole seconds, and the full
+/// burst returns one interval per extra burst request after that.
+fn assert_retry_headers(response: &reqwest::Response, burst: u32, elapsed: Duration) -> u64 {
+    let seconds: u64 = header(response, "retry-after").parse().unwrap();
+    let millis: u64 = header(response, "retry-after-ms").parse().unwrap();
+    assert!(
+        wait_seconds_bounds(elapsed).contains(&seconds),
+        "retry-after {seconds} after {elapsed:?}"
+    );
+    let lowest_millis = u64::try_from(INTERVAL.saturating_sub(elapsed).as_millis()).unwrap();
+    assert!(
+        (lowest_millis..=60_000).contains(&millis),
+        "retry-after-ms {millis} after {elapsed:?}"
+    );
+    assert_eq!(seconds, millis.div_ceil(1000), "both hints round up the same wait");
+    assert_eq!(header(response, "x-ratelimit-limit-requests"), "1");
+    assert_eq!(header(response, "x-ratelimit-remaining-requests"), "0");
+    let reset = header(response, "x-ratelimit-reset-requests");
+    assert_eq!(
+        reset_millis(reset),
+        millis + 60_000 * u64::from(burst - 1),
+        "the full burst returns one interval per extra burst request later: {reset}"
+    );
+    seconds
 }
 
 fn models(gateway: &str, bearer: Option<&str>) -> reqwest::RequestBuilder {
@@ -93,6 +153,7 @@ async fn a_caller_over_its_limit_gets_an_openai_429_with_retry_headers() {
     let (upstream, calls) = counting_upstream().await;
     let gateway = gateway(&upstream, Some(per_minute(2))).await;
 
+    let started = Instant::now();
     for _ in 0..2 {
         let response = models(&gateway, Some("caller-a")).send().await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
@@ -102,21 +163,13 @@ async fn a_caller_over_its_limit_gets_an_openai_429_with_retry_headers() {
         );
     }
     let limited = models(&gateway, Some("caller-a")).send().await.unwrap();
+    let elapsed = started.elapsed();
     assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
-    assert_eq!(header(&limited, "retry-after"), "60");
-    let retry_after_ms: u64 = header(&limited, "retry-after-ms").parse().unwrap();
-    assert!((59_000..=60_000).contains(&retry_after_ms), "{retry_after_ms}");
-    assert_eq!(header(&limited, "x-ratelimit-limit-requests"), "1");
-    assert_eq!(header(&limited, "x-ratelimit-remaining-requests"), "0");
-    let reset = header(&limited, "x-ratelimit-reset-requests");
-    assert!(
-        reset.starts_with("1m59") || reset == "2m",
-        "two requests refill in two minutes: {reset}"
-    );
+    let seconds = assert_retry_headers(&limited, 2, elapsed);
     assert_eq!(
         limited.json::<Value>().await.unwrap(),
         json!({"error": {
-            "message": "rate limit exceeded; retry after 60 seconds",
+            "message": format!("rate limit exceeded; retry after {seconds} seconds"),
             "type": "rate_limit_error",
             "param": null,
             "code": "rate_limit_exceeded"
@@ -174,17 +227,22 @@ async fn messages_routes_answer_in_the_anthropic_format_and_key_by_api_key() {
             .json(&json!({"model": "m", "max_tokens": 8, "messages": [{"role": "user", "content": "hi"}]}))
     };
 
+    let started = Instant::now();
     assert_ne!(message().send().await.unwrap().status(), StatusCode::TOO_MANY_REQUESTS);
     let limited = message().send().await.unwrap();
+    let elapsed = started.elapsed();
     assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
-    assert_eq!(header(&limited, "retry-after"), "60");
+    let seconds = assert_retry_headers(&limited, 1, elapsed);
     let request_id = header(&limited, "request-id").to_owned();
     assert!(request_id.starts_with("req_"), "{request_id}");
     assert_eq!(
         limited.json::<Value>().await.unwrap(),
         json!({
             "type": "error",
-            "error": {"type": "rate_limit_error", "message": "rate limit exceeded; retry after 60 seconds"},
+            "error": {
+                "type": "rate_limit_error",
+                "message": format!("rate limit exceeded; retry after {seconds} seconds")
+            },
             "request_id": request_id
         })
     );
@@ -246,12 +304,27 @@ async fn create_completes(socket: &mut Socket) {
     assert_eq!(recv(socket).await["type"], "response.completed");
 }
 
-fn ws_rate_limit_error() -> Value {
-    json!({"type": "error", "status": 429, "error": {
-        "message": "rate limit exceeded; retry after 60 seconds",
-        "type": "rate_limit_error",
-        "code": "rate_limit_exceeded"
-    }})
+/// Checks a WebSocket rate-limit error frame, given the time since just before
+/// its bucket's first request.
+fn assert_ws_rate_limit_error(frame: &Value, elapsed: Duration) {
+    let seconds: u64 = frame["error"]["message"]
+        .as_str()
+        .and_then(|message| message.strip_prefix("rate limit exceeded; retry after "))
+        .and_then(|rest| rest.strip_suffix(" seconds"))
+        .and_then(|seconds| seconds.parse().ok())
+        .unwrap_or_else(|| panic!("not a rate-limit message: {frame}"));
+    assert!(
+        wait_seconds_bounds(elapsed).contains(&seconds),
+        "retry after {seconds} s after {elapsed:?}"
+    );
+    assert_eq!(
+        frame,
+        &json!({"type": "error", "status": 429, "error": {
+            "message": format!("rate limit exceeded; retry after {seconds} seconds"),
+            "type": "rate_limit_error",
+            "code": "rate_limit_exceeded"
+        }})
+    );
 }
 
 #[tokio::test]
@@ -260,11 +333,12 @@ async fn websocket_creates_are_charged_and_a_limited_create_keeps_the_connection
     let gateway = gateway(&upstream, Some(per_minute(3))).await;
 
     // The upgrade is the first request; two creates use the rest of the burst.
+    let started = Instant::now();
     let mut socket = connect(&gateway, Some("ws-caller")).await.unwrap();
     create_completes(&mut socket).await;
     create_completes(&mut socket).await;
     send(&mut socket, local_create()).await;
-    assert_eq!(recv(&mut socket).await, ws_rate_limit_error());
+    assert_ws_rate_limit_error(&recv(&mut socket).await, started.elapsed());
 
     // Steering acts on an admitted response and is not charged; it is answered
     // on the same, still open, connection.
@@ -282,13 +356,14 @@ async fn http_and_websocket_share_a_bucket_and_the_upgrade_is_charged() {
     let (upstream, _calls) = counting_upstream().await;
     let gateway = gateway(&upstream, Some(per_minute(2))).await;
 
+    let started = Instant::now();
     assert_eq!(
         models(&gateway, Some("shared")).send().await.unwrap().status(),
         StatusCode::OK
     );
     let mut socket = connect(&gateway, Some("shared")).await.unwrap();
     send(&mut socket, local_create()).await;
-    assert_eq!(recv(&mut socket).await, ws_rate_limit_error());
+    assert_ws_rate_limit_error(&recv(&mut socket).await, started.elapsed());
 
     match connect(&gateway, Some("shared")).await {
         Err(WsError::Http(response)) => assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS),
