@@ -5,11 +5,13 @@ mod carry_over;
 mod context;
 mod summary;
 
-pub(crate) use carry_over::StoredCarryOver;
-use carry_over::{CompactionCarryOver, public_calls};
+pub(crate) use carry_over::CompactionCarryOver;
+use carry_over::public_calls;
 
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+
+use either::Either;
 
 use super::telemetry::FailureCategory;
 use super::telemetry::metrics::Stage;
@@ -252,26 +254,15 @@ pub(crate) async fn maybe_compact_context(
     // Single-agent compaction covers every item. Items stored again come from the request's own
     // public items; the model input may keep a lowered call, which the model sees lowered anyway.
     let compacted_items = match (&ctx.enriched_request.input, multi_agent) {
-        (ResponsesInput::Items(model_items), false) => Cow::Owned(
-            model_items
-                .iter()
-                .filter_map(InOutItem::as_input)
-                .map(Cow::into_owned)
-                .collect(),
-        ),
-        _ => Cow::Borrowed(&items[..prefix]),
+        (input @ ResponsesInput::Items(_), false) => Either::Left(input.input_items()),
+        _ => Either::Right(items[..prefix].iter().map(Cow::Borrowed)),
     };
-    let own_items: Vec<_> = ctx
-        .new_input_items
-        .iter()
-        .filter_map(InOutItem::as_input)
-        .map(Cow::into_owned)
-        .collect();
+    let own_items = ctx.new_input_items.iter().filter_map(InOutItem::as_input);
     let suffix = if multi_agent { &items[prefix..] } else { &[][..] };
-    let (open_calls, carried) = {
-        let carry = CompactionCarryOver::new(&compacted_items, &own_items, suffix);
-        (carry.open_calls().cloned().collect::<Vec<_>>(), carry.stored())
-    };
+    let CompactionCarryOver {
+        open_calls,
+        stored: carried,
+    } = CompactionCarryOver::new(compacted_items, own_items, suffix);
     let input = ResponsesInput::from(items[..prefix].to_vec());
     let (mut compacted, usage, _) = compact_items_with_trigger(
         &ctx.enriched_request,
@@ -336,24 +327,14 @@ pub async fn compact_response(
     let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
     // The returned window keeps every open async call, in its public form, so a client replaying it
     // stays self-contained; storage adds only this request's own items (see `CompactionCarryOver`).
-    let own_items: Vec<_> = ctx
-        .new_input_items
-        .iter()
-        .filter_map(InOutItem::as_input)
-        .map(Cow::into_owned)
-        .collect();
-    let (open_calls, carried) = match &input {
-        ResponsesInput::Items(items) => {
-            let items: Vec<_> = items
-                .iter()
-                .filter_map(InOutItem::as_input)
-                .map(Cow::into_owned)
-                .collect();
-            let carry = CompactionCarryOver::new(&items, &own_items, &[]);
-            (carry.open_calls().cloned().collect::<Vec<_>>(), carry.stored())
-        }
-        ResponsesInput::Text(_) => (Vec::new(), CompactionCarryOver::new(&[], &[], &[]).stored()),
-    };
+    let CompactionCarryOver {
+        open_calls,
+        stored: carried,
+    } = CompactionCarryOver::new(
+        input.input_items(),
+        ctx.new_input_items.iter().filter_map(InOutItem::as_input),
+        &[],
+    );
     // A history call's public identity comes from what was stored, not from the tools this request
     // declares: the model input above lowered it, and the declarations may have changed since.
     // History is read again only when an open call came from it.
@@ -378,10 +359,11 @@ pub async fn compact_response(
     // A call this request supplied is already public; a call from history takes its stored form.
     let public_call = |item: InputItem| -> InputItem {
         let public = item.call_id().and_then(|call_id| {
-            own_items
+            ctx.new_input_items
                 .iter()
+                .filter_map(InOutItem::as_input)
                 .find(|own| own.call_id() == Some(call_id))
-                .cloned()
+                .map(Cow::into_owned)
                 .or_else(|| history_calls.remove(call_id))
         });
         public.unwrap_or(item)

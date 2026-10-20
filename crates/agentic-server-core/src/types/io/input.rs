@@ -778,7 +778,7 @@ mod tests {
             "action": {"type": "search", "query": "rust"}
         }))
         .unwrap();
-        assert!(matches!(web_search, InOutItem::Output(OutputItem::WebSearchCall(_))));
+        assert!(matches!(web_search, InOutItem::Input(InputItem::WebSearchCall(_))));
         assert_eq!(
             serde_json::to_value(&web_search).unwrap()["action"]["query"],
             "rust",
@@ -795,7 +795,7 @@ mod tests {
             "output": "found"
         }))
         .unwrap();
-        assert!(matches!(mcp, InOutItem::Output(OutputItem::McpCall(_))));
+        assert!(matches!(mcp, InOutItem::Input(InputItem::McpCall(_))));
         let value = serde_json::to_value(&mcp).unwrap();
         assert_eq!(value["server_label"], "search");
         assert_eq!(value["output"], "found", "the output payload survives replay");

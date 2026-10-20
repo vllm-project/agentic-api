@@ -21,7 +21,7 @@ use std::num::NonZeroUsize;
 #[cfg(test)]
 use either::Either;
 
-use super::compaction::{StoredCarryOver, compact_items};
+use super::compaction::{CompactionCarryOver, compact_items};
 use super::gateway::{
     compaction_event_plans, emit_gateway_completed_events, emit_gateway_start_events, emit_response_start_events,
 };
@@ -36,7 +36,7 @@ use crate::executor::response_budget::MAX_EXECUTOR_RESPONSE_BYTES;
 use crate::executor::telemetry::Api;
 use crate::executor::telemetry::metrics::RoundCounter;
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
-use crate::types::io::{InputItem, OutputItem, ResponseUsage, ResponsesInput};
+use crate::types::io::{InOutItem, InputItem, OutputItem, ResponseUsage, ResponsesInput};
 #[cfg(test)]
 use crate::types::request_response::RequestPayload;
 use crate::types::request_response::{IncompleteDetails, ResponsePayload};
@@ -198,10 +198,13 @@ async fn run_compaction_trigger(
         // Earlier open async calls stay visible through the compaction window. The request's late
         // outputs and its own open calls would be dropped with the items this turn replaces, so they
         // are stored again, before the compaction output.
-        let carried = match &input {
-            ResponsesInput::Items(items) => StoredCarryOver::from_history(items, &ctx.new_input_items).into_inputs(),
-            ResponsesInput::Text(_) => Vec::new(),
-        };
+        let carried = CompactionCarryOver::new(
+            input.input_items(),
+            ctx.new_input_items.iter().filter_map(InOutItem::as_input),
+            &[],
+        )
+        .stored
+        .into_inputs();
         let (mut compacted, usage, service_tier) = compact_items(&ctx.enriched_request, input, exec_ctx, auth).await?;
         let Some(InputItem::Compaction(compaction)) = compacted.pop() else {
             unreachable!("compact_items always appends a compaction item");
@@ -294,7 +297,6 @@ mod tests {
     use crate::executor::modes::{ConversationHandler, ResponseHandler};
     use crate::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
     use crate::tool::{GatewayExecutorRegistration, McpDiscoveredHandler, McpHandler};
-    use crate::types::io::InOutItem;
     use crate::types::tools::{McpDiscoveredToolParam, ResponsesTool};
     use futures::StreamExt;
     use std::sync::Arc;
