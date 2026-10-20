@@ -7,7 +7,7 @@ use agentic_core::types::conversations::{
     ConversationResponse, CreateConversationRequest, CreateItemRequest, ListItemsResponse,
 };
 
-fn remap_ids(value: &Value, ids: &IdPairs) -> Value {
+pub(super) fn remap_ids(value: &Value, ids: &IdPairs) -> Value {
     match value {
         Value::String(value) => Value::String(ids.forward.get(value).unwrap_or(value).clone()),
         Value::Array(values) => Value::Array(values.iter().map(|value| remap_ids(value, ids)).collect()),
@@ -30,7 +30,11 @@ fn conversation_body(data: ConversationData) -> Value {
     .unwrap()
 }
 
-async fn execute_step(handler: &ConversationHandler, turn: &Turn, ids: &IdPairs) -> Result<Value, Box<ExecutorError>> {
+pub(super) async fn execute_step(
+    handler: &ConversationHandler,
+    turn: &Turn,
+    ids: &IdPairs,
+) -> Result<Value, Box<ExecutorError>> {
     let segments: Vec<_> = turn.request.path.split('/').filter(|part| !part.is_empty()).collect();
     let body = remap_ids(&turn.request.body, ids);
     let query = remap_ids(&turn.request.query_params, ids);

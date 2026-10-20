@@ -186,7 +186,7 @@ impl Fixture {
         };
         let placeholder = InOutItem::Input(
             serde_json::from_value(json!({
-                "role":"user", "content":"placeholder"
+                "type":"message", "role":"user", "content":"placeholder"
             }))
             .expect("placeholder message"),
         );

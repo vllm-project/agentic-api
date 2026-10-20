@@ -197,7 +197,14 @@ async fn run_messages_loop_traced(
         // assistant turn (thinking/text/tool_use, order preserved — F3) plus the
         // tool_results back for the next round. Gateway blocks stay internal.
         usage.record(message.get("usage"));
-        let tool_results = execute_gateway_calls(tool_uses(&gateway_calls), &mut ctx, registry, &gateway_map).await;
+        let tool_results = execute_gateway_calls(
+            tool_uses(&gateway_calls),
+            &mut ctx,
+            registry,
+            &gateway_map,
+            &exec_ctx.metrics,
+        )
+        .await;
         ctx.append_round(content, tool_results)?;
     }
 

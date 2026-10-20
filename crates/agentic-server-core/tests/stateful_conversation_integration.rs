@@ -7,7 +7,10 @@
 mod support;
 
 use agentic_core::executor::{create_conversation, execute};
-use serde_json::json;
+use agentic_core::storage::ConversationStore;
+use agentic_core::types::io::InOutItem;
+use serde_json::{Value, json};
+use std::collections::HashSet;
 use std::sync::Arc;
 use support::{
     TestFixture, collect_stream, expected_text, function_call_response, load_cassette, make_request, output_text,
@@ -16,6 +19,118 @@ use support::{
 };
 
 const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/cassettes/text_only/conversation");
+
+fn item_ids(items: &Value) -> Vec<String> {
+    items
+        .as_array()
+        .expect("item array")
+        .iter()
+        .filter_map(|item| item["id"].as_str().map(str::to_owned))
+        .collect()
+}
+
+fn item_texts(items: &Value) -> Vec<String> {
+    items
+        .as_array()
+        .expect("item array")
+        .iter()
+        .map(|item| match &item["content"] {
+            Value::String(content) => content.clone(),
+            Value::Array(parts) => parts.iter().filter_map(|part| part["text"].as_str()).collect(),
+            _ => String::new(),
+        })
+        .collect()
+}
+
+fn item_roles(items: &Value) -> Vec<String> {
+    items
+        .as_array()
+        .expect("item array")
+        .iter()
+        .map(|item| item["role"].as_str().unwrap_or_default().to_owned())
+        .collect()
+}
+
+fn recorded_output(turn: &support::Turn) -> Value {
+    if let Some(body) = &turn.response.body {
+        return body["output"].clone();
+    }
+    support::recorded_named_sse_events(turn)
+        .into_iter()
+        .rev()
+        .find(|event| event["type"] == "response.completed")
+        .map(|event| event["response"]["output"].clone())
+        .expect("recorded turn has a completed event")
+}
+
+/// A recorded two-turn conversation keeps the history clients and the model server see.
+async fn assert_recorded_conversation_history(
+    fixture: &TestFixture,
+    conversation_id: &str,
+    first: &support::Turn,
+    second: &support::Turn,
+) {
+    let store = ConversationStore::new(Arc::clone(&fixture.pool));
+    let items = store.rehydrate(conversation_id).await.expect("rehydrate conversation");
+    let history = Value::Array(
+        items
+            .iter()
+            .map(|item| match item {
+                InOutItem::Input(input) => serde_json::to_value(input).expect("serialize input item"),
+                InOutItem::Output(output) => serde_json::to_value(output).expect("serialize output item"),
+            })
+            .collect(),
+    );
+    let first_output = recorded_output(first);
+    let second_output = recorded_output(second);
+    let first_prompt = first.request.body.input.as_str().unwrap_or_default();
+    let second_prompt = second.request.body.input.as_str().unwrap_or_default();
+
+    assert_eq!(
+        item_ids(&history),
+        item_ids(&first_output)
+            .into_iter()
+            .chain(item_ids(&second_output))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(item_roles(&history), ["user", "assistant", "user", "assistant"]);
+    assert_eq!(
+        item_texts(&history),
+        [
+            first_prompt.to_owned(),
+            expected_text(first),
+            second_prompt.to_owned(),
+            expected_text(second)
+        ]
+    );
+
+    // Each row keeps the recorded public identity and its own primary key.
+    let rows: Vec<(String, Option<String>)> =
+        sqlx::query_as("SELECT id, public_id FROM items WHERE conversation_id = $1 ORDER BY seq")
+            .bind(conversation_id)
+            .fetch_all(fixture.pool.as_ref())
+            .await
+            .expect("list conversation rows");
+    assert_eq!(rows.len(), 4);
+    assert_eq!(rows[1].0, item_ids(&first_output)[0]);
+    assert_eq!(rows[3].0, item_ids(&second_output)[0]);
+    assert_eq!(rows[1].1.as_deref(), Some(item_ids(&first_output)[0].as_str()));
+    assert_eq!(rows[3].1.as_deref(), Some(item_ids(&second_output)[0].as_str()));
+    assert_eq!(
+        rows.iter().map(|row| &row.0).collect::<HashSet<_>>().len(),
+        4,
+        "conversation rows must not share a primary key"
+    );
+
+    // The second turn forwards the recorded history and the new input upstream.
+    let bodies = fixture.request_bodies().await;
+    assert_eq!(bodies.len(), 2);
+    assert_eq!(item_ids(&bodies[1]["input"]), item_ids(&first_output));
+    assert_eq!(
+        item_texts(&bodies[1]["input"]),
+        [first_prompt.to_owned(), expected_text(first), second_prompt.to_owned()]
+    );
+}
 
 /// Case 6 — two turns, non-streaming, via `conversation_id`.
 #[tokio::test]
@@ -42,7 +157,7 @@ async fn test_two_turn_nonstreaming_conversation() {
     );
     let p2 = unwrap_blocking(
         execute(
-            make_request(&t2.request.body.input, true, false, None, Some(conv_id)),
+            make_request(&t2.request.body.input, true, false, None, Some(conv_id.clone())),
             Arc::clone(ctx),
         )
         .await
@@ -56,6 +171,7 @@ async fn test_two_turn_nonstreaming_conversation() {
     assert_ne!(p2.id, p1.id);
     assert_eq!(p2.status, "completed");
     assert_eq!(output_text(&p2), expected_text(t2));
+    assert_recorded_conversation_history(&fixture, &conv_id, t1, t2).await;
 }
 
 #[tokio::test]
@@ -281,7 +397,7 @@ async fn test_two_turn_streaming_conversation() {
     .await;
     let p2 = collect_stream(
         execute(
-            make_request(&t2.request.body.input, true, true, None, Some(conv_id)),
+            make_request(&t2.request.body.input, true, true, None, Some(conv_id.clone())),
             Arc::clone(ctx),
         )
         .await
@@ -296,6 +412,7 @@ async fn test_two_turn_streaming_conversation() {
     assert_ne!(p2.id, p1.id);
     assert_eq!(p2.status, "completed");
     assert_eq!(output_text(&p2), expected_text(t2));
+    assert_recorded_conversation_history(&fixture, &conv_id, t1, t2).await;
 }
 
 /// Case 8 — two independent conversations must not share context.

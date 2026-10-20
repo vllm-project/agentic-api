@@ -1458,6 +1458,15 @@ mod tests {
     }
 
     #[test]
+    fn responses_input_rejects_unknown_items() {
+        let input = serde_json::from_value::<ResponsesInput>(serde_json::json!([
+            {"type": "message", "role": "user", "content": "hi"},
+            {"type": "future_item", "payload": {"a": 1}}
+        ]));
+        assert!(input.is_err(), "an unmodeled item type fails at the boundary");
+    }
+
+    #[test]
     fn response_payload_terminal_chunk_uses_status_specific_event_type() {
         let mut payload = ResponsePayload {
             id: "resp_test".to_string(),

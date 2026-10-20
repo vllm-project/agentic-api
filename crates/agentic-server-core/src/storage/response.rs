@@ -129,13 +129,14 @@ impl ResponseStore {
             None => Vec::new(),
         };
         let items_ = item::serialize_new_items(new_items, item::ItemSource::ResponseHistory)?;
-        item_ids.extend(items_.iter().map(|(id, _)| id.clone()));
-        let history_item_ids_json = serialize_to_string(&item_ids)?;
         let metadata_json = String::try_from(metadata)?;
 
         let mut tx = pool.begin().await?;
 
-        item::create_in_tx(&mut tx, items_, None).await?;
+        // History rows get their own row IDs, so repeated public IDs keep every position.
+        let created = item::create_in_tx(&mut tx, items_, None).await?;
+        item_ids.extend(created.into_iter().map(|item| item.id));
+        let history_item_ids_json = serialize_to_string(&item_ids)?;
 
         response::create_in_tx(
             &mut tx,

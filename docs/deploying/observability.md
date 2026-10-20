@@ -147,7 +147,7 @@ argument, or error message appears on the span.
 #### Execution stages and upstream propagation
 
 Stages are children of `agentic.execute`, including work the response stream
-polls after the handler returns. A typical Responses tool loop has two
+polls after the handler returns. A typical tool loop has two
 `agentic.inference_round` children with `agentic.tool.execute` between them;
 each round contains its upstream `http.client.request`.
 
@@ -155,16 +155,20 @@ each round contains its upstream `http.client.request`.
 | --- | --- |
 | `agentic.rehydrate` | `agentic.rehydrate.source`: `none`, `previous_response`, or `conversation` |
 | `agentic.inference_round` | `agentic.inference.round`: zero-based round index |
-| `agentic.tool.execute` | `agentic.tool.type`: the gateway's tool category (`function`, `tool_search`, `custom`, `shell`, `codex_namespace`, `mcp`, `web_search`, `file_search`, or `code_interpreter`), never the tool name |
+| `agentic.tool.execute` | `agentic.tool.type`: the gateway's tool category (`function`, `tool_search`, `custom`, `shell`, `codex_namespace`, `mcp`, `web_search`, `web_fetch`, `file_search`, or `code_interpreter`), never the tool name |
 | `agentic.compaction` | `agentic.compaction.operation`: `summarize`; `agentic.compaction.trigger`: `context_management`, `input_item`, or `explicit` |
 | `agentic.persist` | `agentic.persist.destination`: `response` or `conversation` |
 
-Rehydration, persistence, compaction, and gateway tool stages describe the
-Responses executor. Inference rounds and HTTP client spans also cover the
-Messages executor. Explicit `/v1/responses/compact` requests emit compaction,
-rehydration, and persistence stages under their HTTP span, without an
-`agentic.execute` wrapper. Compaction's summarization HTTP call is a child
-of its compaction span.
+Rehydration, persistence, and compaction stages describe the Responses
+executor. Inference rounds, gateway tool stages, and HTTP client spans also
+cover the Messages executor, where `agentic.tool.type` names the executor
+that serves the call, so a client tool name aliased to `web_search` is
+`web_search`. A Messages call refused before it runs, because its `max_uses`
+budget is spent or its arguments cannot be dispatched, has no tool stage.
+Explicit `/v1/responses/compact` requests emit compaction, rehydration, and
+persistence stages under their HTTP span, without an `agentic.execute`
+wrapper. Compaction's summarization HTTP call is a child of its compaction
+span.
 
 The `http.client.request` span has client kind and only
 `http.request.method=POST`, `server.address` (host only), `server.port`,
@@ -272,8 +276,9 @@ to finalization, so for a stream it includes client delivery.
 - An `inference` sample is one upstream round: sending the request and, for a
   streamed round, reading its whole body. `persist` is recorded only when the
   request asked for storage. `tool` covers gateway-executed built-in tools in
-  the Responses executor, one sample per tool call. Gateway-executed built-in
-  tools in the Messages loop are not timed yet.
+  both executors, one sample per call that runs. A Messages call that reports
+  a failure, errors, has no handler, or times out is `error.type=tool`; one
+  refused before it runs records no sample.
 - `agentic.inference.rounds` is recorded once per execution, however the loop
   ended, when at least one round started. A multi-agent response records one
   sample that counts every agent's rounds, so it can exceed the round cap.

@@ -1174,6 +1174,7 @@ mod tests {
         for input in [
             serde_json::json!(""),
             serde_json::json!([{"role": "user", "content": "   "}]),
+            serde_json::json!([]),
         ] {
             let request = serde_json::from_value(serde_json::json!({
                 "model": "test-model",

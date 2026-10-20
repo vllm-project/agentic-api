@@ -1,5 +1,7 @@
-//! Compare recorder-generated `OpenAI` and gateway item API histories.
+//! Compare recorded API histories and replay them through the current gateway.
 //! Set `REQUIRE_CONVERSATIONS_CASSETTES=1` in CI to require both recordings.
+
+mod support;
 
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -646,7 +648,7 @@ fn check_pagination(cassette: &Cassette, streaming: bool) {
     );
 }
 
-fn compare_case(scenario: &str) {
+async fn compare_case(scenario: &str) {
     for streaming in [false, true] {
         let name = if streaming {
             format!("{scenario}-stream")
@@ -662,28 +664,33 @@ fn compare_case(scenario: &str) {
             check_case(&gateway, scenario, streaming);
         }
         compare_recordings(&name, &openai, &gateway);
+        replay::run(&format!("{name}/openai"), &openai).await;
+        replay::run(&format!("{name}/gateway"), &gateway).await;
     }
 }
 
-#[test]
-fn continuation_matches_openai() {
-    compare_case("continuation");
+#[tokio::test]
+async fn continuation_matches_openai() {
+    compare_case("continuation").await;
 }
 
-#[test]
-fn deletion_matches_openai() {
-    compare_case("deletion");
+#[tokio::test]
+async fn deletion_matches_openai() {
+    compare_case("deletion").await;
 }
 
-#[test]
-fn response_branch_matches_openai() {
-    compare_case("branch");
+#[tokio::test]
+async fn response_branch_matches_openai() {
+    compare_case("branch").await;
 }
 
-#[test]
-fn pagination_matches_openai() {
-    compare_case("pagination");
+#[tokio::test]
+async fn pagination_matches_openai() {
+    compare_case("pagination").await;
 }
+
+#[path = "conversations/replay.rs"]
+mod replay;
 
 fn check_edge_case_recording(cassette: &Cassette) {
     let turns = &cassette.turns;

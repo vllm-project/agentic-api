@@ -686,6 +686,7 @@ mod tests {
         ];
         for fixture in &output_items {
             validate("OutputItem", fixture);
+            validate("InOutItem", fixture);
         }
 
         // -- McpCallError: typed, string, and arbitrary forms --

@@ -1183,6 +1183,10 @@ async fn test_unsupported_input_item_is_rejected_before_upstream() {
             assert_eq!(response.status(), StatusCode::BAD_REQUEST);
             let body: serde_json::Value = response.json().await.expect("error envelope");
             assert_eq!(body["error"]["code"], "invalid_request_error");
+            assert_eq!(body["error"]["type"], "invalid_request_error");
+            assert!(body["error"].get("param").is_none(), "request shape, not a parameter");
+            let message = body["error"]["message"].as_str().expect("error message");
+            assert!(!message.is_empty(), "the boundary reports why the body was rejected");
         }
     }
     assert!(requests.lock().await.is_empty(), "rejected before reaching upstream");

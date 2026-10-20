@@ -38,8 +38,8 @@ pub enum InputMessageType {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct InputMessage {
-    // The InputItem schema already supplies this discriminator. Keeping it typed
-    // here lets the untagged message variant accept an omitted type, but no other type.
+    // InputItem's schema already supplies this discriminator. Its typed default
+    // accepts shorthand messages without accepting another item's explicit type.
     #[serde(default, rename = "type")]
     #[cfg_attr(feature = "openapi", schema(ignore))]
     pub kind: InputMessageType,
@@ -752,13 +752,99 @@ mod tests {
             );
         }
 
-        assert!(
-            serde_json::from_value::<InputItem>(serde_json::json!({
-                "type": "future_search_item",
-                "payload": {"opaque": true}
-            }))
-            .is_err()
+        let future = serde_json::from_value::<InputItem>(serde_json::json!({
+            "type": "future_search_item",
+            "payload": {"opaque": true}
+        }));
+        assert!(future.is_err(), "unmodeled input item types are rejected");
+    }
+
+    #[test]
+    fn gateway_emitted_calls_keep_their_payloads() {
+        let web_search: InOutItem = serde_json::from_value(serde_json::json!({
+            "type": "web_search_call",
+            "id": "ws_1",
+            "status": "completed",
+            "action": {"type": "search", "query": "rust"}
+        }))
+        .unwrap();
+        assert!(matches!(web_search, InOutItem::Output(OutputItem::WebSearchCall(_))));
+        assert_eq!(
+            serde_json::to_value(&web_search).unwrap()["action"]["query"],
+            "rust",
+            "the action payload survives replay"
         );
+
+        let mcp: InOutItem = serde_json::from_value(serde_json::json!({
+            "type": "mcp_call",
+            "id": "mcp_1",
+            "server_label": "search",
+            "name": "find",
+            "arguments": "{\"q\":\"rust\"}",
+            "status": "completed",
+            "output": "found"
+        }))
+        .unwrap();
+        assert!(matches!(mcp, InOutItem::Output(OutputItem::McpCall(_))));
+        let value = serde_json::to_value(&mcp).unwrap();
+        assert_eq!(value["server_label"], "search");
+        assert_eq!(value["output"], "found", "the output payload survives replay");
+    }
+
+    #[test]
+    fn unmodeled_input_item_types_fail_deserialization() {
+        for kind in [
+            "computer_call",
+            "image_generation_call",
+            "file_search_call",
+            "local_shell_call",
+            "mcp_approval_response",
+        ] {
+            assert!(
+                serde_json::from_value::<InputItem>(serde_json::json!({"type": kind, "id": "x"})).is_err(),
+                "{kind} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn shorthand_messages_stay_accepted() {
+        let input: ResponsesInput =
+            serde_json::from_value(serde_json::json!([{"role": "user", "content": "hi"}])).unwrap();
+        let ResponsesInput::Items(items) = input else {
+            panic!("expected item array");
+        };
+        assert!(matches!(items[0], InOutItem::Input(InputItem::Message(_))));
+
+        for wire in [
+            serde_json::json!({"role": "user", "content": "hi"}),
+            serde_json::json!({"type": "message", "role": "user", "content": "hi"}),
+        ] {
+            let item: InputItem = serde_json::from_value(wire).unwrap();
+            assert!(matches!(item, InputItem::Message(_)));
+            let serialized = serde_json::to_string(&item).unwrap();
+            assert_eq!(serialized.matches("\"type\"").count(), 1);
+            assert_eq!(
+                serde_json::from_str::<Value>(&serialized).unwrap(),
+                serde_json::json!({"type": "message", "role": "user", "content": "hi"})
+            );
+        }
+    }
+
+    #[test]
+    fn explicit_non_message_types_cannot_fall_back_to_shorthand() {
+        for kind in [
+            serde_json::json!("computer_call"),
+            serde_json::json!("function_call"),
+            serde_json::json!("web_search_call"),
+            serde_json::json!("mcp_call"),
+            Value::Null,
+            serde_json::json!(7),
+        ] {
+            let wire = serde_json::json!({"type": kind, "role": "user", "content": "hi"});
+            assert!(serde_json::from_value::<InputItem>(wire.clone()).is_err(), "{wire}");
+            assert!(serde_json::from_value::<ResponsesInput>(serde_json::json!([wire])).is_err());
+        }
     }
 
     #[test]
