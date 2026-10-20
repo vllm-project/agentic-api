@@ -252,10 +252,21 @@ pub(crate) async fn maybe_compact_context(
     // Single-agent compaction covers every item. Items stored again come from the request's own
     // public items; the model input may keep a lowered call, which the model sees lowered anyway.
     let compacted_items = match (&ctx.enriched_request.input, multi_agent) {
-        (ResponsesInput::Items(model_items), false) => Cow::Owned(InOutItem::to_replay_inputs(model_items)),
+        (ResponsesInput::Items(model_items), false) => Cow::Owned(
+            model_items
+                .iter()
+                .filter_map(InOutItem::as_input)
+                .map(Cow::into_owned)
+                .collect(),
+        ),
         _ => Cow::Borrowed(&items[..prefix]),
     };
-    let own_items = InOutItem::to_replay_inputs(&ctx.new_input_items);
+    let own_items: Vec<_> = ctx
+        .new_input_items
+        .iter()
+        .filter_map(InOutItem::as_input)
+        .map(Cow::into_owned)
+        .collect();
     let suffix = if multi_agent { &items[prefix..] } else { &[][..] };
     let (open_calls, carried) = {
         let carry = CompactionCarryOver::new(&compacted_items, &own_items, suffix);
@@ -325,10 +336,19 @@ pub async fn compact_response(
     let input = std::mem::replace(&mut ctx.enriched_request.input, ResponsesInput::Items(Vec::new()));
     // The returned window keeps every open async call, in its public form, so a client replaying it
     // stays self-contained; storage adds only this request's own items (see `CompactionCarryOver`).
-    let own_items = InOutItem::to_replay_inputs(&ctx.new_input_items);
+    let own_items: Vec<_> = ctx
+        .new_input_items
+        .iter()
+        .filter_map(InOutItem::as_input)
+        .map(Cow::into_owned)
+        .collect();
     let (open_calls, carried) = match &input {
         ResponsesInput::Items(items) => {
-            let items = InOutItem::to_replay_inputs(items);
+            let items: Vec<_> = items
+                .iter()
+                .filter_map(InOutItem::as_input)
+                .map(Cow::into_owned)
+                .collect();
             let carry = CompactionCarryOver::new(&items, &own_items, &[]);
             (carry.open_calls().cloned().collect::<Vec<_>>(), carry.stored())
         }

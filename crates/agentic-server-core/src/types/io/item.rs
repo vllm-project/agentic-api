@@ -1,35 +1,38 @@
 //! Shared input/output history items for Responses, Conversations, and storage.
 
+mod item_id;
+
 use std::borrow::Cow;
 
-use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "openapi")]
+use utoipa::{
+    PartialSchema, ToSchema,
+    openapi::{Ref, RefOr, schema::Schema},
+};
 
 use super::{InputItem, OutputItem};
 use crate::utils::common::serialize_to_value;
 
 /// An input or output item retained in request, response, or conversation history.
-#[derive(Debug, Clone, Serialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged, from = "InputItem")]
 pub enum InOutItem {
     Input(InputItem),
     Output(OutputItem),
 }
 
 #[cfg(feature = "openapi")]
-impl utoipa::PartialSchema for InOutItem {
-    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
-        use utoipa::openapi::{Ref, schema::AnyOfBuilder};
-        // Input and output shapes overlap, so a valid replay may match both.
-        AnyOfBuilder::new()
-            .item(Ref::from_schema_name("InputItem"))
-            .item(Ref::from_schema_name("OutputItem"))
-            .into()
+impl PartialSchema for InOutItem {
+    fn schema() -> RefOr<Schema> {
+        // Submitted history follows the strict input contract, even when its
+        // wire shape also appears in upstream output.
+        Ref::from_schema_name("InputItem").into()
     }
 }
 
 #[cfg(feature = "openapi")]
-impl utoipa::ToSchema for InOutItem {}
+impl ToSchema for InOutItem {}
 
 impl PartialEq for InOutItem {
     fn eq(&self, other: &Self) -> bool {
@@ -55,34 +58,6 @@ impl From<OutputItem> for InOutItem {
     }
 }
 
-impl<'de> Deserialize<'de> for InOutItem {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = Value::deserialize(deserializer)?;
-        let input_error = match InputItem::deserialize(&value) {
-            Ok(input) => return Ok(Self::Input(input)),
-            Err(error) => error,
-        };
-        // Only output-only shapes may use the output decoder. Shared shapes must
-        // satisfy input requirements: upstream output decoding permits partial calls.
-        match OutputItem::deserialize(value).map_err(serde::de::Error::custom)? {
-            output @ (OutputItem::WebSearchCall(_) | OutputItem::McpCall(_)) => Ok(Self::Output(output)),
-            OutputItem::Message(_)
-            | OutputItem::FunctionCall(_)
-            | OutputItem::CodeInterpreterCall(_)
-            | OutputItem::ToolSearchCall(_)
-            | OutputItem::CustomToolCall(_)
-            | OutputItem::ShellCall(_)
-            | OutputItem::McpListTools(_)
-            | OutputItem::Reasoning(_)
-            | OutputItem::Compaction(_)
-            | OutputItem::MultiAgentCall(_)
-            | OutputItem::MultiAgentCallOutput(_)
-            | OutputItem::AgentMessage(_)
-            | OutputItem::Unknown => Err(serde::de::Error::custom(input_error)),
-        }
-    }
-}
-
 impl InOutItem {
     /// Borrow an input record or project a public output using the existing continuation conversion.
     pub(crate) fn as_input(&self) -> Option<Cow<'_, InputItem>> {
@@ -90,12 +65,6 @@ impl InOutItem {
             Self::Input(input) => Some(Cow::Borrowed(input)),
             Self::Output(output) => output.to_input_item().map(Cow::Owned),
         }
-    }
-
-    /// Project replay inputs while preserving the public types of input tool calls.
-    /// Output records follow the existing output-to-input continuation policy.
-    pub(crate) fn to_replay_inputs(history: &[Self]) -> Vec<InputItem> {
-        history.iter().filter_map(Self::as_input).map(Cow::into_owned).collect()
     }
 
     pub(crate) fn call_id(&self) -> Option<&str> {

@@ -1,6 +1,7 @@
 //! What a compaction keeps from the items it summarizes: open async calls for the model input,
 //! and the request's own items that storage needs again.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 use crate::types::io::InOutItem;
@@ -93,8 +94,16 @@ pub(crate) struct StoredCarryOver {
 impl StoredCarryOver {
     /// Select the request's own async records from shared public history.
     pub(crate) fn from_history(items: &[InOutItem], own_items: &[InOutItem]) -> Self {
-        let items = InOutItem::to_replay_inputs(items);
-        let own_items = InOutItem::to_replay_inputs(own_items);
+        let items: Vec<_> = items
+            .iter()
+            .filter_map(InOutItem::as_input)
+            .map(Cow::into_owned)
+            .collect();
+        let own_items: Vec<_> = own_items
+            .iter()
+            .filter_map(InOutItem::as_input)
+            .map(Cow::into_owned)
+            .collect();
         CompactionCarryOver::new(&items, &own_items, &[]).stored()
     }
 

@@ -1,6 +1,6 @@
 mod validation;
 pub(crate) use validation::ensure_request_prepared;
-use validation::{request_contains_tool_search_state, validate_tool_search_request};
+use validation::{input_contains_tool_search_state, request_contains_tool_search_state, validate_tool_search_request};
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -368,14 +368,11 @@ impl ToolSearchState {
             return Ok(Self::default());
         }
 
-        let input_items = active_input.to_replay_inputs();
-        let has_search_history = input_items
-            .iter()
-            .any(|item| matches!(item, InputItem::ToolSearchCall(_) | InputItem::ToolSearchOutput(_)));
+        let has_search_history = input_contains_tool_search_state(&active_input);
         let has_completed_search = !restored_loaded_tools.is_empty()
-            || input_items
-                .iter()
-                .any(|item| matches!(item, InputItem::ToolSearchOutput(_)));
+            || active_input
+                .input_items()
+                .any(|item| matches!(&*item, InputItem::ToolSearchOutput(_)));
         let declaration = request
             .tools
             .as_deref()
@@ -1041,7 +1038,9 @@ fn prepare_history(
             | InputItem::Compaction(_)
             | InputItem::MultiAgentCall(_)
             | InputItem::MultiAgentCallOutput(_)
-            | InputItem::AgentMessage(_) => private_items.push(item.into_owned()),
+            | InputItem::AgentMessage(_)
+            | InputItem::WebSearchCall(_)
+            | InputItem::McpCall(_) => private_items.push(item.into_owned()),
         }
     }
 

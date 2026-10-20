@@ -589,13 +589,17 @@ access happen — those live in `tool/`, `executor/`, and `storage/` respectivel
   item types to vLLM.
 - **`types/io/item.rs`** — `InOutItem` is the shared input/output union used by
   `ResponsesInput::Items`, conversation requests/resources, and retained history.
-  Input JSON is validated by the derived `InputItem` decoder; output-only web-search
-  and MCP records retain their typed payloads as `OutputItem`s. Shared shapes must
-  satisfy input requirements rather than falling back to the permissive upstream
-  output decoder. `into_canonical_items` preserves these public records, while
+  Submitted history is decoded through the derived `InputItem` decoder, including
+  typed web-search and MCP call records. `InOutItem` derives deserialization through
+  `From<InputItem>`; upstream output decoding remains separate and can accept partial
+  streaming shapes. Its request schema describes the same strict input contract. `into_canonical_items` preserves these public records, while
   `InOutItem::into_input_items` uses the existing output-to-input conversion and
   client-tool lowering for model history. Storage row markers and legacy decoding
   remain in `storage/`; there is no separate conversation-item enum.
+  `ResponsesInput::input_items` uses `InOutItem::as_input` to borrow submitted input
+  items and project outputs. The existing compaction-window selection accepts these
+  borrowed items, so estimation avoids copying message and image payloads and model
+  construction moves owned projections.
 - **`types/io/multi_agent.rs`** — public collaboration output items and agent-message
   content. Its `input` module defines replay forms with optional IDs; output IDs remain
   required. Agent-message content includes text, images, files, refusals and encrypted
@@ -661,6 +665,9 @@ items, and MCP list metadata have explicit continuation representations. Public
 `web_search_call` and `mcp_call` output items return `None`: gateway execution records
 the canonical model-facing function call and its `function_call_output` separately,
 so converting the public projection would duplicate the call or lose result details.
+This omission applies to gateway-emitted output records. Client-submitted
+`InputItem::WebSearchCall` and `InputItem::McpCall` remain input records throughout
+request conversion and storage replay.
 Gateway tool results are already `InputItem`s and are appended through
 `append_tool_outputs`; they do not need an output-to-input conversion.
 

@@ -14,6 +14,7 @@ pub use content::{InputContent, InputFileContent, InputImageContent, InputTextCo
 
 use std::borrow::Cow;
 
+use either::Either;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -24,7 +25,10 @@ use super::{InOutItem, OutputItem};
 
 use super::code_interpreter::CodeInterpreterCall;
 use super::multi_agent::{AgentAttribution, InputAgentMessage, InputMultiAgentCall, InputMultiAgentCallOutput};
-use super::output::{CustomToolCall, FunctionToolCall, McpListTools, MessagePhase, ReasoningOutput, ToolSearchCall};
+use super::output::{
+    CustomToolCall, FunctionToolCall, McpCall, McpListTools, MessagePhase, ReasoningOutput, ToolSearchCall,
+    WebSearchCall,
+};
 use super::shell::{ShellCall, ShellCallOutputMessage, ShellCallStatus};
 
 /// The optional wire discriminator of a message input item.
@@ -336,6 +340,12 @@ pub enum InputItem {
     ShellCallOutput(ShellCallOutputMessage),
     #[serde(rename = "reasoning")]
     Reasoning(ReasoningOutput),
+    /// A public web-search call supplied as request history.
+    #[serde(rename = "web_search_call")]
+    WebSearchCall(WebSearchCall),
+    /// A public MCP call supplied as request history, including its output.
+    #[serde(rename = "mcp_call")]
+    McpCall(McpCall),
     /// Internal history record used by gateway orchestration to remember that
     /// an MCP server's tools were already listed. It is never sent to the model.
     #[serde(rename = "mcp_list_tools")]
@@ -389,11 +399,11 @@ impl Default for ResponsesInput {
 }
 
 impl ResponsesInput {
-    /// Project replay inputs without lowering public input tool calls.
-    pub(crate) fn to_replay_inputs(&self) -> Vec<InputItem> {
+    /// Borrow input records and project outputs through the continuation conversion.
+    pub(crate) fn input_items(&self) -> impl Iterator<Item = Cow<'_, InputItem>> {
         match self {
-            Self::Text(_) => Vec::from(self),
-            Self::Items(items) => InOutItem::to_replay_inputs(items),
+            Self::Text(_) => Either::Left(Vec::<InputItem>::from(self).into_iter().map(Cow::Owned)),
+            Self::Items(items) => Either::Right(items.iter().filter_map(InOutItem::as_input)),
         }
     }
 
@@ -440,17 +450,17 @@ impl ResponsesInput {
         {
             return Cow::Borrowed(self);
         }
-        let projected = InOutItem::to_replay_inputs(items);
-        let model = model_items(&projected)
-            .map(|item| match item {
+        let projected = self.input_items().collect();
+        let model = model_items(projected)
+            .map(|item| match item.into_owned() {
                 InputItem::Compaction(compaction) => InputItem::Message(InputMessage {
                     role: "assistant".to_owned(),
                     content: InputMessageContent::Parts(vec![InputContent::OutputText(InputTextContent::new(
-                        compaction.encrypted_content.clone(),
+                        compaction.encrypted_content,
                     ))]),
                     ..Default::default()
                 }),
-                other => other.clone(),
+                other => other,
             })
             .collect::<Vec<_>>();
         Cow::Owned(Self::from(model))
@@ -1202,5 +1212,70 @@ mod tests {
         assert_eq!(serialized[0]["type"], "shell_call");
         assert_eq!(serialized[1]["type"], "shell_call_output");
         assert_eq!(serialized[1]["output"][0]["outcome"]["exit_code"], 0);
+    }
+}
+
+#[cfg(test)]
+mod borrowed_history_tests {
+    use super::*;
+    use crate::types::io::InOutItem;
+    use crate::types::io::OutputItem;
+    use serde_json::json;
+
+    #[test]
+    fn model_window_borrows_retained_media_and_moves_output_projections() {
+        let input: ResponsesInput = serde_json::from_value(json!([
+            {"role":"user", "content":"superseded"},
+            {"type":"compaction", "encrypted_content":"summary"},
+            {"role":"user", "content":[{"type":"input_image", "image_url":"data:image/png;base64,abc"}]}
+        ]))
+        .unwrap();
+        let ResponsesInput::Items(mut items) = input else {
+            panic!("item history")
+        };
+        let output: OutputItem = serde_json::from_value(json!({
+            "type":"message", "id":"msg_1", "role":"assistant", "status":"completed",
+            "content":[{"type":"output_text", "text":"answer"}]
+        }))
+        .unwrap();
+        items.push(InOutItem::Output(output));
+        let InOutItem::Input(image_message) = &items[2] else {
+            panic!("input message")
+        };
+        let projected: Vec<_> = items.iter().filter_map(InOutItem::as_input).collect();
+        let InputItem::Message(message) = projected.last().unwrap().as_ref() else {
+            panic!("output message")
+        };
+        let id_ptr = message.id.as_ref().unwrap().as_ptr();
+        let selected: Vec<_> = model_items(projected).collect();
+        assert_eq!(selected.len(), 3);
+        assert!(matches!(&selected[1], Cow::Borrowed(item) if std::ptr::eq(*item, image_message)));
+        let Cow::Owned(InputItem::Message(message)) = &selected[2] else {
+            panic!("owned projection")
+        };
+        assert_eq!(
+            message.id.as_ref().unwrap().as_ptr(),
+            id_ptr,
+            "move the projected payload instead of cloning it"
+        );
+    }
+
+    #[test]
+    fn replay_view_keeps_public_calls_while_model_conversion_lowers_them() {
+        let input: ResponsesInput = serde_json::from_value(json!([
+            {"type":"custom_tool_call", "id":"ctc_1", "call_id":"custom", "name":"notes", "input":"text"},
+            {"type":"shell_call", "id":"sh_1", "call_id":"shell", "action":{"commands":["pwd"]}}
+        ]))
+        .unwrap();
+        let public: Vec<_> = input.input_items().map(Cow::into_owned).collect();
+        assert!(matches!(
+            public.as_slice(),
+            [InputItem::CustomToolCall(_), InputItem::ShellCall(_)]
+        ));
+        let model = Vec::<InputItem>::from(&input);
+        assert!(matches!(
+            model.as_slice(),
+            [InputItem::FunctionCall(_), InputItem::FunctionCall(_)]
+        ));
     }
 }

@@ -1039,6 +1039,32 @@ mod item_id_tests {
     }
 
     #[test]
+    fn submitted_gateway_calls_remain_inputs_after_storage_round_trip() {
+        for wire in [
+            json!({"type":"web_search_call", "id":"ws_1", "status":"completed", "action":{"type":"search", "query":"weather"}}),
+            json!({"type":"mcp_call", "id":"mcp_1", "server_label":"weather", "name":"forecast", "arguments":"{}", "output":"sunny"}),
+        ] {
+            let input = stored(wire);
+            let expected = serde_json::to_value(&input).unwrap();
+            let row = Item {
+                id: "row_1".to_owned(),
+                reference_id: None,
+                public_id: None,
+                data: String::try_from(&input).unwrap(),
+                created_at: 0,
+                conversation_id: None,
+                seq: None,
+                tenant_id: None,
+            };
+            let restored = row.as_inout().unwrap();
+            assert!(matches!(restored, InOutItem::Input(_)));
+            let replay = InOutItem::into_input_items(vec![restored]);
+            assert_eq!(replay.len(), 1);
+            assert_eq!(serde_json::to_value(&replay[0]).unwrap(), expected);
+        }
+    }
+
+    #[test]
     fn supplied_ids_are_validated_by_item_type_without_changing_call_ids() {
         let cases = [
             json!({"type":"message", "id":"msg_1", "role":"user", "content":"hello"}),

@@ -1,7 +1,9 @@
+use std::borrow::Borrow;
+
 use crate::types::io::input::model_items;
 use crate::types::io::{
-    CodeInterpreterCallOutput, InputContent, InputFileContent, InputItem, InputMessageContent, ResponsesInput,
-    ToolCallOutput, ToolOutputContent,
+    CodeInterpreterCallOutput, InputContent, InputFileContent, InputItem, InputMessageContent, ReasoningOutput,
+    ReasoningStatus, ResponsesInput, ToolCallOutput, ToolOutputContent,
 };
 use crate::types::tools::ResponsesTool;
 use crate::utils::common::serialize_to_value;
@@ -66,166 +68,181 @@ impl InputTokenEstimate {
             + u64::from(!self.text_bytes.is_multiple_of(ESTIMATED_BYTES_PER_TOKEN));
         self.fixed_tokens.saturating_add(text_tokens)
     }
-}
 
-fn add_message_content(estimate: &mut InputTokenEstimate, content: &InputMessageContent) {
-    match content {
-        InputMessageContent::Text(text) => estimate.add_text(text),
-        InputMessageContent::Parts(parts) => {
-            for part in parts {
-                match part {
-                    InputContent::InputText(text)
-                    | InputContent::OutputText(text)
-                    | InputContent::ReasoningText(text) => {
-                        estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
-                        estimate.add_text(&text.text);
-                    }
-                    InputContent::Refusal(refusal) => {
-                        estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
-                        estimate.add_text(&refusal.refusal);
-                    }
-                    InputContent::InputImage(_) => estimate.add_tokens(ESTIMATED_IMAGE_TOKENS),
-                    InputContent::InputFile(file) => add_file_content(estimate, file),
-                    InputContent::Unknown(_) => estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS),
-                }
-            }
-        }
-    }
-}
-
-fn add_file_content(estimate: &mut InputTokenEstimate, file: &InputFileContent) {
-    estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
-    estimate.add_optional_text(file.file_data.as_deref());
-    estimate.add_optional_text(file.file_id.as_deref());
-    estimate.add_optional_text(file.file_url.as_deref());
-    estimate.add_optional_text(file.filename.as_deref());
-    estimate.add_optional_text(file.detail.as_deref());
-}
-
-fn add_tool_definition(estimate: &mut InputTokenEstimate, tool: &ResponsesTool) {
-    // Serialize only declarations, preserving nested schemas and extra fields without
-    // copying image-bearing input. An unrepresentable declaration must not undercount.
-    match serialize_to_value(tool) {
-        Ok(value) => estimate.add_json_value(&value),
-        Err(_) => estimate.add_tokens(u64::MAX),
-    }
-}
-
-fn add_tool_call_output(estimate: &mut InputTokenEstimate, output: &ToolCallOutput) {
-    match output {
-        ToolCallOutput::Text(text) => estimate.add_text(text),
-        ToolCallOutput::Content(parts) => {
-            for part in parts {
-                match part {
-                    ToolOutputContent::InputText(text) => {
-                        estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
-                        estimate.add_text(&text.text);
-                    }
-                    ToolOutputContent::InputImage(_) => estimate.add_tokens(ESTIMATED_IMAGE_TOKENS),
-                    ToolOutputContent::InputFile(file) => add_file_content(estimate, file),
-                }
-            }
-        }
-    }
-}
-
-fn add_input_item(estimate: &mut InputTokenEstimate, item: &InputItem) {
-    if !item.is_model_visible() {
-        return;
-    }
-    estimate.add_tokens(ESTIMATED_ITEM_OVERHEAD_TOKENS);
-
-    match item {
-        InputItem::Message(message) => {
-            estimate.add_optional_text(message.id.as_deref());
-            estimate.add_text(&message.role);
-            add_message_content(estimate, &message.content);
-        }
-        InputItem::FunctionCall(call) => {
-            estimate.add_optional_text(call.id.as_deref());
-            estimate.add_text(&call.call_id);
-            estimate.add_text(&call.name);
-            estimate.add_optional_text(call.namespace.as_deref());
-            estimate.add_text(&call.arguments);
-        }
-        InputItem::FunctionCallOutput(output) => {
-            estimate.add_text(&output.call_id);
-            add_tool_call_output(estimate, &output.output);
-        }
-        InputItem::CodeInterpreterCall(call) => {
-            estimate.add_text(&call.id);
-            estimate.add_text(&call.container_id);
-            estimate.add_text(&call.code);
-            if let Some(outputs) = &call.outputs {
-                for output in outputs {
-                    match output {
-                        CodeInterpreterCallOutput::Logs { logs } => estimate.add_text(logs),
-                        CodeInterpreterCallOutput::Image { .. } => estimate.add_tokens(ESTIMATED_IMAGE_TOKENS),
+    fn add_message_content(&mut self, content: &InputMessageContent) {
+        match content {
+            InputMessageContent::Text(text) => self.add_text(text),
+            InputMessageContent::Parts(parts) => {
+                for part in parts {
+                    match part {
+                        InputContent::InputText(text)
+                        | InputContent::OutputText(text)
+                        | InputContent::ReasoningText(text) => {
+                            self.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
+                            self.add_text(&text.text);
+                        }
+                        InputContent::Refusal(refusal) => {
+                            self.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
+                            self.add_text(&refusal.refusal);
+                        }
+                        InputContent::InputImage(_) => self.add_tokens(ESTIMATED_IMAGE_TOKENS),
+                        InputContent::InputFile(file) => self.add_file_content(file),
+                        InputContent::Unknown(_) => self.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS),
                     }
                 }
             }
         }
-        InputItem::ToolSearchCall(call) => {
-            estimate.add_text(&call.id);
-            estimate.add_text(&call.call_id);
-            estimate.add_json_value(&call.arguments);
+    }
+
+    fn add_file_content(&mut self, file: &InputFileContent) {
+        self.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
+        self.add_optional_text(file.file_data.as_deref());
+        self.add_optional_text(file.file_id.as_deref());
+        self.add_optional_text(file.file_url.as_deref());
+        self.add_optional_text(file.filename.as_deref());
+        self.add_optional_text(file.detail.as_deref());
+    }
+
+    fn add_tool_definition(&mut self, tool: &ResponsesTool) {
+        // Serialize only declarations, preserving nested schemas and extra fields without
+        // copying image-bearing input. An unrepresentable declaration must not undercount.
+        match serialize_to_value(tool) {
+            Ok(value) => self.add_json_value(&value),
+            Err(_) => self.add_tokens(u64::MAX),
         }
-        InputItem::ToolSearchOutput(output) => {
-            estimate.add_text(&output.call_id);
-            for tool in &output.tools {
-                add_tool_definition(estimate, tool);
+    }
+
+    fn add_tool_call_output(&mut self, output: &ToolCallOutput) {
+        match output {
+            ToolCallOutput::Text(text) => self.add_text(text),
+            ToolCallOutput::Content(parts) => {
+                for part in parts {
+                    match part {
+                        ToolOutputContent::InputText(text) => {
+                            self.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
+                            self.add_text(&text.text);
+                        }
+                        ToolOutputContent::InputImage(_) => self.add_tokens(ESTIMATED_IMAGE_TOKENS),
+                        ToolOutputContent::InputFile(file) => self.add_file_content(file),
+                    }
+                }
             }
         }
-        InputItem::CustomToolCall(call) => {
-            estimate.add_text(&call.id);
-            estimate.add_text(&call.call_id);
-            estimate.add_text(&call.name);
-            estimate.add_text(&call.input);
+    }
+
+    fn add_item(&mut self, item: &InputItem) {
+        if !item.is_model_visible() {
+            return;
         }
-        InputItem::CustomToolCallOutput(output) => {
-            estimate.add_text(&output.call_id);
-            estimate.add_optional_text(output.name.as_deref());
-            add_tool_call_output(estimate, &output.output);
-        }
-        InputItem::ShellCall(_) | InputItem::ShellCallOutput(_) => {
-            // Shell items carry textual commands and outputs, without image payloads.
-            match serialize_to_value(item) {
-                Ok(value) => estimate.add_json_value(&value),
-                Err(_) => estimate.add_tokens(u64::MAX),
+        self.add_tokens(ESTIMATED_ITEM_OVERHEAD_TOKENS);
+
+        match item {
+            InputItem::Message(message) => {
+                self.add_optional_text(message.id.as_deref());
+                self.add_text(&message.role);
+                self.add_message_content(&message.content);
             }
-        }
-        InputItem::Reasoning(reasoning) => {
-            estimate.add_text(&reasoning.id);
-            estimate.add_optional_text(reasoning.status.map(crate::types::io::ReasoningStatus::as_str));
-            for content in &reasoning.content {
-                estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
-                estimate.add_text(&content.text);
+            InputItem::FunctionCall(call) => {
+                self.add_optional_text(call.id.as_deref());
+                self.add_text(&call.call_id);
+                self.add_text(&call.name);
+                self.add_optional_text(call.namespace.as_deref());
+                self.add_text(&call.arguments);
             }
-            for summary in &reasoning.summary {
-                // Match the previous JSON estimate: one object, two strings,
-                // and the literal field names, without reconstructing JSON.
-                estimate.add_tokens(3 * ESTIMATED_JSON_VALUE_OVERHEAD_TOKENS);
-                estimate.add_text("type");
-                estimate.add_text("summary_text");
-                estimate.add_text("text");
-                estimate.add_text(&summary.text);
+            InputItem::FunctionCallOutput(output) => {
+                self.add_text(&output.call_id);
+                self.add_tool_call_output(&output.output);
             }
-            if let Some(encrypted_content) = &reasoning.encrypted_content {
-                estimate.add_tokens(ESTIMATED_JSON_VALUE_OVERHEAD_TOKENS);
-                estimate.add_text(encrypted_content.as_str());
+            InputItem::CodeInterpreterCall(call) => {
+                self.add_text(&call.id);
+                self.add_text(&call.container_id);
+                self.add_text(&call.code);
+                if let Some(outputs) = &call.outputs {
+                    for output in outputs {
+                        match output {
+                            CodeInterpreterCallOutput::Logs { logs } => self.add_text(logs),
+                            CodeInterpreterCallOutput::Image { .. } => self.add_tokens(ESTIMATED_IMAGE_TOKENS),
+                        }
+                    }
+                }
             }
+            InputItem::ToolSearchCall(call) => {
+                self.add_text(&call.id);
+                self.add_text(&call.call_id);
+                self.add_json_value(&call.arguments);
+            }
+            InputItem::ToolSearchOutput(output) => {
+                self.add_text(&output.call_id);
+                for tool in &output.tools {
+                    self.add_tool_definition(tool);
+                }
+            }
+            InputItem::CustomToolCall(call) => {
+                self.add_text(&call.id);
+                self.add_text(&call.call_id);
+                self.add_text(&call.name);
+                self.add_text(&call.input);
+            }
+            InputItem::CustomToolCallOutput(output) => {
+                self.add_text(&output.call_id);
+                self.add_optional_text(output.name.as_deref());
+                self.add_tool_call_output(&output.output);
+            }
+            InputItem::ShellCall(_) | InputItem::ShellCallOutput(_) => {
+                // Shell items carry textual commands and outputs, without image payloads.
+                match serialize_to_value(item) {
+                    Ok(value) => self.add_json_value(&value),
+                    Err(_) => self.add_tokens(u64::MAX),
+                }
+            }
+            InputItem::Reasoning(reasoning) => self.add_reasoning(reasoning),
+            InputItem::WebSearchCall(call) => {
+                self.add_text(&call.id);
+                if let Ok(action) = serialize_to_value(&call.action) {
+                    self.add_json_value(&action);
+                }
+            }
+            InputItem::McpCall(call) => {
+                self.add_text(&call.id);
+                self.add_text(&call.server_label);
+                self.add_text(&call.name);
+                self.add_text(&call.arguments);
+                self.add_optional_text(call.output.as_deref());
+            }
+            InputItem::Compaction(compaction) => {
+                // `model_input` presents the checkpoint as one assistant output-text message.
+                self.add_text("assistant");
+                self.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
+                self.add_text(&compaction.encrypted_content);
+            }
+            InputItem::MultiAgentCall(_)
+            | InputItem::MultiAgentCallOutput(_)
+            | InputItem::AgentMessage(_)
+            | InputItem::McpListTools(_)
+            | InputItem::CompactionTrigger => {}
         }
-        InputItem::Compaction(compaction) => {
-            // `model_input` presents the checkpoint as one assistant output-text message.
-            estimate.add_text("assistant");
-            estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
-            estimate.add_text(&compaction.encrypted_content);
+    }
+
+    fn add_reasoning(&mut self, reasoning: &ReasoningOutput) {
+        self.add_text(&reasoning.id);
+        self.add_optional_text(reasoning.status.map(ReasoningStatus::as_str));
+        for content in &reasoning.content {
+            self.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
+            self.add_text(&content.text);
         }
-        InputItem::MultiAgentCall(_)
-        | InputItem::MultiAgentCallOutput(_)
-        | InputItem::AgentMessage(_)
-        | InputItem::McpListTools(_)
-        | InputItem::CompactionTrigger => {}
+        for summary in &reasoning.summary {
+            // Match the previous JSON estimate: one object, two strings,
+            // and the literal field names, without reconstructing JSON.
+            self.add_tokens(3 * ESTIMATED_JSON_VALUE_OVERHEAD_TOKENS);
+            self.add_text("type");
+            self.add_text("summary_text");
+            self.add_text("text");
+            self.add_text(&summary.text);
+        }
+        if let Some(encrypted_content) = &reasoning.encrypted_content {
+            self.add_tokens(ESTIMATED_JSON_VALUE_OVERHEAD_TOKENS);
+            self.add_text(encrypted_content.as_str());
+        }
     }
 }
 
@@ -243,15 +260,21 @@ pub(crate) fn estimate_input_tokens(input: &ResponsesInput) -> u64 {
             estimate.add_text(text);
             estimate.total_tokens()
         }
-        ResponsesInput::Items(_) => estimate_history_tokens(&input.to_replay_inputs()),
+        ResponsesInput::Items(_) => InputTokenEstimate::from_items(input.input_items().collect()).total_tokens(),
     }
 }
 
 pub(crate) fn estimate_history_tokens(items: &[InputItem]) -> u64 {
-    let mut estimate = InputTokenEstimate::default();
-    estimate.add_tokens(ESTIMATED_INPUT_OVERHEAD_TOKENS);
-    for item in model_items(items) {
-        add_input_item(&mut estimate, item);
+    InputTokenEstimate::from_items(items.iter().collect()).total_tokens()
+}
+
+impl InputTokenEstimate {
+    fn from_items<T: Borrow<InputItem>>(items: Vec<T>) -> Self {
+        let mut estimate = Self::default();
+        estimate.add_tokens(ESTIMATED_INPUT_OVERHEAD_TOKENS);
+        for item in model_items(items) {
+            estimate.add_item(item.borrow());
+        }
+        estimate
     }
-    estimate.total_tokens()
 }

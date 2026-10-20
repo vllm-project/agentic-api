@@ -11,6 +11,8 @@
 //! does not change a call already made.
 
 use indexmap::IndexMap;
+#[cfg(test)]
+use std::borrow::Cow;
 
 use super::{ExecutorError, ExecutorResult};
 use crate::tool::{ToolError, shell::SHELL_FUNCTION_NAME};
@@ -266,7 +268,9 @@ fn scan_calls(items: &[InputItem]) -> ExecutorResult<CallLedger> {
             | InputItem::CompactionTrigger
             | InputItem::MultiAgentCall(_)
             | InputItem::MultiAgentCallOutput(_)
-            | InputItem::AgentMessage(_) => {}
+            | InputItem::AgentMessage(_)
+            | InputItem::WebSearchCall(_)
+            | InputItem::McpCall(_) => {}
         }
         if ledger.unresolved_sync == 0 {
             ledger.resolved_prefix = index + 1;
@@ -598,12 +602,13 @@ mod tests {
                             ResponsesInput::from(vec![deserialize_from_value::<InputItem>(item.clone()).unwrap()]);
                         let normalized = input.normalized_model_input();
                         for history in [&input, normalized.as_ref()] {
-                            let required = pending_calls(&history.to_replay_inputs())
-                                .unwrap()
-                                .pop()
-                                .unwrap()
-                                .into_steering_required_input(&tools)
-                                .unwrap();
+                            let required =
+                                pending_calls(&history.input_items().map(Cow::into_owned).collect::<Vec<_>>())
+                                    .unwrap()
+                                    .pop()
+                                    .unwrap()
+                                    .into_steering_required_input(&tools)
+                                    .unwrap();
                             assert_eq!(
                                 serialize_to_value(&required).unwrap(),
                                 expected,

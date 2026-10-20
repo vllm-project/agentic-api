@@ -332,6 +332,50 @@ mod tests {
     use utoipa::OpenApi;
 
     #[test]
+    fn history_schema_matches_strict_input_deserialization() {
+        let mut schema = serde_json::to_value(ApiDoc::openapi()).unwrap();
+        schema["$ref"] = "#/components/schemas/InOutItem".into();
+        let validator = jsonschema::validator_for(&schema).unwrap();
+        for (wire, valid) in [
+            (serde_json::json!({"type":"function_call", "name":"weather"}), false),
+            (
+                serde_json::json!({"type":"function_call", "call_id":"call_1", "name":"weather"}),
+                false,
+            ),
+            (serde_json::json!({"type":"function_call_output"}), false),
+            (
+                serde_json::json!({"type":"message", "id":"msg_1", "role":"assistant", "status":"completed"}),
+                false,
+            ),
+            (
+                serde_json::json!({"type":"future_item", "role":"user", "content":"not a message"}),
+                false,
+            ),
+            (serde_json::json!({"type":"web_search_call", "id":"ws_1"}), false),
+            (serde_json::json!({"type":"mcp_call", "id":"mcp_1"}), false),
+            (
+                serde_json::json!({"type":"function_call", "call_id":"call_1", "name":"weather", "arguments":"{}"}),
+                true,
+            ),
+            (
+                serde_json::json!({"type":"web_search_call", "id":"ws_1", "status":"completed", "action":{"type":"search", "query":"weather"}}),
+                true,
+            ),
+            (
+                serde_json::json!({"type":"mcp_call", "id":"mcp_1", "server_label":"weather", "name":"forecast", "arguments":"{}", "output":"sunny"}),
+                true,
+            ),
+        ] {
+            assert_eq!(validator.is_valid(&wire), valid, "schema: {wire}");
+            assert_eq!(
+                serde_json::from_value::<InOutItem>(wire.clone()).is_ok(),
+                valid,
+                "decoder: {wire}"
+            );
+        }
+    }
+
+    #[test]
     fn spec_contains_expected_paths() {
         let spec = ApiDoc::openapi();
         let paths: Vec<&str> = spec.paths.paths.keys().map(String::as_str).collect();
@@ -666,9 +710,12 @@ mod tests {
             serde_json::json!({"type": "mcp_list_tools", "id": "mlt1", "server_label": "s", "tools": []}),
             serde_json::json!({"type": "compaction", "id": "cmp1", "encrypted_content": "enc"}),
             serde_json::json!({"type": "compaction_trigger"}),
+            serde_json::json!({"type": "web_search_call", "id": "ws1", "status": "completed", "action": {"type": "search", "query": "q"}}),
+            serde_json::json!({"type": "mcp_call", "id": "mc1", "server_label": "s", "name": "n", "arguments": "{}"}),
         ];
         for fixture in &input_items {
             validate("InputItem", fixture);
+            validate("InOutItem", fixture);
         }
 
         // -- OutputItem: every variant --
@@ -686,7 +733,6 @@ mod tests {
         ];
         for fixture in &output_items {
             validate("OutputItem", fixture);
-            validate("InOutItem", fixture);
         }
 
         // -- McpCallError: typed, string, and arbitrary forms --

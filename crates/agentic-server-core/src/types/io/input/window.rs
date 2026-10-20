@@ -4,7 +4,9 @@
 //! the previous checkpoint and async calls still open at the checkpoint, whose outputs may still
 //! arrive and must find their calls.
 
+use std::borrow::Borrow;
 use std::collections::HashSet;
+use std::hash::Hash;
 
 use super::InputItem;
 use crate::types::event::MessageStatus;
@@ -35,19 +37,24 @@ impl CompactionWindow {
     /// an async call still open at the checkpoint (`open` from [`open_async_call_ids`] over
     /// the items before it).
     #[must_use]
-    pub(crate) fn retains_item(self, index: usize, item: &InputItem, open: &HashSet<&str>) -> bool {
+    pub(crate) fn retains_item<S: Borrow<str> + Eq + Hash>(
+        self,
+        index: usize,
+        item: &InputItem,
+        open: &HashSet<S>,
+    ) -> bool {
         self.retains_user_item(index, item) || (index < self.latest_index && retained_async_call(item, open))
     }
 }
 
 #[must_use]
-pub(crate) fn latest_compaction_window(items: &[InputItem]) -> Option<CompactionWindow> {
+pub(crate) fn latest_compaction_window<T: Borrow<InputItem>>(items: &[T]) -> Option<CompactionWindow> {
     let latest_index = items
         .iter()
-        .rposition(|item| matches!(item, InputItem::Compaction(_)))?;
+        .rposition(|item| matches!(item.borrow(), InputItem::Compaction(_)))?;
     let retained_start = items[..latest_index]
         .iter()
-        .rposition(|item| matches!(item, InputItem::Compaction(_)))
+        .rposition(|item| matches!(item.borrow(), InputItem::Compaction(_)))
         .map_or(0, |index| index + 1);
     Some(CompactionWindow {
         latest_index,
@@ -57,9 +64,10 @@ pub(crate) fn latest_compaction_window(items: &[InputItem]) -> Option<Compaction
 
 /// Call IDs of async calls in `items` that have no output in `items`.
 #[must_use]
-pub(crate) fn open_async_call_ids(items: &[InputItem]) -> HashSet<&str> {
+pub(crate) fn open_async_call_ids<T: Borrow<InputItem>>(items: &[T]) -> HashSet<&str> {
     let mut open = HashSet::new();
     for item in items {
+        let item = item.borrow();
         if item.is_async_call() {
             open.extend(item.call_id());
         } else if let Some(call_id) = item.output_call_id() {
@@ -74,7 +82,7 @@ pub(crate) fn open_async_call_ids(items: &[InputItem]) -> HashSet<&str> {
 /// A summary cannot stand in for a call whose output may still arrive: the output must find
 /// its call. Such calls stay in the model context even though a checkpoint supersedes the
 /// items around them.
-pub(crate) fn retained_async_call(item: &InputItem, ids: &HashSet<&str>) -> bool {
+pub(crate) fn retained_async_call<S: Borrow<str> + Eq + Hash>(item: &InputItem, ids: &HashSet<S>) -> bool {
     item.is_async_call() && item.call_id().is_some_and(|call_id| ids.contains(call_id))
 }
 
@@ -108,23 +116,21 @@ pub(crate) fn async_records(items: &[InputItem]) -> Vec<bool> {
 /// An async call from before the checkpoint stays visible while it is open there, or when a further
 /// output for it arrives after the checkpoint (async calls accept repeated outputs), so the model
 /// never receives an output without its call.
-pub(crate) fn model_items(items: &[InputItem]) -> impl Iterator<Item = &InputItem> {
-    let window = latest_compaction_window(items);
-    let open = window.map_or_else(HashSet::new, |window| {
+pub(crate) fn model_items<T: Borrow<InputItem>>(items: Vec<T>) -> impl Iterator<Item = T> {
+    let window = latest_compaction_window(&items);
+    let open: HashSet<String> = window.map_or_else(HashSet::new, |window| {
         let (before, after) = items.split_at(window.latest_index());
         let mut kept = open_async_call_ids(before);
-        kept.extend(after.iter().filter_map(InputItem::output_call_id));
-        kept
+        kept.extend(after.iter().filter_map(|item| item.borrow().output_call_id()));
+        // Own the IDs so selection can move output projections without cloning payloads.
+        kept.into_iter().map(str::to_owned).collect()
     });
-    items
-        .iter()
-        .enumerate()
-        .filter(move |(index, item)| {
-            item.is_model_visible()
-                && window
-                    .is_none_or(|window| *index >= window.latest_index() || window.retains_item(*index, item, &open))
-        })
-        .map(|(_, item)| item)
+    items.into_iter().enumerate().filter_map(move |(index, item)| {
+        let input = item.borrow();
+        let visible = input.is_model_visible()
+            && window.is_none_or(|window| index >= window.latest_index() || window.retains_item(index, input, &open));
+        visible.then_some(item)
+    })
 }
 
 /// The items of the latest compaction window, plus the async call records from before it

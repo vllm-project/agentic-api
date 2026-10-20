@@ -195,13 +195,13 @@ fn output_history_is_preserved_until_model_projection() {
 }
 
 #[test]
-fn preserves_output_only_items_and_rejects_unknown_types() {
+fn preserves_gateway_call_input_and_rejects_unknown_types() {
     for wire in [
         json!({"type":"web_search_call", "id":"ws_1", "status":"completed", "action":{"type":"search", "query":"weather", "queries":["weather"], "sources":[{"url":"https://example.com"}]}}),
         json!({"type":"mcp_call", "id":"mcp_1", "name":"weather", "server_label":"weather", "arguments":"{}", "output":"sunny", "status":"completed"}),
     ] {
         let item: InOutItem = serde_json::from_value(wire.clone()).unwrap();
-        assert!(matches!(item, InOutItem::Output(_)));
+        assert!(matches!(item, InOutItem::Input(_)));
         let actual = serde_json::to_value(item).unwrap();
         for (key, value) in wire.as_object().unwrap() {
             assert_eq!(&actual[key], value, "{key}");

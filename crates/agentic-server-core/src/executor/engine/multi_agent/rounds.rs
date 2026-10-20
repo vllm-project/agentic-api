@@ -21,6 +21,7 @@ use crate::types::{
     request_response::IncompleteDetails,
     tools::ToolSearchStatus,
 };
+use std::borrow::Cow;
 
 use super::{
     CompletedRound, CompletedWork, MAX_RUN_ROUNDS, MultiAgentRun, call_error, invalid, mail_input, registry_error,
@@ -280,7 +281,7 @@ impl MultiAgentRun {
             .get_mut(&turn.agent)
             .expect("completed work has a canonical context");
         context.execution = execution;
-        context.stored.history = request.input.to_replay_inputs();
+        context.stored.history = request.input.input_items().map(Cow::into_owned).collect();
         context.stored.history.append(&mut context.inputs_during_round);
         context.generation += 1;
         context.request = request;

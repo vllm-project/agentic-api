@@ -236,21 +236,14 @@ async fn tagged_enum_discriminators_present() {
                 .or_else(|| variant["allOf"][0]["properties"]["type"]["enum"][0].as_str())
         })
         .collect();
-    for expected in ["compaction_trigger", "message"] {
+    for expected in ["compaction_trigger", "message", "web_search_call", "mcp_call"] {
         assert!(
             type_values.contains(&expected),
             "InputItem missing '{expected}', got: {type_values:?}"
         );
     }
     assert!(schemas.get("ConversationItem").is_none());
-    assert_eq!(
-        schemas["InOutItem"]["anyOf"][0]["$ref"],
-        "#/components/schemas/InputItem"
-    );
-    assert_eq!(
-        schemas["InOutItem"]["anyOf"][1]["$ref"],
-        "#/components/schemas/OutputItem"
-    );
+    assert_eq!(schemas["InOutItem"]["$ref"], "#/components/schemas/InputItem");
     assert_eq!(
         schemas["ResponsesInput"]["oneOf"][1]["items"]["$ref"],
         "#/components/schemas/InOutItem"

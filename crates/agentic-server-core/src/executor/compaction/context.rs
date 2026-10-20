@@ -56,6 +56,8 @@ pub(super) fn item_has_meaningful_context(item: &InputItem) -> bool {
         | InputItem::MultiAgentCallOutput(_)
         | InputItem::AgentMessage(_)
         | InputItem::McpListTools(_)
-        | InputItem::CompactionTrigger => false,
+        | InputItem::CompactionTrigger
+        | InputItem::WebSearchCall(_)
+        | InputItem::McpCall(_) => false,
     }
 }

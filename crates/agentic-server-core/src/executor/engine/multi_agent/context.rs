@@ -1,4 +1,5 @@
 use crate::types::io::InOutItem;
+use std::borrow::Cow;
 use std::{collections::HashSet, num::NonZeroUsize};
 
 use super::super::agent_turn::AgentTurn;
@@ -59,7 +60,7 @@ pub(in crate::executor::engine) fn prepare_without_inference(
             &agent.loaded_tools,
             request.original_request.tools.is_some(),
         )?;
-        agent.history = effective.input.to_replay_inputs();
+        agent.history = effective.input.input_items().map(Cow::into_owned).collect();
         if let Some(search) = search {
             agent.loaded_tools = search.into_public_metadata().loaded_tools;
         }
@@ -228,7 +229,12 @@ pub(super) fn restore_agents(
             turn: root.turn,
             state: AgentState::Active(AgentPhase::Runnable),
             mailbox: Vec::new(),
-            history: request.enriched_request.input.to_replay_inputs(),
+            history: request
+                .enriched_request
+                .input
+                .input_items()
+                .map(Cow::into_owned)
+                .collect(),
             loaded_tools: Vec::new(),
             last_task: String::new(),
             final_answer: None,
@@ -269,7 +275,7 @@ pub(super) async fn prepare_agent(
         parent.original_request.tools.is_some(),
     )?;
     // Discovery resolves public search pairs before this private history is used for inference.
-    stored.history = request.input.to_replay_inputs();
+    stored.history = request.input.input_items().map(Cow::into_owned).collect();
     let ctx = RequestContext {
         multi_agent_tree: None,
         original_request: request.clone(),

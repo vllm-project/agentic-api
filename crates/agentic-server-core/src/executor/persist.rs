@@ -14,8 +14,8 @@ use crate::storage::ResponseMetadata;
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
 use crate::types::event::ResponseStatus;
 use crate::types::io::InOutItem;
+use crate::types::io::OutputItem;
 use crate::types::io::input::model_items;
-use crate::types::io::{InputItem, OutputItem};
 use crate::types::request_response::ResponsePayload;
 use tracing::error;
 
@@ -273,8 +273,9 @@ async fn validate_output_call_ids(
     if ctx.continuation.is_some() {
         // Rehydration already combined the pinned parent with normalized input.
         // Validate that effective window, excluding calls superseded by compaction.
-        let items = Vec::<InputItem>::from(&ctx.enriched_request.input);
-        return validate_history_call_ids(model_items(&items).map(InputItem::call_id), &call_ids);
+        let projected = ctx.enriched_request.input.input_items().collect();
+        let items: Vec<_> = model_items(projected).collect();
+        return validate_history_call_ids(items.iter().map(|item| item.call_id()), &call_ids);
     }
     let history = resp_handler.rehydrate(ctx).await?;
     validate_history_call_ids(history.iter().map(InOutItem::call_id), &call_ids)?;

@@ -1,7 +1,7 @@
 //! Request input is checked at the typed boundary, before execution or routing.
 
 use agentic_core::executor::ExecutorError;
-use agentic_core::types::io::{InOutItem, InputItem, OutputItem, ResponsesInput};
+use agentic_core::types::io::{InOutItem, InputItem, ResponsesInput};
 use agentic_core::types::request_response::{CompactRequest, RequestPayload};
 use http::StatusCode;
 use serde_json::json;
@@ -90,15 +90,21 @@ fn gateway_call_input_preserves_typed_payloads_in_canonical_history() {
         "model": "synthetic", "input": wire
     }))
     .expect("gateway calls are typed request input");
-    // Public projections are retained, but replay normalization is a separate change.
-    assert!(Vec::<InputItem>::from(&payload.input).is_empty());
-    assert_eq!(serde_json::to_value(payload.input.model_input()).unwrap(), json!([]));
+    assert_eq!(
+        serde_json::to_value(Vec::<InputItem>::from(&payload.input)).unwrap(),
+        wire
+    );
+    assert_eq!(serde_json::to_value(payload.input.model_input()).unwrap(), wire);
+    for stream in [false, true] {
+        let upstream = payload.to_upstream_request(stream).unwrap();
+        assert_eq!(serde_json::to_value(&upstream.input).unwrap(), wire);
+    }
     let items = payload.input.into_canonical_items();
     assert!(matches!(
         items.as_slice(),
         [
-            InOutItem::Output(OutputItem::WebSearchCall(_)),
-            InOutItem::Output(OutputItem::McpCall(_))
+            InOutItem::Input(InputItem::WebSearchCall(_)),
+            InOutItem::Input(InputItem::McpCall(_))
         ]
     ));
     assert_eq!(serde_json::to_value(ResponsesInput::Items(items)).unwrap(), wire);
