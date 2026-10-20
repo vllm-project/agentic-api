@@ -162,7 +162,7 @@ mod tests {
             usage: ResponseUsage::default(),
             service_tier: None,
         };
-        let mut history = vec![InputItem::Unknown, InputItem::CompactionTrigger];
+        let mut history = vec![InputItem::CompactionTrigger, InputItem::CompactionTrigger];
         assert_eq!(result().commit(8, &mut history), CompactionCommit::Stale);
         assert_eq!(history.len(), 2);
         assert_eq!(result().commit(7, &mut history), CompactionCommit::Applied);

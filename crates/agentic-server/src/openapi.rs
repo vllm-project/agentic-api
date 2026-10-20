@@ -665,6 +665,8 @@ mod tests {
             serde_json::json!({"type": "mcp_list_tools", "id": "mlt1", "server_label": "s", "tools": []}),
             serde_json::json!({"type": "compaction", "id": "cmp1", "encrypted_content": "enc"}),
             serde_json::json!({"type": "compaction_trigger"}),
+            serde_json::json!({"type": "web_search_call", "id": "ws1", "status": "completed", "action": {"type": "search", "query": "q"}}),
+            serde_json::json!({"type": "mcp_call", "id": "mc1", "server_label": "s", "name": "n", "arguments": "{}"}),
         ];
         for fixture in &input_items {
             validate("InputItem", fixture);

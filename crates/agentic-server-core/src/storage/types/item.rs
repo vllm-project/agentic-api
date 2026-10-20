@@ -136,7 +136,6 @@ impl InOutItem {
         let items = history
             .into_iter()
             .filter_map(|item| match item {
-                InOutItem::Input(item) if item.is_unknown() => None,
                 InOutItem::Input(item) => Some(item),
                 InOutItem::Output(output) => output.to_input_item(),
             })

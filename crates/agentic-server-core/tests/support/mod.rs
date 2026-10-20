@@ -7,6 +7,7 @@
 
 #![allow(dead_code)]
 
+use std::fmt::Write as _;
 use std::sync::Arc;
 
 use axum::Router;
@@ -337,6 +338,8 @@ pub async fn setup_pool() -> Arc<DbPool> {
 /// Bundles everything a test needs.  Dropped at end of test scope.
 pub struct TestFixture {
     pub exec_ctx: Arc<ExecutionContext>,
+    /// Database behind the handlers, exposed for store-level assertions.
+    pub pool: Arc<DbPool>,
     // Kept for its Drop impl — aborts the mock server when the test ends.
     pub server: MockServer,
 }
@@ -366,7 +369,7 @@ impl TestFixture {
             server.url().to_string(),
         ));
 
-        Self { exec_ctx, server }
+        Self { exec_ctx, pool, server }
     }
 
     pub async fn new_with_responses(responses: Vec<MockResponse>) -> Self {
@@ -383,12 +386,96 @@ impl TestFixture {
             server.url().to_string(),
         ));
 
-        Self { exec_ctx, server }
+        Self { exec_ctx, pool, server }
     }
 
     pub async fn request_bodies(&self) -> Vec<Value> {
         self.server.request_bodies().await
     }
+}
+
+/// How the search backend behind a gateway `web_search` answers.
+#[derive(Clone)]
+pub enum Search {
+    /// One result titled "private search result", a value no span or metric may carry.
+    Answers,
+    /// Every query fails with a 500.
+    Fails,
+    /// Signals that a search arrived, then never answers it.
+    Hangs(Arc<tokio::sync::Notify>),
+}
+
+/// A search backend serving `GET /v1/search`.
+pub async fn search_server(search: Search) -> (String, JoinHandle<()>) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let router = Router::new().route(
+        "/v1/search",
+        axum::routing::get(move || {
+            let search = search.clone();
+            async move {
+                match search {
+                    Search::Answers => axum::Json(serde_json::json!({"results": {
+                        "web": [{"url": "https://example.com", "title": "private search result"}],
+                        "news": []
+                    }}))
+                    .into_response(),
+                    Search::Fails => {
+                        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "search backend down").into_response()
+                    }
+                    Search::Hangs(arrived) => {
+                        arrived.notify_one();
+                        std::future::pending().await
+                    }
+                }
+            }
+        }),
+    );
+    let task = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    (url, task)
+}
+
+/// A Messages SSE body: each event framed with its `type` as the event name.
+pub fn messages_sse(events: &[Value]) -> MockResponse {
+    let mut body = String::new();
+    for event in events {
+        writeln!(body, "event: {}\ndata: {event}\n", event["type"].as_str().unwrap()).unwrap();
+    }
+    MockResponse::Sse(body)
+}
+
+/// The `message_start` event that opens an upstream Messages stream.
+pub fn messages_start_event() -> Value {
+    serde_json::json!({"type": "message_start", "message": {
+        "id": "msg_upstream", "type": "message", "role": "assistant", "model": "test-model",
+        "content": [], "stop_reason": null, "stop_sequence": null,
+        "usage": {"input_tokens": 3, "output_tokens": 0}}})
+}
+
+/// A Messages turn that answers "hello" and ends with `stop_reason`.
+pub fn messages_json_response(stop_reason: &str) -> MockResponse {
+    MockResponse::Json(
+        serde_json::json!({
+            "id": "msg_upstream", "type": "message", "role": "assistant", "model": "test-model",
+            "content": [{"type": "text", "text": "hello"}],
+            "stop_reason": stop_reason, "stop_sequence": null,
+            "usage": {"input_tokens": 3, "output_tokens": 1}
+        })
+        .to_string(),
+    )
+}
+
+/// The streamed form of [`messages_json_response`].
+pub fn messages_sse_response(stop_reason: &str) -> MockResponse {
+    messages_sse(&[
+        messages_start_event(),
+        serde_json::json!({"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}),
+        serde_json::json!({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "hello"}}),
+        serde_json::json!({"type": "content_block_stop", "index": 0}),
+        serde_json::json!({"type": "message_delta", "delta": {"stop_reason": stop_reason, "stop_sequence": null},
+            "usage": {"output_tokens": 1}}),
+        serde_json::json!({"type": "message_stop"}),
+    ])
 }
 
 pub fn text_response(text: &str) -> MockResponse {

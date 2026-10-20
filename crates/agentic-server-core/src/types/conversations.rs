@@ -131,12 +131,11 @@ pub enum ConversationItem {
 impl<'de> Deserialize<'de> for ConversationItem {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let value = Value::deserialize(deserializer)?;
-        let input = InputItem::deserialize(&value).map_err(serde::de::Error::custom)?;
-        if !matches!(input, InputItem::Unknown) {
+        // A kind that the input union does not model may still be an output item;
+        // fall back to the output union instead of rejecting it here.
+        if let Ok(input) = InputItem::deserialize(&value) {
             return Ok(Self::Input(input));
         }
-        // InputItem's forward-compatible fallback must not consume output-only
-        // kinds such as web_search_call and mcp_call and discard their payloads.
         let output = OutputItem::deserialize(value).map_err(serde::de::Error::custom)?;
         if matches!(output, OutputItem::Unknown) {
             return Err(serde::de::Error::custom("unsupported conversation item type"));

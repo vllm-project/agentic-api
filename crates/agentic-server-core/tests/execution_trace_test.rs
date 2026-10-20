@@ -33,12 +33,16 @@ use tracing_subscriber::layer::SubscriberExt as _;
 
 #[path = "execution_trace/compaction.rs"]
 mod compaction;
+#[path = "support/messages_gateway_tools.rs"]
+mod messages_gateway_tools;
+#[path = "execution_trace/messages_tools.rs"]
+mod messages_tools;
 #[path = "execution_trace/stages.rs"]
 mod stages;
 mod support;
 #[path = "../../agentic-server/tests/execution_traces/attributes.rs"]
 mod trace_attributes;
-use support::{MockResponse, MockServer, TestFixture, text_response};
+use support::{MockResponse, MockServer, TestFixture, messages_json_response, messages_sse_response, text_response};
 
 const PROMPT: &str = "the prompt text must never be exported";
 
@@ -489,53 +493,6 @@ fn messages_request(stream: bool) -> MessagesRequestContext {
         "messages": [{"role": "user", "content": PROMPT}]
     }))
     .unwrap()
-}
-
-fn messages_json_response(stop_reason: &str) -> MockResponse {
-    MockResponse::Json(
-        json!({
-            "id": "msg_upstream", "type": "message", "role": "assistant", "model": "test-model",
-            "content": [{"type": "text", "text": "hello"}],
-            "stop_reason": stop_reason, "stop_sequence": null,
-            "usage": {"input_tokens": 3, "output_tokens": 1}
-        })
-        .to_string(),
-    )
-}
-
-fn messages_sse_response(stop_reason: &str) -> MockResponse {
-    let events = [
-        (
-            "message_start",
-            json!({"type": "message_start", "message": {
-            "id": "msg_upstream", "type": "message", "role": "assistant", "model": "test-model",
-            "content": [], "stop_reason": null, "stop_sequence": null,
-            "usage": {"input_tokens": 3, "output_tokens": 0}}}),
-        ),
-        (
-            "content_block_start",
-            json!({"type": "content_block_start", "index": 0,
-            "content_block": {"type": "text", "text": ""}}),
-        ),
-        (
-            "content_block_delta",
-            json!({"type": "content_block_delta", "index": 0,
-            "delta": {"type": "text_delta", "text": "hello"}}),
-        ),
-        ("content_block_stop", json!({"type": "content_block_stop", "index": 0})),
-        (
-            "message_delta",
-            json!({"type": "message_delta",
-            "delta": {"stop_reason": stop_reason, "stop_sequence": null},
-            "usage": {"output_tokens": 1}}),
-        ),
-        ("message_stop", json!({"type": "message_stop"})),
-    ];
-    let mut body = String::new();
-    for (name, event) in events {
-        writeln!(body, "event: {name}\ndata: {event}\n").unwrap();
-    }
-    MockResponse::Sse(body)
 }
 
 #[tokio::test]

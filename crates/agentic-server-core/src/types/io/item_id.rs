@@ -20,11 +20,12 @@ impl InputItem {
             Self::Reasoning(item) => Some(&item.id),
             Self::McpListTools(item) => Some(&item.id),
             Self::Compaction(item) => item.id.as_deref(),
+            Self::WebSearchCall(item) => Some(&item.id),
+            Self::McpCall(item) => Some(&item.id),
             Self::FunctionCallOutput(_)
             | Self::ToolSearchOutput(_)
             | Self::CustomToolCallOutput(_)
-            | Self::CompactionTrigger
-            | Self::Unknown => None,
+            | Self::CompactionTrigger => None,
         }
     }
 
@@ -44,13 +45,14 @@ impl InputItem {
             Self::ShellCall(_) => Some("sh_"),
             Self::Reasoning(_) => Some("rs_"),
             Self::McpListTools(_) => Some("mcpl_"),
+            Self::WebSearchCall(_) => Some("ws_"),
+            Self::McpCall(_) => Some("mcp_"),
             Self::Compaction(_) => Some("cmp_"),
             Self::ShellCallOutput(_)
             | Self::FunctionCallOutput(_)
             | Self::ToolSearchOutput(_)
             | Self::CustomToolCallOutput(_)
-            | Self::CompactionTrigger
-            | Self::Unknown => None,
+            | Self::CompactionTrigger => None,
         }
     }
 }
@@ -74,7 +76,7 @@ impl OutputItem {
             Self::McpListTools(item) => Some(&item.id),
             Self::Reasoning(item) => Some(&item.id),
             Self::Compaction(item) => item.id.as_deref(),
-            Self::Unknown => None,
+            Self::Unknown { .. } => None,
         }
     }
 
@@ -97,7 +99,7 @@ impl OutputItem {
             Self::McpListTools(_) => Some("mcpl_"),
             Self::Reasoning(_) => Some("rs_"),
             Self::Compaction(_) => Some("cmp_"),
-            Self::Unknown => None,
+            Self::Unknown { .. } => None,
         }
     }
 }

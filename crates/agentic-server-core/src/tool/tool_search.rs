@@ -1045,7 +1045,8 @@ fn prepare_history(
             | InputItem::MultiAgentCall(_)
             | InputItem::MultiAgentCallOutput(_)
             | InputItem::AgentMessage(_)
-            | InputItem::Unknown => private_items.push(item.clone()),
+            | InputItem::WebSearchCall(_)
+            | InputItem::McpCall(_) => private_items.push(item.clone()),
         }
     }
 

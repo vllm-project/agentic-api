@@ -131,6 +131,7 @@ const KEY_VALUES: &[(&str, &[&str])] = &[
             "codex_namespace",
             "mcp",
             "web_search",
+            "web_fetch",
             "file_search",
             "code_interpreter",
         ],

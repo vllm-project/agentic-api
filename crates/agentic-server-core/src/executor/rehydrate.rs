@@ -197,7 +197,7 @@ async fn rehydrate_request(
     // Persistence keeps the public items. Tool lowering belongs to the enriched
     // inference copy, including when a later turn loads these items from storage.
     let new_input_items = match &request.input {
-        ResponsesInput::Items(items) => items.iter().filter(|item| !item.is_unknown()).cloned().collect(),
+        ResponsesInput::Items(items) => items.clone(),
         ResponsesInput::Text(_) => Vec::from(&request.input),
     };
 
@@ -490,7 +490,7 @@ mod tests {
     #[test]
     fn session_history_without_compaction_is_unchanged() {
         let history: Vec<InputItem> = serde_json::from_value(serde_json::json!([
-            {"role":"user", "content":"question"},
+            {"type":"message", "role":"user", "content":"question"},
             {"type":"mcp_list_tools", "id":"mcpl_1", "server_label":"counter", "tools":[]},
             {"type":"function_call", "call_id":"pending", "name":"lookup", "arguments":"{}"}
         ]))
@@ -506,10 +506,10 @@ mod tests {
     fn restored_session_keeps_canonical_compaction_and_mcp_discovery() {
         let history: Vec<InputItem> = serde_json::from_value(serde_json::json!([
             {"type":"mcp_list_tools", "id":"mcpl_1", "server_label":"counter", "tools":[]},
-            {"role":"assistant", "content":"obsolete detail"},
+            {"type":"message", "role":"assistant", "content":"obsolete detail"},
             {"type":"function_call", "call_id":"obsolete", "name":"lookup", "arguments":"{}"},
-            {"role":"user", "content":"noncanonical old user"},
-            {"role":"user", "id":"msg_keep", "status":"completed", "content":"canonical user"},
+            {"type":"message", "role":"user", "content":"noncanonical old user"},
+            {"type":"message", "role":"user", "id":"msg_keep", "status":"completed", "content":"canonical user"},
             {"type":"compaction", "id":"cmp_latest", "encrypted_content":"latest summary"},
             {"type":"function_call", "call_id":"live", "name":"lookup", "arguments":"{}"},
             {"type":"function_call_output", "call_id":"live", "output":"live result"}
@@ -531,11 +531,11 @@ mod tests {
     #[test]
     fn restored_session_uses_the_latest_window_and_preserves_live_pending_calls() {
         let history: Vec<InputItem> = serde_json::from_value(serde_json::json!([
-            {"role":"user", "id":"msg_old", "status":"completed", "content":"old user"},
+            {"type":"message", "role":"user", "id":"msg_old", "status":"completed", "content":"old user"},
             {"type":"mcp_list_tools", "id":"mcpl_old", "server_label":"old", "tools":[]},
             {"type":"compaction", "id":"cmp_old", "encrypted_content":"old summary"},
-            {"role":"user", "id":"msg_keep", "status":"completed", "content":"retained user"},
-            {"role":"user", "id":"msg_incomplete", "status":"in_progress", "content":"superseded"},
+            {"type":"message", "role":"user", "id":"msg_keep", "status":"completed", "content":"retained user"},
+            {"type":"message", "role":"user", "id":"msg_incomplete", "status":"in_progress", "content":"superseded"},
             {"type":"mcp_list_tools", "id":"mcpl_new", "server_label":"new", "tools":[]},
             {"type":"compaction", "id":"cmp_new", "encrypted_content":"latest summary"},
             {"type":"function_call", "call_id":"live", "name":"lookup", "arguments":"{}"}

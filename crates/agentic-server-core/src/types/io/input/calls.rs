@@ -16,6 +16,8 @@ impl InputItem {
             | Self::MultiAgentCallOutput(_)
             | Self::AgentMessage(_)
             | Self::Message(_)
+            | Self::WebSearchCall(_)
+            | Self::McpCall(_)
             | Self::CodeInterpreterCall(_)
             | Self::FunctionCallOutput(_)
             | Self::ToolSearchOutput(_)
@@ -24,8 +26,7 @@ impl InputItem {
             | Self::Reasoning(_)
             | Self::McpListTools(_)
             | Self::Compaction(_)
-            | Self::CompactionTrigger
-            | Self::Unknown => None,
+            | Self::CompactionTrigger => None,
         }
     }
 
@@ -39,7 +40,9 @@ impl InputItem {
             Self::CustomToolCallOutput(output) => Some(&output.call_id),
             Self::ShellCallOutput(output) => Some(&output.call_id),
             // Multi-agent outputs belong to the coordinator, not to a client call.
-            Self::MultiAgentCall(_)
+            Self::WebSearchCall(_)
+            | Self::McpCall(_)
+            | Self::MultiAgentCall(_)
             | Self::MultiAgentCallOutput(_)
             | Self::AgentMessage(_)
             | Self::Message(_)
@@ -51,8 +54,7 @@ impl InputItem {
             | Self::Reasoning(_)
             | Self::McpListTools(_)
             | Self::Compaction(_)
-            | Self::CompactionTrigger
-            | Self::Unknown => None,
+            | Self::CompactionTrigger => None,
         }
     }
 
@@ -77,7 +79,8 @@ impl InputItem {
             | Self::McpListTools(_)
             | Self::Compaction(_)
             | Self::CompactionTrigger
-            | Self::Unknown => false,
+            | Self::WebSearchCall(_)
+            | Self::McpCall(_) => false,
         }
     }
 }

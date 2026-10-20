@@ -1442,16 +1442,12 @@ mod tests {
     }
 
     #[test]
-    fn responses_input_discards_unknown_items_when_converted_for_storage() {
-        let input: ResponsesInput = serde_json::from_value(serde_json::json!([
+    fn responses_input_rejects_unknown_items() {
+        let input = serde_json::from_value::<ResponsesInput>(serde_json::json!([
             {"type": "message", "role": "user", "content": "hi"},
             {"type": "future_item", "payload": {"a": 1}}
-        ]))
-        .unwrap();
-
-        let items = Vec::<InputItem>::from(&input);
-        assert_eq!(items.len(), 1);
-        assert!(matches!(items[0], InputItem::Message(_)));
+        ]));
+        assert!(input.is_err(), "an unmodeled item type fails at the boundary");
     }
 
     #[test]

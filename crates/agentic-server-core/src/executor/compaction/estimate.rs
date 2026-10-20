@@ -1,7 +1,7 @@
 use crate::types::io::input::model_items;
 use crate::types::io::{
-    CodeInterpreterCallOutput, InputContent, InputFileContent, InputItem, InputMessageContent, ResponsesInput,
-    ToolCallOutput, ToolOutputContent,
+    CodeInterpreterCallOutput, InputContent, InputFileContent, InputItem, InputMessageContent, McpCall, ResponsesInput,
+    ToolCallOutput, ToolOutputContent, WebSearchCall,
 };
 use crate::types::tools::ResponsesTool;
 use crate::utils::common::serialize_to_value;
@@ -129,6 +129,21 @@ fn add_tool_call_output(estimate: &mut InputTokenEstimate, output: &ToolCallOutp
     }
 }
 
+fn add_web_search_call(estimate: &mut InputTokenEstimate, call: &WebSearchCall) {
+    estimate.add_text(&call.id);
+    if let Ok(action) = serde_json::to_value(&call.action) {
+        estimate.add_json_value(&action);
+    }
+}
+
+fn add_mcp_call(estimate: &mut InputTokenEstimate, call: &McpCall) {
+    estimate.add_text(&call.id);
+    estimate.add_text(&call.server_label);
+    estimate.add_text(&call.name);
+    estimate.add_text(&call.arguments);
+    estimate.add_optional_text(call.output.as_deref());
+}
+
 fn add_input_item(estimate: &mut InputTokenEstimate, item: &InputItem) {
     if !item.is_model_visible() {
         return;
@@ -221,10 +236,11 @@ fn add_input_item(estimate: &mut InputTokenEstimate, item: &InputItem) {
             estimate.add_tokens(ESTIMATED_CONTENT_PART_OVERHEAD_TOKENS);
             estimate.add_text(&compaction.encrypted_content);
         }
+        InputItem::WebSearchCall(call) => add_web_search_call(estimate, call),
+        InputItem::McpCall(call) => add_mcp_call(estimate, call),
         InputItem::MultiAgentCall(_)
         | InputItem::MultiAgentCallOutput(_)
         | InputItem::AgentMessage(_)
-        | InputItem::Unknown
         | InputItem::McpListTools(_)
         | InputItem::CompactionTrigger => {}
     }

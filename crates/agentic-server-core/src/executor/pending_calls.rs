@@ -267,7 +267,8 @@ fn scan_calls(items: &[InputItem]) -> ExecutorResult<CallLedger> {
             | InputItem::MultiAgentCall(_)
             | InputItem::MultiAgentCallOutput(_)
             | InputItem::AgentMessage(_)
-            | InputItem::Unknown => {}
+            | InputItem::WebSearchCall(_)
+            | InputItem::McpCall(_) => {}
         }
         if ledger.unresolved_sync == 0 {
             ledger.resolved_prefix = index + 1;
@@ -286,11 +287,11 @@ mod tests {
     #[test]
     fn compaction_prefix_never_splits_interleaved_calls_and_outputs() {
         let items = vec![
-            InputItem::Unknown,
+            InputItem::CompactionTrigger,
             function_call("a"),
             function_call("b"),
             function_call_output("a"),
-            InputItem::Unknown,
+            InputItem::CompactionTrigger,
         ];
         assert_eq!(resolved_prefix_len(&items).unwrap(), 1);
         let mut resolved = items;
@@ -748,11 +749,11 @@ mod tests {
     #[test]
     fn pending_async_calls_do_not_end_the_resolved_prefix() {
         let items = vec![
-            InputItem::Unknown,
+            InputItem::CompactionTrigger,
             async_function_call("call_async"),
-            InputItem::Unknown,
+            InputItem::CompactionTrigger,
             function_call("call_sync"),
-            InputItem::Unknown,
+            InputItem::CompactionTrigger,
         ];
         assert_eq!(
             resolved_prefix_len(&items).unwrap(),

@@ -61,15 +61,12 @@ impl From<&ResponsesInput> for Vec<InputItem> {
             })],
             ResponsesInput::Items(items) => items
                 .iter()
-                .filter_map(|item| match item {
-                    InputItem::Unknown => None,
-                    InputItem::ShellCall(call) => Some(InputItem::FunctionCall(call.clone().into())),
-                    InputItem::ShellCallOutput(output) => Some(InputItem::FunctionCallOutput(output.clone().into())),
-                    InputItem::CustomToolCall(call) => Some(InputItem::FunctionCall(call.clone().into())),
-                    InputItem::CustomToolCallOutput(output) => {
-                        Some(InputItem::FunctionCallOutput(output.clone().into()))
-                    }
-                    item => Some(item.clone()),
+                .map(|item| match item {
+                    InputItem::ShellCall(call) => InputItem::FunctionCall(call.clone().into()),
+                    InputItem::ShellCallOutput(output) => InputItem::FunctionCallOutput(output.clone().into()),
+                    InputItem::CustomToolCall(call) => InputItem::FunctionCall(call.clone().into()),
+                    InputItem::CustomToolCallOutput(output) => InputItem::FunctionCallOutput(output.clone().into()),
+                    item => item.clone(),
                 })
                 .collect(),
         }
@@ -86,13 +83,12 @@ impl From<ResponsesInput> for Vec<InputItem> {
             })],
             ResponsesInput::Items(items) => items
                 .into_iter()
-                .filter_map(|item| match item {
-                    InputItem::Unknown => None,
-                    InputItem::ShellCall(call) => Some(InputItem::FunctionCall(call.into())),
-                    InputItem::ShellCallOutput(output) => Some(InputItem::FunctionCallOutput(output.into())),
-                    InputItem::CustomToolCall(call) => Some(InputItem::FunctionCall(call.into())),
-                    InputItem::CustomToolCallOutput(output) => Some(InputItem::FunctionCallOutput(output.into())),
-                    item => Some(item),
+                .map(|item| match item {
+                    InputItem::ShellCall(call) => InputItem::FunctionCall(call.into()),
+                    InputItem::ShellCallOutput(output) => InputItem::FunctionCallOutput(output.into()),
+                    InputItem::CustomToolCall(call) => InputItem::FunctionCall(call.into()),
+                    InputItem::CustomToolCallOutput(output) => InputItem::FunctionCallOutput(output.into()),
+                    item => item,
                 })
                 .collect(),
         }
@@ -115,8 +111,7 @@ mod tests {
             }},
             {"type":"shell_call_output", "call_id":"shell", "output":[{
                 "stdout":"/tmp", "stderr":"", "outcome":{"type":"exit", "exit_code":0}
-            }]},
-            {"type":"unrecognized"}
+            }]}
         ]))
         .unwrap();
         let expected = serialize_to_value(&input).unwrap();
@@ -125,7 +120,6 @@ mod tests {
         assert!(matches!(&items[1], InputItem::CustomToolCallOutput(_)));
         assert!(matches!(&items[2], InputItem::ShellCall(_)));
         assert!(matches!(&items[3], InputItem::ShellCallOutput(_)));
-        assert!(matches!(&items[4], InputItem::Unknown));
         assert_eq!(serialize_to_value(&ResponsesInput::Items(items)).unwrap(), expected);
     }
 

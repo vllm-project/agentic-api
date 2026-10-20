@@ -107,7 +107,7 @@ mod tests {
     fn gateway_results() -> [GatewayCallResult; 1] {
         [GatewayCallResult {
             item_index: 0,
-            input_item: InputItem::Unknown,
+            input_item: InputItem::CompactionTrigger,
             public_output: None,
             omitted: false,
         }]

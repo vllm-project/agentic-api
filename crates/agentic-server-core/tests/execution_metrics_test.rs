@@ -7,6 +7,7 @@
 
 use std::fmt::Write as _;
 use std::sync::Arc;
+use std::time::Duration;
 
 use agentic_core::executor::{
     BoxStream, ExecuteRequest, ExecutionContext, ExecutorResult, MessagesRequestContext, MessagesUpstream,
@@ -21,9 +22,12 @@ use serde_json::json;
 
 #[path = "execution_metrics/harness.rs"]
 mod harness;
+#[path = "support/messages_gateway_tools.rs"]
+mod messages_gateway_tools;
 mod support;
 use harness::{Metrics, histogram_sum, int_histogram_sum, recorded, total};
-use support::{MockResponse, MockServer, TestFixture, text_response};
+use messages_gateway_tools::{self as gateway_tools, Offer};
+use support::{MockResponse, MockServer, Search, TestFixture, search_server, text_response};
 
 const RESPONSES_EXECUTOR: &[(&str, &str)] = &[("agentic.api", "responses"), ("agentic.route", "executor")];
 
@@ -288,7 +292,7 @@ async fn gateway_tool_round_counts_rounds_and_times_the_tool() {
         "/tests/cassettes/codex/codex-openai-web-search-then-namespace-gpt-4o-streaming.yaml"
     ));
     let fixture = TestFixture::new(&support::responses_turns(&cassette)).await;
-    let search = search_server().await;
+    let search = search_server(Search::Answers).await;
     let exec_ctx = ExecutionContext::clone(&fixture.exec_ctx)
         .with_gateway_executor(Arc::new(agentic_core::tool::WebSearchHandler::with_api_key(
             Arc::new(reqwest::Client::new()),
@@ -377,19 +381,6 @@ async fn explicit_compaction_times_its_stages_and_usage_without_an_execution() {
         !recorded(&points, "agentic.execution.count"),
         "compaction has no agentic.execute span"
     );
-}
-
-async fn search_server() -> (String, tokio::task::JoinHandle<()>) {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let url = format!("http://{}", listener.local_addr().unwrap());
-    let router = axum::Router::new().route(
-        "/v1/search",
-        axum::routing::get(|| async {
-            axum::Json(json!({"results":{"web":[{"url":"https://example.com","title":"result"}],"news":[]}}))
-        }),
-    );
-    let task = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-    (url, task)
 }
 
 struct MessagesFixture {
@@ -574,6 +565,210 @@ async fn messages_stream_rejected_before_headers_is_never_delivered() {
             &points,
             "agentic.stage.duration",
             &[("agentic.stage", "inference"), ("error.type", "upstream_status")]
+        ),
+        1
+    );
+}
+
+/// The finalized points of one Messages request through the two-round
+/// search exchange.
+async fn messages_gateway_tool_points(stream: bool, offer: Offer, search: Search) -> Vec<harness::Point> {
+    let metrics = Metrics::new();
+    let (search_url, search_task) = search_server(search).await;
+    let fixture = messages_fixture(
+        &metrics,
+        vec![
+            gateway_tools::tool_round(stream, offer),
+            gateway_tools::final_round(stream),
+        ],
+    )
+    .await;
+    let (exec_ctx, registry) =
+        gateway_tools::with_web_search(ExecutionContext::clone(&fixture.exec_ctx), &search_url, offer).await;
+    if stream {
+        let response = run_messages_stream(
+            gateway_tools::request(true, offer),
+            registry,
+            exec_ctx,
+            fixture.upstream.clone(),
+        )
+        .await
+        .unwrap();
+        let frames: Vec<String> = response.body.collect().await;
+        assert!(
+            frames.iter().any(|frame| frame.starts_with("event: message_stop")),
+            "{frames:?}"
+        );
+    } else {
+        run_messages_loop(
+            gateway_tools::request(false, offer),
+            &registry,
+            &exec_ctx,
+            &fixture.upstream,
+        )
+        .await
+        .unwrap();
+    }
+    search_task.abort();
+    metrics.wait_for("finalized execution", finalized).await
+}
+
+const TOOL_STAGE: (&str, &str) = ("agentic.stage", "tool");
+
+#[tokio::test]
+async fn messages_gateway_tool_times_only_the_admitted_call() {
+    for stream in [false, true] {
+        let points = messages_gateway_tool_points(stream, Offer::Native, Search::Answers).await;
+        assert_messages_finalized_once(&points, &stream.to_string(), "completed", "delivered");
+        assert_eq!(
+            total(&points, "agentic.stage.duration", &[TOOL_STAGE]),
+            1,
+            "the call refused by max_uses is not timed (stream: {stream})"
+        );
+        assert_eq!(
+            total(
+                &points,
+                "agentic.stage.duration",
+                &[TOOL_STAGE, ("agentic.tool.type", "web_search")]
+            ),
+            1
+        );
+        assert_eq!(
+            total(&points, "agentic.stage.duration", &[TOOL_STAGE, ("error.type", "tool")]),
+            0
+        );
+        assert_eq!(
+            total(&points, "agentic.stage.duration", &[("agentic.stage", "inference")]),
+            2
+        );
+    }
+}
+
+#[tokio::test]
+async fn messages_gateway_tool_failure_is_a_failed_tool_stage() {
+    for stream in [false, true] {
+        let points = messages_gateway_tool_points(stream, Offer::Native, Search::Fails).await;
+        // The failure is fed back to the model, so the execution completes.
+        assert_messages_finalized_once(&points, &stream.to_string(), "completed", "delivered");
+        assert_eq!(total(&points, "agentic.stage.duration", &[TOOL_STAGE]), 1);
+        assert_eq!(
+            total(
+                &points,
+                "agentic.stage.duration",
+                &[TOOL_STAGE, ("agentic.tool.type", "web_search"), ("error.type", "tool")]
+            ),
+            1,
+            "stream: {stream}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn messages_aliased_gateway_tool_is_typed_by_the_executor_that_serves_it() {
+    for stream in [false, true] {
+        let points = messages_gateway_tool_points(stream, Offer::Alias, Search::Answers).await;
+        assert_eq!(total(&points, "agentic.stage.duration", &[TOOL_STAGE]), 2);
+        assert_eq!(
+            total(
+                &points,
+                "agentic.stage.duration",
+                &[TOOL_STAGE, ("agentic.tool.type", "web_search")]
+            ),
+            2,
+            "the model's WebSearch runs on the web_search executor (stream: {stream})"
+        );
+    }
+}
+
+#[tokio::test]
+async fn messages_web_fetch_is_a_web_fetch_tool_stage() {
+    let metrics = Metrics::new();
+    // The default policy refuses a loopback address before any I/O: the
+    // tool answers with a failure, which is still a call that ran.
+    let url = "http://127.0.0.1:9/page";
+    let tool_round = MockResponse::Json(
+        json!({
+            "id": "msg_upstream", "type": "message", "role": "assistant", "model": "test-model",
+            "content": [{"type": "tool_use", "id": "toolu_0", "name": "web_fetch", "input": {"url": url}}],
+            "stop_reason": "tool_use", "stop_sequence": null, "usage": {"input_tokens": 3, "output_tokens": 2}
+        })
+        .to_string(),
+    );
+    let fixture = messages_fixture(&metrics, vec![tool_round, gateway_tools::final_round(false)]).await;
+    let exec_ctx = ExecutionContext::clone(&fixture.exec_ctx).with_gateway_executor(
+        agentic_core::tool::GatewayExecutorRegistration::WebFetch(Arc::new(
+            agentic_core::tool::WebFetchHandler::from_config(
+                &agentic_core::config::WebFetchConfig::default(),
+                agentic_core::config::DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS,
+            ),
+        )),
+    );
+    let ctx = MessagesRequestContext::from_value(json!({
+        "model": "test-model", "max_tokens": 64,
+        "messages": [{"role": "user", "content": format!("read {url}")}],
+        "tools": [{"type": "web_fetch_20250910", "name": "web_fetch"}]
+    }))
+    .unwrap();
+    let mut params = agentic_core::tool::registry_tools(ctx.tools(), &exec_ctx.messages_gateway_tools);
+    let mut executors = exec_ctx.gateway_executors.clone();
+    let registry = ToolRegistry::build_with_handlers(&mut params, &mut executors)
+        .await
+        .unwrap();
+
+    run_messages_loop(ctx, &registry, &exec_ctx, &fixture.upstream)
+        .await
+        .unwrap();
+
+    let points = metrics.wait_for("finalized execution", finalized).await;
+    assert_eq!(
+        total(
+            &points,
+            "agentic.stage.duration",
+            &[TOOL_STAGE, ("agentic.tool.type", "web_fetch"), ("error.type", "tool")]
+        ),
+        1
+    );
+}
+
+#[tokio::test]
+async fn messages_stream_dropped_while_a_gateway_tool_runs_cancels_its_stage() {
+    let metrics = Metrics::new();
+    let arrived = Arc::new(tokio::sync::Notify::new());
+    let (search_url, search_task) = search_server(Search::Hangs(Arc::clone(&arrived))).await;
+    let fixture = messages_fixture(&metrics, vec![gateway_tools::tool_round(true, Offer::Native)]).await;
+    let (exec_ctx, registry) =
+        gateway_tools::with_web_search(ExecutionContext::clone(&fixture.exec_ctx), &search_url, Offer::Native).await;
+    let response = run_messages_stream(
+        gateway_tools::request(true, Offer::Native),
+        registry,
+        exec_ctx,
+        fixture.upstream.clone(),
+    )
+    .await
+    .unwrap();
+    let mut client = tokio::spawn(response.body.collect::<Vec<_>>());
+    // Fail rather than hang if the search is never reached, for example
+    // because the call was not dispatched and the stream already ended.
+    tokio::select! {
+        () = arrived.notified() => {}
+        frames = &mut client => panic!("the stream ended before the search started: {frames:?}"),
+        () = tokio::time::sleep(Duration::from_secs(5)) => panic!("the search was not reached within five seconds"),
+    }
+    client.abort();
+    assert!(client.await.unwrap_err().is_cancelled());
+    search_task.abort();
+
+    let points = metrics.wait_for("finalized execution", finalized).await;
+    assert_messages_finalized_once(&points, "true", "cancelled", "disconnected");
+    assert_eq!(
+        total(
+            &points,
+            "agentic.stage.duration",
+            &[
+                TOOL_STAGE,
+                ("agentic.tool.type", "web_search"),
+                ("error.type", "cancelled")
+            ]
         ),
         1
     );

@@ -1159,6 +1159,43 @@ async fn test_invalid_json_is_rejected_before_upstream() {
 }
 
 #[tokio::test]
+async fn test_unsupported_input_item_is_rejected_before_upstream() {
+    for store in [true, false] {
+        let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_bytes().await;
+        let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+
+        let response = reqwest::Client::new()
+            .post(format!("{gateway_url}/v1/responses"))
+            .header("Content-Type", "application/json")
+            .body(
+                serde_json::json!({
+                    "model": "test",
+                    "store": store,
+                    "input": [
+                        {"role": "user", "content": "hi"},
+                        {"type": "computer_call", "id": "cu_1", "call_id": "call_1", "action": {"type": "click"}}
+                    ]
+                })
+                .to_string(),
+            )
+            .send()
+            .await
+            .expect("unsupported input request");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body: serde_json::Value = response.json().await.expect("error envelope");
+        assert_eq!(body["error"]["type"], "invalid_request_error");
+        assert!(body["error"].get("param").is_none(), "request shape, not a parameter");
+        let message = body["error"]["message"].as_str().expect("error message");
+        assert!(!message.is_empty(), "the boundary reports why the body was rejected");
+        assert!(
+            requests.lock().await.is_empty(),
+            "rejected before reaching upstream (store={store})"
+        );
+    }
+}
+
+#[tokio::test]
 async fn test_store_false_with_web_search_reaches_executor() {
     // Arrange
     let (llm_url, requests, _h1) = spawn_mock_vllm_json_capture().await;

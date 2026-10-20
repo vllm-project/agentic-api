@@ -161,6 +161,8 @@ impl utoipa::PartialSchema for InputItem {
                     )
                     .required("type"),
             )
+            .item(tagged_ref("web_search_call", "WebSearchCall"))
+            .item(tagged_ref("mcp_call", "McpCall"))
             .into()
     }
 }
