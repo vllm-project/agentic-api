@@ -53,18 +53,17 @@ file, or `AGENTIC_RATE_LIMIT_REQUESTS_PER_MINUTE` or `--rate-limit-requests-per-
 `rate_limit_burst` requests at once (default: the per-minute rate) and then one request every
 `60 / rate_limit_requests_per_minute` seconds.
 
-Each request is charged to the first matching caller:
+Each request is charged to a caller the gateway can verify:
 
 1. the OIDC token's issuer and subject, when OIDC is configured;
-2. otherwise the `Authorization: Bearer` token;
-3. otherwise the `x-api-key` header;
-4. otherwise one bucket shared by every caller without credentials.
+2. otherwise the connection's peer address. An IPv6 address counts as its /64 network, since one host commonly holds a
+   whole /64.
 
-The gateway keeps only a keyed hash of a token or API key, never the credential. Without OIDC, the gateway does not
-verify these credentials, so the limit only binds clients that reuse one: a client gets a fresh bucket by sending a
-different bearer token or `x-api-key`, and a client without credentials leaves the shared bucket by adding any. Enable
-OIDC to enforce per-caller limits against untrusted clients. A WebSocket is charged to the caller of its upgrade
-request, never to the server's `OPENAI_API_KEY`.
+A bearer token or `x-api-key` never chooses the bucket. Without OIDC the gateway does not verify them, and on executor
+routes it may call the upstream with its own key, so a client could send a fresh made-up credential with every request.
+Forwarded-for headers are not trusted either, since any client can set them. Behind a proxy or ingress, every request
+arrives from the proxy's address, so all callers share one bucket. Enable OIDC to enforce per-caller limits against
+untrusted clients. A WebSocket's `response.create` messages are charged to the caller of its upgrade request.
 
 Every API route is limited except `/health`, `/ready`, and Swagger. A limited request never reaches the upstream.
 It receives `429 Too Many Requests` with these headers:

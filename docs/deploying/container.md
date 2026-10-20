@@ -119,10 +119,11 @@ over this variable, which in turn overrides `server.max_request_body_size_bytes`
 
 `AGENTIC_RATE_LIMIT_REQUESTS_PER_MINUTE` turns on a per-caller request rate limit, and `AGENTIC_RATE_LIMIT_BURST`
 (default: the per-minute rate) sets how many requests a caller may send at once. Both are off by default. The limit is
-kept in each container's memory, so with N replicas a caller can send up to N times the rate. The
-`--rate-limit-requests-per-minute` and `--rate-limit-burst` arguments take precedence over these variables, which in
-turn override `server.rate_limit_requests_per_minute` and `server.rate_limit_burst`. See
-[Rate limits](../api/index.md#rate-limits).
+kept in each container's memory, so with N replicas a caller can send up to N times the rate. Without OIDC, callers
+are told apart by the peer address the container sees, so behind a proxy or load balancer that does not preserve
+client addresses all callers share one bucket. The `--rate-limit-requests-per-minute` and `--rate-limit-burst`
+arguments take precedence over these variables, which in turn override `server.rate_limit_requests_per_minute` and
+`server.rate_limit_burst`. See [Rate limits](../api/index.md#rate-limits).
 
 Size the pool across the whole deployment, not one process. Keep `replicas * POSTGRES_MAX_CONNECTIONS` below the managed database connection limit, with capacity reserved for migrations, administration, and failover. The acquire timeout bounds how long a request waits when the pool is exhausted. Lock and statement timeouts prevent a stalled transaction, slow query, or hot conversation from holding a connection indefinitely. Idle and lifetime recycling protect against stale connections and can be disabled with `0` only when the provider recommends it.
 

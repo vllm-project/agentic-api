@@ -359,9 +359,9 @@ file setting.
 and defaults to the per-minute rate. A caller over its limit receives `429` with `retry-after`. The limit is per
 process, so N replicas allow N times the rate. Order of precedence is `--rate-limit-requests-per-minute` and
 `--rate-limit-burst`, then `AGENTIC_RATE_LIMIT_REQUESTS_PER_MINUTE` and `AGENTIC_RATE_LIMIT_BURST`, then these file
-settings. Without OIDC, a client is identified only by the credential it sends, so it can get a fresh bucket by
-changing that credential; enable OIDC to enforce the limit against untrusted clients. See
-[Rate limits](docs/api/index.md#rate-limits) for how callers are identified.
+settings. Callers are told apart by their OIDC identity, otherwise by peer address, never by a credential the
+gateway does not verify. Behind a proxy every request shares the proxy's address, so enable OIDC for per-caller limits.
+See [Rate limits](docs/api/index.md#rate-limits) for how callers are identified.
 
 `api_key_env` names the process environment variable containing the web-search credential; it does not contain the
 credential itself. When it is unset, the selected provider's conventional variable is read (`YOU_API_KEY`,

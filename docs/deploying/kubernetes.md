@@ -366,8 +366,9 @@ loss of co-located replicas during a node failure.
 
 Per-caller rate limits (`AGENTIC_RATE_LIMIT_REQUESTS_PER_MINUTE`) are enforced by each replica separately, so with the
 base's two replicas a caller can send up to twice the configured rate. With OIDC enabled, a caller is identified by its
-token's issuer and subject. Without OIDC, a client can get a fresh bucket by changing the credential it sends, so enable
-OIDC before relying on the limit against untrusted clients. See [Rate limits](../api/index.md#rate-limits).
+token's issuer and subject. Without OIDC, callers are told apart by peer address: behind an Ingress or another proxy
+every request arrives from the proxy, so all callers share one bucket. Enable OIDC for per-caller limits. See
+[Rate limits](../api/index.md#rate-limits).
 
 ## Verify persistence and transport
 
