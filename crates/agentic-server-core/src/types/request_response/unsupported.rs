@@ -20,6 +20,8 @@ use super::{JsonKind, RequestPayload};
 pub const BACKGROUND_PARAM: &str = "background";
 /// Request parameter name for a reusable prompt reference.
 pub const PROMPT_PARAM: &str = "prompt";
+/// Request parameter name for the tool selector.
+pub const TOOL_CHOICE_PARAM: &str = "tool_choice";
 
 /// A request member recognized only to be rejected: any JSON value
 /// deserializes, and none of it is retained.
@@ -98,6 +100,8 @@ pub enum UnsupportedParameterError {
     BackgroundType(JsonKind),
     #[error("reusable prompt templates are not supported; send `instructions` and `input` instead of `prompt`")]
     PromptTemplate,
+    #[error("MCP tool_choice is not supported; use `auto`, `required`, or a function `tool_choice` instead")]
+    McpToolChoice,
 }
 
 impl UnsupportedParameterError {
@@ -107,6 +111,7 @@ impl UnsupportedParameterError {
         match self {
             Self::BackgroundMode | Self::BackgroundType(_) => BACKGROUND_PARAM,
             Self::PromptTemplate => PROMPT_PARAM,
+            Self::McpToolChoice => TOOL_CHOICE_PARAM,
         }
     }
 
@@ -114,9 +119,26 @@ impl UnsupportedParameterError {
     #[must_use]
     pub const fn code(self) -> &'static str {
         match self {
-            Self::BackgroundMode => "unsupported_value",
+            Self::BackgroundMode | Self::McpToolChoice => "unsupported_value",
             Self::BackgroundType(_) => "invalid_type",
             Self::PromptTemplate => "unsupported_parameter",
+        }
+    }
+}
+
+impl<T: ?Sized, C> RequestPayload<T, C> {
+    /// Rejects a `tool_choice` the gateway parses but does not support.
+    ///
+    /// Unlike `background` and `prompt`, this is checked on the direct route too: a direct request declares no MCP
+    /// server, so an MCP `tool_choice` there names nothing and the upstream would be asked to honour a dangling choice.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`UnsupportedParameterError::McpToolChoice`] for an MCP selector.
+    pub fn validate_tool_choice(&self) -> Result<(), UnsupportedParameterError> {
+        match &self.tool_choice {
+            Some(choice) if !choice.is_supported() => Err(UnsupportedParameterError::McpToolChoice),
+            _ => Ok(()),
         }
     }
 }
@@ -127,7 +149,7 @@ impl RequestPayload {
     /// # Errors
     ///
     /// Returns [`UnsupportedParameterError`] for `background: true`, a
-    /// non-boolean `background`, or a non-null `prompt`.
+    /// non-boolean `background`, a non-null `prompt`, or an MCP `tool_choice`.
     pub fn ensure_supported_parameters(&self) -> Result<(), UnsupportedParameterError> {
         match self.background {
             Some(Background(WireBackground::Boolean(true))) => {
@@ -141,7 +163,7 @@ impl RequestPayload {
         if self.prompt.is_some() {
             return Err(UnsupportedParameterError::PromptTemplate);
         }
-        Ok(())
+        self.validate_tool_choice()
     }
 }
 

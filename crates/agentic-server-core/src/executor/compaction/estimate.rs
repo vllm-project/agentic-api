@@ -168,11 +168,11 @@ impl InputTokenEstimate {
             }
             InputItem::ToolSearchCall(call) => {
                 self.add_text(&call.id);
-                self.add_text(&call.call_id);
+                self.add_text(call.call_id.as_deref().unwrap_or_default());
                 self.add_json_value(&call.arguments);
             }
             InputItem::ToolSearchOutput(output) => {
-                self.add_text(&output.call_id);
+                self.add_text(output.call_id.as_deref().unwrap_or_default());
                 for tool in &output.tools {
                     self.add_tool_definition(tool);
                 }

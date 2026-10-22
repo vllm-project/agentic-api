@@ -55,6 +55,7 @@ pub(crate) const fn tool_type(kind: ToolType) -> &'static str {
     match kind {
         ToolType::Function => "function",
         ToolType::ToolSearch => "tool_search",
+        ToolType::HostedToolSearch => "hosted_tool_search",
         ToolType::Custom => "custom",
         ToolType::Shell => "shell",
         ToolType::CodexNamespace => "codex_namespace",

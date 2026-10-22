@@ -70,6 +70,17 @@ All notable changes to Agentic API are documented here.
   continuation. On typed paths, `file_id`, `file_url`, binary or PDF data, invalid base64, and non-UTF-8 content
   are still rejected with HTTP 400 and a specific reason. Eligible raw `store: false` proxy requests are unchanged
   and still reach the upstream byte for byte. No file is fetched and no dependency is added.
+- Added gateway-executed (hosted) `tool_search` on the Responses API (#448). A request that declares
+  `{"type": "tool_search"}` without `execution` or with `execution: "server"` has the gateway run the search in the
+  same response, over deferred functions (`defer_loading: true`), namespaces with deferred members, and `type: "mcp"`
+  servers with `defer_loading: true` (searched as the namespace `mcp_<server_label>`). The model calls `tool_search`
+  with `paths` and an optional `query`, which keeps tools whose name or description contains it, ignoring case; the
+  loaded tools join the round and persist across `previous_response_id`, conversations, WebSocket sessions,
+  compaction, `store: false` replay, and multi-agent. Each search adds a `tool_search_call` and a
+  `tool_search_output` item with `execution: "server"` and `call_id: null`, streamed as `output_item.added`/`done`
+  only, and does not count toward `max_tool_calls`. `tool_search` with no deferred tool, deferred MCP with
+  `execution: "client"`, and a `tool_choice` naming an unloaded deferred tool are rejected with HTTP 400.
+  `[mcp_servers]` entries accept `defer_loading` and `description` as defaults. `execution: "client"` is unchanged.
 
 ### Changed
 
@@ -97,6 +108,14 @@ All notable changes to Agentic API are documented here.
   `agentic_core::tool::SEARXNG_BASE_URL_HINT` and `validate_searxng_base_url` carry the operator-facing rules for
   the mandatory endpoint (absolute `http(s)` URL with a host and no query or fragment), shared by the startup check
   and the provider.
+- A Responses request whose MCP server cannot list its tools now fails, as the Responses API does, instead of
+  continuing with a failed `mcp_list_tools` item and no tools from that server (#448). JSON requests get HTTP 424
+  with `type: "external_connector_error"`, `code: "http_error"`, and `param: "tools"`; streaming requests get the
+  listing's `response.mcp_list_tools.failed`, an `error` event, and `response.failed`. A continuation whose history
+  already holds a successful listing for that server keeps going. An MCP server whose `allowed_tools` matches none
+  of its tools is no longer rejected with HTTP 400; its listing is empty and the response completes. An MCP
+  `tool_choice` (`{"type": "mcp", ...}`) is rejected with HTTP 400 `unsupported_value` on `tool_choice`, also on
+  the direct route, instead of a generic parse error.
 
 ## [0.9.0] - 2026-09-30
 

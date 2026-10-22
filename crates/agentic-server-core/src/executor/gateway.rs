@@ -5,30 +5,41 @@ mod admission_tests;
 pub(super) mod history;
 mod lifecycle;
 mod policy;
+mod public_output;
 mod timing;
 
 pub(crate) use admission::BuiltInToolCallBudget;
-pub(super) use history::{append_gateway_calls_to_new_input, append_output_items_to_input, append_tool_outputs};
+pub(super) use history::{append_gateway_calls_to_new_input, append_gateway_results, append_output_items_to_input};
+use lifecycle::emit_calls_in_order;
 pub(super) use lifecycle::{
     emit_gateway_completed_events, emit_gateway_start_events, emit_response_start_events, relay_round_events,
 };
 pub(crate) use policy::GatewaySchedulerPolicy;
 #[cfg(test)]
 pub(super) use policy::MAX_CONCURRENT_MATERIALIZATIONS;
+#[cfg(test)]
+use public_output::complete_gateway_event_plans;
+pub(super) use public_output::{
+    GatewayPublicOutputSource, compaction_event_plans, mcp_list_tools_event_plans, public_output_items,
+};
 
 use std::num::NonZeroU64;
 use std::time::Duration;
 
-use futures::future::join_all;
+use std::future::Future;
+
+#[cfg(test)]
+use futures::StreamExt;
+use futures::stream::FuturesOrdered;
 use tokio::sync::Semaphore;
 
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::relay::StreamRelay;
 use crate::executor::request::ExecutionContext;
-use crate::executor::response_budget::ExecutorResponseBudget;
+use crate::executor::response_budget::{ExecutorResponseBudget, RetainedSize};
 use crate::executor::telemetry::metrics::ExecutorMetrics;
 use crate::tool::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
-use crate::tool::{GatewayBinding, ToolError, ToolOutput, ToolOwnership, ToolRegistry};
+use crate::tool::{GatewayBinding, ToolError, ToolOutput, ToolOwnership, ToolRegistry, ToolType};
 use crate::types::io::output::{FunctionToolCall, GatewayCallStatus};
 use crate::types::io::{InputItem, OutputItem};
 use crate::utils::common::serialize_to_string;
@@ -45,26 +56,27 @@ const GATEWAY_TOOL_TIMEOUT: Duration = Duration::from_secs(60);
 #[derive(Clone)]
 pub(super) struct GatewayCallResult {
     pub(super) item_index: usize,
-    pub(super) input_item: InputItem,
+    /// Appended to the model's context for the next inference round.
+    pub(super) model_input: Vec<InputItem>,
+    /// Recorded as the turn's history; usually the model input.
+    pub(super) history_input: Vec<InputItem>,
     pub(super) public_output: Option<OutputItem>,
+    /// A second public item at the next output index (a hosted `tool_search_output`).
+    pub(super) follow_up_output: Option<OutputItem>,
     /// A call refused by `max_tool_calls` that the public response does not show.
     pub(super) omitted: bool,
 }
 
-/// Supplies the public output that completes a gateway event plan.
-pub(super) trait GatewayPublicOutputSource {
-    fn public_output(&self) -> Option<&OutputItem>;
-}
-
-impl GatewayPublicOutputSource for GatewayCallResult {
-    fn public_output(&self) -> Option<&OutputItem> {
-        self.public_output.as_ref()
-    }
-}
-
-impl GatewayPublicOutputSource for OutputItem {
-    fn public_output(&self) -> Option<&OutputItem> {
-        Some(self)
+impl GatewayCallResult {
+    fn new(item_index: usize, model_input: Vec<InputItem>, public_output: Option<OutputItem>, omitted: bool) -> Self {
+        Self {
+            item_index,
+            history_input: model_input.clone(),
+            model_input,
+            public_output,
+            follow_up_output: None,
+            omitted,
+        }
     }
 }
 
@@ -73,6 +85,8 @@ pub(super) struct GatewayEventPlan {
     output_index: u32,
     started_output: Option<OutputItem>,
     completed_output: Option<OutputItem>,
+    /// Complete at planning time; emitted after `completed_output` at the next index.
+    follow_up_output: Option<OutputItem>,
     arguments: Option<String>,
 }
 
@@ -108,6 +122,8 @@ pub(super) struct GatewayScheduler {
     calls: Vec<GatewayCallPlan>,
     /// Item indexes of refused calls without a public item, in ascending order.
     omitted_items: Vec<usize>,
+    /// Item indexes of calls with a follow-up public item, in ascending order.
+    expanded_items: Vec<usize>,
     policy: GatewaySchedulerPolicy,
     timeout: Duration,
     /// Times each executed call as an `agentic.stage.duration` sample.
@@ -154,6 +170,7 @@ impl GatewayScheduler {
         budget: &mut BuiltInToolCallBudget,
     ) -> Self {
         let mut omitted_items = Vec::new();
+        let mut expanded_items = Vec::new();
         let calls = output_items
             .iter()
             .enumerate()
@@ -166,17 +183,27 @@ impl GatewayScheduler {
                     return None;
                 };
 
-                let started_output = binding
+                let (started_output, follow_up_output) = binding
                     .as_ref()
-                    .and_then(|binding| binding.plan_gateway_events(call).into_started_output());
-                // Earlier omitted calls have no public position.
-                let public_index = output_offset.saturating_add(item_index - omitted_items.len());
+                    .map(|binding| binding.plan_gateway_events(call).into_parts())
+                    .unwrap_or_default();
+                // Earlier omitted calls have no public position; earlier
+                // follow-up items take one more.
+                let public_index = output_offset
+                    .saturating_add(item_index - omitted_items.len())
+                    .saturating_add(expanded_items.len());
                 let execution = binding
                     .as_ref()
                     .map_or(GatewayExecutionPlan::MissingHandler, |binding| {
                         GatewayExecutionPlan::Bound(binding.clone())
                     });
-                let (refused, started_output, completed_output) = match budget.admit() {
+                // A hosted search does not count toward `max_tool_calls`.
+                let admission = if entry.tool_type == ToolType::HostedToolSearch {
+                    admission::Admission::Dispatch
+                } else {
+                    budget.admit()
+                };
+                let (refused, started_output, completed_output) = match admission {
                     admission::Admission::Dispatch => (None, started_output, None),
                     admission::Admission::Refuse { limit, visible } => {
                         let shown = started_output
@@ -191,6 +218,10 @@ impl GatewayScheduler {
                         (Some(limit), started_output.filter(|_| shown.is_some()), shown)
                     }
                 };
+                let follow_up_output = follow_up_output.filter(|_| refused.is_none());
+                if follow_up_output.is_some() {
+                    expanded_items.push(item_index);
+                }
                 Some(GatewayCallPlan {
                     tool_type: entry.tool_type,
                     item_index,
@@ -201,6 +232,7 @@ impl GatewayScheduler {
                         output_index: u32::try_from(public_index).unwrap_or(u32::MAX),
                         started_output,
                         completed_output,
+                        follow_up_output,
                         arguments: Some(call.arguments.clone()),
                     },
                 })
@@ -209,6 +241,7 @@ impl GatewayScheduler {
         Self {
             calls,
             omitted_items,
+            expanded_items,
             policy,
             timeout,
             metrics: None,
@@ -220,7 +253,10 @@ impl GatewayScheduler {
     pub(super) fn public_item_index(&self, item_index: usize) -> Option<usize> {
         match self.omitted_items.binary_search(&item_index) {
             Ok(_) => None,
-            Err(omitted_before) => Some(item_index - omitted_before),
+            Err(omitted_before) => {
+                let expanded_before = self.expanded_items.partition_point(|expanded| *expanded < item_index);
+                Some(item_index - omitted_before + expanded_before)
+            }
         }
     }
 
@@ -256,7 +292,8 @@ impl GatewayScheduler {
     }
 
     /// Number of leading scheduled calls whose start lifecycle may be emitted
-    /// before execution without overtaking an earlier client-owned call.
+    /// before execution without overtaking an earlier client-owned call or a
+    /// follow-up item.
     pub(super) fn initial_event_run_len(&self, output_items: &[OutputItem], registry: &ToolRegistry) -> usize {
         let Some(first) = self.calls.first().map(|call| call.item_index) else {
             return 0;
@@ -267,11 +304,52 @@ impl GatewayScheduler {
         {
             return 0;
         }
-        self.calls
+        let contiguous = self
+            .calls
             .iter()
             .enumerate()
             .take_while(|(offset, call)| call.item_index == first.saturating_add(*offset))
-            .count()
+            .count();
+        contiguous.min(self.start_run_end(0))
+    }
+
+    /// End (exclusive) of the calls from `from` that can be announced without a
+    /// later call overtaking a follow-up item: the run ends with the first call
+    /// that has one, because that item takes the next public index.
+    pub(super) fn start_run_end(&self, from: usize) -> usize {
+        self.calls
+            .get(from..)
+            .and_then(|calls| calls.iter().position(|call| call.events.follow_up_output.is_some()))
+            .map_or(self.calls.len(), |offset| from + offset + 1)
+    }
+
+    /// Runs the planned calls concurrently within `execution_slots` and yields each
+    /// result in call order as soon as that call and every earlier one finished,
+    /// so a round's lifecycle events never wait for its slowest call.
+    pub(super) fn results_in_order<'a>(
+        &'a self,
+        execution_slots: &'a Semaphore,
+        response_budget: &'a ExecutorResponseBudget,
+    ) -> FuturesOrdered<impl Future<Output = ExecutorResult<GatewayCallResult>> + 'a> {
+        self.calls
+            .iter()
+            .cloned()
+            .map(|call| self.resolve_call(call, execution_slots, response_budget))
+            .collect()
+    }
+
+    pub(super) fn call_count(&self) -> usize {
+        self.calls.len()
+    }
+
+    /// Records each call's completed public lifecycle on its plan.
+    #[cfg(test)]
+    pub(super) fn record_completed(&mut self, results: &[GatewayCallResult]) {
+        debug_assert_eq!(self.calls.len(), results.len());
+        for (planned, result) in self.calls.iter_mut().zip(results) {
+            debug_assert_eq!(planned.item_index, result.item_index);
+            planned.events.completed_output.clone_from(&result.public_output);
+        }
     }
 
     /// Executes planned calls under the bounded-concurrency policy and records
@@ -281,26 +359,20 @@ impl GatewayScheduler {
         self.execute_with_budget(&ExecutorResponseBudget::new()).await
     }
 
+    #[cfg(test)]
     pub(super) async fn execute_with_budget(
         &mut self,
         response_budget: &ExecutorResponseBudget,
     ) -> ExecutorResult<Vec<GatewayCallResult>> {
         let execution_slots = self.policy.new_round_execution_slots();
-        let results = join_all(
-            self.calls
-                .iter()
-                .cloned()
-                .map(|call| self.resolve_call(call, &execution_slots, response_budget)),
-        )
-        .await
-        .into_iter()
-        .collect::<ExecutorResult<Vec<_>>>()?;
-
-        debug_assert_eq!(self.calls.len(), results.len());
-        for (planned, result) in self.calls.iter_mut().zip(&results) {
-            debug_assert_eq!(planned.item_index, result.item_index);
-            planned.events.completed_output.clone_from(&result.public_output);
-        }
+        // Every call finishes before the first error in call order is returned.
+        let results = self
+            .results_in_order(&execution_slots, response_budget)
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<ExecutorResult<Vec<_>>>()?;
+        self.record_completed(&results);
         Ok(results)
     }
 
@@ -315,6 +387,8 @@ impl GatewayScheduler {
         let Some(limit) = plan.refused else {
             return self.timed_run(plan, execution_slots, response_budget).await;
         };
+        // Admission never refuses a hosted search, whose model input must pair a call with its output.
+        debug_assert_ne!(plan.tool_type, ToolType::HostedToolSearch);
         let message = admission::limit_reached_message(limit);
         let omitted = plan.events.completed_output.is_none();
         let public_output = plan.events.completed_output;
@@ -338,12 +412,21 @@ impl GatewayScheduler {
         response_budget: &ExecutorResponseBudget,
     ) -> ExecutorResult<(GatewayCallResult, GatewayCallStatus)> {
         let GatewayCallPlan {
+            tool_type,
             item_index,
             call,
             execution,
+            events,
             ..
         } = plan;
         let GatewayExecutionPlan::Bound(binding) = execution else {
+            if tool_type == ToolType::HostedToolSearch {
+                // A hosted search entry is always bound; an unbound one would
+                // leave the model an output without its call.
+                return Err(ExecutorError::Tool(ToolError::Config(
+                    "hosted tool_search has no bound catalog".to_owned(),
+                )));
+            }
             let message = format!("gateway tool '{}' has no registered handler", call.name);
             return unexecuted_result(item_index, &call, &message, None, false, response_budget)
                 .map(|result| (result, GatewayCallStatus::Failed));
@@ -382,11 +465,19 @@ impl GatewayScheduler {
         };
         enforce_gateway_tool_output_size(output.output.len())?;
         response_budget.consume(output.output.len())?;
+        let follow_up_output = events.follow_up_output;
+        if let Some(follow_up) = &follow_up_output {
+            response_budget.consume(follow_up.retained_bytes())?;
+        }
         let public_output = binding.public_output(&call, &output, status);
+        let history_input = binding.history_input(&call, follow_up_output.as_ref());
+        let model_input = binding.model_input(&call, output, follow_up_output.as_ref());
         let result = GatewayCallResult {
             item_index,
-            input_item: InputItem::FunctionCallOutput(output.into()),
+            history_input: history_input.unwrap_or_else(|| model_input.clone()),
+            model_input,
             public_output,
+            follow_up_output,
             omitted: false,
         };
         Ok((result, status))
@@ -414,96 +505,17 @@ fn unexecuted_result(
     let output = execution_error_output(call, message)?;
     enforce_gateway_tool_output_size(output.output.len())?;
     response_budget.consume(output.output.len())?;
-    Ok(GatewayCallResult {
+    Ok(GatewayCallResult::new(
         item_index,
-        input_item: InputItem::FunctionCallOutput(output.into()),
+        vec![InputItem::FunctionCallOutput(output.into())],
         public_output,
         omitted,
-    })
+    ))
 }
 
 fn execution_error_output(call: &FunctionToolCall, message: &str) -> ExecutorResult<ToolOutput> {
     let output = serialize_to_string(&serde_json::json!({ "error": message })).map_err(ExecutorError::JsonError)?;
     Ok(ToolOutput::failure(call.call_id.clone(), output))
-}
-
-pub(super) fn public_output_items(
-    output_items: &[OutputItem],
-    registry: &ToolRegistry,
-    gateway_results: &[GatewayCallResult],
-) -> ExecutorResult<Vec<OutputItem>> {
-    output_items
-        .iter()
-        .enumerate()
-        .filter(|(item_index, _)| {
-            !gateway_results
-                .iter()
-                .any(|result| result.omitted && result.item_index == *item_index)
-        })
-        .map(|(item_index, item)| {
-            Ok(match item {
-                OutputItem::FunctionCall(call) if registry.is_client_custom_name(&call.name) => {
-                    crate::tool::CustomHandler::output_item(call)
-                }
-                OutputItem::FunctionCall(call) if registry.is_client_shell_name(&call.name) => {
-                    crate::tool::ShellHandler::output_item(call).ok_or_else(|| {
-                        ExecutorError::ParseError("shell function call contains invalid action arguments".to_owned())
-                    })?
-                }
-                OutputItem::FunctionCall(call) if registry.is_gateway_owned_name(&call.name) => gateway_results
-                    .iter()
-                    .find(|result| result.item_index == item_index)
-                    .and_then(|result| result.public_output.clone())
-                    .unwrap_or_else(|| OutputItem::FunctionCall(call.clone())),
-                other => other.clone(),
-            })
-        })
-        .collect()
-}
-
-pub(super) fn mcp_list_tools_event_plans(
-    public_output_items: &[OutputItem],
-    output_offset: usize,
-) -> Vec<GatewayEventPlan> {
-    public_output_items
-        .iter()
-        .enumerate()
-        .filter_map(|(index, item)| {
-            let OutputItem::McpListTools(list_tools) = item else {
-                return None;
-            };
-            Some(GatewayEventPlan {
-                output_index: u32::try_from(output_offset.saturating_add(index)).unwrap_or(u32::MAX),
-                started_output: Some(crate::tool::mcp::handler::started_list_tools_output_item(list_tools)),
-                completed_output: Some(item.clone()),
-                arguments: None,
-            })
-        })
-        .collect()
-}
-
-pub(super) fn compaction_event_plans(
-    public_output_items: &[OutputItem],
-    output_offset: usize,
-) -> Vec<GatewayEventPlan> {
-    public_output_items
-        .iter()
-        .enumerate()
-        .filter(|(_, item)| matches!(item, OutputItem::Compaction(_)))
-        .map(|(index, item)| GatewayEventPlan {
-            output_index: u32::try_from(output_offset.saturating_add(index)).unwrap_or(u32::MAX),
-            started_output: Some(item.clone()),
-            completed_output: Some(item.clone()),
-            arguments: None,
-        })
-        .collect()
-}
-
-#[cfg(test)]
-fn complete_gateway_event_plans<T: GatewayPublicOutputSource>(plans: &mut [GatewayEventPlan], completed: &[T]) {
-    for (plan, source) in plans.iter_mut().zip(completed) {
-        plan.completed_output = source.public_output().cloned();
-    }
 }
 
 /// Plan, execute and relay one round's gateway calls under the execution
@@ -518,19 +530,17 @@ pub(super) async fn execute_and_emit_output_calls(
     relay: &mut StreamRelay,
 ) -> ExecutorResult<Vec<GatewayCallResult>> {
     let policy = exec_ctx.gateway_scheduler_policy.clone();
-    let mut scheduler =
-        GatewayScheduler::plan_with_budget(output_items, registry, output_offset, policy, tool_call_budget)
-            .with_metrics(&exec_ctx.metrics);
-    emit_gateway_start_events(scheduler.event_plans(), relay).await?;
-    let gateway_results = scheduler.execute_with_budget(response_budget).await?;
-    emit_gateway_completed_events(&gateway_results, scheduler.event_plans(), relay).await?;
-    Ok(gateway_results)
+    let scheduler = GatewayScheduler::plan_with_budget(output_items, registry, output_offset, policy, tool_call_budget)
+        .with_metrics(&exec_ctx.metrics);
+    emit_calls_in_order(&scheduler, response_budget, relay).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::GatewayCallResult;
+    use super::lifecycle::drive_in_order;
     use crate::executor::accumulator::ResponseAccumulator;
+    use crate::executor::error::ExecutorResult;
     use crate::executor::gateway_accumulator::StreamEvent;
     use crate::executor::relay::{RelayLimits, StreamRelay};
     use crate::types::io::output::{FunctionToolCall, McpListTool, McpListTools};
@@ -550,10 +560,14 @@ mod tests {
         event
     }
 
+    use std::future;
+    use std::iter;
     use std::num::NonZeroUsize;
     use std::pin::Pin;
+    use std::slice;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::time::{Duration, Instant};
 
     use serde_json::Value;
 
@@ -602,7 +616,7 @@ mod tests {
         ) -> Pin<Box<dyn Future<Output = Result<ToolOutput, ToolError>> + Send + '_>> {
             let call_id = call_id.to_owned();
             Box::pin(async move {
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                tokio::time::sleep(Duration::from_millis(50)).await;
                 Ok(ToolOutput::success(call_id, "unreachable"))
             })
         }
@@ -751,7 +765,7 @@ mod tests {
                 let output = if call_id == "call_fail" {
                     "x".repeat(crate::tool::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES + 1)
                 } else {
-                    tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+                    tokio::time::sleep(Duration::from_millis(25)).await;
                     slow_call_finished.store(true, Ordering::SeqCst);
                     "ok".to_owned()
                 };
@@ -862,7 +876,7 @@ mod tests {
         // the stuck call becomes an error output the loop can feed back.
         let output_items = [OutputItem::FunctionCall(web_search_call("call_hang"))];
         let mut scheduler =
-            GatewayScheduler::plan_with_test_timeout(&output_items, &registry, 0, std::time::Duration::from_millis(1));
+            GatewayScheduler::plan_with_test_timeout(&output_items, &registry, 0, Duration::from_millis(1));
         let result = scheduler
             .execute()
             .await
@@ -873,7 +887,7 @@ mod tests {
         // A failed web_search still yields a public web_search_call item.
         assert!(matches!(result.public_output, Some(OutputItem::WebSearchCall(_))));
         // The fed-back tool output is an error JSON mentioning the timeout.
-        let InputItem::FunctionCallOutput(msg) = &result.input_item else {
+        let InputItem::FunctionCallOutput(msg) = &result.model_input[0] else {
             panic!("expected a function_call_output");
         };
         let body = serde_json::to_string(msg).expect("serialize output");
@@ -899,8 +913,7 @@ mod tests {
             .expect("registry builds");
 
         let output_items = [OutputItem::FunctionCall(web_search_call("call_no_handler"))];
-        let mut scheduler =
-            GatewayScheduler::plan_with_test_timeout(&output_items, &registry, 0, std::time::Duration::ZERO);
+        let mut scheduler = GatewayScheduler::plan_with_test_timeout(&output_items, &registry, 0, Duration::ZERO);
         let result = scheduler
             .execute()
             .await
@@ -909,7 +922,7 @@ mod tests {
 
         assert_eq!(result.item_index, 0);
         assert!(matches!(result.public_output, Some(OutputItem::WebSearchCall(_))));
-        let InputItem::FunctionCallOutput(msg) = &result.input_item else {
+        let InputItem::FunctionCallOutput(msg) = &result.model_input[0] else {
             panic!("expected a function_call_output");
         };
         let body = serde_json::to_string(msg).expect("serialize output");
@@ -997,6 +1010,118 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn streamed_round_drains_started_calls_before_returning_an_error() {
+        let slow_call_finished = Arc::new(AtomicBool::new(false));
+        let web_search: ResponsesTool =
+            serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).expect("web_search tool param");
+        let mut executors = GatewayExecutors::default();
+        executors.insert(Arc::new(DrainTrackingExecutor {
+            slow_call_finished: Arc::clone(&slow_call_finished),
+        }));
+        let mut tools = [ToolDeclaration::from(web_search)];
+        let registry = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
+            .await
+            .expect("registry builds");
+        let output_items = [
+            OutputItem::FunctionCall(web_search_call("call_fail")),
+            OutputItem::FunctionCall(web_search_call("call_slow")),
+        ];
+        let scheduler = GatewayScheduler::plan(&output_items, &registry, 0, GatewaySchedulerPolicy::default());
+        let (sender, _receiver) = mpsc::channel(32);
+        let mut relay = StreamRelay::client(sender, RelayLimits::default());
+
+        let Err(error) = super::emit_calls_in_order(&scheduler, &ExecutorResponseBudget::new(), &mut relay).await
+        else {
+            panic!("oversized output must fail");
+        };
+
+        assert!(error.to_string().contains("gateway tool output exceeded"));
+        assert!(
+            slow_call_finished.load(Ordering::SeqCst),
+            "a peer call started in the same batch must be drained before the round returns"
+        );
+    }
+
+    /// Finishes call `call_<n>` after `n` × 30 ms and counts it.
+    struct StaggeredExecutor {
+        finished: Arc<AtomicUsize>,
+    }
+
+    impl ToolHandler for StaggeredExecutor {
+        type ToolParams = WebSearchToolParam;
+
+        fn tool_type(&self) -> ToolType {
+            ToolType::WebSearch
+        }
+
+        fn validate(&self, _params: &WebSearchToolParam) -> Result<(), ToolError> {
+            Ok(())
+        }
+
+        fn normalize(&self, _params: &WebSearchToolParam) -> Vec<FunctionTool> {
+            Vec::new()
+        }
+    }
+
+    impl GatewayExecutor for StaggeredExecutor {
+        type ExecutionParams = WebSearchToolParam;
+
+        fn execute(
+            &self,
+            call_id: &str,
+            _tool_name: &str,
+            _arguments: &str,
+            _params: &WebSearchToolParam,
+        ) -> Pin<Box<dyn Future<Output = Result<ToolOutput, ToolError>> + Send + '_>> {
+            let call_id = call_id.to_owned();
+            let finished = Arc::clone(&self.finished);
+            Box::pin(async move {
+                let order: u64 = call_id.trim_start_matches("call_").parse().expect("numbered call");
+                tokio::time::sleep(Duration::from_millis(order * 30)).await;
+                finished.fetch_add(1, Ordering::SeqCst);
+                Ok(ToolOutput::success(call_id, "ok".to_owned()))
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn calls_keep_running_while_their_emission_is_blocked() {
+        let finished = Arc::new(AtomicUsize::new(0));
+        let web_search: ResponsesTool =
+            serde_json::from_value(serde_json::json!({"type": "web_search_preview"})).expect("web_search tool param");
+        let mut executors = GatewayExecutors::default();
+        executors.insert(Arc::new(StaggeredExecutor {
+            finished: Arc::clone(&finished),
+        }));
+        let mut tools = [ToolDeclaration::from(web_search)];
+        let registry = ToolRegistry::build_with_handlers(&mut tools, &mut executors)
+            .await
+            .expect("registry builds");
+        let output_items: Vec<_> = (1..=3)
+            .map(|order| OutputItem::FunctionCall(web_search_call(&format!("call_{order}"))))
+            .collect();
+        let scheduler = GatewayScheduler::plan(&output_items, &registry, 0, GatewaySchedulerPolicy::default());
+        let budget = ExecutorResponseBudget::new();
+
+        // The emitter takes the first result, then stalls as a client that stopped reading would.
+        let stalled = tokio::time::timeout(
+            Duration::from_millis(500),
+            drive_in_order(&scheduler, &budget, async |ordered| {
+                ordered.recv().await;
+                future::pending::<ExecutorResult<()>>().await
+            }),
+        )
+        .await;
+
+        assert!(stalled.is_err(), "the emitter never finishes");
+        assert_eq!(
+            finished.load(Ordering::SeqCst),
+            3,
+            "every call finished while emission was blocked"
+        );
+    }
+
+    #[tokio::test]
     async fn cloned_gateway_policies_share_the_materialization_limit() {
         const CALLS_PER_SCHEDULER: usize = MAX_CONCURRENT_MATERIALIZATIONS / 2 + 1;
         const TOTAL_CALLS: usize = CALLS_PER_SCHEDULER * 2;
@@ -1032,14 +1157,14 @@ mod tests {
         let second_task = tokio::spawn(async move { second.execute().await });
 
         for _ in 0..MAX_CONCURRENT_MATERIALIZATIONS {
-            tokio::time::timeout(std::time::Duration::from_secs(1), entered_rx.recv())
+            tokio::time::timeout(Duration::from_secs(1), entered_rx.recv())
                 .await
                 .expect("the shared materialization window should fill")
                 .expect("probe sender should remain open");
         }
         assert_eq!(peak.load(Ordering::SeqCst), MAX_CONCURRENT_MATERIALIZATIONS);
         assert!(
-            tokio::time::timeout(std::time::Duration::from_millis(50), entered_rx.recv())
+            tokio::time::timeout(Duration::from_millis(50), entered_rx.recv())
                 .await
                 .is_err(),
             "materialization started beyond the shared limit of {MAX_CONCURRENT_MATERIALIZATIONS}"
@@ -1110,7 +1235,7 @@ mod tests {
             .await
             .expect("completed events");
 
-        let events = std::iter::from_fn(|| receiver.try_recv().ok().map(StreamEvent::into_frame))
+        let events = iter::from_fn(|| receiver.try_recv().ok().map(StreamEvent::into_frame))
             .map(|event| parse_named_sse_event(&event.content))
             .collect::<Vec<_>>();
         assert!(!events.is_empty());
@@ -1141,7 +1266,7 @@ mod tests {
             .map(|call_id| OutputItem::FunctionCall(web_search_call(call_id)))
             .collect();
 
-        let started = std::time::Instant::now();
+        let started = Instant::now();
         let mut scheduler = GatewayScheduler::plan(&output_items, &registry, 0, GatewaySchedulerPolicy::default());
         let results = scheduler.execute().await.expect("all calls execute");
         let elapsed = started.elapsed();
@@ -1150,7 +1275,7 @@ mod tests {
         // Well under the ~200ms four sequential 50ms calls would take, and close to
         // one 50ms slot -- proves the calls actually overlapped in wall-clock time.
         assert!(
-            elapsed < std::time::Duration::from_millis(150),
+            elapsed < Duration::from_millis(150),
             "four concurrent 50ms calls took {elapsed:?}, expected well under 150ms"
         );
         // The scheduler restores original item order regardless of completion order.
@@ -1176,14 +1301,14 @@ mod tests {
             .collect::<Vec<_>>();
         let policy = GatewaySchedulerPolicy::new(NonZeroUsize::MIN);
 
-        let started = std::time::Instant::now();
+        let started = Instant::now();
         let mut scheduler = GatewayScheduler::plan(&output_items, &registry, 0, policy);
         let results = scheduler.execute().await.expect("all calls execute");
         let elapsed = started.elapsed();
 
         assert_eq!(results.len(), 4);
         assert!(
-            elapsed >= std::time::Duration::from_millis(180),
+            elapsed >= Duration::from_millis(180),
             "a one-call scheduler window completed four 50ms calls in {elapsed:?}"
         );
     }
@@ -1219,7 +1344,7 @@ mod tests {
         ) -> Pin<Box<dyn Future<Output = Result<ToolOutput, ToolError>> + Send + '_>> {
             let call_id = call_id.to_owned();
             Box::pin(async move {
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                tokio::time::sleep(Duration::from_millis(50)).await;
                 Ok(ToolOutput::success(call_id, "unreachable"))
             })
         }
@@ -1241,7 +1366,7 @@ mod tests {
             .map(|call_id| OutputItem::FunctionCall(web_search_call(call_id)))
             .collect();
 
-        let started = std::time::Instant::now();
+        let started = Instant::now();
         let mut scheduler = GatewayScheduler::plan(&output_items, &registry, 0, GatewaySchedulerPolicy::default());
         let results = scheduler.execute().await.expect("all calls execute");
         let elapsed = started.elapsed();
@@ -1250,7 +1375,7 @@ mod tests {
         // Four 50ms calls run sequentially (one at a time) should take close to
         // 200ms -- well above what four *concurrent* 50ms calls would take.
         assert!(
-            elapsed >= std::time::Duration::from_millis(180),
+            elapsed >= Duration::from_millis(180),
             "four exclusive 50ms calls took {elapsed:?}, expected close to 200ms"
         );
     }
@@ -1321,6 +1446,7 @@ mod tests {
             tool_type: crate::tool::ToolType::WebSearch,
             item_index,
             events: GatewayEventPlan {
+                follow_up_output: None,
                 output_index: u32::try_from(item_index).expect("test item index fits in u32"),
                 started_output: None,
                 completed_output: None,
@@ -1355,16 +1481,17 @@ mod tests {
         let mut scheduler = GatewayScheduler {
             calls,
             omitted_items: Vec::new(),
+            expanded_items: Vec::new(),
             policy: GatewaySchedulerPolicy::new(NonZeroUsize::new(2).expect("nonzero test limit")),
-            timeout: std::time::Duration::ZERO,
+            timeout: Duration::ZERO,
             metrics: None,
         };
 
         let execution = tokio::spawn(async move { scheduler.execute().await });
-        tokio::time::timeout(std::time::Duration::from_secs(1), blocked_started.notified())
+        tokio::time::timeout(Duration::from_secs(1), blocked_started.notified())
             .await
             .expect("first same-tool call starts");
-        tokio::time::timeout(std::time::Duration::from_secs(1), unrelated_started.notified())
+        tokio::time::timeout(Duration::from_secs(1), unrelated_started.notified())
             .await
             .expect("unrelated call starts while the same-tool waiter remains queued");
         release_blocked.notify_one();
@@ -1401,16 +1528,17 @@ mod tests {
         let mut scheduler = GatewayScheduler {
             calls,
             omitted_items: Vec::new(),
+            expanded_items: Vec::new(),
             policy: GatewaySchedulerPolicy::new(NonZeroUsize::new(2).expect("nonzero test limit")),
-            timeout: std::time::Duration::ZERO,
+            timeout: Duration::ZERO,
             metrics: None,
         };
 
         let execution = tokio::spawn(async move { scheduler.execute().await });
-        tokio::time::timeout(std::time::Duration::from_secs(1), blocked_started.notified())
+        tokio::time::timeout(Duration::from_secs(1), blocked_started.notified())
             .await
             .expect("first call starts");
-        tokio::time::timeout(std::time::Duration::from_secs(1), refilled_call_started.notified())
+        tokio::time::timeout(Duration::from_secs(1), refilled_call_started.notified())
             .await
             .expect("third call refills the slot released by the completed second call");
         release_blocked.notify_one();
@@ -1459,7 +1587,7 @@ mod tests {
             .await
             .expect("completed events");
 
-        let events = std::iter::from_fn(|| receiver.try_recv().ok().map(StreamEvent::into_frame))
+        let events = iter::from_fn(|| receiver.try_recv().ok().map(StreamEvent::into_frame))
             .map(|event| parse_named_sse_event(&event.content))
             .collect::<Vec<_>>();
         assert_eq!(
@@ -1503,7 +1631,7 @@ mod tests {
             .await
             .expect("completed events");
 
-        let chunks = std::iter::from_fn(|| receiver.try_recv().ok().map(StreamEvent::into_frame))
+        let chunks = iter::from_fn(|| receiver.try_recv().ok().map(StreamEvent::into_frame))
             .map(|event| event.content)
             .collect::<Vec<_>>();
         let events = chunks
@@ -1533,6 +1661,7 @@ mod tests {
     #[tokio::test]
     async fn code_interpreter_gateway_events_follow_openai_lifecycle() {
         let mut plans = vec![super::GatewayEventPlan {
+            follow_up_output: None,
             output_index: 4,
             started_output: Some(OutputItem::CodeInterpreterCall(CodeInterpreterCall {
                 agent: None,
@@ -1561,12 +1690,12 @@ mod tests {
         super::emit_gateway_start_events(&plans, &mut relay)
             .await
             .expect("start events");
-        super::complete_gateway_event_plans(&mut plans, std::slice::from_ref(&final_item));
-        super::emit_gateway_completed_events(std::slice::from_ref(&final_item), &plans, &mut relay)
+        super::complete_gateway_event_plans(&mut plans, slice::from_ref(&final_item));
+        super::emit_gateway_completed_events(slice::from_ref(&final_item), &plans, &mut relay)
             .await
             .expect("completed events");
 
-        let events = std::iter::from_fn(|| receiver.try_recv().ok().map(StreamEvent::into_frame))
+        let events = iter::from_fn(|| receiver.try_recv().ok().map(StreamEvent::into_frame))
             .map(|event| parse_named_sse_event(&event.content))
             .collect::<Vec<_>>();
         assert_eq!(
@@ -1644,6 +1773,7 @@ mod tests {
             None,
         ));
         let mut plans = vec![super::GatewayEventPlan {
+            follow_up_output: None,
             output_index: 0,
             started_output: Some(started),
             completed_output: None,
@@ -1696,7 +1826,9 @@ mod tests {
         ));
         let results = vec![GatewayCallResult {
             item_index: 0,
-            input_item: InputItem::FunctionCallOutput(ToolOutput::success("call_1", "1").into()),
+            model_input: vec![InputItem::FunctionCallOutput(ToolOutput::success("call_1", "1").into())],
+            history_input: Vec::new(),
+            follow_up_output: None,
             public_output: Some(final_item),
             omitted: false,
         }];
@@ -1733,6 +1865,7 @@ mod tests {
             namespace: None,
         };
         let mut plans = vec![super::GatewayEventPlan {
+            follow_up_output: None,
             output_index: 0,
             started_output: Some(OutputItem::McpCall(crate::types::io::McpCall::new(
                 "mcp_1",
@@ -1748,7 +1881,11 @@ mod tests {
         }];
         let results = vec![GatewayCallResult {
             item_index: 0,
-            input_item: InputItem::FunctionCallOutput(ToolOutput::failure("call_1", r#"{"error":"boom"}"#).into()),
+            model_input: vec![InputItem::FunctionCallOutput(
+                ToolOutput::failure("call_1", r#"{"error":"boom"}"#).into(),
+            )],
+            history_input: Vec::new(),
+            follow_up_output: None,
             public_output: Some(OutputItem::McpCall(crate::types::io::McpCall::new(
                 "mcp_1",
                 "counter",
@@ -1771,7 +1908,7 @@ mod tests {
             .await
             .expect("failed events");
 
-        let events = std::iter::from_fn(|| receiver.try_recv().ok().map(StreamEvent::into_frame))
+        let events = iter::from_fn(|| receiver.try_recv().ok().map(StreamEvent::into_frame))
             .map(|event| parse_named_sse_event(&event.content))
             .collect::<Vec<_>>();
         assert_eq!(

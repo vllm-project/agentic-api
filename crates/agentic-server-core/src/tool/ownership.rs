@@ -5,8 +5,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use super::handler::{GatewayExecutor, GatewayToolEventPlan, ToolError, ToolOutput};
-use crate::types::io::OutputItem;
 use crate::types::io::output::{FunctionToolCall, GatewayCallStatus};
+use crate::types::io::{InputItem, OutputItem};
 
 /// Object-safe execution surface for a handler that has already been paired
 /// with the exact parameter type declared by its [`GatewayExecutor`]
@@ -27,6 +27,15 @@ trait ErasedGatewayExecutor: Send + Sync {
         output: &ToolOutput,
         status: GatewayCallStatus,
     ) -> Option<OutputItem>;
+
+    fn model_input(
+        &self,
+        call: &FunctionToolCall,
+        output: ToolOutput,
+        follow_up: Option<&OutputItem>,
+    ) -> Vec<InputItem>;
+
+    fn history_input(&self, call: &FunctionToolCall, follow_up: Option<&OutputItem>) -> Option<Vec<InputItem>>;
 }
 
 struct TypedGatewayExecutor<E>
@@ -61,6 +70,19 @@ where
         status: GatewayCallStatus,
     ) -> Option<OutputItem> {
         self.executor.public_output(call, output, status, &self.params)
+    }
+
+    fn model_input(
+        &self,
+        call: &FunctionToolCall,
+        output: ToolOutput,
+        follow_up: Option<&OutputItem>,
+    ) -> Vec<InputItem> {
+        self.executor.model_input(call, output, follow_up)
+    }
+
+    fn history_input(&self, call: &FunctionToolCall, follow_up: Option<&OutputItem>) -> Option<Vec<InputItem>> {
+        self.executor.history_input(call, follow_up)
     }
 }
 
@@ -119,6 +141,23 @@ impl GatewayBinding {
         status: GatewayCallStatus,
     ) -> Option<OutputItem> {
         self.executor.public_output(call, output, status)
+    }
+
+    pub(crate) fn model_input(
+        &self,
+        call: &FunctionToolCall,
+        output: ToolOutput,
+        follow_up: Option<&OutputItem>,
+    ) -> Vec<InputItem> {
+        self.executor.model_input(call, output, follow_up)
+    }
+
+    pub(crate) fn history_input(
+        &self,
+        call: &FunctionToolCall,
+        follow_up: Option<&OutputItem>,
+    ) -> Option<Vec<InputItem>> {
+        self.executor.history_input(call, follow_up)
     }
 }
 

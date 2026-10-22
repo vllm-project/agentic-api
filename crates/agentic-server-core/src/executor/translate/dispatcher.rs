@@ -204,7 +204,8 @@ impl TranslationDispatcher {
                 Box::new(crate::tool::ShellHandler::new_translator(execution))
             }
             ToolType::ToolSearch => Box::new(ToolSearchHandler::new_translator(execution)),
-            ToolType::Shell
+            ToolType::HostedToolSearch
+            | ToolType::Shell
             | ToolType::Mcp
             | ToolType::WebSearch
             | ToolType::WebFetch

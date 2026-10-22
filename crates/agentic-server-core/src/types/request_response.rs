@@ -1,11 +1,11 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::num::NonZeroU64;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::io::input::InputValidationError;
+use super::io::input::{InputValidationError, McpToolNames};
 use super::io::{FunctionTool, InputItem, MultiAgentConfig, OutputItem, ResponseUsage, ResponsesInput, ToolChoice};
 use super::tools::ResponsesTool;
 use crate::tool::async_execution::lower_async_calls;
@@ -28,7 +28,9 @@ use serde_helpers::{
 };
 pub use standard_response::{ResponseReasoning, StandardResponseFields};
 pub use text_config::{ResponseTextConfig, ResponseTextFormat};
-pub use unsupported::{BACKGROUND_PARAM, Background, PROMPT_PARAM, RejectedValue, UnsupportedParameterError};
+pub use unsupported::{
+    BACKGROUND_PARAM, Background, PROMPT_PARAM, RejectedValue, TOOL_CHOICE_PARAM, UnsupportedParameterError,
+};
 #[cfg(feature = "openapi")]
 mod schema;
 
@@ -366,9 +368,20 @@ impl RequestPayload {
         });
         let tools = tools.filter(|tools| !tools.is_empty());
         let namespace_map = CodexNamespaceHandler.build_namespace_map(declarations.as_deref())?;
-        let input = lower_async_calls(
-            CodexNamespaceHandler.resolve_input(namespace_map.as_ref(), self.input.normalized_model_input()?),
-        );
+        let mcp_names = McpToolNames::from_tools(self.tools.as_deref().unwrap_or_default());
+        let top_level_functions: HashSet<&str> = declarations
+            .iter()
+            .flatten()
+            .filter_map(|declaration| match declaration {
+                ToolDeclaration::Function(function) => Some(function.name.as_str()),
+                _ => None,
+            })
+            .collect();
+        let input = lower_async_calls(CodexNamespaceHandler.resolve_input(
+            namespace_map.as_ref(),
+            &top_level_functions,
+            self.input.normalized_model_input_with(&mcp_names)?,
+        ));
         let tool_choice = CodexNamespaceHandler.resolve_tool_choice(namespace_map.as_ref(), self.tool_choice.as_ref());
         CustomHandler::validate_tool_choice(declarations.as_deref(), &tool_choice)?;
         Ok(UpstreamRequest {

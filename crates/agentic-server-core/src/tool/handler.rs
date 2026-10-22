@@ -1,8 +1,8 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use crate::types::io::FunctionTool;
 use crate::types::io::output::{FunctionToolCall, GatewayCallStatus, OutputItem};
+use crate::types::io::{FunctionTool, InputItem};
 
 pub(crate) const MAX_GATEWAY_TOOL_OUTPUT_BYTES: usize = 1024 * 1024;
 
@@ -61,17 +61,29 @@ impl ToolOutput {
 #[derive(Debug, Clone, Default)]
 pub struct GatewayToolEventPlan {
     started_output: Option<OutputItem>,
+    follow_up_output: Option<OutputItem>,
 }
 
 impl GatewayToolEventPlan {
     #[must_use]
     pub const fn new(started_output: Option<OutputItem>) -> Self {
-        Self { started_output }
+        Self {
+            started_output,
+            follow_up_output: None,
+        }
+    }
+
+    /// Adds a second public item, already complete, that follows the call's
+    /// own item at the next output index (a hosted `tool_search_output`).
+    #[must_use]
+    pub fn with_follow_up(mut self, item: OutputItem) -> Self {
+        self.follow_up_output = Some(item);
+        self
     }
 
     #[must_use]
-    pub(crate) fn into_started_output(self) -> Option<OutputItem> {
-        self.started_output
+    pub(crate) fn into_parts(self) -> (Option<OutputItem>, Option<OutputItem>) {
+        (self.started_output, self.follow_up_output)
     }
 }
 
@@ -198,6 +210,28 @@ pub trait GatewayExecutor: ToolHandler + 'static {
         params: &Self::ExecutionParams,
     ) -> Option<OutputItem> {
         let _ = (call, output, status, params);
+        None
+    }
+
+    /// Items appended to the model's context for the next inference round.
+    /// Defaults to the call's output, after the model's own call item.
+    #[must_use]
+    fn model_input(
+        &self,
+        call: &FunctionToolCall,
+        output: ToolOutput,
+        follow_up: Option<&OutputItem>,
+    ) -> Vec<InputItem> {
+        let _ = (call, follow_up);
+        vec![InputItem::FunctionCallOutput(output.into())]
+    }
+
+    /// Items recorded as the turn's history instead of the model input, for a
+    /// tool whose public items are its canonical history. `None` records the
+    /// model input.
+    #[must_use]
+    fn history_input(&self, call: &FunctionToolCall, follow_up: Option<&OutputItem>) -> Option<Vec<InputItem>> {
+        let _ = (call, follow_up);
         None
     }
 }

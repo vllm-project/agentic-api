@@ -7,6 +7,7 @@ use crate::types::agent::AgentIdentity;
 use crate::types::io::input::async_records;
 use crate::types::io::{InputItem, ResponseUsage, ResponsesInput};
 use crate::types::request_response::{PromptCacheOptions, PromptCacheRetention, RequestPayload};
+use crate::types::tools::ResponsesTool;
 
 pub struct CompactionPlan {
     agent: AgentIdentity,
@@ -18,6 +19,8 @@ pub struct CompactionPlan {
     prompt_cache_retention: Option<PromptCacheRetention>,
     prompt_cache_options: Option<PromptCacheOptions>,
     service_tier: Option<String>,
+    /// The request's MCP declarations; the summary names replayed MCP calls with their discovered tools.
+    mcp_declarations: Vec<ResponsesTool>,
 }
 
 pub struct CompactionResult {
@@ -79,6 +82,13 @@ impl CompactionPlan {
             prompt_cache_retention: request.prompt_cache_retention,
             prompt_cache_options: request.prompt_cache_options,
             service_tier: request.service_tier.clone(),
+            mcp_declarations: request
+                .tools
+                .iter()
+                .flatten()
+                .filter(|tool| matches!(tool, ResponsesTool::Mcp(_)))
+                .cloned()
+                .collect(),
         }))
     }
 
@@ -111,6 +121,7 @@ impl CompactionPlan {
             prompt_cache_retention: self.prompt_cache_retention,
             prompt_cache_options: self.prompt_cache_options,
             service_tier: self.service_tier,
+            tools: (!self.mcp_declarations.is_empty()).then_some(self.mcp_declarations),
             ..Default::default()
         };
         let (mut replacement, usage, service_tier) =

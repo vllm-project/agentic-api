@@ -78,6 +78,7 @@ impl ToolDeclaration {
     pub fn tool_type(&self) -> Option<ToolType> {
         match self {
             Self::Function(_) => Some(ToolType::Function),
+            Self::ToolSearch(param) if param.is_hosted() => Some(ToolType::HostedToolSearch),
             Self::ToolSearch(_) => Some(ToolType::ToolSearch),
             Self::Mcp(_) => Some(ToolType::Mcp),
             Self::WebSearch(_) => Some(ToolType::WebSearch),

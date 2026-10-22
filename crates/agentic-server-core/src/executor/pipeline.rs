@@ -18,6 +18,7 @@ use crate::tool::{ToolRegistry, ToolSearchMetadata, ToolSearchState};
 use crate::types::agent::AgentIdentity;
 use crate::types::io::{InputMessage, OutputItem};
 use crate::types::request_response::ResponsePayload;
+use crate::types::tools::ResponsesTool;
 use futures::{Stream, StreamExt};
 use tokio_util::sync::CancellationToken;
 
@@ -111,6 +112,15 @@ impl AgentPipeline {
 
     pub(super) fn tool_search_state(&self) -> Option<&ToolSearchState> {
         self.tool_search_state.as_ref()
+    }
+
+    /// Loads the tools this round's hosted searches returned, updating the
+    /// search state and the private tools of the next inference round.
+    pub(super) fn apply_hosted_search(&mut self, loaded: &[ResponsesTool]) -> ExecutorResult<()> {
+        if let Some(state) = self.tool_search_state.as_mut() {
+            state.apply_hosted_search(loaded, &mut self.request.enriched_request)?;
+        }
+        Ok(())
     }
 
     pub(super) fn ensure_request_prepared(&self) -> ExecutorResult<()> {

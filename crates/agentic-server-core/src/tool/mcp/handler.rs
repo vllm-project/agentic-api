@@ -226,13 +226,9 @@ impl ToolHandler for McpHandler {
         ToolType::Mcp
     }
 
-    fn validate(&self, params: &McpToolParam) -> Result<(), ToolError> {
-        if params.defer_loading == Some(true) {
-            return Err(ToolError::Config(format!(
-                "MCP tool '{}' cannot use defer_loading because deferred MCP tools are not supported",
-                params.server_label
-            )));
-        }
+    fn validate(&self, _params: &McpToolParam) -> Result<(), ToolError> {
+        // A deferred server is valid only behind hosted tool search, which
+        // tool-search preparation validates with the rest of the catalog.
         Ok(())
     }
 
@@ -240,6 +236,12 @@ impl ToolHandler for McpHandler {
         params
             .discovered_tools
             .iter()
+            .filter(|tool| {
+                params
+                    .loaded_tool_names
+                    .as_ref()
+                    .is_none_or(|loaded| loaded.contains(&tool.tool_name))
+            })
             .map(discovered_mcp_function_tool)
             .collect()
     }
@@ -376,6 +378,11 @@ pub(crate) fn discovered_mcp_function_tool(param: &McpDiscoveredToolParam) -> Fu
 const INTERNAL_MCP_PREFIX: &str = "mcp__";
 const MAX_INTERNAL_TOOL_NAME_LEN: usize = 64;
 
+/// The function name the model knows an MCP tool by, as discovery assigns it when no other tool collides.
+pub(crate) fn model_tool_name(server_label: &str, tool_name: &str) -> String {
+    internal_mcp_tool_name(server_label, tool_name, &mut HashMap::new())
+}
+
 fn internal_mcp_tool_name(server_label: &str, tool_name: &str, used: &mut HashMap<String, (String, String)>) -> String {
     let identity = (server_label.to_owned(), tool_name.to_owned());
     let base = sanitize_internal_tool_name(&format!("{INTERNAL_MCP_PREFIX}{server_label}__{tool_name}"));
@@ -489,18 +496,23 @@ mod tests {
     }
 
     #[test]
-    fn deferred_mcp_tools_are_rejected() {
-        let param = serde_json::from_value::<McpToolParam>(serde_json::json!({
+    fn deferred_server_exposes_only_loaded_tools() {
+        let handler = McpHandler::discovered_tool_spec_only();
+        let mut params = serde_json::from_value::<McpToolParam>(serde_json::json!({
             "server_label": "counter",
             "server_url": "http://127.0.0.1:8000/mcp",
             "defer_loading": true
         }))
         .expect("MCP tool param");
+        handler
+            .validate(&params)
+            .expect("a deferred server is valid behind hosted tool search");
+        params.discovered_tools.push(discovered_param());
 
-        let error = McpHandler::spec_from_param(&param)
-            .validate(&param)
-            .expect_err("deferred MCP tools are not supported");
-        assert!(error.to_string().contains("deferred MCP tools are not supported"));
+        params.loaded_tool_names = Some(Vec::new());
+        assert!(handler.normalize(&params).is_empty(), "nothing is loaded yet");
+        params.loaded_tool_names = Some(vec!["increment".to_owned()]);
+        assert_eq!(handler.normalize(&params)[0].name, "mcp__counter__increment");
     }
 
     #[test]

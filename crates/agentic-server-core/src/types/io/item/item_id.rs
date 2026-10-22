@@ -1,6 +1,6 @@
 //! Typed public item identities and their known type-specific prefixes.
 
-use crate::types::io::{InputItem, OutputItem};
+use crate::types::io::{InOutItem, InputItem, OutputItem};
 
 impl InputItem {
     /// Returns the public ID carried by this input item, when present.
@@ -14,6 +14,7 @@ impl InputItem {
             Self::FunctionCall(item) => item.id.as_deref(),
             Self::CodeInterpreterCall(item) => Some(&item.id),
             Self::ToolSearchCall(item) => Some(&item.id),
+            Self::ToolSearchOutput(item) => item.id.as_deref(),
             Self::CustomToolCall(item) => Some(&item.id),
             Self::ShellCall(item) => item.id.as_deref(),
             Self::ShellCallOutput(item) => item.id.as_deref(),
@@ -22,10 +23,7 @@ impl InputItem {
             Self::Compaction(item) => item.id.as_deref(),
             Self::WebSearchCall(item) => Some(&item.id),
             Self::McpCall(item) => Some(&item.id),
-            Self::FunctionCallOutput(_)
-            | Self::ToolSearchOutput(_)
-            | Self::CustomToolCallOutput(_)
-            | Self::CompactionTrigger => None,
+            Self::FunctionCallOutput(_) | Self::CustomToolCallOutput(_) | Self::CompactionTrigger => None,
         }
     }
 
@@ -41,6 +39,7 @@ impl InputItem {
             Self::FunctionCall(_) => Some("fc_"),
             Self::CodeInterpreterCall(_) => Some("ci_"),
             Self::ToolSearchCall(_) => Some("tsc_"),
+            Self::ToolSearchOutput(_) => Some("tso_"),
             Self::CustomToolCall(_) => Some("ctc_"),
             Self::ShellCall(_) => Some("sh_"),
             Self::Reasoning(_) => Some("rs_"),
@@ -50,7 +49,6 @@ impl InputItem {
             Self::McpCall(_) => Some("mcp_"),
             Self::ShellCallOutput(_)
             | Self::FunctionCallOutput(_)
-            | Self::ToolSearchOutput(_)
             | Self::CustomToolCallOutput(_)
             | Self::CompactionTrigger => None,
         }
@@ -69,6 +67,7 @@ impl OutputItem {
             Self::FunctionCall(item) => Some(&item.id),
             Self::CodeInterpreterCall(item) => Some(&item.id),
             Self::ToolSearchCall(item) => Some(&item.id),
+            Self::ToolSearchOutput(item) => item.id.as_deref(),
             Self::CustomToolCall(item) => Some(&item.id),
             Self::ShellCall(item) => item.id.as_deref(),
             Self::WebSearchCall(item) => Some(&item.id),
@@ -92,6 +91,7 @@ impl OutputItem {
             Self::FunctionCall(_) => Some("fc_"),
             Self::CodeInterpreterCall(_) => Some("ci_"),
             Self::ToolSearchCall(_) => Some("tsc_"),
+            Self::ToolSearchOutput(_) => Some("tso_"),
             Self::CustomToolCall(_) => Some("ctc_"),
             Self::ShellCall(_) => Some("sh_"),
             Self::WebSearchCall(_) => Some("ws_"),
@@ -100,6 +100,17 @@ impl OutputItem {
             Self::Reasoning(_) => Some("rs_"),
             Self::Compaction(_) => Some("cmp_"),
             Self::Unknown => None,
+        }
+    }
+}
+
+impl InOutItem {
+    /// Returns the public ID of the wrapped input or output item, when present.
+    #[must_use]
+    pub(crate) fn id(&self) -> Option<&str> {
+        match self {
+            Self::Input(item) => item.id(),
+            Self::Output(item) => item.id(),
         }
     }
 }

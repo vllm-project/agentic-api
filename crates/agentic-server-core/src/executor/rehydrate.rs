@@ -184,6 +184,9 @@ async fn rehydrate_request(
 
     exec_ctx
         .gateway_executors
+        .apply_configured_mcp_defaults(ctx.enriched_request.tools.as_deref_mut());
+    exec_ctx
+        .gateway_executors
         .validate_declarations(ctx.enriched_request.tool_declarations().as_deref())?;
     ctx.enriched_request.input.validate()?;
     validate_multi_agent_request(&ctx.enriched_request)?;

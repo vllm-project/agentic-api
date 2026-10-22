@@ -239,6 +239,8 @@ async fn unavailable_configured_mcp_server_does_not_block_startup() {
             headers: None,
             allowed_tools: Some(vec!["read".to_owned()]),
             require_approval: Some("never".to_owned()),
+            description: None,
+            defer_loading: None,
         },
     );
     let config = ToolRuntimeConfig {
@@ -293,8 +295,10 @@ async fn cached_mcp_server_tools_apply_request_allowed_tools_with_fresh_output_i
     assert_ne!(first_output_id, second.list_tools_item.id);
 }
 
+/// Recorded reference (`mcp-failures`): an `allowed_tools` filter that matches nothing lists no tools and the
+/// request completes.
 #[tokio::test]
-async fn cached_mcp_handlers_reject_empty_final_allowed_set() {
+async fn cached_mcp_handlers_accept_an_empty_final_allowed_set() {
     let mut executors = GatewayExecutors::default();
     executors.insert(GatewayExecutorRegistration::Mcp {
         server_label: "counter".to_owned(),
@@ -306,9 +310,12 @@ async fn cached_mcp_handlers_reject_empty_final_allowed_set() {
         "require_approval": "never"
     }));
 
-    let Err(error) = executors.mcp_server_tools(&param).await else {
-        panic!("expected empty allowed set to be rejected");
-    };
+    let tool_set = executors
+        .mcp_server_tools(&param)
+        .await
+        .expect("an empty allowed set is not an error");
 
-    assert!(error.to_string().contains("empty final allowed tool set"));
+    assert!(tool_set.discovered_handlers.is_empty());
+    assert!(tool_set.list_tools_item.tools.is_empty());
+    assert!(tool_set.list_tools_item.error.is_none());
 }

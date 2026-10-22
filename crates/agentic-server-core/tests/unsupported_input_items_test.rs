@@ -94,10 +94,21 @@ fn gateway_call_input_preserves_typed_payloads_in_canonical_history() {
         serde_json::to_value(Vec::<InputItem>::from(&payload.input)).unwrap(),
         wire
     );
-    assert_eq!(serde_json::to_value(payload.input.model_input()).unwrap(), wire);
+    // The model sees each replayed record as the function call and output it saw live; vLLM rejects the
+    // public records themselves.
+    let model = json!([
+        {"type": "function_call", "id": "ws_1", "call_id": "ws_1", "name": "web_search",
+         "arguments": "{\"queries\":[\"weather\"]}", "status": "completed"},
+        {"type": "function_call_output", "call_id": "ws_1",
+         "output": "{\"sources\":[{\"url\":\"https://example.com\",\"title\":\"Forecast\"}]}"},
+        {"type": "function_call", "id": "mcp_1", "call_id": "mcp_1", "name": "mcp__weather__forecast",
+         "arguments": "{}", "status": "completed"},
+        {"type": "function_call_output", "call_id": "mcp_1", "output": "sunny"}
+    ]);
+    assert_eq!(serde_json::to_value(payload.input.model_input()).unwrap(), model);
     for stream in [false, true] {
         let upstream = payload.to_upstream_request(stream).unwrap();
-        assert_eq!(serde_json::to_value(&upstream.input).unwrap(), wire);
+        assert_eq!(serde_json::to_value(&upstream.input).unwrap(), model);
     }
     let items = payload.input.into_canonical_items();
     assert!(matches!(

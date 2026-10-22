@@ -2,6 +2,9 @@
 use crate::types::io::InOutItem;
 use serde_json::json;
 
+use crate::types::tools::McpDiscoveredToolParam;
+use crate::utils::common::serialize_to_value;
+
 use super::*;
 
 fn param(value: Value) -> ToolSearchToolParam {
@@ -149,7 +152,7 @@ fn terminal_projection_preserves_incomplete_and_discards_failed_calls() {
     let native = ToolSearchCall {
         agent: None,
         id: "tsc_search".to_owned(),
-        call_id: "call_search".to_owned(),
+        call_id: Some("call_search".to_owned()),
         execution: crate::types::tools::ToolSearchExecution::Client,
         arguments: json!({"query": "weather"}),
         status: ToolSearchStatus::InProgress,
@@ -488,4 +491,85 @@ fn tool_search_output_rejects_mcp_definitions() {
         error,
         ToolError::Config(message) if message.contains("unsupported tool definition")
     ));
+}
+
+#[test]
+fn restored_mcp_loads_survive_compaction_and_offer_only_the_rest() {
+    let request: RequestPayload = serde_json::from_value(json!({
+        "model": "m",
+        "input": "continue",
+        "tools": [
+            {"type": "tool_search"},
+            {"type": "mcp", "server_label": "stub", "server_url": "http://127.0.0.1:9/mcp", "defer_loading": true}
+        ]
+    }))
+    .unwrap();
+    let restored: Vec<ResponsesTool> = serde_json::from_value(json!([{
+        "type": "namespace", "name": "mcp_stub", "description": "",
+        "tools": [{"type": "function", "name": "echo", "defer_loading": true}]
+    }]))
+    .unwrap();
+    let mut state = ToolSearchState::build_with_loaded_tools(&request, &restored, true).unwrap();
+    assert!(state.is_hosted());
+
+    let mut prepared = request.clone();
+    state.prepare_inference_request(&mut prepared).unwrap();
+    let Some(ResponsesTool::Mcp(server)) = prepared
+        .tools
+        .as_mut()
+        .and_then(|tools| tools.iter_mut().find(|tool| matches!(tool, ResponsesTool::Mcp(_))))
+    else {
+        panic!("the deferred server stays declared");
+    };
+    assert_eq!(
+        server.loaded_tool_names.as_deref(),
+        Some(["echo".to_owned()].as_slice())
+    );
+
+    // With discovery, the catalog offers only the tool not loaded before this response.
+    for name in ["echo", "reverse"] {
+        server.discovered_tools.push(McpDiscoveredToolParam {
+            server_label: "stub".to_owned(),
+            tool_name: name.to_owned(),
+            internal_name: format!("mcp__stub__{name}"),
+            tool: serde_json::from_value(json!({"name": name, "inputSchema": {"type": "object"}})).unwrap(),
+        });
+    }
+    let tools = prepared.tools.clone().unwrap();
+    let found = state.hosted_catalog(&tools).search_raw(r#"{"paths":["mcp_stub"]}"#);
+    let ResponsesTool::Namespace(namespace) = &found[0] else {
+        panic!("an MCP server loads as a namespace");
+    };
+    assert_eq!(namespace.tools.len(), 1);
+    assert!(
+        matches!(&namespace.tools[0], CodexNamespaceMember::Function(function) if function.name.as_str() == "reverse")
+    );
+    assert_eq!(
+        state.withheld_mcp_tool_names(&tools),
+        HashSet::from(["mcp__stub__reverse".to_owned()])
+    );
+    // Restored loads are kept for the next response's metadata.
+    assert_eq!(state.loaded_public_tools().len(), 1);
+}
+
+#[test]
+fn hosted_mcp_member_survives_a_storage_round_trip_unchanged() {
+    let discovered = McpDiscoveredToolParam {
+        server_label: "stub".to_owned(),
+        tool_name: "echo".to_owned(),
+        internal_name: "mcp__stub__echo".to_owned(),
+        tool: serde_json::from_value(
+            json!({"name": "echo", "description": "Echo.", "inputSchema": {"type": "object"}}),
+        )
+        .unwrap(),
+    };
+    let member = hosted_mcp_member(&discovered).expect("named MCP tool");
+    let stored = serde_json::to_value(&member).unwrap();
+    let reloaded: CodexNamespaceMember = serde_json::from_value(stored.clone()).unwrap();
+    assert_eq!(serde_json::to_value(reloaded).unwrap(), stored);
+    assert_eq!(
+        stored,
+        json!({"type": "function", "name": "echo", "description": "Echo.", "parameters": {"type": "object"},
+            "defer_loading": true, "output_schema": null})
+    );
 }

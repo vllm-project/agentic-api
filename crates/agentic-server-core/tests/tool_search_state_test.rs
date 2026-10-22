@@ -240,38 +240,35 @@ fn optional_declaration_fields_get_private_defaults_and_supplied_values_are_pres
 
 #[test]
 fn unsupported_deferred_tool_kinds_are_rejected_during_state_preparation() {
-    for (kind, tool) in [
-        (
-            "MCP",
-            json!({
-                "type": "mcp",
-                "server_label": "weather",
-                "server_url": "https://mcp.example.test/mcp",
-                "defer_loading": true
-            }),
-        ),
-        (
-            "custom",
-            json!({
-                "type": "custom",
-                "name": "raw_weather",
-                "defer_loading": true
-            }),
-        ),
-    ] {
-        let request = request(json!([tool]), json!("find a weather tool"));
+    // A deferred MCP server is supported behind hosted tool search; without a
+    // tool_search declaration it fails like any other deferred tool.
+    let mcp = request(
+        json!([{
+            "type": "mcp",
+            "server_label": "weather",
+            "server_url": "https://mcp.example.test/mcp",
+            "defer_loading": true
+        }]),
+        json!("find a weather tool"),
+    );
+    assert!(ToolSearchHandler::request_has_state(&mcp));
+    let error = ToolSearchState::build(&mcp).expect_err("a deferred MCP server needs tool_search");
+    assert!(
+        error
+            .to_string()
+            .contains("defer_loading requires a tool_search declaration")
+    );
 
-        assert!(
-            ToolSearchHandler::request_has_state(&request),
-            "deferred {kind} must enter preparation instead of raw proxying"
-        );
-        let error = ToolSearchState::build(&request).expect_err("unsupported deferral must fail during preparation");
-        assert!(
-            error
-                .to_string()
-                .contains(&format!("deferred {kind} tools are not supported"))
-        );
-    }
+    let custom = request(
+        json!([{"type": "custom", "name": "raw_weather", "defer_loading": true}]),
+        json!("find a weather tool"),
+    );
+    assert!(
+        ToolSearchHandler::request_has_state(&custom),
+        "deferred custom must enter preparation instead of raw proxying"
+    );
+    let error = ToolSearchState::build(&custom).expect_err("unsupported deferral must fail during preparation");
+    assert!(error.to_string().contains("deferred custom tools are not supported"));
 }
 
 #[test]
@@ -377,7 +374,7 @@ fn invalid_history_order_and_linkage_are_rejected() {
     let InOutItem::Input(InputItem::ToolSearchCall(call)) = &mut items[0] else {
         panic!("test request starts with search call")
     };
-    call.call_id.clear();
+    call.call_id = Some(String::new());
     let mut blank_output = request(
         base_tools.clone(),
         json!([search_call("call_search_1"), search_output("call_search_1", vec![])]),
@@ -388,7 +385,7 @@ fn invalid_history_order_and_linkage_are_rejected() {
     let InOutItem::Input(InputItem::ToolSearchOutput(output)) = &mut items[1] else {
         panic!("test request ends with search output")
     };
-    output.call_id.clear();
+    output.call_id = Some(String::new());
 
     let cases = [
         (

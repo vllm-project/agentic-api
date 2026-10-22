@@ -71,7 +71,7 @@ impl InOutItem {
         match self {
             Self::Input(item) => item.call_id(),
             Self::Output(OutputItem::FunctionCall(call)) => Some(&call.call_id),
-            Self::Output(OutputItem::ToolSearchCall(call)) => Some(&call.call_id),
+            Self::Output(OutputItem::ToolSearchCall(call)) => call.call_id.as_deref(),
             Self::Output(OutputItem::CustomToolCall(call)) => Some(&call.call_id),
             Self::Output(OutputItem::ShellCall(call)) => Some(&call.call_id),
             Self::Output(_) => None,

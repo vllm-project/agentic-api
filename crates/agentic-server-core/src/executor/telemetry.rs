@@ -210,7 +210,7 @@ impl From<&ExecutorError> for FailureCategory {
             ExecutorError::ResourceLimitExceeded { .. } => Self::ResourceLimit,
             ExecutorError::Conflict(_) => Self::Conflict,
             ExecutorError::CompactionFailed { .. } => Self::Compaction,
-            ExecutorError::Tool(_) => Self::Tool,
+            ExecutorError::Tool(_) | ExecutorError::McpListToolsFailed(_) => Self::Tool,
             ExecutorError::StreamProducerPanicked => Self::Panic,
         }
     }

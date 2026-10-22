@@ -2,10 +2,15 @@ mod calls;
 mod content;
 mod conversions;
 mod file_text;
+mod replayed_calls;
+mod tool_search;
 mod validation;
 mod window;
 
 pub use file_text::InputFileError;
+pub(crate) use replayed_calls::{McpToolNames, name_replayed_gateway_calls};
+pub(super) use tool_search::check_tool_search_call_id;
+pub use tool_search::{InputToolSearchCall, ToolSearchOutputMessage};
 pub use validation::InputValidationError;
 
 pub(crate) use window::{
@@ -18,18 +23,15 @@ use std::borrow::Cow;
 
 use either::Either;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::types::event::MessageStatus;
-use crate::types::tools::{ResponsesTool, ToolSearchExecution, ToolSearchStatus};
 
 use super::{InOutItem, OutputItem};
 
 use super::code_interpreter::CodeInterpreterCall;
 use super::multi_agent::{AgentAttribution, InputAgentMessage, InputMultiAgentCall, InputMultiAgentCallOutput};
 use super::output::{
-    CustomToolCall, FunctionToolCall, McpCall, McpListTools, MessagePhase, ReasoningOutput, ToolSearchCall,
-    WebSearchCall,
+    CustomToolCall, FunctionToolCall, McpCall, McpListTools, MessagePhase, ReasoningOutput, WebSearchCall,
 };
 use super::shell::{ShellCall, ShellCallOutputMessage, ShellCallStatus};
 
@@ -232,52 +234,16 @@ where
     Ok(value)
 }
 
-/// A public model-generated tool-search call replayed as Responses input.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct InputToolSearchCall {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent: Option<AgentAttribution>,
-    #[serde(deserialize_with = "deserialize_non_blank_string")]
-    pub id: String,
-    #[serde(deserialize_with = "deserialize_non_blank_string")]
-    pub call_id: String,
-    #[serde(default)]
-    pub execution: ToolSearchExecution,
-    pub arguments: Value,
-    #[serde(default)]
-    pub status: ToolSearchStatus,
-}
-
-impl TryFrom<&ToolSearchCall> for InputToolSearchCall {
-    type Error = ToolSearchStatus;
-
-    fn try_from(call: &ToolSearchCall) -> Result<Self, Self::Error> {
-        if call.status != ToolSearchStatus::Completed {
-            return Err(call.status);
-        }
-        Ok(Self {
-            agent: call.agent.clone(),
-            id: call.id.clone(),
-            call_id: call.call_id.clone(),
-            execution: call.execution,
-            arguments: call.arguments.clone(),
-            status: ToolSearchStatus::Completed,
-        })
+/// A call id that is `null` for a hosted (server-executed) item and otherwise non-blank.
+pub(super) fn deserialize_optional_non_blank_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    if value.as_deref().is_some_and(|value| value.trim().is_empty()) {
+        return Err(serde::de::Error::custom("value must not be blank"));
     }
-}
-
-/// Client-returned declarations resolving a public tool-search call.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct ToolSearchOutputMessage {
-    #[serde(deserialize_with = "deserialize_non_blank_string")]
-    pub call_id: String,
-    #[serde(default)]
-    pub execution: ToolSearchExecution,
-    #[serde(default)]
-    pub status: ToolSearchStatus,
-    pub tools: Vec<ResponsesTool>,
+    Ok(value)
 }
 
 /// An opaque compacted context checkpoint accepted as Responses input.
@@ -438,31 +404,52 @@ impl ResponsesInput {
     /// becomes an assistant message containing the locally generated summary.
     /// Items before that checkpoint are superseded and are omitted.
     /// Internal MCP-list records and `compaction_trigger` markers are stripped
-    /// and never reach the model.
+    /// and never reach the model. A replayed `mcp_call` or `web_search_call`
+    /// becomes the function call and output the model saw live.
     #[must_use]
     pub fn model_input(&self) -> Cow<'_, Self> {
+        self.project_for_model(Some(&McpToolNames::default()))
+    }
+
+    /// [`Self::model_input`], naming replayed MCP calls as discovery named their tools in this request.
+    pub(crate) fn model_input_with(&self, mcp_names: &McpToolNames<'_>) -> Cow<'_, Self> {
+        self.project_for_model(Some(mcp_names))
+    }
+
+    /// [`Self::model_input`] for a projection that runs before MCP discovery: replayed gateway calls stay
+    /// public records until the upstream request names them with the discovered tools.
+    pub(crate) fn model_input_keeping_gateway_calls(&self) -> Cow<'_, Self> {
+        self.project_for_model(None)
+    }
+
+    fn project_for_model(&self, mcp_names: Option<&McpToolNames<'_>>) -> Cow<'_, Self> {
         let Self::Items(items) = self else {
             return Cow::Borrowed(self);
         };
 
         if !self.contains_compaction()
-            && items
-                .iter()
-                .all(|item| matches!(item, InOutItem::Input(input) if input.is_model_visible()))
+            && items.iter().all(|item| {
+                matches!(item, InOutItem::Input(input)
+                    if input.is_model_visible()
+                        && (mcp_names.is_none() || !replayed_calls::is_replayed_gateway_call(input)))
+            })
         {
             return Cow::Borrowed(self);
         }
         let projected = self.input_items().collect();
         let model = model_items(projected)
-            .map(|item| match item.into_owned() {
-                InputItem::Compaction(compaction) => InputItem::Message(InputMessage {
+            .flat_map(|item| match item.into_owned() {
+                InputItem::Compaction(compaction) => vec![InputItem::Message(InputMessage {
                     role: "assistant".to_owned(),
                     content: InputMessageContent::Parts(vec![InputContent::OutputText(InputTextContent::new(
                         compaction.encrypted_content,
                     ))]),
                     ..Default::default()
-                }),
-                other => other,
+                })],
+                other => match mcp_names {
+                    Some(mcp_names) => replayed_calls::model_items(other, mcp_names),
+                    None => vec![other],
+                },
             })
             .collect::<Vec<_>>();
         Cow::Owned(Self::from(model))
@@ -485,6 +472,8 @@ fn function_call_item_id(item_id: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::Value;
+
     use super::*;
 
     #[test]

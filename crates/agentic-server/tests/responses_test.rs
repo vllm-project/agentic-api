@@ -1678,6 +1678,37 @@ async fn test_non_boolean_background_is_forwarded_directly_and_rejected_by_typed
 }
 
 #[tokio::test]
+async fn test_mcp_tool_choice_is_rejected_on_direct_and_typed_routes() {
+    let (llm_url, requests, llm) = spawn_mock_vllm_json_capture().await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
+    let client = reqwest::Client::new();
+    for store in [false, true] {
+        let response = client
+            .post(format!("{gateway_url}/v1/responses"))
+            .json(&serde_json::json!({"model": "test", "input": "hi", "store": store,
+                "tool_choice": {"type": "mcp", "server_label": "docs"}}))
+            .send()
+            .await
+            .expect("response request");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "store={store}");
+        let body: serde_json::Value = response.json().await.expect("error body");
+        assert_eq!(
+            body["error"],
+            serde_json::json!({"message": "MCP tool_choice is not supported; use `auto`, `required`, or a function `tool_choice` instead",
+                "type": "invalid_request_error", "code": "unsupported_value", "param": "tool_choice"}),
+            "store={store}"
+        );
+    }
+    assert!(
+        requests.lock().await.is_empty(),
+        "an MCP tool_choice never reaches the upstream"
+    );
+    gateway.abort();
+    llm.abort();
+}
+
+#[tokio::test]
 async fn test_stateful_request_forwards_text_configuration() {
     let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
     let fixture = storage_backed_state(&llm_url).await;

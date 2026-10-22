@@ -22,9 +22,22 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
             .map(|(name, kind)| (name.to_owned(), kind))
             .collect(),
         state
-            .map(|state| state.withheld_function_names().clone())
+            .map(|state| {
+                let mut withheld = state.withheld_function_names().clone();
+                // Deferred MCP tools that no hosted search has loaded yet.
+                withheld.extend(
+                    state.withheld_mcp_tool_names(agent.request.enriched_request.tools.as_deref().unwrap_or_default()),
+                );
+                withheld
+            })
             .unwrap_or_default(),
         state.is_some_and(ToolSearchState::is_active),
+    )
+    .with_self_namespaced_functions(
+        state
+            .filter(|state| state.is_hosted())
+            .map(ToolSearchState::hosted_deferred_functions)
+            .unwrap_or_default(),
     )
     .with_collaboration(
         agent
@@ -79,7 +92,10 @@ fn upstream_request_with_guidance(
     let mut request = ctx.enriched_request.to_upstream_request(stream)?;
     if let Some(registry) = withheld {
         if let Some(tools) = request.tools.as_mut() {
-            tools.retain(|UpstreamTool::Function(function)| !registry.is_gateway_owned_name(&function.name));
+            // Hosted search does not count toward `max_tool_calls`, so it stays available.
+            tools.retain(|UpstreamTool::Function(function)| {
+                !registry.is_gateway_owned_name(&function.name) || registry.is_hosted_tool_search_name(&function.name)
+            });
         }
         request.tools = request.tools.filter(|tools| !tools.is_empty());
     }

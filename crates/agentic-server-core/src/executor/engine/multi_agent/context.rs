@@ -333,7 +333,7 @@ pub(super) fn fork_history(history: &[InputItem], fork_turns: &str) -> ExecutorR
             InputItem::FunctionCallOutput(output) => Some(output.call_id.as_str()),
             InputItem::ShellCallOutput(output) => Some(output.call_id.as_str()),
             InputItem::CustomToolCallOutput(output) => Some(output.call_id.as_str()),
-            InputItem::ToolSearchOutput(output) => Some(output.call_id.as_str()),
+            InputItem::ToolSearchOutput(output) => output.call_id.as_deref(),
             _ => None,
         })
         .collect::<HashSet<_>>();
@@ -343,7 +343,7 @@ pub(super) fn fork_history(history: &[InputItem], fork_turns: &str) -> ExecutorR
             InputItem::FunctionCall(call) => Some(call.call_id.as_str()),
             InputItem::ShellCall(call) => Some(call.call_id.as_str()),
             InputItem::CustomToolCall(call) => Some(call.call_id.as_str()),
-            InputItem::ToolSearchCall(call) => Some(call.call_id.as_str()),
+            InputItem::ToolSearchCall(call) => call.call_id.as_deref(),
             _ => None,
         })
         .collect::<HashSet<_>>();
@@ -353,11 +353,12 @@ pub(super) fn fork_history(history: &[InputItem], fork_turns: &str) -> ExecutorR
             InputItem::FunctionCall(call) => completed.contains(call.call_id.as_str()),
             InputItem::ShellCall(call) => completed.contains(call.call_id.as_str()),
             InputItem::CustomToolCall(call) => completed.contains(call.call_id.as_str()),
-            InputItem::ToolSearchCall(call) => completed.contains(call.call_id.as_str()),
+            // A hosted search item has no call id and is retained with its pair.
+            InputItem::ToolSearchCall(call) => call.call_id.as_deref().is_none_or(|id| completed.contains(id)),
             InputItem::FunctionCallOutput(output) => calls.contains(output.call_id.as_str()),
             InputItem::ShellCallOutput(output) => calls.contains(output.call_id.as_str()),
             InputItem::CustomToolCallOutput(output) => calls.contains(output.call_id.as_str()),
-            InputItem::ToolSearchOutput(output) => calls.contains(output.call_id.as_str()),
+            InputItem::ToolSearchOutput(output) => output.call_id.as_deref().is_none_or(|id| calls.contains(id)),
             _ => item.is_model_visible(),
         })
         .cloned()

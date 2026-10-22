@@ -12,7 +12,7 @@ use super::web_fetch::{WebFetchExecutor, WebFetchHandler};
 use super::web_search::{WebSearchExecutor, WebSearchHandler};
 use super::{GatewayExecutor, ToolError};
 use crate::config::{DEFAULT_MAX_CONCURRENT_GATEWAY_CALLS, ToolRuntimeConfig, WebFetchConfig};
-use crate::types::tools::McpToolParam;
+use crate::types::tools::{McpToolParam, ResponsesTool};
 
 use super::code_interpreter::CodeInterpreterExecutor;
 
@@ -233,18 +233,39 @@ impl GatewayExecutors {
     ///
     /// # Errors
     ///
-    /// Returns a configuration error for an invalid declaration or an empty
-    /// allowed tool set, and an execution error when the server cannot connect.
+    /// Returns a configuration error for an invalid declaration, and an
+    /// execution error when the server cannot connect.
     pub async fn mcp_handler(&mut self, param: &McpToolParam) -> Result<Vec<McpDiscoveredHandler>, ToolError> {
         Ok(self.mcp_server_tools(param).await?.discovered_handlers)
     }
 
+    /// Applies operator defaults to request declarations of configured MCP
+    /// servers: `defer_loading` and the catalog `description` fill fields the
+    /// request leaves unset.
+    pub(crate) fn apply_configured_mcp_defaults(&self, tools: Option<&mut [ResponsesTool]>) {
+        for tool in tools.into_iter().flatten() {
+            let ResponsesTool::Mcp(param) = tool else {
+                continue;
+            };
+            let Some(entry) = self.mcp_configs.get(param.server_label.trim()) else {
+                continue;
+            };
+            if param.defer_loading.is_none() {
+                param.defer_loading = entry.defer_loading();
+            }
+            if param.server_description.is_none() {
+                param.server_description = entry.description().map(str::to_owned);
+            }
+        }
+    }
+
     /// Returns the request-scoped tools and public discovery item for one MCP server.
+    /// An `allowed_tools` filter that matches nothing yields an empty listing, as in the Responses API.
     ///
     /// # Errors
     ///
-    /// Returns a configuration error for an invalid declaration or an empty
-    /// allowed tool set, and an execution error when the server cannot connect.
+    /// Returns a configuration error for an invalid declaration, and an
+    /// execution error when the server cannot connect.
     pub(crate) async fn mcp_server_tools(&mut self, param: &McpToolParam) -> Result<McpServerToolSet, ToolError> {
         let server_label = param.server_label.trim();
         if server_label.is_empty() {
@@ -261,10 +282,7 @@ impl GatewayExecutors {
             )));
         }
         if let Some(configured_handlers) = configured_handlers {
-            let discovered_handlers = require_non_empty_mcp_handlers(
-                server_label,
-                filter_allowed_mcp_handlers(configured_handlers, param.allowed_tools.as_deref()),
-            )?;
+            let discovered_handlers = filter_allowed_mcp_handlers(configured_handlers, param.allowed_tools.as_deref());
             return Ok(McpHandler::server_tool_set_from_handlers(
                 server_label,
                 discovered_handlers,
@@ -297,23 +315,22 @@ impl GatewayExecutors {
                     .insert(server_label.to_owned(), Arc::clone(&client));
                 client
             };
-            let discovered_handlers = if let Some(discovered_handlers) =
-                self.mcp_discovered.read().await.get(server_label).cloned()
-            {
-                discovered_handlers
-            } else {
-                let tool_set = McpHandler::discover_tools(server_label, client, entry.allowed_tools()).await?;
-                let discovered_handlers = require_non_empty_mcp_handlers(server_label, tool_set.discovered_handlers)?;
-                self.mcp_discovered
-                    .write()
-                    .await
-                    .insert(server_label.to_owned(), discovered_handlers.clone());
-                discovered_handlers
-            };
-            let discovered_handlers = require_non_empty_mcp_handlers(
-                server_label,
-                filter_allowed_mcp_handlers(&discovered_handlers, param.allowed_tools.as_deref()),
-            )?;
+            let discovered_handlers =
+                if let Some(discovered_handlers) = self.mcp_discovered.read().await.get(server_label).cloned() {
+                    discovered_handlers
+                } else {
+                    let tool_set = McpHandler::discover_tools(server_label, client, entry.allowed_tools()).await?;
+                    let discovered_handlers = tool_set.discovered_handlers;
+                    // An empty listing may be a server still starting up; list it again next time.
+                    if !discovered_handlers.is_empty() {
+                        self.mcp_discovered
+                            .write()
+                            .await
+                            .insert(server_label.to_owned(), discovered_handlers.clone());
+                    }
+                    discovered_handlers
+                };
+            let discovered_handlers = filter_allowed_mcp_handlers(&discovered_handlers, param.allowed_tools.as_deref());
             return Ok(McpHandler::server_tool_set_from_handlers(
                 server_label,
                 discovered_handlers,
@@ -333,7 +350,7 @@ impl GatewayExecutors {
             ));
         };
         let tool_set = McpHandler::discover_tools(server_label, client, param.allowed_tools.as_deref()).await?;
-        let discovered_handlers = require_non_empty_mcp_handlers(server_label, tool_set.discovered_handlers)?;
+        let discovered_handlers = tool_set.discovered_handlers;
         self.mcp.insert(server_label.to_owned(), discovered_handlers.clone());
         Ok(McpHandler::server_tool_set_from_handlers(
             server_label,
@@ -353,18 +370,6 @@ fn filter_allowed_mcp_handlers(
         })
         .cloned()
         .collect()
-}
-
-fn require_non_empty_mcp_handlers(
-    server_label: &str,
-    handlers: Vec<McpDiscoveredHandler>,
-) -> Result<Vec<McpDiscoveredHandler>, ToolError> {
-    if handlers.is_empty() {
-        return Err(ToolError::Config(format!(
-            "MCP server '{server_label}' has an empty final allowed tool set"
-        )));
-    }
-    Ok(handlers)
 }
 
 fn validate_mcp_execution_options(param: &McpToolParam, configured_server: bool) -> Result<(), ToolError> {

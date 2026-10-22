@@ -1199,7 +1199,7 @@ fn incomplete_stream_preserves_unfinished_synthetic_search() {
         .find(|frame| frame.event_type == SSEEventType::OutputItemAdded)
         .expect("public added frame");
     assert_eq!(call.id, added.wire.rest["item"]["id"]);
-    assert_eq!(call.call_id, added.wire.rest["item"]["call_id"]);
+    assert_eq!(call.call_id.as_deref(), added.wire.rest["item"]["call_id"].as_str());
     assert_eq!(call.arguments, serde_json::json!({}));
     assert_eq!(call.status, crate::types::tools::ToolSearchStatus::Incomplete);
     assert!(payload.output[0].to_input_item().is_none());

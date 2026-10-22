@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use super::{
     InputContent, InputItem, InputMessage, InputMessageContent, InputMessageType, InputTextContent,
-    InputValidationError, ResponsesInput,
+    InputValidationError, McpToolNames, ResponsesInput,
 };
 use std::borrow::Cow;
 
@@ -74,14 +74,18 @@ impl ResponsesInput {
     ///
     /// Message files become `input_text` parts in place through
     /// `InputTextContent::try_from(&InputFileContent)`; the canonical history
-    /// keeps the client's `input_file`.
+    /// keeps the client's `input_file`. Replayed MCP calls take the names
+    /// discovery gave their tools in this request (`mcp_names`).
     ///
     /// # Errors
     /// Returns a file that cannot be converted to text. Positions refer to the
     /// model-facing copy; [`Self::validate`] reports the same failure with the
     /// request's positions and runs first on typed paths.
-    pub(crate) fn normalized_model_input(&self) -> Result<Cow<'_, Self>, InputValidationError> {
-        let input = self.model_input();
+    pub(crate) fn normalized_model_input_with(
+        &self,
+        mcp_names: &McpToolNames<'_>,
+    ) -> Result<Cow<'_, Self>, InputValidationError> {
+        let input = self.model_input_with(mcp_names);
         let has_client_tools = matches!(&*input, Self::Items(items) if items.iter().any(|item| matches!(item,
             InOutItem::Input(InputItem::ShellCall(_) | InputItem::ShellCallOutput(_)
                 | InputItem::CustomToolCall(_) | InputItem::CustomToolCallOutput(_))
@@ -228,7 +232,7 @@ mod tests {
         };
         assert!(matches!(&parts[0], InputContent::InputImage(image) if image.detail.is_none()));
 
-        let model = input.normalized_model_input().unwrap();
+        let model = input.normalized_model_input_with(&McpToolNames::default()).unwrap();
         let ResponsesInput::Items(model_items) = &*model else {
             panic!("model items")
         };
@@ -257,7 +261,7 @@ mod tests {
                 {"type":"input_text", "text":"after"}]}
         ]))
         .unwrap();
-        let model = input.normalized_model_input().unwrap();
+        let model = input.normalized_model_input_with(&McpToolNames::default()).unwrap();
         assert!(matches!(model, Cow::Owned(_)));
         assert_eq!(
             serialize_to_value(&*model).unwrap()[0]["content"],
@@ -271,7 +275,10 @@ mod tests {
             {"role":"user", "content":[{"type":"input_text", "text":"hello"}]}
         ]))
         .unwrap();
-        assert!(matches!(plain.normalized_model_input().unwrap(), Cow::Borrowed(_)));
+        assert!(matches!(
+            plain.normalized_model_input_with(&McpToolNames::default()).unwrap(),
+            Cow::Borrowed(_)
+        ));
     }
 
     #[test]
@@ -281,7 +288,7 @@ mod tests {
                 {"type":"input_file", "file_data":"data:application/pdf;base64,JVBERi0=", "filename":"a.pdf"}]}
         ]))
         .unwrap();
-        let error = input.normalized_model_input().unwrap_err();
+        let error = input.normalized_model_input_with(&McpToolNames::default()).unwrap_err();
         assert!(
             error
                 .to_string()

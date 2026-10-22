@@ -293,7 +293,8 @@ graph LR
 - **Round execution (`GatewayScheduler`):** plans one slot per gateway-owned call,
   keeping the item index, typed binding, and lifecycle projection together; it then
   executes those slots through the configured sliding window and per-binding
-  same-tool policy and collects results in model call order.
+  same-tool policy and yields results in model call order, each as soon as it and every
+  earlier call have finished.
 - **Multi-round orchestration (`classify_round` + the loop):** decides whether
   the turn continues, is done, hands back to the client, or exhausts the round
   budget, then re-infers when gateway results require another round.

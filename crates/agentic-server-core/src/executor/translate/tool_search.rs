@@ -6,7 +6,7 @@ use crate::executor::gateway_accumulator::synthetic_event;
 use crate::tool::{ToolType, tool_search};
 use crate::types::event::ResponseStatus;
 use crate::types::io::OutputItem;
-use crate::types::tools::ToolSearchStatus;
+use crate::types::tools::{ToolSearchExecution, ToolSearchStatus};
 use crate::utils::common::{serialize_to_string, serialize_to_value};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -191,7 +191,7 @@ impl ToolSearchStreamState {
                 }
                 Some("tool_search_call") => {
                     let call = tool_search::strict_native_call(item.clone())?;
-                    if !call_ids.insert(call.call_id.clone()) {
+                    if !call_ids.insert(tool_search::native_call_id(&call)?.to_owned()) {
                         return Err(tool_search::invalid_upstream_search_call().into());
                     }
                     let arguments = serialize_to_string(&call.arguments).map_err(ExecutorError::JsonError)?;
@@ -217,7 +217,7 @@ impl ToolSearchStreamState {
                 self.start_tool_search_call(
                     ToolSearchCallSource::Native,
                     resolved_output_index(*output_index)?,
-                    &call.call_id,
+                    tool_search::native_call_id(&call)?,
                 )?;
                 self.active_native_tool_search
                     .insert(resolved_output_index(*output_index)?);
@@ -231,7 +231,7 @@ impl ToolSearchStreamState {
                 self.observe_tool_search_call(
                     ToolSearchCallSource::Native,
                     resolved_output_index(*output_index)?,
-                    &call.call_id,
+                    tool_search::native_call_id(&call)?,
                 )?;
                 if call.status == crate::types::tools::ToolSearchStatus::Completed {
                     self.active_native_tool_search
@@ -347,7 +347,7 @@ pub(super) fn normalize_response_output(
         match item {
             OutputItem::FunctionCall(call) => {
                 tool_search::ensure_function_is_available(context.is_withheld_function(&call.name))?;
-                if context.tool_type(&call.name) == ToolType::ToolSearch {
+                if context.is_client_tool_search(&call.name) {
                     if !call_ids.insert(call.call_id.clone()) {
                         return Err(tool_search::invalid_upstream_search_call().into());
                     }
@@ -362,8 +362,12 @@ pub(super) fn normalize_response_output(
                     normalized.push(OutputItem::FunctionCall(call));
                 }
             }
+            // Hosted search items are produced by the gateway, not upstream.
+            OutputItem::ToolSearchCall(call) if call.execution == ToolSearchExecution::Server => {
+                normalized.push(OutputItem::ToolSearchCall(call));
+            }
             OutputItem::ToolSearchCall(call) => {
-                if !call_ids.insert(call.call_id.clone()) {
+                if !call_ids.insert(tool_search::native_call_id(&call)?.to_owned()) {
                     return Err(tool_search::invalid_upstream_search_call().into());
                 }
                 if let Some(public) = tool_search::project_native_call(&call, status)? {

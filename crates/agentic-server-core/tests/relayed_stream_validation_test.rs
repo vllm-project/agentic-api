@@ -307,7 +307,14 @@ async fn strict_relay_decoder_accepts_compatible_recorded_responses_streams() {
     let mut decoded = 0;
     let mut rejected = Vec::new();
 
-    for path in yaml_files(&root) {
+    // Hosted tool-search recordings are the public shape of a search the gateway
+    // runs itself; the gateway lowers that search to a function upstream, so an
+    // upstream never streams hosted search items.
+    let gateway_executed = root.join("hosted_tool_search");
+    for path in yaml_files(&root)
+        .into_iter()
+        .filter(|path| !path.starts_with(&gateway_executed))
+    {
         for (turn_index, chunks) in response_streams(&path).into_iter().enumerate() {
             let stream = chunks.join("\n");
             if !is_responses_event_stream(&stream) {

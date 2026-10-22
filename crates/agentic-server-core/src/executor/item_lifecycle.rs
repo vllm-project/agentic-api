@@ -59,6 +59,7 @@ impl<'a> Lifecycle<'a> {
             | OutputItem::AgentMessage(_)
             | OutputItem::CodeInterpreterCall(_)
             | OutputItem::ToolSearchCall(_)
+            | OutputItem::ToolSearchOutput(_)
             | OutputItem::CustomToolCall(_)
             | OutputItem::ShellCall(_)
             | OutputItem::WebSearchCall(_)

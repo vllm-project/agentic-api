@@ -104,6 +104,8 @@ pub async fn responses(State(state): State<AppState>, req: Request) -> Response 
     } else if let Err(error) = routing_payload.max_tool_calls_limit() {
         // The executor validates its own requests; proxied ones are checked here.
         executor_error_response(error.into())
+    } else if let Err(error) = routing_payload.validate_tool_choice() {
+        executor_error_response(error.into())
     } else {
         proxy_responses(&state, parts, bytes).await
     }

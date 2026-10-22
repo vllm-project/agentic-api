@@ -85,7 +85,6 @@ pub(super) fn classify_round(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::io::InputItem;
 
     const NONE: ClientCalls = ClientCalls {
         synchronous: false,
@@ -107,7 +106,9 @@ mod tests {
     fn gateway_results() -> [GatewayCallResult; 1] {
         [GatewayCallResult {
             item_index: 0,
-            input_item: InputItem::CompactionTrigger,
+            model_input: Vec::new(),
+            history_input: Vec::new(),
+            follow_up_output: None,
             public_output: None,
             omitted: false,
         }]
