@@ -21,14 +21,13 @@ use tracing::error;
 
 /// Decides whether a completed turn reaches the storage handlers.
 ///
-/// `store` governs the no-session path: a `store: false` request leaves no row
-/// even when `previous_response_id` hydrated it from a stored response, so its
-/// id can be neither retrieved nor continued. Session continuations always reach
-/// the handler, which keeps `store: false` checkpoints connection-local. An
-/// explicit conversation stays durable.
+/// A `store: false` request leaves no durable row, including when it reads a
+/// stored parent or explicit conversation. Response-scoped session continuations
+/// still reach their handler to publish a connection-local checkpoint. Explicit
+/// conversations do not publish those checkpoints or append unstored turns.
 #[must_use]
 pub(crate) fn should_persist(ctx: &RequestContext) -> bool {
-    ctx.continuation.is_some() || ctx.original_request.store || ctx.original_request.conversation.is_some()
+    ctx.original_request.store || (ctx.continuation.is_some() && ctx.original_request.conversation.is_none())
 }
 
 /// Persist when the request asked for it; only an attempted write is timed

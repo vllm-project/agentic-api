@@ -412,25 +412,14 @@ async fn websocket_rejects_user_file_before_inference() {
 }
 
 #[tokio::test]
-async fn control_raw_proxy_preserves_exact_file_request_bytes() {
+async fn stateless_http_json_rejects_file_input_before_inference() {
     let fixture = Fixture::new().await;
-    let raw = format!(
-        "{{\n  \"model\":\"test-model\", \"store\":false, \"input\": {}\n}}",
-        user_input(&file_part())
-    );
-    let response = fixture
-        .client
-        .post(format!("{}/v1/responses", fixture.url))
-        .header("content-type", "application/json")
-        .body(raw.clone())
-        .send()
-        .await
-        .expect("raw HTTP response");
-    assert_eq!(response.status(), reqwest::StatusCode::OK);
-    let _ = response.bytes().await.expect("consume response");
-    let captured = fixture.requests.lock().await;
-    assert_eq!(captured.len(), 1);
-    assert_eq!(captured[0], raw.as_bytes());
+    fixture
+        .assert_rejected(
+            "/v1/responses",
+            json!({"model":"test-model", "store":false, "stream":false, "input":user_input(&file_part())}),
+        )
+        .await;
 }
 
 #[tokio::test]
@@ -679,25 +668,14 @@ async fn control_text_prewarm_still_persists_without_inference() {
 }
 
 #[tokio::test]
-async fn control_streaming_raw_proxy_preserves_exact_file_request_bytes() {
+async fn stateless_http_sse_rejects_file_input_before_inference() {
     let fixture = Fixture::new().await;
-    let raw = format!(
-        "{{\n  \"model\":\"test-model\", \"store\":false, \"stream\":true, \"input\": {}\n}}",
-        user_input(&file_part())
-    );
-    let response = fixture
-        .client
-        .post(format!("{}/v1/responses", fixture.url))
-        .header("content-type", "application/json")
-        .body(raw.clone())
-        .send()
-        .await
-        .expect("proxy response");
-    assert_eq!(response.status(), reqwest::StatusCode::OK);
-    let _ = response.bytes().await.expect("consume proxy stream");
-    let captured = fixture.requests.lock().await;
-    assert_eq!(captured.len(), 1);
-    assert_eq!(captured[0], raw.as_bytes());
+    fixture
+        .assert_rejected(
+            "/v1/responses",
+            json!({"model":"test-model", "store":false, "stream":true, "input":user_input(&file_part())}),
+        )
+        .await;
 }
 
 #[tokio::test]
@@ -812,50 +790,42 @@ async fn websocket_inlines_text_file() {
     assert_eq!(fixture.stored_files().await, vec![text_file_part()]);
 }
 
-/// Send `raw` as a `store: false` request and assert the upstream received exactly those bytes.
-async fn assert_proxied_unchanged(raw: &str) {
-    let fixture = Fixture::new().await;
-    let response = fixture
-        .client
-        .post(format!("{}/v1/responses", fixture.url))
-        .header("content-type", "application/json")
-        .body(raw.to_owned())
-        .send()
-        .await
-        .expect("proxy response");
-    assert_eq!(response.status(), reqwest::StatusCode::OK);
-    let _ = response.bytes().await.expect("consume proxy response");
-    let captured = fixture.requests.lock().await;
-    assert_eq!(captured.len(), 1);
-    assert_eq!(
-        String::from_utf8_lossy(&captured[0]),
-        raw,
-        "raw store:false requests must reach the upstream unchanged"
-    );
-    assert_eq!(fixture.row_counts().await, (0, 0), "store:false must not persist");
-}
-
 #[tokio::test]
-async fn stateless_mixed_text_and_pdf_files_are_proxied_unchanged() {
+async fn stateless_mixed_text_and_pdf_files_are_rejected_before_inference() {
     let pdf = json!({"type":"input_file", "file_data":"data:application/pdf;base64,JVBERi0=", "filename":"a.pdf"});
     let input = json!([{"role":"user", "content":[{"type":"input_text", "text":"Compare these"},
         text_file_part(), pdf]}]);
     for stream in [false, true] {
-        assert_proxied_unchanged(&format!(
-            "{{\n  \"model\":\"test-model\", \"store\":false, \"stream\":{stream}, \"input\": {input}\n}}"
-        ))
-        .await;
+        let fixture = Fixture::new().await;
+        fixture
+            .assert_rejected(
+                "/v1/responses",
+                json!({"model":"test-model", "store":false, "stream":stream, "input":input}),
+            )
+            .await;
     }
 }
 
 #[tokio::test]
-async fn stateless_text_file_keeps_provider_fields_on_the_raw_proxy() {
-    assert_proxied_unchanged(&format!(
-        "{{\"model\":\"test-model\", \"store\":false, \"input\": {}, \
-         \"chat_template_kwargs\": {{\"enable_thinking\": false}}}}",
-        user_input(&text_file_part())
-    ))
-    .await;
+async fn stateless_text_file_is_inlined_and_keeps_provider_fields_without_persistence() {
+    for stream in [false, true] {
+        let fixture = Fixture::new().await;
+        let (status, body) = fixture
+            .post(
+                "/v1/responses",
+                json!({"model":"test-model", "store":false, "stream":stream,
+                    "input":user_input(&text_file_part()),
+                    "chat_template_kwargs":{"enable_thinking":false}}),
+            )
+            .await;
+        assert_eq!(status, reqwest::StatusCode::OK, "{body}");
+        let captured = fixture.captured().await;
+        assert_eq!(captured.len(), 1);
+        assert_inlined(&captured[0]);
+        assert_eq!(captured[0]["store"], false);
+        assert_eq!(captured[0]["chat_template_kwargs"], json!({"enable_thinking":false}));
+        assert_eq!(fixture.row_counts().await, (0, 0), "store:false must not persist");
+    }
 }
 
 #[tokio::test]

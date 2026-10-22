@@ -8,6 +8,7 @@ mod control;
 mod delivery;
 mod guidance;
 mod rounds;
+use crate::executor::inference::UpstreamHeaders;
 pub(super) use context::prepare_without_inference;
 use context::{RestoredAgents, fork_history, mail_input, prepare_agent, restore_agents};
 
@@ -192,7 +193,7 @@ impl MultiAgentRun {
         mut self,
         pipeline: &mut AgentPipeline,
         exec: &ExecutionContext,
-        auth: Option<&str>,
+        auth: Option<&UpstreamHeaders>,
     ) -> ExecutorResult<ResponsePayload> {
         // A retained (WebSocket) owner cancels through the pipeline token, and the
         // tasks are still cancelled and joined below. A dropped HTTP stream drops
@@ -241,7 +242,7 @@ impl MultiAgentRun {
         &mut self,
         pipeline: &mut AgentPipeline,
         exec: &ExecutionContext,
-        auth: Option<&str>,
+        auth: Option<&UpstreamHeaders>,
     ) -> ExecutorResult<()> {
         emit_response_start_events(&self.payload, pipeline.relay_mut()).await?;
         let discovery = self

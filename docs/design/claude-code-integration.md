@@ -132,7 +132,7 @@ So the whole gateway is stateless orchestration: accept Messages, map tool calls
 - Serve a `/v1/messages` endpoint that Claude Code targets via `ANTHROPIC_BASE_URL` (transparent proxy landed in [#99](https://github.com/vllm-project/agentic-api/pull/99)).
 - Execute gateway-owned tools server-side, reusing the existing tool loop rather than forking a Messages-specific one.
 - Support what Claude Code uses: streaming, `tool_use`/`tool_result`, `system` prompt, `thinking`.
-- Keep the gateway stateless — the raw pass-through path stays transparent, mirroring the Responses `store=false` proxy.
+- Keep the gateway stateless — the raw pass-through path stays transparent, while HTTP Responses uses typed execution even with `store:false`.
 
 ### Non-goals
 

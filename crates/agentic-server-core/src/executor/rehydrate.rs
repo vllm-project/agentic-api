@@ -9,7 +9,7 @@ use crate::executor::multi_agent::{CheckpointLimits, ValidatedTreeCheckpoint};
 use crate::executor::pending_calls::first_unanswered_sync_call;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::telemetry::metrics::Stage;
-use crate::storage::ResponseMetadata;
+use crate::storage::{ResponseMetadata, StorageError};
 use crate::tool::ToolError;
 use crate::types::io::InOutItem;
 use crate::types::io::{
@@ -239,7 +239,13 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
     if ctx.continuation.is_some() {
         return from_session_response(ctx, exec_ctx).await;
     }
-    let stored = exec_ctx.resp_handler.get(ctx).await?;
+    let stored = exec_ctx.resp_handler.get(ctx).await.map_err(|error| match error {
+        ExecutorError::Storage(ref source) if source.is_not_found() => StorageError::PreviousResponseNotFound {
+            id: ctx.original_request.previous_response_id.clone().unwrap_or_default(),
+        }
+        .into(),
+        other => other,
+    })?;
     if restore_agent_tree(ctx, &stored.metadata, exec_ctx.responses_config.max_retained_bytes)? {
         return Ok(());
     }
@@ -270,14 +276,16 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
     } else {
         let previous_id = ctx.original_request.previous_response_id.as_deref().unwrap_or_default();
         if !ctx.original_request.store {
-            return Err(ExecutorError::PreviousResponseNotFound {
+            return Err(StorageError::PreviousResponseNotFound {
                 id: previous_id.to_owned(),
-            });
+            }
+            .into());
         }
         let map_missing = |error| match error {
-            ExecutorError::Storage(ref source) if source.is_not_found() => ExecutorError::PreviousResponseNotFound {
+            ExecutorError::Storage(ref source) if source.is_not_found() => StorageError::PreviousResponseNotFound {
                 id: previous_id.to_owned(),
-            },
+            }
+            .into(),
             other => other,
         };
         let stored = exec_ctx.resp_handler.get(ctx).await.map_err(map_missing)?;

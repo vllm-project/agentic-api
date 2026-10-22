@@ -1,6 +1,7 @@
 use crate::executor::accumulator::Validation;
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::inference::{call_inference_limited, fetch_response_json_limited};
+use crate::executor::inference::UpstreamHeaders;
+use crate::executor::inference::{call_inference_with_headers_limited, fetch_response_json_limited};
 use crate::executor::multi_agent::collaboration;
 use crate::executor::pipeline::AgentPipeline;
 use crate::executor::relay::StreamRelay;
@@ -59,8 +60,8 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
     .with_request_fields(&agent.request.original_request)
 }
 
-/// Builds the JSON body sent upstream: history inlined, continuation and storage
-/// fields removed.
+/// Builds the JSON body sent upstream: history inlined, continuation fields removed,
+/// and `store: false` preserved when the caller disables storage.
 ///
 /// # Errors
 /// Unsupported message content, a tool-configuration error, or a serialization failure.
@@ -110,7 +111,7 @@ fn upstream_request_with_guidance(
 pub(super) async fn fetch_blocking_payload(
     agent: &mut AgentPipeline,
     exec_ctx: &ExecutionContext,
-    auth: Option<&str>,
+    auth: Option<&UpstreamHeaders>,
     registry: &ToolRegistry,
     response_budget: Option<&ExecutorResponseBudget>,
 ) -> ExecutorResult<ResponsePayload> {
@@ -175,7 +176,7 @@ pub async fn decode_upstream(
 pub(super) async fn fetch_stream_payload(
     agent: &mut AgentPipeline,
     exec_ctx: &ExecutionContext,
-    auth: Option<&str>,
+    auth: Option<&UpstreamHeaders>,
     registry: &ToolRegistry,
     output_offset: usize,
     response_budget: &ExecutorResponseBudget,
@@ -183,11 +184,11 @@ pub(super) async fn fetch_stream_payload(
     agent.ensure_request_prepared()?;
     let withheld = agent.builtin_tools_withheld().then_some(registry);
     let upstream_json = upstream_request_with_guidance(&agent.request, true, agent.agent_guidance(), withheld)?;
-    let lines = call_inference_limited(
+    let lines = call_inference_with_headers_limited(
         upstream_json,
         exec_ctx.responses_url(),
         Arc::clone(&exec_ctx.client),
-        auth.map(str::to_owned),
+        auth.cloned(),
         exec_ctx.streaming_timeout,
         exec_ctx.responses_config.max_upstream_sse_line_bytes,
     );

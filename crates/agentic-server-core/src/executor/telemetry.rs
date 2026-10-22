@@ -199,7 +199,7 @@ impl From<&ExecutorError> for FailureCategory {
             ExecutorError::NetworkError(_) => Self::Network,
             ExecutorError::JsonError(_) | ExecutorError::ParseError(_) => Self::Parse,
             ExecutorError::StreamError(_) => Self::Stream,
-            ExecutorError::NotFound { .. } | ExecutorError::PreviousResponseNotFound { .. } => Self::NotFound,
+            ExecutorError::NotFound { .. } => Self::NotFound,
             ExecutorError::InvalidRequest(_)
             | ExecutorError::InvalidInput(_)
             | ExecutorError::InvalidMaxToolCalls(_)
@@ -495,6 +495,7 @@ impl Drop for ExecutionSpan {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::StorageError;
     use crate::tool::ToolError;
     use http::StatusCode;
 
@@ -552,9 +553,9 @@ mod tests {
                 FailureCategory::Tool,
             ),
             (
-                ExecutorError::PreviousResponseNotFound {
+                ExecutorError::Storage(StorageError::PreviousResponseNotFound {
                     id: "resp_1".to_owned(),
-                },
+                }),
                 FailureCategory::NotFound,
             ),
             (

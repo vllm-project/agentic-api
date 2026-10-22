@@ -470,6 +470,7 @@ These files use `sessions`, not the HTTP `turns` schema or synthesized SSE.
 |--------|-----------|---------|
 | `record_multi_agent_cassettes.sh` | Five delegated scenarios over HTTP JSON/SSE or persistent duplex WebSocket | OpenAI and gateway |
 | `record_text_only_cassettes.sh` | 10 text-only cassettes (responses + conv modes, streaming + non-streaming) | OpenAI (`OPENAI_API_KEY`) |
+| `record_store_false_cassettes.sh` | Two HTTP `store:false` cassettes per provider (JSON/SSE), each containing six named scenarios | OpenAI and gateway |
 | `record_conversations_api_cassettes.sh` | 18 Conversation Items API cassettes: four history scenarios in both transports and one non-streaming edge-case sequence, each for both providers | OpenAI and gateway |
 | `record_reasoning_cassettes.sh` | Matching explicit-reasoning cassettes (streaming + non-streaming) | gateway and OpenAI reference; optional direct vLLM |
 | `record_tool_call_cassettes.sh` | 8 tool-call cassettes (4 tool_choice modes x streaming + non-streaming) | vLLM |
@@ -551,6 +552,65 @@ python crates/agentic-server-core/tests/cassettes/record_messages_tool_choice.py
 OPENAI_API_KEY=sk-... bash tests/cassettes/record_text_only_cassettes.sh
 MODEL=gpt-4o-mini OPENAI_API_KEY=sk-... bash tests/cassettes/record_text_only_cassettes.sh
 ```
+
+### HTTP store:false (OpenAI and gateway)
+
+Run from the repository root with `OPENAI_API_KEY` exported:
+
+```bash
+MODEL=gpt-4o uv run --no-project --with click --with fastapi --with httpx --with uvicorn --with pyyaml \
+  bash crates/agentic-server-core/tests/cassettes/record_store_false_cassettes.sh
+
+cargo test -p agentic-server --test responses_test recorded_store_false_
+```
+
+The shell wrapper uses `record_cassette.py` for every captured request and response.
+It derives follow-up input from captured outputs and reuses the existing pipeline
+function declarations and output fixtures. All twelve scenario recordings are staged
+before being grouped into two files in `store_false/`, one per transport mode.
+Each file has a `cases` mapping containing `manual-replay`, `stored-parent`,
+`unstored-parent`, `conversation`, `function-replay`, and `conversation-items`.
+Each scenario retains its original `turns` and runs against an isolated gateway in
+the replay tests. Grouping preserves every recorded request, response, and SSE line.
+The default model is `gpt-4o`; the replay tests use those filenames.
+Use `--combine-existing` to migrate individual scenario files without new API calls.
+
+To record a running gateway backed by vLLM, select `STORE_FALSE_RECORD_SET=gateway`
+and set `GATEWAY_MODEL` to the served model name. It takes precedence over `MODEL`,
+which remains a fallback:
+
+```bash
+STORE_FALSE_RECORD_SET=gateway GATEWAY_URL=http://127.0.0.1:9000 \
+GATEWAY_MODEL=Qwen/Qwen3.8-27B-FP8 \
+uv run --no-project --with click --with fastapi --with httpx --with uvicorn --with pyyaml \
+  bash crates/agentic-server-core/tests/cassettes/record_store_false_cassettes.sh
+```
+
+Gateway captures use `store-false-gateway-MODEL-MODE.yaml` filenames,
+leaving OpenAI references intact. This uses the existing recorder's unauthenticated
+`--gateway` mode; run a local gateway with authentication disabled and database
+storage enabled for the stored-parent and conversation cases. No OpenAI key is
+needed. `MAX_OUTPUT_TOKENS` defaults to 2048 for gateway recordings and 256 for
+OpenAI, and can be overridden for reasoning models. The wrapper does not start
+vLLM or the gateway.
+
+Both JSON and SSE cover full-history replay without storage, a stored parent with
+an unstored child, rejection of an unstored parent, explicit conversation history,
+and a client-executed function with complete history replay. Missing-parent captures
+retain OpenAI's HTTP 400 `previous_response_not_found` error. The conversation case
+sends `conversation` on both turns, without `previous_response_id`.
+
+Gateway replay checks output items, error envelopes, normalized upstream history,
+and database rows. Ordinary `store:false` turns leave no stored response or items;
+explicit conversations read stored history without appending the unstored turn, and
+stored-parent references hydrate the parent without retaining the new response.
+The `conversation-items` scenario adds GET item-listing and response-retrieval
+probes around `store:false` turns in both empty and populated conversations. These
+recordings establish persistence independently of model-generated answers.
+Missing-response GETs check the recorded HTTP 404 error envelope as well as the
+absence of stored rows. Both providers' captures replay through the gateway;
+model text and reasoning differ, while state controls and function arguments
+are compared across providers.
 
 ### Reasoning (gateway and OpenAI)
 

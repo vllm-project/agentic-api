@@ -2,6 +2,7 @@ use super::super::{
     accumulate_usage,
     agent_turn::{AgentTurn, RoundDecision, RoundResult},
 };
+use crate::executor::inference::UpstreamHeaders;
 use crate::executor::{
     error::{ExecutorError, ExecutorResult},
     multi_agent::{
@@ -31,7 +32,7 @@ impl MultiAgentRun {
     pub(super) fn schedule(
         &mut self,
         exec: &ExecutionContext,
-        auth: Option<&str>,
+        auth: Option<&UpstreamHeaders>,
         pipeline: &AgentPipeline,
     ) -> ExecutorResult<()> {
         let runnable = self
@@ -85,12 +86,10 @@ impl MultiAgentRun {
             {
                 context.compacting = true;
                 let exec = exec.clone();
-                let auth = auth.map(str::to_owned);
+                let auth = auth.cloned();
                 self.tasks
                     .spawn_turn(turn.clone(), async move {
-                        plan.execute(&exec, auth.as_deref())
-                            .await
-                            .map(CompletedWork::Compaction)
+                        plan.execute(&exec, auth.as_ref()).await.map(CompletedWork::Compaction)
                     })
                     .map_err(|error| invalid(&error.to_string()))?;
                 self.registry
@@ -107,7 +106,7 @@ impl MultiAgentRun {
         &mut self,
         turn: &AgentTurnKey,
         exec: &ExecutionContext,
-        auth: Option<&str>,
+        auth: Option<&UpstreamHeaders>,
         pipeline: &AgentPipeline,
     ) -> ExecutorResult<()> {
         if let Some(context) = self.contexts.get_mut(&turn.agent) {
@@ -164,7 +163,7 @@ impl MultiAgentRun {
             round: self.rounds,
         };
         let exec = exec.clone();
-        let auth = auth.map(str::to_owned);
+        let auth = auth.cloned();
         let budget = self.budget.clone();
         self.tasks
             .spawn_turn(turn.clone(), async move {
@@ -172,7 +171,7 @@ impl MultiAgentRun {
                     execution.refresh_tools(&mut agent, &exec, &budget).await?;
                 }
                 let mut turn = AgentTurn::resume(&mut agent, &exec, execution);
-                let result = turn.run_round(0, auth.as_deref(), streaming, &budget).await?;
+                let result = turn.run_round(0, auth.as_ref(), streaming, &budget).await?;
                 let execution = turn.execution_state();
                 let tool_search = agent.tool_search_state().cloned();
                 let (ctx, _) = agent.into_parts();

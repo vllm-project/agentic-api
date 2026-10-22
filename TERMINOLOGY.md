@@ -130,7 +130,7 @@ Describes a flow in which the service retains or resolves prior state, such as R
 
 Describes a flow in which the request supplies all required context and the service does not rely on retained response
 or conversation state. `store: false` disables durable response storage, although callers may still replay prior items
-or continue from the active WebSocket connection's transient checkpoint. An explicit conversation remains durable.
+or continue from the active WebSocket connection's transient checkpoint. An explicit conversation can supply stored history, but `store: false` does not append the current turn.
 
 ### compaction
 

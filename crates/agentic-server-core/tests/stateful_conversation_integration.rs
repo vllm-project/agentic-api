@@ -625,7 +625,7 @@ async fn test_multi_branch() {
 }
 
 #[tokio::test]
-async fn test_store_false_with_conversation_id_hydrates_and_persists() {
+async fn test_store_false_with_conversation_id_hydrates_without_persisting() {
     let cassette = load_cassette(&format!("{DIR}/conv-store-false-followup-gpt-4o-nonstreaming.yaml"));
     let all: Vec<_> = cassette.turns.iter().collect();
     let fixture = TestFixture::new(&all).await;
@@ -653,7 +653,9 @@ async fn test_store_false_with_conversation_id_hydrates_and_persists() {
     assert_eq!(p1.status, "completed");
     assert_eq!(output_text(&p1), expected_text(t1));
 
-    // Turn 2: store=false but conversation_id passed — must rehydrate and persist locally
+    // Turn 2 reads the stored history but must not append to it.
+    let store = ConversationStore::new(Arc::clone(&fixture.pool));
+    let before = store.rehydrate(&conv_id).await.unwrap();
     let p2 = unwrap_blocking(
         execute(
             make_request(
@@ -670,6 +672,7 @@ async fn test_store_false_with_conversation_id_hydrates_and_persists() {
     );
     assert_eq!(p2.status, "completed");
     assert_eq!(output_text(&p2), expected_text(t2));
+    assert_eq!(store.rehydrate(&conv_id).await.unwrap(), before);
 
     // Turn 2 was sent the full history from turn 1 (rehydrated correctly)
     let requests = fixture.request_bodies().await;

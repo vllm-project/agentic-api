@@ -121,6 +121,10 @@ pub struct RequestPayload<T: ?Sized = ResponseTextConfig, C = PromptCacheOptions
     /// Detection only, never serialized: typed execution rejects any non-null value.
     #[serde(default, skip_serializing)]
     pub prompt: Option<RejectedValue>,
+    /// Unmodeled provider parameters (for example, `chat_template_kwargs`), forwarded unchanged.
+    /// Modeled request fields retain their typed validation and upstream conversion.
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
 }
 
 /// Validation failures while constructing a typed upstream request.
@@ -134,6 +138,9 @@ pub enum UpstreamRequestError {
 
 #[derive(Debug, Serialize)]
 pub struct UpstreamRequest<'a> {
+    /// Disable upstream storage when the caller disables gateway storage.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub store: Option<bool>,
     pub model: &'a str,
     pub input: Cow<'a, ResponsesInput>,
     pub stream: bool,
@@ -179,6 +186,8 @@ pub struct UpstreamRequest<'a> {
     pub service_tier: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_salt: Option<&'a str>,
+    #[serde(flatten)]
+    pub extra: &'a HashMap<String, Value>,
 }
 
 /// A normalized tool declaration supported by the upstream Responses endpoint.
@@ -298,6 +307,7 @@ impl<T: ?Sized, C> RequestPayload<T, C> {
             context_management: self.context_management,
             background: self.background,
             prompt: self.prompt,
+            extra: self.extra,
         })
     }
 }
@@ -372,6 +382,7 @@ impl RequestPayload {
         let tool_choice = CodexNamespaceHandler.resolve_tool_choice(namespace_map.as_ref(), self.tool_choice.as_ref());
         CustomHandler::validate_tool_choice(declarations.as_deref(), &tool_choice)?;
         Ok(UpstreamRequest {
+            store: (!self.store).then_some(false),
             model: &self.model,
             input,
             stream,
@@ -393,6 +404,7 @@ impl RequestPayload {
             prompt_cache_options: self.prompt_cache_options.as_ref(),
             service_tier: self.service_tier.as_deref(),
             cache_salt: self.cache_salt.as_deref(),
+            extra: &self.extra,
         })
     }
 }
@@ -489,6 +501,45 @@ pub struct ResponsePayload {
 mod tests {
     use super::*;
     use crate::types::io::InOutItem;
+
+    #[test]
+    fn provider_extensions_survive_mapping_and_request_round_trip() {
+        let wire = serde_json::json!({
+            "model": "test", "input": "hello", "store": false,
+            "conversation_id": "conv_test", "background": false, "prompt": null,
+            "context_management": [], "max_tool_calls": 2,
+            "chat_template_kwargs": {"enable_thinking": false}, "top_k": 20,
+            "x_provider_option": null
+        });
+        let routing: RequestPayload<serde_json::value::RawValue> = serde_json::from_value(wire.clone()).unwrap();
+        let request = routing
+            .try_map_text(|text| serde_json::from_str::<ResponseTextConfig>(text.get()).map(Box::new))
+            .unwrap();
+        let restored: RequestPayload = serde_json::from_value(serde_json::to_value(&request).unwrap()).unwrap();
+        assert_eq!(
+            restored.extra.len(),
+            3,
+            "known fields must not enter provider extensions"
+        );
+        for stream in [false, true] {
+            let upstream = serde_json::to_value(restored.to_upstream_request(stream).unwrap()).unwrap();
+            assert_eq!(upstream["stream"], stream);
+            assert_eq!(upstream["store"], false);
+            for key in ["chat_template_kwargs", "top_k", "x_provider_option"] {
+                assert_eq!(upstream.get(key), wire.get(key));
+            }
+            for key in [
+                "conversation_id",
+                "conversation",
+                "background",
+                "prompt",
+                "context_management",
+                "max_tool_calls",
+            ] {
+                assert!(upstream.get(key).is_none(), "gateway field {key} must not be forwarded");
+            }
+        }
+    }
 
     #[test]
     fn prompt_cache_retention_survives_text_mapping_and_request_round_trip() {

@@ -1,0 +1,1958 @@
+cases:
+  manual-replay:
+    turns:
+    - filename: t1
+      request:
+        body:
+          input: Remember the word ORCHID. Reply with exactly OK.
+          max_output_tokens: 2048
+          model: Qwen/Qwen3.8-27B-FP8
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          background: false
+          completed_at: 1792572239
+          created_at: 1792572239
+          error: null
+          frequency_penalty: 0.0
+          id: resp_01a15da1-acd8-75f0-8a9e-801aa9419852
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: 2048
+          max_tool_calls: null
+          metadata: {}
+          model: Qwen/Qwen3.8-27B-FP8
+          object: response
+          output:
+          - content:
+            - text: 'The user wants me to remember the word "ORCHID" and reply with exactly
+                "OK".
+
+                '
+              type: reasoning_text
+            id: rs_b2e5e83e0229c1d9
+            summary: []
+            type: reasoning
+          - content:
+            - annotations: []
+              text: '
+
+
+                OK'
+              type: output_text
+            id: msg_94e7cb26705647e5
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: false
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_options: null
+          reasoning: null
+          safety_identifier: null
+          service_tier: auto
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+          tool_choice: auto
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 52
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 25
+            output_tokens_details:
+              reasoning_tokens: 21
+            total_tokens: 77
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t2
+      request:
+        body:
+          input:
+          - content: Remember the word ORCHID. Reply with exactly OK.
+            role: user
+          - content:
+            - text: 'The user wants me to remember the word "ORCHID" and reply with exactly
+                "OK".
+
+                '
+              type: reasoning_text
+            id: rs_b2e5e83e0229c1d9
+            summary: []
+            type: reasoning
+          - content:
+            - annotations: []
+              text: '
+
+
+                OK'
+              type: output_text
+            id: msg_94e7cb26705647e5
+            role: assistant
+            status: completed
+            type: message
+          - content: What word did I ask you to remember? Reply with that word only.
+            role: user
+          max_output_tokens: 2048
+          model: Qwen/Qwen3.8-27B-FP8
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          background: false
+          completed_at: 1792572242
+          created_at: 1792572242
+          error: null
+          frequency_penalty: 0.0
+          id: resp_01a15da1-b4a2-7ba1-b844-e9ddbcb672ed
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: 2048
+          max_tool_calls: null
+          metadata: {}
+          model: Qwen/Qwen3.8-27B-FP8
+          object: response
+          output:
+          - content:
+            - text: 'The user is asking me what word they asked me to remember. In the
+                previous message, they asked me to remember the word "ORCHID". I should
+                reply with that word only.
+
+                '
+              type: reasoning_text
+            id: rs_8e7b97f26df1004b
+            summary: []
+            type: reasoning
+          - content:
+            - annotations: []
+              text: '
+
+
+                ORCHID'
+              type: output_text
+            id: msg_a5418c84b0728482
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: false
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_options: null
+          reasoning: null
+          safety_identifier: null
+          service_tier: auto
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+          tool_choice: auto
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 103
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 45
+            output_tokens_details:
+              reasoning_tokens: 39
+            total_tokens: 148
+        headers:
+          content-type: application/json
+        status_code: 200
+  stored-parent:
+    turns:
+    - filename: t1
+      request:
+        body:
+          input: Remember the word ORCHID. Reply with exactly OK.
+          max_output_tokens: 2048
+          model: Qwen/Qwen3.8-27B-FP8
+          store: true
+          stream: false
+        headers:
+          accept: '*/*'
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          background: false
+          completed_at: 1792572243
+          created_at: 1792572243
+          error: null
+          frequency_penalty: 0.0
+          id: resp_01a15da1-bdad-7ae2-9233-c3e99f72f514
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: 2048
+          max_tool_calls: null
+          metadata: {}
+          model: Qwen/Qwen3.8-27B-FP8
+          object: response
+          output:
+          - content:
+            - text: 'The user wants me to remember the word "ORCHID" and reply with exactly
+                "OK".
+
+                '
+              type: reasoning_text
+            id: rs_9a9883a638bae496
+            summary: []
+            type: reasoning
+          - content:
+            - annotations: []
+              text: '
+
+
+                OK'
+              type: output_text
+            id: msg_aa083ddfde46284b
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: false
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_options: null
+          reasoning: null
+          safety_identifier: null
+          service_tier: auto
+          status: completed
+          store: true
+          temperature: 1.0
+          text:
+            format:
+              type: text
+          tool_choice: auto
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 52
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 25
+            output_tokens_details:
+              reasoning_tokens: 21
+            total_tokens: 77
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t2
+      request:
+        body:
+          input: What word did I ask you to remember? Reply with that word only.
+          max_output_tokens: 2048
+          model: Qwen/Qwen3.8-27B-FP8
+          previous_response_id: resp_01a15da1-bdad-7ae2-9233-c3e99f72f514
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          background: false
+          completed_at: 1792572246
+          created_at: 1792572246
+          error: null
+          frequency_penalty: 0.0
+          id: resp_01a15da1-c53d-70d3-90f4-8f957d347a1f
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: 2048
+          max_tool_calls: null
+          metadata: {}
+          model: Qwen/Qwen3.8-27B-FP8
+          object: response
+          output:
+          - content:
+            - text: 'The user is asking me to recall the word they asked me to remember.
+                In the previous message, they asked me to remember the word "ORCHID".
+                I should reply with just that word.
+
+                '
+              type: reasoning_text
+            id: rs_8261013cb6e74cd2
+            summary: []
+            type: reasoning
+          - content:
+            - annotations: []
+              text: '
+
+
+                ORCHID'
+              type: output_text
+            id: msg_b6b53b19de4531a1
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: false
+          presence_penalty: 0.0
+          previous_response_id: resp_01a15da1-bdad-7ae2-9233-c3e99f72f514
+          prompt_cache_key: null
+          prompt_cache_options: null
+          reasoning: null
+          safety_identifier: null
+          service_tier: auto
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+          tool_choice: auto
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 103
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 47
+            output_tokens_details:
+              reasoning_tokens: 41
+            total_tokens: 150
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t3
+      request:
+        body:
+          input: Say OK.
+          max_output_tokens: 2048
+          model: Qwen/Qwen3.8-27B-FP8
+          previous_response_id: resp_01a15da1-c53d-70d3-90f4-8f957d347a1f
+          store: true
+          stream: false
+        headers:
+          accept: '*/*'
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          error:
+            code: previous_response_not_found
+            message: Previous response with id 'resp_01a15da1-c53d-70d3-90f4-8f957d347a1f'
+              not found.
+            param: previous_response_id
+            type: invalid_request_error
+        headers:
+          content-type: application/json
+        status_code: 400
+  unstored-parent:
+    turns:
+    - filename: t1
+      request:
+        body:
+          input: Remember the word ORCHID. Reply with exactly OK.
+          max_output_tokens: 2048
+          model: Qwen/Qwen3.8-27B-FP8
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          background: false
+          completed_at: 1792572249
+          created_at: 1792572249
+          error: null
+          frequency_penalty: 0.0
+          id: resp_01a15da1-d3bc-7331-ad84-5890ba00b510
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: 2048
+          max_tool_calls: null
+          metadata: {}
+          model: Qwen/Qwen3.8-27B-FP8
+          object: response
+          output:
+          - content:
+            - text: 'The user wants me to remember the word "ORCHID" and reply with exactly
+                "OK".
+
+                '
+              type: reasoning_text
+            id: rs_92ead7e45df9815c
+            summary: []
+            type: reasoning
+          - content:
+            - annotations: []
+              text: '
+
+
+                OK'
+              type: output_text
+            id: msg_8669edd6074eec79
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: false
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_options: null
+          reasoning: null
+          safety_identifier: null
+          service_tier: auto
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+          tool_choice: auto
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 52
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 25
+            output_tokens_details:
+              reasoning_tokens: 21
+            total_tokens: 77
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t2
+      request:
+        body:
+          input: Say OK.
+          max_output_tokens: 2048
+          model: Qwen/Qwen3.8-27B-FP8
+          previous_response_id: resp_01a15da1-d3bc-7331-ad84-5890ba00b510
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          error:
+            code: previous_response_not_found
+            message: Previous response with id 'resp_01a15da1-d3bc-7331-ad84-5890ba00b510'
+              not found.
+            param: previous_response_id
+            type: invalid_request_error
+        headers:
+          content-type: application/json
+        status_code: 400
+  conversation:
+    turns:
+    - filename: t1
+      request:
+        body: {}
+        headers:
+          accept: '*/*'
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/conversations
+        query_params: {}
+      response:
+        body:
+          created_at: 1792572252
+          id: conv_01a15da1-e06e-7250-b527-5e3d73a82d2b
+          metadata: {}
+          object: conversation
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t2
+      request:
+        body:
+          conversation: conv_01a15da1-e06e-7250-b527-5e3d73a82d2b
+          input: Remember the word ORCHID. Reply with exactly OK.
+          model: Qwen/Qwen3.8-27B-FP8
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          background: false
+          completed_at: 1792572252
+          conversation:
+            id: conv_01a15da1-e06e-7250-b527-5e3d73a82d2b
+          created_at: 1792572252
+          error: null
+          frequency_penalty: 0.0
+          id: resp_01a15da1-e078-7593-9ec3-599ff782cfb9
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: null
+          max_tool_calls: null
+          metadata: {}
+          model: Qwen/Qwen3.8-27B-FP8
+          object: response
+          output:
+          - content:
+            - text: 'The user wants me to remember the word "ORCHID" and reply with exactly
+                "OK".
+
+                '
+              type: reasoning_text
+            id: rs_930289ee78d759aa
+            summary: []
+            type: reasoning
+          - content:
+            - annotations: []
+              text: '
+
+
+                OK'
+              type: output_text
+            id: msg_a5ed8e35b3d1b834
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: false
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_options: null
+          reasoning: null
+          safety_identifier: null
+          service_tier: auto
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+          tool_choice: auto
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 52
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 25
+            output_tokens_details:
+              reasoning_tokens: 21
+            total_tokens: 77
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t3
+      request:
+        body:
+          conversation: conv_01a15da1-e06e-7250-b527-5e3d73a82d2b
+          input: What word did I ask you to remember? Reply with that word only.
+          max_output_tokens: 2048
+          model: Qwen/Qwen3.8-27B-FP8
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          background: false
+          completed_at: 1792572255
+          conversation:
+            id: conv_01a15da1-e06e-7250-b527-5e3d73a82d2b
+          created_at: 1792572255
+          error: null
+          frequency_penalty: 0.0
+          id: resp_01a15da1-e7f5-7911-a48c-7e98aa74c4f6
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: 2048
+          max_tool_calls: null
+          metadata: {}
+          model: Qwen/Qwen3.8-27B-FP8
+          object: response
+          output:
+          - content:
+            - text: 'The user is asking me what word they previously asked me to remember.
+                Looking at the conversation history, there is no previous message where
+                the user asked me to remember a word. This is the first message in our
+                conversation. I should let them know that no such word was provided.
+
+                '
+              type: reasoning_text
+            id: rs_922ecba0cf868743
+            summary: []
+            type: reasoning
+          - content:
+            - annotations: []
+              text: '
+
+
+                You haven''t asked me to remember any word in this conversation.'
+              type: output_text
+            id: msg_b77e166d8a2f46ea
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: false
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_options: null
+          reasoning: null
+          safety_identifier: null
+          service_tier: auto
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+          tool_choice: auto
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 55
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 73
+            output_tokens_details:
+              reasoning_tokens: 57
+            total_tokens: 128
+        headers:
+          content-type: application/json
+        status_code: 200
+  function-replay:
+    turns:
+    - filename: t1
+      request:
+        body:
+          input: Call get_job_status for job-382, then reply with just its status.
+          max_output_tokens: 2048
+          model: Qwen/Qwen3.8-27B-FP8
+          store: false
+          stream: false
+          tool_choice:
+            name: get_job_status
+            type: function
+          tools:
+          - description: Query the pipeline orchestrator for a job's current state, metadata,
+              and failure info.
+            name: get_job_status
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier, e.g. job-382
+                  type: string
+              required:
+              - job_id
+              type: object
+            strict: true
+            type: function
+          - description: Fetch error logs and stack traces for a failed pipeline job.
+            name: get_error_logs
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier
+                  type: string
+                max_entries:
+                  description: Maximum log entries to return (default 50)
+                  type: integer
+                severity:
+                  description: Minimum severity filter
+                  enum:
+                  - WARN
+                  - ERROR
+                  - FATAL
+                  - ALL
+                  type: string
+              required:
+              - job_id
+              - severity
+              - max_entries
+              type: object
+            strict: true
+            type: function
+          - description: Search internal operations runbooks for troubleshooting procedures.
+            name: search_runbook
+            parameters:
+              additionalProperties: false
+              properties:
+                max_results:
+                  description: Maximum results to return (default 5)
+                  type: integer
+                query:
+                  description: Natural language search query
+                  type: string
+              required:
+              - query
+              - max_results
+              type: object
+            strict: true
+            type: function
+          - description: Execute a Python analysis script in a sandboxed environment for
+              log parsing or data inspection.
+            name: run_analysis
+            parameters:
+              additionalProperties: false
+              properties:
+                code:
+                  description: Python code to execute
+                  type: string
+                timeout_seconds:
+                  description: Execution timeout (default 30)
+                  type: integer
+              required:
+              - code
+              - timeout_seconds
+              type: object
+            strict: true
+            type: function
+          - description: Restart a failed pipeline job with optional configuration overrides.
+            name: restart_job
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier to restart
+                  type: string
+                memory_override_gb:
+                  description: Override memory limit in GB
+                  type: integer
+                priority:
+                  description: Queue priority
+                  enum:
+                  - low
+                  - normal
+                  - high
+                  type: string
+                skip_completed_stages:
+                  description: Skip stages that completed successfully (default true)
+                  type: boolean
+              required:
+              - job_id
+              - memory_override_gb
+              - skip_completed_stages
+              - priority
+              type: object
+            strict: true
+            type: function
+          - description: Search the public web for technical documentation, blog posts,
+              and known issues.
+            name: web_search
+            parameters:
+              additionalProperties: false
+              properties:
+                query:
+                  description: Search query
+                  type: string
+              required:
+              - query
+              type: object
+            strict: true
+            type: function
+        headers:
+          accept: '*/*'
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          background: false
+          completed_at: 1792572258
+          created_at: 1792572258
+          error: null
+          frequency_penalty: 0.0
+          id: resp_01a15da1-f334-7363-a2c9-6ec73a785e64
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: 2048
+          max_tool_calls: null
+          metadata: {}
+          model: Qwen/Qwen3.8-27B-FP8
+          object: response
+          output:
+          - content:
+            - text: 'The user wants me to call get_job_status for job-382 and then reply
+                with just its status.
+
+                '
+              type: reasoning_text
+            id: rs_8b198fea685b52b9
+            summary: []
+            type: reasoning
+          - arguments: '{"job_id": "job-382"}'
+            call_id: chatcmpl-tool-b6835b8d766d921f
+            id: fc_b9ab055cae5a256f
+            name: get_job_status
+            status: completed
+            type: function_call
+          parallel_tool_calls: false
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_options: null
+          reasoning: null
+          safety_identifier: null
+          service_tier: auto
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+          tool_choice:
+            name: get_job_status
+            type: function
+          tools:
+          - description: Query the pipeline orchestrator for a job's current state, metadata,
+              and failure info.
+            name: get_job_status
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier, e.g. job-382
+                  type: string
+              required:
+              - job_id
+              type: object
+            strict: true
+            type: function
+          - description: Fetch error logs and stack traces for a failed pipeline job.
+            name: get_error_logs
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier
+                  type: string
+                max_entries:
+                  description: Maximum log entries to return (default 50)
+                  type: integer
+                severity:
+                  description: Minimum severity filter
+                  enum:
+                  - WARN
+                  - ERROR
+                  - FATAL
+                  - ALL
+                  type: string
+              required:
+              - job_id
+              - severity
+              - max_entries
+              type: object
+            strict: true
+            type: function
+          - description: Search internal operations runbooks for troubleshooting procedures.
+            name: search_runbook
+            parameters:
+              additionalProperties: false
+              properties:
+                max_results:
+                  description: Maximum results to return (default 5)
+                  type: integer
+                query:
+                  description: Natural language search query
+                  type: string
+              required:
+              - query
+              - max_results
+              type: object
+            strict: true
+            type: function
+          - description: Execute a Python analysis script in a sandboxed environment for
+              log parsing or data inspection.
+            name: run_analysis
+            parameters:
+              additionalProperties: false
+              properties:
+                code:
+                  description: Python code to execute
+                  type: string
+                timeout_seconds:
+                  description: Execution timeout (default 30)
+                  type: integer
+              required:
+              - code
+              - timeout_seconds
+              type: object
+            strict: true
+            type: function
+          - description: Restart a failed pipeline job with optional configuration overrides.
+            name: restart_job
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier to restart
+                  type: string
+                memory_override_gb:
+                  description: Override memory limit in GB
+                  type: integer
+                priority:
+                  description: Queue priority
+                  enum:
+                  - low
+                  - normal
+                  - high
+                  type: string
+                skip_completed_stages:
+                  description: Skip stages that completed successfully (default true)
+                  type: boolean
+              required:
+              - job_id
+              - memory_override_gb
+              - skip_completed_stages
+              - priority
+              type: object
+            strict: true
+            type: function
+          - description: Search the public web for technical documentation, blog posts,
+              and known issues.
+            name: web_search
+            parameters:
+              additionalProperties: false
+              properties:
+                query:
+                  description: Search query
+                  type: string
+              required:
+              - query
+              type: object
+            strict: true
+            type: function
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 975
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 784
+            output_tokens: 57
+            output_tokens_details:
+              reasoning_tokens: 24
+            total_tokens: 1032
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t2
+      request:
+        body:
+          input:
+          - content: Call get_job_status for job-382, then reply with just its status.
+            role: user
+          - content:
+            - text: 'The user wants me to call get_job_status for job-382 and then reply
+                with just its status.
+
+                '
+              type: reasoning_text
+            id: rs_8b198fea685b52b9
+            summary: []
+            type: reasoning
+          - arguments: '{"job_id": "job-382"}'
+            call_id: chatcmpl-tool-b6835b8d766d921f
+            id: fc_b9ab055cae5a256f
+            name: get_job_status
+            status: completed
+            type: function_call
+          - call_id: chatcmpl-tool-b6835b8d766d921f
+            output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
+              "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
+              31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
+            type: function_call_output
+          max_output_tokens: 2048
+          model: Qwen/Qwen3.8-27B-FP8
+          store: false
+          stream: false
+          tool_choice: none
+          tools:
+          - description: Query the pipeline orchestrator for a job's current state, metadata,
+              and failure info.
+            name: get_job_status
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier, e.g. job-382
+                  type: string
+              required:
+              - job_id
+              type: object
+            strict: true
+            type: function
+          - description: Fetch error logs and stack traces for a failed pipeline job.
+            name: get_error_logs
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier
+                  type: string
+                max_entries:
+                  description: Maximum log entries to return (default 50)
+                  type: integer
+                severity:
+                  description: Minimum severity filter
+                  enum:
+                  - WARN
+                  - ERROR
+                  - FATAL
+                  - ALL
+                  type: string
+              required:
+              - job_id
+              - severity
+              - max_entries
+              type: object
+            strict: true
+            type: function
+          - description: Search internal operations runbooks for troubleshooting procedures.
+            name: search_runbook
+            parameters:
+              additionalProperties: false
+              properties:
+                max_results:
+                  description: Maximum results to return (default 5)
+                  type: integer
+                query:
+                  description: Natural language search query
+                  type: string
+              required:
+              - query
+              - max_results
+              type: object
+            strict: true
+            type: function
+          - description: Execute a Python analysis script in a sandboxed environment for
+              log parsing or data inspection.
+            name: run_analysis
+            parameters:
+              additionalProperties: false
+              properties:
+                code:
+                  description: Python code to execute
+                  type: string
+                timeout_seconds:
+                  description: Execution timeout (default 30)
+                  type: integer
+              required:
+              - code
+              - timeout_seconds
+              type: object
+            strict: true
+            type: function
+          - description: Restart a failed pipeline job with optional configuration overrides.
+            name: restart_job
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier to restart
+                  type: string
+                memory_override_gb:
+                  description: Override memory limit in GB
+                  type: integer
+                priority:
+                  description: Queue priority
+                  enum:
+                  - low
+                  - normal
+                  - high
+                  type: string
+                skip_completed_stages:
+                  description: Skip stages that completed successfully (default true)
+                  type: boolean
+              required:
+              - job_id
+              - memory_override_gb
+              - skip_completed_stages
+              - priority
+              type: object
+            strict: true
+            type: function
+          - description: Search the public web for technical documentation, blog posts,
+              and known issues.
+            name: web_search
+            parameters:
+              additionalProperties: false
+              properties:
+                query:
+                  description: Search query
+                  type: string
+              required:
+              - query
+              type: object
+            strict: true
+            type: function
+        headers:
+          accept: '*/*'
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          background: false
+          completed_at: 1792572260
+          created_at: 1792572260
+          error: null
+          frequency_penalty: 0.0
+          id: resp_01a15da1-fd99-7980-9d8e-e2f2bc249703
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: 2048
+          max_tool_calls: null
+          metadata: {}
+          model: Qwen/Qwen3.8-27B-FP8
+          object: response
+          output:
+          - content:
+            - text: 'The user asked me to reply with just its status.
+
+                '
+              type: reasoning_text
+            id: rs_82f7c0954d08d69f
+            summary: []
+            type: reasoning
+          - content:
+            - annotations: []
+              text: '
+
+
+                failed'
+              type: output_text
+            id: msg_891a4fe6955d8d90
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: false
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_options: null
+          reasoning: null
+          safety_identifier: null
+          service_tier: auto
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+          tool_choice: none
+          tools:
+          - description: Query the pipeline orchestrator for a job's current state, metadata,
+              and failure info.
+            name: get_job_status
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier, e.g. job-382
+                  type: string
+              required:
+              - job_id
+              type: object
+            strict: true
+            type: function
+          - description: Fetch error logs and stack traces for a failed pipeline job.
+            name: get_error_logs
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier
+                  type: string
+                max_entries:
+                  description: Maximum log entries to return (default 50)
+                  type: integer
+                severity:
+                  description: Minimum severity filter
+                  enum:
+                  - WARN
+                  - ERROR
+                  - FATAL
+                  - ALL
+                  type: string
+              required:
+              - job_id
+              - severity
+              - max_entries
+              type: object
+            strict: true
+            type: function
+          - description: Search internal operations runbooks for troubleshooting procedures.
+            name: search_runbook
+            parameters:
+              additionalProperties: false
+              properties:
+                max_results:
+                  description: Maximum results to return (default 5)
+                  type: integer
+                query:
+                  description: Natural language search query
+                  type: string
+              required:
+              - query
+              - max_results
+              type: object
+            strict: true
+            type: function
+          - description: Execute a Python analysis script in a sandboxed environment for
+              log parsing or data inspection.
+            name: run_analysis
+            parameters:
+              additionalProperties: false
+              properties:
+                code:
+                  description: Python code to execute
+                  type: string
+                timeout_seconds:
+                  description: Execution timeout (default 30)
+                  type: integer
+              required:
+              - code
+              - timeout_seconds
+              type: object
+            strict: true
+            type: function
+          - description: Restart a failed pipeline job with optional configuration overrides.
+            name: restart_job
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier to restart
+                  type: string
+                memory_override_gb:
+                  description: Override memory limit in GB
+                  type: integer
+                priority:
+                  description: Queue priority
+                  enum:
+                  - low
+                  - normal
+                  - high
+                  type: string
+                skip_completed_stages:
+                  description: Skip stages that completed successfully (default true)
+                  type: boolean
+              required:
+              - job_id
+              - memory_override_gb
+              - skip_completed_stages
+              - priority
+              type: object
+            strict: true
+            type: function
+          - description: Search the public web for technical documentation, blog posts,
+              and known issues.
+            name: web_search
+            parameters:
+              additionalProperties: false
+              properties:
+                query:
+                  description: Search query
+                  type: string
+              required:
+              - query
+              type: object
+            strict: true
+            type: function
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 1145
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 784
+            output_tokens: 16
+            output_tokens_details:
+              reasoning_tokens: 12
+            total_tokens: 1161
+        headers:
+          content-type: application/json
+        status_code: 200
+  conversation-items:
+    turns:
+    - filename: t1
+      request:
+        body: {}
+        headers:
+          accept: '*/*'
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/conversations
+        query_params: {}
+      response:
+        body:
+          created_at: 1792572530
+          id: conv_01a15da6-1fa2-7952-bdcc-c0bf56d627a6
+          metadata: {}
+          object: conversation
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t2
+      request:
+        body:
+          conversation: conv_01a15da6-1fa2-7952-bdcc-c0bf56d627a6
+          input:
+          - content: Remember the secret word ORCHID. Reply with only OK.
+            role: user
+          model: Qwen/Qwen3.8-27B-FP8
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          background: false
+          completed_at: 1792572531
+          conversation:
+            id: conv_01a15da6-1fa2-7952-bdcc-c0bf56d627a6
+          created_at: 1792572531
+          error: null
+          frequency_penalty: 0.0
+          id: resp_01a15da6-1fb7-7af2-bfbb-e9c80ca46623
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: null
+          max_tool_calls: null
+          metadata: {}
+          model: Qwen/Qwen3.8-27B-FP8
+          object: response
+          output:
+          - content:
+            - text: 'The user is asking me to remember a "secret word" ORCHID and to reply
+                with only "OK". This is a simple request - they want me to acknowledge
+                that I''ve noted the word and respond with just "OK".
+
+                '
+              type: reasoning_text
+            id: rs_a5f01e28124bafc0
+            summary: []
+            type: reasoning
+          - content:
+            - annotations: []
+              text: '
+
+
+                OK'
+              type: output_text
+            id: msg_af2c5e1fa16001b9
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: false
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_options: null
+          reasoning: null
+          safety_identifier: null
+          service_tier: auto
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+          tool_choice: auto
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 53
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 52
+            output_tokens_details:
+              reasoning_tokens: 48
+            total_tokens: 105
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t3
+      request:
+        body: {}
+        headers:
+          accept: '*/*'
+          user-agent: python-httpx/0.28.1
+        method: GET
+        path: /v1/conversations/conv_01a15da6-1fa2-7952-bdcc-c0bf56d627a6/items
+        query_params:
+          order: asc
+      response:
+        body:
+          data: []
+          first_id: null
+          has_more: false
+          last_id: null
+          object: list
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t4
+      request:
+        body: {}
+        headers:
+          accept: '*/*'
+          user-agent: python-httpx/0.28.1
+        method: GET
+        path: /v1/responses/resp_01a15da6-1fb7-7af2-bfbb-e9c80ca46623
+        query_params: {}
+      response:
+        body:
+          error:
+            code: null
+            message: Response with id 'resp_01a15da6-1fb7-7af2-bfbb-e9c80ca46623' not
+              found.
+            param: null
+            type: invalid_request_error
+        headers:
+          content-type: application/json
+        status_code: 404
+    - filename: t5
+      request:
+        body:
+          conversation: conv_01a15da6-1fa2-7952-bdcc-c0bf56d627a6
+          input:
+          - content: Remember the secret word SAPPHIRE. Reply with only OK.
+            role: user
+          model: Qwen/Qwen3.8-27B-FP8
+          store: true
+          stream: false
+        headers:
+          accept: '*/*'
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          background: false
+          completed_at: 1792572532
+          conversation:
+            id: conv_01a15da6-1fa2-7952-bdcc-c0bf56d627a6
+          created_at: 1792572532
+          error: null
+          frequency_penalty: 0.0
+          id: resp_01a15da6-2480-76a3-b9a2-e2923275f91f
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: null
+          max_tool_calls: null
+          metadata: {}
+          model: Qwen/Qwen3.8-27B-FP8
+          object: response
+          output:
+          - content:
+            - text: 'The user is asking me to remember a "secret word" (SAPPHIRE) and
+                reply with only "OK". This is a simple request. I''ll comply by responding
+                with just "OK".
+
+                '
+              type: reasoning_text
+            id: rs_a887b90331210cb3
+            summary: []
+            type: reasoning
+          - content:
+            - annotations: []
+              text: '
+
+
+                OK'
+              type: output_text
+            id: msg_bd6edda447552220
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: false
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_options: null
+          reasoning: null
+          safety_identifier: null
+          service_tier: auto
+          status: completed
+          store: true
+          temperature: 1.0
+          text:
+            format:
+              type: text
+          tool_choice: auto
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 53
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 46
+            output_tokens_details:
+              reasoning_tokens: 42
+            total_tokens: 99
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t6
+      request:
+        body: {}
+        headers:
+          accept: '*/*'
+          user-agent: python-httpx/0.28.1
+        method: GET
+        path: /v1/conversations/conv_01a15da6-1fa2-7952-bdcc-c0bf56d627a6/items
+        query_params:
+          order: asc
+      response:
+        body:
+          data:
+          - content:
+            - text: Remember the secret word SAPPHIRE. Reply with only OK.
+              type: input_text
+            id: msg_01a15da6-2888-7403-ada1-b0a4185fe3da
+            role: user
+            status: completed
+            type: message
+          - content:
+            - text: 'The user is asking me to remember a "secret word" (SAPPHIRE) and
+                reply with only "OK". This is a simple request. I''ll comply by responding
+                with just "OK".
+
+                '
+              type: reasoning_text
+            id: rs_a887b90331210cb3
+            summary: []
+            type: reasoning
+          - content:
+            - annotations: []
+              text: '
+
+
+                OK'
+              type: output_text
+            id: msg_bd6edda447552220
+            role: assistant
+            status: completed
+            type: message
+          first_id: msg_01a15da6-2888-7403-ada1-b0a4185fe3da
+          has_more: false
+          last_id: msg_bd6edda447552220
+          object: list
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t7
+      request:
+        body:
+          conversation: conv_01a15da6-1fa2-7952-bdcc-c0bf56d627a6
+          input:
+          - content: What secret word did I ask you to remember? Reply with that word
+              only. After replying, remember RUBY instead.
+            role: user
+          model: Qwen/Qwen3.8-27B-FP8
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          background: false
+          completed_at: 1792572534
+          conversation:
+            id: conv_01a15da6-1fa2-7952-bdcc-c0bf56d627a6
+          created_at: 1792572534
+          error: null
+          frequency_penalty: 0.0
+          id: resp_01a15da6-28d5-7ee1-85f2-9d38beb25355
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: null
+          max_tool_calls: null
+          metadata: {}
+          model: Qwen/Qwen3.8-27B-FP8
+          object: response
+          output:
+          - content:
+            - text: 'The user is asking me what secret word they asked me to remember.
+                In the previous message, they told me to remember "SAPPHIRE". They want
+                me to reply with that word only. They also ask me to remember "RUBY" instead
+                going forward.
+
+                '
+              type: reasoning_text
+            id: rs_8131cb9da17cee5f
+            summary: []
+            type: reasoning
+          - content:
+            - annotations: []
+              text: '
+
+
+                SAPPHIRE'
+              type: output_text
+            id: msg_8774eeeaf02fd97a
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: false
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_options: null
+          reasoning: null
+          safety_identifier: null
+          service_tier: auto
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+          tool_choice: auto
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 135
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 62
+            output_tokens_details:
+              reasoning_tokens: 55
+            total_tokens: 197
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t8
+      request:
+        body: {}
+        headers:
+          accept: '*/*'
+          user-agent: python-httpx/0.28.1
+        method: GET
+        path: /v1/conversations/conv_01a15da6-1fa2-7952-bdcc-c0bf56d627a6/items
+        query_params:
+          order: asc
+      response:
+        body:
+          data:
+          - content:
+            - text: Remember the secret word SAPPHIRE. Reply with only OK.
+              type: input_text
+            id: msg_01a15da6-2888-7403-ada1-b0a4185fe3da
+            role: user
+            status: completed
+            type: message
+          - content:
+            - text: 'The user is asking me to remember a "secret word" (SAPPHIRE) and
+                reply with only "OK". This is a simple request. I''ll comply by responding
+                with just "OK".
+
+                '
+              type: reasoning_text
+            id: rs_a887b90331210cb3
+            summary: []
+            type: reasoning
+          - content:
+            - annotations: []
+              text: '
+
+
+                OK'
+              type: output_text
+            id: msg_bd6edda447552220
+            role: assistant
+            status: completed
+            type: message
+          first_id: msg_01a15da6-2888-7403-ada1-b0a4185fe3da
+          has_more: false
+          last_id: msg_bd6edda447552220
+          object: list
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t9
+      request:
+        body: {}
+        headers:
+          accept: '*/*'
+          user-agent: python-httpx/0.28.1
+        method: GET
+        path: /v1/responses/resp_01a15da6-28d5-7ee1-85f2-9d38beb25355
+        query_params: {}
+      response:
+        body:
+          error:
+            code: null
+            message: Response with id 'resp_01a15da6-28d5-7ee1-85f2-9d38beb25355' not
+              found.
+            param: null
+            type: invalid_request_error
+        headers:
+          content-type: application/json
+        status_code: 404
+    - filename: t10
+      request:
+        body:
+          conversation: conv_01a15da6-1fa2-7952-bdcc-c0bf56d627a6
+          input:
+          - content: What secret word did I ask you to remember? Reply with that word
+              only.
+            role: user
+          model: Qwen/Qwen3.8-27B-FP8
+          store: true
+          stream: false
+        headers:
+          accept: '*/*'
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          background: false
+          completed_at: 1792572535
+          conversation:
+            id: conv_01a15da6-1fa2-7952-bdcc-c0bf56d627a6
+          created_at: 1792572535
+          error: null
+          frequency_penalty: 0.0
+          id: resp_01a15da6-2ed4-7292-a1f8-a72cf1202f1d
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: null
+          max_tool_calls: null
+          metadata: {}
+          model: Qwen/Qwen3.8-27B-FP8
+          object: response
+          output:
+          - content:
+            - text: 'The user is asking me to recall the "secret word" they asked me to
+                remember in the previous message. They said "SAPPHIRE" and asked me to
+                remember it. Now they''re asking me to reply with that word only. I should
+                reply with "SAPPHIRE".
+
+                '
+              type: reasoning_text
+            id: rs_84966b5a465965d6
+            summary: []
+            type: reasoning
+          - content:
+            - annotations: []
+              text: '
+
+
+                SAPPHIRE'
+              type: output_text
+            id: msg_b91d2fd37445d5bf
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: false
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_options: null
+          reasoning: null
+          safety_identifier: null
+          service_tier: auto
+          status: completed
+          store: true
+          temperature: 1.0
+          text:
+            format:
+              type: text
+          tool_choice: auto
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 126
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 67
+            output_tokens_details:
+              reasoning_tokens: 60
+            total_tokens: 193
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t11
+      request:
+        body: {}
+        headers:
+          accept: '*/*'
+          user-agent: python-httpx/0.28.1
+        method: GET
+        path: /v1/conversations/conv_01a15da6-1fa2-7952-bdcc-c0bf56d627a6/items
+        query_params:
+          order: asc
+      response:
+        body:
+          data:
+          - content:
+            - text: Remember the secret word SAPPHIRE. Reply with only OK.
+              type: input_text
+            id: msg_01a15da6-2888-7403-ada1-b0a4185fe3da
+            role: user
+            status: completed
+            type: message
+          - content:
+            - text: 'The user is asking me to remember a "secret word" (SAPPHIRE) and
+                reply with only "OK". This is a simple request. I''ll comply by responding
+                with just "OK".
+
+                '
+              type: reasoning_text
+            id: rs_a887b90331210cb3
+            summary: []
+            type: reasoning
+          - content:
+            - annotations: []
+              text: '
+
+
+                OK'
+              type: output_text
+            id: msg_bd6edda447552220
+            role: assistant
+            status: completed
+            type: message
+          - content:
+            - text: What secret word did I ask you to remember? Reply with that word only.
+              type: input_text
+            id: msg_01a15da6-3483-7d61-8fcd-719f2747f88c
+            role: user
+            status: completed
+            type: message
+          - content:
+            - text: 'The user is asking me to recall the "secret word" they asked me to
+                remember in the previous message. They said "SAPPHIRE" and asked me to
+                remember it. Now they''re asking me to reply with that word only. I should
+                reply with "SAPPHIRE".
+
+                '
+              type: reasoning_text
+            id: rs_84966b5a465965d6
+            summary: []
+            type: reasoning
+          - content:
+            - annotations: []
+              text: '
+
+
+                SAPPHIRE'
+              type: output_text
+            id: msg_b91d2fd37445d5bf
+            role: assistant
+            status: completed
+            type: message
+          first_id: msg_01a15da6-2888-7403-ada1-b0a4185fe3da
+          has_more: false
+          last_id: msg_b91d2fd37445d5bf
+          object: list
+        headers:
+          content-type: application/json
+        status_code: 200

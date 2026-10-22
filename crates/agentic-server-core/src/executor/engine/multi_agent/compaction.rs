@@ -1,5 +1,6 @@
 //! Explicit root compaction uses the same safe-prefix plan as automatic compaction.
 use super::{MultiAgentRun, invalid, registry_error, restore_agents};
+use crate::executor::inference::UpstreamHeaders;
 use crate::executor::{
     error::ExecutorResult,
     multi_agent::{
@@ -19,7 +20,7 @@ impl MultiAgentRun {
     pub(crate) async fn compact_root(
         ctx: &mut RequestContext,
         exec: &ExecutionContext,
-        auth: Option<&str>,
+        auth: Option<&UpstreamHeaders>,
     ) -> ExecutorResult<(CompactionItem, ResponseUsage, Option<String>)> {
         let budget = ExecutorResponseBudget::with_limit(exec.responses_config.max_retained_bytes);
         let mut restored = restore_agents(ctx, exec, &budget)?;

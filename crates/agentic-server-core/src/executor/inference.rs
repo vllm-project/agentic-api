@@ -16,6 +16,23 @@ use crate::config::DEFAULT_MAX_UPSTREAM_SSE_LINE_BYTES;
 use crate::executor::error::{ExecutorError, ExecutorResult, ResourceLimit};
 use crate::proxy::processed_response_headers;
 
+/// Request-scoped upstream headers. The HTTP handler supplies the proxy's filtered
+/// end-to-end headers; existing embedded and WebSocket callers can supply a bearer token.
+#[derive(Clone)]
+pub(crate) enum UpstreamHeaders {
+    Bearer(String),
+    Forwarded(http::HeaderMap),
+}
+
+impl UpstreamHeaders {
+    fn transport_parts(&self) -> (Option<&str>, Option<&http::HeaderMap>) {
+        match self {
+            Self::Bearer(token) => (Some(token), None),
+            Self::Forwarded(headers) => (None, Some(headers)),
+        }
+    }
+}
+
 /// SSE stream of raw lines sent to the client (`data: …\n\n` per event).
 pub type BoxStream = std::pin::Pin<Box<dyn Stream<Item = String> + Send>>;
 
@@ -196,17 +213,26 @@ pub(super) async fn fetch_response_json(
     client: &reqwest::Client,
     auth: Option<&str>,
 ) -> ExecutorResult<String> {
-    fetch_response_json_limited(upstream_json, url, client, auth, DEFAULT_MAX_UPSTREAM_JSON_BYTES).await
+    let auth = auth.map(|token| UpstreamHeaders::Bearer(token.to_owned()));
+    fetch_response_json_limited(
+        upstream_json,
+        url,
+        client,
+        auth.as_ref(),
+        DEFAULT_MAX_UPSTREAM_JSON_BYTES,
+    )
+    .await
 }
 
 pub(super) async fn fetch_response_json_limited(
     upstream_json: String,
     url: &str,
     client: &reqwest::Client,
-    auth: Option<&str>,
+    auth: Option<&UpstreamHeaders>,
     max_upstream_json_bytes: usize,
 ) -> ExecutorResult<String> {
-    let resp = send_request(client, url, upstream_json, auth, None, Duration::ZERO).await?;
+    let (auth, headers) = auth.map_or((None, None), UpstreamHeaders::transport_parts);
+    let resp = send_request(client, url, upstream_json, auth, headers, Duration::ZERO).await?;
     // Preserve the reqwest::Error as the typed source (NetworkError).
     response_text_limited(resp, Duration::ZERO, max_upstream_json_bytes).await
 }
@@ -251,6 +277,7 @@ pub fn call_inference(
     )
 }
 
+/// Stream upstream SSE lines with a configured maximum line size.
 pub fn call_inference_limited(
     upstream_json: String,
     url: String,
@@ -259,13 +286,32 @@ pub fn call_inference_limited(
     chunk_timeout: Duration,
     max_sse_line_bytes: usize,
 ) -> impl Stream<Item = Result<String, ExecutorError>> + Send + 'static {
+    call_inference_with_headers_limited(
+        upstream_json,
+        url,
+        client,
+        auth.map(UpstreamHeaders::Bearer),
+        chunk_timeout,
+        max_sse_line_bytes,
+    )
+}
+
+pub(super) fn call_inference_with_headers_limited(
+    upstream_json: String,
+    url: String,
+    client: Arc<reqwest::Client>,
+    auth: Option<UpstreamHeaders>,
+    chunk_timeout: Duration,
+    max_sse_line_bytes: usize,
+) -> impl Stream<Item = Result<String, ExecutorError>> + Send + 'static {
     stream! {
+        let (auth, headers) = auth.as_ref().map_or((None, None), UpstreamHeaders::transport_parts);
         let resp = match send_request(
             &client,
             &url,
             upstream_json,
-            auth.as_deref(),
-            None,
+            auth,
+            headers,
             chunk_timeout,
         ).await {
             Ok(r) => r,

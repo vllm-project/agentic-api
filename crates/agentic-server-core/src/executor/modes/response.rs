@@ -37,7 +37,7 @@ impl ResponseHandler {
     /// Retrieves the terminal payload of a response created with `store=true`.
     ///
     /// # Errors
-    /// Returns a storage error for missing IDs or unavailable storage, and a conflict
+    /// Returns `ResponseNotFound` for missing IDs, a storage error for unavailable storage, and a conflict
     /// for older records that contain continuation history but no response snapshot.
     pub async fn retrieve(&self, response_id: &str) -> ExecutorResult<ResponsePayload> {
         let stored = self.store.get(response_id).await?;

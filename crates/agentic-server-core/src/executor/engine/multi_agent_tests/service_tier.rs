@@ -166,7 +166,7 @@ async fn final_root_tier_controls_json_sse_and_stored_snapshot() {
                 if status == "failed" {
                     assert!(matches!(
                         exec.resp_handler.retrieve(&payload.id).await,
-                        Err(ExecutorError::Storage(crate::StorageError::NotFound { .. }))
+                        Err(ExecutorError::Storage(crate::StorageError::ResponseNotFound { .. }))
                     ));
                 } else {
                     let stored = exec.resp_handler.retrieve(&payload.id).await.unwrap();

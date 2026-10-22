@@ -1,4 +1,5 @@
 mod estimate;
+use crate::executor::inference::UpstreamHeaders;
 pub(crate) use estimate::{estimate_history_tokens, estimate_input_tokens};
 
 mod carry_over;
@@ -111,6 +112,7 @@ fn request_payload(model: String, input: ResponsesInput, instructions: Option<St
         context_management: None,
         background: None,
         prompt: None,
+        extra: HashMap::new(),
     }
 }
 
@@ -124,7 +126,7 @@ pub(crate) async fn compact_items(
     request: &RequestPayload,
     input: ResponsesInput,
     exec_ctx: &ExecutionContext,
-    auth: Option<&str>,
+    auth: Option<&UpstreamHeaders>,
 ) -> ExecutorResult<(Vec<InputItem>, ResponseUsage, Option<String>)> {
     compact_items_with_trigger(request, input, exec_ctx, auth, CompactionTrigger::InputItem).await
 }
@@ -136,7 +138,7 @@ async fn compact_items_with_trigger(
     request: &RequestPayload,
     input: ResponsesInput,
     exec_ctx: &ExecutionContext,
-    auth: Option<&str>,
+    auth: Option<&UpstreamHeaders>,
     trigger: CompactionTrigger,
 ) -> ExecutorResult<(Vec<InputItem>, ResponseUsage, Option<String>)> {
     let timer = exec_ctx.metrics.stage(Stage::Compaction);
@@ -149,7 +151,7 @@ async fn summarize_items(
     request: &RequestPayload,
     input: ResponsesInput,
     exec_ctx: &ExecutionContext,
-    auth: Option<&str>,
+    auth: Option<&UpstreamHeaders>,
 ) -> ExecutorResult<(Vec<InputItem>, ResponseUsage, Option<String>)> {
     request.validate_prompt_cache_options(exec_ctx.responses_config.prompt_cache_options_supported)?;
     let original_items = Vec::from(input);
@@ -215,7 +217,7 @@ async fn summarize_items(
 pub(crate) async fn maybe_compact_context(
     ctx: &mut RequestContext,
     exec_ctx: &ExecutionContext,
-    auth: Option<&str>,
+    auth: Option<&UpstreamHeaders>,
 ) -> ExecutorResult<Option<ResponseUsage>> {
     let threshold = ctx
         .enriched_request
@@ -306,6 +308,7 @@ pub async fn compact_response(
     exec_ctx: &ExecutionContext,
     auth: Option<&str>,
 ) -> ExecutorResult<CompactedResponse> {
+    let auth = auth.map(|token| UpstreamHeaders::Bearer(token.to_owned()));
     if request.input.is_none() && request.previous_response_id.is_none() {
         return Err(ExecutorError::InvalidRequest(
             "compaction requires input or previous_response_id".to_owned(),
@@ -354,7 +357,7 @@ pub async fn compact_response(
         &ctx.enriched_request,
         input,
         exec_ctx,
-        auth,
+        auth.as_ref(),
         CompactionTrigger::Explicit,
     )
     .await?;

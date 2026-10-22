@@ -1,6 +1,7 @@
 //! Streaming ownership for transports that retain delivery after public completion.
 use super::run_until_gateway_tools_complete;
 use super::streaming::StreamFailureContext;
+use crate::executor::inference::UpstreamHeaders;
 use crate::executor::{
     error::{ExecutorError, ExecutorResult},
     gateway_accumulator::STREAM_EVENT_BUFFER,
@@ -38,7 +39,7 @@ pub struct PreparedRetainedResponse {
     pub(super) ctx: Option<RequestContext>,
     pub(super) tools: Option<ToolSearchState>,
     pub(super) exec_ctx: Arc<ExecutionContext>,
-    pub(super) client_auth: Option<String>,
+    pub(super) client_auth: Option<UpstreamHeaders>,
     pub(super) max_stream_event_bytes: usize,
     pub(super) execution: Option<ExecutionSpan>,
     pub(super) steering_ids: Vec<String>,
@@ -184,7 +185,7 @@ impl ResponseRunOwner {
     async fn execute(
         mut pipeline: AgentPipeline,
         exec: &ExecutionContext,
-        auth: Option<&str>,
+        auth: Option<&UpstreamHeaders>,
         sink: &ResponseEventSink,
         execution: &mut ExecutionSpan,
     ) -> ExecutorResult<()> {
@@ -270,7 +271,7 @@ pub(super) fn start(
     mut ctx: RequestContext,
     tools: Option<ToolSearchState>,
     exec: Arc<ExecutionContext>,
-    auth: Option<String>,
+    auth: Option<UpstreamHeaders>,
     max_bytes: usize,
     mut execution: ExecutionSpan,
     mode: ResponseStartMode,
@@ -329,7 +330,7 @@ pub(super) fn start(
                     activation = activated => activation.map_err(|_| ExecutorError::StreamError("response activation was abandoned".into()))?,
                 }
             }
-            Box::pin(ResponseRunOwner::execute(pipeline, &exec, auth.as_deref(), &worker_sink, &mut execution)).await
+            Box::pin(ResponseRunOwner::execute(pipeline, &exec, auth.as_ref(), &worker_sink, &mut execution)).await
         }).await;
         if let Err(error) = &result {
             worker_sink.mark_failed();

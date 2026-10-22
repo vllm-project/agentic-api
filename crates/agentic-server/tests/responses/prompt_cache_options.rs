@@ -51,7 +51,7 @@ async fn json_parity_and_durable_continuation_preserve_request_scoped_options() 
         assert_eq!(response.status(), StatusCode::OK);
         let _: Value = response.json().await.unwrap();
     }
-    // Raw null survives; typed null is omitted. Neither path supplies defaults.
+    // Null is omitted for both store values; neither supplies defaults.
     for store in [false, true] {
         let response = client
             .post(format!("{gateway_url}/v1/responses"))
@@ -80,7 +80,7 @@ async fn json_parity_and_durable_continuation_preserve_request_scoped_options() 
         assert_eq!(request["input"][0]["content"], "parent context");
         assert!(request.get("previous_response_id").is_none());
     }
-    assert_eq!(requests[11].get("prompt_cache_options"), Some(&Value::Null));
+    assert!(requests[11].get("prompt_cache_options").is_none());
     assert!(requests[12].get("prompt_cache_options").is_none());
     gateway.abort();
     model.abort();
@@ -144,11 +144,8 @@ async fn invalid_and_unqualified_typed_options_fail_before_upstream_or_storage()
         }
         if !supported {
             for store in [false, true] {
-                let mut request = json!({"model":"test","input":"hi","store":store,
+                let request = json!({"model":"test","input":"hi","store":store,
                     "prompt_cache_options":{"mode":"explicit"},"prompt_cache_retention":"24h"});
-                if !store {
-                    request["previous_response_id"] = json!("resp_missing");
-                }
                 let response = reqwest::Client::new()
                     .post(format!("{gateway_url}/v1/responses"))
                     .json(&request)
@@ -201,7 +198,7 @@ async fn review_combined_cache_controls_are_forwarded_independently() {
 }
 
 #[tokio::test]
-async fn review_direct_passthrough_leaves_cache_options_to_the_upstream() {
+async fn stateless_cache_options_are_validated_before_upstream() {
     let values = [
         json!({"prewarm":true}),
         json!({"comparison_response_id":"resp_compare"}),
@@ -232,18 +229,32 @@ async fn review_direct_passthrough_leaves_cache_options_to_the_upstream() {
                 .send()
                 .await
                 .unwrap();
-            assert_eq!(response.status(), StatusCode::OK, "{options}");
+            let accepted = options.is_null() || (supported && *options == json!({}));
+            assert_eq!(
+                response.status(),
+                if accepted {
+                    StatusCode::OK
+                } else {
+                    StatusCode::BAD_REQUEST
+                },
+                "{options}"
+            );
             let body = response.text().await.unwrap();
-            if stream {
+            if stream && accepted {
                 assert!(body.contains("response.completed"));
             }
         }
         let requests = captured.lock().await;
-        assert_eq!(requests.len(), values.len());
-        for (request, options) in requests.iter().zip(&values) {
-            assert_eq!(request.get("prompt_cache_options"), Some(options));
-            assert_eq!(request["prompt_cache_retention"], "24h");
+        assert_eq!(requests.len(), if supported { 2 } else { 1 });
+        if supported {
+            assert_eq!(requests[0]["prompt_cache_options"], json!({}));
         }
+        assert!(requests.last().unwrap().get("prompt_cache_options").is_none());
+        assert!(
+            requests
+                .iter()
+                .all(|request| request["prompt_cache_retention"] == "24h")
+        );
         gateway.abort();
         model.abort();
     }
@@ -385,7 +396,7 @@ async fn review_sse_options_are_consistent_from_created_to_completed_and_storage
 }
 
 #[tokio::test]
-async fn direct_cache_options_preserve_the_original_json_bytes() {
+async fn stateless_cache_options_reject_duplicate_fields() {
     let (url, captured, model) = spawn_mock_vllm_json_capture_bytes().await;
     let fixture = storage_backed_state(&url).await;
     let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
@@ -398,9 +409,8 @@ async fn direct_cache_options_preserve_the_original_json_bytes() {
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    let _ = response.text().await.unwrap();
-    assert_eq!(captured.lock().await[0].as_ref(), wire.as_bytes());
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(captured.lock().await.is_empty());
     gateway.abort();
     model.abort();
 }

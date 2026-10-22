@@ -141,13 +141,26 @@ default. These routes are stateless pass-through, with the same authentication a
 
 ### `POST /v1/responses`
 
-HTTP Responses requests use the OpenAI-compatible Responses shape. Requests
-with `store=true`, `previous_response_id`, `conversation`, any non-function
-tool, an async tool or replayed async call, `multi_agent.enabled`, tool-search state,
-compaction input, or `context_management` run through the executor. Other stateless `store=false`
-requests are passed directly to the configured vLLM backend. A `store=false`
-request that continues a stored response is hydrated from that response but is
-not stored itself: its id can be neither retrieved nor used as `previous_response_id`.
+HTTP Responses requests always use the typed executor for input/tool normalization
+and the tool loop. With `store:false` and no state IDs, clients supply the complete
+item history; the gateway neither rehydrates nor persists the turn. A stored
+`previous_response_id` or explicit `conversation` still supplies prior history,
+but `store:false` does not store the response or append conversation items. An
+unstored response ID cannot be retrieved or used for HTTP continuation.
+
+Unmodeled top-level provider parameters, such as `chat_template_kwargs` and `top_k`,
+are forwarded unchanged on each inference round. Their interpretation belongs to
+the upstream provider. Known request fields still use the gateway's validation and
+normalization rules. `store:false` is also forwarded to the upstream on every
+inference round. Caller authentication and end-to-end routing headers are preserved;
+hop-by-hop headers are filtered. An upstream HTTP error before the first streaming
+event retains its status, body, and headers, including `Retry-After`.
+
+Full upstream body compatibility remains a separate capability: typed execution
+rejects unsupported file/audio input and text formats, prepares plaintext reasoning
+for vLLM, and rejects encrypted-only reasoning that vLLM cannot replay. Reasoning
+context and compatible opaque state support are tracked in
+[#444](https://github.com/vllm-project/agentic-api/issues/444).
 
 Executor-backed requests accept at most 64 MCP server declarations and 128
 discovered MCP tools. MCP discovery metadata shares the request's retained
@@ -399,14 +412,10 @@ checked on October 2, 2026. That SDK declares `cache_write_tokens` as a required
 policy for other upstreams, rather than an allowance in that OpenAI contract.
 Availability of these counters depends on the upstream.
 
-Direct HTTP requests pass through without typed response assembly. Requests with
-`store:true`, `previous_response_id`, tool-search state, or a feature requiring
-in-process execution use the executor and typed accounting. Thus `store:false`
-alone does not guarantee a direct request.
+HTTP Responses requests use typed response assembly and accounting for both `store` values.
 
 | Path | Cache reads | Cache writes |
 | --- | --- | --- |
-| Direct HTTP JSON/SSE | Upstream value passes through | Upstream value and field presence pass through, including `null` |
 | Typed HTTP JSON/SSE | Preserved for a single inference; accumulated across inference rounds | Accumulated when reported; explicit `0` is retained |
 | WebSocket | Same typed accounting, scoped to the current response | Same typed accounting; a continuation does not carry over its parent's usage |
 | Stored response retrieval | Returns the terminal response snapshot without inference | Preserves the terminal value or omission |
@@ -472,7 +481,7 @@ so you can continue with `previous_response_id` without a database. After reconn
 replay the full item history or a compacted window; an unstored response ID returns
 `400 previous_response_not_found`. With `store: true`, an uncached response can be
 loaded from durable storage. Explicit `conversation` requests retain the durable
-Conversations API behavior.
+Conversations API behavior: `store:false` reads existing history without appending the new turn.
 
 A failed ordinary same-lane continuation evicts its referenced cached parent. Failed forks
 preserve the source lane's parent. Admission rejections (429) preserve existing

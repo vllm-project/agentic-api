@@ -140,10 +140,9 @@ Extract text from PDFs and other documents client-side and send it as `input_tex
 `input_image`. The same validation applies to files restored from response/conversation history, explicit and
 automatic compaction, `compaction_trigger`, and WebSocket `generate: false` requests.
 
-Eligible raw `store: false` proxy requests, including ones with inline text files, remain byte-transparent and
-leave file support to the upstream; the gateway inlines text files only on paths that already require typed
-execution. Merely setting `store: false` does not select the raw proxy path when history or an in-process feature
-requires typed execution.
+HTTP `store: false` requests use the same typed executor, inline text-file normalization, and file-input validation.
+Without `previous_response_id` or `conversation`, clients supply the complete item history in `input`; the gateway
+does not load or persist state.
 Structured function/custom tool call outputs containing files retain their existing pass-through behavior.
 
 API `input_file` content is distinct from mentioning a local filename in Codex or asking a client-executed read tool

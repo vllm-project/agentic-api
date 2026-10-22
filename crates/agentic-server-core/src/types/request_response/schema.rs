@@ -1,7 +1,9 @@
 use super::{
     MultiAgentConfig, PromptCacheOptions, PromptCacheRetention, RequestPayload, ResponsePayload, ResponseTextFormat,
 };
-use utoipa::openapi::schema::{AllOfBuilder, ArrayBuilder, ObjectBuilder, OneOfBuilder, SchemaType, Type};
+use utoipa::openapi::schema::{
+    AdditionalProperties, AllOfBuilder, ArrayBuilder, ObjectBuilder, OneOfBuilder, SchemaType, Type,
+};
 use utoipa::openapi::{Ref, RefOr};
 
 /// Helper to create conversation object schema: `{"id": "string"}`.
@@ -79,6 +81,7 @@ impl utoipa::PartialSchema for RequestPayload {
             .item(conversation_object_schema())
             .item(null_type());
         ObjectBuilder::new()
+            .additional_properties(Some(AdditionalProperties::FreeForm(true)))
             .property("model", str_type())
             .required("model")
             .property("input", Ref::from_schema_name("ResponsesInput"))

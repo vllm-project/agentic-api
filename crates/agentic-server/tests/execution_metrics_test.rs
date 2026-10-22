@@ -194,8 +194,16 @@ async fn http_terminal_paths_each_finalize_once() {
         .send()
         .await
         .unwrap();
-    assert_eq!(failed.status(), 200, "the failure is delivered in-band");
-    assert!(failed.text().await.unwrap().contains("event: error"));
+    assert_eq!(
+        failed.status(),
+        502,
+        "failure before the first SSE event preserves HTTP status"
+    );
+    let error: Value = failed.json().await.unwrap();
+    assert_eq!(
+        error,
+        json!({"error":{"message":"upstream secret","type":"server_error"}})
+    );
 
     let blocking = client
         .post(&url)
@@ -206,14 +214,14 @@ async fn http_terminal_paths_each_finalize_once() {
     assert_eq!(blocking.status(), 200);
     blocking.bytes().await.unwrap();
 
-    let proxied = client
+    let stateless = client
         .post(&url)
         .json(&request("hello", false, false))
         .send()
         .await
         .unwrap();
-    assert_eq!(proxied.status(), 200);
-    proxied.bytes().await.unwrap();
+    assert_eq!(stateless.status(), 200);
+    stateless.bytes().await.unwrap();
 
     let mut hanging = client
         .post(&url)
@@ -236,15 +244,19 @@ async fn http_terminal_paths_each_finalize_once() {
     assert_eq!(outcome(&points, "completed"), 3);
     assert_eq!(outcome(&points, "failed"), 1);
     assert_eq!(outcome(&points, "cancelled"), 1);
-    assert_eq!(delivery(&points, "delivered"), 4, "the in-band failure was delivered");
+    assert_eq!(delivery(&points, "delivered"), 3);
+    assert_eq!(delivery(&points, "not_started"), 1, "the failed stream never started");
     assert_eq!(delivery(&points, "disconnected"), 1);
     assert_eq!(
         total(
             &points,
             "agentic.execution.count",
-            &[("agentic.route", "proxy"), ("agentic.execution.outcome", "completed")]
+            &[
+                ("agentic.route", "executor"),
+                ("agentic.execution.outcome", "completed")
+            ]
         ),
-        1
+        3
     );
     assert_eq!(
         total(

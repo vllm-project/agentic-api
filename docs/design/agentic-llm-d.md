@@ -13,7 +13,7 @@ serve it. Cache-aware scoring can still prefer the engine that handled the previ
 ## The two steps
 
 `hydrate` takes the client's request, resolves `previous_response_id` against storage, and returns two things: the
-upstream request body with the history inlined and every continuation and storage field removed, and a sealed context
+upstream request body with the history inlined and continuation fields removed and `store:false` preserved, and a sealed context
 describing the turn. The caller forwards the body to a model unchanged and echoes the context back.
 
 `persist` takes that context together with the response the model produced, either a complete JSON body or the SSE

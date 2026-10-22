@@ -15,6 +15,14 @@ pub enum StorageError {
     #[error("not found: {resource_type} with id '{id}'")]
     NotFound { resource_type: String, id: String },
 
+    /// Retrieval cannot find a durably stored response.
+    #[error("Response with id '{id}' not found.")]
+    ResponseNotFound { id: String },
+
+    /// Continuation cannot resolve the requested response checkpoint.
+    #[error("Previous response with id '{id}' not found.")]
+    PreviousResponseNotFound { id: String },
+
     /// A pagination cursor no longer identifies an item in the conversation.
     #[error("No item found with id '{id}'")]
     ItemCursorNotFound { id: String },
@@ -90,7 +98,13 @@ impl StorageError {
     /// Returns `true` if this error is "not found".
     #[must_use]
     pub fn is_not_found(&self) -> bool {
-        matches!(self, Self::NotFound { .. } | Self::ItemCursorNotFound { .. })
+        matches!(
+            self,
+            Self::NotFound { .. }
+                | Self::ResponseNotFound { .. }
+                | Self::PreviousResponseNotFound { .. }
+                | Self::ItemCursorNotFound { .. }
+        )
     }
 
     /// Returns `true` if this error is "not configured".
@@ -119,6 +133,9 @@ impl StorageError {
     pub fn not_found_details(&self) -> Option<(String, String)> {
         match self {
             Self::NotFound { resource_type, id } => Some((resource_type.clone(), id.clone())),
+            Self::ResponseNotFound { id } | Self::PreviousResponseNotFound { id } => {
+                Some(("Response".to_owned(), id.clone()))
+            }
             _ => None,
         }
     }

@@ -59,7 +59,7 @@ pub(super) fn is_steering(text: &str) -> bool {
 }
 
 pub(super) fn parse_ws_request(text: &str) -> Result<WsRequest, WsRequestParseError> {
-    let value = serde_json::from_str::<Value>(text).map_err(|error| WsRequestParseError {
+    let mut value = serde_json::from_str::<Value>(text).map_err(|error| WsRequestParseError {
         error: WsError::InvalidJson(error),
         previous_response_id: None,
         stream_id: None,
@@ -93,6 +93,10 @@ pub(super) fn parse_ws_request(text: &str) -> Result<WsRequest, WsRequestParseEr
         .get("previous_response_id")
         .and_then(Value::as_str)
         .map(str::to_owned);
+    // The event discriminator is transport metadata, not a provider extension.
+    if let Some(fields) = value.as_object_mut() {
+        fields.remove("type");
+    }
     let create = serde_json::from_value::<ResponseCreateRequest>(value).map_err(|error| WsRequestParseError {
         error: WsError::from(ExecutorError::from(error)),
         previous_response_id,

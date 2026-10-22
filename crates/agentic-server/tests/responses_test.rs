@@ -1,6 +1,10 @@
 mod common;
 #[path = "responses/prompt_cache_options.rs"]
 mod prompt_cache_options;
+#[path = "responses/stateless.rs"]
+mod stateless;
+#[path = "responses/stateless_cassettes.rs"]
+mod stateless_cassettes;
 
 use axum::Router;
 use axum::body::Bytes;
@@ -449,27 +453,6 @@ async fn spawn_mock_vllm_json_capture_bytes() -> (String, Arc<Mutex<Vec<Bytes>>>
     (format!("http://{addr}"), requests, handle)
 }
 
-/// Spawn a mock vLLM that returns an SSE stream.
-async fn spawn_mock_vllm_sse() -> (String, tokio::task::JoinHandle<()>) {
-    let app = Router::new().route(
-        "/v1/responses",
-        post(|| async {
-            axum::response::Response::builder()
-                .status(200)
-                .header("Content-Type", "text/event-stream; charset=utf-8")
-                .body(axum::body::Body::from(
-                    "data: {\"type\":\"response.done\"}\n\ndata: [DONE]\n\n",
-                ))
-                .unwrap()
-                .into_response()
-        }),
-    );
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let handle = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    (format!("http://{addr}"), handle)
-}
-
 async fn spawn_tool_search_sse_sequence(
     responses: Vec<String>,
 ) -> (String, Arc<Mutex<Vec<serde_json::Value>>>, tokio::task::JoinHandle<()>) {
@@ -749,7 +732,7 @@ async fn test_http_sse_tool_search_three_request_continuation_stays_public() {
 }
 
 #[tokio::test]
-async fn test_store_false_proxies_json_to_vllm() {
+async fn test_store_false_executes_json_without_storage() {
     // Arrange
     let (llm_url, _h1) = spawn_mock_vllm_json().await;
     let (gw_url, _h2) = spawn_gateway(test_state(&test_config(&llm_url))).await;
@@ -762,10 +745,11 @@ async fn test_store_false_proxies_json_to_vllm() {
         .await
         .unwrap();
 
-    // Assert — proxy forwards vLLM response verbatim; mock_id is not resp_-prefixed
+    // The gateway assembles the response even when storage is disabled.
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.unwrap();
-    assert_eq!(body["id"], "mock_id");
+    assert!(body["id"].as_str().unwrap().starts_with("resp_"));
+    assert_eq!(body["store"], false);
 }
 
 #[cfg(not(feature = "embedded-code-interpreter"))]
@@ -1098,7 +1082,7 @@ async fn test_blocking_tool_search_rejects_invalid_upstream_arguments_as_bad_gat
 }
 
 #[tokio::test]
-async fn test_store_false_proxies_unknown_text_format_verbatim() {
+async fn test_store_false_rejects_unknown_text_format_before_upstream() {
     let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_bytes().await;
     let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
     let request_body = r#"{"model":"test","input":"hi","store":false,"stream":false,"text":{"format":{"type":"provider_format","provider_option":true}}}"#;
@@ -1111,9 +1095,8 @@ async fn test_store_false_proxies_unknown_text_format_verbatim() {
         .await
         .expect("stateless response request");
 
-    assert_eq!(response.status(), StatusCode::OK);
-    let requests = requests.lock().await;
-    assert_eq!(requests.as_slice(), [Bytes::from_static(request_body.as_bytes())]);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(requests.lock().await.is_empty());
 }
 
 #[tokio::test]
@@ -1255,7 +1238,7 @@ async fn test_stateful_request_forwards_reasoning_configuration() {
 }
 
 #[tokio::test]
-async fn test_prompt_cache_key_matches_pass_through_and_typed_execution() {
+async fn test_prompt_cache_key_matches_stateless_and_stored_execution() {
     let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
     let fixture = storage_backed_state(&llm_url).await;
     let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
@@ -1305,7 +1288,7 @@ async fn test_prompt_cache_key_matches_pass_through_and_typed_execution() {
 }
 
 #[tokio::test]
-async fn test_service_tier_matches_pass_through_and_typed_execution() {
+async fn test_service_tier_matches_stateless_and_stored_execution() {
     let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_body(serde_json::json!({
         "id": "mock_id",
         "object": "response",
@@ -1376,7 +1359,7 @@ async fn test_service_tier_matches_pass_through_and_typed_execution() {
 }
 
 #[tokio::test]
-async fn test_prompt_cache_key_matches_pass_through_and_typed_sse_execution() {
+async fn test_prompt_cache_key_matches_stateless_and_stored_sse_execution() {
     let (llm_url, requests, llm) = spawn_tool_search_sse_sequence(vec![final_message_sse(); 2]).await;
     let fixture = storage_backed_state(&llm_url).await;
     let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
@@ -1418,7 +1401,7 @@ async fn test_prompt_cache_key_matches_pass_through_and_typed_sse_execution() {
 }
 
 #[tokio::test]
-async fn test_service_tier_matches_pass_through_and_typed_sse_execution() {
+async fn test_service_tier_matches_stateless_and_stored_sse_execution() {
     let response = final_message_sse().replace(
         "\"status\":\"completed\",\"usage\":null",
         "\"status\":\"completed\",\"service_tier\":\"default\",\"usage\":null",
@@ -1458,7 +1441,7 @@ async fn test_service_tier_matches_pass_through_and_typed_sse_execution() {
 }
 
 #[tokio::test]
-async fn test_null_prompt_cache_key_preserves_proxy_body_and_is_omitted_by_executor() {
+async fn test_null_prompt_cache_key_is_omitted_for_both_store_values() {
     let (llm_url, requests, llm) = spawn_mock_vllm_json_capture().await;
     let fixture = storage_backed_state(&llm_url).await;
     let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
@@ -1476,14 +1459,14 @@ async fn test_null_prompt_cache_key_preserves_proxy_body_and_is_omitted_by_execu
     }
     let requests = requests.lock().await;
     assert_eq!(requests.len(), 2);
-    assert_eq!(requests[0].get("prompt_cache_key"), Some(&serde_json::Value::Null));
+    assert!(requests[0].get("prompt_cache_key").is_none());
     assert!(requests[1].get("prompt_cache_key").is_none());
     gateway.abort();
     llm.abort();
 }
 
 #[tokio::test]
-async fn test_max_tool_calls_is_validated_on_proxy_and_executor_routes() {
+async fn test_max_tool_calls_is_validated_for_both_store_values() {
     let (llm_url, requests, llm) = spawn_mock_vllm_json_capture().await;
     let fixture = storage_backed_state(&llm_url).await;
     let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
@@ -1526,12 +1509,11 @@ async fn test_max_tool_calls_is_validated_on_proxy_and_executor_routes() {
         assert_eq!(response.status(), StatusCode::OK);
         bodies.push(response.json::<serde_json::Value>().await.expect("response body"));
     }
-    assert_eq!(bodies[1]["max_tool_calls"], 3, "the executor echoes the request limit");
+    for body in bodies {
+        assert_eq!(body["max_tool_calls"], 3, "the executor echoes the request limit");
+    }
     let requests = requests.lock().await;
-    assert_eq!(
-        requests[0]["max_tool_calls"], 3,
-        "the proxy forwards the request unchanged"
-    );
+    assert!(requests[0].get("max_tool_calls").is_none());
     assert!(
         requests[1].get("max_tool_calls").is_none(),
         "the executor enforces the limit instead of forwarding it"
@@ -1541,7 +1523,7 @@ async fn test_max_tool_calls_is_validated_on_proxy_and_executor_routes() {
 }
 
 #[tokio::test]
-async fn test_unsupported_parameters_are_rejected_by_typed_execution_and_passed_through_directly() {
+async fn test_unsupported_parameters_are_rejected_for_both_store_values() {
     let (llm_url, requests, llm) = spawn_mock_vllm_json_capture().await;
     let fixture = storage_backed_state(&llm_url).await;
     let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
@@ -1562,12 +1544,12 @@ async fn test_unsupported_parameters_are_rejected_by_typed_execution_and_passed_
         ),
     ];
 
-    // Storage, a continuation, or any other executor feature selects typed
-    // execution, which rejects before history lookup or inference.
+    // All HTTP Responses requests validate before inference.
     for route in [
         serde_json::json!({"store": true, "stream": false}),
         serde_json::json!({"store": true, "stream": true}),
-        serde_json::json!({"store": false, "previous_response_id": "resp_missing"}),
+        serde_json::json!({"store": false, "stream": false}),
+        serde_json::json!({"store": false, "stream": true}),
     ] {
         for (param, value, code, message) in &unsupported {
             let mut request = serde_json::json!({"model": "test", "input": "hi"});
@@ -1593,16 +1575,6 @@ async fn test_unsupported_parameters_are_rejected_by_typed_execution_and_passed_
         "typed execution rejects before any upstream call"
     );
 
-    // Direct pass-through keeps the original body; the upstream decides.
-    for (param, value, ..) in &unsupported {
-        let mut request = serde_json::json!({"model": "test", "input": "hi", "store": false});
-        request[*param] = value.clone();
-        let response = post(request.clone()).await.expect("response request");
-        assert_eq!(response.status(), StatusCode::OK, "{request}");
-        let forwarded = requests.lock().await.last().cloned().expect("forwarded request");
-        assert_eq!(forwarded, request, "the direct route forwards the body unchanged");
-    }
-
     // Typed execution accepts the explicit defaults and does not forward them.
     let response = post(serde_json::json!({
         "model": "test", "input": "hi", "store": true, "background": false, "prompt": null
@@ -1620,7 +1592,7 @@ async fn test_unsupported_parameters_are_rejected_by_typed_execution_and_passed_
 }
 
 #[tokio::test]
-async fn test_non_boolean_background_is_forwarded_directly_and_rejected_by_typed_execution() {
+async fn test_non_boolean_background_is_rejected_for_both_store_values() {
     let (llm_url, requests, llm) = spawn_mock_vllm_json_capture().await;
     let fixture = storage_backed_state(&llm_url).await;
     let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
@@ -1634,25 +1606,11 @@ async fn test_non_boolean_background_is_forwarded_directly_and_rejected_by_typed
         (serde_json::json!(0.5), "a decimal number"),
     ];
 
-    // Direct pass-through keeps the original body: the upstream decides.
-    for stream in [false, true] {
-        for (value, _) in &values {
-            let request = serde_json::json!({
-                "model": "test", "input": "hi", "store": false, "stream": stream, "background": value
-            });
-            let response = post(request.clone()).await.expect("response request");
-            assert_eq!(response.status(), StatusCode::OK, "{request}");
-            let forwarded = requests.lock().await.last().cloned().expect("forwarded request");
-            assert_eq!(forwarded, request, "the direct route forwards the body unchanged");
-        }
-    }
-    let forwarded = requests.lock().await.len();
-
     // Typed execution rejects the value before any upstream call.
-    for stream in [false, true] {
+    for (store, stream) in [(false, false), (false, true), (true, false), (true, true)] {
         for (value, kind) in &values {
             let request = serde_json::json!({
-                "model": "test", "input": "hi", "store": true, "stream": stream, "background": value
+                "model": "test", "input": "hi", "store": store, "stream": stream, "background": value
             });
             let response = post(request.clone()).await.expect("response request");
             assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{request}");
@@ -1670,7 +1628,7 @@ async fn test_non_boolean_background_is_forwarded_directly_and_rejected_by_typed
     }
     assert_eq!(
         requests.lock().await.len(),
-        forwarded,
+        0,
         "typed execution never reaches the upstream"
     );
     gateway.abort();
@@ -1876,7 +1834,7 @@ async fn test_gateway_normalization_allows_parallel_tool_calls_true() {
 }
 
 #[tokio::test]
-async fn test_store_false_proxies_large_json_body_to_vllm() {
+async fn test_store_false_executes_large_json_body() {
     // Arrange
     let (llm_url, requests, _h1) = spawn_mock_vllm_json_capture().await;
     let (gw_url, _h2) = spawn_gateway(test_state(&test_config(&llm_url))).await;
@@ -1895,7 +1853,7 @@ async fn test_store_false_proxies_large_json_body_to_vllm() {
         .await
         .unwrap();
 
-    // Assert — the gateway keeps this below-limit request on the proxy path.
+    // The gateway accepts this below-limit request through the executor.
     assert_eq!(resp.status(), 200);
     let requests = requests.lock().await;
     assert_eq!(requests.len(), 1);
@@ -1905,9 +1863,9 @@ async fn test_store_false_proxies_large_json_body_to_vllm() {
 }
 
 #[tokio::test]
-async fn test_store_false_proxies_sse_to_vllm() {
+async fn test_store_false_executes_sse_without_storage() {
     // Arrange
-    let (llm_url, _h1) = spawn_mock_vllm_sse().await;
+    let (llm_url, _requests, _h1) = spawn_tool_search_sse_sequence(vec![final_message_sse()]).await;
     let (gw_url, _h2) = spawn_gateway(test_state(&test_config(&llm_url))).await;
 
     // Act
@@ -1918,7 +1876,7 @@ async fn test_store_false_proxies_sse_to_vllm() {
         .await
         .unwrap();
 
-    // Assert — SSE content-type forwarded from mock vLLM
+    // The executor emits a complete SSE response without requiring storage.
     assert_eq!(resp.status(), 200);
     assert!(
         resp.headers()["content-type"]
@@ -1926,6 +1884,11 @@ async fn test_store_false_proxies_sse_to_vllm() {
             .unwrap()
             .contains("event-stream")
     );
+    let events = sse_events(&resp.text().await.unwrap());
+    let terminal = events.last().unwrap();
+    assert_eq!(terminal["type"], "response.completed");
+    assert_eq!(terminal["response"]["store"], false);
+    assert!(terminal["response"]["id"].as_str().unwrap().starts_with("resp_"));
 }
 
 #[tokio::test]
@@ -1951,7 +1914,7 @@ async fn test_store_true_hides_internal_persistence_error_details() {
 
 #[tokio::test]
 async fn test_streaming_store_true_hides_persistence_details_without_sequence_gap() {
-    let (llm_url, _h1) = spawn_mock_vllm_sse().await;
+    let (llm_url, _requests, _h1) = spawn_tool_search_sse_sequence(vec![final_message_sse()]).await;
     let (gw_url, _h2) = spawn_gateway(test_state(&test_config(&llm_url))).await;
 
     let resp = reqwest::Client::new()
@@ -2649,13 +2612,12 @@ async fn test_http_stored_tool_image_output_survives_continuation() {
 }
 
 #[tokio::test]
-async fn test_store_false_proxies_image_content_verbatim() {
+async fn test_store_false_preserves_image_content_extensions() {
     let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture_bytes().await;
     let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
-    // An unmodeled field on the image part proves the raw proxy forwards bytes
-    // rather than reserializing through the gateway's typed input model.
+    // Typed normalization preserves extension fields on image content parts.
     let request_body = format!(
-        r#"{{"model":"test","store":false,"stream":false,"input":[{{"type":"message","role":"user","content":[{{"type":"input_image","image_url":"{RED_PIXEL_PNG}","detail":"low","x_future_field":"kept"}},{{"type":"input_text","text":"raw proxy"}}]}}]}}"#
+        r#"{{"model":"test","store":false,"stream":false,"input":[{{"type":"message","role":"user","content":[{{"type":"input_image","image_url":"{RED_PIXEL_PNG}","detail":"low","x_future_field":"kept"}},{{"type":"input_text","text":"stateless execution"}}]}}]}}"#
     );
 
     let response = reqwest::Client::new()
@@ -2664,16 +2626,15 @@ async fn test_store_false_proxies_image_content_verbatim() {
         .body(request_body.clone())
         .send()
         .await
-        .expect("raw proxy request");
+        .expect("stateless execution request");
 
     assert_eq!(response.status(), StatusCode::OK);
     let requests = requests.lock().await;
     assert_eq!(requests.len(), 1);
-    assert_eq!(
-        std::str::from_utf8(&requests[0]).expect("upstream body should be UTF-8"),
-        request_body,
-        "a stateless request must reach vLLM byte for byte"
-    );
+    let forwarded: serde_json::Value = serde_json::from_slice(&requests[0]).unwrap();
+    let original: serde_json::Value = serde_json::from_str(&request_body).unwrap();
+    assert_eq!(forwarded["input"], original["input"]);
+    assert_eq!(forwarded["store"], false);
 }
 
 #[tokio::test]
@@ -2797,7 +2758,7 @@ async fn test_http_message_with_empty_content_is_rejected() {
 }
 
 #[tokio::test]
-async fn test_prompt_cache_retention_matches_pass_through_and_typed_sse_execution() {
+async fn test_prompt_cache_retention_matches_stateless_and_stored_sse_execution() {
     let (llm_url, requests, llm) = spawn_tool_search_sse_sequence(vec![final_message_sse(); 2]).await;
     let fixture = storage_backed_state(&llm_url).await;
     let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
@@ -2839,7 +2800,7 @@ async fn test_prompt_cache_retention_matches_pass_through_and_typed_sse_executio
 }
 
 #[tokio::test]
-async fn test_prompt_cache_retention_matches_pass_through_and_typed_continuation() {
+async fn test_prompt_cache_retention_matches_stateless_and_stored_continuation() {
     let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
     let fixture = storage_backed_state(&llm_url).await;
     let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
@@ -2895,7 +2856,7 @@ async fn test_prompt_cache_retention_matches_pass_through_and_typed_continuation
 }
 
 #[tokio::test]
-async fn test_prompt_cache_retention_validates_before_proxy_or_execution() {
+async fn test_prompt_cache_retention_validates_before_execution() {
     let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
     let fixture = storage_backed_state(&llm_url).await;
     let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
@@ -2935,10 +2896,7 @@ async fn test_prompt_cache_retention_validates_before_proxy_or_execution() {
     }
     let requests = requests.lock().await;
     assert_eq!(requests.len(), 2);
-    assert_eq!(
-        requests[0].get("prompt_cache_retention"),
-        Some(&serde_json::Value::Null)
-    );
+    assert!(requests[0].get("prompt_cache_retention").is_none());
     assert!(requests[1].get("prompt_cache_retention").is_none());
 }
 
@@ -2990,7 +2948,7 @@ async fn cache_usage_survives_http_json_sse_and_stored_retrieval() {
                     response.json::<serde_json::Value>().await.unwrap()
                 };
                 let mut expected = usage.clone();
-                if store && writes.as_ref().is_some_and(serde_json::Value::is_null) {
+                if writes.as_ref().is_some_and(serde_json::Value::is_null) {
                     expected["input_tokens_details"]
                         .as_object_mut()
                         .unwrap()

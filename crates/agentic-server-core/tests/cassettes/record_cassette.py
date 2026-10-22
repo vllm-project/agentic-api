@@ -373,13 +373,14 @@ def _item_response(
     conversation: str | None = None,
     previous_response_id: str | None = None,
     stream: bool = False,
+    store: bool = True,
 ) -> dict:
     if conversation and previous_response_id:
         raise ValueError("conversation and previous_response_id are mutually exclusive")
     body: dict[str, Any] = {
         "model": model,
         "input": [{"role": "user", "content": prompt}],
-        "store": True,
+        "store": store,
         "stream": stream,
     }
     if conversation:
@@ -420,6 +421,36 @@ def run_items(
     client: httpx.Client, proxy_url: str, model: str, scenario: str, stream: bool
 ) -> None:
     """Record each conversation or item API request as its own numbered step."""
+    if scenario == "store-false":
+        conv_id = _create_conversation(client, proxy_url)
+        items_path = f"/v1/conversations/{conv_id}/items"
+        first = _item_response(
+            client, proxy_url, model,
+            "Remember the secret word ORCHID. Reply with only OK.",
+            conversation=conv_id, stream=stream, store=False,
+        )
+        _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+        _item_request(client, proxy_url, "GET", f"/v1/responses/{first['id']}", expected_status=None)
+        _item_response(
+            client, proxy_url, model,
+            "Remember the secret word SAPPHIRE. Reply with only OK.",
+            conversation=conv_id, stream=stream,
+        )
+        _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+        child = _item_response(
+            client, proxy_url, model,
+            "What secret word did I ask you to remember? Reply with that word only. After replying, remember RUBY instead.",
+            conversation=conv_id, stream=stream, store=False,
+        )
+        _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+        _item_request(client, proxy_url, "GET", f"/v1/responses/{child['id']}", expected_status=None)
+        _item_response(
+            client, proxy_url, model,
+            "What secret word did I ask you to remember? Reply with that word only.",
+            conversation=conv_id, stream=stream,
+        )
+        _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+        return
     if scenario == "edge-cases":
         for item in (
             {
@@ -1728,7 +1759,7 @@ def run_responses(
 )
 @click.option(
     "--items-scenario",
-    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases"]),
+    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "store-false"]),
     default="continuation",
     help="Conversation item recording scenario (for --mode items).",
 )
@@ -1856,7 +1887,7 @@ def run_responses(
     "--manual-item-replay",
     is_flag=True,
     default=False,
-    help="Replay full accumulated item history with store=false (direct-vLLM or gateway tool-search).",
+    help="Replay full accumulated item history with store=false over HTTP Responses.",
 )
 @click.option(
     "--input-file",
@@ -1996,7 +2027,8 @@ def main(
         raise click.UsageError("--max-tool-calls requires linear --mode responses without branches.")
 
     if mode == "items":
-        expected_turns = (10 if items_scenario == "pagination" else
+        expected_turns = (11 if items_scenario == "store-false" else
+                          10 if items_scenario == "pagination" else
                           6 if items_scenario == "branch" else
                           19 if items_scenario == "edge-cases" else 5)
         if turns != expected_turns:
@@ -2026,9 +2058,9 @@ def main(
         raise click.UsageError(
             "--tools-after-search requires --tool-search-output-tools."
         )
-    if manual_item_replay and not tool_search_recording:
+    if manual_item_replay and (mode != "responses" or transport != "http" or not no_store or branches):
         raise click.UsageError(
-            "--manual-item-replay requires --tool-search-output-tools."
+            "--manual-item-replay requires HTTP --mode responses with --no-store and no branches."
         )
     if tool_search_recording:
         if mode != "responses":
@@ -2046,10 +2078,6 @@ def main(
         if no_store and not manual_item_replay:
             raise click.UsageError(
                 "store=false tool-search characterization requires --manual-item-replay."
-            )
-        if manual_item_replay and not no_store:
-            raise click.UsageError(
-                "--manual-item-replay requires --no-store."
             )
         if input_file:
             raise click.UsageError(

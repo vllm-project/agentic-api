@@ -172,18 +172,35 @@ what stops the HTTP catalog and a launcher catalog from disagreeing about image 
 | `GET /health` | `health` | `handler/http/models.rs` |
 | `GET /ready` | `ready` | `handler/http/models.rs` |
 
-Handlers make a request-scoped decision between two paths:
-- **Stateful/executor path** — used when the request needs state (`store: true`,
-  `previous_response_id`, `conversation_id`, compaction, or a gateway-owned tool).
-  Builds an `ExecuteRequest` (Responses) or calls `run_messages_loop`/
-  `run_messages_stream` (Messages) against `state.exec_ctx`.
-- **Pass-through path** — everything else is forwarded to vLLM unchanged via
-  `agentic_core::proxy`, with no state, no persistence.
+The HTTP Responses handler parses a typed `RequestPayload` and always builds an
+`ExecuteRequest` against `state.exec_ctx`. Both `store: true` and `store: false`
+requests use input normalization, tool normalization, validation, and the tool loop.
+Unmodeled top-level provider parameters, such as `chat_template_kwargs` and `top_k`,
+are retained in `RequestPayload::extra` and borrowed by `UpstreamRequest` for forwarding
+on each inference round. Known fields keep their typed validation and conversion;
+gateway state controls and WebSocket event metadata are not provider extensions.
+With `store: false` and no state IDs, execution does not rehydrate stored history or
+persist the turn. Clients supply the complete item history in `input`, including
+prior output items and tool call outputs. `previous_response_id` still loads an
+available stored parent; `store: false` prevents the new response from being stored.
+An explicit `conversation` loads its stored history, but `store: false` does not
+append the new input/output items or store the response.
 
-The HTTP Responses handler first parses `RequestPayload<RawValue>` so routing fields
-remain typed while provider-specific `text` formats stay opaque on the pass-through
-path. Executor routes convert that raw field to `ResponseTextConfig` before
-building `ExecuteRequest`, preserving strict validation for in-process execution.
+`UpstreamRequest` carries `store:false` whenever gateway storage is disabled.
+Typed admission still rejects unsupported body shapes. Provider reasoning context
+and opaque-state compatibility require coordinated backend work, tracked in
+[#444](https://github.com/vllm-project/agentic-api/issues/444).
+
+HTTP execution supplies request-scoped headers through `with_upstream_headers`, using
+the proxy's existing end-to-end filter and authentication fallback. These headers
+travel through every inference and compaction round, without entering stored state.
+`run_http` polls the same stream-owned producer until the first client frame, allowing
+initial upstream failures to retain their HTTP status and processed response headers.
+Later failures remain SSE events. Embedded `run` callers keep lazy stream startup.
+
+The Messages handler selects `run_messages_loop`/`run_messages_stream` for requests
+that need gateway execution. Other requests and pass-through endpoints forward to
+the upstream through `agentic_core::proxy`.
 
 ### WebSocket transport (`handler/websocket/`)
 
@@ -461,7 +478,7 @@ For response-scoped session execution, `store: false` has no durable writes or
 database fallback. A stored child of a transient parent persists the complete
 canonical window without creating a row or dangling database reference for that
 parent. Explicit `conversation_id` requests keep the existing durable Conversations
-policy and append output only through the conversation handler. Their session lease
+policy: only `store: true` appends through the conversation handler. Their session lease
 still serializes execution without recording a second copy. Core commit supports
 prewarming without inference; WebSocket `generate: false` uses that same session
 rehydration and commit path.
@@ -867,7 +884,7 @@ all persisted data comes from the enriched copy. Use the field-specific rules be
 | Append the current client's input to restored history | Read `original_request.input`; write the combined history to `enriched_request.input` | The original input contains this request's submission; the enriched input contains the model context. |
 | Append tool calls/results, prepare reasoning, estimate context size, or compact model input | `enriched_request.input` | These operations affect the next inference round. Use the existing history/compaction helpers so canonical persistence state is updated consistently too. |
 | Build the model request | `enriched_request.to_upstream_request(stream)` | The model needs resolved history, tools, and the current round's selector. Converting the original copy would omit inherited history and tool results. |
-| Decide storage policy and route persistence | `original_request.store` and `original_request.conversation`, together with `ctx.continuation` | `should_persist` handles session and conversation exceptions to `store: false`. Use that helper rather than checking either request's `store` field alone. |
+| Decide storage policy and route persistence | `original_request.store` and `original_request.conversation`, together with `ctx.continuation` | `should_persist` allows connection-local checkpoints for response-scoped sessions; explicit conversations honor `store: false`. Use that helper rather than checking either request's `store` field alone. |
 | Identify the parent response publicly or in stored metadata | `original_request.previous_response_id` | Rehydration clears the enriched copy's parent ID after inlining its history. The public response still identifies its parent. Generated response/conversation IDs come from `RequestContext`. |
 | Populate ordinary request-derived response fields | `original_request` through `StandardResponseFields::apply_request` and `RequestContext::inject_ids` | This covers fields such as `store`, `metadata`, `text`, and `max_output_tokens`; use the existing field-specific defaulting. Upstream-derived fields such as usage and the delivered `service_tier` come from execution results. |
 | Populate public response `tools` | Active `ToolSearchState::public_response_tools()`, otherwise `enriched_request.tools`, through response metadata sanitization | Use effective public declarations, including inherited tools. Remove private MCP discovery/auth fields. The original list can be absent; the upstream list contains lowered function schemas. |

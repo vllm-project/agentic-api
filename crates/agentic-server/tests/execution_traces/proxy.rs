@@ -84,35 +84,31 @@ async fn proxy_handler(
 async fn upstream() -> (Server, Arc<Mutex<Vec<Observed>>>) {
     let seen = Arc::new(Mutex::new(Vec::new()));
     let router = axum::Router::new()
-        .route("/v1/responses", axum::routing::post(proxy_handler))
         .route("/v1/messages", axum::routing::post(proxy_handler))
         .with_state(Arc::clone(&seen));
     (Server::start(router).await, seen)
 }
 
-fn request(api: &str, streaming: bool) -> String {
-    if api == "responses" {
-        json!({"model":"test","input":"private proxy prompt","store":false,"stream":streaming}).to_string()
-    } else {
-        json!({"model":"test","max_tokens":64,"messages":[{"role":"user","content":"private proxy prompt"}],"stream":streaming}).to_string()
-    }
+fn request(streaming: bool) -> String {
+    json!({"model":"test","max_tokens":64,"messages":[{"role":"user","content":"private proxy prompt"}],"stream":streaming}).to_string()
 }
 
 #[tokio::test]
-async fn proxy_replaces_trace_context_and_preserves_raw_payloads_for_both_apis() {
+async fn messages_proxy_replaces_trace_context_and_preserves_raw_payloads() {
     let _guard = trace_test().await;
     let (upstream, seen) = upstream().await;
     let gateway = gateway(&upstream.url).await;
     let client = reqwest::Client::new();
     let mut bodies = Vec::new();
-    for api in ["responses", "messages"] {
+    {
+        let api = "messages";
         for (streaming, query) in [
             (false, "secret=private-query"),
             (true, "secret=private-query"),
             (true, "mode=chunked&secret=private-query"),
             (true, "mode=empty&secret=private-query"),
         ] {
-            let body = request(api, streaming);
+            let body = request(streaming);
             let response = client
                 .post(format!("{}/v1/{api}?{query}", gateway.url))
                 .header("content-type", "application/json")
@@ -132,10 +128,10 @@ async fn proxy_replaces_trace_context_and_preserves_raw_payloads_for_both_apis()
             bodies.push((body, api, streaming, query));
         }
     }
-    let spans = finished("agentic.execute", 8).await;
-    assert_eq!(spans.iter().filter(|span| span.name == "agentic.execute").count(), 8);
+    let spans = finished("agentic.execute", 4).await;
+    assert_eq!(spans.iter().filter(|span| span.name == "agentic.execute").count(), 4);
     let observations = seen.lock().await;
-    assert_eq!(observations.len(), 8);
+    assert_eq!(observations.len(), 4);
     for (observation, (body, api, streaming, query)) in observations.iter().zip(&bodies) {
         assert_eq!(observation.body.as_ref(), body.as_bytes());
         assert_eq!(observation.query, *query);
@@ -180,11 +176,12 @@ async fn proxy_records_upstream_rejection_and_stream_disconnect() {
     let (upstream, _) = upstream().await;
     let gateway = gateway(&upstream.url).await;
     let client = reqwest::Client::new();
-    for api in ["responses", "messages"] {
+    {
+        let api = "messages";
         let response = client
             .post(format!("{}/v1/{api}?mode=error", gateway.url))
             .header("content-type", "application/json")
-            .body(request(api, false))
+            .body(request(false))
             .send()
             .await
             .unwrap();
@@ -193,7 +190,7 @@ async fn proxy_records_upstream_rejection_and_stream_disconnect() {
         let mut response = client
             .post(format!("{}/v1/{api}?mode=slow", gateway.url))
             .header("content-type", "application/json")
-            .body(request(api, true))
+            .body(request(true))
             .send()
             .await
             .unwrap();
@@ -202,21 +199,21 @@ async fn proxy_records_upstream_rejection_and_stream_disconnect() {
         let response = client
             .post(format!("{}/v1/{api}?mode=broken", gateway.url))
             .header("content-type", "application/json")
-            .body(request(api, true))
+            .body(request(true))
             .send()
             .await
             .unwrap();
         assert!(response.bytes().await.is_err());
     }
-    let spans = finished("agentic.execute", 6).await;
+    let spans = finished("agentic.execute", 3).await;
     let executions: Vec<_> = spans.iter().filter(|span| span.name == "agentic.execute").collect();
-    assert_eq!(executions.len(), 6);
+    assert_eq!(executions.len(), 3);
     assert_eq!(
         executions
             .iter()
             .filter(|span| attr(span, "error.type") == Some(&Value::from("network")))
             .count(),
-        2
+        1
     );
     for execution in executions {
         assert_eq!(attr(execution, "agentic.route"), Some(&Value::from("proxy")));

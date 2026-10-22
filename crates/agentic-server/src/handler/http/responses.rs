@@ -1,43 +1,23 @@
 use axum::extract::{Path, Request, State};
 use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
-use bytes::Bytes;
 use either::Either;
-use serde_json::value::RawValue;
 use tracing::debug;
 
 use std::sync::Arc;
 
-use agentic_core::executor::telemetry::Api;
 use agentic_core::executor::{ExecuteRequest, compact_response as execute_compaction};
-use agentic_core::proxy::ProxyRequest;
-use agentic_core::tool::ToolSearchHandler;
-use agentic_core::types::request_response::{CompactRequest, PromptCacheOptions, RequestPayload, ResponseTextConfig};
+use agentic_core::proxy::{ProxyAuth, upstream_request_headers};
+use agentic_core::types::request_response::{CompactRequest, RequestPayload};
 
-use super::super::common::{
-    convert_response, executor_error_response, extract_bearer, read_bytes, read_json, sse_response,
-};
+use super::super::common::{executor_error_response, extract_bearer, read_json, sse_response};
 use crate::app::AppState;
 
-// Only executor requests interpret text and prompt-cache options. Proxy requests retain their raw body.
-type RoutingPayload = RequestPayload<RawValue, Box<RawValue>>;
-
-async fn proxy_responses(state: &AppState, parts: Parts, body: Bytes) -> Response {
-    let proxy_req = ProxyRequest {
-        headers: parts.headers,
-        body,
-        query: parts.uri.query().map(str::to_string),
-    };
-    convert_response(
-        crate::telemetry::proxy::trace_proxy_request(Api::Responses, proxy_req, "/v1/responses", state).await,
-    )
-}
-
 async fn execute_responses(state: &AppState, parts: Parts, payload: RequestPayload) -> Response {
-    let auth = extract_bearer(&parts.headers, state.openai_api_key.as_deref());
+    let headers = upstream_request_headers(&parts.headers, &state.proxy_state.config, ProxyAuth::OpenAiBearer);
     match ExecuteRequest::new(payload, Arc::clone(&state.exec_ctx))
-        .with_auth(auth)
-        .run()
+        .with_upstream_headers(headers)
+        .run_http()
         .await
     {
         Ok(Either::Left(response_payload)) => axum::Json(response_payload).into_response(),
@@ -64,49 +44,25 @@ async fn execute_responses(state: &AppState, parts: Parts, payload: RequestPaylo
 ))]
 pub async fn responses(State(state): State<AppState>, req: Request) -> Response {
     let (parts, body) = req.into_parts();
-    let bytes = match read_bytes(body, state.max_request_body_size).await {
-        Ok(bytes) => bytes,
+    let payload: RequestPayload = match read_json(body, state.max_request_body_size).await {
+        Ok(payload) => payload,
         Err(response) => return response,
     };
-    let routing_payload = match serde_json::from_slice::<RoutingPayload>(&bytes) {
-        Ok(payload) => payload,
-        Err(error) => return executor_error_response(error.into()),
-    };
 
-    let has_tool_search_state = ToolSearchHandler::request_has_state(&routing_payload);
-    let should_execute = routing_payload.store
-        || routing_payload.previous_response_id.is_some()
-        || has_tool_search_state
-        || routing_payload.in_process_feature().is_some();
     debug!(
-        route = if should_execute { "executor" } else { "proxy" },
-        store = routing_payload.store,
-        stream = routing_payload.stream,
-        has_previous_response_id = routing_payload.previous_response_id.is_some(),
-        has_conversation_id = routing_payload.conversation.is_some(),
-        has_compaction = routing_payload.input.contains_compaction(),
-        has_compaction_trigger = routing_payload.input.has_compaction_trigger(),
-        has_tool_search_state,
-        context_management = routing_payload.context_management.as_ref().map_or(0, Vec::len),
-        tools = routing_payload.tools.as_ref().map_or(0, Vec::len),
-        "routing HTTP responses request"
+        route = "executor",
+        store = payload.store,
+        stream = payload.stream,
+        has_previous_response_id = payload.previous_response_id.is_some(),
+        has_conversation_id = payload.conversation.is_some(),
+        has_compaction = payload.input.contains_compaction(),
+        has_compaction_trigger = payload.input.has_compaction_trigger(),
+        context_management = payload.context_management.as_ref().map_or(0, Vec::len),
+        tools = payload.tools.as_ref().map_or(0, Vec::len),
+        "executing HTTP responses request"
     );
 
-    if should_execute {
-        let payload = match routing_payload.try_map_configs(
-            |text| serde_json::from_str::<ResponseTextConfig>(text.get()).map(Box::new),
-            |options| serde_json::from_str::<PromptCacheOptions>(options.get()),
-        ) {
-            Ok(payload) => payload,
-            Err(error) => return executor_error_response(error.into()),
-        };
-        execute_responses(&state, parts, payload).await
-    } else if let Err(error) = routing_payload.max_tool_calls_limit() {
-        // The executor validates its own requests; proxied ones are checked here.
-        executor_error_response(error.into())
-    } else {
-        proxy_responses(&state, parts, bytes).await
-    }
+    execute_responses(&state, parts, payload).await
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(

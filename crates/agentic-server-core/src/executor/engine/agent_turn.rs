@@ -8,6 +8,7 @@
 mod round_policy;
 
 use super::accumulate_usage;
+use crate::executor::inference::UpstreamHeaders;
 use round_policy::{AsyncContinuations, ClientCalls, classify_round};
 use std::{collections::HashMap, num::NonZeroUsize};
 
@@ -241,7 +242,7 @@ impl<'a> AgentTurn<'a> {
     pub(super) async fn run_round(
         &mut self,
         output_offset: usize,
-        auth: Option<&str>,
+        auth: Option<&UpstreamHeaders>,
         stream_upstream: bool,
         response_budget: &ExecutorResponseBudget,
     ) -> ExecutorResult<RoundResult> {

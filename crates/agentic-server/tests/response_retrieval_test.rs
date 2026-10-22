@@ -209,7 +209,7 @@ async fn store_false_continuation_of_a_stored_response_is_not_retained() {
     let orphaned = create(json!({"model":"test-model", "input":"third", "store":true,
         "previous_response_id":child_id}))
     .await;
-    assert_eq!(orphaned.status(), StatusCode::NOT_FOUND);
+    assert_eq!(orphaned.status(), StatusCode::BAD_REQUEST);
     assert!(orphaned.json::<Value>().await.unwrap().get("error").is_some());
     assert_eq!(
         requests.lock().unwrap().len(),

@@ -12,6 +12,7 @@ pub(crate) mod retained;
 mod streaming;
 mod usage;
 
+use crate::executor::inference::UpstreamHeaders;
 pub use execute::{ExecuteRequest, execute, prepare_non_generating_turn};
 pub use retained::PreparedRetainedResponse;
 use usage::accumulate_usage;
@@ -53,7 +54,7 @@ const MAX_GATEWAY_TOOL_ROUNDS: NonZeroUsize = NonZeroUsize::new(10).unwrap();
 async fn run_until_gateway_tools_complete(
     agent: &mut AgentPipeline,
     exec_ctx: &ExecutionContext,
-    auth: Option<&str>,
+    auth: Option<&UpstreamHeaders>,
     stream_upstream: bool,
 ) -> ExecutorResult<(ResponsePayload, Option<ToolSearchMetadata>)> {
     if agent.request.original_request.input.has_compaction_trigger() {
@@ -109,7 +110,7 @@ impl<'a> EngineOrchestration<'a> {
 
     async fn run(
         self,
-        auth: Option<&str>,
+        auth: Option<&UpstreamHeaders>,
         stream_upstream: bool,
     ) -> ExecutorResult<(ResponsePayload, Option<ToolSearchMetadata>)> {
         match self {
@@ -149,7 +150,7 @@ impl<'a> SingleAgentRun<'a> {
 
     async fn run(
         mut self,
-        auth: Option<&str>,
+        auth: Option<&UpstreamHeaders>,
         stream_upstream: bool,
     ) -> ExecutorResult<(ResponsePayload, Option<ToolSearchMetadata>)> {
         loop {
@@ -182,7 +183,7 @@ impl<'a> SingleAgentRun<'a> {
 async fn run_compaction_trigger(
     ctx: &mut RequestContext,
     exec_ctx: &ExecutionContext,
-    auth: Option<&str>,
+    auth: Option<&UpstreamHeaders>,
 ) -> ExecutorResult<ResponsePayload> {
     let model = ctx.enriched_request.model.clone();
     let instructions = ctx.enriched_request.instructions.clone();
@@ -257,7 +258,7 @@ async fn run_blocking(
     ctx: RequestContext,
     tool_search_state: Option<ToolSearchState>,
     exec_ctx: &ExecutionContext,
-    auth: Option<&str>,
+    auth: Option<&UpstreamHeaders>,
 ) -> ExecutorResult<ResponsePayload> {
     let mut agent = AgentPipeline::new(ctx, tool_search_state, StreamRelay::detached());
     let (payload, tool_search_metadata) =

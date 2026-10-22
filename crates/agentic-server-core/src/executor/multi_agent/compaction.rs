@@ -1,6 +1,7 @@
 //! Immutable compaction work and generation-checked canonical replacement.
 use crate::executor::compaction::{compact_items, estimate_history_tokens};
 use crate::executor::error::ExecutorResult;
+use crate::executor::inference::UpstreamHeaders;
 use crate::executor::pending_calls::resolved_prefix_len;
 use crate::executor::request::ExecutionContext;
 use crate::types::agent::AgentIdentity;
@@ -85,7 +86,7 @@ impl CompactionPlan {
     pub(in crate::executor) async fn execute(
         self,
         exec: &ExecutionContext,
-        auth: Option<&str>,
+        auth: Option<&UpstreamHeaders>,
     ) -> ExecutorResult<CompactionResult> {
         let prefix_len = self.prefix.len();
         let discovery = self

@@ -3,8 +3,9 @@
 mod producer;
 
 use super::run_until_gateway_tools_complete;
-use crate::executor::error::ExecutorError;
+use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, STREAM_EVENT_BUFFER, StreamEvent};
+use crate::executor::inference::UpstreamHeaders;
 use crate::executor::inference::{BoxStream, DONE_MARKER};
 use crate::executor::multi_agent::RunControlReceiver;
 use crate::executor::persist::persist_if_needed;
@@ -22,8 +23,15 @@ use producer::ProducerEvent;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use tracing::Instrument as _;
 
-/// `max_stream_event_bytes` is the effective limit for one serialized client
+/// Client event bounds and whether HTTP status must wait for stream startup.
+pub(super) struct StreamOptions {
+    pub max_event_bytes: usize,
+    pub defer_http_status: bool,
+}
+
+/// `options.max_event_bytes` is the effective limit for one serialized client
 /// event on the transport that will deliver this stream. The terminal
 /// `response.completed` frame is validated against it before the response is
 /// persisted or a session checkpoint is published, so a frame the transport
@@ -39,23 +47,23 @@ use tokio::sync::mpsc;
 /// are taken. The pipeline takes the first-upstream-data timing.
 /// Dropping the stream drops orchestration. For a multi-agent response that
 /// includes its `RunOwner`, which aborts round tasks without joining them.
-pub(super) fn run_stream(
+pub(super) async fn run_stream(
     ctx: RequestContext,
     tool_search_state: Option<ToolSearchState>,
     exec_ctx: Arc<ExecutionContext>,
-    auth: Option<String>,
-    max_stream_event_bytes: usize,
+    auth: Option<UpstreamHeaders>,
+    options: StreamOptions,
     mut execution: ExecutionSpan,
     control: Option<RunControlReceiver>,
-) -> BoxStream {
+) -> ExecutorResult<BoxStream> {
     let span = execution.span().clone();
     let clock = execution.clock().clone();
     let relay_clock = clock.clone();
-    let frames: BoxStream = Box::pin(stream! {
+    let mut frames = Box::pin(stream! {
         let failure_context = StreamFailureContext::from(&ctx);
         let (event_tx, event_rx) = mpsc::channel(STREAM_EVENT_BUFFER);
         let exec_ctx_for_run = Arc::clone(&exec_ctx);
-        let relay = StreamRelay::client(event_tx, RelayLimits::with_event_bytes(max_stream_event_bytes));
+        let relay = StreamRelay::client(event_tx, RelayLimits::with_event_bytes(options.max_event_bytes));
         let mut agent = AgentPipeline::new(ctx, tool_search_state, relay);
         agent.control = control;
         agent.set_execution_clock(clock.clone());
@@ -63,7 +71,7 @@ pub(super) fn run_stream(
             let result = Box::pin(run_until_gateway_tools_complete(
                 &mut agent,
                 exec_ctx_for_run.as_ref(),
-                auth.as_deref(),
+                auth.as_ref(),
                 true,
             ))
             .await;
@@ -78,7 +86,7 @@ pub(super) fn run_stream(
             match event {
                 ProducerEvent::Event(event) => {
                     if let Some(content) = consume_stream_event(event, &mut next_sequence_number, &clock) {
-                        yield content;
+                        yield Ok(content);
                     }
                 }
                 ProducerEvent::Finished(result) => {
@@ -86,15 +94,23 @@ pub(super) fn run_stream(
                         Err(e) => {
                             // A caught producer panic; no payload is forwarded.
                             execution.failed(&e);
-                            yield GatewayStreamAccumulator::executor_error_chunk_at(&e, next_sequence_number);
+                            yield Ok(GatewayStreamAccumulator::executor_error_chunk_at(&e, next_sequence_number));
                             execution.delivered();
-                            yield DONE_MARKER.to_string();
+                            yield Ok(DONE_MARKER.to_string());
                         }
                         Ok((Err(e), mut stream_accumulator)) => {
                             execution.failed(&e);
-                            yield failed_stream_chunk(&e, &failure_context, &mut stream_accumulator, next_sequence_number);
+                            if options.defer_http_status
+                                && next_sequence_number == 0
+                                && matches!(e, ExecutorError::LLMRequest { .. } | ExecutorError::LLMTransport { .. })
+                            {
+                                execution.not_delivered();
+                                yield Err(e);
+                                return;
+                            }
+                            yield Ok(failed_stream_chunk(&e, &failure_context, &mut stream_accumulator, next_sequence_number));
                             execution.delivered();
-                            yield DONE_MARKER.to_string();
+                            yield Ok(DONE_MARKER.to_string());
                         }
                         Ok((Ok((payload, ctx, tool_search_metadata)), stream_accumulator)) => {
                             let terminal = Box::pin(completed_stream_chunk(
@@ -108,8 +124,8 @@ pub(super) fn run_stream(
                             ))
                             .await;
                             execution.delivered();
-                            yield terminal;
-                            yield DONE_MARKER.to_string();
+                            yield Ok(terminal);
+                            yield Ok(DONE_MARKER.to_string());
                         }
                     }
                     break;
@@ -117,7 +133,21 @@ pub(super) fn run_stream(
             }
         }
     });
-    Box::pin(InstrumentedStream::delivering(frames, span, relay_clock))
+    // Poll through transport startup before the HTTP handler commits status 200.
+    // The same producer and bounded relay continue after this one buffered frame.
+    let first = if options.defer_http_status {
+        frames.next().instrument(span.clone()).await.transpose()?
+    } else {
+        None
+    };
+    let frames = futures::stream::iter(first).chain(
+        frames.map(|frame| frame.unwrap_or_else(|error| GatewayStreamAccumulator::executor_error_chunk_at(&error, 0))),
+    );
+    Ok(Box::pin(InstrumentedStream::delivering(
+        Box::pin(frames),
+        span,
+        relay_clock,
+    )))
 }
 
 fn failed_stream_chunk(

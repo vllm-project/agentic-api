@@ -275,8 +275,8 @@ impl ServerConfig {
 /// Shared application state injected into every handler.
 ///
 /// Both states are always present:
-/// - `proxy_state` handles `store=false` requests (direct passthrough to vLLM)
-/// - `exec_ctx` handles `store=true` requests (stateful executor with DB)
+/// - `proxy_state` handles endpoints that pass requests through to the upstream.
+/// - `exec_ctx` handles Responses and gateway tool execution, with optional persistence.
 #[derive(Clone)]
 pub struct AppState {
     pub proxy_state: ProxyState,

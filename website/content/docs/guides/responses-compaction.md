@@ -104,8 +104,8 @@ HTTP 400 `invalid_request_error` (or the equivalent WebSocket error) before infe
 to files restored from response/conversation history, explicit and automatic compaction, `compaction_trigger`,
 and WebSocket `generate: false` requests. Use supported `input_text` or `input_image` content instead.
 
-Eligible raw `store: false` proxy requests remain byte-transparent and leave file support to the upstream. Merely
-setting `store: false` does not select that path when history or an in-process feature requires typed execution.
+HTTP `store: false` requests use the same typed executor and file-input validation. Without `previous_response_id`
+or `conversation`, clients supply the complete item history in `input`; the gateway does not load or persist state.
 Structured function/custom tool call outputs containing files retain their existing pass-through behavior.
 
 API `input_file` content is distinct from mentioning a local filename in Codex or asking a client-executed read tool
@@ -120,8 +120,8 @@ HTTP 400 `invalid_request_error` (or the equivalent WebSocket error) before infe
 to files restored from response/conversation history, explicit and automatic compaction, `compaction_trigger`,
 and WebSocket `generate: false` requests. Use supported `input_text` or `input_image` content instead.
 
-Eligible raw `store: false` proxy requests remain byte-transparent and leave file support to the upstream. Merely
-setting `store: false` does not select that path when history or an in-process feature requires typed execution.
+HTTP `store: false` requests use the same typed executor and file-input validation. Without `previous_response_id`
+or `conversation`, clients supply the complete item history in `input`; the gateway does not load or persist state.
 Structured function/custom tool call outputs containing files retain their existing pass-through behavior.
 
 API `input_file` content is distinct from mentioning a local filename in Codex or asking a client-executed read tool

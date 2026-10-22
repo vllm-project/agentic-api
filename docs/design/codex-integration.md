@@ -47,9 +47,9 @@ The current integration supports the typed executor path:
 - WebSocket Responses execution uses the same typed executor path and restores namespace tool-call events before sending
   them to clients.
 
-Stateless `store=false` requests containing only ordinary `function` declarations remain byte-transparent raw proxy
-requests. Requests with continuation IDs or any non-function tool use the typed executor, where namespace and
-gateway-executed built-in tool normalization occurs.
+HTTP Responses requests, including `store=false` with ordinary function declarations, use the typed executor
+for input and tool normalization. Without state IDs, clients replay complete item history and the gateway does
+not read or write stored state.
 
 ---
 

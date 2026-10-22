@@ -1,0 +1,2060 @@
+cases:
+  manual-replay:
+    turns:
+    - filename: t1
+      request:
+        body:
+          input: Remember the word ORCHID. Reply with exactly OK.
+          max_output_tokens: 256
+          model: gpt-4o
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          access_programs: null
+          background: false
+          billing:
+            payer: developer
+          completed_at: 1792567684
+          created_at: 1792567684
+          error: null
+          frequency_penalty: 0.0
+          id: resp_0ffafc8660454284016ad86984175c87d0a75e52f26bd35128
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: 256
+          max_tool_calls: null
+          metadata: {}
+          model: gpt-4o-2024-08-06
+          moderation: null
+          object: response
+          output:
+          - content:
+            - annotations: []
+              logprobs: []
+              text: OK
+              type: output_text
+            id: msg_0ffafc8660454284016ad8698490fc87d0a4a49b34b76e1784
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: true
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_retention: in_memory
+          reasoning:
+            context: null
+            effort: null
+            summary: null
+          safety_identifier: null
+          service_tier: default
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+            verbosity: medium
+          tool_choice: auto
+          tool_usage:
+            image_gen:
+              input_tokens: 0
+              input_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              output_tokens: 0
+              output_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              total_tokens: 0
+            web_search:
+              num_requests: 0
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 19
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 2
+            output_tokens_details:
+              reasoning_tokens: 0
+            total_tokens: 21
+          user: null
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t2
+      request:
+        body:
+          input:
+          - content: Remember the word ORCHID. Reply with exactly OK.
+            role: user
+          - content:
+            - annotations: []
+              logprobs: []
+              text: OK
+              type: output_text
+            id: msg_0ffafc8660454284016ad8698490fc87d0a4a49b34b76e1784
+            role: assistant
+            status: completed
+            type: message
+          - content: What word did I ask you to remember? Reply with that word only.
+            role: user
+          max_output_tokens: 256
+          model: gpt-4o
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          access_programs: null
+          background: false
+          billing:
+            payer: developer
+          completed_at: 1792567686
+          created_at: 1792567686
+          error: null
+          frequency_penalty: 0.0
+          id: resp_0ffafc8660454284016ad8698637d087d0a743aed2b0963d48
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: 256
+          max_tool_calls: null
+          metadata: {}
+          model: gpt-4o-2024-08-06
+          moderation: null
+          object: response
+          output:
+          - content:
+            - annotations: []
+              logprobs: []
+              text: ORCHID
+              type: output_text
+            id: msg_0ffafc8660454284016ad86986a56c87d0bc087e67be023c5b
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: true
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_retention: in_memory
+          reasoning:
+            context: null
+            effort: null
+            summary: null
+          safety_identifier: null
+          service_tier: default
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+            verbosity: medium
+          tool_choice: auto
+          tool_usage:
+            image_gen:
+              input_tokens: 0
+              input_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              output_tokens: 0
+              output_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              total_tokens: 0
+            web_search:
+              num_requests: 0
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 43
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 4
+            output_tokens_details:
+              reasoning_tokens: 0
+            total_tokens: 47
+          user: null
+        headers:
+          content-type: application/json
+        status_code: 200
+  stored-parent:
+    turns:
+    - filename: t1
+      request:
+        body:
+          input: Remember the word ORCHID. Reply with exactly OK.
+          max_output_tokens: 256
+          model: gpt-4o
+          store: true
+          stream: false
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          access_programs: null
+          background: false
+          billing:
+            payer: developer
+          completed_at: 1792567689
+          created_at: 1792567688
+          error: null
+          frequency_penalty: 0.0
+          id: resp_0c29d5a87112739f006ad86988456487d08f1a1c99b62c93b4
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: 256
+          max_tool_calls: null
+          metadata: {}
+          model: gpt-4o-2024-08-06
+          moderation: null
+          object: response
+          output:
+          - content:
+            - annotations: []
+              logprobs: []
+              text: OK
+              type: output_text
+            id: msg_0c29d5a87112739f006ad86989376087d0848d5099915a6a4c
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: true
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_retention: in_memory
+          reasoning:
+            context: null
+            effort: null
+            summary: null
+          safety_identifier: null
+          service_tier: default
+          status: completed
+          store: true
+          temperature: 1.0
+          text:
+            format:
+              type: text
+            verbosity: medium
+          tool_choice: auto
+          tool_usage:
+            image_gen:
+              input_tokens: 0
+              input_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              output_tokens: 0
+              output_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              total_tokens: 0
+            web_search:
+              num_requests: 0
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 19
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 2
+            output_tokens_details:
+              reasoning_tokens: 0
+            total_tokens: 21
+          user: null
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t2
+      request:
+        body:
+          input: What word did I ask you to remember? Reply with that word only.
+          max_output_tokens: 256
+          model: gpt-4o
+          previous_response_id: resp_0c29d5a87112739f006ad86988456487d08f1a1c99b62c93b4
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          access_programs: null
+          background: false
+          billing:
+            payer: developer
+          completed_at: 1792567691
+          created_at: 1792567691
+          error: null
+          frequency_penalty: 0.0
+          id: resp_0c29d5a87112739f016ad8698b2dec87d09408717aacc4781c
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: 256
+          max_tool_calls: null
+          metadata: {}
+          model: gpt-4o-2024-08-06
+          moderation: null
+          object: response
+          output:
+          - content:
+            - annotations: []
+              logprobs: []
+              text: ORCHID
+              type: output_text
+            id: msg_0c29d5a87112739f016ad8698b9e8887d09a86e1b353adac0e
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: true
+          presence_penalty: 0.0
+          previous_response_id: resp_0c29d5a87112739f006ad86988456487d08f1a1c99b62c93b4
+          prompt_cache_key: null
+          prompt_cache_retention: in_memory
+          reasoning:
+            context: null
+            effort: null
+            summary: null
+          safety_identifier: null
+          service_tier: default
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+            verbosity: medium
+          tool_choice: auto
+          tool_usage:
+            image_gen:
+              input_tokens: 0
+              input_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              output_tokens: 0
+              output_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              total_tokens: 0
+            web_search:
+              num_requests: 0
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 43
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 4
+            output_tokens_details:
+              reasoning_tokens: 0
+            total_tokens: 47
+          user: null
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t3
+      request:
+        body:
+          input: Say OK.
+          max_output_tokens: 256
+          model: gpt-4o
+          previous_response_id: resp_0c29d5a87112739f016ad8698b2dec87d09408717aacc4781c
+          store: true
+          stream: false
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          error:
+            code: previous_response_not_found
+            message: Previous response with id 'resp_0c29d5a87112739f016ad8698b2dec87d09408717aacc4781c'
+              not found.
+            param: previous_response_id
+            type: invalid_request_error
+        headers:
+          content-type: application/json
+        status_code: 400
+  unstored-parent:
+    turns:
+    - filename: t1
+      request:
+        body:
+          input: Remember the word ORCHID. Reply with exactly OK.
+          max_output_tokens: 256
+          model: gpt-4o
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          access_programs: null
+          background: false
+          billing:
+            payer: developer
+          completed_at: 1792567695
+          created_at: 1792567695
+          error: null
+          frequency_penalty: 0.0
+          id: resp_0fe0cd3ab148fdba016ad8698ef62887d0872d9b09a40b0b39
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: 256
+          max_tool_calls: null
+          metadata: {}
+          model: gpt-4o-2024-08-06
+          moderation: null
+          object: response
+          output:
+          - content:
+            - annotations: []
+              logprobs: []
+              text: OK
+              type: output_text
+            id: msg_0fe0cd3ab148fdba016ad8698f6fe487d0b6b8cccadb86e9d5
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: true
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_retention: in_memory
+          reasoning:
+            context: null
+            effort: null
+            summary: null
+          safety_identifier: null
+          service_tier: default
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+            verbosity: medium
+          tool_choice: auto
+          tool_usage:
+            image_gen:
+              input_tokens: 0
+              input_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              output_tokens: 0
+              output_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              total_tokens: 0
+            web_search:
+              num_requests: 0
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 19
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 2
+            output_tokens_details:
+              reasoning_tokens: 0
+            total_tokens: 21
+          user: null
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t2
+      request:
+        body:
+          input: Say OK.
+          max_output_tokens: 256
+          model: gpt-4o
+          previous_response_id: resp_0fe0cd3ab148fdba016ad8698ef62887d0872d9b09a40b0b39
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          error:
+            code: previous_response_not_found
+            message: Previous response with id 'resp_0fe0cd3ab148fdba016ad8698ef62887d0872d9b09a40b0b39'
+              not found.
+            param: previous_response_id
+            type: invalid_request_error
+        headers:
+          content-type: application/json
+        status_code: 400
+  conversation:
+    turns:
+    - filename: t1
+      request:
+        body: {}
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/conversations
+        query_params: {}
+      response:
+        body:
+          created_at: 1792567698
+          id: conv_6ad86992d328819392e0abc9483daff607adaf8ad5f6c9b9
+          metadata: {}
+          object: conversation
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t2
+      request:
+        body:
+          conversation: conv_6ad86992d328819392e0abc9483daff607adaf8ad5f6c9b9
+          input: Remember the word ORCHID. Reply with exactly OK.
+          model: gpt-4o
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          access_programs: null
+          background: false
+          billing:
+            payer: developer
+          completed_at: 1792567699
+          conversation:
+            id: conv_6ad86992d328819392e0abc9483daff607adaf8ad5f6c9b9
+          created_at: 1792567699
+          error: null
+          frequency_penalty: 0.0
+          id: resp_07adaf8ad5f6c9b9016ad869932c448193b8d98db3b7c099fd
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: null
+          max_tool_calls: null
+          metadata: {}
+          model: gpt-4o-2024-08-06
+          moderation: null
+          object: response
+          output:
+          - content:
+            - annotations: []
+              logprobs: []
+              text: OK
+              type: output_text
+            id: msg_07adaf8ad5f6c9b9016ad86993b51881939e2dfcbd6ca2ef31
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: true
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_retention: in_memory
+          reasoning:
+            context: null
+            effort: null
+            summary: null
+          safety_identifier: null
+          service_tier: default
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+            verbosity: medium
+          tool_choice: auto
+          tool_usage:
+            image_gen:
+              input_tokens: 0
+              input_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              output_tokens: 0
+              output_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              total_tokens: 0
+            web_search:
+              num_requests: 0
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 19
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 2
+            output_tokens_details:
+              reasoning_tokens: 0
+            total_tokens: 21
+          user: null
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t3
+      request:
+        body:
+          conversation: conv_6ad86992d328819392e0abc9483daff607adaf8ad5f6c9b9
+          input: What word did I ask you to remember? Reply with that word only.
+          max_output_tokens: 256
+          model: gpt-4o
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          access_programs: null
+          background: false
+          billing:
+            payer: developer
+          completed_at: 1792567702
+          conversation:
+            id: conv_6ad86992d328819392e0abc9483daff607adaf8ad5f6c9b9
+          created_at: 1792567701
+          error: null
+          frequency_penalty: 0.0
+          id: resp_07adaf8ad5f6c9b9016ad8699599d48193a6128d30dfe758a1
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: 256
+          max_tool_calls: null
+          metadata: {}
+          model: gpt-4o-2024-08-06
+          moderation: null
+          object: response
+          output:
+          - content:
+            - annotations: []
+              logprobs: []
+              text: I'm sorry, I can't recall previous interactions or remember words.
+              type: output_text
+            id: msg_07adaf8ad5f6c9b9016ad86996217c8193b9e4ebd5945a9ef3
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: true
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_retention: in_memory
+          reasoning:
+            context: null
+            effort: null
+            summary: null
+          safety_identifier: null
+          service_tier: default
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+            verbosity: medium
+          tool_choice: auto
+          tool_usage:
+            image_gen:
+              input_tokens: 0
+              input_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              output_tokens: 0
+              output_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              total_tokens: 0
+            web_search:
+              num_requests: 0
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 22
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 13
+            output_tokens_details:
+              reasoning_tokens: 0
+            total_tokens: 35
+          user: null
+        headers:
+          content-type: application/json
+        status_code: 200
+  function-replay:
+    turns:
+    - filename: t1
+      request:
+        body:
+          input: Call get_job_status for job-382, then reply with just its status.
+          max_output_tokens: 256
+          model: gpt-4o
+          store: false
+          stream: false
+          tool_choice:
+            name: get_job_status
+            type: function
+          tools:
+          - description: Query the pipeline orchestrator for a job's current state, metadata,
+              and failure info.
+            name: get_job_status
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier, e.g. job-382
+                  type: string
+              required:
+              - job_id
+              type: object
+            strict: true
+            type: function
+          - description: Fetch error logs and stack traces for a failed pipeline job.
+            name: get_error_logs
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier
+                  type: string
+                max_entries:
+                  description: Maximum log entries to return (default 50)
+                  type: integer
+                severity:
+                  description: Minimum severity filter
+                  enum:
+                  - WARN
+                  - ERROR
+                  - FATAL
+                  - ALL
+                  type: string
+              required:
+              - job_id
+              - severity
+              - max_entries
+              type: object
+            strict: true
+            type: function
+          - description: Search internal operations runbooks for troubleshooting procedures.
+            name: search_runbook
+            parameters:
+              additionalProperties: false
+              properties:
+                max_results:
+                  description: Maximum results to return (default 5)
+                  type: integer
+                query:
+                  description: Natural language search query
+                  type: string
+              required:
+              - query
+              - max_results
+              type: object
+            strict: true
+            type: function
+          - description: Execute a Python analysis script in a sandboxed environment for
+              log parsing or data inspection.
+            name: run_analysis
+            parameters:
+              additionalProperties: false
+              properties:
+                code:
+                  description: Python code to execute
+                  type: string
+                timeout_seconds:
+                  description: Execution timeout (default 30)
+                  type: integer
+              required:
+              - code
+              - timeout_seconds
+              type: object
+            strict: true
+            type: function
+          - description: Restart a failed pipeline job with optional configuration overrides.
+            name: restart_job
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier to restart
+                  type: string
+                memory_override_gb:
+                  description: Override memory limit in GB
+                  type: integer
+                priority:
+                  description: Queue priority
+                  enum:
+                  - low
+                  - normal
+                  - high
+                  type: string
+                skip_completed_stages:
+                  description: Skip stages that completed successfully (default true)
+                  type: boolean
+              required:
+              - job_id
+              - memory_override_gb
+              - skip_completed_stages
+              - priority
+              type: object
+            strict: true
+            type: function
+          - description: Search the public web for technical documentation, blog posts,
+              and known issues.
+            name: web_search
+            parameters:
+              additionalProperties: false
+              properties:
+                query:
+                  description: Search query
+                  type: string
+              required:
+              - query
+              type: object
+            strict: true
+            type: function
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          access_programs: null
+          background: false
+          billing:
+            payer: developer
+          completed_at: 1792567704
+          created_at: 1792567704
+          error: null
+          frequency_penalty: 0.0
+          id: resp_023debcfbecbec6e016ad86998124487d087645a96a0161609
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: 256
+          max_tool_calls: null
+          metadata: {}
+          model: gpt-4o-2024-08-06
+          moderation: null
+          object: response
+          output:
+          - arguments: '{"job_id":"job-382"}'
+            call_id: call_Wxznh1ojp2MvjU81TBN7iFFf
+            id: fc_023debcfbecbec6e016ad8699867fc87d0bf44017bbca4a2de
+            name: get_job_status
+            status: completed
+            type: function_call
+          parallel_tool_calls: true
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_retention: in_memory
+          reasoning:
+            context: null
+            effort: null
+            summary: null
+          safety_identifier: null
+          service_tier: default
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+            verbosity: medium
+          tool_choice:
+            name: get_job_status
+            type: function
+          tool_usage:
+            image_gen:
+              input_tokens: 0
+              input_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              output_tokens: 0
+              output_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              total_tokens: 0
+            web_search:
+              num_requests: 0
+          tools:
+          - description: Query the pipeline orchestrator for a job's current state, metadata,
+              and failure info.
+            name: get_job_status
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier, e.g. job-382
+                  type: string
+              required:
+              - job_id
+              type: object
+            strict: true
+            type: function
+          - description: Fetch error logs and stack traces for a failed pipeline job.
+            name: get_error_logs
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier
+                  type: string
+                max_entries:
+                  description: Maximum log entries to return (default 50)
+                  type: integer
+                severity:
+                  description: Minimum severity filter
+                  enum:
+                  - WARN
+                  - ERROR
+                  - FATAL
+                  - ALL
+                  type: string
+              required:
+              - job_id
+              - severity
+              - max_entries
+              type: object
+            strict: true
+            type: function
+          - description: Search internal operations runbooks for troubleshooting procedures.
+            name: search_runbook
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                max_results:
+                  description: Maximum results to return (default 5)
+                  type: integer
+                query:
+                  description: Natural language search query
+                  type: string
+              required:
+              - query
+              - max_results
+              type: object
+            strict: true
+            type: function
+          - description: Execute a Python analysis script in a sandboxed environment for
+              log parsing or data inspection.
+            name: run_analysis
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                code:
+                  description: Python code to execute
+                  type: string
+                timeout_seconds:
+                  description: Execution timeout (default 30)
+                  type: integer
+              required:
+              - code
+              - timeout_seconds
+              type: object
+            strict: true
+            type: function
+          - description: Restart a failed pipeline job with optional configuration overrides.
+            name: restart_job
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier to restart
+                  type: string
+                memory_override_gb:
+                  description: Override memory limit in GB
+                  type: integer
+                priority:
+                  description: Queue priority
+                  enum:
+                  - low
+                  - normal
+                  - high
+                  type: string
+                skip_completed_stages:
+                  description: Skip stages that completed successfully (default true)
+                  type: boolean
+              required:
+              - job_id
+              - memory_override_gb
+              - skip_completed_stages
+              - priority
+              type: object
+            strict: true
+            type: function
+          - description: Search the public web for technical documentation, blog posts,
+              and known issues.
+            name: web_search
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                query:
+                  description: Search query
+                  type: string
+              required:
+              - query
+              type: object
+            strict: true
+            type: function
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 362
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 9
+            output_tokens_details:
+              reasoning_tokens: 0
+            total_tokens: 371
+          user: null
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t2
+      request:
+        body:
+          input:
+          - content: Call get_job_status for job-382, then reply with just its status.
+            role: user
+          - arguments: '{"job_id":"job-382"}'
+            call_id: call_Wxznh1ojp2MvjU81TBN7iFFf
+            id: fc_023debcfbecbec6e016ad8699867fc87d0bf44017bbca4a2de
+            name: get_job_status
+            status: completed
+            type: function_call
+          - call_id: call_Wxznh1ojp2MvjU81TBN7iFFf
+            output: '{"job_id": "job-382", "status": "failed", "error_type": "OutOfMemoryError",
+              "failed_at": "2024-01-15T03:22:11Z", "stage": "transform", "memory_used_gb":
+              31.2, "memory_limit_gb": 32, "pipeline": "etl-daily-ingest", "owner": "data-platform-team"}'
+            type: function_call_output
+          max_output_tokens: 256
+          model: gpt-4o
+          store: false
+          stream: false
+          tool_choice: none
+          tools:
+          - description: Query the pipeline orchestrator for a job's current state, metadata,
+              and failure info.
+            name: get_job_status
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier, e.g. job-382
+                  type: string
+              required:
+              - job_id
+              type: object
+            strict: true
+            type: function
+          - description: Fetch error logs and stack traces for a failed pipeline job.
+            name: get_error_logs
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier
+                  type: string
+                max_entries:
+                  description: Maximum log entries to return (default 50)
+                  type: integer
+                severity:
+                  description: Minimum severity filter
+                  enum:
+                  - WARN
+                  - ERROR
+                  - FATAL
+                  - ALL
+                  type: string
+              required:
+              - job_id
+              - severity
+              - max_entries
+              type: object
+            strict: true
+            type: function
+          - description: Search internal operations runbooks for troubleshooting procedures.
+            name: search_runbook
+            parameters:
+              additionalProperties: false
+              properties:
+                max_results:
+                  description: Maximum results to return (default 5)
+                  type: integer
+                query:
+                  description: Natural language search query
+                  type: string
+              required:
+              - query
+              - max_results
+              type: object
+            strict: true
+            type: function
+          - description: Execute a Python analysis script in a sandboxed environment for
+              log parsing or data inspection.
+            name: run_analysis
+            parameters:
+              additionalProperties: false
+              properties:
+                code:
+                  description: Python code to execute
+                  type: string
+                timeout_seconds:
+                  description: Execution timeout (default 30)
+                  type: integer
+              required:
+              - code
+              - timeout_seconds
+              type: object
+            strict: true
+            type: function
+          - description: Restart a failed pipeline job with optional configuration overrides.
+            name: restart_job
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier to restart
+                  type: string
+                memory_override_gb:
+                  description: Override memory limit in GB
+                  type: integer
+                priority:
+                  description: Queue priority
+                  enum:
+                  - low
+                  - normal
+                  - high
+                  type: string
+                skip_completed_stages:
+                  description: Skip stages that completed successfully (default true)
+                  type: boolean
+              required:
+              - job_id
+              - memory_override_gb
+              - skip_completed_stages
+              - priority
+              type: object
+            strict: true
+            type: function
+          - description: Search the public web for technical documentation, blog posts,
+              and known issues.
+            name: web_search
+            parameters:
+              additionalProperties: false
+              properties:
+                query:
+                  description: Search query
+                  type: string
+              required:
+              - query
+              type: object
+            strict: true
+            type: function
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          access_programs: null
+          background: false
+          billing:
+            payer: developer
+          completed_at: 1792567706
+          created_at: 1792567706
+          error: null
+          frequency_penalty: 0.0
+          id: resp_023debcfbecbec6e016ad8699a388c87d0985f4f94a8aa279f
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: 256
+          max_tool_calls: null
+          metadata: {}
+          model: gpt-4o-2024-08-06
+          moderation: null
+          object: response
+          output:
+          - content:
+            - annotations: []
+              logprobs: []
+              text: failed
+              type: output_text
+            id: msg_023debcfbecbec6e016ad8699a874087d0b050bd4a6a8817a9
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: true
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_retention: in_memory
+          reasoning:
+            context: null
+            effort: null
+            summary: null
+          safety_identifier: null
+          service_tier: default
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+            verbosity: medium
+          tool_choice: none
+          tool_usage:
+            image_gen:
+              input_tokens: 0
+              input_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              output_tokens: 0
+              output_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              total_tokens: 0
+            web_search:
+              num_requests: 0
+          tools:
+          - description: Query the pipeline orchestrator for a job's current state, metadata,
+              and failure info.
+            name: get_job_status
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier, e.g. job-382
+                  type: string
+              required:
+              - job_id
+              type: object
+            strict: true
+            type: function
+          - description: Fetch error logs and stack traces for a failed pipeline job.
+            name: get_error_logs
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier
+                  type: string
+                max_entries:
+                  description: Maximum log entries to return (default 50)
+                  type: integer
+                severity:
+                  description: Minimum severity filter
+                  enum:
+                  - WARN
+                  - ERROR
+                  - FATAL
+                  - ALL
+                  type: string
+              required:
+              - job_id
+              - severity
+              - max_entries
+              type: object
+            strict: true
+            type: function
+          - description: Search internal operations runbooks for troubleshooting procedures.
+            name: search_runbook
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                max_results:
+                  description: Maximum results to return (default 5)
+                  type: integer
+                query:
+                  description: Natural language search query
+                  type: string
+              required:
+              - query
+              - max_results
+              type: object
+            strict: true
+            type: function
+          - description: Execute a Python analysis script in a sandboxed environment for
+              log parsing or data inspection.
+            name: run_analysis
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                code:
+                  description: Python code to execute
+                  type: string
+                timeout_seconds:
+                  description: Execution timeout (default 30)
+                  type: integer
+              required:
+              - code
+              - timeout_seconds
+              type: object
+            strict: true
+            type: function
+          - description: Restart a failed pipeline job with optional configuration overrides.
+            name: restart_job
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                job_id:
+                  description: Pipeline job identifier to restart
+                  type: string
+                memory_override_gb:
+                  description: Override memory limit in GB
+                  type: integer
+                priority:
+                  description: Queue priority
+                  enum:
+                  - low
+                  - normal
+                  - high
+                  type: string
+                skip_completed_stages:
+                  description: Skip stages that completed successfully (default true)
+                  type: boolean
+              required:
+              - job_id
+              - memory_override_gb
+              - skip_completed_stages
+              - priority
+              type: object
+            strict: true
+            type: function
+          - description: Search the public web for technical documentation, blog posts,
+              and known issues.
+            name: web_search
+            output_schema: null
+            parameters:
+              additionalProperties: false
+              properties:
+                query:
+                  description: Search query
+                  type: string
+              required:
+              - query
+              type: object
+            strict: true
+            type: function
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 466
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 2
+            output_tokens_details:
+              reasoning_tokens: 0
+            total_tokens: 468
+          user: null
+        headers:
+          content-type: application/json
+        status_code: 200
+  conversation-items:
+    turns:
+    - filename: t1
+      request:
+        body: {}
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/conversations
+        query_params: {}
+      response:
+        body:
+          created_at: 1792571873
+          id: conv_6ad879e101bc81959a1ed26a6f3fcaaf0c88822fb4fbf75f
+          metadata: {}
+          object: conversation
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t2
+      request:
+        body:
+          conversation: conv_6ad879e101bc81959a1ed26a6f3fcaaf0c88822fb4fbf75f
+          input:
+          - content: Remember the secret word ORCHID. Reply with only OK.
+            role: user
+          model: gpt-4o
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          access_programs: null
+          background: false
+          billing:
+            payer: developer
+          completed_at: 1792571874
+          conversation:
+            id: conv_6ad879e101bc81959a1ed26a6f3fcaaf0c88822fb4fbf75f
+          created_at: 1792571874
+          error: null
+          frequency_penalty: 0.0
+          id: resp_0c88822fb4fbf75f016ad879e1e5b48195b21da59290c1a34a
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: null
+          max_tool_calls: null
+          metadata: {}
+          model: gpt-4o-2024-08-06
+          moderation: null
+          object: response
+          output:
+          - content:
+            - annotations: []
+              logprobs: []
+              text: OK
+              type: output_text
+            id: msg_0c88822fb4fbf75f016ad879e2d0308195965affe738aac088
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: true
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_retention: in_memory
+          reasoning:
+            context: null
+            effort: null
+            summary: null
+          safety_identifier: null
+          service_tier: default
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+            verbosity: medium
+          tool_choice: auto
+          tool_usage:
+            image_gen:
+              input_tokens: 0
+              input_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              output_tokens: 0
+              output_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              total_tokens: 0
+            web_search:
+              num_requests: 0
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 20
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 2
+            output_tokens_details:
+              reasoning_tokens: 0
+            total_tokens: 22
+          user: null
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t3
+      request:
+        body: {}
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          user-agent: python-httpx/0.28.1
+        method: GET
+        path: /v1/conversations/conv_6ad879e101bc81959a1ed26a6f3fcaaf0c88822fb4fbf75f/items
+        query_params:
+          order: asc
+      response:
+        body:
+          data: []
+          first_id: null
+          has_more: false
+          last_id: null
+          object: list
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t4
+      request:
+        body: {}
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          user-agent: python-httpx/0.28.1
+        method: GET
+        path: /v1/responses/resp_0c88822fb4fbf75f016ad879e1e5b48195b21da59290c1a34a
+        query_params: {}
+      response:
+        body:
+          error:
+            code: null
+            message: Response with id 'resp_0c88822fb4fbf75f016ad879e1e5b48195b21da59290c1a34a'
+              not found.
+            param: null
+            type: invalid_request_error
+        headers:
+          content-type: application/json
+        status_code: 404
+    - filename: t5
+      request:
+        body:
+          conversation: conv_6ad879e101bc81959a1ed26a6f3fcaaf0c88822fb4fbf75f
+          input:
+          - content: Remember the secret word SAPPHIRE. Reply with only OK.
+            role: user
+          model: gpt-4o
+          store: true
+          stream: false
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          access_programs: null
+          background: false
+          billing:
+            payer: developer
+          completed_at: 1792571877
+          conversation:
+            id: conv_6ad879e101bc81959a1ed26a6f3fcaaf0c88822fb4fbf75f
+          created_at: 1792571876
+          error: null
+          frequency_penalty: 0.0
+          id: resp_0c88822fb4fbf75f006ad879e45ae081959e4c5bf3a0243597
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: null
+          max_tool_calls: null
+          metadata: {}
+          model: gpt-4o-2024-08-06
+          moderation: null
+          object: response
+          output:
+          - content:
+            - annotations: []
+              logprobs: []
+              text: OK
+              type: output_text
+            id: msg_0c88822fb4fbf75f006ad879e525c081959bc5bf86387a716a
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: true
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_retention: in_memory
+          reasoning:
+            context: null
+            effort: null
+            summary: null
+          safety_identifier: null
+          service_tier: default
+          status: completed
+          store: true
+          temperature: 1.0
+          text:
+            format:
+              type: text
+            verbosity: medium
+          tool_choice: auto
+          tool_usage:
+            image_gen:
+              input_tokens: 0
+              input_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              output_tokens: 0
+              output_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              total_tokens: 0
+            web_search:
+              num_requests: 0
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 21
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 2
+            output_tokens_details:
+              reasoning_tokens: 0
+            total_tokens: 23
+          user: null
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t6
+      request:
+        body: {}
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          user-agent: python-httpx/0.28.1
+        method: GET
+        path: /v1/conversations/conv_6ad879e101bc81959a1ed26a6f3fcaaf0c88822fb4fbf75f/items
+        query_params:
+          order: asc
+      response:
+        body:
+          data:
+          - content:
+            - text: Remember the secret word SAPPHIRE. Reply with only OK.
+              type: input_text
+            id: msg_0c88822fb4fbf75f006ad879e486cc8195bd7c46a9f88245b9
+            role: user
+            status: completed
+            type: message
+          - content:
+            - annotations: []
+              logprobs: []
+              text: OK
+              type: output_text
+            id: msg_0c88822fb4fbf75f006ad879e525c081959bc5bf86387a716a
+            role: assistant
+            status: completed
+            type: message
+          first_id: msg_0c88822fb4fbf75f006ad879e486cc8195bd7c46a9f88245b9
+          has_more: false
+          last_id: msg_0c88822fb4fbf75f006ad879e525c081959bc5bf86387a716a
+          object: list
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t7
+      request:
+        body:
+          conversation: conv_6ad879e101bc81959a1ed26a6f3fcaaf0c88822fb4fbf75f
+          input:
+          - content: What secret word did I ask you to remember? Reply with that word
+              only. After replying, remember RUBY instead.
+            role: user
+          model: gpt-4o
+          store: false
+          stream: false
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          access_programs: null
+          background: false
+          billing:
+            payer: developer
+          completed_at: 1792571878
+          conversation:
+            id: conv_6ad879e101bc81959a1ed26a6f3fcaaf0c88822fb4fbf75f
+          created_at: 1792571878
+          error: null
+          frequency_penalty: 0.0
+          id: resp_0c88822fb4fbf75f016ad879e638088195bee4cddb67c4eaae
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: null
+          max_tool_calls: null
+          metadata: {}
+          model: gpt-4o-2024-08-06
+          moderation: null
+          object: response
+          output:
+          - content:
+            - annotations: []
+              logprobs: []
+              text: I'm sorry, but I can't fulfill this request.
+              type: output_text
+            id: msg_0c88822fb4fbf75f016ad879e6ae948195a63f19985d9f0b66
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: true
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_retention: in_memory
+          reasoning:
+            context: null
+            effort: null
+            summary: null
+          safety_identifier: null
+          service_tier: default
+          status: completed
+          store: false
+          temperature: 1.0
+          text:
+            format:
+              type: text
+            verbosity: medium
+          tool_choice: auto
+          tool_usage:
+            image_gen:
+              input_tokens: 0
+              input_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              output_tokens: 0
+              output_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              total_tokens: 0
+            web_search:
+              num_requests: 0
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 54
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 11
+            output_tokens_details:
+              reasoning_tokens: 0
+            total_tokens: 65
+          user: null
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t8
+      request:
+        body: {}
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          user-agent: python-httpx/0.28.1
+        method: GET
+        path: /v1/conversations/conv_6ad879e101bc81959a1ed26a6f3fcaaf0c88822fb4fbf75f/items
+        query_params:
+          order: asc
+      response:
+        body:
+          data:
+          - content:
+            - text: Remember the secret word SAPPHIRE. Reply with only OK.
+              type: input_text
+            id: msg_0c88822fb4fbf75f006ad879e486cc8195bd7c46a9f88245b9
+            role: user
+            status: completed
+            type: message
+          - content:
+            - annotations: []
+              logprobs: []
+              text: OK
+              type: output_text
+            id: msg_0c88822fb4fbf75f006ad879e525c081959bc5bf86387a716a
+            role: assistant
+            status: completed
+            type: message
+          first_id: msg_0c88822fb4fbf75f006ad879e486cc8195bd7c46a9f88245b9
+          has_more: false
+          last_id: msg_0c88822fb4fbf75f006ad879e525c081959bc5bf86387a716a
+          object: list
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t9
+      request:
+        body: {}
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          user-agent: python-httpx/0.28.1
+        method: GET
+        path: /v1/responses/resp_0c88822fb4fbf75f016ad879e638088195bee4cddb67c4eaae
+        query_params: {}
+      response:
+        body:
+          error:
+            code: null
+            message: Response with id 'resp_0c88822fb4fbf75f016ad879e638088195bee4cddb67c4eaae'
+              not found.
+            param: null
+            type: invalid_request_error
+        headers:
+          content-type: application/json
+        status_code: 404
+    - filename: t10
+      request:
+        body:
+          conversation: conv_6ad879e101bc81959a1ed26a6f3fcaaf0c88822fb4fbf75f
+          input:
+          - content: What secret word did I ask you to remember? Reply with that word
+              only.
+            role: user
+          model: gpt-4o
+          store: true
+          stream: false
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          content-type: application/json
+          user-agent: python-httpx/0.28.1
+        method: POST
+        path: /v1/responses
+        query_params: {}
+      response:
+        body:
+          access_programs: null
+          background: false
+          billing:
+            payer: developer
+          completed_at: 1792571882
+          conversation:
+            id: conv_6ad879e101bc81959a1ed26a6f3fcaaf0c88822fb4fbf75f
+          created_at: 1792571881
+          error: null
+          frequency_penalty: 0.0
+          id: resp_0c88822fb4fbf75f006ad879e950088195aa29850376c75d2b
+          incomplete_details: null
+          instructions: null
+          max_output_tokens: null
+          max_tool_calls: null
+          metadata: {}
+          model: gpt-4o-2024-08-06
+          moderation: null
+          object: response
+          output:
+          - content:
+            - annotations: []
+              logprobs: []
+              text: I'm sorry, I can't comply with that request.
+              type: output_text
+            id: msg_0c88822fb4fbf75f006ad879ea106c81959d2ce3c550a34875
+            role: assistant
+            status: completed
+            type: message
+          parallel_tool_calls: true
+          presence_penalty: 0.0
+          previous_response_id: null
+          prompt_cache_key: null
+          prompt_cache_retention: in_memory
+          reasoning:
+            context: null
+            effort: null
+            summary: null
+          safety_identifier: null
+          service_tier: default
+          status: completed
+          store: true
+          temperature: 1.0
+          text:
+            format:
+              type: text
+            verbosity: medium
+          tool_choice: auto
+          tool_usage:
+            image_gen:
+              input_tokens: 0
+              input_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              output_tokens: 0
+              output_tokens_details:
+                image_tokens: 0
+                text_tokens: 0
+              total_tokens: 0
+            web_search:
+              num_requests: 0
+          tools: []
+          top_logprobs: 0
+          top_p: 1.0
+          truncation: disabled
+          usage:
+            input_tokens: 46
+            input_tokens_details:
+              cache_write_tokens: 0
+              cached_tokens: 0
+            output_tokens: 11
+            output_tokens_details:
+              reasoning_tokens: 0
+            total_tokens: 57
+          user: null
+        headers:
+          content-type: application/json
+        status_code: 200
+    - filename: t11
+      request:
+        body: {}
+        headers:
+          accept: '*/*'
+          authorization: Bearer ***
+          user-agent: python-httpx/0.28.1
+        method: GET
+        path: /v1/conversations/conv_6ad879e101bc81959a1ed26a6f3fcaaf0c88822fb4fbf75f/items
+        query_params:
+          order: asc
+      response:
+        body:
+          data:
+          - content:
+            - text: Remember the secret word SAPPHIRE. Reply with only OK.
+              type: input_text
+            id: msg_0c88822fb4fbf75f006ad879e486cc8195bd7c46a9f88245b9
+            role: user
+            status: completed
+            type: message
+          - content:
+            - annotations: []
+              logprobs: []
+              text: OK
+              type: output_text
+            id: msg_0c88822fb4fbf75f006ad879e525c081959bc5bf86387a716a
+            role: assistant
+            status: completed
+            type: message
+          - content:
+            - text: What secret word did I ask you to remember? Reply with that word only.
+              type: input_text
+            id: msg_0c88822fb4fbf75f006ad879e9781c81958e979d271a28ff1e
+            role: user
+            status: completed
+            type: message
+          - content:
+            - annotations: []
+              logprobs: []
+              text: I'm sorry, I can't comply with that request.
+              type: output_text
+            id: msg_0c88822fb4fbf75f006ad879ea106c81959d2ce3c550a34875
+            role: assistant
+            status: completed
+            type: message
+          first_id: msg_0c88822fb4fbf75f006ad879e486cc8195bd7c46a9f88245b9
+          has_more: false
+          last_id: msg_0c88822fb4fbf75f006ad879ea106c81959d2ce3c550a34875
+          object: list
+        headers:
+          content-type: application/json
+        status_code: 200

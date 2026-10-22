@@ -57,6 +57,10 @@ async fn openapi_json_returns_valid_spec() {
         "must be OpenAPI 3.x"
     );
     assert_eq!(body["info"]["title"], "vLLM Agentic API");
+    assert_eq!(
+        body["components"]["schemas"]["RequestPayload"]["additionalProperties"],
+        true
+    );
 
     let paths = body["paths"].as_object().expect("paths must be an object");
     for expected in [

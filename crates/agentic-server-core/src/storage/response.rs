@@ -54,7 +54,9 @@ impl ResponseStore {
         let pool = self.pool()?;
         let row = response::get(pool, response_id)
             .await?
-            .ok_or_else(|| StorageError::not_found("Response", response_id))?;
+            .ok_or_else(|| StorageError::ResponseNotFound {
+                id: response_id.to_owned(),
+            })?;
         row.try_into()
     }
 

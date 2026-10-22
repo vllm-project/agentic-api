@@ -2,6 +2,7 @@
 //! opens its `agentic.execute` span, and hands off to the blocking or
 //! streaming driver.
 
+use crate::executor::inference::UpstreamHeaders;
 #[cfg(test)]
 use crate::types::io::InOutItem;
 use std::sync::Arc;
@@ -11,7 +12,7 @@ use tracing::{Instrument as _, debug};
 
 use super::retained::PreparedRetainedResponse;
 use super::run_blocking;
-use super::streaming::run_stream;
+use super::streaming::{StreamOptions, run_stream};
 use crate::executor::RunningResponse;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::inference::BoxStream;
@@ -34,7 +35,8 @@ use crate::types::request_response::{RequestPayload, ResponsePayload};
 pub struct ExecuteRequest {
     payload: RequestPayload,
     exec_ctx: Arc<ExecutionContext>,
-    client_auth: Option<String>,
+    client_auth: Option<UpstreamHeaders>,
+    defer_http_status: bool,
     continuation: Option<ResponseContinuation>,
     pinned_continuation: bool,
     steering_ids: Vec<String>,
@@ -50,6 +52,7 @@ impl ExecuteRequest {
             payload,
             exec_ctx,
             client_auth: None,
+            defer_http_status: false,
             continuation: None,
             pinned_continuation: false,
             steering_ids: Vec::new(),
@@ -75,10 +78,18 @@ impl ExecuteRequest {
             .map_or(configured, |transport| transport.min(configured))
     }
 
+    /// Supply request-scoped upstream headers already filtered by the transport.
+    /// Replaces a bearer-only override, including its fallback credentials.
+    #[must_use]
+    pub fn with_upstream_headers(mut self, headers: http::HeaderMap) -> Self {
+        self.client_auth = Some(UpstreamHeaders::Forwarded(headers));
+        self
+    }
+
     /// Override the bearer token for this request only; does not touch the shared [`ExecutionContext`].
     #[must_use]
     pub fn with_auth(mut self, token: Option<String>) -> Self {
-        self.client_auth = token;
+        self.client_auth = token.map(UpstreamHeaders::Bearer);
         self
     }
 
@@ -290,6 +301,17 @@ impl ExecuteRequest {
         Ok(self.prepare_retained().await?.start())
     }
 
+    /// Execute an HTTP response, retaining initial upstream failures as HTTP errors.
+    /// Streaming startup waits for the first client frame before returning success.
+    /// Later failures remain SSE events; dropping the request cancels its producer.
+    ///
+    /// # Errors
+    /// Returns preparation errors and upstream failures before the first client frame.
+    pub async fn run_http(mut self) -> ExecutorResult<Either<ResponsePayload, BoxStream>> {
+        self.defer_http_status = true;
+        self.run().await
+    }
+
     /// Execute one stateful conversation turn.
     ///
     /// Returns `Either::Left(ResponsePayload)` for non-streaming requests, or
@@ -339,21 +361,27 @@ impl ExecuteRequest {
             }
         };
         if ctx.original_request.stream {
-            return Ok(Either::Right(run_stream(
-                ctx,
-                tool_search_state,
-                self.exec_ctx,
-                self.client_auth,
-                max_stream_event_bytes,
-                execution,
-                self.control,
-            )));
+            return Ok(Either::Right(
+                run_stream(
+                    ctx,
+                    tool_search_state,
+                    self.exec_ctx,
+                    self.client_auth,
+                    StreamOptions {
+                        max_event_bytes: max_stream_event_bytes,
+                        defer_http_status: self.defer_http_status,
+                    },
+                    execution,
+                    self.control,
+                )
+                .await?,
+            ));
         }
         let result = Box::pin(run_blocking(
             ctx,
             tool_search_state,
             &self.exec_ctx,
-            self.client_auth.as_deref(),
+            self.client_auth.as_ref(),
         ))
         .await;
         match result {
@@ -431,7 +459,7 @@ mod tests {
 
     use super::*;
     use crate::executor::{ConversationHandler, ResponseHandler, commit, rehydrate_in_session};
-    use crate::storage::{ConversationStore, ResponseStore};
+    use crate::storage::{ConversationStore, ResponseStore, StorageError};
     use crate::tool::ToolError;
     use crate::types::io::{InputItem, InputMessageContent, ResponsesInput};
     use crate::utils::common::deserialize_from_value;
@@ -793,7 +821,7 @@ mod tests {
         let first_id = prepared.response_id().to_owned();
         assert_ne!(first_id, pin.response_id());
         assert_eq!(prepared.previous_response_id(), Some(pin.response_id()));
-        assert_eq!(prepared.client_auth.as_deref(), Some("test-token"));
+        assert!(matches!(prepared.client_auth.as_ref(), Some(UpstreamHeaders::Bearer(token)) if token == "test-token"));
         assert_eq!(
             prepared.max_stream_event_bytes,
             512.min(exec.responses_config.max_stream_event_bytes)
@@ -911,7 +939,7 @@ mod tests {
             .unwrap();
         assert!(matches!(
             ordinary.run().await,
-            Err(ExecutorError::PreviousResponseNotFound { .. })
+            Err(ExecutorError::Storage(StorageError::PreviousResponseNotFound { .. }))
         ));
 
         for stream in [false, true] {
