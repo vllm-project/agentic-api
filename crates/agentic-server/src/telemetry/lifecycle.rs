@@ -9,6 +9,7 @@ use std::fmt;
 use std::time::Duration;
 
 use opentelemetry::metrics::{Meter, MeterProvider as _};
+use opentelemetry::propagation::TextMapCompositePropagator;
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry::{KeyValue, global};
 use opentelemetry_otlp::{
@@ -17,7 +18,7 @@ use opentelemetry_otlp::{
 use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::error::OTelSdkError;
 use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider};
-use opentelemetry_sdk::propagation::TraceContextPropagator;
+use opentelemetry_sdk::propagation::{BaggagePropagator, TraceContextPropagator};
 use opentelemetry_sdk::trace::{SdkTracer, SdkTracerProvider};
 use tracing::warn;
 
@@ -205,12 +206,15 @@ fn exporter_compression(compression: OtlpCompression) -> Option<Compression> {
     }
 }
 
-/// Register the providers and the W3C `traceparent` propagator globally so
-/// instrumentation that only sees the `opentelemetry` API can reach them.
+/// Register the providers and the W3C `traceparent` and `baggage` propagators
+/// globally so instrumentation that only sees the `opentelemetry` API can reach them.
 pub(crate) fn install_globals(providers: &Providers) {
     if let Some(tracer) = &providers.tracer {
         global::set_tracer_provider(tracer.clone());
-        global::set_text_map_propagator(TraceContextPropagator::new());
+        global::set_text_map_propagator(TextMapCompositePropagator::new(vec![
+            Box::new(TraceContextPropagator::new()),
+            Box::new(BaggagePropagator::new()),
+        ]));
     }
     if let Some(meter) = &providers.meter {
         global::set_meter_provider(meter.clone());
