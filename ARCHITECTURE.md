@@ -118,11 +118,11 @@ boundaries; see [HTTP multi-agent execution](#http-multi-agent-execution).
 
 The crate produces a library plus two independent binaries. `src/lib.rs` exports
 `agentic_cli`, `agentic_harness`, `agentic_output`, `agentic_process`, `app`, `auth`,
-`handler`, and `model_capabilities`. On top of that:
+`handler`, `model_capabilities`, and `rate_limit`. On top of that:
 
 | Binary | Entry point | Uses |
 |---|---|---|
-| `agentic-server` (the gateway) | `src/main.rs` | `app`, `auth`, `handler`, `model_capabilities`, plus binary-private `server.rs` and `config_file.rs` |
+| `agentic-server` (the gateway) | `src/main.rs` | `app`, `auth`, `handler`, `model_capabilities`, `rate_limit`, plus binary-private `server.rs`, `config_file.rs`, and `server_settings.rs` |
 | `agentic` (the CLI launcher) | `src/bin/agentic.rs` | `agentic_cli`, `agentic_harness`, `agentic_output`, `agentic_process`, `model_capabilities` |
 
 These are two unrelated concerns bundled in one crate. If you're working on request
@@ -142,14 +142,25 @@ what stops the HTTP catalog and a launcher catalog from disagreeing about image 
 - **`app.rs`** (library) builds the router: `AppState` (the per-request-shared state:
   `exec_ctx: Arc<ExecutionContext>`, proxy state, readiness/websocket trackers, config)
   and `build_router_with_auth(state, server_config, authenticator)`, which wires every
-  route and optionally layers OIDC auth (`auth::require_oidc`) onto the protected ones.
+  route and layers [request admission](#request-admission-authentication-then-rate-limits)
+  onto the protected ones: optional OIDC auth (`auth::require_oidc`), then optional rate
+  limiting (`rate_limit::enforce_rate_limit`).
 - **`server.rs`** (binary-private) owns process lifecycle: `build_state` (constructs
   `ExecutionContext::from_config`, i.e. where the DB pool actually gets created),
   `serve_gateway`/`serve_gateway_until_signal` (bind, serve, graceful shutdown with a
   bounded drain), and `run`/`run_with_llm` (standalone mode, optionally spawning a vLLM
-  subprocess).
+  subprocess). It serves with `into_make_service_with_connect_info::<SocketAddr>()`, so
+  middleware can read each connection's peer address.
 - **`main.rs`** (binary-private) is the `clap` CLI front end: parses config from
   flags/env/`config.toml`, then calls `server::run` or `server::run_with_llm`.
+- **`server_settings.rs`** (binary-private) resolves the gateway admission settings from
+  the `[server]` table: the request body size ceiling (`resolve_max_request_body_size`)
+  and the per-caller rate limit (`resolve_rate_limit`, which returns `None` when no rate
+  is set and rejects a burst without a rate). Each setting resolves as CLI argument >
+  environment variable > configuration file > default, and an explicit CLI argument
+  skips the lower sources, so a malformed inherited environment value cannot block
+  startup. `generated_server_file_config` records the same environment variables when
+  `main.rs` generates a configuration file.
 
 ### HTTP handlers (`handler/http/`)
 
@@ -477,7 +488,65 @@ rendering an `ExecutorError` as a JSON error body.
 OIDC bearer-token authentication: discovery, JWKS fetch/cache/refresh, and the
 `require_oidc` axum middleware layered onto protected routes in `app.rs`. The
 WebSocket handler also reads the resulting `AuthenticatedPrincipal` extension directly,
-to detect token expiry mid-session.
+to detect token expiry mid-session. `auth/api_key.rs` holds `require_api_key`, which
+guards stored-response retrieval when OIDC is off and `OPENAI_API_KEY` is set, because
+that route reads local storage and never reaches an upstream that would check the key.
+
+### Request admission: authentication, then rate limits
+
+`build_router_with_auth` applies `route_layer` to the protected routes twice. Axum runs
+the layer added last first, so the rate-limit layer is added before the OIDC layer, and
+every protected request is admitted in this order:
+
+1. `auth::require_oidc` (when OIDC is configured) verifies the bearer token and inserts
+   the `AuthenticatedPrincipal`, or rejects with 401 (503 if the identity provider is
+   unavailable).
+2. `rate_limit::enforce_rate_limit` (when a rate is configured) charges the request to
+   its caller's bucket, or rejects with 429.
+3. On `GET /v1/responses/{response_id}` only, `auth::api_key::require_api_key` (OIDC
+   off, `OPENAI_API_KEY` set).
+4. The handler.
+
+Authentication must come first because the limiter keys a bucket by the verified
+principal whenever there is one. With OIDC, an unauthenticated request is rejected
+before it can consume any caller's allowance.
+
+`/health`, `/ready`, and the OpenAPI docs are public routes outside both layers. The
+outermost `track_request` layer still records 401 and 429 responses in HTTP metrics.
+
+### `rate_limit.rs`
+
+Opt-in, per-process, in-memory rate limiting with one bucket per caller.
+
+- **Algorithm.** `RateLimiter` implements GCRA, which is equivalent to a token bucket.
+  Each bucket is a single theoretical arrival time in a `Mutex`-guarded map
+  (`LimiterState::arrivals`). The critical section contains no `.await`.
+- **Keys.** `RateLimitKey::for_caller` uses the OIDC principal (`issuer` + `subject`)
+  when there is one. Otherwise it uses the connection's peer address from
+  `ConnectInfo`, with IPv6 grouped by /64. That address is why `server.rs` serves with
+  connect info.
+- **What never chooses a bucket.** A bearer token or `x-api-key` the gateway does not
+  verify, and forwarded-for headers. A client could vary them on every request.
+- **Memory bound.** The key map holds at most `MAX_KEYS` callers. When it is full, idle
+  buckets are swept at most once per `SWEEP_INTERVAL`. Callers beyond the cap share the
+  `Overflow` bucket, which keeps memory bounded under key churn.
+- **Rejections.** A rejection carries `retry-after`, `retry-after-ms`, and
+  `x-ratelimit-*-requests` hints, all rounded up.
+- **WebSocket.** The middleware charges the upgrade request. It also inserts a
+  `RateLimitCharge` extension, which the Responses WebSocket handler uses to charge each
+  `response.create` frame to the same bucket. A rejected frame is answered with an
+  error event, and the connection stays open.
+
+### `error_response.rs`
+
+The single builder for errors the gateway raises itself rather than an upstream or the
+executor: authentication failures (`auth.rs`) and rate limits (`rate_limit.rs`).
+`GatewayError` carries the status, the OpenAI and Anthropic `error.type` values, and a
+message. `ErrorFormat::for_path` picks the envelope: Messages routes answer in the
+Anthropic format, with a generated `request_id` repeated in the `request-id` header;
+every other route answers in the OpenAI format. Both envelopes are typed `Serialize`
+structs, not ad hoc JSON. Callers add their own headers, such as `WWW-Authenticate` or
+the retry hints. Executor errors keep going through `handler/common.rs`.
 
 ### The hard boundary: no direct storage access
 
@@ -1860,6 +1929,7 @@ router, reusing the same core logic in-process.
 | Task | Where |
 |---|---|
 | Add a new HTTP or WebSocket route | `agentic-server/src/handler/{http,websocket}/`, wire it in `app.rs`'s `build_router_with_auth` |
+| Change request admission (authentication, rate limits, or gateway-raised errors) | The layer order in `app.rs`'s `build_router_with_auth`, then `auth.rs`, `rate_limit.rs`, or `error_response.rs`; startup settings in `server_settings.rs` |
 | Support a new upstream SSE event | `events/types.rs` → `events/normalize.rs` → `executor/accumulator/` → `executor/translate/` when the event needs public tool-shape translation |
 | Add a new tool type | `tool/handler.rs` impl(s) → `tool/declaration.rs` (a `ToolDeclaration` kind and its view) → `tool/normalize.rs` → `tool/registry.rs` → `executor/translate/client.rs` for client-executed function shapes → `tool/executors.rs` for lazy gateway setup |
 | Change gateway-round concurrency or lifecycle ordering | `executor/gateway.rs` (`GatewayScheduler`/event plans) + `executor/engine.rs` (round decision/ordered streaming) + `tool/ownership.rs` (typed binding and same-tool safety) |
