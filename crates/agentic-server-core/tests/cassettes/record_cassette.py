@@ -1994,11 +1994,11 @@ def main(
     """Interactive multi-turn cassette recorder (proxy embedded)."""
     global HTTP_READ_TIMEOUT
     if auto_tool_continuations and (
-        mode != "responses" or no_store or not tool_outputs_file
+        mode != "responses" or (no_store and not manual_item_replay) or not tool_outputs_file
         or branch_from or branch_turn_number or tool_choice_sequence_file or request_overrides_raw
     ):
         raise click.UsageError(
-            "--auto-tool-continuations requires stored Responses with --tool-outputs, "
+            "--auto-tool-continuations requires Responses with --tool-outputs and either storage or --manual-item-replay, "
             "without branches, tool-choice sequences, or request overrides."
         )
     if http_read_timeout != TIMEOUT and mode != "responses":

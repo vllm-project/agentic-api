@@ -85,6 +85,23 @@ for vLLM, and rejects encrypted-only reasoning that vLLM cannot replay. Reasonin
 context and compatible opaque state support are tracked in
 [#444](https://github.com/vllm-project/agentic-api/issues/444).
 
+Multi-agent HTTP requests also support `store:false`. Append returned output items
+unchanged to your input, then append new messages or matching client tool outputs.
+The response ends with a root-attributed `compaction` item whose `encrypted_content`
+carries the agent tree, private contexts, and pending client calls. Treat that content
+as opaque; clients do not inspect or decode it. You may discard all items before the
+latest compaction item, as in OpenAI's
+[stateless compaction flow](https://developers.openai.com/api/docs/guides/compaction#server-side-compaction).
+Keeping the complete history also works: the authenticated compaction supersedes its
+prefix, and only subsequent input is applied as new work. The gateway writes no database
+rows. A collaboration transcript without its final compaction item is rejected even
+when `multi_agent` is omitted. Re-declare
+the desired tools on each stateless request. For replay across gateway restarts
+or replicas, configure the same `AGENTIC_MULTI_AGENT_REPLAY_KEY` everywhere (a
+base64-encoded 32-byte secret); the default key lasts for the current process.
+Stateless multi-agent execution uses automatic per-agent compaction; the gateway's
+explicit `compaction_trigger` extension is unsupported in this mode.
+
 Executor-backed requests accept at most 64 MCP server declarations and 128
 discovered MCP tools. MCP discovery metadata shares the request's retained
 response budget (`[responses] max_retained_bytes`, default 8 MiB) with upstream
@@ -96,9 +113,10 @@ rounds and gateway tool output.
 gateway orchestrate subagents for one response and return attributed
 `multi_agent_call`, `multi_agent_call_output`, and `agent_message` items.
 `max_concurrent_subagents` defaults to 3 and must be positive. Multi-agent
-requests require `store: true`, reject `max_tool_calls` and reasoning summaries,
+requests reject `max_tool_calls` and reasoning summaries,
 and run over HTTP JSON and SSE only; the WebSocket transport rejects them.
-Continue the agent tree with `previous_response_id`. See
+Continue a stored agent tree with `previous_response_id`, or replay the complete
+item history with `store:false` as described above. See
 [HTTP multi-agent execution](https://github.com/vllm-project/agentic-api/blob/main/ARCHITECTURE.md#http-multi-agent-execution).
 
 `prompt_cache_key` is forwarded unchanged on direct and executor-backed HTTP
@@ -142,6 +160,12 @@ Compacts direct input or a stored previous-response chain into a canonical
 window of retained user messages plus one `compaction` item. See
 [Responses compaction](../guides/responses-compaction.md) for request examples,
 automatic threshold management, and the local plaintext limitation.
+
+Multi-agent trees are unsupported on this endpoint, including those restored from
+client-carried checkpoints or `previous_response_id`; these requests return HTTP 400
+before inference. Multi-agent execution uses automatic per-agent compaction through
+`/v1/responses`, matching OpenAI's
+[multi-agent limitations](https://developers.openai.com/api/docs/guides/responses-multi-agent#limitations).
 
 ### `WS /v1/responses`
 

@@ -334,7 +334,7 @@ including after terminal delivery. Routes with accepted input remain retained;
 unapplied input is disposed with the connection. Other lanes cannot consume it.
 Superseded targets reject further steering rather than redirecting input.
 
-WebSocket session admission allows multi-agent configuration with `store: true`,
+WebSocket session admission allows multi-agent configuration with either `store` value,
 including configuration inherited from a stored agent tree. The common multi-agent
 validation still runs before and after restoring effective settings. Generating responses
 register connection-local routes before their first event is relayed. Injection bypasses
@@ -621,7 +621,7 @@ access happen — those live in `tool/`, `executor/`, and `storage/` respectivel
   content. Its `input` module defines replay forms with optional IDs; output IDs remain
   required. Agent-message content includes text, images, files, refusals and encrypted
   parts, preserving response content during replay. These wire types do not impose a
-  storage policy; stored-only execution is a gateway admission constraint.
+  storage policy; the executor restores either stored or client-carried checkpoints.
 - **`types/tools/params.rs`** — the tool **declaration** shapes a client sends:
   `ResponsesTool` (tagged enum: `Function`, `ToolSearch`, `Mcp`, `WebSearch`, `FileSearch`,
   `CodeInterpreter`, `Namespace`, `Custom`, `Unknown`) and each variant's param struct.
@@ -811,7 +811,7 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   single-history rehydration validator; neither public error mapping nor
   transport-specific batch policy is defined by it.
   `multi_agent/control.rs` provides opt-in live input through `RunControl::channel`
-  and `ExecuteRequest::with_run_control`. It requires a stored, streaming multi-agent
+  and `ExecuteRequest::with_run_control`. It requires a streaming multi-agent
   inference request. Nonblocking admission bounds each batch's logical retained bytes
   and at most 32 outstanding commands, including unread decisions. Adapters must keep
   draining response events while awaiting decisions. The coordinator validates the
@@ -833,7 +833,7 @@ call inference, run the tool loop, persist. `agentic-server` never reaches past 
   unknown acceptance, never permission to retry silently. This core seam does not yet
   own WebSocket routing, wire acknowledgements, or completed-response retention;
   those belong to the connection adapter and retained event sink described above.
-  `engine/multi_agent.rs` coordinates these components for stored HTTP responses.
+  `engine/multi_agent.rs` coordinates these components for HTTP responses with either `store` value.
   Canonical histories and pending calls remain owned by the coordinator; the pipeline never
   spawns subagents. Its `context`, `actions`, `rounds`, `delivery`, and `compaction`
   modules separate restoration, collaboration commands, scheduling, public output and
@@ -960,7 +960,7 @@ exposing those declarations.
 #### HTTP multi-agent execution
 
 `multi_agent.enabled` selects gateway orchestration; it is not forwarded to the
-upstream model. Enabled requests require `store: true`; the current validator also
+upstream model. Enabled requests accept either `store` value; the current validator
 rejects `max_tool_calls`, `reasoning.summary`, and `reasoning.generate_summary`. These are gateway
 validation rules, not a claim that every upstream provider has the same restrictions.
 New requests without multi-agent configuration use single-agent execution;
@@ -1045,6 +1045,30 @@ uses the existing response/conversation stores.
 `ResponseMetadata.multi_agent_tree` restores execution state, while
 `response_snapshot` retains the exact terminal public response for GET retrieval.
 Continuation restoration discards the latter duplicate but retains the tree.
+
+With `store:false`, HTTP execution writes no response, item, conversation, or tree rows.
+The coordinator emits the authenticated tree as a root-attributed `compaction` item
+at the response boundary. Its `encrypted_content` is opaque to clients; the serialization
+and encryption format are internal implementation details. Clients append output items
+unchanged and may discard every item before the latest compaction. The complete tree
+includes private per-agent histories, mailboxes, discovered tools, and pending client
+calls, so pruning public history does not lose the state needed for continuation.
+`multi_agent/replay.rs` authenticates and bounds the tree before restoring it. The
+compaction supersedes its public prefix whether that prefix is retained or pruned;
+there is no public-history digest or client-side ciphertext inspection requirement.
+A collaboration transcript missing its final compaction item is rejected even if the
+caller omits `multi_agent`. The existing `ValidatedTreeCheckpoint` and pending-call registry
+then restore agent histories, mailboxes, discovered tools, and call ownership.
+Only the input after the checkpoint is applied as new work, including when a replay
+switches to `store:true` with explicit root compaction. The compactor separates new
+input before removing the trigger so replay offsets cannot shift. Stored parent IDs and
+explicit conversations can still supply a tree; `store:false` leaves the new turn unstored.
+
+`AGENTIC_MULTI_AGENT_REPLAY_KEY` accepts a base64-encoded 32-byte deployment secret.
+Use the same key across replicas and restarts to keep client-carried history replayable.
+When unset, a random process-local key supports replay until that gateway restarts.
+Only this encryption key is retained between stateless HTTP requests, not their histories.
+Replay size limits share the existing response retention and checkpoint limits.
 
 The public transcript contains attributed `multi_agent_call` (`mac_`),
 `multi_agent_call_output` (`maco_`) and `agent_message` (`amsg_`) items alongside each
@@ -1258,6 +1282,10 @@ depend on SSE or executor types. `TranslationContext` is an owned snapshot of th
 registry facts and request metadata needed for classification and restoration. It
 provides each round's tool classification and owns final restoration of public tool
 declarations, custom/namespace shapes, tool choice, and tool-search metadata.
+Output-text `logprobs` use the existing nullable-vector deserializer: missing and
+null values become an empty vector and serialize as `[]`. Wire normalization uses
+the same default so content parts agree with item and terminal snapshots;
+populated log probabilities are preserved through continuation and storage.
 
 Async client tools are marked from the same snapshot: the registry's async tool names
 (`ToolRegistry::async_tool_names`) are copied into the context. The dispatcher creates each

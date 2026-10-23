@@ -25,7 +25,7 @@ const GATEWAY_TOOL_ALIASES_ENV: &str = "MESSAGES_GATEWAY_TOOL_ALIASES";
 /// Context built by `rehydrate_conversation`, threaded through the execute pipeline.
 #[derive(Debug)]
 pub struct RequestContext {
-    /// Private canonical tree; committed atomically with response metadata.
+    /// Private canonical tree, restored from stored metadata or authenticated client-carried state.
     pub multi_agent_tree: Option<ValidatedTreeCheckpoint>,
     /// Client request. Before relaxing the inference selector, an omitted `tool_choice`
     /// is filled with its resolved value so public response metadata stays consistent.

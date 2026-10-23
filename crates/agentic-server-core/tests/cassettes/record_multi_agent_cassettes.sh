@@ -20,7 +20,8 @@ masked), injection outcomes, and close/failure details without synthesizing SSE.
 Function, shell, custom, and discovery outputs are submitted for characterization;
 a provider may reject an injection kind. Such failures are preserved and reported,
 not retried as though accepted input were rejected.
-Positive scenarios enable multi-agent with store:true and the multi-agent beta header.
+Scenarios enable multi-agent with the multi-agent beta header. Storage defaults to true.
+MULTI_AGENT_STORE=false characterizes mixed-tools HTTP full-history replay without storage.
 Select MULTI_AGENT_SUITE=websocket-edge-cases to record only the four state/race/atomicity probes.
 All edge cases share one YAML per provider, with a labeled session for each probe.
 For that focused suite, MULTI_AGENT_EDGE_ACTIVE=true uses [websocket-active] sibling text generation during injection
@@ -33,6 +34,7 @@ Environment:
   MULTI_AGENT_RECORD_SET  openai (default), gateway, or all
   MULTI_AGENT_SUITE       all (default), review, proposals, mixed-tools, client-owned-tools, code-interpreter, or websocket-edge-cases
   MULTI_AGENT_TRANSPORT   http (default) or websocket
+  MULTI_AGENT_STORE       true (default) or false (HTTP mixed-tools full-history replay)
   MULTI_AGENT_STREAM_MODE both (default), streaming, or nonstreaming
   MULTI_AGENT_MAX_CONTINUATIONS  Extra client-tool requests per scenario (default: 10; max: 100)
   HTTP_READ_TIMEOUT      Upstream read inactivity timeout in seconds (default: 900)
@@ -40,7 +42,8 @@ Environment:
   OPENAI_MODEL           Default: gpt-5.6-sol
   GATEWAY_URL            Default: http://localhost:9000
   GATEWAY_MODEL          Served gateway model (also accepts MODEL)
-  MULTI_AGENT_OUTPUT_DIR Cassette directory (default: multi_agent beside this script)
+  MULTI_AGENT_OUTPUT_DIR Cassette directory (default: multi_agent; store:false uses store_false)
+  MULTI_AGENT_MIXED_TOOLS_FILE Optional mixed-tools fixture override (for local dependency proxies)
   MAX_CONCURRENT_SUBAGENTS Maximum active subagents, excluding root (default: 3; code-interpreter: 2)
   MAX_OUTPUT_TOKENS     Default: 16384; 0 omits the request limit
   PROXY_PORT            Default: 7070
@@ -94,7 +97,7 @@ and a ready, operator-enabled runtime; see docs/design/embedded-code-interpreter
 Remaining coverage: partial/duplicate/mismatched outputs for a real pending call,
 branch/configuration changes, long-context compaction and its races, all hosted
 actions, WebSocket, and gateway dependency replay. Passing this suite does not
-complete MA-01 characterization. Gateway multi-agent support is scoped to store:true.
+complete MA-01 characterization. The mixed-tools HTTP suite also supports store:false.
 HELP
 }
 
@@ -113,16 +116,29 @@ RECORD_SET="${MULTI_AGENT_RECORD_SET:-openai}"
 SUITE="${MULTI_AGENT_SUITE:-all}"
 STREAM_MODE="${MULTI_AGENT_STREAM_MODE:-both}"
 TRANSPORT="${MULTI_AGENT_TRANSPORT:-http}"
+STORE="${MULTI_AGENT_STORE:-true}"
 HTTP_READ_TIMEOUT="${HTTP_READ_TIMEOUT:-900}"
 OPENAI_MODEL="${OPENAI_MODEL:-gpt-5.6-sol}"
 GATEWAY_URL="${GATEWAY_URL:-http://localhost:9000}"
 GATEWAY_MODEL="${GATEWAY_MODEL:-${MODEL:-}}"
 FIXTURES_DIR="$SCRIPTS_DIR/multi_agent"
 TOOL_SEARCH_FIXTURES="$SCRIPTS_DIR/tool_search"
-BASE_DIR="${MULTI_AGENT_OUTPUT_DIR:-$FIXTURES_DIR}"
+BASE_DIR="$FIXTURES_DIR"
+if [[ "$STORE" == false ]]; then BASE_DIR="$SCRIPTS_DIR/store_false"; fi
+BASE_DIR="${MULTI_AGENT_OUTPUT_DIR:-$BASE_DIR}"
 MAX_OUTPUT_TOKENS="${MAX_OUTPUT_TOKENS:-16384}"
 PROXY_PORT="${PROXY_PORT:-7070}"
 PYTHON="${PYTHON:-python3}"
+case "$STORE" in
+  true) ;;
+  false)
+    if [[ "$TRANSPORT" != http || "$SUITE" != mixed-tools ]]; then
+      echo 'ERROR: MULTI_AGENT_STORE=false requires HTTP transport and MULTI_AGENT_SUITE=mixed-tools' >&2
+      exit 2
+    fi
+    ;;
+  *) echo 'ERROR: MULTI_AGENT_STORE must be true or false' >&2; exit 2 ;;
+esac
 MAX_CONCURRENT_SUBAGENTS="${MAX_CONCURRENT_SUBAGENTS:-}"
 if [[ -n "$MAX_CONCURRENT_SUBAGENTS" && ! "$MAX_CONCURRENT_SUBAGENTS" =~ ^[1-9][0-9]*$ ]]; then
   echo 'ERROR: MAX_CONCURRENT_SUBAGENTS must be a positive integer' >&2
@@ -255,7 +271,7 @@ record_scenarios() {
       tool_args=(--auto-tool-continuations "${MULTI_AGENT_MAX_CONTINUATIONS:-10}" --tools "$FIXTURES_DIR/tools.json" --tool-outputs "$FIXTURES_DIR/tool_outputs.py")
     elif [[ "$scenario" == mixed-tools ]]; then
       tool_args=(--auto-tool-continuations "${MULTI_AGENT_MAX_CONTINUATIONS:-10}"
-        --tools "$FIXTURES_DIR/mixed_tools.json"
+        --tools "${MULTI_AGENT_MIXED_TOOLS_FILE:-$FIXTURES_DIR/mixed_tools.json}"
         --tool-outputs "$FIXTURES_DIR/mixed_tool_outputs.py")
     elif [[ "$scenario" == code-interpreter ]]; then
       tool_args=(--tools "$FIXTURES_DIR/code_interpreter_tools.json" --parallel-tool-calls true)
@@ -272,11 +288,15 @@ record_scenarios() {
     for mode in "${modes[@]}"; do
       if [[ "$TRANSPORT" == http && "$STREAM_MODE" != both && "$mode" != "$STREAM_MODE" ]]; then continue; fi
       output="$BASE_DIR/multi-agent-$provider-$scenario-$model_slug-$mode.yaml"
+      if [[ "$STORE" == false ]]; then
+        output="$BASE_DIR/multi-agent-store-false-$provider-$scenario-$model_slug-$mode.yaml"
+      fi
       command=("$PYTHON" -u "$RECORDER" --mode responses --transport "$TRANSPORT" --turns "$turns"
         --model "$model" "$endpoint_flag" "$endpoint" --proxy-port "$PROXY_PORT"
         --multi-agent "$multi_agent_config" --openai-beta responses_multi_agent=v1
         --http-read-timeout "$HTTP_READ_TIMEOUT"
         --max-output-tokens "$MAX_OUTPUT_TOKENS" --output "$output" "${tool_args[@]}")
+      if [[ "$STORE" == false ]]; then command+=(--no-store --manual-item-replay); fi
       if [[ "$mode" != nonstreaming ]]; then command+=(--stream); else command+=(--no-stream); fi
       if [[ "$DRY_RUN" == true ]]; then
         printf '%q ' "${command[@]}"

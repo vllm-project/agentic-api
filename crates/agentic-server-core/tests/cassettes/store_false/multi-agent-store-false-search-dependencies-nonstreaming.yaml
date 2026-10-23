@@ -1,0 +1,429 @@
+turns:
+- filename: t1
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+    method: GET
+    path: /v1/search
+    query_params:
+      count: '5'
+      include_domains: docs.python.org
+      query: Python csv module official documentation reader writer DictReader DictWriter
+        dialect
+  response:
+    body:
+      metadata:
+        latency: 0.8179470971226692
+        query: Python csv module official documentation reader writer DictReader DictWriter
+          dialect
+        search_uuid: aee8ba90-a917-4fb4-b981-2ad6a081a7e5
+      results:
+        web:
+        - description: 'Source code: Lib/csv.py The so-called CSV (Comma Separated
+            Values) format is the most common import and export format for spreadsheets
+            and databases. CSV format was used for many years prior to att...'
+          favicon_url: https://you.com/favicon?domain=docs.python.org&size=128
+          original_thumbnail_url: https://docs.python.org/3.15/_images/social_previews/summary_library_csv_3d1c7a78.png
+          snippets:
+          - Programmers can also read and write data in dictionary form using the
+            DictReader and DictWriter classes. ... The Python Enhancement Proposal
+            which proposed this addition to Python. ... Return a reader object that
+            will process lines from the given csvfile. A csvfile must be an iterable
+            of strings, each in the reader’s defined csv format. A csvfile is most
+            commonly a file-like object or list. If csvfile is a file object, it should
+            be opened with newline=''. [1] An optional dialect parameter can be given
+            which is used to define a set of parameters specific to a particular CSV
+            dialect.
+          - 'A read-only description of the dialect in use by the parser. ... The
+            number of lines read from the source iterator. This is not the same as
+            the number of records returned, as records can span multiple lines. DictReader
+            objects have the following public attribute: ... If not passed as a parameter
+            when creating the object, this attribute is initialized upon first access
+            or when the first record is read from the file. writer objects (DictWriter
+            instances and objects returned by the writer() function) have the following
+            public methods.'
+          - If it is set to 'ignore', extra values in the dictionary are ignored.
+            Any other optional or keyword arguments are passed to the underlying writer
+            instance. Note that unlike the DictReader class, the fieldnames parameter
+            of the DictWriter class is not optional.
+          - Return the next row of the reader’s iterable object as a list (if the
+            object was returned from reader()) or a dict (if it is a DictReader instance),
+            parsed according to the current Dialect.
+          thumbnail_url: https://docs.python.org/3.15/_images/social_previews/summary_library_csv_3d1c7a78.png
+          title: csv — CSV file reading and writing — Python 3.15.0 documentation
+          url: https://docs.python.org/3/library/csv.html
+        - description: Users could modify the underlying ... active readers and writers.
+            ... Return the names of all registered dialects. ... Returns the current
+            maximum field size allowed by the parser. If new_limit is given, this
+            becomes the new limit. New in version 2.5. ... class csv.DictReader(f,
+            ...
+          favicon_url: https://you.com/favicon?domain=docs.python.org&size=128
+          snippets:
+          - Users could modify the underlying class, changing the behavior of active
+            readers and writers. ... Return the names of all registered dialects.
+            ... Returns the current maximum field size allowed by the parser. If new_limit
+            is given, this becomes the new limit. New in version 2.5. ... class csv.DictReader(f,
+            fieldnames=None, restkey=None, restval=None, dialect='excel', *args, **kwds)¶
+          - The csv module’s reader and writer objects read and write sequences. Programmers
+            can also read and write data in dictionary form using the DictReader and
+            DictWriter classes.
+          - 'A read-only description of the dialect in use by the writer. DictWriter
+            objects have the following public method: ... Write a row with the field
+            names (as specified in the constructor). New in version 2.7. ... import
+            csv with open(''passwd'', ''rb'') as f: reader = csv.reader(f, delimiter='':'',
+            quoting=csv.QUOTE_NONE) for row in reader: print row'
+          - 'Reader objects (DictReader instances and objects returned by the reader()
+            function) have the following public methods: ... Return the next row of
+            the reader’s iterable object as a list, parsed according to the current
+            dialect.'
+          title: 13.1. csv — CSV File Reading and Writing — Python 2.7.18 ...
+          url: https://docs.python.org/2/library/csv.html
+        - description: 'A read-only description of the dialect in use by the parser.
+            ... The number of lines read from the source iterator. This is not the
+            same as the number of records returned, as records can span multiple lines.
+            DictReader objects have the following public attribute: ... If not passed
+            as a parameter when creating the object, this attribute is initialized
+            upon first access or when the first record is read from the file. Writer
+            objects (DictWriter ...'
+          favicon_url: https://you.com/favicon?domain=docs.python.org&size=128
+          snippets:
+          - 'A read-only description of the dialect in use by the parser. ... The
+            number of lines read from the source iterator. This is not the same as
+            the number of records returned, as records can span multiple lines. DictReader
+            objects have the following public attribute: ... If not passed as a parameter
+            when creating the object, this attribute is initialized upon first access
+            or when the first record is read from the file. Writer objects (DictWriter
+            instances and objects returned by the writer() function) have the following
+            public methods.'
+          - The csv module’s reader and writer objects read and write sequences. Programmers
+            can also read and write data in dictionary form using the DictReader and
+            DictWriter classes.
+          - If it is set to 'ignore', extra values in the dictionary are ignored.
+            Any other optional or keyword arguments are passed to the underlying writer
+            instance. Note that unlike the DictReader class, the fieldnames parameter
+            of the DictWriter class is not optional.
+          - Return the next row of the reader’s iterable object as a list (if the
+            object was returned from reader()) or a dict (if it is a DictReader instance),
+            parsed according to the current Dialect.
+          title: csv — CSV File Reading and Writing — Python 3.10.19 documentation
+          url: https://docs.python.org/3.10/library/csv.html
+        - description: 'A read-only description of the dialect in use by the parser.
+            ... The number of lines read from the source iterator. This is not the
+            same as the number of records returned, as records can span multiple lines.
+            DictReader objects have the following public attribute: ... If not passed
+            as a parameter when creating the object, this attribute is initialized
+            upon first access or when the first record is read from the file. Writer
+            objects (DictWriter ...'
+          favicon_url: https://you.com/favicon?domain=docs.python.org&size=128
+          snippets:
+          - 'A read-only description of the dialect in use by the parser. ... The
+            number of lines read from the source iterator. This is not the same as
+            the number of records returned, as records can span multiple lines. DictReader
+            objects have the following public attribute: ... If not passed as a parameter
+            when creating the object, this attribute is initialized upon first access
+            or when the first record is read from the file. Writer objects (DictWriter
+            instances and objects returned by the writer() function) have the following
+            public methods.'
+          - The csv module’s reader and writer objects read and write sequences. Programmers
+            can also read and write data in dictionary form using the DictReader and
+            DictWriter classes.
+          - If it is set to 'ignore', extra values in the dictionary are ignored.
+            Any other optional or keyword arguments are passed to the underlying writer
+            instance. Note that unlike the DictReader class, the fieldnames parameter
+            of the DictWriter class is not optional.
+          - Return the next row of the reader’s iterable object as a list (if the
+            object was returned from reader()) or a dict (if it is a DictReader instance),
+            parsed according to the current Dialect.
+          title: csv — CSV File Reading and Writing — Python 3.10.20 documentation
+          url: https://docs.python.org/3.10/library/csv.html?highlight=dictreader
+        - description: 'Source code: Lib/csv.py The so-called CSV (Comma Separated
+            Values) format is the most common import and export format for spreadsheets
+            and databases. CSV format was used for many years prior to att...'
+          favicon_url: https://you.com/favicon?domain=docs.python.org&size=128
+          original_thumbnail_url: https://docs.python.org/3.12/_images/social_previews/summary_library_csv_aff76666.png
+          snippets:
+          - Programmers can also read and write data in dictionary form using the
+            DictReader and DictWriter classes. ... The Python Enhancement Proposal
+            which proposed this addition to Python. ... Return a reader object that
+            will process lines from the given csvfile. A csvfile must be an iterable
+            of strings, each in the reader’s defined csv format. A csvfile is most
+            commonly a file-like object or list. If csvfile is a file object, it should
+            be opened with newline=''. [1] An optional dialect parameter can be given
+            which is used to define a set of parameters specific to a particular CSV
+            dialect.
+          - 'A read-only description of the dialect in use by the parser. ... The
+            number of lines read from the source iterator. This is not the same as
+            the number of records returned, as records can span multiple lines. DictReader
+            objects have the following public attribute: ... If not passed as a parameter
+            when creating the object, this attribute is initialized upon first access
+            or when the first record is read from the file. writer objects (DictWriter
+            instances and objects returned by the writer() function) have the following
+            public methods.'
+          - If it is set to 'ignore', extra values in the dictionary are ignored.
+            Any other optional or keyword arguments are passed to the underlying writer
+            instance. Note that unlike the DictReader class, the fieldnames parameter
+            of the DictWriter class is not optional.
+          - Return the next row of the reader’s iterable object as a list (if the
+            object was returned from reader()) or a dict (if it is a DictReader instance),
+            parsed according to the current Dialect.
+          thumbnail_url: https://docs.python.org/3.12/_images/social_previews/summary_library_csv_aff76666.png
+          title: csv — CSV File Reading and Writing — Python 3.12.14 documentation
+          url: https://docs.python.org/3.12/library/csv.html
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+    method: GET
+    path: /v1/search
+    query_params:
+      include_domains: github.com
+      query: tiktoken core.py Encoding encode decode method signature allowed_special
+        disallowed_special
+  response:
+    body:
+      metadata:
+        latency: 0.7462871251627803
+        query: tiktoken core.py Encoding encode decode method signature allowed_special
+          disallowed_special
+        search_uuid: 2ba1926f-d8ae-481d-bc0d-1855ebe08fd5
+      results:
+        web:
+        - description: tiktoken is a fast BPE tokeniser for use with OpenAI's models.
+            - openai/tiktoken
+          favicon_url: https://you.com/favicon?domain=github.com&size=128
+          original_thumbnail_url: https://opengraph.githubassets.com/502fcaf587fb91814a3858c4e355bc3ad7fc736310aa22a1dfb8c466bf7077e3/openai/tiktoken
+          snippets:
+          - tiktoken is a fast BPE tokeniser for use with OpenAI's models. - tiktoken/tiktoken/core.py
+            at main · openai/tiktoken
+          - 'self._core_bpe = _tiktoken.CoreBPE(mergeable_ranks, special_tokens, pat_str)  ·     def
+            __repr__(self) -> str:         return f""  ·     # ====================     #
+            Encoding ·     # ====================  ·     def encode_ordinary(self,
+            text: str) -> list[int]:         """Encodes a string into tokens, ignoring
+            special tokens.  ·         This is equivalent to `encode(text, disallowed_special=())`
+            (but slightly faster).'
+          - 'raise_disallowed_special_token(match.group())  ·         import numpy
+            as np ·  ·         buffer = self._core_bpe.encode_to_tiktoken_buffer(text,
+            allowed_special)         return np.frombuffer(buffer, dtype=np.uint32)  ·     def
+            encode_ordinary_batch(self, text: list[str], *, num_threads: int = 8)
+            -> list[list[int]]:         """Encodes a list of strings into tokens,
+            in parallel, ignoring special tokens.'
+          - '>>> assert all(enc.decode_bytes(stable_tokens + seq).startswith(text.encode())
+            for seq in completions)'
+          thumbnail_url: https://opengraph.githubassets.com/502fcaf587fb91814a3858c4e355bc3ad7fc736310aa22a1dfb8c466bf7077e3/openai/tiktoken
+          title: tiktoken/tiktoken/core.py at main · openai/tiktoken
+          url: https://github.com/openai/tiktoken/blob/main/tiktoken/core.py
+        - description: tiktoken is a fast BPE tokeniser for use with OpenAI's models.
+            - openai/tiktoken
+          favicon_url: https://you.com/favicon?domain=github.com&size=128
+          original_thumbnail_url: https://opengraph.githubassets.com/d4f725fb65a6f48082a6abe3b3b03d7ac830a1c2a29bb21941f16c06b3f5a0d3/openai/tiktoken
+          snippets:
+          - tiktoken is a fast BPE tokeniser for use with OpenAI's models. - tiktoken/tiktoken/core.py
+            at dcb39287a1f90a94d4bf6146df25da03c017646f · openai/tiktoken
+          - 'self._core_bpe = _tiktoken.CoreBPE(mergeable_ranks, special_tokens, pat_str)  ·     def
+            __repr__(self) -> str:         return f""  ·     # ====================     #
+            Encoding ·     # ====================  ·     def encode_ordinary(self,
+            text: str) -> list[int]:         """Encodes a string into tokens, ignoring
+            special tokens.  ·         This is equivalent to `encode(text, disallowed_special=())`
+            (but slightly faster).'
+          - 'raise_disallowed_special_token(match.group())  ·         import numpy
+            as np ·  ·         buffer = self._core_bpe.encode_to_tiktoken_buffer(text,
+            allowed_special)         return np.frombuffer(buffer, dtype=np.uint32)  ·     def
+            encode_ordinary_batch(self, text: list[str], *, num_threads: int = 8)
+            -> list[list[int]]:         """Encodes a list of strings into tokens,
+            in parallel, ignoring special tokens.'
+          - '>>> assert all(enc.decode_bytes(stable_tokens + seq).startswith(text.encode())
+            for seq in completions)'
+          thumbnail_url: https://opengraph.githubassets.com/d4f725fb65a6f48082a6abe3b3b03d7ac830a1c2a29bb21941f16c06b3f5a0d3/openai/tiktoken
+          title: tiktoken/tiktoken/core.py at dcb39287a1f90a94d4bf6146df25da03c017646f
+            ...
+          url: https://github.com/openai/tiktoken/blob/dcb39287/tiktoken/core.py
+        - description: tiktoken is a fast BPE tokeniser for use with OpenAI's models.
+            - openai/tiktoken
+          favicon_url: https://you.com/favicon?domain=github.com&size=128
+          original_thumbnail_url: https://opengraph.githubassets.com/d4f725fb65a6f48082a6abe3b3b03d7ac830a1c2a29bb21941f16c06b3f5a0d3/openai/tiktoken
+          snippets:
+          - tiktoken is a fast BPE tokeniser for use with OpenAI's models. - tiktoken/tiktoken/core.py
+            at 97e49cbadd500b5cc9dbb51a486f0b42e6701bee · openai/tiktoken
+          - 'self._core_bpe = _tiktoken.CoreBPE(mergeable_ranks, special_tokens, pat_str)  ·     def
+            __repr__(self) -> str:         return f""  ·     # ====================     #
+            Encoding ·     # ====================  ·     def encode_ordinary(self,
+            text: str) -> list[int]:         """Encodes a string into tokens, ignoring
+            special tokens.  ·         This is equivalent to `encode(text, disallowed_special=())`
+            (but slightly faster).'
+          - 'raise_disallowed_special_token(match.group())  ·         import numpy
+            as np ·  ·         buffer = self._core_bpe.encode_to_tiktoken_buffer(text,
+            allowed_special)         return np.frombuffer(buffer, dtype=np.uint32)  ·     def
+            encode_ordinary_batch(self, text: list[str], *, num_threads: int = 8)
+            -> list[list[int]]:         """Encodes a list of strings into tokens,
+            in parallel, ignoring special tokens.'
+          - '>>> assert all(enc.decode_bytes(stable_tokens + seq).startswith(text.encode())
+            for seq in completions)'
+          thumbnail_url: https://opengraph.githubassets.com/d4f725fb65a6f48082a6abe3b3b03d7ac830a1c2a29bb21941f16c06b3f5a0d3/openai/tiktoken
+          title: tiktoken/tiktoken/core.py at 97e49cbadd500b5cc9dbb51a486f0b42e6701bee
+            ...
+          url: https://github.com/openai/tiktoken/blob/97e49cba/tiktoken/core.py
+        - description: 'Hi, we are using tiktoken 0.5.2 to calculate the token count.
+            It is working most of the time, but we are seeing the error: RuntimeError(StackOverflow)
+            with one of the runs. Here is the part of the ...'
+          favicon_url: https://you.com/favicon?domain=github.com&size=128
+          original_thumbnail_url: https://opengraph.githubassets.com/21f8220714197b0b93716635ae8f81adf4725ee461f4c0d48f68e3b4001cb8cd/openai/tiktoken/issues/400
+          page_age: '2025-05-06T07:36:47'
+          snippets:
+          - 'Hi, we are using tiktoken 0.5.2 to calculate the token count. It is working
+            most of the time, but we are seeing the error: RuntimeError(StackOverflow)
+            with one of the runs. Here is the part of the stack trace: SystemLog:
+            File "/azureml-e...'
+          - 'RuntimeError(StackOverflow) with tiktoken.encoding_for_model(''gpt-4'').encode(txt,
+            disallowed_special=())#400 ... we are using tiktoken 0.5.2 to calculate
+            the token count. It is working most of the time, but we are seeing the
+            error: RuntimeError(StackOverflow) with one of the runs. Here is the part
+            of the stack trace: SystemLog: File "/azureml-envs/azureml_40acd812113c64de92b8cc12dc98c336/lib/python3.11/site-packages/tiktoken/core.py",
+            line 120, in encode SystemLog: return self._core_bpe.encode(text, allowed_special)'
+          thumbnail_url: https://opengraph.githubassets.com/21f8220714197b0b93716635ae8f81adf4725ee461f4c0d48f68e3b4001cb8cd/openai/tiktoken/issues/400
+          title: RuntimeError(StackOverflow) with tiktoken.encoding_for_model('...
+          url: https://github.com/openai/tiktoken/issues/400
+        - description: tiktoken is a fast BPE tokeniser for use with OpenAI's models.
+            - openai/tiktoken
+          favicon_url: https://you.com/favicon?domain=github.com&size=128
+          original_thumbnail_url: https://opengraph.githubassets.com/d4f725fb65a6f48082a6abe3b3b03d7ac830a1c2a29bb21941f16c06b3f5a0d3/openai/tiktoken
+          snippets:
+          - tiktoken is a fast BPE tokeniser for use with OpenAI's models. - tiktoken/tiktoken/core.py
+            at e35ab0915e37b919946b70947f1d0854196cb72c · openai/tiktoken
+          - 'self._core_bpe = _tiktoken.CoreBPE(mergeable_ranks, special_tokens, pat_str)  ·     def
+            __repr__(self) -> str:         return f""  ·     # ====================     #
+            Encoding ·     # ====================  ·     def encode_ordinary(self,
+            text: str) -> list[int]:         """Encodes a string into tokens, ignoring
+            special tokens.  ·         This is equivalent to `encode(text, disallowed_special=())`
+            (but slightly faster).'
+          - 'raise_disallowed_special_token(match.group())  ·         import numpy
+            as np ·  ·         buffer = self._core_bpe.encode_to_tiktoken_buffer(text,
+            self.special_tokens_set)         return np.frombuffer(buffer, dtype=np.uint32)  ·     def
+            encode_ordinary_batch(self, text: list[str], *, num_threads: int = 8)
+            -> list[list[int]]:         """Encodes a list of strings into tokens,
+            in parallel, ignoring special tokens.'
+          - '>>> assert all(enc.decode_bytes(stable_tokens + seq).startswith(text.encode())
+            for seq in completions)'
+          thumbnail_url: https://opengraph.githubassets.com/d4f725fb65a6f48082a6abe3b3b03d7ac830a1c2a29bb21941f16c06b3f5a0d3/openai/tiktoken
+          title: tiktoken/tiktoken/core.py at e35ab0915e37b919946b70947f1d0854196cb72c
+            ...
+          url: https://github.com/openai/tiktoken/blob/e35ab0915e37b919946b70947f1d0854196cb72c/tiktoken/core.py
+        - description: tiktoken is a fast BPE tokeniser for use with OpenAI's models.
+            - openai/tiktoken
+          favicon_url: https://you.com/favicon?domain=github.com&size=128
+          original_thumbnail_url: https://opengraph.githubassets.com/efa05e0be9afd23793748c026972915040d8c3913b1174580d103a3e8956a67d/openai/tiktoken
+          snippets:
+          - tiktoken is a fast BPE tokeniser for use with OpenAI's models. - tiktoken/tiktoken/core.py
+            at 095924e02c85617df6889698d94515f91666c7ea · openai/tiktoken
+          - 'self._core_bpe = _tiktoken.CoreBPE(mergeable_ranks, special_tokens, pat_str)  ·     def
+            __repr__(self) -> str:         return f""  ·     # ====================     #
+            Encoding ·     # ====================  ·     def encode_ordinary(self,
+            text: str) -> list[int]:         """Encodes a string into tokens, ignoring
+            special tokens.  ·         This is equivalent to `encode(text, disallowed_special=())`
+            (but slightly faster).'
+          - '>>> assert all(enc.decode_bytes(stable_tokens + seq).startswith(text.encode())
+            for seq in completions)'
+          thumbnail_url: https://opengraph.githubassets.com/efa05e0be9afd23793748c026972915040d8c3913b1174580d103a3e8956a67d/openai/tiktoken
+          title: tiktoken/tiktoken/core.py at 095924e02c85617df6889698d94515f91666c7ea
+            ...
+          url: https://github.com/openai/tiktoken/blob/095924e02c85617df6889698d94515f91666c7ea/tiktoken/core.py
+        - description: 'If a text being tokenizer by tiktoken contains a special token
+            like , we will see the error: ValueError: Encountered text corresponding
+            to disallowed special token '' ''. If ...'
+          favicon_url: https://you.com/favicon?domain=github.com&size=128
+          original_thumbnail_url: https://opengraph.githubassets.com/5302b0bb60c685a35b2ab17ae007b859723b481a516537f66d455ed9ae39f86d/langchain-ai/langchain/issues/923
+          page_age: '2023-02-07T08:19:22'
+          snippets:
+          - 'If a text being tokenizer by tiktoken contains a special token like ,
+            we will see the error: ValueError: Encountered text corresponding to disallowed
+            special token '' ''. If you want this text to be encoded as a sp...'
+          - 'If a text being tokenizer by tiktoken contains a special token like ,
+            we will see the error: ValueError: Encountered text corresponding to disallowed
+            special token ''''. If you want this text to be encoded as a special token,
+            pass it to `allowed_special`, e.g.'
+          - But we cannot access the disallowed_special or allowed_special params
+            via langchain.
+          - '`allowed_special={'''', ...}`. If you want this text to be encoded as
+            normal text, disable the check for this token by passing `disallowed_special=(enc.special_tokens_set
+            - {''''})`. To disable this check for all special tokens, pass `disallowed_special=()`.'
+          thumbnail_url: https://opengraph.githubassets.com/5302b0bb60c685a35b2ab17ae007b859723b481a516537f66d455ed9ae39f86d/langchain-ai/langchain/issues/923
+          title: 'Access special token params for tiktoken · Issue #923 · ...'
+          url: https://github.com/hwchase17/langchain/issues/923
+        - description: 'Summary EncodeNative corrupts every text segment that follows
+            an allowed special token: the segment is read from offset 0 of the input
+            instead of from the current position. Only the NET8_0_OR_GREAT...'
+          favicon_url: https://you.com/favicon?domain=github.com&size=128
+          original_thumbnail_url: https://opengraph.githubassets.com/79d077780050fa883ff1b012682e01fbd2c016f6cce892ac5f9bf195308074b0/tryAGI/Tiktoken/issues/143
+          page_age: '2026-08-26T05:37:52'
+          snippets:
+          - 'Summary EncodeNative corrupts every text segment that follows an allowed
+            special token: the segment is read from offset 0 of the input instead
+            of from the current position. Only the NET8_0_OR_GREATER and NET9_0_OR_GREATER
+            span paths are ...'
+          - Encode / CountTokens are unaffected, because with all specials disallowed
+            the loop runs a single iteration with start == 0, where the bug cannot
+            fire. // net8.0, Tiktoken 3.1.5 var encoder = ModelToEncoder.For("text-embedding-3-large");
+            var ids = encoder.EncodeWithAllAllowedSpecial("ABC");
+          - 'src/libs/Tiktoken.Core/CoreBPE.cs, EncodeNative (lines 427/429 and 461/463
+            on main):'
+          thumbnail_url: https://opengraph.githubassets.com/79d077780050fa883ff1b012682e01fbd2c016f6cce892ac5f9bf195308074b0/tryAGI/Tiktoken/issues/143
+          title: EncodeNative reads post-special-token segments from offset 0 on ...
+          url: https://github.com/tryAGI/Tiktoken/issues/143
+        - description: 'Builds on #13 (abi 0.4: TOKS_NO_TRUNCATE / TOKS_NO_PAD, toks_template,
+            toks_added, TOKS_DECODE_RAW, and toks_info''s truncation / padding / template
+            fields). python/ only: the library does n...'
+          favicon_url: https://you.com/favicon?domain=github.com&size=128
+          original_thumbnail_url: https://opengraph.githubassets.com/db265c6b6ec725df3ef123a7201448d452ec75a074b6211772c81785a6135e91/actual-computer/toks/pull/34
+          snippets:
+          - 'Builds on #13 (abi 0.4: TOKS_NO_TRUNCATE / TOKS_NO_PAD, toks_template,
+            toks_added, TOKS_DECODE_RAW, and toks_info''s truncation / padding / template
+            fields). python/ only: the library does not change.'
+          - 'exact tokenizers ids, as fast as the hardware allows - python: hf''s
+            Encoding and tiktoken''s Encoding on toks.Tokenizer, over abi 0.4 by Tom-A-Lynch
+            · Pull Request #34 · actual-computer/toks'
+          - 'The surface against the body''s claims, field by field: encode_ex / encode_batch_ex
+            give hf''s ids, type_ids, tokens, attention_mask, special_tokens_mask,
+            overflowing ([]), n_sequences, len(); encode_batch pads a BatchLongest
+            file to the batch''s longest member; num_special_tokens_to_add and get_added_tokens_decoder
+            from toks_template / toks_added; the tiktoken view (encode with allowed_special
+            / disallowed_special, encode_ordinary, decode_bytes(_batch), token_byte_values,
+            n_vocab, max_token_value, eot_token, special_tokens_set, name). The stub
+            matches every signature.'
+          - 'tiktoken''s Encoding surface on the same class: n_vocab, max_token_value,
+            eot_token (KeyError when the file has no ), special_tokens_set, name,
+            token_byte_values(), encode_ordinary, encode(text, allowed_special=...,
+            disallowed_special=...) with tiktoken''s ValueError, and decode_bytes
+            / decode_bytes_batch (TOKS_DECODE_RAW). What is special is the file''s
+            own definition: a tokenizer.json''s added tokens marked special (hf''s
+            special_tokens_set), or a tiktoken model''s special tokens. encode(text)
+            without a tiktoken keyword stays hf''s call. python/README.md lists every
+            new name with its oracle, and where each differs from it.'
+          thumbnail_url: https://opengraph.githubassets.com/db265c6b6ec725df3ef123a7201448d452ec75a074b6211772c81785a6135e91/actual-computer/toks/pull/34
+          title: 'python: hf''s Encoding and tiktoken''s Encoding on toks.Tokenizer,
+            ...'
+          url: https://github.com/actual-computer/toks/pull/34
+        - description: 'This code here: tiktoken/tiktoken/core.py Lines 375 to 383
+            in 39f29ce def raise_disallowed_special_token(token: str) -> NoReturn:
+            raise ValueError( f"Encountered text corresponding to disal...'
+          favicon_url: https://you.com/favicon?domain=github.com&size=128
+          original_thumbnail_url: https://opengraph.githubassets.com/34d9c372f842fb4de8ae26942810668b3b7e5432cbe14a6d924142b2a0b32bd1/openai/tiktoken/issues/290
+          page_age: '2024-05-02T23:21:54'
+          snippets:
+          - 'This code here: tiktoken/tiktoken/core.py Lines 375 to 383 in 39f29ce
+            def raise_disallowed_special_token(token: str) -> NoReturn: raise ValueError(
+            f"Encountered text corresponding to disallowed special token {token!r}.\n"
+            "If you want t...'
+          - 'try: tokens = encoding.encode(text, **kwargs) except ValueError as ex:
+            if ''disallowed special token'' in str(ex): # Do something special'
+          - 'class DisallowedSpecialTokenError(ValueError): pass'
+          thumbnail_url: https://opengraph.githubassets.com/34d9c372f842fb4de8ae26942810668b3b7e5432cbe14a6d924142b2a0b32bd1/openai/tiktoken/issues/290
+          title: Use a custom exception ValueError subclass for the special tokens
+            ...
+          url: https://github.com/openai/tiktoken/issues/290
+    headers:
+      content-type: application/json
+    status_code: 200

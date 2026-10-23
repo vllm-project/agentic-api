@@ -1,0 +1,960 @@
+turns:
+- filename: t1
+  request:
+    body:
+      id: 0
+      jsonrpc: '2.0'
+      method: initialize
+      params:
+        capabilities: {}
+        clientInfo:
+          name: agentic-api
+          version: 0.9.0
+        protocolVersion: '2025-06-18'
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: 'event: message
+
+      data: {"jsonrpc":"2.0","id":0,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"GitMCP","version":"1.1.0"}}}
+
+
+      '
+    headers:
+      content-type: text/event-stream
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      jsonrpc: '2.0'
+      method: notifications/initialized
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: ''
+    headers:
+      content-type: application/json
+    status_code: 202
+- filename: t3
+  request:
+    body: {}
+    headers:
+      accept: text/event-stream, application/json
+    method: GET
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body:
+      error:
+        code: -32000
+        message: Method not allowed
+      id: null
+      jsonrpc: '2.0'
+    headers:
+      content-type: text/plain;charset=UTF-8
+    status_code: 405
+- filename: t4
+  request:
+    body:
+      id: 1
+      jsonrpc: '2.0'
+      method: tools/list
+      params:
+        _meta:
+          progressToken: 0
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: 'event: message
+
+      data: {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"fetch_tiktoken_documentation","description":"Fetch
+      entire documentation file from GitHub repository: openai/tiktoken. Useful for
+      general questions. Always call this tool first if asked about openai/tiktoken.","inputSchema":{"type":"object"},"annotations":{"_def":{"options":[{"_def":{"unknownKeys":"strip","catchall":{"_def":{"typeName":"ZodNever"},"~standard":{"version":1,"vendor":"zod"}},"typeName":"ZodObject"},"~standard":{"version":1,"vendor":"zod"},"_cached":null},{"_def":{"typeName":"ZodNull"},"~standard":{"version":1,"vendor":"zod"}}],"typeName":"ZodUnion"},"~standard":{"version":1,"vendor":"zod"}}},{"name":"search_tiktoken_documentation","description":"Semantically
+      search within the fetched documentation from GitHub repository: openai/tiktoken.
+      Useful for specific queries.","inputSchema":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant documentation"}},"required":["query"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}},{"name":"search_tiktoken_code","description":"Search
+      for code within the GitHub repository: \"openai/tiktoken\" using the GitHub
+      Search API (exact match). Returns matching files for you to query further if
+      relevant.","inputSchema":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant code files"},"page":{"type":"number","description":"Page
+      number to retrieve (starting from 1). Each page contains 30 results."}},"required":["query"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}},{"name":"fetch_generic_url_content","description":"Generic
+      tool to fetch content from any absolute URL, respecting robots.txt rules. Use
+      this to retrieve referenced urls (absolute urls) that were mentioned in previously
+      fetched documentation.","inputSchema":{"type":"object","properties":{"url":{"type":"string","description":"The
+      URL of the document or page to fetch"}},"required":["url"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}]}}
+
+
+      '
+    headers:
+      content-type: text/event-stream
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      id: 2
+      jsonrpc: '2.0'
+      method: tools/call
+      params:
+        _meta:
+          progressToken: 1
+        arguments:
+          query: encode text to tokens
+        name: search_tiktoken_documentation
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: 'event: message
+
+      data: {"jsonrpc":"2.0","id":2,"result":{"searchQuery":"encode text to tokens","content":[{"type":"text","text":"###
+      Search Results for: \"encode text to tokens\"\n\nNo relevant documentation found
+      for your query. It''s either being indexed or the search query did not match
+      any documentation.\n\nAs a fallback, this is the documentation for openai/tiktoken:\n\n#
+      ⏳ tiktoken\n\ntiktoken is a fast [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding)
+      tokeniser for use with\nOpenAI''s models.\n\n```python\nimport tiktoken\nenc
+      = tiktoken.get_encoding(\"o200k_base\")\nassert enc.decode(enc.encode(\"hello
+      world\")) == \"hello world\"\n\n# To get the tokeniser corresponding to a specific
+      model in the OpenAI API:\nenc = tiktoken.encoding_for_model(\"gpt-4o\")\n```\n\nThe
+      open source version of `tiktoken` can be installed from [PyPI](https://pypi.org/project/tiktoken):\n```\npip
+      install tiktoken\n```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\nExample
+      code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\n\n##
+      Performance\n\n`tiktoken` is between 3-6x faster than a comparable open source
+      tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\nPerformance
+      measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`
+      from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\n\n##
+      Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\nIf
+      you work at OpenAI, make sure to check the internal documentation or feel free
+      to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage models don''t see
+      text like you and I, instead they see a sequence of numbers (known as tokens).\nByte
+      pair encoding (BPE) is a way of converting text into tokens. It has a couple
+      desirable\nproperties:\n1) It''s reversible and lossless, so you can convert
+      tokens back into the original text\n2) It works on arbitrary text, even text
+      that is not in the tokeniser''s training data\n3) It compresses the text: the
+      token sequence is shorter than the bytes corresponding to the\n   original text.
+      On average, in practice, each token corresponds to about 4 bytes.\n4) It attempts
+      to let the model see common subwords. For instance, \"ing\" is a common subword
+      in\n   English, so BPE encodings will often split \"encoding\" into tokens like
+      \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"). Because the
+      model will then see the \"ing\" token again and\n   again in different contexts,
+      it helps models generalise and better understand grammar.\n\n`tiktoken` contains
+      an educational submodule that is friendlier if you want to learn more about\nthe
+      details of BPE, including code that helps visualise the BPE procedure:\n```python\nfrom
+      tiktoken._educational import *\n\n# Train a BPE tokeniser on a small amount
+      of text\nenc = train_simple_encoding()\n\n# Visualise how the GPT-4 encoder
+      encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"cl100k_base\")\nenc.encode(\"hello
+      world aaaaaaaaaaaa\")\n```\n\n\n## Extending tiktoken\n\nYou may wish to extend
+      `tiktoken` to support new encodings. There are two ways to do this.\n\n\n**Create
+      your `Encoding` object exactly the way you want and simply pass it around.**\n\n```python\ncl100k_base
+      = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the arguments
+      directly instead of accessing private attributes\n# See openai_public.py for
+      examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n    #
+      If you''re changing the set of special tokens, make sure to use a different
+      name\n    # It should be clear from the name what behaviour to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n        **cl100k_base._special_tokens,\n        \"<|im_start|>\":
+      100264,\n        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`
+      plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\nThis
+      is only useful if you need `tiktoken.get_encoding` to find your encoding, otherwise
+      prefer\noption 1.\n\nTo do this, you''ll need to create a namespace package
+      under `tiktoken_ext`.\n\nLayout your project like this, making sure to omit
+      the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n├── tiktoken_ext\n│  
+      └── my_encodings.py\n└── setup.py\n```\n\n`my_encodings.py` should be a module
+      that contains a variable named `ENCODING_CONSTRUCTORS`.\nThis is a dictionary
+      from an encoding name to a function that takes no arguments and returns\narguments
+      that can be passed to `tiktoken.Encoding` to construct that encoding. For an
+      example, see\n`tiktoken_ext/openai_public.py`. For precise details, see `tiktoken/registry.py`.\n\nYour
+      `setup.py` should look something like this:\n```python\nfrom setuptools import
+      setup, find_namespace_packages\n\nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=[''tiktoken_ext*'']),\n    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen
+      simply `pip install ./my_tiktoken_extension` and you should be able to use your\ncustom
+      encodings! Make sure **not** to use an editable install.\n\n\n\nIf you''d like
+      to retry the search, try changing the query to increase the likelihood of a
+      match."}]}}
+
+
+      '
+    headers:
+      content-type: text/event-stream
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      id: 3
+      jsonrpc: '2.0'
+      method: tools/call
+      params:
+        _meta:
+          progressToken: 2
+        arguments:
+          query: decode tokens to text
+        name: search_tiktoken_documentation
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: 'event: message
+
+      data: {"jsonrpc":"2.0","id":3,"result":{"searchQuery":"decode tokens to text","content":[{"type":"text","text":"###
+      Search Results for: \"decode tokens to text\"\n\nNo relevant documentation found
+      for your query. It''s either being indexed or the search query did not match
+      any documentation.\n\nAs a fallback, this is the documentation for openai/tiktoken:\n\n#
+      ⏳ tiktoken\n\ntiktoken is a fast [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding)
+      tokeniser for use with\nOpenAI''s models.\n\n```python\nimport tiktoken\nenc
+      = tiktoken.get_encoding(\"o200k_base\")\nassert enc.decode(enc.encode(\"hello
+      world\")) == \"hello world\"\n\n# To get the tokeniser corresponding to a specific
+      model in the OpenAI API:\nenc = tiktoken.encoding_for_model(\"gpt-4o\")\n```\n\nThe
+      open source version of `tiktoken` can be installed from [PyPI](https://pypi.org/project/tiktoken):\n```\npip
+      install tiktoken\n```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\nExample
+      code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\n\n##
+      Performance\n\n`tiktoken` is between 3-6x faster than a comparable open source
+      tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\nPerformance
+      measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`
+      from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\n\n##
+      Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\nIf
+      you work at OpenAI, make sure to check the internal documentation or feel free
+      to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage models don''t see
+      text like you and I, instead they see a sequence of numbers (known as tokens).\nByte
+      pair encoding (BPE) is a way of converting text into tokens. It has a couple
+      desirable\nproperties:\n1) It''s reversible and lossless, so you can convert
+      tokens back into the original text\n2) It works on arbitrary text, even text
+      that is not in the tokeniser''s training data\n3) It compresses the text: the
+      token sequence is shorter than the bytes corresponding to the\n   original text.
+      On average, in practice, each token corresponds to about 4 bytes.\n4) It attempts
+      to let the model see common subwords. For instance, \"ing\" is a common subword
+      in\n   English, so BPE encodings will often split \"encoding\" into tokens like
+      \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"). Because the
+      model will then see the \"ing\" token again and\n   again in different contexts,
+      it helps models generalise and better understand grammar.\n\n`tiktoken` contains
+      an educational submodule that is friendlier if you want to learn more about\nthe
+      details of BPE, including code that helps visualise the BPE procedure:\n```python\nfrom
+      tiktoken._educational import *\n\n# Train a BPE tokeniser on a small amount
+      of text\nenc = train_simple_encoding()\n\n# Visualise how the GPT-4 encoder
+      encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"cl100k_base\")\nenc.encode(\"hello
+      world aaaaaaaaaaaa\")\n```\n\n\n## Extending tiktoken\n\nYou may wish to extend
+      `tiktoken` to support new encodings. There are two ways to do this.\n\n\n**Create
+      your `Encoding` object exactly the way you want and simply pass it around.**\n\n```python\ncl100k_base
+      = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the arguments
+      directly instead of accessing private attributes\n# See openai_public.py for
+      examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n    #
+      If you''re changing the set of special tokens, make sure to use a different
+      name\n    # It should be clear from the name what behaviour to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n        **cl100k_base._special_tokens,\n        \"<|im_start|>\":
+      100264,\n        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`
+      plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\nThis
+      is only useful if you need `tiktoken.get_encoding` to find your encoding, otherwise
+      prefer\noption 1.\n\nTo do this, you''ll need to create a namespace package
+      under `tiktoken_ext`.\n\nLayout your project like this, making sure to omit
+      the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n├── tiktoken_ext\n│  
+      └── my_encodings.py\n└── setup.py\n```\n\n`my_encodings.py` should be a module
+      that contains a variable named `ENCODING_CONSTRUCTORS`.\nThis is a dictionary
+      from an encoding name to a function that takes no arguments and returns\narguments
+      that can be passed to `tiktoken.Encoding` to construct that encoding. For an
+      example, see\n`tiktoken_ext/openai_public.py`. For precise details, see `tiktoken/registry.py`.\n\nYour
+      `setup.py` should look something like this:\n```python\nfrom setuptools import
+      setup, find_namespace_packages\n\nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=[''tiktoken_ext*'']),\n    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen
+      simply `pip install ./my_tiktoken_extension` and you should be able to use your\ncustom
+      encodings! Make sure **not** to use an editable install.\n\n\n\nIf you''d like
+      to retry the search, try changing the query to increase the likelihood of a
+      match."}]}}
+
+
+      '
+    headers:
+      content-type: text/event-stream
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      id: 4
+      jsonrpc: '2.0'
+      method: tools/call
+      params:
+        _meta:
+          progressToken: 3
+        arguments:
+          query: Encoding class encode decode core.py API parameters
+        name: search_tiktoken_documentation
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: 'event: message
+
+      data: {"jsonrpc":"2.0","id":4,"result":{"searchQuery":"Encoding class encode
+      decode core.py API parameters","content":[{"type":"text","text":"### Search
+      Results for: \"Encoding class encode decode core.py API parameters\"\n\nNo relevant
+      documentation found for your query. It''s either being indexed or the search
+      query did not match any documentation.\n\nAs a fallback, this is the documentation
+      for openai/tiktoken:\n\n# ⏳ tiktoken\n\ntiktoken is a fast [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding)
+      tokeniser for use with\nOpenAI''s models.\n\n```python\nimport tiktoken\nenc
+      = tiktoken.get_encoding(\"o200k_base\")\nassert enc.decode(enc.encode(\"hello
+      world\")) == \"hello world\"\n\n# To get the tokeniser corresponding to a specific
+      model in the OpenAI API:\nenc = tiktoken.encoding_for_model(\"gpt-4o\")\n```\n\nThe
+      open source version of `tiktoken` can be installed from [PyPI](https://pypi.org/project/tiktoken):\n```\npip
+      install tiktoken\n```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\nExample
+      code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\n\n##
+      Performance\n\n`tiktoken` is between 3-6x faster than a comparable open source
+      tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\nPerformance
+      measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`
+      from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\n\n##
+      Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\nIf
+      you work at OpenAI, make sure to check the internal documentation or feel free
+      to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage models don''t see
+      text like you and I, instead they see a sequence of numbers (known as tokens).\nByte
+      pair encoding (BPE) is a way of converting text into tokens. It has a couple
+      desirable\nproperties:\n1) It''s reversible and lossless, so you can convert
+      tokens back into the original text\n2) It works on arbitrary text, even text
+      that is not in the tokeniser''s training data\n3) It compresses the text: the
+      token sequence is shorter than the bytes corresponding to the\n   original text.
+      On average, in practice, each token corresponds to about 4 bytes.\n4) It attempts
+      to let the model see common subwords. For instance, \"ing\" is a common subword
+      in\n   English, so BPE encodings will often split \"encoding\" into tokens like
+      \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"). Because the
+      model will then see the \"ing\" token again and\n   again in different contexts,
+      it helps models generalise and better understand grammar.\n\n`tiktoken` contains
+      an educational submodule that is friendlier if you want to learn more about\nthe
+      details of BPE, including code that helps visualise the BPE procedure:\n```python\nfrom
+      tiktoken._educational import *\n\n# Train a BPE tokeniser on a small amount
+      of text\nenc = train_simple_encoding()\n\n# Visualise how the GPT-4 encoder
+      encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"cl100k_base\")\nenc.encode(\"hello
+      world aaaaaaaaaaaa\")\n```\n\n\n## Extending tiktoken\n\nYou may wish to extend
+      `tiktoken` to support new encodings. There are two ways to do this.\n\n\n**Create
+      your `Encoding` object exactly the way you want and simply pass it around.**\n\n```python\ncl100k_base
+      = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the arguments
+      directly instead of accessing private attributes\n# See openai_public.py for
+      examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n    #
+      If you''re changing the set of special tokens, make sure to use a different
+      name\n    # It should be clear from the name what behaviour to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n        **cl100k_base._special_tokens,\n        \"<|im_start|>\":
+      100264,\n        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`
+      plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\nThis
+      is only useful if you need `tiktoken.get_encoding` to find your encoding, otherwise
+      prefer\noption 1.\n\nTo do this, you''ll need to create a namespace package
+      under `tiktoken_ext`.\n\nLayout your project like this, making sure to omit
+      the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n├── tiktoken_ext\n│  
+      └── my_encodings.py\n└── setup.py\n```\n\n`my_encodings.py` should be a module
+      that contains a variable named `ENCODING_CONSTRUCTORS`.\nThis is a dictionary
+      from an encoding name to a function that takes no arguments and returns\narguments
+      that can be passed to `tiktoken.Encoding` to construct that encoding. For an
+      example, see\n`tiktoken_ext/openai_public.py`. For precise details, see `tiktoken/registry.py`.\n\nYour
+      `setup.py` should look something like this:\n```python\nfrom setuptools import
+      setup, find_namespace_packages\n\nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=[''tiktoken_ext*'']),\n    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen
+      simply `pip install ./my_tiktoken_extension` and you should be able to use your\ncustom
+      encodings! Make sure **not** to use an editable install.\n\n\n\nIf you''d like
+      to retry the search, try changing the query to increase the likelihood of a
+      match."}]}}
+
+
+      '
+    headers:
+      content-type: text/event-stream
+    status_code: 200
+- filename: t8
+  request:
+    body:
+      id: 5
+      jsonrpc: '2.0'
+      method: tools/call
+      params:
+        _meta:
+          progressToken: 4
+        arguments:
+          query: tiktoken get_encoding encoding_for_model count_tokens special tokens
+        name: search_tiktoken_documentation
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: 'event: message
+
+      data: {"jsonrpc":"2.0","id":5,"result":{"searchQuery":"tiktoken get_encoding
+      encoding_for_model count_tokens special tokens","content":[{"type":"text","text":"###
+      Search Results for: \"tiktoken get_encoding encoding_for_model count_tokens
+      special tokens\"\n\nNo relevant documentation found for your query. It''s either
+      being indexed or the search query did not match any documentation.\n\nAs a fallback,
+      this is the documentation for openai/tiktoken:\n\n# ⏳ tiktoken\n\ntiktoken is
+      a fast [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding) tokeniser for
+      use with\nOpenAI''s models.\n\n```python\nimport tiktoken\nenc = tiktoken.get_encoding(\"o200k_base\")\nassert
+      enc.decode(enc.encode(\"hello world\")) == \"hello world\"\n\n# To get the tokeniser
+      corresponding to a specific model in the OpenAI API:\nenc = tiktoken.encoding_for_model(\"gpt-4o\")\n```\n\nThe
+      open source version of `tiktoken` can be installed from [PyPI](https://pypi.org/project/tiktoken):\n```\npip
+      install tiktoken\n```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\nExample
+      code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\n\n##
+      Performance\n\n`tiktoken` is between 3-6x faster than a comparable open source
+      tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\nPerformance
+      measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`
+      from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\n\n##
+      Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\nIf
+      you work at OpenAI, make sure to check the internal documentation or feel free
+      to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage models don''t see
+      text like you and I, instead they see a sequence of numbers (known as tokens).\nByte
+      pair encoding (BPE) is a way of converting text into tokens. It has a couple
+      desirable\nproperties:\n1) It''s reversible and lossless, so you can convert
+      tokens back into the original text\n2) It works on arbitrary text, even text
+      that is not in the tokeniser''s training data\n3) It compresses the text: the
+      token sequence is shorter than the bytes corresponding to the\n   original text.
+      On average, in practice, each token corresponds to about 4 bytes.\n4) It attempts
+      to let the model see common subwords. For instance, \"ing\" is a common subword
+      in\n   English, so BPE encodings will often split \"encoding\" into tokens like
+      \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"). Because the
+      model will then see the \"ing\" token again and\n   again in different contexts,
+      it helps models generalise and better understand grammar.\n\n`tiktoken` contains
+      an educational submodule that is friendlier if you want to learn more about\nthe
+      details of BPE, including code that helps visualise the BPE procedure:\n```python\nfrom
+      tiktoken._educational import *\n\n# Train a BPE tokeniser on a small amount
+      of text\nenc = train_simple_encoding()\n\n# Visualise how the GPT-4 encoder
+      encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"cl100k_base\")\nenc.encode(\"hello
+      world aaaaaaaaaaaa\")\n```\n\n\n## Extending tiktoken\n\nYou may wish to extend
+      `tiktoken` to support new encodings. There are two ways to do this.\n\n\n**Create
+      your `Encoding` object exactly the way you want and simply pass it around.**\n\n```python\ncl100k_base
+      = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the arguments
+      directly instead of accessing private attributes\n# See openai_public.py for
+      examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n    #
+      If you''re changing the set of special tokens, make sure to use a different
+      name\n    # It should be clear from the name what behaviour to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n        **cl100k_base._special_tokens,\n        \"<|im_start|>\":
+      100264,\n        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`
+      plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\nThis
+      is only useful if you need `tiktoken.get_encoding` to find your encoding, otherwise
+      prefer\noption 1.\n\nTo do this, you''ll need to create a namespace package
+      under `tiktoken_ext`.\n\nLayout your project like this, making sure to omit
+      the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n├── tiktoken_ext\n│  
+      └── my_encodings.py\n└── setup.py\n```\n\n`my_encodings.py` should be a module
+      that contains a variable named `ENCODING_CONSTRUCTORS`.\nThis is a dictionary
+      from an encoding name to a function that takes no arguments and returns\narguments
+      that can be passed to `tiktoken.Encoding` to construct that encoding. For an
+      example, see\n`tiktoken_ext/openai_public.py`. For precise details, see `tiktoken/registry.py`.\n\nYour
+      `setup.py` should look something like this:\n```python\nfrom setuptools import
+      setup, find_namespace_packages\n\nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=[''tiktoken_ext*'']),\n    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen
+      simply `pip install ./my_tiktoken_extension` and you should be able to use your\ncustom
+      encodings! Make sure **not** to use an editable install.\n\n\n\nIf you''d like
+      to retry the search, try changing the query to increase the likelihood of a
+      match."}]}}
+
+
+      '
+    headers:
+      content-type: text/event-stream
+    status_code: 200
+- filename: t9
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+    method: DELETE
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: "<!DOCTYPE html><html lang=\"en\"><head><meta charSet=\"utf-8\"/><meta name=\"\
+      viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\"\
+      /><title>Unhandled Thrown Response!</title></head><body><main style=\"font-family:system-ui,\
+      \ sans-serif;padding:2rem\"><h1 style=\"font-size:24px\">405<!-- --> <!-- -->Method\
+      \ Not Allowed</h1><script>\n        console.log(\n          \"\U0001F4BF Hey\
+      \ developer \U0001F44B. You can provide a way better UX than this when your\
+      \ app throws errors. Check out https://remix.run/guides/errors for more information.\"\
+      \n        );\n      </script></main><!--$--><!--/$--></body></html>"
+    headers:
+      content-type: text/html
+    status_code: 405
+- filename: t10
+  request:
+    body:
+      id: 0
+      jsonrpc: '2.0'
+      method: initialize
+      params:
+        capabilities: {}
+        clientInfo:
+          name: agentic-api
+          version: 0.9.0
+        protocolVersion: '2025-06-18'
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: 'event: message
+
+      data: {"jsonrpc":"2.0","id":0,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"GitMCP","version":"1.1.0"}}}
+
+
+      '
+    headers:
+      content-type: text/event-stream
+    status_code: 200
+- filename: t11
+  request:
+    body:
+      jsonrpc: '2.0'
+      method: notifications/initialized
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: ''
+    headers:
+      content-type: application/json
+    status_code: 202
+- filename: t12
+  request:
+    body: {}
+    headers:
+      accept: text/event-stream, application/json
+    method: GET
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body:
+      error:
+        code: -32000
+        message: Method not allowed
+      id: null
+      jsonrpc: '2.0'
+    headers:
+      content-type: text/plain;charset=UTF-8
+    status_code: 405
+- filename: t13
+  request:
+    body:
+      id: 1
+      jsonrpc: '2.0'
+      method: tools/list
+      params:
+        _meta:
+          progressToken: 0
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: 'event: message
+
+      data: {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"fetch_tiktoken_documentation","description":"Fetch
+      entire documentation file from GitHub repository: openai/tiktoken. Useful for
+      general questions. Always call this tool first if asked about openai/tiktoken.","inputSchema":{"type":"object"},"annotations":{"_def":{"options":[{"_def":{"unknownKeys":"strip","catchall":{"_def":{"typeName":"ZodNever"},"~standard":{"version":1,"vendor":"zod"}},"typeName":"ZodObject"},"~standard":{"version":1,"vendor":"zod"},"_cached":null},{"_def":{"typeName":"ZodNull"},"~standard":{"version":1,"vendor":"zod"}}],"typeName":"ZodUnion"},"~standard":{"version":1,"vendor":"zod"}}},{"name":"search_tiktoken_documentation","description":"Semantically
+      search within the fetched documentation from GitHub repository: openai/tiktoken.
+      Useful for specific queries.","inputSchema":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant documentation"}},"required":["query"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}},{"name":"search_tiktoken_code","description":"Search
+      for code within the GitHub repository: \"openai/tiktoken\" using the GitHub
+      Search API (exact match). Returns matching files for you to query further if
+      relevant.","inputSchema":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant code files"},"page":{"type":"number","description":"Page
+      number to retrieve (starting from 1). Each page contains 30 results."}},"required":["query"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}},{"name":"fetch_generic_url_content","description":"Generic
+      tool to fetch content from any absolute URL, respecting robots.txt rules. Use
+      this to retrieve referenced urls (absolute urls) that were mentioned in previously
+      fetched documentation.","inputSchema":{"type":"object","properties":{"url":{"type":"string","description":"The
+      URL of the document or page to fetch"}},"required":["url"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}]}}
+
+
+      '
+    headers:
+      content-type: text/event-stream
+    status_code: 200
+- filename: t14
+  request:
+    body:
+      id: 0
+      jsonrpc: '2.0'
+      method: initialize
+      params:
+        capabilities: {}
+        clientInfo:
+          name: agentic-api
+          version: 0.9.0
+        protocolVersion: '2025-06-18'
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: 'event: message
+
+      data: {"jsonrpc":"2.0","id":0,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"GitMCP","version":"1.1.0"}}}
+
+
+      '
+    headers:
+      content-type: text/event-stream
+    status_code: 200
+- filename: t15
+  request:
+    body:
+      jsonrpc: '2.0'
+      method: notifications/initialized
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: ''
+    headers:
+      content-type: application/json
+    status_code: 202
+- filename: t16
+  request:
+    body: {}
+    headers:
+      accept: text/event-stream, application/json
+    method: GET
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body:
+      error:
+        code: -32000
+        message: Method not allowed
+      id: null
+      jsonrpc: '2.0'
+    headers:
+      content-type: text/plain;charset=UTF-8
+    status_code: 405
+- filename: t17
+  request:
+    body:
+      id: 1
+      jsonrpc: '2.0'
+      method: tools/list
+      params:
+        _meta:
+          progressToken: 0
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: 'event: message
+
+      data: {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"fetch_tiktoken_documentation","description":"Fetch
+      entire documentation file from GitHub repository: openai/tiktoken. Useful for
+      general questions. Always call this tool first if asked about openai/tiktoken.","inputSchema":{"type":"object"},"annotations":{"_def":{"options":[{"_def":{"unknownKeys":"strip","catchall":{"_def":{"typeName":"ZodNever"},"~standard":{"version":1,"vendor":"zod"}},"typeName":"ZodObject"},"~standard":{"version":1,"vendor":"zod"},"_cached":null},{"_def":{"typeName":"ZodNull"},"~standard":{"version":1,"vendor":"zod"}}],"typeName":"ZodUnion"},"~standard":{"version":1,"vendor":"zod"}}},{"name":"search_tiktoken_documentation","description":"Semantically
+      search within the fetched documentation from GitHub repository: openai/tiktoken.
+      Useful for specific queries.","inputSchema":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant documentation"}},"required":["query"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}},{"name":"search_tiktoken_code","description":"Search
+      for code within the GitHub repository: \"openai/tiktoken\" using the GitHub
+      Search API (exact match). Returns matching files for you to query further if
+      relevant.","inputSchema":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant code files"},"page":{"type":"number","description":"Page
+      number to retrieve (starting from 1). Each page contains 30 results."}},"required":["query"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}},{"name":"fetch_generic_url_content","description":"Generic
+      tool to fetch content from any absolute URL, respecting robots.txt rules. Use
+      this to retrieve referenced urls (absolute urls) that were mentioned in previously
+      fetched documentation.","inputSchema":{"type":"object","properties":{"url":{"type":"string","description":"The
+      URL of the document or page to fetch"}},"required":["url"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}]}}
+
+
+      '
+    headers:
+      content-type: text/event-stream
+    status_code: 200
+- filename: t18
+  request:
+    body:
+      id: 0
+      jsonrpc: '2.0'
+      method: initialize
+      params:
+        capabilities: {}
+        clientInfo:
+          name: agentic-api
+          version: 0.9.0
+        protocolVersion: '2025-06-18'
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: 'event: message
+
+      data: {"jsonrpc":"2.0","id":0,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"GitMCP","version":"1.1.0"}}}
+
+
+      '
+    headers:
+      content-type: text/event-stream
+    status_code: 200
+- filename: t19
+  request:
+    body:
+      jsonrpc: '2.0'
+      method: notifications/initialized
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: ''
+    headers:
+      content-type: application/json
+    status_code: 202
+- filename: t20
+  request:
+    body: {}
+    headers:
+      accept: text/event-stream, application/json
+    method: GET
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body:
+      error:
+        code: -32000
+        message: Method not allowed
+      id: null
+      jsonrpc: '2.0'
+    headers:
+      content-type: text/plain;charset=UTF-8
+    status_code: 405
+- filename: t21
+  request:
+    body:
+      id: 1
+      jsonrpc: '2.0'
+      method: tools/list
+      params:
+        _meta:
+          progressToken: 0
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: 'event: message
+
+      data: {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"fetch_tiktoken_documentation","description":"Fetch
+      entire documentation file from GitHub repository: openai/tiktoken. Useful for
+      general questions. Always call this tool first if asked about openai/tiktoken.","inputSchema":{"type":"object"},"annotations":{"_def":{"options":[{"_def":{"unknownKeys":"strip","catchall":{"_def":{"typeName":"ZodNever"},"~standard":{"version":1,"vendor":"zod"}},"typeName":"ZodObject"},"~standard":{"version":1,"vendor":"zod"},"_cached":null},{"_def":{"typeName":"ZodNull"},"~standard":{"version":1,"vendor":"zod"}}],"typeName":"ZodUnion"},"~standard":{"version":1,"vendor":"zod"}}},{"name":"search_tiktoken_documentation","description":"Semantically
+      search within the fetched documentation from GitHub repository: openai/tiktoken.
+      Useful for specific queries.","inputSchema":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant documentation"}},"required":["query"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}},{"name":"search_tiktoken_code","description":"Search
+      for code within the GitHub repository: \"openai/tiktoken\" using the GitHub
+      Search API (exact match). Returns matching files for you to query further if
+      relevant.","inputSchema":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant code files"},"page":{"type":"number","description":"Page
+      number to retrieve (starting from 1). Each page contains 30 results."}},"required":["query"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}},{"name":"fetch_generic_url_content","description":"Generic
+      tool to fetch content from any absolute URL, respecting robots.txt rules. Use
+      this to retrieve referenced urls (absolute urls) that were mentioned in previously
+      fetched documentation.","inputSchema":{"type":"object","properties":{"url":{"type":"string","description":"The
+      URL of the document or page to fetch"}},"required":["url"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}]}}
+
+
+      '
+    headers:
+      content-type: text/event-stream
+    status_code: 200
+- filename: t22
+  request:
+    body:
+      id: 0
+      jsonrpc: '2.0'
+      method: initialize
+      params:
+        capabilities: {}
+        clientInfo:
+          name: agentic-api
+          version: 0.9.0
+        protocolVersion: '2025-06-18'
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: 'event: message
+
+      data: {"jsonrpc":"2.0","id":0,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"GitMCP","version":"1.1.0"}}}
+
+
+      '
+    headers:
+      content-type: text/event-stream
+    status_code: 200
+- filename: t23
+  request:
+    body:
+      jsonrpc: '2.0'
+      method: notifications/initialized
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: ''
+    headers:
+      content-type: application/json
+    status_code: 202
+- filename: t24
+  request:
+    body: {}
+    headers:
+      accept: text/event-stream, application/json
+    method: GET
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body:
+      error:
+        code: -32000
+        message: Method not allowed
+      id: null
+      jsonrpc: '2.0'
+    headers:
+      content-type: text/plain;charset=UTF-8
+    status_code: 405
+- filename: t25
+  request:
+    body:
+      id: 1
+      jsonrpc: '2.0'
+      method: tools/list
+      params:
+        _meta:
+          progressToken: 0
+    headers:
+      accept: text/event-stream, application/json
+      content-type: application/json
+    method: POST
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: 'event: message
+
+      data: {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"fetch_tiktoken_documentation","description":"Fetch
+      entire documentation file from GitHub repository: openai/tiktoken. Useful for
+      general questions. Always call this tool first if asked about openai/tiktoken.","inputSchema":{"type":"object"},"annotations":{"_def":{"options":[{"_def":{"unknownKeys":"strip","catchall":{"_def":{"typeName":"ZodNever"},"~standard":{"version":1,"vendor":"zod"}},"typeName":"ZodObject"},"~standard":{"version":1,"vendor":"zod"},"_cached":null},{"_def":{"typeName":"ZodNull"},"~standard":{"version":1,"vendor":"zod"}}],"typeName":"ZodUnion"},"~standard":{"version":1,"vendor":"zod"}}},{"name":"search_tiktoken_documentation","description":"Semantically
+      search within the fetched documentation from GitHub repository: openai/tiktoken.
+      Useful for specific queries.","inputSchema":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant documentation"}},"required":["query"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}},{"name":"search_tiktoken_code","description":"Search
+      for code within the GitHub repository: \"openai/tiktoken\" using the GitHub
+      Search API (exact match). Returns matching files for you to query further if
+      relevant.","inputSchema":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant code files"},"page":{"type":"number","description":"Page
+      number to retrieve (starting from 1). Each page contains 30 results."}},"required":["query"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}},{"name":"fetch_generic_url_content","description":"Generic
+      tool to fetch content from any absolute URL, respecting robots.txt rules. Use
+      this to retrieve referenced urls (absolute urls) that were mentioned in previously
+      fetched documentation.","inputSchema":{"type":"object","properties":{"url":{"type":"string","description":"The
+      URL of the document or page to fetch"}},"required":["url"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}]}}
+
+
+      '
+    headers:
+      content-type: text/event-stream
+    status_code: 200
+- filename: t28
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+    method: DELETE
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: "<!DOCTYPE html><html lang=\"en\"><head><meta charSet=\"utf-8\"/><meta name=\"\
+      viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\"\
+      /><title>Unhandled Thrown Response!</title></head><body><main style=\"font-family:system-ui,\
+      \ sans-serif;padding:2rem\"><h1 style=\"font-size:24px\">405<!-- --> <!-- -->Method\
+      \ Not Allowed</h1><script>\n        console.log(\n          \"\U0001F4BF Hey\
+      \ developer \U0001F44B. You can provide a way better UX than this when your\
+      \ app throws errors. Check out https://remix.run/guides/errors for more information.\"\
+      \n        );\n      </script></main><!--$--><!--/$--></body></html>"
+    headers:
+      content-type: text/html
+    status_code: 405
+- filename: t27
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+    method: DELETE
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: "<!DOCTYPE html><html lang=\"en\"><head><meta charSet=\"utf-8\"/><meta name=\"\
+      viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\"\
+      /><title>Unhandled Thrown Response!</title></head><body><main style=\"font-family:system-ui,\
+      \ sans-serif;padding:2rem\"><h1 style=\"font-size:24px\">405<!-- --> <!-- -->Method\
+      \ Not Allowed</h1><script>\n        console.log(\n          \"\U0001F4BF Hey\
+      \ developer \U0001F44B. You can provide a way better UX than this when your\
+      \ app throws errors. Check out https://remix.run/guides/errors for more information.\"\
+      \n        );\n      </script></main><!--$--><!--/$--></body></html>"
+    headers:
+      content-type: text/html
+    status_code: 405
+- filename: t29
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+    method: DELETE
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: "<!DOCTYPE html><html lang=\"en\"><head><meta charSet=\"utf-8\"/><meta name=\"\
+      viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\"\
+      /><title>Unhandled Thrown Response!</title></head><body><main style=\"font-family:system-ui,\
+      \ sans-serif;padding:2rem\"><h1 style=\"font-size:24px\">405<!-- --> <!-- -->Method\
+      \ Not Allowed</h1><script>\n        console.log(\n          \"\U0001F4BF Hey\
+      \ developer \U0001F44B. You can provide a way better UX than this when your\
+      \ app throws errors. Check out https://remix.run/guides/errors for more information.\"\
+      \n        );\n      </script></main><!--$--><!--/$--></body></html>"
+    headers:
+      content-type: text/html
+    status_code: 405
+- filename: t26
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+    method: DELETE
+    path: /openai/tiktoken
+    query_params: {}
+  response:
+    body: "<!DOCTYPE html><html lang=\"en\"><head><meta charSet=\"utf-8\"/><meta name=\"\
+      viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\"\
+      /><title>Unhandled Thrown Response!</title></head><body><main style=\"font-family:system-ui,\
+      \ sans-serif;padding:2rem\"><h1 style=\"font-size:24px\">405<!-- --> <!-- -->Method\
+      \ Not Allowed</h1><script>\n        console.log(\n          \"\U0001F4BF Hey\
+      \ developer \U0001F44B. You can provide a way better UX than this when your\
+      \ app throws errors. Check out https://remix.run/guides/errors for more information.\"\
+      \n        );\n      </script></main><!--$--><!--/$--></body></html>"
+    headers:
+      content-type: text/html
+    status_code: 405

@@ -612,6 +612,12 @@ absence of stored rows. Both providers' captures replay through the gateway;
 model text and reasoning differ, while state controls and function arguments
 are compared across providers.
 
+The same `store_false/` directory contains the multi-agent mixed-tools captures.
+Record them with `MULTI_AGENT_STORE=false MULTI_AGENT_SUITE=mixed-tools` using
+`record_multi_agent_cassettes.sh`; see the [multi-agent workflow](multi_agent/README.md).
+The Rust multi-agent contract test compares full-history continuation, delegated
+agents, web/MCP activity, and client shell outputs across both providers in JSON and SSE.
+
 ### Reasoning (gateway and OpenAI)
 
 The default records the same explicit `reasoning` object against OpenAI and the

@@ -13,6 +13,8 @@ use axum::routing::post;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 
+use agentic_core::executor::{ConversationHandler, ExecutionContext, ResponseHandler};
+use agentic_core::storage::{ConversationStore, ResponseStore, create_pool_with_schema};
 use agentic_core::tool::{GatewayExecutor, ToolError, ToolHandler, ToolOutput, ToolType};
 use agentic_core::types::io::FunctionTool;
 use agentic_core::types::tools::WebSearchToolParam;
@@ -121,6 +123,72 @@ async fn spawn_compaction_model() -> (String, Arc<Mutex<Vec<serde_json::Value>>>
         axum::serve(listener, app).await.expect("serve model");
     });
     (format!("http://{address}"), requests, handle)
+}
+
+#[tokio::test]
+async fn compact_endpoint_rejects_restored_multi_agent_trees_before_inference() {
+    let (model_url, captured, model) = spawn_compaction_model().await;
+    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let client = Arc::new(reqwest::Client::new());
+    let mut state = test_state(&test_config(&model_url));
+    state.exec_ctx = Arc::new(ExecutionContext::new(
+        ConversationHandler::new(ConversationStore::new(pool.clone())),
+        ResponseHandler::new(ResponseStore::new(pool)),
+        client.clone(),
+        model_url,
+    ));
+    let (url, gateway) = spawn_gateway(state).await;
+    for store in [false, true] {
+        let response = client
+            .post(format!("{url}/v1/responses"))
+            .header("OpenAI-Beta", "responses_multi_agent=v1")
+            .json(&serde_json::json!({
+                "model": "test-model", "input": "Remember the original context.",
+                "store": store, "multi_agent": {"enabled": true}
+            }))
+            .send()
+            .await
+            .unwrap();
+        let status = response.status();
+        let parent: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(status, reqwest::StatusCode::OK, "{parent}");
+        assert_eq!(parent["status"], "completed", "{parent}");
+        let mut request = serde_json::json!({
+            "model": "test-model",
+            "input": [{"role": "user", "content": "Also remember this new message."}]
+        });
+        if store {
+            request["previous_response_id"] = parent["id"].clone();
+        } else {
+            let checkpoint = parent["output"].as_array().unwrap().last().unwrap();
+            assert_eq!(checkpoint["type"], "compaction");
+            request["input"].as_array_mut().unwrap().insert(0, checkpoint.clone());
+        }
+        let calls_before = captured.lock().await.len();
+        let response = client
+            .post(format!("{url}/v1/responses/compact"))
+            .json(&request)
+            .send()
+            .await
+            .unwrap();
+        let status = response.status();
+        let body: serde_json::Value = response.json().await.unwrap();
+        assert_eq!(status, reqwest::StatusCode::BAD_REQUEST, "{body}");
+        assert!(
+            body["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("/responses/compact is not supported with multi_agent"),
+            "{body}"
+        );
+        assert_eq!(
+            captured.lock().await.len(),
+            calls_before,
+            "rejection must precede inference"
+        );
+    }
+    gateway.abort();
+    model.abort();
 }
 
 #[tokio::test]

@@ -266,7 +266,7 @@ fn normalize_content_part(part: &mut Value) {
         return;
     };
     if part.get("type").and_then(Value::as_str) == Some("output_text")
-        && part.get("logprobs").is_some_and(Value::is_null)
+        && part.get("logprobs").is_none_or(Value::is_null)
     {
         part.insert("logprobs".to_owned(), json!([]));
     }
@@ -345,5 +345,18 @@ mod tests {
         );
         context.restore_stream_event_wire(&mut part).expect("normalize part");
         assert_eq!(part.rest["part"]["logprobs"], json!([]));
+        part.rest["part"].as_object_mut().unwrap().remove("logprobs");
+        context
+            .restore_stream_event_wire(&mut part)
+            .expect("default missing logprobs");
+        assert_eq!(part.rest["part"]["logprobs"], json!([]));
+        for logprobs in [
+            json!([]),
+            json!([{"token": "ok", "bytes": [111, 107], "logprob": -0.1, "top_logprobs": []}]),
+        ] {
+            part.rest["part"]["logprobs"] = logprobs.clone();
+            context.restore_stream_event_wire(&mut part).expect("preserve logprobs");
+            assert_eq!(part.rest["part"]["logprobs"], logprobs);
+        }
     }
 }

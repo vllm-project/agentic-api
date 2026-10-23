@@ -1,10 +1,16 @@
 mod common;
+#[path = "../../agentic-server-core/tests/support/multi_agent_contract.rs"]
+pub mod multi_agent_contract;
+#[path = "responses/multi_agent_stateless.rs"]
+mod multi_agent_stateless;
 #[path = "responses/prompt_cache_options.rs"]
 mod prompt_cache_options;
 #[path = "responses/stateless.rs"]
 mod stateless;
 #[path = "responses/stateless_cassettes.rs"]
 mod stateless_cassettes;
+#[path = "../../agentic-server-core/tests/support/mod.rs"]
+mod support;
 
 use axum::Router;
 use axum::body::Bytes;

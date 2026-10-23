@@ -139,26 +139,34 @@ pub(in crate::executor) fn tools() -> Vec<UpstreamTool> {
     .collect()
 }
 
-/// A response-local key protects public transcript content. Durable continuation
-/// uses the private canonical tree, never decrypted client-supplied transcript.
+/// Protects public transcript content with a response-local key, or client-carried
+/// checkpoints with a deployment key and a separate authentication domain.
 pub(in crate::executor) struct TranscriptSealer(aead::LessSafeKey);
 
 impl TranscriptSealer {
     pub(in crate::executor) fn new() -> ExecutorResult<Self> {
         let mut key = [0; 32];
         SystemRandom::new().fill(&mut key).map_err(|_| crypto_error())?;
-        let key = aead::UnboundKey::new(&aead::AES_256_GCM, &key).map_err(|_| crypto_error())?;
+        Self::with_key(&key)
+    }
+
+    pub(super) fn with_key(key: &[u8; 32]) -> ExecutorResult<Self> {
+        let key = aead::UnboundKey::new(&aead::AES_256_GCM, key).map_err(|_| crypto_error())?;
         Ok(Self(aead::LessSafeKey::new(key)))
     }
 
     pub(in crate::executor) fn seal(&self, text: &str) -> ExecutorResult<String> {
+        self.seal_bytes(text.as_bytes(), b"agentic-api/multi-agent/v1")
+    }
+
+    pub(super) fn seal_bytes(&self, bytes: &[u8], domain: &[u8]) -> ExecutorResult<String> {
         let mut nonce = [0; aead::NONCE_LEN];
         SystemRandom::new().fill(&mut nonce).map_err(|_| crypto_error())?;
-        let mut ciphertext = text.as_bytes().to_vec();
+        let mut ciphertext = bytes.to_vec();
         self.0
             .seal_in_place_append_tag(
                 aead::Nonce::assume_unique_for_key(nonce),
-                aead::Aad::from(b"agentic-api/multi-agent/v1"),
+                aead::Aad::from(domain),
                 &mut ciphertext,
             )
             .map_err(|_| crypto_error())?;
@@ -168,6 +176,22 @@ impl TranscriptSealer {
             "enc_{}",
             base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(envelope)
         ))
+    }
+
+    pub(super) fn open_bytes(&self, text: &str, domain: &[u8]) -> ExecutorResult<Vec<u8>> {
+        let invalid = || ExecutorError::InvalidRequest("invalid multi-agent replay state or replay key".into());
+        let mut bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(text.strip_prefix("enc_").ok_or_else(invalid)?)
+            .map_err(|_| invalid())?;
+        if bytes.len() < aead::NONCE_LEN + aead::AES_256_GCM.tag_len() {
+            return Err(invalid());
+        }
+        let nonce = aead::Nonce::try_assume_unique_for_key(&bytes[..aead::NONCE_LEN]).map_err(|_| invalid())?;
+        let plaintext = self
+            .0
+            .open_in_place(nonce, aead::Aad::from(domain), &mut bytes[aead::NONCE_LEN..])
+            .map_err(|_| invalid())?;
+        Ok(plaintext.to_vec())
     }
 
     pub(in crate::executor) fn arguments(&self, command: &AgentCommand) -> ExecutorResult<String> {

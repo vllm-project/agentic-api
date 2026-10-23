@@ -12,6 +12,7 @@ pub use control::{RunControl, RunControlReceiver};
 mod checkpoint;
 pub(in crate::executor) mod collaboration;
 mod compaction;
+mod replay;
 pub use checkpoint::{CheckpointLimits, ValidatedTreeCheckpoint};
 pub use compaction::{CompactionCommit, CompactionPlan, CompactionResult};
 mod pending_calls;

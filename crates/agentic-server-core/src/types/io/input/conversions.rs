@@ -16,13 +16,11 @@ impl From<OutputMessageContent> for InputContent {
                 if let Some(annotations) = part.annotations {
                     text.extra.insert("annotations".into(), Value::Array(annotations));
                 }
-                if let Some(logprobs) = part.logprobs {
-                    // These fixed structs contain only JSON-compatible values and string keys.
-                    text.extra.insert(
-                        "logprobs".into(),
-                        serde_json::to_value(logprobs).expect("text log probabilities serialize to JSON"),
-                    );
-                }
+                // These fixed structs contain only JSON-compatible values and string keys.
+                text.extra.insert(
+                    "logprobs".into(),
+                    serde_json::to_value(part.logprobs).expect("text log probabilities serialize to JSON"),
+                );
                 Self::OutputText(text)
             }
         }

@@ -789,7 +789,7 @@ Unknown or ambiguous tool shapes are **never executed by default**. They are pre
 
 ## 🤝 Multi-agent Responses
 
-Set `multi_agent.enabled` on a stored Responses request and the gateway runs the [Responses multi-agent](https://developers.openai.com/api/docs/guides/responses-multi-agent) collaboration loop itself: the root agent spawns subagents, each with its own history and tool registry, and the response returns their attributed `multi_agent_call`, `multi_agent_call_output`, and `agent_message` items. Continue the whole agent tree with `previous_response_id`.
+Set `multi_agent.enabled` on an HTTP Responses request and the gateway runs the [Responses multi-agent](https://developers.openai.com/api/docs/guides/responses-multi-agent) collaboration loop itself: the root agent spawns subagents, each with its own history and tool registry, and the response returns their attributed `multi_agent_call`, `multi_agent_call_output`, and `agent_message` items. Continue a stored agent tree with `previous_response_id`. With `store:false`, replay returned output items and append new input; the final opaque `compaction` item carries the tree without database persistence, and items before it may be pruned.
 
 ```bash
 curl http://localhost:9000/v1/responses \
@@ -802,7 +802,7 @@ curl http://localhost:9000/v1/responses \
   }'
 ```
 
-- `store: true` is required; the gateway does not yet support stateless multi-agent requests.
+- HTTP supports both `store:true` and `store:false`. Stateless continuation requires the returned compaction item; see the [API guide](docs/api/index.md#responses) for replay and deployment-key configuration.
 - `max_concurrent_subagents` limits active descendant turns (default `3`); it is not a total agent count.
 - Multi-agent execution is HTTP and SSE only. WebSocket requests with multi-agent enabled are rejected.
 - `max_tool_calls` and reasoning summaries are rejected while multi-agent is enabled.
@@ -848,7 +848,7 @@ Design and migration decisions are tracked as ADRs in [docs/adr/](docs/adr/), wi
 - [x] **Server-side tool execution**: explicit ownership, web search, web fetch, MCP, and code interpreter built in
 - [x] **Messages API**: Claude Code support with a server-side gateway tool loop
 - [x] **Conversations API**: OpenAI-compatible conversation and item management
-- [ ] **Multi-agent Responses**: HTTP execution ships today; WebSocket injection and stateless requests are next
+- [ ] **Multi-agent Responses**: stateful and stateless HTTP execution ship today; WebSocket injection is next
 - [ ] **File search**: Files and Vector Stores APIs with a gateway-executed `file_search` tool
 - [ ] **Stateful Messages**: Messages continuation on the same persistence and execution primitives
 - [ ] **Interactions API**: durable, higher-level agentic workflows

@@ -1,6 +1,7 @@
 //! Integration-only comparison of independently recorded provider exchanges.
 #[path = "multi_agent_code_interpreter.rs"]
 mod code_interpreter;
+use agentic_core::utils::common::deserialize_from_value;
 use flate2::read::GzDecoder;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Read;
@@ -35,6 +36,7 @@ impl RecordedSession {
 
 struct RecordedExchange {
     response: ResponsePayload,
+    store: bool,
     previous_response_id: Option<String>,
     input: Vec<InputItem>,
     stream: bool,
@@ -60,6 +62,8 @@ fn mismatch(message: impl Into<String>) -> ContractMismatch {
 }
 
 impl RecordedSession {
+    /// # Errors
+    /// The cassette cannot be read or violates the multi-agent contract.
     pub fn load(path: &Path) -> Result<Self, ContractMismatch> {
         let content = if path.extension().is_some_and(|extension| extension == "gz") {
             let file = std::fs::File::open(path).map_err(|error| mismatch(error.to_string()))?;
@@ -72,19 +76,61 @@ impl RecordedSession {
             std::fs::read_to_string(path).map_err(|error| mismatch(error.to_string()))?
         };
         let cassette: Cassette = serde_yaml::from_str(&content).map_err(|error| mismatch(error.to_string()))?;
+        Self::from_cassette(&cassette)
+    }
+
+    /// Apply the same recorded contract to exchanges produced by a live gateway test.
+    /// # Errors
+    /// An exchange violates the multi-agent contract.
+    pub fn from_cassette(cassette: &Cassette) -> Result<Self, ContractMismatch> {
         let mut exchanges = Vec::new();
-        for turn in responses_turns(&cassette) {
-            if !turn.request.body.store || turn.request.body.extra["multi_agent"]["enabled"] != true {
+        let mut replay_history = Vec::new();
+        for turn in responses_turns(cassette) {
+            if turn.request.body.extra["multi_agent"]["enabled"] != true {
                 // Continuations may inherit configuration from stored state.
                 if !turn.request.body.store || turn.request.body.previous_response_id.is_none() {
-                    return Err(mismatch("recording must use stored multi-agent requests"));
+                    return Err(mismatch("recording must enable multi-agent or inherit a stored tree"));
                 }
             }
             let (terminal, response) = read_recorded_response(turn)?;
             let input = match &turn.request.body.input {
                 Value::Array(items) => {
-                    serde_json::from_value(Value::Array(items.clone())).map_err(|error| mismatch(error.to_string()))?
+                    let new_items = if turn.request.body.store {
+                        replay_history.clear();
+                        items.clone()
+                    } else {
+                        if turn.request.body.previous_response_id.is_some() || terminal["store"] != false {
+                            return Err(mismatch("stateless replay must not reference or store a response"));
+                        }
+                        let retained = if items.starts_with(&replay_history) {
+                            replay_history.as_slice()
+                        } else if let Some(index) = replay_history.iter().rposition(|item| item["type"] == "compaction")
+                        {
+                            // The public compaction contract permits dropping its
+                            // entire prefix without losing pending client calls.
+                            &replay_history[index..]
+                        } else {
+                            return Err(mismatch("stateless continuation changed or omitted public history"));
+                        };
+                        if !items.starts_with(retained) {
+                            return Err(mismatch(
+                                "stateless continuation changed or omitted its compacted history",
+                            ));
+                        }
+                        let new_items = items[retained.len()..].to_vec();
+                        replay_history.clone_from(items);
+                        replay_history.extend(
+                            terminal["output"]
+                                .as_array()
+                                .ok_or_else(|| mismatch("missing output array"))?
+                                .iter()
+                                .cloned(),
+                        );
+                        new_items
+                    };
+                    deserialize_from_value(Value::Array(new_items)).map_err(|error| mismatch(error.to_string()))?
                 }
+                _ if !turn.request.body.store => return Err(mismatch("stateless replay requires an input item array")),
                 _ => Vec::new(),
             };
             let kinds = terminal["output"]
@@ -95,6 +141,7 @@ impl RecordedSession {
                 .collect();
             exchanges.push(RecordedExchange {
                 response,
+                store: turn.request.body.store,
                 previous_response_id: turn.request.body.previous_response_id.clone(),
                 input,
                 stream: turn.request.body.stream,
@@ -175,7 +222,7 @@ impl RecordedSession {
             if !collaboration.is_empty() {
                 return Err(mismatch("collaboration call has no output"));
             }
-            previous = Some(exchange.response.id.as_str());
+            previous = exchange.store.then_some(exchange.response.id.as_str());
         }
         if self.exchanges.is_empty() {
             return Err(mismatch("no Responses exchanges"));
@@ -329,6 +376,8 @@ fn opaque_content(value: &mut Value) {
     }
 }
 
+/// # Errors
+/// The observed session differs from the required reference contract.
 pub fn assert_multi_agent_contract(
     reference: &RecordedSession,
     gateway: &RecordedSession,
@@ -419,6 +468,8 @@ fn client_call(item: &OutputItem) -> Option<(&str, ClientCallKind)> {
 impl RecordedSession {
     /// Check the scenario's public names and discovery results, allowing different
     /// agents, call counts and model text between providers.
+    /// # Errors
+    /// Client-owned tool discovery or continuation is inconsistent.
     pub fn assert_client_owned_tools(&self) -> Result<(), ContractMismatch> {
         let mut discovered = HashSet::new();
         let mut called = HashSet::new();

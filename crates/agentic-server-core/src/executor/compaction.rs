@@ -326,6 +326,13 @@ pub async fn compact_response(
     payload.prompt_cache_options = request.prompt_cache_options;
     payload.prompt_cache_key = request.prompt_cache_key;
     let ctx = rehydrate_conversation(payload, exec_ctx).await?;
+    // OpenAI excludes multi-agent execution from the standalone compact endpoint,
+    // including trees restored from client-carried checkpoints or stored responses.
+    if ctx.multi_agent_tree.is_some() {
+        return Err(ExecutorError::InvalidRequest(
+            "/responses/compact is not supported with multi_agent".into(),
+        ));
+    }
     let (mut ctx, tool_search_state) =
         prepare_request_tools(ctx, &exec_ctx.conv_handler, &exec_ctx.resp_handler).await?;
     let tool_search_metadata = tool_search_state.map(ToolSearchState::into_public_metadata);

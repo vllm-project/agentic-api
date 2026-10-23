@@ -24,11 +24,14 @@ impl MultiAgentRun {
     ) -> ExecutorResult<(CompactionItem, ResponseUsage, Option<String>)> {
         let budget = ExecutorResponseBudget::with_limit(exec.responses_config.max_retained_bytes);
         let mut restored = restore_agents(ctx, exec, &budget)?;
-        ctx.new_input_items
-            .retain(|item| !matches!(item, InOutItem::Input(InputItem::CompactionTrigger)));
-        if restored.continuing_tree && !ctx.new_input_items.is_empty() {
-            restored.continue_input(&ctx.response_id, &ctx.new_input_items)?;
+        // Split before removing triggers so the authenticated replay offset stays
+        // valid. Keep the public prefix for persistence, but apply only new work.
+        let mut new_items = ctx.new_input_items.split_off(restored.replayed_items);
+        new_items.retain(|item| !matches!(item, InOutItem::Input(InputItem::CompactionTrigger)));
+        if restored.continuing_tree && !new_items.is_empty() {
+            restored.continue_input(&ctx.response_id, &new_items)?;
         }
+        ctx.new_input_items.extend(new_items);
         let root = restored
             .agents
             .iter_mut()

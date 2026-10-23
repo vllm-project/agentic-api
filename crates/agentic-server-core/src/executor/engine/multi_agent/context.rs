@@ -46,7 +46,10 @@ pub(in crate::executor::engine) fn prepare_without_inference(
     let budget = ExecutorResponseBudget::with_limit(exec.responses_config.max_retained_bytes);
     let mut restored = restore_agents(request, exec, &budget)?;
     if restored.continuing_tree {
-        restored.continue_input(&request.response_id, &request.new_input_items)?;
+        restored.continue_input(
+            &request.response_id,
+            &request.new_input_items[restored.replayed_items..],
+        )?;
     }
     // Keep only shared settings in the template; canonical agent histories are
     // moved into preparation and back instead of copying them for every agent.
@@ -184,6 +187,7 @@ pub(super) struct RestoredAgents {
     pub(super) pending: PendingClientCalls,
     pub(super) agents: Vec<StoredAgent>,
     pub(super) continuing_tree: bool,
+    pub(super) replayed_items: usize,
 }
 
 pub(super) fn restore_agents(
@@ -195,6 +199,10 @@ pub(super) fn restore_agents(
         max_agents: MAX_AGENTS,
         max_mailbox_messages: MAX_MAIL,
     };
+    let replayed_items = request
+        .multi_agent_tree
+        .as_ref()
+        .map_or(0, ValidatedTreeCheckpoint::replayed_items);
     let tree = request
         .multi_agent_tree
         .take()
@@ -247,6 +255,7 @@ pub(super) fn restore_agents(
         pending,
         agents,
         continuing_tree,
+        replayed_items,
     })
 }
 

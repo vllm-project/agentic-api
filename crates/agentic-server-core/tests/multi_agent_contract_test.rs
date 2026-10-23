@@ -90,6 +90,54 @@ fn mixed_tools_streaming_matches_reference_contract() {
 }
 
 #[test]
+fn store_false_mixed_tools_openai_matches_stored_contract() {
+    let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cassettes");
+    for mode in ["nonstreaming", "streaming"] {
+        let stored = RecordedSession::load(&directory.join(format!(
+            "multi_agent/multi-agent-openai-reference-mixed-tools-gpt-5.6-sol-{mode}.yaml"
+        )))
+        .unwrap();
+        let stateless = RecordedSession::load(&directory.join(format!(
+            "store_false/multi-agent-store-false-openai-reference-mixed-tools-gpt-5.6-sol-{mode}.yaml"
+        )))
+        .unwrap();
+        assert_multi_agent_contract(
+            &stored,
+            &stateless,
+            &ComparisonPolicy {
+                require_reference_tool_kinds: true,
+                minimum_delegated_agents: Some(3),
+            },
+        )
+        .unwrap_or_else(|error| panic!("store:false {mode}: {error}"));
+    }
+}
+
+#[test]
+fn store_false_mixed_tools_gateway_matches_openai_contract() {
+    let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cassettes/store_false");
+    for mode in ["nonstreaming", "streaming"] {
+        let reference = RecordedSession::load(&directory.join(format!(
+            "multi-agent-store-false-openai-reference-mixed-tools-gpt-5.6-sol-{mode}.yaml"
+        )))
+        .unwrap();
+        let gateway = RecordedSession::load(&directory.join(format!(
+            "multi-agent-store-false-gateway-mixed-tools-Qwen-Qwen3.8-27B-FP8-{mode}.yaml"
+        )))
+        .unwrap();
+        assert_multi_agent_contract(
+            &reference,
+            &gateway,
+            &ComparisonPolicy {
+                require_reference_tool_kinds: true,
+                minimum_delegated_agents: Some(3),
+            },
+        )
+        .unwrap_or_else(|error| panic!("store:false gateway {mode}: {error}"));
+    }
+}
+
+#[test]
 fn client_owned_tools_nonstreaming_matches_reference_contract() {
     assert_qwen_case("client-owned-tools", "nonstreaming");
 }

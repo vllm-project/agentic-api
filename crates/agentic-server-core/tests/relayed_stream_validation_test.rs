@@ -306,27 +306,51 @@ async fn strict_relay_decoder_accepts_compatible_recorded_responses_streams() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cassettes");
     let mut decoded = 0;
     let mut rejected = Vec::new();
+    // Preserve raw recordings, including their incompatibilities. Pin each
+    // rejection to its capture, exact error, and number of streamed turns.
+    // Live gateway output is validated separately by multi_agent_stateless.
+    let mut recorded_incompatibilities = [(
+        "store_false/multi-agent-store-false-model-dependencies-streaming.yaml",
+        "invalid request: upstream stream event does not match its active output item: inconsistent item ID, output_index, or kind",
+        17,
+        0,
+    )];
 
     for path in yaml_files(&root) {
+        let relative = path.strip_prefix(&root).expect("cassette below root");
         for (turn_index, chunks) in response_streams(&path).into_iter().enumerate() {
             let stream = chunks.join("\n");
             if !is_responses_event_stream(&stream) {
                 continue;
             }
-            match decode_upstream(request_context(), UpstreamBody::Sse(&stream))
+            let result = decode_upstream(request_context(), UpstreamBody::Sse(&stream))
                 .await
-                .map(|(payload, _)| payload)
+                .map(|(payload, _)| payload);
+            if let Some((_, expected_error, _, observed)) = recorded_incompatibilities
+                .iter_mut()
+                .find(|(capture, _, _, _)| relative == Path::new(capture))
             {
-                Ok(_) => decoded += 1,
-                Err(error) => rejected.push(format!(
-                    "{} turn {}: {error}",
-                    path.strip_prefix(&root).expect("cassette below root").display(),
+                let error = result.expect_err("recorded strict-relay incompatibility changed");
+                assert_eq!(
+                    error.to_string(),
+                    *expected_error,
+                    "{} stream {}",
+                    relative.display(),
                     turn_index + 1
-                )),
+                );
+                *observed += 1;
+                continue;
+            }
+            match result {
+                Ok(_) => decoded += 1,
+                Err(error) => rejected.push(format!("{} turn {}: {error}", relative.display(), turn_index + 1)),
             }
         }
     }
 
+    for (capture, _, expected, observed) in recorded_incompatibilities {
+        assert_eq!(observed, expected, "recorded incompatibility count: {capture}");
+    }
     let unexpected: Vec<_> = rejected
         .iter()
         .filter(|failure| !failure.contains("changes 'call_id'"))

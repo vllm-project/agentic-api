@@ -225,7 +225,8 @@ fn message_completion_cannot_reassign_identity_or_rewrite_completed_parts() {
     use serde_json::json;
     let opening = json!({"type": "message", "id": "msg_child", "role": "assistant", "phase": "final_answer",
         "status": "in_progress", "agent": {"agent_name": "/root/reviewer"}, "content": []});
-    let part = json!({"type": "output_text", "text": "OK", "annotations": [], "logprobs": []});
+    let part = json!({"type": "output_text", "text": "OK", "annotations": [],
+        "logprobs": [{"token": "OK", "bytes": [79, 75], "logprob": -0.1, "top_logprobs": []}]});
     for validation in [Validation::Strict, Validation::Lenient] {
         for (field, value) in [
             ("role", json!("user")),

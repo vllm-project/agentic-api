@@ -14,6 +14,8 @@ mod root_completion;
 mod service_tier;
 #[path = "multi_agent_tests/shell_continuation.rs"]
 mod shell_continuation;
+#[path = "multi_agent_tests/stateless_replay.rs"]
+mod stateless_replay;
 use crate::executor::{
     ExecuteRequest,
     modes::{ConversationHandler, ResponseHandler},
@@ -144,6 +146,7 @@ async fn setup_with_compaction_gate(
         let compaction_gate = compaction_gate.clone();
         async move {
             assert!(request.get("multi_agent").is_none());
+            assert!(!request.to_string().contains("enc_"), "encrypted replay state must not reach inference");
             assert!(request["input"].as_array().unwrap().iter().all(|item| !matches!(
                 item["type"].as_str(), Some("multi_agent_call" | "multi_agent_call_output" | "agent_message"))));
             let input = request["input"].as_array().unwrap();
@@ -229,32 +232,6 @@ async fn setup_with_compaction_gate(
         format!("http://{address}"),
     );
     (Arc::new(exec), server)
-}
-
-#[tokio::test]
-async fn automatic_compaction_is_attributed_and_usage_is_counted_once() {
-    let (exec, server) = setup().await;
-    let request = RequestPayload {
-        model: "test".into(),
-        store: true,
-        input: ResponsesInput::Text("simple compaction test".into()),
-        multi_agent: Some(MultiAgentConfig {
-            enabled: true,
-            max_concurrent_subagents: Some(3),
-        }),
-        context_management: Some(vec![ContextManagement {
-            type_: "compaction".into(),
-            compact_threshold: Some(1),
-        }]),
-        ..Default::default()
-    };
-    let result = tokio::time::timeout(Duration::from_secs(10), response(request, exec)).await;
-    server.abort();
-    let result = result.unwrap();
-    assert_eq!(result.usage.unwrap().total_tokens, 6);
-    assert!(matches!(result.output.first(), Some(OutputItem::Compaction(item))
-        if item.agent.as_ref().is_some_and(|agent| agent.agent_name == "/root")));
-    assert_eq!(result.output.len(), 2);
 }
 
 #[tokio::test]

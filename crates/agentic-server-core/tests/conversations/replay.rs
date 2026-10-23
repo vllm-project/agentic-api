@@ -15,21 +15,26 @@ use std::sync::Arc;
 #[path = "replay_history.rs"]
 mod history;
 
-fn normalize_recorded_reasoning(value: &mut Value) {
+fn normalize_recorded_defaults(value: &mut Value) {
     match value {
         Value::Object(fields) => {
-            // Older gateway recordings emitted null; the base branch already omits
-            // absent opaque state. Do not normalize non-null state or other fields.
+            // Older gateway recordings emitted null for absent opaque state.
             if fields.get("type").and_then(Value::as_str) == Some("reasoning")
                 && fields.get("encrypted_content") == Some(&Value::Null)
             {
                 fields.remove("encrypted_content");
             }
+            // Missing or null logprobs now serialize as an empty collection.
+            if fields.get("type").and_then(Value::as_str) == Some("output_text")
+                && fields.get("logprobs").is_none_or(Value::is_null)
+            {
+                fields.insert("logprobs".into(), Value::Array(Vec::new()));
+            }
             for value in fields.values_mut() {
-                normalize_recorded_reasoning(value);
+                normalize_recorded_defaults(value);
             }
         }
-        Value::Array(values) => values.iter_mut().for_each(normalize_recorded_reasoning),
+        Value::Array(values) => values.iter_mut().for_each(normalize_recorded_defaults),
         _ => {}
     }
 }
@@ -47,7 +52,7 @@ fn response_fields(body: &Value) -> Value {
         fields.insert(field.to_owned(), body[field].clone());
     }
     let mut result = Value::Object(fields);
-    normalize_recorded_reasoning(&mut result);
+    normalize_recorded_defaults(&mut result);
     result
 }
 
@@ -122,7 +127,7 @@ pub(super) async fn run(name: &str, recording: &Cassette) {
         assert_eq!(actual.status_code, turn.response.status_code, "{location}");
         assert_eq!(actual.sse.is_some(), turn.response.sse.is_some(), "{location}");
         let mut expected_body = result_body(&turn.response);
-        normalize_recorded_reasoning(&mut expected_body);
+        normalize_recorded_defaults(&mut expected_body);
         let actual_body = result_body(&actual);
         if turn.request.path == "/v1/responses" {
             let has_conversation = !turn.request.body["conversation"].is_null();
