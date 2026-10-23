@@ -1,0 +1,829 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content: Reply with only SAPPHIRE.
+        role: user
+      model: gpt-4.1
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792744697
+      created_at: 1792744696
+      error: null
+      frequency_penalty: 0.0
+      id: resp_03ec669b52bd3e6f006adb1cf7dbd487d0a9005513573ff901
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE.
+          type: output_text
+        id: msg_03ec669b52bd3e6f006adb1cf8f88c87d0b4120e37112d37c1
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 15
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 21
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_03ec669b52bd3e6f006adb1cf7dbd487d0a9005513573ff901/input_items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_03ec669b52bd3e6f006adb1cf81f4487d0b148e69357f5467a
+        role: user
+        status: completed
+        type: message
+      first_id: msg_03ec669b52bd3e6f006adb1cf81f4487d0b148e69357f5467a
+      has_more: false
+      last_id: msg_03ec669b52bd3e6f006adb1cf81f4487d0b148e69357f5467a
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - content: Reply with only ORCHID.
+        role: user
+      model: gpt-4.1
+      previous_response_id: resp_03ec669b52bd3e6f006adb1cf7dbd487d0a9005513573ff901
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792744698
+      created_at: 1792744698
+      error: null
+      frequency_penalty: 0.0
+      id: resp_03ec669b52bd3e6f006adb1cf9ff1087d08e8ec4c1d27292ec
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: ORCHID.
+          type: output_text
+        id: msg_03ec669b52bd3e6f006adb1cfa945887d0954d2950bdf34b56
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_03ec669b52bd3e6f006adb1cf7dbd487d0a9005513573ff901
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 35
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 5
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 40
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_03ec669b52bd3e6f006adb1cf9ff1087d08e8ec4c1d27292ec/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_03ec669b52bd3e6f006adb1cf81f4487d0b148e69357f5467a
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE.
+          type: output_text
+        id: msg_03ec669b52bd3e6f006adb1cf8f88c87d0b4120e37112d37c1
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_03ec669b52bd3e6f006adb1cfa095487d08e7f1d2d8717d6ac
+        role: user
+        status: completed
+        type: message
+      first_id: msg_03ec669b52bd3e6f006adb1cf81f4487d0b148e69357f5467a
+      has_more: false
+      last_id: msg_03ec669b52bd3e6f006adb1cfa095487d08e7f1d2d8717d6ac
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_03ec669b52bd3e6f006adb1cf9ff1087d08e8ec4c1d27292ec/input_items
+    query_params:
+      limit: '1'
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_03ec669b52bd3e6f006adb1cf81f4487d0b148e69357f5467a
+        role: user
+        status: completed
+        type: message
+      first_id: msg_03ec669b52bd3e6f006adb1cf81f4487d0b148e69357f5467a
+      has_more: true
+      last_id: msg_03ec669b52bd3e6f006adb1cf81f4487d0b148e69357f5467a
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_03ec669b52bd3e6f006adb1cf9ff1087d08e8ec4c1d27292ec/input_items
+    query_params:
+      after: msg_03ec669b52bd3e6f006adb1cf81f4487d0b148e69357f5467a
+      limit: '1'
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE.
+          type: output_text
+        id: msg_03ec669b52bd3e6f006adb1cf8f88c87d0b4120e37112d37c1
+        role: assistant
+        status: completed
+        type: message
+      first_id: msg_03ec669b52bd3e6f006adb1cf8f88c87d0b4120e37112d37c1
+      has_more: true
+      last_id: msg_03ec669b52bd3e6f006adb1cf8f88c87d0b4120e37112d37c1
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_03ec669b52bd3e6f006adb1cf9ff1087d08e8ec4c1d27292ec
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792744698
+      created_at: 1792744698
+      error: null
+      frequency_penalty: 0.0
+      id: resp_03ec669b52bd3e6f006adb1cf9ff1087d08e8ec4c1d27292ec
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: ORCHID.
+          type: output_text
+        id: msg_03ec669b52bd3e6f006adb1cfa945887d0954d2950bdf34b56
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_03ec669b52bd3e6f006adb1cf7dbd487d0a9005513573ff901
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 35
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 5
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 40
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_03ec669b52bd3e6f006adb1cf7dbd487d0a9005513573ff901
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: resp_03ec669b52bd3e6f006adb1cf7dbd487d0a9005513573ff901
+      object: response.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_03ec669b52bd3e6f006adb1cf7dbd487d0a9005513573ff901
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Response with id 'resp_03ec669b52bd3e6f006adb1cf7dbd487d0a9005513573ff901'
+          not found.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t10
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_03ec669b52bd3e6f006adb1cf7dbd487d0a9005513573ff901/input_items
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Response with id 'resp_03ec669b52bd3e6f006adb1cf7dbd487d0a9005513573ff901'
+          not found.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t11
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_03ec669b52bd3e6f006adb1cf9ff1087d08e8ec4c1d27292ec/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_03ec669b52bd3e6f006adb1cfa095487d08e7f1d2d8717d6ac
+        role: user
+        status: completed
+        type: message
+      first_id: msg_03ec669b52bd3e6f006adb1cfa095487d08e7f1d2d8717d6ac
+      has_more: false
+      last_id: msg_03ec669b52bd3e6f006adb1cfa095487d08e7f1d2d8717d6ac
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t12
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_03ec669b52bd3e6f006adb1cf9ff1087d08e8ec4c1d27292ec
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792744698
+      created_at: 1792744698
+      error: null
+      frequency_penalty: 0.0
+      id: resp_03ec669b52bd3e6f006adb1cf9ff1087d08e8ec4c1d27292ec
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: ORCHID.
+          type: output_text
+        id: msg_03ec669b52bd3e6f006adb1cfa945887d0954d2950bdf34b56
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_03ec669b52bd3e6f006adb1cf7dbd487d0a9005513573ff901
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 35
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 5
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 40
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t13
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_03ec669b52bd3e6f006adb1cf7dbd487d0a9005513573ff901
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Response with id 'resp_03ec669b52bd3e6f006adb1cf7dbd487d0a9005513573ff901'
+          not found.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t14
+  request:
+    body:
+      input:
+      - content: What exact word did the first user message ask you to reply with?
+          Reply with only that word.
+        role: user
+      model: gpt-4.1
+      previous_response_id: resp_03ec669b52bd3e6f006adb1cf9ff1087d08e8ec4c1d27292ec
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792744703
+      created_at: 1792744703
+      error: null
+      frequency_penalty: 0.0
+      id: resp_03ec669b52bd3e6f006adb1cff6ab487d0a6c520cdef13e27a
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: ORCHID
+          type: output_text
+        id: msg_03ec669b52bd3e6f006adb1cffbf4487d0addfc60124ff76f6
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: resp_03ec669b52bd3e6f006adb1cf9ff1087d08e8ec4c1d27292ec
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 46
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 4
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 50
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t15
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_03ec669b52bd3e6f006adb1cff6ab487d0a6c520cdef13e27a/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_03ec669b52bd3e6f006adb1cfa095487d08e7f1d2d8717d6ac
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          logprobs: []
+          text: ORCHID.
+          type: output_text
+        id: msg_03ec669b52bd3e6f006adb1cfa945887d0954d2950bdf34b56
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: What exact word did the first user message ask you to reply with?
+            Reply with only that word.
+          type: input_text
+        id: msg_03ec669b52bd3e6f006adb1cff76bc87d0ab21d63dec836f8e
+        role: user
+        status: completed
+        type: message
+      first_id: msg_03ec669b52bd3e6f006adb1cfa095487d08e7f1d2d8717d6ac
+      has_more: false
+      last_id: msg_03ec669b52bd3e6f006adb1cff76bc87d0ab21d63dec836f8e
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t16
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_03ec669b52bd3e6f006adb1cff6ab487d0a6c520cdef13e27a
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: resp_03ec669b52bd3e6f006adb1cff6ab487d0a6c520cdef13e27a
+      object: response.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t17
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_03ec669b52bd3e6f006adb1cf9ff1087d08e8ec4c1d27292ec
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: resp_03ec669b52bd3e6f006adb1cf9ff1087d08e8ec4c1d27292ec
+      object: response.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t18
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_03ec669b52bd3e6f006adb1cf9ff1087d08e8ec4c1d27292ec/input_items
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Response with id 'resp_03ec669b52bd3e6f006adb1cf9ff1087d08e8ec4c1d27292ec'
+          not found.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t19
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_03ec669b52bd3e6f006adb1cf9ff1087d08e8ec4c1d27292ec
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Response with id 'resp_03ec669b52bd3e6f006adb1cf9ff1087d08e8ec4c1d27292ec'
+          not found.
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404

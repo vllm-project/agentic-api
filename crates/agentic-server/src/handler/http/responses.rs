@@ -1,4 +1,4 @@
-use axum::extract::{Path, Request, State};
+use axum::extract::{Path, RawQuery, Request, State};
 use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
@@ -12,11 +12,13 @@ use agentic_core::executor::telemetry::Api;
 use agentic_core::executor::{ExecuteRequest, compact_response as execute_compaction};
 use agentic_core::proxy::ProxyRequest;
 use agentic_core::tool::ToolSearchHandler;
+use agentic_core::types::io::DeletedResponse;
 use agentic_core::types::request_response::{CompactRequest, PromptCacheOptions, RequestPayload, ResponseTextConfig};
 
 use super::super::common::{
     convert_response, executor_error_response, extract_bearer, read_bytes, read_json, sse_response,
 };
+use super::items::ListItemsQuery;
 use crate::app::AppState;
 
 // Only executor requests interpret text and prompt-cache options. Proxy requests retain their raw body.
@@ -151,6 +153,71 @@ pub async fn compact_response(State(state): State<AppState>, req: Request) -> Re
 pub async fn retrieve_response(State(state): State<AppState>, Path(response_id): Path<String>) -> Response {
     match state.exec_ctx.resp_handler.retrieve(&response_id).await {
         Ok(payload) => axum::Json(payload).into_response(),
+        Err(error) => executor_error_response(error),
+    }
+}
+
+/// Delete a locally persisted response without invoking inference.
+///
+/// Descendants created with `previous_response_id` stay retrievable; a new request
+/// naming the deleted ID as `previous_response_id` is rejected as not found.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    delete,
+    path = "/v1/responses/{response_id}",
+    params(("response_id" = String, Path, description = "Stored response ID")),
+    responses(
+        (status = 200, description = "Response deleted", body = agentic_core::types::io::DeletedResponse),
+        (status = 401, description = "Missing or invalid bearer token", body = crate::openapi::ApiErrorResponse),
+        (status = 404, description = "Response not found", body = crate::openapi::ApiErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+    tag = "responses",
+))]
+pub async fn delete_response(State(state): State<AppState>, Path(response_id): Path<String>) -> Response {
+    match state.exec_ctx.resp_handler.delete(&response_id).await {
+        Ok(()) => axum::Json(DeletedResponse::response(response_id)).into_response(),
+        Err(error) => executor_error_response(error),
+    }
+}
+
+/// List the input items of a locally persisted response.
+///
+/// The list is the full context the response was generated from — items inherited
+/// through `previous_response_id` or its conversation, then this turn's input —
+/// without the response's own output.
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/v1/responses/{response_id}/input_items",
+    params(
+        ("response_id" = String, Path, description = "Stored response ID"),
+        ListItemsQuery
+    ),
+    responses(
+        (status = 200, description = "Input items", body = agentic_core::types::ListItemsResponse),
+        (status = 400, description = "Invalid pagination parameters", body = crate::openapi::ApiErrorResponse),
+        (status = 401, description = "Missing or invalid bearer token", body = crate::openapi::ApiErrorResponse),
+        (status = 404, description = "Response not found", body = crate::openapi::ApiErrorResponse),
+        (status = 409, description = "Legacy response has no retrievable payload", body = crate::openapi::ApiErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+    tag = "responses",
+))]
+pub async fn list_input_items(
+    State(state): State<AppState>,
+    Path(response_id): Path<String>,
+    RawQuery(query): RawQuery,
+) -> Response {
+    let query = match ListItemsQuery::parse(query.as_deref()) {
+        Ok(query) => query,
+        Err(error) => return *error,
+    };
+    match state
+        .exec_ctx
+        .resp_handler
+        .list_input_items(&response_id, query.page())
+        .await
+    {
+        Ok(page) => axum::Json(page).into_response(),
         Err(error) => executor_error_response(error),
     }
 }

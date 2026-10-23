@@ -426,7 +426,7 @@ async fn failure_before_execution_starts_is_not_delivered() {
     let Err(error) = run(&traces, Arc::clone(&fixture.exec_ctx), payload).await else {
         panic!("unknown previous_response_id fails rehydration");
     };
-    assert_eq!(error.http_status(), 404, "{error}");
+    assert_eq!(error.http_status(), 400, "{error}");
 
     let span = traces.execute_span().await;
     assert_execute_attributes(&span, false, "failed", "not_started");

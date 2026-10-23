@@ -395,10 +395,26 @@ async fn explicit_conversation_tool_history(use_session: bool, gateway_tool: boo
     assert_eq!(calls.load(Ordering::Relaxed), usize::from(gateway_tool));
     let requests = model.requests.lock().await;
     assert_eq!(requests.len(), if gateway_tool { 3 } else { 2 });
-    let model_history = requests.last().unwrap()["input"].clone();
+    let mut model_history = requests.last().unwrap()["input"].clone();
     drop(requests);
     let history = conversations.rehydrate(&conversation.conversation_id).await.unwrap();
-    let stored_history = serde_json::to_value(InOutItem::into_input_items(history)).unwrap();
+    let mut stored_history = serde_json::to_value(InOutItem::into_input_items(history)).unwrap();
+    // Independently executed sessions generate different result item IDs. Check
+    // persistence within each execution before comparing their semantic history.
+    for item in model_history.as_array_mut().unwrap() {
+        if item["type"] == "function_call_output" && !item["id"].is_null() {
+            assert!(item["id"].as_str().unwrap().starts_with("fc_"));
+            let stored = stored_history
+                .as_array_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|stored| stored["type"] == "function_call_output" && stored["call_id"] == item["call_id"])
+                .unwrap();
+            assert_eq!(stored["id"], item["id"]);
+            item.as_object_mut().unwrap().remove("id");
+            stored.as_object_mut().unwrap().remove("id");
+        }
+    }
     model.close().await;
     pool.close().await;
     (model_history, stored_history)

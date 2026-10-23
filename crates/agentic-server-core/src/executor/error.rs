@@ -117,10 +117,13 @@ pub enum ExecutorError {
     /// The request's `max_tool_calls` is not an integer of at least one.
     #[error(transparent)]
     InvalidMaxToolCalls(#[from] MaxToolCallsError),
-    /// A recognized request value that cannot be used in this combination, reported with
-    /// `code: unsupported_value` and the offending request parameter.
+    /// A rejected request parameter value, with its public code and parameter name.
     #[error("{message}")]
-    UnsupportedValue { param: &'static str, message: &'static str },
+    UnsupportedValue {
+        param: String,
+        code: Option<&'static str>,
+        message: String,
+    },
     /// A recognized request member this gateway cannot honour (`background: true`, `prompt`).
     #[error(transparent)]
     UnsupportedParameter(#[from] UnsupportedParameterError),
@@ -240,6 +243,9 @@ impl ExecutorError {
             | Self::JsonError(_)
             | Self::PayloadTooLarge(_)
             | Self::Storage(StorageError::ItemCursorNotFound { .. }) => "invalid_request_error",
+            Self::Storage(StorageError::NotFound { resource_type, .. }) if resource_type == "Response" => {
+                "invalid_request_error"
+            }
             Self::Storage(e) if e.is_not_found() => "not_found",
             Self::Storage(e) if e.is_validation() => "invalid_request_error",
             Self::Conflict(_) => "conflict_error",
@@ -270,7 +276,7 @@ impl ExecutorError {
             Self::ResourceLimitExceeded { .. } => "response_resource_limit_exceeded",
             Self::InvalidPromptCacheOptions(PromptCacheOptionsError::Unsupported) => "unsupported_parameter",
             Self::InvalidMaxToolCalls(error) => error.code(),
-            Self::UnsupportedValue { .. } => "unsupported_value",
+            Self::UnsupportedValue { code, .. } => code.unwrap_or("unsupported_value"),
             Self::UnsupportedParameter(error) => error.code(),
             Self::Tool(ToolError::UnknownParameter { .. }) => "unknown_parameter",
             other => other.error_type(),
@@ -282,7 +288,8 @@ impl ExecutorError {
     pub fn error_param(&self) -> Option<&str> {
         match self.client_visible_error() {
             Self::Storage(StorageError::InvalidItemId { param, .. })
-            | Self::Tool(ToolError::UnknownParameter { param }) => Some(param),
+            | Self::Tool(ToolError::UnknownParameter { param })
+            | Self::UnsupportedValue { param, .. } => Some(param),
             Self::Storage(StorageError::ItemAlreadyInConversation) => Some("items"),
             Self::Storage(StorageError::ItemCursorNotFound { .. }) => Some("after"),
             Self::ConversationLocked { .. } => Some("conversation"),
@@ -290,7 +297,6 @@ impl ExecutorError {
             Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. }) => Some("input"),
             Self::InvalidPromptCacheOptions(_) => Some("prompt_cache_options"),
             Self::InvalidMaxToolCalls(_) => Some(MAX_TOOL_CALLS_PARAM),
-            Self::UnsupportedValue { param, .. } => Some(param),
             Self::UnsupportedParameter(error) => Some(error.param()),
             _ => None,
         }
@@ -317,11 +323,15 @@ impl ExecutorError {
 
     /// Builds the OpenAI-compatible error object shared by HTTP and SSE.
     pub(crate) fn response_error(&self) -> serde_json::Value {
-        let code = if matches!(
-            self.client_visible_error(),
-            Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. })
-                | Self::Storage(StorageError::ItemCursorNotFound { .. })
-        ) {
+        let missing_response = matches!(self.client_visible_error(),
+            Self::Storage(StorageError::NotFound { resource_type, .. }) if resource_type == "Response");
+        let code = if missing_response
+            || matches!(
+                self.client_visible_error(),
+                Self::Tool(ToolError::MissingOutput { .. } | ToolError::UnknownCallOutput { .. })
+                    | Self::Storage(StorageError::ItemCursorNotFound { .. })
+                    | Self::UnsupportedValue { code: None, .. }
+            ) {
             serde_json::Value::Null
         } else {
             serde_json::json!(self.error_code())
@@ -332,6 +342,8 @@ impl ExecutorError {
         error.insert("code".to_owned(), code);
         if let Some(param) = self.error_param() {
             error.insert("param".to_owned(), serde_json::json!(param));
+        } else if missing_response {
+            error.insert("param".to_owned(), serde_json::Value::Null);
         }
         serde_json::Value::Object(error)
     }
@@ -565,8 +577,9 @@ mod tests {
     #[test]
     fn unsupported_value_matches_openai_error_envelope() {
         let error = ExecutorError::UnsupportedValue {
-            param: "multi_agent",
-            message: "Async parallel tool calls are not yet supported in multi-agent mode.",
+            param: "multi_agent".into(),
+            code: Some("unsupported_value"),
+            message: "Async parallel tool calls are not yet supported in multi-agent mode.".into(),
         };
         assert_eq!(
             envelope(error),

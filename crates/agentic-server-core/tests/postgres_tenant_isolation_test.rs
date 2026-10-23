@@ -218,7 +218,7 @@ async fn postgres_concurrent_tenant_isolation() {
 #[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
 async fn postgres_item_crud_uses_turn_locking_and_preserves_history() {
     use agentic_core::storage::{ResponseMetadata, ResponseStore, StorageError};
-    use agentic_core::types::conversations::ItemOrder;
+    use agentic_core::types::io::ItemOrder;
 
     let pool = setup_postgres_pool().await;
     let store = Arc::new(ConversationStore::new(Arc::clone(&pool)));

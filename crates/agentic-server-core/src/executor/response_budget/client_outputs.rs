@@ -70,7 +70,10 @@ impl RetainedSize for ToolCallOutput {
 
 impl RetainedSize for FunctionToolResultMessage {
     fn retained_bytes(&self) -> usize {
-        RETAINED_CONTAINER_OVERHEAD_BYTES + self.call_id.len() + self.output.retained_bytes()
+        RETAINED_CONTAINER_OVERHEAD_BYTES
+            + opt_len(self.id.as_ref())
+            + self.call_id.len()
+            + self.output.retained_bytes()
     }
 }
 
@@ -104,6 +107,7 @@ impl RetainedSize for ShellCallOutputMessage {
 impl RetainedSize for CustomToolCallOutputMessage {
     fn retained_bytes(&self) -> usize {
         RETAINED_CONTAINER_OVERHEAD_BYTES
+            + opt_len(self.id.as_ref())
             + self.call_id.len()
             + opt_len(self.name.as_ref())
             + self.output.retained_bytes()

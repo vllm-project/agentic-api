@@ -1,0 +1,830 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content: Reply with only SAPPHIRE.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a16820-4a84-7ac2-86de-a8608839d611","created_at":1792748309,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":null,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a16820-4a84-7ac2-86de-a8608839d611","created_at":1792748309,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":null,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"rs_a4cd688dbf81fe1f","summary":[],"type":"reasoning","content":[],"status":"in_progress"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":3,"output_index":0,"content_index":0,"delta":"The","item_id":"rs_a4cd688dbf81fe1f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"content_index":0,"delta":"
+      user","item_id":"rs_a4cd688dbf81fe1f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":5,"output_index":0,"content_index":0,"delta":"
+      wants","item_id":"rs_a4cd688dbf81fe1f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":6,"output_index":0,"content_index":0,"delta":"
+      me","item_id":"rs_a4cd688dbf81fe1f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":7,"output_index":0,"content_index":0,"delta":"
+      to","item_id":"rs_a4cd688dbf81fe1f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":8,"output_index":0,"content_index":0,"delta":"
+      reply","item_id":"rs_a4cd688dbf81fe1f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":9,"output_index":0,"content_index":0,"delta":"
+      with","item_id":"rs_a4cd688dbf81fe1f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":10,"output_index":0,"content_index":0,"delta":"
+      only","item_id":"rs_a4cd688dbf81fe1f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"content_index":0,"delta":"
+      the","item_id":"rs_a4cd688dbf81fe1f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"content_index":0,"delta":"
+      word","item_id":"rs_a4cd688dbf81fe1f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":13,"output_index":0,"content_index":0,"delta":"
+      \"","item_id":"rs_a4cd688dbf81fe1f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":14,"output_index":0,"content_index":0,"delta":"S","item_id":"rs_a4cd688dbf81fe1f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"content_index":0,"delta":"AP","item_id":"rs_a4cd688dbf81fe1f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":16,"output_index":0,"content_index":0,"delta":"PH","item_id":"rs_a4cd688dbf81fe1f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":17,"output_index":0,"content_index":0,"delta":"IRE","item_id":"rs_a4cd688dbf81fe1f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":18,"output_index":0,"content_index":0,"delta":".\"","item_id":"rs_a4cd688dbf81fe1f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"content_index":0,"delta":"\n","item_id":"rs_a4cd688dbf81fe1f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.done
+
+      '
+    - 'data: {"type":"response.reasoning_text.done","sequence_number":20,"output_index":0,"content_index":0,"item_id":"rs_a4cd688dbf81fe1f","text":"The
+      user wants me to reply with only the word \"SAPPHIRE.\"\n"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":21,"output_index":0,"item":{"id":"rs_a4cd688dbf81fe1f","summary":[],"type":"reasoning","content":[{"text":"The
+      user wants me to reply with only the word \"SAPPHIRE.\"\n","type":"reasoning_text"}],"status":"completed"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":22,"output_index":1,"item":{"id":"msg_baaee0fee3e10a0d","content":[],"role":"assistant","status":"in_progress","type":"message"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","sequence_number":23,"output_index":1,"content_index":0,"item_id":"msg_baaee0fee3e10a0d","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":24,"output_index":1,"content_index":0,"delta":"\n\nS","item_id":"msg_baaee0fee3e10a0d","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":25,"output_index":1,"content_index":0,"delta":"AP","item_id":"msg_baaee0fee3e10a0d","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":26,"output_index":1,"content_index":0,"delta":"PH","item_id":"msg_baaee0fee3e10a0d","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":27,"output_index":1,"content_index":0,"delta":"IRE","item_id":"msg_baaee0fee3e10a0d","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","sequence_number":28,"output_index":1,"content_index":0,"item_id":"msg_baaee0fee3e10a0d","logprobs":[],"text":"\n\nSAPPHIRE"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","sequence_number":29,"output_index":1,"content_index":0,"item_id":"msg_baaee0fee3e10a0d","part":{"annotations":[],"text":"\n\nSAPPHIRE","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":30,"output_index":1,"item":{"id":"msg_baaee0fee3e10a0d","content":[{"annotations":[],"text":"\n\nSAPPHIRE","type":"output_text","logprobs":[]}],"role":"assistant","status":"completed","type":"message"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":31,"response":{"id":"resp_01a16820-4a84-7ac2-86de-a8608839d611","object":"response","created_at":1792748309,"model":"Qwen/Qwen3.8-27B-FP8","status":"completed","output":[{"type":"reasoning","id":"rs_a4cd688dbf81fe1f","content":[{"type":"reasoning_text","text":"The
+      user wants me to reply with only the word \"SAPPHIRE.\"\n"}],"summary":[],"status":"completed"},{"type":"message","id":"msg_baaee0fee3e10a0d","role":"assistant","status":"completed","content":[{"type":"output_text","text":"\n\nSAPPHIRE","annotations":[]}]}],"usage":{"input_tokens":47,"output_tokens":24,"total_tokens":71,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens_details":{"reasoning_tokens":17}},"incomplete_details":null,"error":null,"previous_response_id":null,"instructions":null,"max_tool_calls":null,"service_tier":"auto","tools":[],"tool_choice":"auto","completed_at":1792748309,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":1.0,"reasoning":null,"max_output_tokens":null,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-4a84-7ac2-86de-a8608839d611/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+      has_more: false
+      last_id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - content: Reply with only ORCHID.
+        id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+        role: user
+        type: message
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748310
+      created_at: 1792748310
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a16820-4d06-72e2-98b8-4426fea978c9
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        id: rs_bfa9f6bd06e01a21
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_b1f359add9782112
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 47
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 24
+        output_tokens_details:
+          reasoning_tokens: 17
+        total_tokens: 71
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-4d06-72e2-98b8-4426fea978c9/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+      has_more: false
+      last_id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-4a84-7ac2-86de-a8608839d611/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+      has_more: false
+      last_id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      input:
+      - content: Reply with only ORCHID.
+        id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+        role: user
+        type: message
+      - content: Reply with only VIOLET.
+        id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+        role: user
+        type: message
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Duplicate item found with id msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4.
+          Remove duplicate items from your input and try again.
+        param: input
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t7
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-4a84-7ac2-86de-a8608839d611/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+      has_more: false
+      last_id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-4a84-7ac2-86de-a8608839d611/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+      has_more: false
+      last_id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body:
+      input:
+      - content: Reply with only ORCHID.
+        id: item_wrongprefix_89b8b67d44667ef6
+        role: user
+        type: message
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: 'Invalid ''input[0].id'': ''item_wrongprefix_89b8b67d44667ef6''.
+          Expected an ID that begins with ''msg''.'
+        param: input[0].id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t10
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-4a84-7ac2-86de-a8608839d611/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+      has_more: false
+      last_id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-4a84-7ac2-86de-a8608839d611/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+      has_more: false
+      last_id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t12
+  request:
+    body:
+      input:
+      - arguments: '{}'
+        call_id: call_history_probe
+        name: lookup
+        type: function_call
+      - call_id: call_history_probe
+        output: SAPPHIRE
+        type: function_call_output
+      - content: Reply with only the lookup result.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748311
+      created_at: 1792748311
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a16820-5138-7cc1-9558-14011b3410b4
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to reply with only the lookup result, which was
+            "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        id: rs_83b3dbf08db452a7
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_b3e0297184259a99
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 82
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 28
+        output_tokens_details:
+          reasoning_tokens: 21
+        total_tokens: 110
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t13
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-5138-7cc1-9558-14011b3410b4/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - arguments: '{}'
+        call_id: call_history_probe
+        id: fc_01a16820-53d1-7583-851b-b15b6d9fd689
+        name: lookup
+        type: function_call
+      - call_id: call_history_probe
+        output: SAPPHIRE
+        type: function_call_output
+      - content:
+        - text: Reply with only the lookup result.
+          type: input_text
+        id: msg_01a16820-53d1-7583-851b-b17055be1005
+        role: user
+        status: completed
+        type: message
+      first_id: fc_01a16820-53d1-7583-851b-b15b6d9fd689
+      has_more: false
+      last_id: msg_01a16820-53d1-7583-851b-b17055be1005
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t14
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-4a84-7ac2-86de-a8608839d611/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+      has_more: false
+      last_id: msg_01a16820-4cc9-7541-b7d9-55e4add4cbe4
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200

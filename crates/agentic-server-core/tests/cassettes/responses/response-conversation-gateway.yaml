@@ -1,0 +1,1016 @@
+turns:
+- filename: t1
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1792748297
+      id: conv_01a16820-1c5c-76e1-b321-93d02754171d
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      items:
+      - content: Remember SAPPHIRE.
+        role: user
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a16820-1c5c-76e1-b321-93d02754171d/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+      has_more: false
+      last_id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      conversation: conv_01a16820-1c5c-76e1-b321-93d02754171d
+      input:
+      - content: Reply with only SAPPHIRE.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748298
+      conversation:
+        id: conv_01a16820-1c5c-76e1-b321-93d02754171d
+      created_at: 1792748298
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a16820-1c75-7f40-9579-ee0308b75eb5
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to remember the word "SAPPHIRE" and then reply
+            with only that word.
+
+            '
+          type: reasoning_text
+        id: rs_80555bf008476001
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_b472515258629203
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 57
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 30
+        output_tokens_details:
+          reasoning_tokens: 23
+        total_tokens: 87
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-1c75-7f40-9579-ee0308b75eb5/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1f3a-7c03-b205-a86401a8a875
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+      has_more: false
+      last_id: msg_01a16820-1f3a-7c03-b205-a86401a8a875
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      items:
+      - content: Now remember ORCHID.
+        role: user
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a16820-1c5c-76e1-b321-93d02754171d/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_01a16820-1f6c-7d51-be19-3d1d69b74858
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-1f6c-7d51-be19-3d1d69b74858
+      has_more: false
+      last_id: msg_01a16820-1f6c-7d51-be19-3d1d69b74858
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-1c75-7f40-9579-ee0308b75eb5/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1f3a-7c03-b205-a86401a8a875
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+      has_more: false
+      last_id: msg_01a16820-1f3a-7c03-b205-a86401a8a875
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      conversation: conv_01a16820-1c5c-76e1-b321-93d02754171d
+      input:
+      - content: Reply with only ORCHID.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748298
+      conversation:
+        id: conv_01a16820-1c5c-76e1-b321-93d02754171d
+      created_at: 1792748298
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a16820-1fab-7cd0-9e0a-08eb28e5769a
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to remember "ORCHID" and reply with only that word.
+
+            '
+          type: reasoning_text
+        id: rs_850b00fd9650bc59
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_967d1f143e45818e
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 116
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 25
+        output_tokens_details:
+          reasoning_tokens: 19
+        total_tokens: 141
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-1fab-7cd0-9e0a-08eb28e5769a/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1f3a-7c03-b205-a86401a8a875
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to remember the word "SAPPHIRE" and then reply
+            with only that word.
+
+            '
+          type: reasoning_text
+        id: rs_80555bf008476001
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_b472515258629203
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_01a16820-1f6c-7d51-be19-3d1d69b74858
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-220a-7ea2-a264-af426a40c9be
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+      has_more: false
+      last_id: msg_01a16820-220a-7ea2-a264-af426a40c9be
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a16820-1c5c-76e1-b321-93d02754171d/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1f3a-7c03-b205-a86401a8a875
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to remember the word "SAPPHIRE" and then reply
+            with only that word.
+
+            '
+          type: reasoning_text
+        id: rs_80555bf008476001
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_b472515258629203
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_01a16820-1f6c-7d51-be19-3d1d69b74858
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-220a-7ea2-a264-af426a40c9be
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to remember "ORCHID" and reply with only that word.
+
+            '
+          type: reasoning_text
+        id: rs_850b00fd9650bc59
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_967d1f143e45818e
+        role: assistant
+        status: completed
+        type: message
+      first_id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+      has_more: false
+      last_id: msg_967d1f143e45818e
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/conversations/conv_01a16820-1c5c-76e1-b321-93d02754171d/items/msg_01a16820-1f6c-7d51-be19-3d1d69b74858
+    query_params: {}
+  response:
+    body:
+      created_at: 1792748297
+      id: conv_01a16820-1c5c-76e1-b321-93d02754171d
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-1fab-7cd0-9e0a-08eb28e5769a/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1f3a-7c03-b205-a86401a8a875
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to remember the word "SAPPHIRE" and then reply
+            with only that word.
+
+            '
+          type: reasoning_text
+        id: rs_80555bf008476001
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_b472515258629203
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_01a16820-1f6c-7d51-be19-3d1d69b74858
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-220a-7ea2-a264-af426a40c9be
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+      has_more: false
+      last_id: msg_01a16820-220a-7ea2-a264-af426a40c9be
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t12
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-1c75-7f40-9579-ee0308b75eb5/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1f3a-7c03-b205-a86401a8a875
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+      has_more: false
+      last_id: msg_01a16820-1f3a-7c03-b205-a86401a8a875
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t13
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_01a16820-1c75-7f40-9579-ee0308b75eb5
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: resp_01a16820-1c75-7f40-9579-ee0308b75eb5
+      object: response.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t14
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-1fab-7cd0-9e0a-08eb28e5769a/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1f3a-7c03-b205-a86401a8a875
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to remember the word "SAPPHIRE" and then reply
+            with only that word.
+
+            '
+          type: reasoning_text
+        id: rs_80555bf008476001
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_b472515258629203
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_01a16820-1f6c-7d51-be19-3d1d69b74858
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-220a-7ea2-a264-af426a40c9be
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+      has_more: false
+      last_id: msg_01a16820-220a-7ea2-a264-af426a40c9be
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t15
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a16820-1c5c-76e1-b321-93d02754171d/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1f3a-7c03-b205-a86401a8a875
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to remember the word "SAPPHIRE" and then reply
+            with only that word.
+
+            '
+          type: reasoning_text
+        id: rs_80555bf008476001
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_b472515258629203
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-220a-7ea2-a264-af426a40c9be
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to remember "ORCHID" and reply with only that word.
+
+            '
+          type: reasoning_text
+        id: rs_850b00fd9650bc59
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_967d1f143e45818e
+        role: assistant
+        status: completed
+        type: message
+      first_id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+      has_more: false
+      last_id: msg_967d1f143e45818e
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t16
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-1fab-7cd0-9e0a-08eb28e5769a
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748298
+      conversation:
+        id: conv_01a16820-1c5c-76e1-b321-93d02754171d
+      created_at: 1792748298
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a16820-1fab-7cd0-9e0a-08eb28e5769a
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to remember "ORCHID" and reply with only that word.
+
+            '
+          type: reasoning_text
+        id: rs_850b00fd9650bc59
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_967d1f143e45818e
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 116
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 25
+        output_tokens_details:
+          reasoning_tokens: 19
+        total_tokens: 141
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t17
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/conversations/conv_01a16820-1c5c-76e1-b321-93d02754171d
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: conv_01a16820-1c5c-76e1-b321-93d02754171d
+      object: conversation.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t18
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-1fab-7cd0-9e0a-08eb28e5769a/input_items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-220a-7ea2-a264-af426a40c9be
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_01a16820-1f6c-7d51-be19-3d1d69b74858
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_b472515258629203
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to remember the word "SAPPHIRE" and then reply
+            with only that word.
+
+            '
+          type: reasoning_text
+        id: rs_80555bf008476001
+        summary: []
+        type: reasoning
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1f3a-7c03-b205-a86401a8a875
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-220a-7ea2-a264-af426a40c9be
+      has_more: false
+      last_id: msg_01a16820-1c68-7513-b9de-5efef8bfc898
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t19
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-1fab-7cd0-9e0a-08eb28e5769a
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748298
+      conversation:
+        id: conv_01a16820-1c5c-76e1-b321-93d02754171d
+      created_at: 1792748298
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a16820-1fab-7cd0-9e0a-08eb28e5769a
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to remember "ORCHID" and reply with only that word.
+
+            '
+          type: reasoning_text
+        id: rs_850b00fd9650bc59
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_967d1f143e45818e
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 116
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 25
+        output_tokens_details:
+          reasoning_tokens: 19
+        total_tokens: 141
+    headers:
+      content-type: application/json
+    status_code: 200

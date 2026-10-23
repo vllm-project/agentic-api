@@ -1,0 +1,584 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content: Reply with only SAPPHIRE.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748305
+      created_at: 1792748305
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a16820-3b48-7372-bd98-214486197122
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        id: rs_a593f79b2097fe2d
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_9548042b171a269a
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 47
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 24
+        output_tokens_details:
+          reasoning_tokens: 17
+        total_tokens: 71
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-3b48-7372-bd98-214486197122/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      has_more: false
+      last_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input:
+      - content: Reply with only ORCHID.
+        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        role: user
+        type: message
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748306
+      created_at: 1792748306
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a16820-3dae-7192-985f-b0b8cc948278
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user is asking me to reply with only the word "SAPPHIRE."
+
+            '
+          type: reasoning_text
+        id: rs_a3eb5300385d8c5a
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_97f8cea357370a3f
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 47
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 25
+        output_tokens_details:
+          reasoning_tokens: 18
+        total_tokens: 72
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-3dae-7192-985f-b0b8cc948278/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      has_more: false
+      last_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-3b48-7372-bd98-214486197122/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      has_more: false
+      last_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      input:
+      - content: Reply with only ORCHID.
+        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        role: user
+        type: message
+      - content: Reply with only VIOLET.
+        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        role: user
+        type: message
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: Duplicate item found with id msg_01a16820-3d8b-7a11-b157-3c11de042d72.
+          Remove duplicate items from your input and try again.
+        param: input
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t7
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-3b48-7372-bd98-214486197122/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      has_more: false
+      last_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-3b48-7372-bd98-214486197122/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      has_more: false
+      last_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body:
+      input:
+      - content: Reply with only ORCHID.
+        id: item_wrongprefix_d71598b4bf20d34f
+        role: user
+        type: message
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: 'Invalid ''input[0].id'': ''item_wrongprefix_d71598b4bf20d34f''.
+          Expected an ID that begins with ''msg''.'
+        param: input[0].id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t10
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-3b48-7372-bd98-214486197122/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      has_more: false
+      last_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-3b48-7372-bd98-214486197122/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      has_more: false
+      last_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t12
+  request:
+    body:
+      input:
+      - arguments: '{}'
+        call_id: call_history_probe
+        name: lookup
+        type: function_call
+      - call_id: call_history_probe
+        output: SAPPHIRE
+        type: function_call_output
+      - content: Reply with only the lookup result.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748307
+      created_at: 1792748307
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a16820-4190-7cf3-aed2-e40d5f1b45da
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to reply with only the lookup result from the previous
+            turn. The lookup result was "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        id: rs_982d339e9f98aca5
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_8082f76f0614422c
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 82
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 34
+        output_tokens_details:
+          reasoning_tokens: 27
+        total_tokens: 116
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t13
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-4190-7cf3-aed2-e40d5f1b45da/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - arguments: '{}'
+        call_id: call_history_probe
+        id: fc_01a16820-44a1-7dd1-8914-80ffa744f5a0
+        name: lookup
+        type: function_call
+      - call_id: call_history_probe
+        output: SAPPHIRE
+        type: function_call_output
+      - content:
+        - text: Reply with only the lookup result.
+          type: input_text
+        id: msg_01a16820-44a1-7dd1-8914-8112e1445097
+        role: user
+        status: completed
+        type: message
+      first_id: fc_01a16820-44a1-7dd1-8914-80ffa744f5a0
+      has_more: false
+      last_id: msg_01a16820-44a1-7dd1-8914-8112e1445097
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t14
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-3b48-7372-bd98-214486197122/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      has_more: false
+      last_id: msg_01a16820-3d8b-7a11-b157-3c11de042d72
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200

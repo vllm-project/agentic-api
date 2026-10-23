@@ -38,6 +38,27 @@ impl ItemKind {
     }
 }
 
+impl InOutItem {
+    /// Validate a client-supplied public identity before item creation.
+    /// Persistence itself also accepts provider-assigned IDs with different prefixes.
+    pub(crate) fn validate_client_id(&self, param: String) -> Result<(), StorageError> {
+        let (id, prefix) = match self {
+            Self::Input(item) => (item.id(), item.id_prefix()),
+            Self::Output(item) => (item.id(), item.id_prefix()),
+        };
+        if let (Some(id), Some(prefix)) = (id, prefix)
+            && !id.starts_with(prefix)
+        {
+            return Err(StorageError::InvalidItemId {
+                param,
+                id: id.to_owned(),
+                prefix: prefix.trim_end_matches('_'),
+            });
+        }
+        Ok(())
+    }
+}
+
 /// Decode retained history without silently omitting invalid records.
 ///
 /// Legacy unmarked items retain the existing input/output discrimination policy.

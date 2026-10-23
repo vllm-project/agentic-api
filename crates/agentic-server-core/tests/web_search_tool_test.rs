@@ -10,7 +10,7 @@ use agentic_core::tool::{GatewayExecutor, ToolOutput, WebSearchHandler, model_vi
 use agentic_core::types::event::MessageStatus;
 use agentic_core::types::io::output::{FunctionToolCall, GatewayCallStatus};
 use agentic_core::types::io::{
-    FunctionToolResultMessage, InputItem, OutputItem, ResponsesInput, ToolCallOutput, ToolChoice,
+    FunctionToolResultMessage, InputItem, ItemOrder, ItemPage, OutputItem, ResponsesInput, ToolCallOutput, ToolChoice,
 };
 use agentic_core::types::request_response::{RequestPayload, ResponsePayload, ResponseTextConfig};
 use agentic_core::types::tools::{ResponsesTool, WebSearchToolParam};
@@ -1901,6 +1901,8 @@ async fn execute_returns_mixed_client_tool_calls_without_followup_model_request(
         previous_response_id: Some(response.id),
         ..base_payload(ResponsesInput::from(vec![InputItem::FunctionCallOutput(
             FunctionToolResultMessage {
+                id: None,
+                status: None,
                 call_id: "call_weather".to_owned(),
                 output: ToolCallOutput::Text("{\"city\":\"San Francisco\",\"temperature_c\":18}".to_owned()),
             },
@@ -2923,5 +2925,85 @@ async fn cache_usage_accumulates_tool_rounds_without_inventing_writes() {
                 expected_writes.map(serde_json::Value::from).as_ref()
             );
         }
+    }
+}
+
+#[tokio::test]
+async fn input_pages_return_stored_items_without_changing_model_history() {
+    let (you_url, _captured, _you) = spawn_mock_you().await;
+    let llm = support::MockServer::start_deque(vec![
+        mixed_web_search_and_client_function_response(),
+        support::text_response("continued after mixed tools"),
+    ])
+    .await;
+    let ctx = build_exec_ctx(llm.url(), you_url).await;
+    let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+        "model": "test-model", "input": "look up rust async and weather", "store": true,
+        "tools": [{"type": "web_search_preview"}, {
+            "type": "function", "name": "get_weather", "parameters": {"type": "object"}
+        }]
+    }))
+    .unwrap();
+    let Either::Left(root) = ExecuteRequest::new(payload, Arc::clone(&ctx)).run().await.unwrap() else {
+        panic!("expected JSON response");
+    };
+    let page = ctx
+        .resp_handler
+        .list_input_items(&root.id, ItemPage::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        page.data.len(),
+        3,
+        "stored input items include the gateway call and result"
+    );
+    let payload: RequestPayload = serde_json::from_value(serde_json::json!({
+        "model": "test-model", "store": true, "previous_response_id": root.id,
+        "input": [{"type": "function_call_output", "call_id": "call_weather", "output": "sunny"}]
+    }))
+    .unwrap();
+    let Either::Left(child) = ExecuteRequest::new(payload, Arc::clone(&ctx)).run().await.unwrap() else {
+        panic!("expected JSON continuation");
+    };
+    let page = ctx
+        .resp_handler
+        .list_input_items(
+            &child.id,
+            ItemPage {
+                order: ItemOrder::Asc,
+                ..ItemPage::default()
+            },
+        )
+        .await
+        .unwrap();
+    let public = serde_json::to_value(&page.data).unwrap();
+    let public = public.as_array().unwrap();
+    assert_eq!(
+        public
+            .iter()
+            .map(|item| item["type"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [
+            "message",
+            "function_call",
+            "function_call_output",
+            "web_search_call",
+            "function_call",
+            "function_call_output"
+        ]
+    );
+    assert_eq!(public[1]["call_id"], "call_search");
+    assert_eq!(public[2]["call_id"], "call_search");
+    assert_eq!(public[4]["name"], "get_weather");
+    assert_eq!(public[5]["call_id"], "call_weather");
+    let bodies = llm.request_bodies().await;
+    let model_input = bodies[1]["input"].as_array().unwrap();
+    for kind in ["function_call", "function_call_output"] {
+        assert!(
+            model_input
+                .iter()
+                .any(|item| item["type"] == kind && item["call_id"] == "call_search"),
+            "canonical search {kind} must remain in inference history"
+        );
     }
 }

@@ -28,10 +28,6 @@
     "crates/agentic-server/src/main.rs": {
       "limit": 644,
       "reason": "Server configuration resolves the web_fetch settings with the same file and environment precedence as the other tool settings."
-    },
-    "crates/agentic-server-core/src/storage/models/item.rs": {
-      "limit": 510,
-      "reason": "The item CRUD now owns response-history row identity, as requested in review; consolidating the insert here adds the row/public-ID bookkeeping. Splitting the item storage module is a separate change."
     }
   },
   "generated": {}

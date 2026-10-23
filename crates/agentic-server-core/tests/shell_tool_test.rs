@@ -301,6 +301,7 @@ async fn submitted_shell_items_preserve_public_fields_in_storage() {
                 InOutItem::Output(_) => None,
             })
             .collect::<Vec<_>>();
+        output["status"] = json!("completed");
         assert_eq!(inputs, vec![call, output]);
         let requests = fixture.request_bodies().await;
         assert_eq!(requests[0]["input"][0]["type"], "function_call");

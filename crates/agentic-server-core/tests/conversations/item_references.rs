@@ -2,7 +2,7 @@
 
 use super::{message_with_id, test_store};
 use agentic_core::storage::{ResponseMetadata, ResponseStore, StorageError};
-use agentic_core::types::conversations::ItemOrder;
+use agentic_core::types::io::ItemOrder;
 use std::sync::Arc;
 
 /// A response history row stores its content under a `item_…` row ID and keeps the public ID in

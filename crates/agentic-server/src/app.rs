@@ -21,9 +21,9 @@ use crate::auth::api_key::require_api_key;
 use crate::auth::{ANTHROPIC_COUNT_TOKENS_PATH, ANTHROPIC_MESSAGES_PATH, OidcAuthenticator, require_oidc};
 use crate::handler::{
     chat_completions, compact_response, completions, count_tokens, create_conversation, create_item,
-    delete_conversation, delete_item, embeddings, health, list_items, messages, models, ready, responses,
-    responses_ws_with_auth, retrieve_conversation, retrieve_item, retrieve_model, retrieve_response, transcriptions,
-    translations, update_conversation,
+    delete_conversation, delete_item, delete_response, embeddings, health, list_input_items, list_items, messages,
+    models, ready, responses, responses_ws_with_auth, retrieve_conversation, retrieve_item, retrieve_model,
+    retrieve_response, transcriptions, translations, update_conversation,
 };
 use crate::model_capabilities::ModelCapabilities;
 use crate::rate_limit::{RateLimitConfig, RateLimiter, enforce_rate_limit};
@@ -349,12 +349,14 @@ pub fn build_router_with_auth(
     } else {
         public_routes
     };
-    // Retrieval reads local storage, so it cannot rely on upstream credential validation.
-    let mut retrieval_route = get(retrieve_response);
+    // Retrieval and deletion act on local storage, so they cannot rely on upstream credential validation.
+    let mut retrieval_route = get(retrieve_response).delete(delete_response);
+    let mut input_items_route = get(list_input_items);
     if authenticator.is_none()
         && let Some(key) = state.openai_api_key.as_ref().filter(|key| !key.is_empty())
     {
         retrieval_route = retrieval_route.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
+        input_items_route = input_items_route.route_layer(middleware::from_fn_with_state(key.clone(), require_api_key));
     }
     let protected_routes = Router::new()
         .route("/v1/conversations", post(create_conversation))
@@ -384,7 +386,8 @@ pub fn build_router_with_auth(
         .route(ANTHROPIC_COUNT_TOKENS_PATH, post(count_tokens))
         .route("/v1/responses", post(responses).get(responses_ws_with_auth))
         .route("/v1/responses/compact", post(compact_response))
-        .route("/v1/responses/{response_id}", retrieval_route);
+        .route("/v1/responses/{response_id}", retrieval_route)
+        .route("/v1/responses/{response_id}/input_items", input_items_route);
     // Layered before authentication, so it runs after it and sees the principal.
     let protected_routes = match server_config.rate_limit {
         Some(config) => protected_routes.route_layer(middleware::from_fn_with_state(

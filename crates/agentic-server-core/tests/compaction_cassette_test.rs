@@ -227,7 +227,10 @@ async fn repeated_compaction_drops_tool_pair_and_replaces_prior_checkpoint() {
     );
 
     let requests = fixture.request_bodies().await;
-    assert_eq!(requests[0]["input"], turn.request.body.input);
+    let mut expected = turn.request.body.input.clone();
+    assert_eq!(expected[4]["type"], "function_call_output");
+    expected[4]["status"] = json!("completed");
+    assert_eq!(requests[0]["input"], expected);
 }
 
 #[tokio::test]

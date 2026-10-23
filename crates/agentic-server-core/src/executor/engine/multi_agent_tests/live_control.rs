@@ -163,6 +163,8 @@ fn batch(response: &str, ids: &[&str]) -> ClientToolOutputBatch {
             .iter()
             .map(|id| {
                 ClientToolOutput::Function(FunctionToolResultMessage {
+                    id: None,
+                    status: None,
                     call_id: (*id).into(),
                     output: ToolCallOutput::Text(format!("output for {id}")),
                 })

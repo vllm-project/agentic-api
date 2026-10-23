@@ -1,5 +1,6 @@
 use super::*;
 use agentic_core::types::InOutItem;
+use serde_json::Value;
 
 async fn create_conversation_with_items(url: &str, items: Vec<serde_json::Value>) -> String {
     let response = reqwest::Client::new()
@@ -139,13 +140,27 @@ async fn rejects_oversized_batches_and_invalid_limits() {
             .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
-    for query in ["limit=0", "limit=101", "order=invalid"] {
+    for (query, code, param) in [
+        ("limit=0", None, None),
+        ("limit=101", Some("integer_above_max_value"), Some("limit")),
+        ("limit=-1", Some("integer_below_min_value"), Some("limit")),
+        ("order=invalid", Some("invalid_value"), Some("order")),
+        ("limit=ten", Some("invalid_type"), Some("limit")),
+        ("limit=1&limit=2", Some("duplicate_parameter"), Some("limit")),
+        ("include[]=unknown", Some("invalid_value"), Some("include[0]")),
+    ] {
         let response = client
             .get(format!("{url}/v1/conversations/{conv_id}/items?{query}"))
             .send()
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body: Value = response.json().await.unwrap();
+        if let Some(code) = code {
+            assert_eq!(body["error"]["type"], "invalid_request_error", "{query}: {body}");
+            assert_eq!(body["error"]["code"], code, "{query}: {body}");
+        }
+        assert_eq!(body["error"]["param"].as_str(), param, "{query}: {body}");
     }
     handle.abort();
 }

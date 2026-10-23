@@ -1,0 +1,977 @@
+turns:
+- filename: t1
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1792738271
+      id: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      items:
+      - content: Remember SAPPHIRE.
+        role: user
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        role: user
+        status: completed
+        type: message
+      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      has_more: false
+      last_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      conversation: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
+      input:
+      - content: Reply with only SAPPHIRE.
+        role: user
+      model: gpt-4.1
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792738273
+      conversation:
+        id: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
+      created_at: 1792738273
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0186b7532502d89f006adb03e0cd348197a454dbacff6b234c
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE.
+          type: output_text
+        id: msg_0186b7532502d89f006adb03e1b6608197a9104e4c499c3bb8
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 25
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 6
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 31
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0186b7532502d89f006adb03e0cd348197a454dbacff6b234c/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        role: user
+        status: completed
+        type: message
+      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      has_more: false
+      last_id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      items:
+      - content: Now remember ORCHID.
+        role: user
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+        role: user
+        status: completed
+        type: message
+      first_id: msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+      has_more: false
+      last_id: msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0186b7532502d89f006adb03e0cd348197a454dbacff6b234c/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        role: user
+        status: completed
+        type: message
+      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      has_more: false
+      last_id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      conversation: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
+      input:
+      - content: Reply with only ORCHID.
+        role: user
+      model: gpt-4.1
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792738277
+      conversation:
+        id: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
+      created_at: 1792738276
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0186b7532502d89f006adb03e451988197846ca60742726a66
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: ORCHID.
+          type: output_text
+        id: msg_0186b7532502d89f006adb03e4f3648197b1d3d884ff5c1cf8
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 55
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 5
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 60
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0186b7532502d89f006adb03e451988197846ca60742726a66/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE.
+          type: output_text
+        id: msg_0186b7532502d89f006adb03e1b6608197a9104e4c499c3bb8
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+        role: user
+        status: completed
+        type: message
+      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      has_more: false
+      last_id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE.
+          type: output_text
+        id: msg_0186b7532502d89f006adb03e1b6608197a9104e4c499c3bb8
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          logprobs: []
+          text: ORCHID.
+          type: output_text
+        id: msg_0186b7532502d89f006adb03e4f3648197b1d3d884ff5c1cf8
+        role: assistant
+        status: completed
+        type: message
+      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      has_more: false
+      last_id: msg_0186b7532502d89f006adb03e4f3648197b1d3d884ff5c1cf8
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/conversations/conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f/items/msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+    query_params: {}
+  response:
+    body:
+      created_at: 1792738271
+      id: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0186b7532502d89f006adb03e451988197846ca60742726a66/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE.
+          type: output_text
+        id: msg_0186b7532502d89f006adb03e1b6608197a9104e4c499c3bb8
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+        role: user
+        status: completed
+        type: message
+      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      has_more: false
+      last_id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t12
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0186b7532502d89f006adb03e0cd348197a454dbacff6b234c/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        role: user
+        status: completed
+        type: message
+      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      has_more: false
+      last_id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t13
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_0186b7532502d89f006adb03e0cd348197a454dbacff6b234c
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: resp_0186b7532502d89f006adb03e0cd348197a454dbacff6b234c
+      object: response.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t14
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0186b7532502d89f006adb03e451988197846ca60742726a66/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE.
+          type: output_text
+        id: msg_0186b7532502d89f006adb03e1b6608197a9104e4c499c3bb8
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+        role: user
+        status: completed
+        type: message
+      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      has_more: false
+      last_id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t15
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE.
+          type: output_text
+        id: msg_0186b7532502d89f006adb03e1b6608197a9104e4c499c3bb8
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          logprobs: []
+          text: ORCHID.
+          type: output_text
+        id: msg_0186b7532502d89f006adb03e4f3648197b1d3d884ff5c1cf8
+        role: assistant
+        status: completed
+        type: message
+      first_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      has_more: false
+      last_id: msg_0186b7532502d89f006adb03e4f3648197b1d3d884ff5c1cf8
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t16
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0186b7532502d89f006adb03e451988197846ca60742726a66
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792738277
+      conversation:
+        id: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
+      created_at: 1792738276
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0186b7532502d89f006adb03e451988197846ca60742726a66
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: ORCHID.
+          type: output_text
+        id: msg_0186b7532502d89f006adb03e4f3648197b1d3d884ff5c1cf8
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 55
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 5
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 60
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t17
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/conversations/conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
+      object: conversation.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t18
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0186b7532502d89f006adb03e451988197846ca60742726a66/input_items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_6adb03e33fa0819787cbdb0d1682bd790186b7532502d89f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE.
+          type: output_text
+        id: msg_0186b7532502d89f006adb03e1b6608197a9104e4c499c3bb8
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_0186b7532502d89f006adb03e178788197ab9cda68741a4f92
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+        role: user
+        status: completed
+        type: message
+      first_id: msg_0186b7532502d89f006adb03e4899081978fb72810bff05971
+      has_more: false
+      last_id: msg_6adb03dfbae48197a061baae3f401fe40186b7532502d89f
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t19
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0186b7532502d89f006adb03e451988197846ca60742726a66
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792738277
+      conversation:
+        id: conv_6adb03df14c08197b2bb094ed25cf7fd0186b7532502d89f
+      created_at: 1792738276
+      error: null
+      frequency_penalty: 0.0
+      id: resp_0186b7532502d89f006adb03e451988197846ca60742726a66
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-4.1-2025-04-14
+      moderation: null
+      object: response
+      output:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: ORCHID.
+          type: output_text
+        id: msg_0186b7532502d89f006adb03e4f3648197b1d3d884ff5c1cf8
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: in_memory
+      reasoning:
+        context: null
+        effort: null
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 55
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 5
+        output_tokens_details:
+          reasoning_tokens: 0
+        total_tokens: 60
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200

@@ -3,7 +3,7 @@ use agentic_core::executor::accumulator::ResponseAccumulator;
 use agentic_core::tool::ToolDeclaration;
 use agentic_core::tool::{GatewayExecutors, ToolOwnership, ToolRegistry, ToolType};
 use agentic_core::types::io::output::McpListTools;
-use agentic_core::types::io::{McpCall, OutputItem, ToolChoice};
+use agentic_core::types::io::{ItemPage, McpCall, OutputItem, ToolChoice};
 use agentic_core::types::request_response::RequestPayload;
 use agentic_core::types::tools::ResponsesTool;
 use axum::Router;
@@ -896,4 +896,38 @@ fn successful_blocking_mcp_call_matches_openai() {
     // while GPT-4o sends `{}`; both execute the same zero-argument MCP tool.
     assert_calls_match_openai(&openai_output, &gateway_output, false);
     assert_eq!(output_text(&gateway_output), output_text(&openai_output));
+}
+
+#[tokio::test]
+async fn mcp_input_items_return_stored_call_and_result() {
+    let mcp_url = spawn_forecast_mcp().await;
+    let fixture = support::TestFixture::new_with_responses(forecast_inference_responses(false, "Paris")).await;
+    let Either::Left(response) = ExecuteRequest::new(forecast_request(false, &mcp_url), Arc::clone(&fixture.exec_ctx))
+        .run()
+        .await
+        .unwrap()
+    else {
+        panic!("expected JSON response")
+    };
+    let page = fixture
+        .exec_ctx
+        .resp_handler
+        .list_input_items(&response.id, ItemPage::default())
+        .await
+        .unwrap();
+    let page = serde_json::to_value(page).unwrap();
+    assert_eq!(page["data"].as_array().unwrap().len(), 3);
+    assert_eq!(page["data"][0]["type"], "function_call_output");
+    assert_eq!(page["data"][1]["type"], "function_call");
+    assert_eq!(page["data"][2]["type"], "message");
+    let bodies = fixture.request_bodies().await;
+    for kind in ["function_call", "function_call_output"] {
+        assert!(
+            bodies[1]["input"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item["type"] == kind && item["call_id"] == "call_forecast")
+        );
+    }
 }

@@ -455,6 +455,8 @@ mod tests {
 
     fn function_image_output(encoded_bytes: usize) -> InputItem {
         InputItem::FunctionCallOutput(FunctionToolResultMessage {
+            id: None,
+            status: None,
             call_id: "call_view_image".to_owned(),
             output: ToolCallOutput::Content(vec![ToolOutputContent::InputImage(inline_image(encoded_bytes))]),
         })
@@ -462,6 +464,8 @@ mod tests {
 
     fn custom_image_output(encoded_bytes: usize) -> InputItem {
         InputItem::CustomToolCallOutput(CustomToolCallOutputMessage {
+            status: None,
+            id: None,
             call_id: "call_view_image".to_owned(),
             name: Some("view_image".to_owned()),
             output: ToolCallOutput::Content(vec![ToolOutputContent::InputImage(inline_image(encoded_bytes))]),
@@ -585,6 +589,8 @@ mod tests {
             }),
             user_message("first"),
             InputItem::FunctionCallOutput(FunctionToolResultMessage {
+                id: None,
+                status: None,
                 call_id: "call_1".to_owned(),
                 output: "tool output".into(),
             }),
@@ -700,6 +706,8 @@ mod tests {
         let input = ResponsesInput::from(vec![
             user_message("hello context"),
             InputItem::FunctionCallOutput(FunctionToolResultMessage {
+                id: None,
+                status: None,
                 call_id: "call_1".to_owned(),
                 output: "substantial tool output".into(),
             }),

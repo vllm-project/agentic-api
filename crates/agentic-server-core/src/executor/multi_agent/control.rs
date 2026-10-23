@@ -180,6 +180,8 @@ mod tests {
         ClientToolOutputBatch {
             response_id: "resp_test".into(),
             outputs: vec![ClientToolOutput::Function(FunctionToolResultMessage {
+                id: None,
+                status: None,
                 call_id: "call_test".into(),
                 output: ToolCallOutput::Text(text.into()),
             })],

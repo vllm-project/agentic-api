@@ -483,6 +483,8 @@ async fn concurrent_children_pause_and_resume_from_durable_tree_json_and_sse() {
                         .iter()
                         .map(|call| {
                             InputItem::FunctionCallOutput(FunctionToolResultMessage {
+                                id: None,
+                                status: None,
                                 call_id: call.call_id.clone(),
                                 output: ToolCallOutput::Text("proposal details".into()),
                             })

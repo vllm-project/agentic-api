@@ -1157,14 +1157,14 @@ fn prepare_search_output(
         load_definition(tool, definition_accumulator)?;
     }
     let projected_tools = model_visible_output_tools(&output.tools)?;
-    let canonical_value = serialize_to_value(&CanonicalToolSearchOutput {
+    let canonical_output = serialize_to_string(&CanonicalToolSearchOutput {
         tools: &projected_tools,
     })
     .map_err(|_| ToolError::Config("tool_search_output could not be canonicalized safely".to_owned()))?;
-    let canonical_output = serialize_to_string(&canonical_value)
-        .map_err(|_| ToolError::Config("tool_search_output could not be canonicalized safely".to_owned()))?;
     completed_call_ids.insert(output.call_id.clone());
     Ok(InputItem::FunctionCallOutput(FunctionToolResultMessage {
+        id: None,
+        status: None,
         call_id: output.call_id.clone(),
         output: ToolCallOutput::Text(canonical_output),
     }))

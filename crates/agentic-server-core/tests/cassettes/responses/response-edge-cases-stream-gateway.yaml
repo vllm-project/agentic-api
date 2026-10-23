@@ -1,0 +1,1110 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content: Reply with only SAPPHIRE.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: false
+      stream: true
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"response":{"id":"resp_873a4b1797aa4849","created_at":1792748293,"incomplete_details":null,"instructions":null,"metadata":null,"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":0.95,"background":false,"max_output_tokens":65489,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":0,"type":"response.created"}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"response":{"id":"resp_873a4b1797aa4849","created_at":1792748293,"incomplete_details":null,"instructions":null,"metadata":null,"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":0.95,"background":false,"max_output_tokens":65489,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":null,"top_logprobs":null,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":1,"type":"response.in_progress"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"item":{"id":"rs_86cbe401d979ff9e","summary":[],"type":"reasoning","content":null,"encrypted_content":null,"status":"in_progress"},"output_index":0,"sequence_number":2,"type":"response.output_item.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"content_index":0,"item_id":"rs_86cbe401d979ff9e","output_index":0,"part":{"text":"","type":"reasoning_text"},"sequence_number":3,"type":"response.content_part.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"The","item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":4,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" user","item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":5,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" wants","item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":6,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" me","item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":7,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" to","item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":8,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" reply","item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":9,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" with","item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":10,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" only","item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":11,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" the","item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":12,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" word","item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":13,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":" \"","item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":14,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"S","item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":15,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"AP","item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":16,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"PH","item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":17,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"IRE","item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":18,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"\".","item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":19,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"\n","item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":20,"type":"response.reasoning_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.done
+
+      '
+    - 'data: {"content_index":0,"item_id":"rs_86cbe401d979ff9e","output_index":0,"sequence_number":21,"text":"The
+      user wants me to reply with only the word \"SAPPHIRE\".\n","type":"response.reasoning_text.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"content_index":0,"item_id":"rs_86cbe401d979ff9e","output_index":0,"part":{"text":"The
+      user wants me to reply with only the word \"SAPPHIRE\".\n","type":"reasoning_text"},"sequence_number":22,"type":"response.content_part.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"item":{"id":"rs_86cbe401d979ff9e","summary":[],"type":"reasoning","content":[{"text":"The
+      user wants me to reply with only the word \"SAPPHIRE\".\n","type":"reasoning_text"}],"encrypted_content":null,"status":"completed"},"output_index":0,"sequence_number":23,"type":"response.output_item.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"item":{"id":"msg_8ca715d6204854f4","content":[],"role":"assistant","status":"in_progress","type":"message","phase":null},"output_index":1,"sequence_number":24,"type":"response.output_item.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_8ca715d6204854f4","output_index":1,"part":{"annotations":[],"text":"","type":"output_text","logprobs":[]},"sequence_number":25,"type":"response.content_part.added"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"\n\nS","item_id":"msg_8ca715d6204854f4","logprobs":[],"output_index":1,"sequence_number":26,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"AP","item_id":"msg_8ca715d6204854f4","logprobs":[],"output_index":1,"sequence_number":27,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"PH","item_id":"msg_8ca715d6204854f4","logprobs":[],"output_index":1,"sequence_number":28,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"content_index":0,"delta":"IRE","item_id":"msg_8ca715d6204854f4","logprobs":[],"output_index":1,"sequence_number":29,"type":"response.output_text.delta"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_8ca715d6204854f4","logprobs":[],"output_index":1,"sequence_number":30,"text":"\n\nSAPPHIRE","type":"response.output_text.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"content_index":0,"item_id":"msg_8ca715d6204854f4","output_index":1,"part":{"annotations":[],"text":"\n\nSAPPHIRE","type":"output_text","logprobs":null},"sequence_number":31,"type":"response.content_part.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"item":{"id":"msg_8ca715d6204854f4","content":[{"annotations":[],"text":"\n\nSAPPHIRE","type":"output_text","logprobs":null}],"role":"assistant","status":"completed","type":"message","phase":null},"output_index":1,"sequence_number":32,"type":"response.output_item.done"}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"response":{"id":"resp_873a4b1797aa4849","created_at":1792748293,"incomplete_details":null,"instructions":null,"metadata":null,"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[{"id":"rs_86cbe401d979ff9e","summary":[],"type":"reasoning","content":[{"text":"The
+      user wants me to reply with only the word \"SAPPHIRE\".\n","type":"reasoning_text"}],"encrypted_content":null,"status":"completed"},{"id":"msg_8ca715d6204854f4","content":[{"annotations":[],"text":"\n\nSAPPHIRE","type":"output_text","logprobs":null}],"role":"assistant","status":"completed","type":"message","phase":null}],"parallel_tool_calls":true,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":0.95,"background":false,"max_output_tokens":65489,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"completed","text":null,"top_logprobs":null,"truncation":"disabled","usage":{"input_tokens":47,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0,"input_tokens_per_turn":[],"cached_tokens_per_turn":[]},"output_tokens":24,"output_tokens_details":{"reasoning_tokens":17,"tool_output_tokens":0,"output_tokens_per_turn":[],"tool_output_tokens_per_turn":[]},"total_tokens":71},"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null},"sequence_number":33,"type":"response.completed"}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_873a4b1797aa4849
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_873a4b1797aa4849'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t3
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_873a4b1797aa4849/input_items
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_873a4b1797aa4849'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_873a4b1797aa4849
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_873a4b1797aa4849'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t5
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_missing
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_missing'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_missing/input_items
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_missing'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t7
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_missing
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_missing'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t8
+  request:
+    body:
+      input:
+      - content: Reply with only ORCHID.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      previous_response_id: resp_missing
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: previous_response_not_found
+        message: Previous response with id 'resp_missing' not found.
+        param: previous_response_id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t9
+  request:
+    body:
+      input:
+      - content: Reply with only ORCHID.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a16820-0fd3-7242-84a7-af23630e3345","created_at":1792748294,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":null,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a16820-0fd3-7242-84a7-af23630e3345","created_at":1792748294,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":null,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"rs_8de5e7f820ccd569","summary":[],"type":"reasoning","content":[],"status":"in_progress"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":3,"output_index":0,"content_index":0,"delta":"The","item_id":"rs_8de5e7f820ccd569"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"content_index":0,"delta":"
+      user","item_id":"rs_8de5e7f820ccd569"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":5,"output_index":0,"content_index":0,"delta":"
+      wants","item_id":"rs_8de5e7f820ccd569"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":6,"output_index":0,"content_index":0,"delta":"
+      me","item_id":"rs_8de5e7f820ccd569"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":7,"output_index":0,"content_index":0,"delta":"
+      to","item_id":"rs_8de5e7f820ccd569"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":8,"output_index":0,"content_index":0,"delta":"
+      reply","item_id":"rs_8de5e7f820ccd569"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":9,"output_index":0,"content_index":0,"delta":"
+      with","item_id":"rs_8de5e7f820ccd569"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":10,"output_index":0,"content_index":0,"delta":"
+      only","item_id":"rs_8de5e7f820ccd569"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"content_index":0,"delta":"
+      the","item_id":"rs_8de5e7f820ccd569"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"content_index":0,"delta":"
+      word","item_id":"rs_8de5e7f820ccd569"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":13,"output_index":0,"content_index":0,"delta":"
+      \"","item_id":"rs_8de5e7f820ccd569"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":14,"output_index":0,"content_index":0,"delta":"OR","item_id":"rs_8de5e7f820ccd569"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"content_index":0,"delta":"CH","item_id":"rs_8de5e7f820ccd569"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":16,"output_index":0,"content_index":0,"delta":"ID","item_id":"rs_8de5e7f820ccd569"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":17,"output_index":0,"content_index":0,"delta":"\".","item_id":"rs_8de5e7f820ccd569"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":18,"output_index":0,"content_index":0,"delta":"\n","item_id":"rs_8de5e7f820ccd569"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.done
+
+      '
+    - 'data: {"type":"response.reasoning_text.done","sequence_number":19,"output_index":0,"content_index":0,"item_id":"rs_8de5e7f820ccd569","text":"The
+      user wants me to reply with only the word \"ORCHID\".\n"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":20,"output_index":0,"item":{"id":"rs_8de5e7f820ccd569","summary":[],"type":"reasoning","content":[{"text":"The
+      user wants me to reply with only the word \"ORCHID\".\n","type":"reasoning_text"}],"status":"completed"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":21,"output_index":1,"item":{"id":"msg_83abae8265795305","content":[],"role":"assistant","status":"in_progress","type":"message"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","sequence_number":22,"output_index":1,"content_index":0,"item_id":"msg_83abae8265795305","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":23,"output_index":1,"content_index":0,"delta":"\n\nOR","item_id":"msg_83abae8265795305","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":24,"output_index":1,"content_index":0,"delta":"CH","item_id":"msg_83abae8265795305","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":25,"output_index":1,"content_index":0,"delta":"ID","item_id":"msg_83abae8265795305","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","sequence_number":26,"output_index":1,"content_index":0,"item_id":"msg_83abae8265795305","logprobs":[],"text":"\n\nORCHID"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","sequence_number":27,"output_index":1,"content_index":0,"item_id":"msg_83abae8265795305","part":{"annotations":[],"text":"\n\nORCHID","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":28,"output_index":1,"item":{"id":"msg_83abae8265795305","content":[{"annotations":[],"text":"\n\nORCHID","type":"output_text","logprobs":[]}],"role":"assistant","status":"completed","type":"message"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":29,"response":{"id":"resp_01a16820-0fd3-7242-84a7-af23630e3345","object":"response","created_at":1792748294,"model":"Qwen/Qwen3.8-27B-FP8","status":"completed","output":[{"type":"reasoning","id":"rs_8de5e7f820ccd569","content":[{"type":"reasoning_text","text":"The
+      user wants me to reply with only the word \"ORCHID\".\n"}],"summary":[],"status":"completed"},{"type":"message","id":"msg_83abae8265795305","role":"assistant","status":"completed","content":[{"type":"output_text","text":"\n\nORCHID","annotations":[]}]}],"usage":{"input_tokens":47,"output_tokens":22,"total_tokens":69,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens_details":{"reasoning_tokens":16}},"incomplete_details":null,"error":null,"previous_response_id":null,"instructions":null,"max_tool_calls":null,"service_tier":"auto","tools":[],"tool_choice":"auto","completed_at":1792748294,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":1.0,"reasoning":null,"max_output_tokens":null,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t10
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0fd3-7242-84a7-af23630e3345/input_items
+    query_params:
+      limit: '0'
+  response:
+    body:
+      data: []
+      first_id: null
+      has_more: true
+      last_id: null
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0fd3-7242-84a7-af23630e3345/input_items
+    query_params:
+      limit: '101'
+  response:
+    body:
+      error:
+        code: integer_above_max_value
+        message: limit must be at most 100
+        param: limit
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t12
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0fd3-7242-84a7-af23630e3345/input_items
+    query_params:
+      order: sideways
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: unknown variant `sideways`, expected `asc` or `desc`
+        param: order
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t13
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0fd3-7242-84a7-af23630e3345/input_items
+    query_params:
+      after: msg_missing
+  response:
+    body:
+      error:
+        code: null
+        message: No item found with id 'msg_missing'
+        param: after
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t14
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0fd3-7242-84a7-af23630e3345/input_items
+    query_params:
+      include[]: web_search_call.results
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-11f5-7733-9248-1b0c81f85b9e
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-11f5-7733-9248-1b0c81f85b9e
+      has_more: false
+      last_id: msg_01a16820-11f5-7733-9248-1b0c81f85b9e
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t15
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0fd3-7242-84a7-af23630e3345/input_items
+    query_params:
+      include[]: message.output_text.logprobs
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-11f5-7733-9248-1b0c81f85b9e
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-11f5-7733-9248-1b0c81f85b9e
+      has_more: false
+      last_id: msg_01a16820-11f5-7733-9248-1b0c81f85b9e
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t16
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0fd3-7242-84a7-af23630e3345/input_items
+    query_params:
+      limit: '-1'
+  response:
+    body:
+      error:
+        code: integer_below_min_value
+        message: limit must be at least 0
+        param: limit
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t17
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0fd3-7242-84a7-af23630e3345/input_items
+    query_params:
+      limit: ten
+  response:
+    body:
+      error:
+        code: invalid_type
+        message: limit must be an integer
+        param: limit
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t18
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0fd3-7242-84a7-af23630e3345/input_items
+    query_params:
+      after: ''
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-11f5-7733-9248-1b0c81f85b9e
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-11f5-7733-9248-1b0c81f85b9e
+      has_more: false
+      last_id: msg_01a16820-11f5-7733-9248-1b0c81f85b9e
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t19
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0fd3-7242-84a7-af23630e3345/input_items
+    query_params:
+      include[]: not.a.valid.include
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: unknown variant `not.a.valid.include`, expected one of `file_search_call.results`,
+          `web_search_call.results`, `web_search_call.action.sources`, `message.input_image.image_url`,
+          `computer_call_output.output.image_url`, `code_interpreter_call.outputs`,
+          `reasoning.encrypted_content`, `message.output_text.logprobs`
+        param: include[0]
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t20
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0fd3-7242-84a7-af23630e3345/input_items
+    query_params:
+      limit:
+      - '1'
+      - '2'
+  response:
+    body:
+      error:
+        code: duplicate_parameter
+        message: '''limit'' must be given at most once'
+        param: limit
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t21
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0fd3-7242-84a7-af23630e3345/input_items
+    query_params:
+      include[]:
+      - message.output_text.logprobs
+      - reasoning.encrypted_content
+  response:
+    body:
+      error:
+        code: null
+        message: Encrypted content cannot be requested for persisted responses.
+        param: include
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t22
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_01a16820-0fd3-7242-84a7-af23630e3345
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: resp_01a16820-0fd3-7242-84a7-af23630e3345
+      object: response.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t23
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_01a16820-0fd3-7242-84a7-af23630e3345
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_01a16820-0fd3-7242-84a7-af23630e3345'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404

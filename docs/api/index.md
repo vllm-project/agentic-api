@@ -436,6 +436,45 @@ history-only APIs, return `409`. Request-scoped MCP credentials are stripped
 before storage. When OIDC is disabled and `OPENAI_API_KEY` is nonempty, callers
 must send that key as a bearer token.
 
+### `DELETE /v1/responses/{response_id}`
+
+Deletes a stored response and returns
+`{"id": "<response_id>", "object": "response.deleted", "deleted": true}`.
+Unknown or already deleted IDs return `404`. The deleted response can no
+longer be retrieved or used as a durable `previous_response_id`.
+
+History item rows are retained: descendant responses and conversations may
+still reference them. Descendants remain retrievable and continuable, but
+response-chain descendants exclude the deleted response's inherited context
+from their input listings and subsequent inference. Conversation snapshots
+retain their recorded context. These behaviors are covered by OpenAI and
+gateway lifecycle recordings, including continuation after parent deletion.
+Existing foreign keys clear pointers to the deleted response, including a
+conversation's `latest_response_id`; deletion does not choose an older turn
+as replacement state. Authentication matches response retrieval.
+
+Deletion does not invalidate a live WebSocket session's cached checkpoint.
+Such a session may still continue without storage; persisting a child of the
+deleted response fails. New connections resolve durable IDs through storage.
+
+### `GET /v1/responses/{response_id}/input_items`
+
+Lists the stored context for a response: inherited history, including earlier
+outputs, followed by this turn's inputs. This response's appended outputs are
+excluded. The endpoint uses the existing history IDs, item records, and saved
+response snapshot; it does not add metadata or change persistence.
+
+Pagination uses the Conversation API query parameters: `limit` (1–100,
+default 20), `order` (`asc` or `desc`, default `desc`), and `after` (a public
+item ID; unknown cursors return `404`). A repeated public ID resumes after
+its last occurrence in the requested order. `include` or `include[]` accepts
+`message.output_text.logprobs`, which stored items already contain; other
+expansions return `400`, as on conversation item listing. Malformed or repeated
+scalar query parameters return `400`.
+
+Unknown or unstored responses return `404`. Legacy responses without a saved
+payload return `409`, as on response retrieval. Authentication matches retrieval.
+
 ### `POST /v1/responses/compact`
 
 Compacts direct input or a stored previous-response chain into a canonical

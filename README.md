@@ -68,6 +68,8 @@ flowchart LR
 | --- | --- | --- |
 | `POST /v1/responses` | OpenAI-compatible Responses API with state, tools, and streaming | ✅ |
 | `GET /v1/responses/{response_id}` | Retrieve a locally stored response | ✅ |
+| `DELETE /v1/responses/{response_id}` | Delete a locally stored response | ✅ |
+| `GET /v1/responses/{response_id}/input_items` | List the input items of a stored response | ✅ |
 | `GET /v1/responses` | WebSocket transport for the Responses API | ✅ |
 | `POST /v1/responses/compact` | Compact direct input or a stored response chain | ✅ |
 | `/v1/conversations` · `/v1/conversations/{id}/items` | Conversations API: create, retrieve, update, and delete conversations and their items | ✅ |

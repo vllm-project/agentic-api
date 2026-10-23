@@ -210,3 +210,112 @@ fn preserves_gateway_call_input_and_rejects_unknown_types() {
     assert!(serde_json::from_value::<InOutItem>(json!({"type":"future_item", "payload":42})).is_err());
     assert!(serde_json::from_value::<InOutItem>(json!({"type":"function_call_output"})).is_err());
 }
+
+#[test]
+fn item_resource_has_one_id_and_flattened_content() {
+    let item: InOutItem =
+        serde_json::from_value(json!({"type":"message", "id":"upstream_id", "role":"user", "content":"hello"}))
+            .unwrap();
+    let resource = item.into_public("item_stored".into());
+    let text = serde_json::to_string(&resource).unwrap();
+    assert_eq!(text.matches("\"id\"").count(), 1);
+    let actual: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(actual["id"], "item_stored");
+    assert_eq!(actual["type"], "message");
+    assert_eq!(actual["status"], "completed");
+    assert_eq!(actual["content"], json!([{"type":"input_text", "text":"hello"}]));
+    assert!(actual.get("item").is_none());
+}
+
+#[test]
+fn function_call_history_status_is_preserved() {
+    for wire in [
+        json!({"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{}"}),
+        json!({"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{}","status":"completed"}),
+    ] {
+        let item: InOutItem = serde_json::from_value(wire.clone()).unwrap();
+        let public = serde_json::to_value(item.into_public("fc_history".into())).unwrap();
+        assert_eq!(public.get("status"), wire.get("status"));
+        assert_eq!(public["call_id"], "call_1");
+    }
+}
+
+#[test]
+fn manually_added_assistant_shorthand_remains_input_text() {
+    let item: InOutItem = serde_json::from_value(json!({"type":"message", "role":"assistant", "content":"9"})).unwrap();
+    let resource = item.into_public("msg_manual".into());
+    let actual = serde_json::to_value(resource).unwrap();
+    assert_eq!(actual["role"], "assistant");
+    assert_eq!(actual["content"], json!([{"type":"input_text", "text":"9"}]));
+}
+
+#[test]
+fn public_item_ids_are_typed_and_preserve_tool_and_orchestration_payloads() {
+    for wire in [
+        json!({"type":"custom_tool_call_output", "id":"old", "call_id":"call_1", "output":"done", "status":"in_progress"}),
+        json!({"type":"tool_search_output", "id":"old", "call_id":"call_1", "tools":[]}),
+        json!({"type":"web_search_call", "id":"old", "status":"completed", "action":{"type":"search", "query":"weather"}}),
+        json!({"type":"mcp_list_tools", "id":"old", "server_label":"weather", "tools":[]}),
+        json!({"type":"compaction", "id":"old", "encrypted_content":"opaque"}),
+    ] {
+        let item: InOutItem = serde_json::from_value(wire).unwrap();
+        assert_eq!(item.id(), Some("old"));
+        let mut expected = serde_json::to_value(&item).unwrap();
+        expected["id"] = json!("stored");
+        let public = item.into_public("stored".into());
+        assert_eq!(public.id(), Some("stored"));
+        assert_eq!(serde_json::to_value(public).unwrap(), expected);
+    }
+
+    let item = InOutItem::Output(OutputItem::Message(OutputMessage::new(
+        "upstream",
+        MessageStatus::Completed,
+    )));
+    let mut expected = serde_json::to_value(&item).unwrap();
+    expected["id"] = json!("stored");
+    let public = item.into_public("stored".into());
+    assert!(matches!(public, InOutItem::Output(_)));
+    assert_eq!(serde_json::to_value(public).unwrap(), expected);
+}
+
+#[test]
+fn item_limit_serde_preserves_bounds() {
+    for value in [0_i64, 20, 100] {
+        let limit: ItemLimit = serde_json::from_value(json!(value)).unwrap();
+        assert_eq!(i64::from(limit), value);
+        assert_eq!(serde_json::to_value(limit).unwrap(), value);
+    }
+    for value in [json!(-1), json!(101), json!(1.5)] {
+        assert!(serde_json::from_value::<ItemLimit>(value).is_err());
+    }
+}
+
+#[test]
+fn empty_pages_match_wire_contract() {
+    assert_eq!(
+        serde_json::to_value(ListItemsResponse::new(vec![], false)).unwrap(),
+        json!({"object":"list", "data":[], "has_more":false, "first_id":null, "last_id":null})
+    );
+}
+
+#[test]
+fn public_items_preserve_failed_and_incomplete_tool_states() {
+    for wire in [
+        json!({"type":"code_interpreter_call", "id":"ci_1", "container_id":"cntr_1", "code":"1/0", "outputs":[], "status":"failed"}),
+        json!({"type":"web_search_call", "id":"ws_1", "action":{"type":"search", "query":"weather"}, "status":"failed"}),
+        json!({"type":"tool_search_call", "id":"tsc_1", "call_id":"call_1", "arguments":{}, "status":"incomplete"}),
+        json!({"type":"tool_search_output", "id":"tso_1", "call_id":"call_1", "tools":[], "status":"incomplete"}),
+        json!({"type":"mcp_call", "id":"mcp_1", "server_label":"weather", "name":"forecast", "arguments":"{}", "error":"unavailable", "status":"failed"}),
+        json!({"type":"shell_call_output", "id":"sho_1", "call_id":"call_1", "output":[], "status":"incomplete"}),
+        json!({"type":"function_call_output", "id":"fc_1", "call_id":"call_1", "output":"partial", "status":"in_progress"}),
+        json!({"type":"custom_tool_call_output", "id":"ctco_1", "call_id":"call_1", "output":"partial", "status":"in_progress"}),
+    ] {
+        let item: InOutItem = serde_json::from_value(wire).unwrap();
+        let mut expected = serde_json::to_value(&item).unwrap();
+        expected["id"] = json!("stored");
+        assert_eq!(
+            serde_json::to_value(item.into_public("stored".into())).unwrap(),
+            expected
+        );
+    }
+}

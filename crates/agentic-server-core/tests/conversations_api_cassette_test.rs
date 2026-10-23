@@ -927,8 +927,8 @@ async fn existing_conversation_item_error_matches_openai_recording() {
 async fn deleted_cursor_error_body_matches_openai_recording() {
     use agentic_core::executor::ExecutorError;
     use agentic_core::storage::{ConversationStore, create_pool_with_schema};
-    use agentic_core::types::conversations::ItemOrder;
     use agentic_core::types::io::InOutItem;
+    use agentic_core::types::io::ItemOrder;
 
     let reference = cassette("edge-cases", "openai").expect("OpenAI edge-case recording");
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();

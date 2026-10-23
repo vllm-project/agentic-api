@@ -596,6 +596,9 @@ access happen — those live in `tool/`, `executor/`, and `storage/` respectivel
   `InOutItem::into_input_items` uses the existing output-to-input conversion and
   client-tool lowering for model history. Storage row markers and legacy decoding
   remain in `storage/`; there is no separate conversation-item enum.
+  Item retrieval and listing return `InOutItem` directly. `into_public` assigns the
+  storage identity and expands shorthand messages on the returned item;
+  serialization uses the item types themselves, without an item-response wrapper.
   `ResponsesInput::input_items` uses `InOutItem::as_input` to borrow submitted input
   items and project outputs. The existing compaction-window selection accepts these
   borrowed items, so estimation avoids copying message and image payloads and model

@@ -1,8 +1,11 @@
 //! Response storage handler — owns all response store operations.
 
-use crate::storage::{ResponseData, ResponseMetadata, ResponseStore};
-use crate::types::io::InOutItem;
+use std::collections::HashSet;
+
+use crate::storage::{ResponseData, ResponseMetadata, ResponseStore, StorageError};
 use crate::types::io::OutputItem;
+use crate::types::io::{InOutItem, InputItem};
+use crate::types::io::{ItemOrder, ItemPage, ListItemsResponse};
 use crate::types::request_response::ResponsePayload;
 
 use super::CommittedResponse;
@@ -52,6 +55,89 @@ impl ResponseHandler {
             })
     }
 
+    /// Deletes a stored response.
+    ///
+    /// # Errors
+    /// Returns an error if the response is missing or storage is unavailable.
+    pub async fn delete(&self, response_id: &str) -> ExecutorResult<()> {
+        self.store.delete(response_id).await.map_err(ExecutorError::Storage)
+    }
+
+    /// Resolve client references without overwriting the stored item with supplied content.
+    pub(crate) async fn resolve_input_items(&self, items: &mut [InOutItem]) -> ExecutorResult<()> {
+        let mut seen = HashSet::new();
+        for (index, item) in items.iter_mut().enumerate() {
+            let Some(id) = item.id() else { continue };
+            if !seen.insert(id.to_owned()) {
+                return Err(ExecutorError::UnsupportedValue {
+                    param: "input".into(),
+                    code: None,
+                    message: format!(
+                        "Duplicate item found with id {id}. Remove duplicate items from your input and try again."
+                    ),
+                });
+            }
+            // Validate message identities at admission, never while persisting upstream outputs.
+            if matches!(
+                item,
+                InOutItem::Input(InputItem::Message(_)) | InOutItem::Output(OutputItem::Message(_))
+            ) {
+                item.validate_client_id(format!("input[{index}].id"))?;
+            }
+            if let Some(row) = self.store.get_input_item(id).await? {
+                *item = InOutItem::try_from(&row)?.into_public(row.public_id().to_owned());
+            }
+        }
+        Ok(())
+    }
+
+    /// Lists stored context, excluding this response's own output.
+    ///
+    /// # Errors
+    /// Returns an error for invalid pagination, missing history, or a legacy response
+    /// without a retrievable snapshot.
+    pub async fn list_input_items(&self, response_id: &str, page: ItemPage<'_>) -> ExecutorResult<ListItemsResponse> {
+        let snapshot = self.retrieve(response_id).await?;
+        let rows = self.store.get_items(response_id).await?;
+        let mut items = rows
+            .into_iter()
+            .map(|row| {
+                let item = InOutItem::try_from(&row)?;
+                Ok(item.into_public(row.public_id().to_owned()))
+            })
+            .collect::<Result<Vec<_>, StorageError>>()?;
+        // Both persistence paths append public outputs after the turn's inputs.
+        // Bound the suffix by this snapshot's output count so an inherited output
+        // remains input even when a turn supplies no new items. Session execution
+        // can already have recorded some outputs as canonical input history.
+        for _ in &snapshot.output {
+            if !items.last().is_some_and(|item| matches!(item, InOutItem::Output(_))) {
+                break;
+            }
+            items.pop();
+        }
+        if page.order == ItemOrder::Desc {
+            items.reverse();
+        }
+        let start = match page.after.filter(|cursor| !cursor.is_empty()) {
+            Some(cursor) => {
+                // Match conversation pagination when a public ID occurs repeatedly.
+                items
+                    .iter()
+                    .rposition(|item| item.id() == Some(cursor))
+                    .ok_or_else(|| StorageError::ItemCursorNotFound { id: cursor.to_owned() })?
+                    + 1
+            }
+            None => 0,
+        };
+        let limit = page.limit.get();
+        let has_more = items.len() - start > limit;
+        Ok(ListItemsResponse::new(
+            items.into_iter().skip(start).take(limit).collect(),
+            has_more,
+        ))
+    }
+
     /// Retrieves the stored response for `previous_response_id`.
     ///
     /// Reads `previous_response_id` from `ctx.original_request`.
@@ -65,7 +151,13 @@ impl ResponseHandler {
             .previous_response_id
             .as_deref()
             .ok_or_else(|| ExecutorError::InvalidRequest("previous_response_id is required for get".into()))?;
-        let mut stored = self.store.get(prev_id).await?;
+        let mut stored = self.store.get(prev_id).await.map_err(|error| {
+            if error.is_not_found() {
+                ExecutorError::PreviousResponseNotFound { id: prev_id.to_owned() }
+            } else {
+                ExecutorError::Storage(error)
+            }
+        })?;
         // Continuation checkpoints retain history and settings, not a duplicate payload.
         stored.metadata.response_snapshot = None;
         Ok(stored)

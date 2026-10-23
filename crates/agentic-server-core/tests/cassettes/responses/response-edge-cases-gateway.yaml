@@ -1,0 +1,640 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content: Reply with only SAPPHIRE.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: false
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      created_at: 1792748289
+      ec_transfer_params: null
+      frequency_penalty: 0.0
+      id: resp_afb7c16e4290a0d2
+      incomplete_details: null
+      input_messages: null
+      instructions: null
+      kv_transfer_params: null
+      max_output_tokens: 65489
+      max_tool_calls: null
+      metadata: null
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        encrypted_content: null
+        id: rs_8895056f462f79ad
+        status: null
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          logprobs: null
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_86bf767304965ea4
+        phase: null
+        role: assistant
+        status: completed
+        type: message
+      output_messages: null
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt: null
+      reasoning: null
+      service_tier: auto
+      status: completed
+      temperature: 1.0
+      text: null
+      tool_choice: none
+      tools: []
+      top_logprobs: null
+      top_p: 0.95
+      truncation: disabled
+      usage:
+        input_tokens: 47
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+          cached_tokens_per_turn: []
+          input_tokens_per_turn: []
+        output_tokens: 24
+        output_tokens_details:
+          output_tokens_per_turn: []
+          reasoning_tokens: 17
+          tool_output_tokens: 0
+          tool_output_tokens_per_turn: []
+        total_tokens: 71
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_afb7c16e4290a0d2
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_afb7c16e4290a0d2'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t3
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_afb7c16e4290a0d2/input_items
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_afb7c16e4290a0d2'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_afb7c16e4290a0d2
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_afb7c16e4290a0d2'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t5
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_missing
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_missing'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_missing/input_items
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_missing'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t7
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_missing
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_missing'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t8
+  request:
+    body:
+      input:
+      - content: Reply with only ORCHID.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      previous_response_id: resp_missing
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: previous_response_not_found
+        message: Previous response with id 'resp_missing' not found.
+        param: previous_response_id
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t9
+  request:
+    body:
+      input:
+      - content: Reply with only ORCHID.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748290
+      created_at: 1792748290
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a16820-0157-7fb2-9533-3e564b318881
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to reply with only the word "ORCHID".
+
+            '
+          type: reasoning_text
+        id: rs_a24b3a74045cbd54
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_be10834c08f1f3e4
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 47
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 22
+        output_tokens_details:
+          reasoning_tokens: 16
+        total_tokens: 69
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0157-7fb2-9533-3e564b318881/input_items
+    query_params:
+      limit: '0'
+  response:
+    body:
+      data: []
+      first_id: null
+      has_more: true
+      last_id: null
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0157-7fb2-9533-3e564b318881/input_items
+    query_params:
+      limit: '101'
+  response:
+    body:
+      error:
+        code: integer_above_max_value
+        message: limit must be at most 100
+        param: limit
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t12
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0157-7fb2-9533-3e564b318881/input_items
+    query_params:
+      order: sideways
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: unknown variant `sideways`, expected `asc` or `desc`
+        param: order
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t13
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0157-7fb2-9533-3e564b318881/input_items
+    query_params:
+      after: msg_missing
+  response:
+    body:
+      error:
+        code: null
+        message: No item found with id 'msg_missing'
+        param: after
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404
+- filename: t14
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0157-7fb2-9533-3e564b318881/input_items
+    query_params:
+      include[]: web_search_call.results
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-0376-7952-9c78-b48a50a7e4c5
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-0376-7952-9c78-b48a50a7e4c5
+      has_more: false
+      last_id: msg_01a16820-0376-7952-9c78-b48a50a7e4c5
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t15
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0157-7fb2-9533-3e564b318881/input_items
+    query_params:
+      include[]: message.output_text.logprobs
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-0376-7952-9c78-b48a50a7e4c5
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-0376-7952-9c78-b48a50a7e4c5
+      has_more: false
+      last_id: msg_01a16820-0376-7952-9c78-b48a50a7e4c5
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t16
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0157-7fb2-9533-3e564b318881/input_items
+    query_params:
+      limit: '-1'
+  response:
+    body:
+      error:
+        code: integer_below_min_value
+        message: limit must be at least 0
+        param: limit
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t17
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0157-7fb2-9533-3e564b318881/input_items
+    query_params:
+      limit: ten
+  response:
+    body:
+      error:
+        code: invalid_type
+        message: limit must be an integer
+        param: limit
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t18
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0157-7fb2-9533-3e564b318881/input_items
+    query_params:
+      after: ''
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-0376-7952-9c78-b48a50a7e4c5
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-0376-7952-9c78-b48a50a7e4c5
+      has_more: false
+      last_id: msg_01a16820-0376-7952-9c78-b48a50a7e4c5
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t19
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0157-7fb2-9533-3e564b318881/input_items
+    query_params:
+      include[]: not.a.valid.include
+  response:
+    body:
+      error:
+        code: invalid_value
+        message: unknown variant `not.a.valid.include`, expected one of `file_search_call.results`,
+          `web_search_call.results`, `web_search_call.action.sources`, `message.input_image.image_url`,
+          `computer_call_output.output.image_url`, `code_interpreter_call.outputs`,
+          `reasoning.encrypted_content`, `message.output_text.logprobs`
+        param: include[0]
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t20
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0157-7fb2-9533-3e564b318881/input_items
+    query_params:
+      limit:
+      - '1'
+      - '2'
+  response:
+    body:
+      error:
+        code: duplicate_parameter
+        message: '''limit'' must be given at most once'
+        param: limit
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t21
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-0157-7fb2-9533-3e564b318881/input_items
+    query_params:
+      include[]:
+      - message.output_text.logprobs
+      - reasoning.encrypted_content
+  response:
+    body:
+      error:
+        code: null
+        message: Encrypted content cannot be requested for persisted responses.
+        param: include
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 400
+- filename: t22
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_01a16820-0157-7fb2-9533-3e564b318881
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: resp_01a16820-0157-7fb2-9533-3e564b318881
+      object: response.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t23
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_01a16820-0157-7fb2-9533-3e564b318881
+    query_params: {}
+  response:
+    body:
+      error:
+        code: null
+        message: 'storage error: not found: Response with id ''resp_01a16820-0157-7fb2-9533-3e564b318881'''
+        param: null
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404

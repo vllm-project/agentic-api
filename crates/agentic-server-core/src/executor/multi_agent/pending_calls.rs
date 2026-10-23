@@ -402,6 +402,8 @@ mod tests {
 
     fn function(id: &str) -> ClientToolOutput {
         ClientToolOutput::Function(FunctionToolResultMessage {
+            id: None,
+            status: None,
             call_id: id.into(),
             output: ToolCallOutput::Text("same output".into()),
         })
@@ -673,6 +675,8 @@ mod tests {
             .into_iter()
             .map(|part| {
                 ClientToolOutput::Function(FunctionToolResultMessage {
+                    id: None,
+                    status: None,
                     call_id: "large".into(),
                     output: ToolCallOutput::Content(vec![part]),
                 })

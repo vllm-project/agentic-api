@@ -10,6 +10,7 @@ use crate::executor::{
 use crate::types::{
     agent::{AgentCompletion, AgentIdentity, AgentTurnKey},
     agent_commands::CollaborationResult,
+    event::MessageStatus,
     io::output::OutputTextContent,
     io::{
         AgentMessage, AgentMessageContent, FunctionToolResultMessage, InputItem, MultiAgentAction,
@@ -43,6 +44,8 @@ impl MultiAgentRun {
             .stored
             .history
             .push(InputItem::FunctionCallOutput(FunctionToolResultMessage {
+                id: Some(uuid7_str("fc_")),
+                status: Some(MessageStatus::Completed),
                 call_id: call_id.clone(),
                 output: ToolCallOutput::Text(text.clone()),
             }));

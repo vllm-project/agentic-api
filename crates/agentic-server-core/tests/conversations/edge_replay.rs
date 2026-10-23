@@ -3,9 +3,8 @@
 use super::{IdPairs, Turn, Value, cassette, compare_value, remap_error_message};
 use agentic_core::executor::{ConversationHandler, ExecutorError};
 use agentic_core::storage::{ConversationData, ConversationStore, create_pool_with_schema};
-use agentic_core::types::conversations::{
-    ConversationResponse, CreateConversationRequest, CreateItemRequest, ListItemsResponse,
-};
+use agentic_core::types::conversations::{ConversationResponse, CreateConversationRequest, CreateItemRequest};
+use agentic_core::types::io::{ItemLimit, ItemOrder, ItemPage, ListItemsResponse};
 
 pub(super) fn remap_ids(value: &Value, ids: &IdPairs) -> Value {
     match value {
@@ -57,15 +56,17 @@ pub(super) async fn execute_step(
             Ok(serde_json::to_value(ListItemsResponse::new(items, false)).unwrap())
         }
         ("GET", 4) => {
-            let limit = query["limit"].as_str().map_or(20, |limit| limit.parse().unwrap());
+            let page = ItemPage {
+                limit: query["limit"].as_str().map_or_else(ItemLimit::default, |limit| {
+                    ItemLimit::try_from(limit.parse::<i64>().unwrap()).unwrap()
+                }),
+                after: query["after"].as_str(),
+                order: query["order"].as_str().map_or_else(ItemOrder::default, |order| {
+                    serde_json::from_value(Value::from(order)).unwrap()
+                }),
+            };
             let items = handler
-                .list_items(
-                    "default_tenant",
-                    conversation.unwrap(),
-                    limit,
-                    query["after"].as_str(),
-                    query["order"].as_str().unwrap_or("desc"),
-                )
+                .list_items("default_tenant", conversation.unwrap(), page)
                 .await?;
             Ok(serde_json::to_value(items).unwrap())
         }

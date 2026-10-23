@@ -327,13 +327,22 @@ async fn strict_relay_decoder_accepts_compatible_recorded_responses_streams() {
         }
     }
 
+    // This stateless gateway capture is raw upstream pass-through. vLLM emits
+    // message content-part events for a reasoning item; strict ingestion must
+    // reject it. Keep this exact observed failure distinct from valid streams.
+    let invalid_passthrough = concat!(
+        "responses/response-edge-cases-stream-gateway.yaml turn 1: ",
+        "invalid request: upstream stream event does not match its active output item: ",
+        "inconsistent item ID, output_index, or kind"
+    );
+    assert!(rejected.iter().any(|failure| failure == invalid_passthrough));
     let unexpected: Vec<_> = rejected
         .iter()
-        .filter(|failure| !failure.contains("changes 'call_id'"))
+        .filter(|failure| !failure.contains("changes 'call_id'") && failure.as_str() != invalid_passthrough)
         .collect();
     assert!(
         unexpected.is_empty(),
-        "recorded streams failed for reasons other than the call-ID stability rule:\n{}",
+        "recorded streams failed beyond the characterized upstream incompatibilities:\n{}",
         unexpected
             .iter()
             .map(|failure| failure.as_str())
@@ -342,8 +351,8 @@ async fn strict_relay_decoder_accepts_compatible_recorded_responses_streams() {
     );
     assert_eq!(
         rejected.len(),
-        10,
-        "the recorded call-ID incompatibility baseline changed:\n{}",
+        11,
+        "the recorded upstream incompatibility baseline changed:\n{}",
         rejected.join("\n")
     );
     assert!(decoded >= 50, "decoded only {decoded} recorded Responses SSE streams");

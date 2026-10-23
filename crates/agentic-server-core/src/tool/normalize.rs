@@ -1,5 +1,7 @@
+use crate::types::event::MessageStatus;
 use crate::types::io::FunctionTool;
 use crate::types::io::input::FunctionToolResultMessage;
+use crate::utils::uuid7_str;
 
 use super::code_interpreter::CodeInterpreterHandler;
 use super::codex::CodexNamespaceHandler;
@@ -146,6 +148,8 @@ impl ToolDeclaration {
 impl From<ToolOutput> for FunctionToolResultMessage {
     fn from(o: ToolOutput) -> Self {
         Self {
+            id: Some(uuid7_str("fc_")),
+            status: Some(MessageStatus::Completed),
             call_id: o.call_id,
             output: o.output.into(),
         }

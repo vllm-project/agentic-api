@@ -325,6 +325,8 @@ mod tests {
 
     fn function_call_output(call_id: &str) -> InputItem {
         InputItem::FunctionCallOutput(FunctionToolResultMessage {
+            id: None,
+            status: None,
             call_id: call_id.to_owned(),
             output: ToolCallOutput::Text(String::new()),
         })
@@ -344,6 +346,8 @@ mod tests {
 
     fn custom_tool_call_output(call_id: &str) -> InputItem {
         InputItem::CustomToolCallOutput(CustomToolCallOutputMessage {
+            status: None,
+            id: None,
             call_id: call_id.to_owned(),
             name: None,
             output: ToolCallOutput::Text(String::new()),

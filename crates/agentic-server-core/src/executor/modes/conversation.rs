@@ -3,9 +3,10 @@
 use crate::storage::{
     ConversationData, ConversationSnapshot, ConversationStore, ConversationVersion, ResponseMetadata, StorageError,
 };
-use crate::types::conversations::{ConversationMetadata, ItemResponse, ListItemsResponse};
+use crate::types::conversations::ConversationMetadata;
 use crate::types::io::InOutItem;
 use crate::types::io::OutputItem;
+use crate::types::io::{ItemPage, ListItemsResponse};
 
 use super::CommittedResponse;
 use crate::executor::error::{ExecutorError, ExecutorResult};
@@ -194,7 +195,7 @@ impl ConversationHandler {
         tenant_id: &str,
         conversation_id: &str,
         items: Vec<InOutItem>,
-    ) -> ExecutorResult<Vec<ItemResponse>> {
+    ) -> ExecutorResult<Vec<InOutItem>> {
         if items.is_empty() || items.len() > 20 {
             return Err(ExecutorError::InvalidRequest(
                 "items must contain between 1 and 20 items".into(),
@@ -211,7 +212,7 @@ impl ConversationHandler {
         let mut item_responses = Vec::with_capacity(created.len());
         for db_item in created {
             let conversation_item = InOutItem::try_from(&db_item)?;
-            item_responses.push(ItemResponse::new(db_item.public_id().to_owned(), conversation_item));
+            item_responses.push(conversation_item.into_public(db_item.public_id().to_owned()));
         }
 
         Ok(item_responses)
@@ -225,41 +226,22 @@ impl ConversationHandler {
         &self,
         tenant_id: &str,
         conversation_id: &str,
-        limit: i64,
-        after: Option<&str>,
-        order: &str,
+        page: ItemPage<'_>,
     ) -> ExecutorResult<ListItemsResponse> {
-        // Validate order parameter
-        if order != "asc" && order != "desc" {
-            return Err(ExecutorError::InvalidRequest("order must be 'asc' or 'desc'".into()));
-        }
-
-        let limit = limit.clamp(1, 100);
-        let order_enum = if order == "desc" {
-            crate::types::conversations::ItemOrder::Desc
-        } else {
-            crate::types::conversations::ItemOrder::Asc
-        };
-
-        // Fetch limit + 1 to determine if there are more items
+        // Fetch one extra item to determine if there are more items
         let mut items = self
             .store
-            .list_items(tenant_id, conversation_id, limit + 1, after, order_enum)
+            .list_items(tenant_id, conversation_id, page.limit.probe(), page.after, page.order)
             .await
             .map_err(ExecutorError::Storage)?;
-
-        // Safe: limit is clamped to [1, 100], far below usize range
-        #[allow(clippy::cast_possible_wrap)]
-        let has_more = (items.len() as i64) > limit;
-        if has_more {
-            items.pop(); // Remove the extra item
-        }
+        let has_more = items.len() > page.limit.get();
+        items.truncate(page.limit.get());
 
         // Perform fallible conversion - propagate errors instead of silently dropping items
         let mut item_responses = Vec::with_capacity(items.len());
         for db_item in items {
             let conversation_item = InOutItem::try_from(&db_item)?;
-            item_responses.push(ItemResponse::new(db_item.public_id().to_owned(), conversation_item));
+            item_responses.push(conversation_item.into_public(db_item.public_id().to_owned()));
         }
 
         Ok(ListItemsResponse::new(item_responses, has_more))
@@ -274,7 +256,7 @@ impl ConversationHandler {
         tenant_id: &str,
         conversation_id: &str,
         item_id: &str,
-    ) -> ExecutorResult<ItemResponse> {
+    ) -> ExecutorResult<InOutItem> {
         let db_item = self
             .store
             .retrieve_item(tenant_id, conversation_id, item_id)
@@ -282,7 +264,7 @@ impl ConversationHandler {
             .map_err(ExecutorError::Storage)?;
 
         let conversation_item = InOutItem::try_from(&db_item)?;
-        Ok(ItemResponse::new(db_item.public_id().to_owned(), conversation_item))
+        Ok(conversation_item.into_public(db_item.public_id().to_owned()))
     }
 
     /// Deletes an item by ID, returning the updated conversation.

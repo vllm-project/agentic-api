@@ -63,6 +63,8 @@ from httpx import AsyncClient
 from yaml import dump as yaml_dump
 from yaml import safe_load as yaml_load
 
+from replay_old_cassettes import run_tool_items
+
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger("cassette_proxy")
 
@@ -196,12 +198,16 @@ async def proxy_request(request: Request, path: str) -> Response:
     raw_body = await request.body()
     parsed_body = json.loads(raw_body.decode("utf-8")) if raw_body else {}
 
+    query_params = {}
+    for key in request.query_params:
+        values = request.query_params.getlist(key)
+        query_params[key] = values[0] if len(values) == 1 else values
     turn: dict[str, Any] = {
         "filename": filename,
         "request": {
             "method": request.method,
             "path": f"/{path}",
-            "query_params": dict(request.query_params),
+            "query_params": query_params,
             "body": parsed_body,
             "headers": _filter_request_headers(request.headers),
         },
@@ -349,12 +355,14 @@ def _item_request(
     path: str,
     *,
     body: dict | None = None,
-    params: dict | None = None,
+    params: dict | list[tuple[str, str]] | None = None,
+    headers: dict[str, str] | None = None,
     expected_status: int | None = 200,
 ) -> dict:
     """Send management requests through the shared recording proxy."""
     response = client.request(
-        method, f"{proxy_url}{path}", json=body, params=params, timeout=TIMEOUT
+        method, f"{proxy_url}{path}", json=body, params=params, headers=headers,
+        timeout=_http_timeout(proxy_client=True),
     )
     if expected_status is not None and response.status_code != expected_status:
         raise RuntimeError(
@@ -373,13 +381,14 @@ def _item_response(
     conversation: str | None = None,
     previous_response_id: str | None = None,
     stream: bool = False,
+    store: bool = True,
 ) -> dict:
     if conversation and previous_response_id:
         raise ValueError("conversation and previous_response_id are mutually exclusive")
     body: dict[str, Any] = {
         "model": model,
         "input": [{"role": "user", "content": prompt}],
-        "store": True,
+        "store": store,
         "stream": stream,
     }
     if conversation:
@@ -419,7 +428,172 @@ def _record_duplicate_items(
 def run_items(
     client: httpx.Client, proxy_url: str, model: str, scenario: str, stream: bool
 ) -> None:
-    """Record each conversation or item API request as its own numbered step."""
+    """Record each fixed Conversation Items or Responses API request as a numbered step."""
+    if scenario == "response-tool-items":
+        run_tool_items(client, proxy_url, model, send_request=_item_request,
+                       extract_tool_calls=_extract_tool_calls,
+                       load_tool_outputs=_load_tool_outputs_file,
+                       build_tool_output_input=_build_tool_output_input)
+        return
+    if scenario == "response-lifecycle":
+        first = _item_response(client, proxy_url, model, "Reply with only SAPPHIRE.", stream=stream)
+        first_path = f"/v1/responses/{first['id']}"
+        _item_request(client, proxy_url, "GET", f"{first_path}/input_items")
+        child = _item_response(
+            client, proxy_url, model, "Reply with only ORCHID.",
+            previous_response_id=first["id"], stream=stream,
+        )
+        child_path = f"/v1/responses/{child['id']}"
+        child_items_path = f"{child_path}/input_items"
+        _item_request(client, proxy_url, "GET", child_items_path, params={"order": "asc"})
+        page = _item_request(
+            client, proxy_url, "GET", child_items_path,
+            params={"order": "asc", "limit": 1},
+        )
+        if not page.get("last_id") or not page.get("has_more"):
+            raise RuntimeError(f"expected a non-final one-item input page: {page}")
+        _item_request(
+            client, proxy_url, "GET", child_items_path,
+            params={"order": "asc", "limit": 1, "after": page["last_id"]},
+        )
+        _item_request(client, proxy_url, "GET", child_path)
+        _item_request(client, proxy_url, "DELETE", first_path)
+        _item_request(client, proxy_url, "GET", first_path, expected_status=None)
+        _item_request(client, proxy_url, "GET", f"{first_path}/input_items", expected_status=None)
+        _item_request(client, proxy_url, "GET", child_items_path, params={"order": "asc"})
+        _item_request(client, proxy_url, "GET", child_path)
+        _item_request(client, proxy_url, "DELETE", first_path, expected_status=None)
+        # A listing's deletion visibility does not establish what inference sees.
+        # Continue the surviving child before deleting it and capture both the
+        # model's answer and the new response's input window.
+        continuation = _item_response(
+            client, proxy_url, model,
+            "What exact word did the first user message ask you to reply with? Reply with only that word.",
+            previous_response_id=child["id"], stream=stream,
+        )
+        continuation_path = f"/v1/responses/{continuation['id']}"
+        _item_request(client, proxy_url, "GET", f"{continuation_path}/input_items", params={"order": "asc"})
+        _item_request(client, proxy_url, "DELETE", continuation_path)
+        _item_request(client, proxy_url, "DELETE", child_path)
+        _item_request(client, proxy_url, "GET", child_items_path, expected_status=None)
+        _item_request(client, proxy_url, "GET", child_path, expected_status=None)
+        return
+    if scenario == "response-pagination":
+        first = _item_response(client, proxy_url, model, "Reply with only SAPPHIRE.", stream=stream)
+        child = _item_response(
+            client, proxy_url, model, "Reply with only ORCHID.",
+            previous_response_id=first["id"], stream=stream,
+        )
+        path = f"/v1/responses/{child['id']}/input_items"
+        _item_request(client, proxy_url, "GET", path, params={"order": "asc"})
+        _item_request(client, proxy_url, "GET", path, params={"order": "desc"})
+        for order in ("asc", "desc"):
+            page = _item_request(client, proxy_url, "GET", path, params={"order": order, "limit": 1})
+            if not page.get("last_id") or not page.get("has_more"):
+                raise RuntimeError(f"expected a non-final {order} page: {page}")
+            _item_request(
+                client, proxy_url, "GET", path,
+                params={"order": order, "limit": 1, "after": page["last_id"]},
+            )
+        _item_request(client, proxy_url, "GET", path)
+        for order in ("asc", "desc"):
+            page = _item_request(client, proxy_url, "GET", path, params={"order": order, "limit": 100})
+            if not page.get("last_id"):
+                raise RuntimeError(f"expected an input cursor: {page}")
+            _item_request(client, proxy_url, "GET", path,
+                          params={"order": order, "after": page["last_id"]}, expected_status=None)
+        foreign = _item_response(client, proxy_url, model, "Reply with only VIOLET.", stream=stream)
+        foreign_page = _item_request(client, proxy_url, "GET", f"/v1/responses/{foreign['id']}/input_items")
+        _item_request(client, proxy_url, "GET", path,
+                      params={"after": foreign_page["data"][0]["id"]}, expected_status=None)
+        return
+    if scenario == "response-edge-cases":
+        transient = _item_response(client, proxy_url, model, "Reply with only SAPPHIRE.", stream=stream, store=False)
+        transient_path = f"/v1/responses/{transient['id']}"
+        for method, path in (
+            ("GET", transient_path), ("GET", f"{transient_path}/input_items"),
+            ("DELETE", transient_path), ("GET", "/v1/responses/resp_missing"),
+            ("GET", "/v1/responses/resp_missing/input_items"),
+            ("DELETE", "/v1/responses/resp_missing"),
+        ):
+            _item_request(client, proxy_url, method, path, expected_status=None)
+        _item_request(
+            client, proxy_url, "POST", "/v1/responses",
+            body={"model": model, "input": [{"role": "user", "content": "Reply with only ORCHID."}],
+                  "previous_response_id": "resp_missing", "store": True, "stream": False},
+            expected_status=None,
+        )
+        stored = _item_response(client, proxy_url, model, "Reply with only ORCHID.", stream=stream)
+        path = f"/v1/responses/{stored['id']}/input_items"
+        for params in (
+            {"limit": "0"}, {"limit": "101"}, {"order": "sideways"},
+            {"after": "msg_missing"}, {"include[]": "web_search_call.results"},
+            {"include[]": "message.output_text.logprobs"},
+            {"limit": "-1"}, {"limit": "ten"}, {"after": ""},
+            {"include[]": "not.a.valid.include"},
+            [("limit", "1"), ("limit", "2")],
+            [("include[]", "message.output_text.logprobs"),
+             ("include[]", "reasoning.encrypted_content")],
+        ):
+            _item_request(client, proxy_url, "GET", path, params=params, expected_status=None)
+        _item_request(client, proxy_url, "DELETE", f"/v1/responses/{stored['id']}")
+        _item_request(client, proxy_url, "DELETE", f"/v1/responses/{stored['id']}", expected_status=None)
+        return
+    if scenario == "response-conversation":
+        conversation = _create_conversation(client, proxy_url)
+        items_path = f"/v1/conversations/{conversation}/items"
+        _item_request(client, proxy_url, "POST", items_path,
+                      body={"items": [{"role": "user", "content": "Remember SAPPHIRE."}]})
+        first = _item_response(client, proxy_url, model, "Reply with only SAPPHIRE.",
+                               conversation=conversation, stream=stream)
+        first_path = f"/v1/responses/{first['id']}"
+        _item_request(client, proxy_url, "GET", f"{first_path}/input_items", params={"order": "asc"})
+        added = _item_request(client, proxy_url, "POST", items_path,
+                              body={"items": [{"role": "user", "content": "Now remember ORCHID."}]})
+        _item_request(client, proxy_url, "GET", f"{first_path}/input_items", params={"order": "asc"})
+        child = _item_response(client, proxy_url, model, "Reply with only ORCHID.",
+                               conversation=conversation, stream=stream)
+        child_path = f"/v1/responses/{child['id']}"
+        _item_request(client, proxy_url, "GET", f"{child_path}/input_items", params={"order": "asc"})
+        _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+        _item_request(client, proxy_url, "DELETE", f"{items_path}/{added['data'][0]['id']}")
+        for path in (child_path, first_path):
+            _item_request(client, proxy_url, "GET", f"{path}/input_items",
+                          params={"order": "asc"}, expected_status=None)
+        _item_request(client, proxy_url, "DELETE", first_path)
+        _item_request(client, proxy_url, "GET", f"{child_path}/input_items",
+                      params={"order": "asc"}, expected_status=None)
+        _item_request(client, proxy_url, "GET", items_path, params={"order": "asc"})
+        _item_request(client, proxy_url, "GET", child_path, expected_status=None)
+        _item_request(client, proxy_url, "DELETE", f"/v1/conversations/{conversation}")
+        _item_request(client, proxy_url, "GET", f"{child_path}/input_items", expected_status=None)
+        _item_request(client, proxy_url, "GET", child_path, expected_status=None)
+        return
+    if scenario == "response-replayed-items":
+        seed = _item_response(client, proxy_url, model, "Reply with only SAPPHIRE.", stream=stream)
+        seed_items = f"/v1/responses/{seed['id']}/input_items"
+        page = _item_request(client, proxy_url, "GET", seed_items, params={"order": "asc"})
+        reused = {"type": "message", "id": page["data"][0]["id"],
+                  "role": "user", "content": "Reply with only ORCHID."}
+        for items in (
+            [reused],
+            [reused, {**reused, "content": "Reply with only VIOLET."}],
+            [{**reused, "id": f"item_wrongprefix_{secrets.token_hex(8)}"}],
+            [{"type": "function_call", "call_id": "call_history_probe", "name": "lookup",
+              "arguments": "{}"},
+             {"type": "function_call_output", "call_id": "call_history_probe", "output": "SAPPHIRE"},
+             {"role": "user", "content": "Reply with only the lookup result."}],
+        ):
+            # Probe status is evidence. On rejection, still inspect the seed to
+            # establish that rejected input did not mutate its stored context.
+            result = _item_request(client, proxy_url, "POST", "/v1/responses",
+                                   body={"model": model, "input": items, "store": True,
+                                         "stream": False}, expected_status=None)
+            response_id = result.get("id", seed["id"])
+            _item_request(client, proxy_url, "GET", f"/v1/responses/{response_id}/input_items",
+                          params={"order": "asc"}, expected_status=None)
+            _item_request(client, proxy_url, "GET", seed_items, params={"order": "asc"})
+        return
     if scenario == "edge-cases":
         for item in (
             {
@@ -1728,9 +1902,9 @@ def run_responses(
 )
 @click.option(
     "--items-scenario",
-    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases"]),
+    type=click.Choice(["continuation", "branch", "deletion", "pagination", "edge-cases", "response-lifecycle", "response-pagination", "response-edge-cases", "response-conversation", "response-replayed-items", "response-tool-items"]),
     default="continuation",
-    help="Conversation item recording scenario (for --mode items).",
+    help="Fixed Conversation Items or Responses API scenario (for --mode items).",
 )
 @click.option(
     "--branch-from",
@@ -1996,7 +2170,13 @@ def main(
         raise click.UsageError("--max-tool-calls requires linear --mode responses without branches.")
 
     if mode == "items":
-        expected_turns = (10 if items_scenario == "pagination" else
+        expected_turns = (19 if items_scenario == "response-lifecycle" else
+                          16 if items_scenario == "response-pagination" else
+                          23 if items_scenario == "response-edge-cases" else
+                          19 if items_scenario == "response-conversation" else
+                          14 if items_scenario == "response-replayed-items" else
+                          48 if items_scenario == "response-tool-items" else
+                          10 if items_scenario == "pagination" else
                           6 if items_scenario == "branch" else
                           19 if items_scenario == "edge-cases" else 5)
         if turns != expected_turns:
@@ -2165,7 +2345,8 @@ def main(
 
     if gateway_url:
         target = gateway_url.rstrip("/")
-        headers = {}
+        gateway_api_key = os.environ.get("GATEWAY_API_KEY", "")
+        headers = {"Authorization": f"Bearer {gateway_api_key}"} if gateway_api_key else {}
         backend_label = f"Gateway: {target}"
     elif vllm_url:
         target = vllm_url.rstrip("/")

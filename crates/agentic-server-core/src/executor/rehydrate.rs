@@ -153,7 +153,8 @@ async fn rehydrate_request(
     let response_id = uuid7_str("resp_");
     // Persistence keeps the public items. Tool lowering belongs to the enriched
     // inference copy, including when a later turn loads these items from storage.
-    let new_input_items = request.input.clone().into_canonical_items();
+    let mut new_input_items = request.input.clone().into_canonical_items();
+    exec_ctx.resp_handler.resolve_input_items(&mut new_input_items).await?;
 
     // One clone for the unmodified original; `request` is moved as enriched_request.
     let original_request = request.clone();
@@ -179,7 +180,7 @@ async fn rehydrate_request(
     } else if ctx.original_request.previous_response_id.is_some() {
         from_response(&mut ctx, exec_ctx).await?;
     } else {
-        ctx.enriched_request.input = ResponsesInput::from(Vec::from(&ctx.original_request.input));
+        ctx.enriched_request.input = ResponsesInput::from(InOutItem::into_input_items(ctx.new_input_items.clone()));
     }
 
     exec_ctx
@@ -213,8 +214,9 @@ fn validate_multi_agent_request(request: &RequestPayload) -> ExecutorResult<()> 
     // `parallel_tool_calls` to false, so only an explicit `true` conflicts.
     if request.parallel_tool_calls == Some(true) && request.declares_async_tools() {
         return Err(ExecutorError::UnsupportedValue {
-            param: "multi_agent",
-            message: "Async parallel tool calls are not yet supported in multi-agent mode.",
+            param: "multi_agent".into(),
+            code: Some("unsupported_value"),
+            message: "Async parallel tool calls are not yet supported in multi-agent mode.".into(),
         });
     }
     if request
@@ -247,7 +249,7 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
 
     let mut items = InOutItem::into_input_items(history);
     items.reserve(ctx.new_input_items.len());
-    items.extend(Vec::from(&ctx.original_request.input));
+    items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
     if let Some(pending) = first_unanswered_sync_call(&items)? {
         return Err(ExecutorError::Tool(ToolError::MissingOutput {
             call_id: pending.call_id,
@@ -258,6 +260,16 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
     ctx.enriched_request.input = ResponsesInput::from(items);
     apply_effective_settings(ctx, &stored.metadata);
     Ok(())
+}
+
+/// A missing `previous_response_id` is a request error, as `OpenAI` reports it, not a missing resource.
+fn previous_response_missing(error: ExecutorError, previous_id: &str) -> ExecutorError {
+    match error {
+        ExecutorError::Storage(ref source) if source.is_not_found() => ExecutorError::PreviousResponseNotFound {
+            id: previous_id.to_owned(),
+        },
+        other => other,
+    }
 }
 
 async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) -> ExecutorResult<()> {
@@ -274,12 +286,7 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
                 id: previous_id.to_owned(),
             });
         }
-        let map_missing = |error| match error {
-            ExecutorError::Storage(ref source) if source.is_not_found() => ExecutorError::PreviousResponseNotFound {
-                id: previous_id.to_owned(),
-            },
-            other => other,
-        };
+        let map_missing = |error| previous_response_missing(error, previous_id);
         let stored = exec_ctx.resp_handler.get(ctx).await.map_err(map_missing)?;
         let history = exec_ctx.resp_handler.rehydrate(ctx).await.map_err(map_missing)?;
         let checkpoint = ResponseCheckpoint {
@@ -303,7 +310,7 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
     let mut items = parent.history.clone();
     // Match durable rehydration: lower custom/shell call outputs only in the
     // inference copy. new_input_items retains their public wire types.
-    items.extend(Vec::from(&ctx.original_request.input));
+    items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
     let items = canonical_session_history(items);
     if let Some(pending) = first_unanswered_sync_call(&items)? {
         return Err(ExecutorError::Tool(ToolError::MissingOutput {
@@ -357,7 +364,7 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
 
     let mut items = InOutItem::into_input_items(snapshot.items);
     items.reserve(ctx.new_input_items.len());
-    items.extend(Vec::from(&ctx.original_request.input));
+    items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
     if let Some(pending) = first_unanswered_sync_call(&items)? {
         return Err(ExecutorError::Tool(ToolError::MissingOutput {
             call_id: pending.call_id,
@@ -759,9 +766,10 @@ mod tests {
         assert!(matches!(
             error,
             ExecutorError::UnsupportedValue {
-                param: "multi_agent",
-                message: "Async parallel tool calls are not yet supported in multi-agent mode."
-            }
+                param,
+                code,
+                message,
+            } if param == "multi_agent" && code == Some("unsupported_value") && message == "Async parallel tool calls are not yet supported in multi-agent mode."
         ));
         for (parallel, async_tool) in [
             (serde_json::json!(false), true),

@@ -58,6 +58,8 @@ pub struct InjectionFunctionOutput {
 impl From<InjectionFunctionOutput> for FunctionToolResultMessage {
     fn from(output: InjectionFunctionOutput) -> Self {
         Self {
+            id: None,
+            status: None,
             call_id: output.call_id,
             output: output.output,
         }

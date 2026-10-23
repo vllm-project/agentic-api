@@ -1,11 +1,41 @@
-use crate::types::io::{InOutItem, OutputMessage, OutputMessageContent};
+use crate::types::event::MessageStatus;
+use crate::types::io::{InOutItem, OutputMessage, OutputMessageContent, ShellCallOutputMessage, ShellCallStatus};
 use serde_json::Value;
 
 use super::{
-    InputContent, InputItem, InputMessage, InputMessageContent, InputMessageType, InputTextContent,
-    InputValidationError, ResponsesInput,
+    CustomToolCallOutputMessage, FunctionToolResultMessage, InputContent, InputItem, InputMessage, InputMessageContent,
+    InputMessageType, InputTextContent, InputValidationError, ResponsesInput,
 };
 use std::borrow::Cow;
+
+impl From<ShellCallOutputMessage> for FunctionToolResultMessage {
+    fn from(output: ShellCallOutputMessage) -> Self {
+        Self {
+            id: output.id,
+            status: match output.status {
+                Some(ShellCallStatus::Completed) => Some(MessageStatus::Completed),
+                Some(ShellCallStatus::InProgress) => Some(MessageStatus::InProgress),
+                Some(ShellCallStatus::Incomplete) | None => None,
+            },
+            call_id: output.call_id,
+            // Command outputs contain only JSON-compatible values and string map keys.
+            output: serde_json::to_string(&output.output)
+                .expect("shell outputs serialize to JSON")
+                .into(),
+        }
+    }
+}
+
+impl From<CustomToolCallOutputMessage> for FunctionToolResultMessage {
+    fn from(output: CustomToolCallOutputMessage) -> Self {
+        Self {
+            id: output.id,
+            status: output.status,
+            call_id: output.call_id,
+            output: output.output,
+        }
+    }
+}
 
 impl From<OutputMessageContent> for InputContent {
     fn from(part: OutputMessageContent) -> Self {
@@ -60,10 +90,29 @@ impl ResponsesInput {
     /// Move request input into canonical items without normalizing tool types,
     /// removing items, or applying model-specific content defaults.
     /// Text becomes one user message, including when the text is empty.
+    /// Submitted tool results default to completed before persistence and model
+    /// lowering. This describes delivery of the result, even if its payload
+    /// reports an error; explicit statuses and call execution states are retained.
     #[must_use]
     pub fn into_canonical_items(self) -> Vec<InOutItem> {
         match self {
-            Self::Items(items) => items,
+            Self::Items(mut items) => {
+                for item in &mut items {
+                    match item {
+                        InOutItem::Input(InputItem::FunctionCallOutput(output)) => {
+                            output.status.get_or_insert(MessageStatus::Completed);
+                        }
+                        InOutItem::Input(InputItem::CustomToolCallOutput(output)) => {
+                            output.status.get_or_insert(MessageStatus::Completed);
+                        }
+                        InOutItem::Input(InputItem::ShellCallOutput(output)) => {
+                            output.status.get_or_insert(ShellCallStatus::Completed);
+                        }
+                        _ => {}
+                    }
+                }
+                items
+            }
             // Reuse the existing user-message conversion only for text. Its
             // item-array branch also lowers custom/shell items for inference.
             text @ Self::Text(_) => Vec::<InputItem>::from(text).into_iter().map(InOutItem::Input).collect(),
@@ -168,14 +217,29 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn canonical_results_default_to_completed_even_when_their_payload_reports_failure() {
+        for wire in [
+            json!({"type":"function_call_output", "call_id":"call_1", "output":"error: lookup failed"}),
+            json!({"type":"custom_tool_call_output", "call_id":"call_1", "output":"error: lookup failed"}),
+            json!({"type":"shell_call_output", "call_id":"call_1", "output":[{"stdout":"", "stderr":"failed", "outcome":{"type":"exit", "exit_code":1}}]}),
+        ] {
+            let item: InOutItem = serde_json::from_value(wire.clone()).unwrap();
+            let items = ResponsesInput::Items(vec![item]).into_canonical_items();
+            let public = serde_json::to_value(&items[0]).unwrap();
+            assert_eq!(public["status"], "completed");
+            assert_eq!(public["output"], wire["output"]);
+        }
+    }
+
+    #[test]
     fn canonical_items_preserve_custom_shell_and_unknown_items() {
         let mut items: Vec<InOutItem> = deserialize_from_value(json!([
             {"type":"custom_tool_call", "id":"ctc_notes", "call_id":"notes", "name":"record_notes", "input":"note"},
-            {"type":"custom_tool_call_output", "call_id":"notes", "output":"recorded"},
+            {"type":"custom_tool_call_output", "call_id":"notes", "output":"recorded", "status":"in_progress"},
             {"type":"shell_call", "id":"sh_test", "call_id":"shell", "action":{
                 "commands":["pwd"], "timeout_ms":1000, "max_output_length":1024
             }},
-            {"type":"shell_call_output", "call_id":"shell", "output":[{
+            {"type":"shell_call_output", "call_id":"shell", "status":"incomplete", "output":[{
                 "stdout":"/tmp", "stderr":"", "outcome":{"type":"exit", "exit_code":0}
             }]}
         ]))
@@ -211,7 +275,7 @@ mod tests {
     #[test]
     fn canonical_items_keep_media_defaults_separate_from_model_normalization() {
         let input: ResponsesInput = deserialize_from_value(json!([
-            {"type":"custom_tool_call_output", "call_id":"notes", "output":"recorded"},
+            {"type":"custom_tool_call_output", "call_id":"notes", "output":"recorded", "status":"in_progress"},
             {"role":"user", "content":[{"type":"input_image", "image_url":"data:image/png;base64,test"}]}
         ]))
         .unwrap();

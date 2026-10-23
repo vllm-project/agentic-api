@@ -1,15 +1,14 @@
 //! Conversation history item stored in the database.
 
 use serde_json::Value;
-use std::convert::TryFrom;
 use std::fmt::Write;
 use tracing::warn;
 
 use super::super::pool::{DbPool, DbResult, DbTransaction};
 use super::super::types::item::{ItemKind, STORED_CODE_INTERPRETER_ORIGIN_KEY, STORED_ITEM_KIND_KEY};
 use crate::storage::{StorageError, StoreResult};
-use crate::types::conversations::ItemOrder;
 use crate::types::io::InOutItem;
+use crate::types::io::ItemOrder;
 use crate::types::io::code_interpreter::CodeInterpreterCallOrigin;
 use crate::types::io::{InputItem, OutputItem, ReasoningOutput};
 use crate::utils::common::{deserialize_from_str_opt, utcnow_str, uuid7_str};
@@ -162,49 +161,6 @@ fn item_values_clause(row_count: usize, first_bind_index: usize, sequence_from_c
     }
 
     clause
-}
-
-/// Distinguishes client-supplied conversation items from persisted model history.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ItemSource {
-    ConversationApi,
-    ResponseHistory,
-}
-
-/// Serialize new history items, retaining public IDs already assigned to input or output items.
-/// Items without IDs receive a storage-generated ID.
-///
-/// # Errors
-/// Returns an error if serialization fails or a supplied ID is empty or has an invalid prefix.
-pub(crate) fn serialize_new_items(items: Vec<InOutItem>, source: ItemSource) -> StoreResult<Vec<(String, String)>> {
-    items
-        .into_iter()
-        .enumerate()
-        .map(|(index, item)| {
-            let (existing_id, prefix) = match &item {
-                InOutItem::Input(input) => (input.id(), input.id_prefix()),
-                InOutItem::Output(output) => (output.id(), output.id_prefix()),
-            };
-            // Upstream model IDs are preserved; some vLLM reasoning items use
-            // msg_ IDs. Prefix errors apply to supplied Conversation Items IDs.
-            if source == ItemSource::ConversationApi
-                && let (Some(id), Some(prefix)) = (existing_id, prefix)
-                && !id.starts_with(prefix)
-            {
-                return Err(StorageError::InvalidItemId {
-                    param: format!("items[{index}].id"),
-                    id: id.to_owned(),
-                    prefix: prefix.trim_end_matches('_'),
-                });
-            }
-            if existing_id == Some("") {
-                return Err(StorageError::Validation("item id cannot be an empty string".to_owned()));
-            }
-            let id = existing_id.map_or_else(|| uuid7_str(prefix.unwrap_or("item_")), str::to_owned);
-            let data = String::try_from(&item)?;
-            Ok((id, data))
-        })
-        .collect()
 }
 
 /// Create items in a transaction with optional conversation context.
@@ -367,6 +323,19 @@ pub async fn get_items(pool: &DbPool, ids: &[String]) -> DbResult<Vec<Item>> {
     Ok(rows)
 }
 
+/// Find the original stored item carrying a public identity.
+///
+/// # Errors
+/// Returns an error if the database query fails.
+pub async fn get_by_public_id(pool: &DbPool, id: &str) -> DbResult<Option<Item>> {
+    sqlx::query_as::<_, Item>(
+        "SELECT * FROM items WHERE COALESCE(public_id, reference_id, id) = $1 ORDER BY created_at, id LIMIT 1",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+}
+
 /// Get items by conversation ID ordered by sequence.
 ///
 /// # Errors
@@ -506,167 +475,7 @@ pub async fn detach_from_conversation_in_tx(
 mod tests {
     use super::*;
     use crate::types::event::MessageStatus;
-    use crate::types::io::{
-        InputItem, OutputItem, OutputMessage, ReasoningOutput, ReasoningTextContent, ResponsesInput,
-    };
-
-    #[test]
-    fn new_items_reuse_public_ids_and_generate_storage_ids() {
-        let input: InputItem = serde_json::from_value(serde_json::json!({
-            "type": "message", "id": "msg_supplied", "role": "user", "content": "hello"
-        }))
-        .unwrap();
-        let output = OutputItem::Message(OutputMessage::new("msg_generated", MessageStatus::Completed));
-        let without_id: InputItem = serde_json::from_value(serde_json::json!({
-            "type": "message", "role": "user", "content": "next"
-        }))
-        .unwrap();
-        let function_call: InputItem = serde_json::from_value(serde_json::json!({
-            "type": "function_call", "id": "fc_supplied", "call_id": "call_1",
-            "name": "lookup", "arguments": "{}"
-        }))
-        .unwrap();
-        let rows = serialize_new_items(
-            vec![
-                InOutItem::Input(input),
-                InOutItem::Output(output),
-                InOutItem::Input(without_id),
-                InOutItem::Input(function_call),
-            ],
-            ItemSource::ConversationApi,
-        )
-        .unwrap();
-        assert_eq!(rows[0].0, "msg_supplied");
-        assert_eq!(rows[1].0, "msg_generated");
-        assert!(rows[2].0.starts_with("msg_"));
-        assert_eq!(rows[3].0, "fc_supplied");
-    }
-
-    #[test]
-    fn response_history_preserves_code_interpreter_public_id() {
-        let output = OutputItem::CodeInterpreterCall(crate::types::io::CodeInterpreterCall {
-            agent: None,
-            id: "ci_public".to_owned(),
-            container_id: "cntr_public".to_owned(),
-            code: "print(42)".to_owned(),
-            status: crate::types::io::CodeInterpreterCallStatus::Completed,
-            outputs: Some(vec![]),
-            origin: CodeInterpreterCallOrigin::default(),
-        });
-        let rows = serialize_new_items(vec![InOutItem::Output(output)], ItemSource::ResponseHistory)
-            .expect("serialize code interpreter response history");
-
-        assert_eq!(rows[0].0, "ci_public");
-        let data: Value = serde_json::from_str(&rows[0].1).expect("stored output JSON");
-        assert_eq!(data["id"], "ci_public");
-        assert_eq!(data["type"], "code_interpreter_call");
-    }
-
-    #[test]
-    fn code_interpreter_history_replays_native_call_without_gateway_duplicate() {
-        let gateway_call: InputItem = serde_json::from_value(serde_json::json!({
-            "type": "function_call",
-            "id": "fc_gateway",
-            "call_id": "call_gateway",
-            "name": "code_interpreter",
-            "arguments": "{\"code\":\"print(42)\"}",
-            "status": "completed"
-        }))
-        .expect("gateway model-facing call");
-        let gateway_result: InputItem = serde_json::from_value(serde_json::json!({
-            "type": "function_call_output",
-            "call_id": "call_gateway",
-            "output": "42"
-        }))
-        .expect("gateway model-facing output");
-        let native_call: OutputItem = serde_json::from_value(serde_json::json!({
-            "type": "code_interpreter_call",
-            "id": "ci_native",
-            "container_id": "cntr_native",
-            "code": "print(7)",
-            "status": "completed",
-            "outputs": [{"type": "logs", "logs": "7\n"}]
-        }))
-        .expect("native upstream call");
-        let mut gateway_projection = native_call.clone();
-        let OutputItem::CodeInterpreterCall(call) = &mut gateway_projection else {
-            panic!("code interpreter call");
-        };
-        call.id = "ci_gateway".to_owned();
-        call.container_id = "cntr_gateway".to_owned();
-        call.origin = CodeInterpreterCallOrigin::Gateway;
-
-        let stored = serialize_new_items(
-            vec![
-                InOutItem::Input(gateway_call),
-                InOutItem::Input(gateway_result),
-                InOutItem::Output(gateway_projection),
-                InOutItem::Output(native_call),
-            ],
-            ItemSource::ResponseHistory,
-        )
-        .expect("serialize response history");
-        let gateway_data: Value = serde_json::from_str(&stored[2].1).expect("stored gateway call");
-        let native_data: Value = serde_json::from_str(&stored[3].1).expect("stored native call");
-        assert_eq!(gateway_data[STORED_CODE_INTERPRETER_ORIGIN_KEY], "gateway");
-        assert!(native_data.get(STORED_CODE_INTERPRETER_ORIGIN_KEY).is_none());
-
-        let history = stored
-            .into_iter()
-            .map(|(id, data)| {
-                Item {
-                    id,
-                    data,
-                    created_at: 0,
-                    conversation_id: None,
-                    seq: None,
-                    tenant_id: None,
-                    reference_id: None,
-                    public_id: None,
-                }
-                .as_inout()
-                .expect("rehydrate stored item")
-            })
-            .collect();
-        let inputs = InOutItem::into_input_items(history);
-        assert_eq!(inputs.len(), 3);
-        assert!(matches!(&inputs[0], InputItem::FunctionCall(call) if call.call_id == "call_gateway"));
-        assert!(matches!(&inputs[1], InputItem::FunctionCallOutput(output) if output.call_id == "call_gateway"));
-        assert!(
-            matches!(&inputs[2], InputItem::CodeInterpreterCall(call) if call.id == "ci_native"
-            && call.code == "print(7)" && call.outputs.as_ref().is_some_and(|outputs| outputs.len() == 1))
-        );
-        let model_input =
-            serde_json::to_value(ResponsesInput::from(inputs).model_input()).expect("model input serializes");
-        assert_eq!(model_input[2]["type"], "code_interpreter_call");
-        assert!(model_input[2].get(STORED_CODE_INTERPRETER_ORIGIN_KEY).is_none());
-    }
-
-    #[test]
-    fn serialize_new_items_rejects_empty_id() {
-        let input: InputItem = serde_json::from_value(serde_json::json!({
-            "type": "message", "id": "", "role": "user", "content": "test"
-        }))
-        .unwrap();
-        let result = serialize_new_items(vec![InOutItem::Input(input)], ItemSource::ConversationApi);
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.is_validation());
-        assert!(matches!(err, StorageError::InvalidItemId { param, .. } if param == "items[0].id"));
-    }
-
-    #[test]
-    fn serialize_new_items_accepts_missing_id() {
-        let input: InputItem = serde_json::from_value(serde_json::json!({
-            "type": "message", "role": "user", "content": "test"
-        }))
-        .unwrap();
-        let result = serialize_new_items(vec![InOutItem::Input(input)], ItemSource::ConversationApi);
-        assert!(result.is_ok());
-        let rows = result.unwrap();
-        assert_eq!(rows.len(), 1);
-        assert!(rows[0].0.starts_with("msg_"));
-    }
+    use crate::types::io::{InputItem, OutputItem, ReasoningOutput, ReasoningTextContent};
 
     #[test]
     fn item_values_clause_numbers_plain_rows() {
@@ -1070,6 +879,10 @@ mod item_id_tests {
             json!({"type":"message", "id":"msg_1", "role":"user", "content":"hello"}),
             json!({"type":"function_call", "id":"fc_1", "call_id":"call_1", "name":"f", "arguments":"{}"}),
             json!({"type":"tool_search_call", "id":"tsc_1", "call_id":"call_1", "arguments":{}}),
+            json!({"type":"function_call_output", "id":"fc_1", "call_id":"call_1", "output":"done"}),
+            json!({"type":"custom_tool_call_output", "id":"ctco_1", "call_id":"call_1", "output":"done"}),
+            json!({"type":"shell_call_output", "id":"sho_1", "call_id":"call_1", "output":[]}),
+            json!({"type":"tool_search_output", "id":"tso_1", "call_id":"call_1", "tools":[]}),
             json!({"type":"custom_tool_call", "id":"ctc_1", "call_id":"call_1", "name":"f", "input":"x"}),
             json!({"type":"shell_call", "id":"sh_1", "call_id":"call_1", "action":{"commands":["pwd"]}}),
             json!({"type":"reasoning", "id":"rs_1", "summary":[]}),
@@ -1080,35 +893,40 @@ mod item_id_tests {
         ];
         for mut value in cases {
             let item = stored(value.clone());
-            serialize_new_items(vec![item], ItemSource::ConversationApi).expect("matching public ID prefix");
+            item.validate_client_id("items[0].id".into())
+                .expect("matching public ID prefix");
             value["id"] = json!("wrong_1");
             let item = stored(value);
-            let error = serialize_new_items(vec![item], ItemSource::ConversationApi).unwrap_err();
+            let error = item.validate_client_id("items[0].id".into()).unwrap_err();
             assert!(error.is_validation());
             assert!(matches!(error, StorageError::InvalidItemId { param, .. } if param == "items[0].id"));
         }
     }
 
     #[test]
-    fn optional_ids_and_unverified_prefixes_are_not_restricted() {
+    fn optional_ids_are_not_required() {
         for value in [
             json!({"type":"message", "role":"user", "content":"hello"}),
             json!({"type":"function_call", "call_id":"call_1", "name":"f", "arguments":"{}"}),
             json!({"type":"function_call_output", "call_id":"call_1", "output":"done"}),
-            json!({"type":"shell_call_output", "id":"output_1", "call_id":"call_1", "output":[]}),
+            json!({"type":"shell_call_output", "call_id":"call_1", "output":[]}),
         ] {
-            serialize_new_items(vec![stored(value)], ItemSource::ConversationApi).unwrap();
+            stored(value).validate_client_id("items[0].id".into()).unwrap();
         }
     }
 
     #[test]
     fn invalid_id_reports_its_batch_index_and_rejects_empty_ids() {
         for id in ["", "item_wrongprefix"] {
-            let items = vec![
+            let items = [
                 stored(json!({"type":"message", "role":"user", "content":"valid"})),
                 stored(json!({"type":"message", "id":id, "role":"user", "content":"invalid"})),
             ];
-            let error = serialize_new_items(items, ItemSource::ConversationApi).unwrap_err();
+            let error = items
+                .iter()
+                .enumerate()
+                .try_for_each(|(index, item)| item.validate_client_id(format!("items[{index}].id")))
+                .unwrap_err();
             assert!(matches!(&error, StorageError::InvalidItemId { param, .. } if param == "items[1].id"));
             assert_eq!(
                 error.to_string(),

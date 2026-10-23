@@ -609,7 +609,7 @@ async fn a_turn_that_cannot_be_stored_is_refused() {
     let ctx = exec_ctx().await;
 
     let unknown = hydrate(request("hi", Some("resp_missing")), &ctx).await;
-    assert_eq!(status_of(&unknown.expect_err("unknown id")), 404);
+    assert_eq!(status_of(&unknown.expect_err("unknown id")), 400);
 
     // A caller-supplied body gets none of the in-process parser's defaults,
     // including the catch-all used for compatibility on trusted internal paths.
@@ -746,7 +746,7 @@ async fn a_turn_that_is_not_written_still_returns() {
         [agentic_core::types::io::OutputItem::FunctionCall(call)] if call.call_id.is_empty()
     ));
     let orphan = hydrate(request("and then?", Some(&id)), &ctx).await;
-    assert_eq!(status_of(&orphan.expect_err("never stored")), 404);
+    assert_eq!(status_of(&orphan.expect_err("never stored")), 400);
 
     // A failed response remains returned-but-unstored even when its partial
     // item representations disagree; no unusable continuation can be created.
@@ -762,7 +762,7 @@ async fn a_turn_that_is_not_written_still_returns() {
         .expect("failed partial output is not a persistence error");
     assert_eq!(payload.status, "error");
     let orphan = hydrate(request("and then?", Some(&failed_id)), &ctx).await;
-    assert_eq!(status_of(&orphan.expect_err("failed SSE was never stored")), 404);
+    assert_eq!(status_of(&orphan.expect_err("failed SSE was never stored")), 400);
 }
 
 /// Until an identical retry can be proven identical, a reused id is refused.

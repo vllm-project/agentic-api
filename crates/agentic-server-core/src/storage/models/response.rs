@@ -1,7 +1,9 @@
 //! LLM API response stored in the database.
 
+use std::collections::HashSet;
+
 use super::super::pool::{DbPool, DbResult, DbTransaction};
-use crate::utils::common::utcnow_str;
+use crate::utils::common::{serialize_to_string, utcnow_str};
 
 /// LLM API response stored in the database.
 ///
@@ -62,6 +64,74 @@ pub async fn create_in_tx(
 /// Returns `DbResult::Err` if the database query fails.
 pub async fn get(pool: &DbPool, id: &str) -> DbResult<Option<Response>> {
     sqlx::query_as::<_, Response>("SELECT * FROM responses WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+}
+
+/// Read a response row inside the caller's transaction.
+///
+/// # Errors
+/// Returns an error if the database query fails.
+pub async fn get_in_tx(tx: &mut DbTransaction<'_>, id: &str) -> DbResult<Option<Response>> {
+    sqlx::query_as::<_, Response>("SELECT * FROM responses WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&mut **tx)
+        .await
+}
+
+/// Delete a response and remove its inherited context from response-chain descendants.
+/// Conversation snapshots and shared item rows are retained.
+/// The caller owns the transaction and commits or rolls back all changes together.
+///
+/// # Errors
+/// Returns an error if history is malformed or the transaction fails.
+pub async fn delete_in_tx(tx: &mut DbTransaction<'_>, id: &str) -> DbResult<bool> {
+    let Some(root) = get_in_tx(tx, id).await? else {
+        return Ok(false);
+    };
+    let inherited: HashSet<String> = root
+        .history_item_ids_vec()
+        .map_err(|error| sqlx::Error::Decode(Box::new(error)))?
+        .into_iter()
+        .collect();
+    let mut parents = vec![root.id];
+    while let Some(parent) = parents.pop() {
+        let children =
+            sqlx::query_as::<_, Response>("SELECT * FROM responses WHERE previous_response_id = $1 ORDER BY id")
+                .bind(parent)
+                .fetch_all(&mut **tx)
+                .await?;
+        for child in children {
+            if child.conversation_id.is_none() {
+                let mut ids = child
+                    .history_item_ids_vec()
+                    .map_err(|error| sqlx::Error::Decode(Box::new(error)))?;
+                ids.retain(|id| !inherited.contains(id));
+                let json = serialize_to_string(&ids).map_err(|error| sqlx::Error::Encode(Box::new(error)))?;
+                sqlx::query("UPDATE responses SET history_item_ids = $1 WHERE id = $2")
+                    .bind(json)
+                    .bind(&child.id)
+                    .execute(&mut **tx)
+                    .await?;
+            }
+            parents.push(child.id);
+        }
+    }
+    sqlx::query("DELETE FROM responses WHERE id = $1")
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(true)
+}
+
+/// Read the ordered history item IDs without loading response metadata.
+/// A legacy NULL history is empty; a missing response returns `None`.
+///
+/// # Errors
+/// Returns an error if the database query fails.
+pub async fn get_item_ids(pool: &DbPool, id: &str) -> DbResult<Option<String>> {
+    sqlx::query_scalar("SELECT COALESCE(history_item_ids, '[]') FROM responses WHERE id = $1")
         .bind(id)
         .fetch_optional(pool)
         .await

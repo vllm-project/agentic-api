@@ -1,0 +1,809 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content: Reply with only SAPPHIRE.
+        role: user
+      model: gpt-4.1
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_0a200e2f1f716972006adb03b8839887d1af0aa02050a9343c","object":"response","created_at":1792738232,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0a200e2f1f716972006adb03b8839887d1af0aa02050a9343c","object":"response","created_at":1792738232,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"S","item_id":"msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416","logprobs":[],"obfuscation":"fL0BugJFlxfAM13","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"APP","item_id":"msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416","logprobs":[],"obfuscation":"MmDLzl28h65SA","output_index":0,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"H","item_id":"msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416","logprobs":[],"obfuscation":"stgyzm7cVzB2XAx","output_index":0,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"IRE","item_id":"msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416","logprobs":[],"obfuscation":"InOUGNwxNNBBA","output_index":0,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416","logprobs":[],"output_index":0,"sequence_number":8,"text":"SAPPHIRE"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"SAPPHIRE"},"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"SAPPHIRE"}],"role":"assistant"},"output_index":0,"sequence_number":10}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_0a200e2f1f716972006adb03b8839887d1af0aa02050a9343c","object":"response","created_at":1792738232,"status":"completed","access_programs":null,"background":false,"completed_at":1792738233,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[{"id":"msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"SAPPHIRE"}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":15,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":5,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":20},"user":null,"metadata":{}},"sequence_number":11}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - content: Reply with only ORCHID.
+        role: user
+      model: gpt-4.1
+      previous_response_id: resp_0a200e2f1f716972006adb03b8839887d1af0aa02050a9343c
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_0a200e2f1f716972006adb03b9a8c487d19acc32ff2238c399","object":"response","created_at":1792738233,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0a200e2f1f716972006adb03b8839887d1af0aa02050a9343c","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0a200e2f1f716972006adb03b9a8c487d19acc32ff2238c399","object":"response","created_at":1792738233,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0a200e2f1f716972006adb03b8839887d1af0aa02050a9343c","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_0a200e2f1f716972006adb03ba3a7487d18280bd61ee58fe77","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0a200e2f1f716972006adb03ba3a7487d18280bd61ee58fe77","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"OR","item_id":"msg_0a200e2f1f716972006adb03ba3a7487d18280bd61ee58fe77","logprobs":[],"obfuscation":"jZYteudj06HFKC","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"CH","item_id":"msg_0a200e2f1f716972006adb03ba3a7487d18280bd61ee58fe77","logprobs":[],"obfuscation":"3pVgiIeuCYIpZh","output_index":0,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"ID","item_id":"msg_0a200e2f1f716972006adb03ba3a7487d18280bd61ee58fe77","logprobs":[],"obfuscation":"g8Y0OfLVtyIxqI","output_index":0,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0a200e2f1f716972006adb03ba3a7487d18280bd61ee58fe77","logprobs":[],"output_index":0,"sequence_number":7,"text":"ORCHID"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0a200e2f1f716972006adb03ba3a7487d18280bd61ee58fe77","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"ORCHID"},"sequence_number":8}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_0a200e2f1f716972006adb03ba3a7487d18280bd61ee58fe77","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"ORCHID"}],"role":"assistant"},"output_index":0,"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_0a200e2f1f716972006adb03b9a8c487d19acc32ff2238c399","object":"response","created_at":1792738233,"status":"completed","access_programs":null,"background":false,"completed_at":1792738234,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[{"id":"msg_0a200e2f1f716972006adb03ba3a7487d18280bd61ee58fe77","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"ORCHID"}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":"resp_0a200e2f1f716972006adb03b8839887d1af0aa02050a9343c","prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":34,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":4,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":38},"user":null,"metadata":{}},"sequence_number":10}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t3
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0a200e2f1f716972006adb03b9a8c487d19acc32ff2238c399/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_0a200e2f1f716972006adb03b88df887d1b2904e9da6c338a3
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE
+          type: output_text
+        id: msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_0a200e2f1f716972006adb03b9b13887d1be38ba8a5e9f154f
+        role: user
+        status: completed
+        type: message
+      first_id: msg_0a200e2f1f716972006adb03b88df887d1b2904e9da6c338a3
+      has_more: false
+      last_id: msg_0a200e2f1f716972006adb03b9b13887d1be38ba8a5e9f154f
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0a200e2f1f716972006adb03b9a8c487d19acc32ff2238c399/input_items
+    query_params:
+      order: desc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_0a200e2f1f716972006adb03b9b13887d1be38ba8a5e9f154f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE
+          type: output_text
+        id: msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_0a200e2f1f716972006adb03b88df887d1b2904e9da6c338a3
+        role: user
+        status: completed
+        type: message
+      first_id: msg_0a200e2f1f716972006adb03b9b13887d1be38ba8a5e9f154f
+      has_more: false
+      last_id: msg_0a200e2f1f716972006adb03b88df887d1b2904e9da6c338a3
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0a200e2f1f716972006adb03b9a8c487d19acc32ff2238c399/input_items
+    query_params:
+      limit: '1'
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_0a200e2f1f716972006adb03b88df887d1b2904e9da6c338a3
+        role: user
+        status: completed
+        type: message
+      first_id: msg_0a200e2f1f716972006adb03b88df887d1b2904e9da6c338a3
+      has_more: true
+      last_id: msg_0a200e2f1f716972006adb03b88df887d1b2904e9da6c338a3
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0a200e2f1f716972006adb03b9a8c487d19acc32ff2238c399/input_items
+    query_params:
+      after: msg_0a200e2f1f716972006adb03b88df887d1b2904e9da6c338a3
+      limit: '1'
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE
+          type: output_text
+        id: msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416
+        role: assistant
+        status: completed
+        type: message
+      first_id: msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416
+      has_more: true
+      last_id: msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0a200e2f1f716972006adb03b9a8c487d19acc32ff2238c399/input_items
+    query_params:
+      limit: '1'
+      order: desc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_0a200e2f1f716972006adb03b9b13887d1be38ba8a5e9f154f
+        role: user
+        status: completed
+        type: message
+      first_id: msg_0a200e2f1f716972006adb03b9b13887d1be38ba8a5e9f154f
+      has_more: true
+      last_id: msg_0a200e2f1f716972006adb03b9b13887d1be38ba8a5e9f154f
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0a200e2f1f716972006adb03b9a8c487d19acc32ff2238c399/input_items
+    query_params:
+      after: msg_0a200e2f1f716972006adb03b9b13887d1be38ba8a5e9f154f
+      limit: '1'
+      order: desc
+  response:
+    body:
+      data:
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE
+          type: output_text
+        id: msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416
+        role: assistant
+        status: completed
+        type: message
+      first_id: msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416
+      has_more: true
+      last_id: msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0a200e2f1f716972006adb03b9a8c487d19acc32ff2238c399/input_items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_0a200e2f1f716972006adb03b9b13887d1be38ba8a5e9f154f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE
+          type: output_text
+        id: msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_0a200e2f1f716972006adb03b88df887d1b2904e9da6c338a3
+        role: user
+        status: completed
+        type: message
+      first_id: msg_0a200e2f1f716972006adb03b9b13887d1be38ba8a5e9f154f
+      has_more: false
+      last_id: msg_0a200e2f1f716972006adb03b88df887d1b2904e9da6c338a3
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0a200e2f1f716972006adb03b9a8c487d19acc32ff2238c399/input_items
+    query_params:
+      limit: '100'
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_0a200e2f1f716972006adb03b88df887d1b2904e9da6c338a3
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE
+          type: output_text
+        id: msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_0a200e2f1f716972006adb03b9b13887d1be38ba8a5e9f154f
+        role: user
+        status: completed
+        type: message
+      first_id: msg_0a200e2f1f716972006adb03b88df887d1b2904e9da6c338a3
+      has_more: false
+      last_id: msg_0a200e2f1f716972006adb03b9b13887d1be38ba8a5e9f154f
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0a200e2f1f716972006adb03b9a8c487d19acc32ff2238c399/input_items
+    query_params:
+      after: msg_0a200e2f1f716972006adb03b9b13887d1be38ba8a5e9f154f
+      order: asc
+  response:
+    body:
+      data: []
+      first_id: null
+      has_more: false
+      last_id: null
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t12
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0a200e2f1f716972006adb03b9a8c487d19acc32ff2238c399/input_items
+    query_params:
+      limit: '100'
+      order: desc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_0a200e2f1f716972006adb03b9b13887d1be38ba8a5e9f154f
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          logprobs: []
+          text: SAPPHIRE
+          type: output_text
+        id: msg_0a200e2f1f716972006adb03b9066487d1bb41d02dbd938416
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_0a200e2f1f716972006adb03b88df887d1b2904e9da6c338a3
+        role: user
+        status: completed
+        type: message
+      first_id: msg_0a200e2f1f716972006adb03b9b13887d1be38ba8a5e9f154f
+      has_more: false
+      last_id: msg_0a200e2f1f716972006adb03b88df887d1b2904e9da6c338a3
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t13
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0a200e2f1f716972006adb03b9a8c487d19acc32ff2238c399/input_items
+    query_params:
+      after: msg_0a200e2f1f716972006adb03b88df887d1b2904e9da6c338a3
+      order: desc
+  response:
+    body:
+      data: []
+      first_id: null
+      has_more: false
+      last_id: null
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t14
+  request:
+    body:
+      input:
+      - content: Reply with only VIOLET.
+        role: user
+      model: gpt-4.1
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_071f39d6a547e429006adb03c0f8d487d1bf8a2e29a176c475","object":"response","created_at":1792738241,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_071f39d6a547e429006adb03c0f8d487d1bf8a2e29a176c475","object":"response","created_at":1792738241,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"msg_071f39d6a547e429006adb03c18fd087d18506739d3702d1aa","type":"message","status":"in_progress","content":[],"role":"assistant"},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_071f39d6a547e429006adb03c18fd087d18506739d3702d1aa","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"V","item_id":"msg_071f39d6a547e429006adb03c18fd087d18506739d3702d1aa","logprobs":[],"obfuscation":"Y4GBgztgbDks6O5","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"IO","item_id":"msg_071f39d6a547e429006adb03c18fd087d18506739d3702d1aa","logprobs":[],"obfuscation":"uIzugyqt1zVyWr","output_index":0,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","content_index":0,"delta":"LET","item_id":"msg_071f39d6a547e429006adb03c18fd087d18506739d3702d1aa","logprobs":[],"obfuscation":"X4WegZ1gLBTBO","output_index":0,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_071f39d6a547e429006adb03c18fd087d18506739d3702d1aa","logprobs":[],"output_index":0,"sequence_number":7,"text":"VIOLET"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_071f39d6a547e429006adb03c18fd087d18506739d3702d1aa","output_index":0,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"VIOLET"},"sequence_number":8}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"msg_071f39d6a547e429006adb03c18fd087d18506739d3702d1aa","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"VIOLET"}],"role":"assistant"},"output_index":0,"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_071f39d6a547e429006adb03c0f8d487d1bf8a2e29a176c475","object":"response","created_at":1792738241,"status":"completed","access_programs":null,"background":false,"completed_at":1792738241,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-4.1-2025-04-14","moderation":null,"output":[{"id":"msg_071f39d6a547e429006adb03c18fd087d18506739d3702d1aa","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"VIOLET"}],"role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"in_memory","reasoning":{"context":null,"effort":null,"summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[],"top_logprobs":0,"top_p":1.0,"truncation":"disabled","usage":{"input_tokens":14,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":4,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":18},"user":null,"metadata":{}},"sequence_number":10}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t15
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_071f39d6a547e429006adb03c0f8d487d1bf8a2e29a176c475/input_items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only VIOLET.
+          type: input_text
+        id: msg_071f39d6a547e429006adb03c1010487d1a299303a6dc6ea55
+        role: user
+        status: completed
+        type: message
+      first_id: msg_071f39d6a547e429006adb03c1010487d1a299303a6dc6ea55
+      has_more: false
+      last_id: msg_071f39d6a547e429006adb03c1010487d1a299303a6dc6ea55
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t16
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_0a200e2f1f716972006adb03b9a8c487d19acc32ff2238c399/input_items
+    query_params:
+      after: msg_071f39d6a547e429006adb03c1010487d1a299303a6dc6ea55
+  response:
+    body:
+      error:
+        code: null
+        message: No item found with id 'msg_071f39d6a547e429006adb03c1010487d1a299303a6dc6ea55'
+        param: after
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404

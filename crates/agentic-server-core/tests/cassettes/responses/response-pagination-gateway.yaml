@@ -1,0 +1,737 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input:
+      - content: Reply with only SAPPHIRE.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748280
+      created_at: 1792748280
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1681f-d907-7202-86b7-552d54678efd
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        id: rs_83623ec2e77c29e2
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_9a636063e7beff44
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 47
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 24
+        output_tokens_details:
+          reasoning_tokens: 17
+        total_tokens: 71
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input:
+      - content: Reply with only ORCHID.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      previous_response_id: resp_01a1681f-d907-7202-86b7-552d54678efd
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748281
+      created_at: 1792748281
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1681f-db5e-7c62-9a8b-1164306878bb
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to reply with only the word "ORCHID".
+
+            '
+          type: reasoning_text
+        id: rs_843dbb18167c5c52
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_8096b62420788c7d
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: resp_01a1681f-d907-7202-86b7-552d54678efd
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 89
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 22
+        output_tokens_details:
+          reasoning_tokens: 16
+        total_tokens: 111
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-db5e-7c62-9a8b-1164306878bb/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a1681f-db4e-71e1-b7e1-91ff4f94de8e
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        id: rs_83623ec2e77c29e2
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_9a636063e7beff44
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a1681f-dd7c-76a2-b880-e86c8fc606a6
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a1681f-db4e-71e1-b7e1-91ff4f94de8e
+      has_more: false
+      last_id: msg_01a1681f-dd7c-76a2-b880-e86c8fc606a6
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-db5e-7c62-9a8b-1164306878bb/input_items
+    query_params:
+      order: desc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a1681f-dd7c-76a2-b880-e86c8fc606a6
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_9a636063e7beff44
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        id: rs_83623ec2e77c29e2
+        summary: []
+        type: reasoning
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a1681f-db4e-71e1-b7e1-91ff4f94de8e
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a1681f-dd7c-76a2-b880-e86c8fc606a6
+      has_more: false
+      last_id: msg_01a1681f-db4e-71e1-b7e1-91ff4f94de8e
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-db5e-7c62-9a8b-1164306878bb/input_items
+    query_params:
+      limit: '1'
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a1681f-db4e-71e1-b7e1-91ff4f94de8e
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a1681f-db4e-71e1-b7e1-91ff4f94de8e
+      has_more: true
+      last_id: msg_01a1681f-db4e-71e1-b7e1-91ff4f94de8e
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-db5e-7c62-9a8b-1164306878bb/input_items
+    query_params:
+      after: msg_01a1681f-db4e-71e1-b7e1-91ff4f94de8e
+      limit: '1'
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        id: rs_83623ec2e77c29e2
+        summary: []
+        type: reasoning
+      first_id: rs_83623ec2e77c29e2
+      has_more: true
+      last_id: rs_83623ec2e77c29e2
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-db5e-7c62-9a8b-1164306878bb/input_items
+    query_params:
+      limit: '1'
+      order: desc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a1681f-dd7c-76a2-b880-e86c8fc606a6
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a1681f-dd7c-76a2-b880-e86c8fc606a6
+      has_more: true
+      last_id: msg_01a1681f-dd7c-76a2-b880-e86c8fc606a6
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t8
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-db5e-7c62-9a8b-1164306878bb/input_items
+    query_params:
+      after: msg_01a1681f-dd7c-76a2-b880-e86c8fc606a6
+      limit: '1'
+      order: desc
+  response:
+    body:
+      data:
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_9a636063e7beff44
+        role: assistant
+        status: completed
+        type: message
+      first_id: msg_9a636063e7beff44
+      has_more: true
+      last_id: msg_9a636063e7beff44
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-db5e-7c62-9a8b-1164306878bb/input_items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a1681f-dd7c-76a2-b880-e86c8fc606a6
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_9a636063e7beff44
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        id: rs_83623ec2e77c29e2
+        summary: []
+        type: reasoning
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a1681f-db4e-71e1-b7e1-91ff4f94de8e
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a1681f-dd7c-76a2-b880-e86c8fc606a6
+      has_more: false
+      last_id: msg_01a1681f-db4e-71e1-b7e1-91ff4f94de8e
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-db5e-7c62-9a8b-1164306878bb/input_items
+    query_params:
+      limit: '100'
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a1681f-db4e-71e1-b7e1-91ff4f94de8e
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        id: rs_83623ec2e77c29e2
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_9a636063e7beff44
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a1681f-dd7c-76a2-b880-e86c8fc606a6
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a1681f-db4e-71e1-b7e1-91ff4f94de8e
+      has_more: false
+      last_id: msg_01a1681f-dd7c-76a2-b880-e86c8fc606a6
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-db5e-7c62-9a8b-1164306878bb/input_items
+    query_params:
+      after: msg_01a1681f-dd7c-76a2-b880-e86c8fc606a6
+      order: asc
+  response:
+    body:
+      data: []
+      first_id: null
+      has_more: false
+      last_id: null
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t12
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-db5e-7c62-9a8b-1164306878bb/input_items
+    query_params:
+      limit: '100'
+      order: desc
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a1681f-dd7c-76a2-b880-e86c8fc606a6
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_9a636063e7beff44
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        id: rs_83623ec2e77c29e2
+        summary: []
+        type: reasoning
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a1681f-db4e-71e1-b7e1-91ff4f94de8e
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a1681f-dd7c-76a2-b880-e86c8fc606a6
+      has_more: false
+      last_id: msg_01a1681f-db4e-71e1-b7e1-91ff4f94de8e
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t13
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-db5e-7c62-9a8b-1164306878bb/input_items
+    query_params:
+      after: msg_01a1681f-db4e-71e1-b7e1-91ff4f94de8e
+      order: desc
+  response:
+    body:
+      data: []
+      first_id: null
+      has_more: false
+      last_id: null
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t14
+  request:
+    body:
+      input:
+      - content: Reply with only VIOLET.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: false
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748283
+      created_at: 1792748283
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a1681f-e3c7-7832-94bf-689225129b05
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to reply with only the word "VIOLET".
+
+            '
+          type: reasoning_text
+        id: rs_ab97ab7ec598edfa
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            VIOLET'
+          type: output_text
+        id: msg_958708764e616442
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 47
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 22
+        output_tokens_details:
+          reasoning_tokens: 16
+        total_tokens: 69
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t15
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-e3c7-7832-94bf-689225129b05/input_items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only VIOLET.
+          type: input_text
+        id: msg_01a1681f-e5e8-76c2-b2af-87f6f9272b13
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a1681f-e5e8-76c2-b2af-87f6f9272b13
+      has_more: false
+      last_id: msg_01a1681f-e5e8-76c2-b2af-87f6f9272b13
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t16
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a1681f-db5e-7c62-9a8b-1164306878bb/input_items
+    query_params:
+      after: msg_01a1681f-e5e8-76c2-b2af-87f6f9272b13
+  response:
+    body:
+      error:
+        code: null
+        message: No item found with id 'msg_01a1681f-e5e8-76c2-b2af-87f6f9272b13'
+        param: after
+        type: invalid_request_error
+    headers:
+      content-type: application/json
+    status_code: 404

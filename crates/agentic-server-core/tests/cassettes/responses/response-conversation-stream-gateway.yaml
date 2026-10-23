@@ -1,0 +1,1489 @@
+turns:
+- filename: t1
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations
+    query_params: {}
+  response:
+    body:
+      created_at: 1792748301
+      id: conv_01a16820-2b87-7c53-9bb1-676804d87fd4
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      items:
+      - content: Remember SAPPHIRE.
+        role: user
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a16820-2b87-7c53-9bb1-676804d87fd4/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+      has_more: false
+      last_id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      conversation: conv_01a16820-2b87-7c53-9bb1-676804d87fd4
+      input:
+      - content: Reply with only SAPPHIRE.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a16820-2b9b-7410-a0cb-696c5bb1db8c","created_at":1792748301,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":null,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null,"conversation":{"id":"conv_01a16820-2b87-7c53-9bb1-676804d87fd4"}}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a16820-2b9b-7410-a0cb-696c5bb1db8c","created_at":1792748301,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":null,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null,"conversation":{"id":"conv_01a16820-2b87-7c53-9bb1-676804d87fd4"}}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"rs_9c49380ef26d9800","summary":[],"type":"reasoning","content":[],"status":"in_progress"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":3,"output_index":0,"content_index":0,"delta":"The","item_id":"rs_9c49380ef26d9800"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"content_index":0,"delta":"
+      user","item_id":"rs_9c49380ef26d9800"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":5,"output_index":0,"content_index":0,"delta":"
+      wants","item_id":"rs_9c49380ef26d9800"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":6,"output_index":0,"content_index":0,"delta":"
+      me","item_id":"rs_9c49380ef26d9800"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":7,"output_index":0,"content_index":0,"delta":"
+      to","item_id":"rs_9c49380ef26d9800"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":8,"output_index":0,"content_index":0,"delta":"
+      reply","item_id":"rs_9c49380ef26d9800"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":9,"output_index":0,"content_index":0,"delta":"
+      with","item_id":"rs_9c49380ef26d9800"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":10,"output_index":0,"content_index":0,"delta":"
+      only","item_id":"rs_9c49380ef26d9800"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"content_index":0,"delta":"
+      the","item_id":"rs_9c49380ef26d9800"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"content_index":0,"delta":"
+      word","item_id":"rs_9c49380ef26d9800"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":13,"output_index":0,"content_index":0,"delta":"
+      \"","item_id":"rs_9c49380ef26d9800"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":14,"output_index":0,"content_index":0,"delta":"S","item_id":"rs_9c49380ef26d9800"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"content_index":0,"delta":"AP","item_id":"rs_9c49380ef26d9800"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":16,"output_index":0,"content_index":0,"delta":"PH","item_id":"rs_9c49380ef26d9800"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":17,"output_index":0,"content_index":0,"delta":"IRE","item_id":"rs_9c49380ef26d9800"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":18,"output_index":0,"content_index":0,"delta":"\".","item_id":"rs_9c49380ef26d9800"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":19,"output_index":0,"content_index":0,"delta":"\n","item_id":"rs_9c49380ef26d9800"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.done
+
+      '
+    - 'data: {"type":"response.reasoning_text.done","sequence_number":20,"output_index":0,"content_index":0,"item_id":"rs_9c49380ef26d9800","text":"The
+      user wants me to reply with only the word \"SAPPHIRE\".\n"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":21,"output_index":0,"item":{"id":"rs_9c49380ef26d9800","summary":[],"type":"reasoning","content":[{"text":"The
+      user wants me to reply with only the word \"SAPPHIRE\".\n","type":"reasoning_text"}],"status":"completed"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":22,"output_index":1,"item":{"id":"msg_bbe8b713e5898ffa","content":[],"role":"assistant","status":"in_progress","type":"message"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","sequence_number":23,"output_index":1,"content_index":0,"item_id":"msg_bbe8b713e5898ffa","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":24,"output_index":1,"content_index":0,"delta":"\n\nS","item_id":"msg_bbe8b713e5898ffa","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":25,"output_index":1,"content_index":0,"delta":"AP","item_id":"msg_bbe8b713e5898ffa","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":26,"output_index":1,"content_index":0,"delta":"PH","item_id":"msg_bbe8b713e5898ffa","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":27,"output_index":1,"content_index":0,"delta":"IRE","item_id":"msg_bbe8b713e5898ffa","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","sequence_number":28,"output_index":1,"content_index":0,"item_id":"msg_bbe8b713e5898ffa","logprobs":[],"text":"\n\nSAPPHIRE"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","sequence_number":29,"output_index":1,"content_index":0,"item_id":"msg_bbe8b713e5898ffa","part":{"annotations":[],"text":"\n\nSAPPHIRE","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":30,"output_index":1,"item":{"id":"msg_bbe8b713e5898ffa","content":[{"annotations":[],"text":"\n\nSAPPHIRE","type":"output_text","logprobs":[]}],"role":"assistant","status":"completed","type":"message"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":31,"response":{"id":"resp_01a16820-2b9b-7410-a0cb-696c5bb1db8c","object":"response","created_at":1792748301,"model":"Qwen/Qwen3.8-27B-FP8","status":"completed","output":[{"type":"reasoning","id":"rs_9c49380ef26d9800","content":[{"type":"reasoning_text","text":"The
+      user wants me to reply with only the word \"SAPPHIRE\".\n"}],"summary":[],"status":"completed"},{"type":"message","id":"msg_bbe8b713e5898ffa","role":"assistant","status":"completed","content":[{"type":"output_text","text":"\n\nSAPPHIRE","annotations":[]}]}],"usage":{"input_tokens":57,"output_tokens":24,"total_tokens":81,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens_details":{"reasoning_tokens":17}},"incomplete_details":null,"error":null,"previous_response_id":null,"conversation":{"id":"conv_01a16820-2b87-7c53-9bb1-676804d87fd4"},"instructions":null,"max_tool_calls":null,"service_tier":"auto","tools":[],"tool_choice":"auto","completed_at":1792748301,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":1.0,"reasoning":null,"max_output_tokens":null,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t4
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-2b9b-7410-a0cb-696c5bb1db8c/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2de1-7c51-9f2f-d64870812414
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+      has_more: false
+      last_id: msg_01a16820-2de1-7c51-9f2f-d64870812414
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      items:
+      - content: Now remember ORCHID.
+        role: user
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/conversations/conv_01a16820-2b87-7c53-9bb1-676804d87fd4/items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_01a16820-2e29-7993-80a9-0eddbfed3890
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-2e29-7993-80a9-0eddbfed3890
+      has_more: false
+      last_id: msg_01a16820-2e29-7993-80a9-0eddbfed3890
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t6
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-2b9b-7410-a0cb-696c5bb1db8c/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2de1-7c51-9f2f-d64870812414
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+      has_more: false
+      last_id: msg_01a16820-2de1-7c51-9f2f-d64870812414
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      conversation: conv_01a16820-2b87-7c53-9bb1-676804d87fd4
+      input:
+      - content: Reply with only ORCHID.
+        role: user
+      model: Qwen/Qwen3.8-27B-FP8
+      store: true
+      stream: true
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","sequence_number":0,"response":{"id":"resp_01a16820-2e87-7210-8e58-c1e51d100a74","created_at":1792748301,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":null,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null,"conversation":{"id":"conv_01a16820-2b87-7c53-9bb1-676804d87fd4"}}}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","sequence_number":1,"response":{"id":"resp_01a16820-2e87-7210-8e58-c1e51d100a74","created_at":1792748301,"incomplete_details":null,"instructions":null,"metadata":{},"model":"Qwen/Qwen3.8-27B-FP8","object":"response","output":[],"parallel_tool_calls":false,"temperature":1.0,"tool_choice":"none","tools":[],"top_p":1.0,"background":false,"max_output_tokens":null,"max_tool_calls":null,"previous_response_id":null,"prompt":null,"reasoning":null,"service_tier":"auto","status":"in_progress","text":{"format":{"type":"text"}},"top_logprobs":0,"truncation":"disabled","usage":null,"user":null,"presence_penalty":0.0,"frequency_penalty":0.0,"kv_transfer_params":null,"ec_transfer_params":null,"input_messages":null,"output_messages":null,"completed_at":null,"store":true,"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null,"error":null,"conversation":{"id":"conv_01a16820-2b87-7c53-9bb1-676804d87fd4"}}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":2,"output_index":0,"item":{"id":"rs_b74e1e323184327f","summary":[],"type":"reasoning","content":[],"status":"in_progress"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":3,"output_index":0,"content_index":0,"delta":"The","item_id":"rs_b74e1e323184327f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":4,"output_index":0,"content_index":0,"delta":"
+      user","item_id":"rs_b74e1e323184327f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":5,"output_index":0,"content_index":0,"delta":"
+      wants","item_id":"rs_b74e1e323184327f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":6,"output_index":0,"content_index":0,"delta":"
+      me","item_id":"rs_b74e1e323184327f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":7,"output_index":0,"content_index":0,"delta":"
+      to","item_id":"rs_b74e1e323184327f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":8,"output_index":0,"content_index":0,"delta":"
+      reply","item_id":"rs_b74e1e323184327f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":9,"output_index":0,"content_index":0,"delta":"
+      with","item_id":"rs_b74e1e323184327f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":10,"output_index":0,"content_index":0,"delta":"
+      only","item_id":"rs_b74e1e323184327f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":11,"output_index":0,"content_index":0,"delta":"
+      the","item_id":"rs_b74e1e323184327f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":12,"output_index":0,"content_index":0,"delta":"
+      word","item_id":"rs_b74e1e323184327f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":13,"output_index":0,"content_index":0,"delta":"
+      \"","item_id":"rs_b74e1e323184327f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":14,"output_index":0,"content_index":0,"delta":"OR","item_id":"rs_b74e1e323184327f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":15,"output_index":0,"content_index":0,"delta":"CH","item_id":"rs_b74e1e323184327f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":16,"output_index":0,"content_index":0,"delta":"ID","item_id":"rs_b74e1e323184327f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":17,"output_index":0,"content_index":0,"delta":"\".","item_id":"rs_b74e1e323184327f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.delta
+
+      '
+    - 'data: {"type":"response.reasoning_text.delta","sequence_number":18,"output_index":0,"content_index":0,"delta":"\n","item_id":"rs_b74e1e323184327f"}
+
+      '
+    - '
+
+      '
+    - 'event: response.reasoning_text.done
+
+      '
+    - 'data: {"type":"response.reasoning_text.done","sequence_number":19,"output_index":0,"content_index":0,"item_id":"rs_b74e1e323184327f","text":"The
+      user wants me to reply with only the word \"ORCHID\".\n"}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":20,"output_index":0,"item":{"id":"rs_b74e1e323184327f","summary":[],"type":"reasoning","content":[{"text":"The
+      user wants me to reply with only the word \"ORCHID\".\n","type":"reasoning_text"}],"status":"completed"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","sequence_number":21,"output_index":1,"item":{"id":"msg_b65d8e89158b45ee","content":[],"role":"assistant","status":"in_progress","type":"message"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.added
+
+      '
+    - 'data: {"type":"response.content_part.added","sequence_number":22,"output_index":1,"content_index":0,"item_id":"msg_b65d8e89158b45ee","part":{"annotations":[],"text":"","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":23,"output_index":1,"content_index":0,"delta":"\n\nOR","item_id":"msg_b65d8e89158b45ee","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":24,"output_index":1,"content_index":0,"delta":"CH","item_id":"msg_b65d8e89158b45ee","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.delta
+
+      '
+    - 'data: {"type":"response.output_text.delta","sequence_number":25,"output_index":1,"content_index":0,"delta":"ID","item_id":"msg_b65d8e89158b45ee","logprobs":[]}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_text.done
+
+      '
+    - 'data: {"type":"response.output_text.done","sequence_number":26,"output_index":1,"content_index":0,"item_id":"msg_b65d8e89158b45ee","logprobs":[],"text":"\n\nORCHID"}
+
+      '
+    - '
+
+      '
+    - 'event: response.content_part.done
+
+      '
+    - 'data: {"type":"response.content_part.done","sequence_number":27,"output_index":1,"content_index":0,"item_id":"msg_b65d8e89158b45ee","part":{"annotations":[],"text":"\n\nORCHID","type":"output_text","logprobs":[]}}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","sequence_number":28,"output_index":1,"item":{"id":"msg_b65d8e89158b45ee","content":[{"annotations":[],"text":"\n\nORCHID","type":"output_text","logprobs":[]}],"role":"assistant","status":"completed","type":"message"}}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","sequence_number":29,"response":{"id":"resp_01a16820-2e87-7210-8e58-c1e51d100a74","object":"response","created_at":1792748302,"model":"Qwen/Qwen3.8-27B-FP8","status":"completed","output":[{"type":"reasoning","id":"rs_b74e1e323184327f","content":[{"type":"reasoning_text","text":"The
+      user wants me to reply with only the word \"ORCHID\".\n"}],"summary":[],"status":"completed"},{"type":"message","id":"msg_b65d8e89158b45ee","role":"assistant","status":"completed","content":[{"type":"output_text","text":"\n\nORCHID","annotations":[]}]}],"usage":{"input_tokens":110,"output_tokens":22,"total_tokens":132,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens_details":{"reasoning_tokens":16}},"incomplete_details":null,"error":null,"previous_response_id":null,"conversation":{"id":"conv_01a16820-2b87-7c53-9bb1-676804d87fd4"},"instructions":null,"max_tool_calls":null,"service_tier":"auto","tools":[],"tool_choice":"auto","completed_at":1792748302,"truncation":"disabled","parallel_tool_calls":false,"text":{"format":{"type":"text"}},"top_p":1.0,"presence_penalty":0.0,"frequency_penalty":0.0,"top_logprobs":0,"temperature":1.0,"reasoning":null,"max_output_tokens":null,"store":true,"background":false,"metadata":{},"safety_identifier":null,"prompt_cache_key":null,"prompt_cache_options":null}}
+
+      '
+    - '
+
+      '
+    - 'data: [DONE]
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t8
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-2e87-7210-8e58-c1e51d100a74/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2de1-7c51-9f2f-d64870812414
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        id: rs_9c49380ef26d9800
+        status: completed
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_bbe8b713e5898ffa
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_01a16820-2e29-7993-80a9-0eddbfed3890
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-30a6-7831-9ba0-b47b94f85227
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+      has_more: false
+      last_id: msg_01a16820-30a6-7831-9ba0-b47b94f85227
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t9
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a16820-2b87-7c53-9bb1-676804d87fd4/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2de1-7c51-9f2f-d64870812414
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        id: rs_9c49380ef26d9800
+        status: completed
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_bbe8b713e5898ffa
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_01a16820-2e29-7993-80a9-0eddbfed3890
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-30a6-7831-9ba0-b47b94f85227
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to reply with only the word "ORCHID".
+
+            '
+          type: reasoning_text
+        id: rs_b74e1e323184327f
+        status: completed
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_b65d8e89158b45ee
+        role: assistant
+        status: completed
+        type: message
+      first_id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+      has_more: false
+      last_id: msg_b65d8e89158b45ee
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t10
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/conversations/conv_01a16820-2b87-7c53-9bb1-676804d87fd4/items/msg_01a16820-2e29-7993-80a9-0eddbfed3890
+    query_params: {}
+  response:
+    body:
+      created_at: 1792748301
+      id: conv_01a16820-2b87-7c53-9bb1-676804d87fd4
+      metadata: {}
+      object: conversation
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t11
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-2e87-7210-8e58-c1e51d100a74/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2de1-7c51-9f2f-d64870812414
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        id: rs_9c49380ef26d9800
+        status: completed
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_bbe8b713e5898ffa
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_01a16820-2e29-7993-80a9-0eddbfed3890
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-30a6-7831-9ba0-b47b94f85227
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+      has_more: false
+      last_id: msg_01a16820-30a6-7831-9ba0-b47b94f85227
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t12
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-2b9b-7410-a0cb-696c5bb1db8c/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2de1-7c51-9f2f-d64870812414
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+      has_more: false
+      last_id: msg_01a16820-2de1-7c51-9f2f-d64870812414
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t13
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/responses/resp_01a16820-2b9b-7410-a0cb-696c5bb1db8c
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: resp_01a16820-2b9b-7410-a0cb-696c5bb1db8c
+      object: response.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t14
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-2e87-7210-8e58-c1e51d100a74/input_items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2de1-7c51-9f2f-d64870812414
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        id: rs_9c49380ef26d9800
+        status: completed
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_bbe8b713e5898ffa
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_01a16820-2e29-7993-80a9-0eddbfed3890
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-30a6-7831-9ba0-b47b94f85227
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+      has_more: false
+      last_id: msg_01a16820-30a6-7831-9ba0-b47b94f85227
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t15
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/conversations/conv_01a16820-2b87-7c53-9bb1-676804d87fd4/items
+    query_params:
+      order: asc
+  response:
+    body:
+      data:
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2de1-7c51-9f2f-d64870812414
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        id: rs_9c49380ef26d9800
+        status: completed
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_bbe8b713e5898ffa
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-30a6-7831-9ba0-b47b94f85227
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to reply with only the word "ORCHID".
+
+            '
+          type: reasoning_text
+        id: rs_b74e1e323184327f
+        status: completed
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_b65d8e89158b45ee
+        role: assistant
+        status: completed
+        type: message
+      first_id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+      has_more: false
+      last_id: msg_b65d8e89158b45ee
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t16
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-2e87-7210-8e58-c1e51d100a74
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748302
+      conversation:
+        id: conv_01a16820-2b87-7c53-9bb1-676804d87fd4
+      created_at: 1792748302
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a16820-2e87-7210-8e58-c1e51d100a74
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to reply with only the word "ORCHID".
+
+            '
+          type: reasoning_text
+        id: rs_b74e1e323184327f
+        status: completed
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_b65d8e89158b45ee
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 110
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 22
+        output_tokens_details:
+          reasoning_tokens: 16
+        total_tokens: 132
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t17
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: DELETE
+    path: /v1/conversations/conv_01a16820-2b87-7c53-9bb1-676804d87fd4
+    query_params: {}
+  response:
+    body:
+      deleted: true
+      id: conv_01a16820-2b87-7c53-9bb1-676804d87fd4
+      object: conversation.deleted
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t18
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-2e87-7210-8e58-c1e51d100a74/input_items
+    query_params: {}
+  response:
+    body:
+      data:
+      - content:
+        - text: Reply with only ORCHID.
+          type: input_text
+        id: msg_01a16820-30a6-7831-9ba0-b47b94f85227
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Now remember ORCHID.
+          type: input_text
+        id: msg_01a16820-2e29-7993-80a9-0eddbfed3890
+        role: user
+        status: completed
+        type: message
+      - content:
+        - annotations: []
+          text: '
+
+
+            SAPPHIRE'
+          type: output_text
+        id: msg_bbe8b713e5898ffa
+        role: assistant
+        status: completed
+        type: message
+      - content:
+        - text: 'The user wants me to reply with only the word "SAPPHIRE".
+
+            '
+          type: reasoning_text
+        id: rs_9c49380ef26d9800
+        status: completed
+        summary: []
+        type: reasoning
+      - content:
+        - text: Reply with only SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2de1-7c51-9f2f-d64870812414
+        role: user
+        status: completed
+        type: message
+      - content:
+        - text: Remember SAPPHIRE.
+          type: input_text
+        id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+        role: user
+        status: completed
+        type: message
+      first_id: msg_01a16820-30a6-7831-9ba0-b47b94f85227
+      has_more: false
+      last_id: msg_01a16820-2b91-7bf0-8ac3-76392132d0d8
+      object: list
+    headers:
+      content-type: application/json
+    status_code: 200
+- filename: t19
+  request:
+    body: {}
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      user-agent: python-httpx/0.28.1
+    method: GET
+    path: /v1/responses/resp_01a16820-2e87-7210-8e58-c1e51d100a74
+    query_params: {}
+  response:
+    body:
+      background: false
+      completed_at: 1792748302
+      conversation:
+        id: conv_01a16820-2b87-7c53-9bb1-676804d87fd4
+      created_at: 1792748302
+      error: null
+      frequency_penalty: 0.0
+      id: resp_01a16820-2e87-7210-8e58-c1e51d100a74
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: null
+      max_tool_calls: null
+      metadata: {}
+      model: Qwen/Qwen3.8-27B-FP8
+      object: response
+      output:
+      - content:
+        - text: 'The user wants me to reply with only the word "ORCHID".
+
+            '
+          type: reasoning_text
+        id: rs_b74e1e323184327f
+        status: completed
+        summary: []
+        type: reasoning
+      - content:
+        - annotations: []
+          text: '
+
+
+            ORCHID'
+          type: output_text
+        id: msg_b65d8e89158b45ee
+        role: assistant
+        status: completed
+        type: message
+      parallel_tool_calls: false
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_options: null
+      reasoning: null
+      safety_identifier: null
+      service_tier: auto
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+      tool_choice: auto
+      tools: []
+      top_logprobs: 0
+      top_p: 1.0
+      truncation: disabled
+      usage:
+        input_tokens: 110
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 22
+        output_tokens_details:
+          reasoning_tokens: 16
+        total_tokens: 132
+    headers:
+      content-type: application/json
+    status_code: 200

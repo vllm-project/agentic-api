@@ -209,7 +209,7 @@ async fn store_false_continuation_of_a_stored_response_is_not_retained() {
     let orphaned = create(json!({"model":"test-model", "input":"third", "store":true,
         "previous_response_id":child_id}))
     .await;
-    assert_eq!(orphaned.status(), StatusCode::NOT_FOUND);
+    assert_eq!(orphaned.status(), StatusCode::BAD_REQUEST);
     assert!(orphaned.json::<Value>().await.unwrap().get("error").is_some());
     assert_eq!(
         requests.lock().unwrap().len(),
@@ -264,4 +264,92 @@ async fn retrieval_allows_unauthenticated_access_without_configured_authenticati
         let _ = gateway.await;
         exec.storage_pool().unwrap().close().await;
     }
+}
+
+#[tokio::test]
+async fn deleting_a_response_keeps_its_descendants_and_ends_its_own_continuations() {
+    let (upstream, requests) = response_retrieval_upstream();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mut config = common::test_config(&format!("http://{}", listener.local_addr().unwrap()));
+    let upstream = tokio::spawn(async move { axum::serve(listener, upstream).await.unwrap() });
+    config.db_url = Some("sqlite://?mode=memory".into());
+    let exec = Arc::new(ExecutionContext::from_config(&config).await.unwrap());
+    let mut state = common::test_state(&config);
+    state.exec_ctx = Arc::clone(&exec);
+    let (url, gateway) = common::spawn_gateway(state).await;
+    let client = reqwest::Client::new();
+    let create = |body: Value| {
+        let request = client.post(format!("{url}/v1/responses")).json(&body);
+        async move { request.send().await.unwrap() }
+    };
+    let delete = |id: &str| {
+        let request = client
+            .delete(format!("{url}/v1/responses/{id}"))
+            .bearer_auth("test-key");
+        async move { request.send().await.unwrap() }
+    };
+    let retrieve = |id: &str| {
+        let request = client.get(format!("{url}/v1/responses/{id}")).bearer_auth("test-key");
+        async move { request.send().await.unwrap() }
+    };
+
+    let parent: Value = create(json!({"model":"test-model", "input":"first", "store":true}))
+        .await
+        .json()
+        .await
+        .unwrap();
+    let parent_id = parent["id"].as_str().unwrap();
+    let child: Value = create(json!({"model":"test-model", "input":"second", "store":true,
+        "previous_response_id":parent_id}))
+    .await
+    .json()
+    .await
+    .unwrap();
+    let child_id = child["id"].as_str().unwrap();
+
+    // Deletion reads local storage, so it carries the same credential check as retrieval.
+    let denied = client
+        .delete(format!("{url}/v1/responses/{parent_id}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(retrieve(parent_id).await.status(), StatusCode::OK);
+
+    let deleted = delete(parent_id).await;
+    assert_eq!(deleted.status(), StatusCode::OK);
+    assert_eq!(
+        deleted.json::<Value>().await.unwrap(),
+        json!({"id":parent_id, "object":"response.deleted", "deleted":true})
+    );
+    assert_eq!(retrieve(parent_id).await.status(), StatusCode::NOT_FOUND);
+    assert_eq!(delete(parent_id).await.status(), StatusCode::NOT_FOUND);
+    assert_eq!(delete("resp_missing").await.status(), StatusCode::NOT_FOUND);
+
+    // The deleted response can no longer be continued, and no inference runs for it.
+    let orphaned = create(json!({"model":"test-model", "input":"third", "store":true,
+        "previous_response_id":parent_id}))
+    .await;
+    // OpenAI reports a missing continuation as an invalid previous_response_id.
+    assert_eq!(orphaned.status(), StatusCode::BAD_REQUEST);
+    let body = orphaned.json::<Value>().await.unwrap();
+    assert!(body["error"].is_object(), "{body}");
+    assert_eq!(requests.lock().unwrap().len(), 2);
+
+    // OpenAI keeps the child's snapshot but excludes the deleted parent's turn
+    // from subsequent inference (recorded in the Responses lifecycle suite).
+    let retrieved = retrieve(child_id).await;
+    assert_eq!(retrieved.status(), StatusCode::OK);
+    assert_eq!(retrieved.json::<Value>().await.unwrap(), child);
+    let grandchild = create(json!({"model":"test-model", "input":"third", "store":true,
+        "previous_response_id":child_id}))
+    .await;
+    assert_eq!(grandchild.status(), StatusCode::OK);
+    assert_eq!(input_texts(&requests.lock().unwrap()[2]), ["second", "answer", "third"]);
+
+    upstream.abort();
+    let _ = upstream.await;
+    gateway.abort();
+    let _ = gateway.await;
+    exec.storage_pool().unwrap().close().await;
 }
