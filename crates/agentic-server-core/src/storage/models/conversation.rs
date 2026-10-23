@@ -68,10 +68,12 @@ pub async fn create(pool: &DbPool, id: &str) -> DbResult<Conversation> {
 /// Returns `DbResult::Err` if the database query fails.
 pub async fn get_or_create(pool: &DbPool, id: &str) -> DbResult<Conversation> {
     let now = utcnow_str();
+    // The no-op update makes `RETURNING` yield the existing row. PostgreSQL rejects an
+    // unqualified `created_at` here as ambiguous with `EXCLUDED.created_at`.
     sqlx::query_as::<_, Conversation>(
         "INSERT INTO conversations (id, created_at) \
          VALUES ($1, $2) \
-         ON CONFLICT (id) DO UPDATE SET created_at = created_at \
+         ON CONFLICT (id) DO UPDATE SET created_at = conversations.created_at \
          RETURNING *",
     )
     .bind(id)

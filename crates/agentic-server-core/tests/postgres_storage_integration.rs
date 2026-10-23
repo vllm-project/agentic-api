@@ -572,3 +572,52 @@ async fn postgres_lock_wait_is_bounded_without_blocking_other_conversations() {
     first_pool.close().await;
     second_pool.close().await;
 }
+
+#[tokio::test]
+#[ignore = "requires TEST_POSTGRES_URL pointing to an isolated PostgreSQL database"]
+async fn postgres_get_or_create_creates_then_returns_the_existing_conversation() {
+    let database_url = std::env::var("TEST_POSTGRES_URL").expect("TEST_POSTGRES_URL must be set");
+    let pool =
+        create_pool_with_schema_and_configs(Some(&database_url), SqliteConfig::default(), PostgresConfig::default())
+            .await
+            .expect("initialize PostgreSQL database");
+    let store = ConversationStore::new(pool.clone());
+    let conversation_id = format!("conv_postgres_{}", uuid::Uuid::now_v7());
+
+    // A stored Responses turn that names a conversation goes through this upsert first.
+    let created = store
+        .get_or_create(&conversation_id)
+        .await
+        .expect("create conversation on first use");
+    let response_id = format!("resp_postgres_{}", uuid::Uuid::now_v7());
+    store
+        .persist(
+            &conversation_id,
+            &response_id,
+            None,
+            vec![input_item("first turn")],
+            &ResponseMetadata::default(),
+        )
+        .await
+        .expect("persist turn");
+    let before = store
+        .rehydrate_snapshot(&conversation_id)
+        .await
+        .expect("rehydrate after first turn");
+
+    let existing = store
+        .get_or_create(&conversation_id)
+        .await
+        .expect("return the existing conversation");
+    assert_eq!(existing.conversation_id, created.conversation_id);
+    assert_eq!(existing.created_at, created.created_at);
+    let after = store
+        .rehydrate_snapshot(&conversation_id)
+        .await
+        .expect("rehydrate after second use");
+    assert_eq!(after.version, before.version);
+    assert_eq!(after.version.response_id.as_deref(), Some(response_id.as_str()));
+    assert_eq!(after.items.len(), 1);
+
+    pool.close().await;
+}
