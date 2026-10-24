@@ -1,5 +1,7 @@
 #[allow(dead_code)]
 mod common;
+#[path = "compaction/prompt_cache_breakpoints.rs"]
+mod prompt_cache_breakpoints;
 
 use std::collections::VecDeque;
 use std::future::Future;

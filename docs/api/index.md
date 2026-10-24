@@ -300,9 +300,8 @@ remain upstream pass-through, and standalone compaction objects do not echo opti
 | Automatic, trigger, and standalone compaction | Current request's options forwarded to summary inference | Loading a previous response does not inherit its options |
 
 This matrix contributes to [#314](https://github.com/vllm-project/agentic-api/issues/314)
-and [#330](https://github.com/vllm-project/agentic-api/issues/330). Qualification of all
-content-part breakpoint lifecycles, model-specific capability profiles, and
-upstream-reported cache diagnostics remain follow-ups.
+and [#330](https://github.com/vllm-project/agentic-api/issues/330).
+Model-specific capability profiles and upstream-reported cache diagnostics remain follow-ups.
 
 `prompt_cache_retention` accepts the legacy `"in_memory"` and `"24h"` values.
 An explicit value is forwarded through HTTP JSON/SSE, WebSocket execution,
@@ -335,6 +334,43 @@ differ from the requested value. The gateway does not select a tier or silently
 retry with another one. In multi-agent execution, the last root-agent inference
 round determines the returned tier; child-agent tiers do not override it, and a
 missing final root tier clears any earlier value.
+
+#### Content-part cache breakpoints
+
+The pinned SDK defines `prompt_cache_breakpoint: {"mode": "explicit"}` on
+[input text](https://github.com/openai/openai-python/blob/b7a1990353baec896ee5e04b40b9f2dc2925a4f5/src/openai/types/responses/response_input_text_param.py),
+[images](https://github.com/openai/openai-python/blob/b7a1990353baec896ee5e04b40b9f2dc2925a4f5/src/openai/types/responses/response_input_image_param.py), and
+[files](https://github.com/openai/openai-python/blob/b7a1990353baec896ee5e04b40b9f2dc2925a4f5/src/openai/types/responses/response_input_file_param.py).
+These are content-part fields, distinct from the request-scoped mode/TTL options.
+The gateway preserves them as content extensions; upstream support and validation
+remain required. It also forwards explicit `null` and future breakpoint values
+unchanged on supported parts, without interpreting them as valid cache policies.
+
+| Path or transformation | Breakpoint handling |
+| --- | --- |
+| Direct HTTP JSON/SSE | Original content passes through; upstream validation |
+| Typed HTTP JSON/SSE | Text/image part boundaries and order are preserved; no boundary is inserted on unmarked parts |
+| Stored and WebSocket history | Boundaries remain attached to restored content, including after a durable WebSocket reconnect or local `generate: false` completion |
+| Image defaults and client tool normalization | Adding image `detail: "auto"` or lowering custom outputs to function outputs preserves content extensions, including structured text/image/file tool outputs |
+| Gateway tool rounds and multi-agent history forks | Original text/image boundaries remain in every inference round that carries those items |
+| Standalone, automatic, and trigger compaction | Summary inference receives original boundaries; retained user parts keep theirs; boundaries on replaced content are not moved to the generated summary |
+| Inline UTF-8 text message files | Supported base64 `file_data` becomes model-facing `input_text` in place, retaining its cache breakpoint; canonical and stored history keep the original `input_file` |
+| Unsupported message files or unknown content on typed routes | File IDs/URLs, unsupported non-text files, invalid base64/UTF-8, and unknown content types are rejected before inference or storage; direct HTTP still passes them through |
+
+Text-file inlining prefixes decoded text with `File: <filename>` when a filename
+is present. Only the shared `prompt_cache_breakpoint` extension is carried onto the
+new text part; file-only extension fields stay on the original file in history.
+This preserves a boundary at the same content position, without claiming identical
+provider tokenization or cache reuse before and after conversion.
+
+Restoring a marked content part does not inherit its parent's top-level
+`prompt_cache_options`: repeat those options on a new request when needed.
+Explicit mode without breakpoints stays explicit and does not gain an implicit
+fallback. Compaction may replace the marked content; replay the complete compacted
+window rather than assuming the old prefix is still present. The gateway does not
+recalculate cache boundaries, move them to summaries, or establish cache hits.
+This matrix is covered with deterministic mock-upstream tests, without claims
+about live-model reuse or TTL enforcement.
 
 #### `max_tool_calls`
 
@@ -424,8 +460,8 @@ This matrix covers usage preservation under
 [#330](https://github.com/vllm-project/agentic-api/issues/330) and
 [#314](https://github.com/vllm-project/agentic-api/issues/314).
 The mode/TTL forwarding matrix above covers request preservation with an operator
-capability assertion. Full breakpoint qualification and model-specific backend
-capability enforcement remain separate acceptance items.
+capability assertion. The breakpoint matrix above covers content preservation and compaction behavior;
+model-specific backend capability enforcement remains a separate acceptance item.
 
 ### `GET /v1/responses/{response_id}`
 

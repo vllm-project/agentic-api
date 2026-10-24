@@ -111,17 +111,25 @@ impl TryFrom<&InputFileContent> for InputTextContent {
 
     fn try_from(file: &InputFileContent) -> Result<Self, Self::Error> {
         let text = String::from_utf8(file.decoded_bytes()?).map_err(|_| InputFileError::NotUtf8)?;
-        Ok(Self::new(match file.filename.as_deref() {
+        let mut content = Self::new(match file.filename.as_deref() {
             Some(filename) => format!("File: {filename}\n{text}"),
             None => text,
-        }))
+        });
+        // A cache boundary belongs to this content position after text inlining, too.
+        // Other file extensions may not apply to text (or may collide with `text`).
+        if let Some(breakpoint) = file.extra.get("prompt_cache_breakpoint") {
+            content
+                .extra
+                .insert("prompt_cache_breakpoint".to_owned(), breakpoint.clone());
+        }
+        Ok(content)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     fn file(fields: serde_json::Value) -> InputFileContent {
         serde_json::from_value(fields).unwrap()
@@ -292,6 +300,24 @@ mod tests {
         );
         let latin1 = format!("data:text/plain;base64,{}", encode(&[0x68, 0xe9, 0x6c]));
         assert_eq!(text(&data(&latin1, None)), Err(InputFileError::NotUtf8));
+    }
+
+    #[test]
+    fn inlining_preserves_cache_boundary_without_copying_file_only_extensions() {
+        for boundary in [None, Some(Value::Null), Some(json!({"mode":"explicit"}))] {
+            let mut fields = json!({"filename":"notes.txt", "file_data":"data:text/plain;base64,aGk=",
+                "text":"must not override decoded content", "file_extension":{"provider":"opaque"}});
+            if let Some(boundary) = &boundary {
+                fields["prompt_cache_breakpoint"] = boundary.clone();
+            }
+            let file = file(fields);
+            let original = serde_json::to_value(&file).unwrap();
+            let converted = InputTextContent::try_from(&file).unwrap();
+            assert_eq!(converted.text, "File: notes.txt\nhi");
+            assert_eq!(converted.extra.get("prompt_cache_breakpoint"), boundary.as_ref());
+            assert_eq!(converted.extra.len(), usize::from(boundary.is_some()));
+            assert_eq!(serde_json::to_value(&file).unwrap(), original);
+        }
     }
 
     #[test]

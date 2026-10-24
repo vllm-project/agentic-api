@@ -954,3 +954,66 @@ async fn unsupported_message_files_are_rejected_with_specific_reasons() {
         assert!(message.contains(reason), "{part}: {message}");
     }
 }
+
+#[tokio::test]
+async fn file_breakpoint_survives_text_inlining_and_durable_continuation() {
+    for transport in ["json", "sse", "websocket"] {
+        let fixture = Fixture::new().await;
+        let file = json!({"type":"input_file", "filename":"notes.txt",
+            "file_data":"data:text/plain;base64,aGk=",
+            "prompt_cache_breakpoint":{"mode":"explicit"}});
+        let payload = json!({"model":"test-model", "store":true, "input":user_input(&file),
+            "stream":transport == "sse"});
+        let parent = if transport == "websocket" {
+            let terminal = fixture.ws(payload).await;
+            assert_eq!(terminal["type"], "response.completed", "{terminal}");
+            terminal["response"].clone()
+        } else {
+            let (status, body) = fixture.post("/v1/responses", payload).await;
+            assert_eq!(status, reqwest::StatusCode::OK, "{body}");
+            if transport == "sse" {
+                body["raw"]
+                    .as_str()
+                    .unwrap()
+                    .lines()
+                    .filter_map(|line| line.strip_prefix("data: "))
+                    .filter_map(|data| serde_json::from_str::<Value>(data).ok())
+                    .find(|event| event["type"] == "response.completed")
+                    .expect("completed SSE response")["response"]
+                    .clone()
+            } else {
+                body
+            }
+        };
+        assert_eq!(fixture.stored_files().await, vec![file.clone()], "{transport}");
+        let (status, body) = fixture
+            .post(
+                "/v1/responses",
+                json!({"model":"test-model",
+            "store":false,"previous_response_id":parent["id"],"input":"continue"}),
+            )
+            .await;
+        assert_eq!(status, reqwest::StatusCode::OK, "{body}");
+        assert_eq!(
+            fixture.stored_files().await,
+            vec![file],
+            "history must remain input_file"
+        );
+        let captured = fixture.captured().await;
+        assert_eq!(captured.len(), 2, "{transport}");
+        for request in &captured {
+            let content = &request["input"][0]["content"];
+            assert_eq!(
+                content[0],
+                json!({"type":"input_text","text":"Summarize this document"})
+            );
+            assert_eq!(content[1]["type"], "input_text", "{request}");
+            assert_eq!(content[1]["text"], "File: notes.txt\nhi", "{request}");
+            assert_eq!(
+                content[1]["prompt_cache_breakpoint"],
+                json!({"mode":"explicit"}),
+                "{transport}: model-facing file lost its breakpoint: {request}"
+            );
+        }
+    }
+}

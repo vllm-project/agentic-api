@@ -587,6 +587,11 @@ access happen — those live in `tool/`, `executor/`, and `storage/` respectivel
   retained user messages and items after the checkpoint remain. This keeps rich
   continuation state available to orchestration without sending unsupported public
   item types to vLLM.
+  Message-file conversion belongs to `input/file_text.rs`: supported inline UTF-8
+  text files become model-facing text with their `prompt_cache_breakpoint` retained.
+  Canonical history keeps the original file; unrelated file extensions are not copied
+  onto the text part.
+
 - **`types/io/item.rs`** — `InOutItem` is the shared input/output union used by
   `ResponsesInput::Items`, conversation requests/resources, and retained history.
   Submitted history is decoded through the derived `InputItem` decoder, including

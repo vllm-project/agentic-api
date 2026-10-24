@@ -1,5 +1,7 @@
 #[allow(dead_code)]
 mod common;
+#[path = "responses_websocket/prompt_cache_breakpoints.rs"]
+mod prompt_cache_breakpoints;
 #[path = "responses_websocket/prompt_cache_options.rs"]
 mod prompt_cache_options;
 

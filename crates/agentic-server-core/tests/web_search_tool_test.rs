@@ -1219,8 +1219,14 @@ async fn prompt_cache_options_survive_every_gateway_tool_round() {
             .responses_config
             .prompt_cache_options_supported = true;
         let options = serde_json::json!({"mode":"explicit","ttl":"30m"});
+        let parts = serde_json::json!([
+            {"type":"input_text","text":"look up rust async","prompt_cache_breakpoint":{"mode":"explicit"}},
+            {"type":"input_image","image_url":"data:image/png;base64,AQ==","detail":"auto",
+                "prompt_cache_breakpoint":{"mode":"explicit"}},
+            {"type":"input_text","text":"unmarked suffix"}
+        ]);
         let request: RequestPayload = serde_json::from_value(serde_json::json!({
-            "model":"test-model", "input":"look up rust async", "store":true, "stream":stream,
+            "model":"test-model", "input":[{"role":"user","content":parts}], "store":true, "stream":stream,
             "tools":[{"type":"web_search_preview"}], "prompt_cache_options":options, "prompt_cache_retention":"24h"
         }))
         .unwrap();
@@ -1236,6 +1242,7 @@ async fn prompt_cache_options_survive_every_gateway_tool_round() {
         let requests = model.request_bodies().await;
         assert_eq!(requests.len(), 2);
         for request in &requests {
+            assert_eq!(request["input"][0]["content"], parts);
             assert_eq!(request["prompt_cache_options"], options);
             assert_eq!(request["prompt_cache_retention"], "24h");
         }

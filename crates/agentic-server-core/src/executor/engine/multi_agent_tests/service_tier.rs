@@ -12,6 +12,13 @@ async fn tier_model(
             assert_eq!(request["service_tier"], "priority");
             if cache_options {
                 assert_eq!(request["prompt_cache_options"], json!({"mode":"explicit","ttl":"30m"}));
+                let prefix = request["input"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|item| item["role"] == "user")
+                    .unwrap();
+                assert_eq!(prefix["content"], marked_prefix());
                 assert_eq!(request["prompt_cache_retention"], "24h");
             } else {
                 assert_eq!(request["prompt_cache_retention"], "24h");
@@ -113,7 +120,11 @@ async fn final_root_tier_controls_json_sse_and_stored_snapshot() {
                     prompt_cache_retention: Some(crate::types::request_response::PromptCacheRetention::TwentyFourHours),
                     prompt_cache_options: cache_options
                         .then(|| serde_json::from_value(json!({"mode":"explicit","ttl":"30m"})).unwrap()),
-                    input: ResponsesInput::Text("review context".into()),
+                    input: if cache_options {
+                        serde_json::from_value(json!([{"role":"user","content":marked_prefix()}])).unwrap()
+                    } else {
+                        ResponsesInput::Text("review context".into())
+                    },
                     multi_agent: Some(MultiAgentConfig {
                         enabled: true,
                         max_concurrent_subagents: Some(1),
@@ -177,4 +188,13 @@ async fn final_root_tier_controls_json_sse_and_stored_snapshot() {
             }
         }
     }
+}
+
+fn marked_prefix() -> Value {
+    json!([
+        {"type":"input_text","text":"review context","prompt_cache_breakpoint":{"mode":"explicit"}},
+        {"type":"input_image","image_url":"data:image/png;base64,AQ==","detail":"auto",
+            "prompt_cache_breakpoint":{"mode":"explicit"}},
+        {"type":"input_text","text":"unmarked suffix"}
+    ])
 }

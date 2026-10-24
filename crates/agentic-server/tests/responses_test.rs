@@ -1,4 +1,6 @@
 mod common;
+#[path = "responses/prompt_cache_breakpoints.rs"]
+mod prompt_cache_breakpoints;
 #[path = "responses/prompt_cache_options.rs"]
 mod prompt_cache_options;
 
