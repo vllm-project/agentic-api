@@ -1448,10 +1448,22 @@ constants (`MAX_GATEWAY_TOOL_ROUNDS`, `GATEWAY_TOOL_TIMEOUT`) are duplicated and
 manually kept in sync with the Responses-side ones rather than shared — a known seam,
 not an oversight, per the future-consolidation note.
 
-The JSON and SSE loops read a model turn differently but dispatch its gateway calls
-through one function, `messages_tools.rs`'s `execute_gateway_calls`, so admission,
-execution, and the fed-back `tool_result`s cannot differ between them. Calls are
-admitted sequentially in model order before any of them starts, then execute through
+The JSON and SSE loops read a model turn differently but use `messages_round.rs`
+for the completed round's decision: continue with gateway-executed tools, return
+client-executed function calls, or finish. That policy also owns the client-call
+`end_turn` correction. SSE ingestion must establish completion before consulting
+it; partial or invalid rounds never execute tools. Text still streams during
+ingestion rather than waiting for the decision.
+
+Both paths dispatch `types/messages/tool_call.rs`'s `MessagesToolCall` through
+`messages_tools.rs`'s `execute_gateway_calls`, so admission, execution, and the
+fed-back `tool_result`s cannot differ between them. Streamed arguments are parsed
+once when consuming the buffered block; history and execution share that input,
+with a typed error retained independently of the legacy empty history fallback.
+Opaque history fields and block order are preserved. Budget admission and
+history/tool-choice mutation keep their existing owners.
+
+Calls are admitted sequentially in model order before any of them starts, then execute through
 the same permit-acquisition path as Responses. Each round has a fresh window of
 `tools.max_concurrent_gateway_calls` executions (default 5). Calls acquire their
 binding's same-tool exclusion before a round slot, then a materialization permit from

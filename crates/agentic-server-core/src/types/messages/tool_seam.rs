@@ -210,13 +210,9 @@ pub fn tool_result_block(tool_use_id: &str, output: String, is_error: bool) -> G
 /// # Errors
 /// Returns a human-readable reason when the input is not a valid JSON object.
 pub fn parse_tool_input(input_json: &str) -> Result<Value, String> {
-    let value: Value =
-        serde_json::from_str(input_json).map_err(|e| format!("could not parse tool arguments as JSON: {e}"))?;
-    if value.is_object() {
-        Ok(value)
-    } else {
-        Err("tool arguments must be a JSON object".to_owned())
-    }
+    super::tool_call::parse_input(input_json)
+        .map(Value::Object)
+        .map_err(|error| error.to_string())
 }
 
 /// Split an assistant turn's content blocks into (client-visible, gateway
