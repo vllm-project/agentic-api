@@ -156,9 +156,15 @@ async fn unsupported_marked_parts_are_rejected_before_inference_and_storage() {
         .responses_config
         .prompt_cache_options_supported = true;
     let (url, gateway) = spawn_gateway(fixture.state.clone()).await;
-    for part in [
-        json!({"type":"input_file","file_id":"file_test","prompt_cache_breakpoint":{"mode":"explicit"}}),
-        json!({"type":"future_part","prompt_cache_breakpoint":{"mode":"explicit"}}),
+    for (part, reason) in [
+        (
+            json!({"type":"input_file","file_id":"file_test","prompt_cache_breakpoint":{"mode":"explicit"}}),
+            "input_file with file_id is not supported",
+        ),
+        (
+            json!({"type":"future_part","prompt_cache_breakpoint":{"mode":"explicit"}}),
+            "message content part type `future_part` is not supported",
+        ),
     ] {
         for store in [false, true] {
             let response = reqwest::Client::new()
@@ -168,23 +174,14 @@ async fn unsupported_marked_parts_are_rejected_before_inference_and_storage() {
                 .send()
                 .await
                 .unwrap();
-            assert_eq!(
-                response.status(),
-                if store { StatusCode::BAD_REQUEST } else { StatusCode::OK }
-            );
-            let _: Value = response.json().await.unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "store={store}");
+            let body: Value = response.json().await.unwrap();
+            let message = body["error"]["message"].as_str().unwrap();
+            assert!(message.contains(reason), "store={store}: {message}");
         }
     }
     let requests = captured.lock().await;
-    assert_eq!(requests.len(), 2, "only direct requests reach the upstream");
-    assert_eq!(requests[0]["input"][0]["content"][0]["type"], "input_file");
-    assert_eq!(requests[1]["input"][0]["content"][0]["type"], "future_part");
-    for request in requests.iter() {
-        assert_eq!(
-            request["input"][0]["content"][0]["prompt_cache_breakpoint"],
-            json!({"mode":"explicit"})
-        );
-    }
+    assert!(requests.is_empty(), "invalid parts must not reach the upstream");
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM responses")
             .fetch_one(fixture.pool.as_ref())

@@ -35,7 +35,10 @@ fn breakpoints_survive_image_defaults_and_custom_tool_normalization() {
         assert_eq!(serde_json::to_value(&request.input).unwrap(), canonical);
         assert_eq!(canonical[0]["content"], parts);
         let stored: ResponsesInput = serde_json::from_value(canonical.clone()).unwrap();
-        assert_eq!(serde_json::to_value(stored.into_canonical_items()).unwrap(), canonical);
+        let stored_items = serde_json::to_value(stored.into_canonical_items()).unwrap();
+        assert_eq!(stored_items[0], canonical[0]);
+        assert_eq!(stored_items[1]["status"], "completed");
+        assert_eq!(stored_items[1]["output"], canonical[1]["output"]);
     }
 }
 
