@@ -1,3 +1,5 @@
+#[path = "responses/capability_contract.rs"]
+mod capability_contract;
 mod common;
 #[path = "responses/prompt_cache_breakpoints.rs"]
 mod prompt_cache_breakpoints;
