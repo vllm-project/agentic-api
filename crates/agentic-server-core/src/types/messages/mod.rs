@@ -7,6 +7,7 @@
 //! the handler, the loop, and the tool seam.
 
 pub mod request;
+pub(crate) mod tool_call;
 pub mod tool_choice;
 pub mod tool_seam;
 pub mod tools;

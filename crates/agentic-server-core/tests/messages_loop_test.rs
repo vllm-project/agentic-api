@@ -30,7 +30,64 @@ use serde_json::Value;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
+mod messages_round_cases;
 mod support;
+
+#[tokio::test]
+async fn json_round_decisions_preserve_execution_history_and_terminal_policy() {
+    for case in messages_round_cases::cases() {
+        let message = case.message();
+        let (vllm_url, upstream, _v) =
+            spawn_mock_vllm_messages(vec![message, messages_round_cases::final_message()]).await;
+        let (search_url, mut captured, _s) = spawn_mock_search().await;
+        let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
+        let request = case.request(false);
+        let tools = serde_json::from_value(request["tools"].clone()).unwrap();
+        let registry = build_tool_registry(&tools, &exec_ctx).await;
+        let result = run_test_messages_loop(request, &registry, &exec_ctx).await.unwrap();
+        assert_eq!(
+            upstream.calls.load(Ordering::SeqCst),
+            1 + case.searches,
+            "{}",
+            case.label
+        );
+        let mut searches = Vec::new();
+        while let Ok(search) = captured.try_recv() {
+            searches.push(search);
+        }
+        assert_eq!(searches.len(), case.searches, "{}", case.label);
+        assert_eq!(result["stop_reason"].as_str(), case.visible_stop, "{}", case.label);
+        let visible = result["content"].as_array().unwrap();
+        assert!(
+            !visible.iter().any(|block| block["name"] == "web_search"),
+            "{}",
+            case.label
+        );
+        assert_eq!(
+            visible.iter().any(|block| block["id"] == "c1"),
+            case.client,
+            "{}",
+            case.label
+        );
+        if case.searches == 1 {
+            assert_eq!(searches[0].body["query"], "rust \"你好\"\nrelease", "{}", case.label);
+            let requests = upstream.requests.lock().await;
+            assert_eq!(
+                requests[1]["messages"][1]["content"],
+                serde_json::json!(case.content),
+                "{}",
+                case.label
+            );
+            assert_eq!(
+                requests[1]["messages"][2]["content"][0]["tool_use_id"], "g1",
+                "{}",
+                case.label
+            );
+            assert_eq!(result["usage"]["input_tokens"], 12, "{}", case.label);
+            assert_eq!(result["usage"]["output_tokens"], 5, "{}", case.label);
+        }
+    }
+}
 
 const CASSETTE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),

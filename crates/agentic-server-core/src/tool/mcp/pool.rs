@@ -71,10 +71,17 @@ impl McpClientPool {
             .iter()
             .filter_map(|param| server_entry_from_param(param, allowed_hosts))
             .collect();
-        Self::from_config(servers).await
+        // Request-declared servers are third parties: no trace context or baggage.
+        Self::connect_all(servers, false).await
     }
 
+    /// Connect the servers an operator configured. They are trusted with the
+    /// caller's trace context and baggage.
     pub async fn from_config(servers: HashMap<String, McpServerEntry>) -> Self {
+        Self::connect_all(servers, true).await
+    }
+
+    async fn connect_all(servers: HashMap<String, McpServerEntry>, propagate_trace_context: bool) -> Self {
         let mut clients = HashMap::with_capacity(servers.len());
         let mut connection_errors = HashMap::new();
 
@@ -90,6 +97,13 @@ impl McpClientPool {
                 } => McpClient::connect_stdio(&command, &args, env.as_ref(), cwd.as_deref()).await,
             };
 
+            let result = result.map(|client| {
+                if propagate_trace_context {
+                    client.with_trace_context_propagation()
+                } else {
+                    client
+                }
+            });
             match result {
                 Ok(client) => {
                     clients.insert(server_label, Arc::new(client));
