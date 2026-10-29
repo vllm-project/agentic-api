@@ -7,7 +7,7 @@ impl OutputMessage {
     /// Empty-ID allocation remains owned by ingestion; upstream lookup keys
     /// are retained separately from the public response projection.
     pub(crate) fn normalize_public_id(id: &mut String) {
-        if !id.is_empty() && !id.starts_with("msg") {
+        if !id.is_empty() && !id.starts_with("msg_") {
             id.insert_str(0, "msg_");
         }
     }

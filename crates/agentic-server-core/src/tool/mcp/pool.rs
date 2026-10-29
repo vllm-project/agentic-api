@@ -71,7 +71,11 @@ impl McpClientPool {
             .iter()
             .filter_map(|param| server_entry_from_param(param, allowed_hosts))
             .collect();
-        // Request-declared servers are third parties: no trace context or baggage.
+        Self::from_request_entries(servers).await
+    }
+
+    /// Connect validated request-declared servers without trace context or baggage.
+    pub(crate) async fn from_request_entries(servers: HashMap<String, McpServerEntry>) -> Self {
         Self::connect_all(servers, false).await
     }
 

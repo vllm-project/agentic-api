@@ -1,4 +1,4 @@
-//! Route standard client-supplied history into the current request's agent contexts.
+//! Route resolved history into the current request's agent contexts.
 //! This reads public items; it does not load storage or accept a tree snapshot.
 
 use super::context::RestoredAgents;
@@ -29,12 +29,12 @@ impl RestoredAgents {
         budget: &ExecutorResponseBudget,
         max_bytes: usize,
     ) -> ExecutorResult<()> {
-        let bytes = serialized_size_up_to(&request.new_input_items, max_bytes)
+        let bytes = serialized_size_up_to(&request.enriched_request.input, max_bytes)
             .map_err(ExecutorError::JsonError)?
             .ok_or_else(|| invalid("multi-agent input exceeds the retained-byte limit"))?;
         budget.consume(bytes)?;
         let sealer = TranscriptSealer::new()?;
-        let input: Vec<_> = request.new_input_items.iter().filter_map(InOutItem::as_input).collect();
+        let input: Vec<_> = request.enriched_request.input.input_items().collect();
         let mut calls = HashMap::new();
         let mut outputs = HashMap::new();
         for item in &input {

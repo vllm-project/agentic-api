@@ -13,6 +13,54 @@ fn request(stream: bool) -> RequestPayload {
 }
 
 #[tokio::test]
+async fn attributed_continuation_preserves_resolved_single_agent_history() {
+    for conversation in [false, true] {
+        for stream in [false, true] {
+            let (exec, server) = setup().await;
+            let mut seed = request(false);
+            seed.store = true;
+            seed.multi_agent = None;
+            if conversation {
+                seed.conversation = Some(exec.conv_handler.create().await.unwrap().conversation_id);
+            }
+            let previous = response(seed.clone(), exec.clone()).await;
+            let mut continuation = request(stream);
+            continuation.conversation = seed.conversation;
+            if !conversation {
+                continuation.previous_response_id = Some(previous.id);
+            }
+            continuation.input = serde_json::from_value(json!([{
+                "type":"agent_message", "author":"/root", "recipient":"/root",
+                "content":[{"type":"input_text", "text":"new attributed input"}]
+            }]))
+            .unwrap();
+            let mut ctx = rehydrate_conversation(continuation.clone(), &exec).await.unwrap();
+            assert!(ctx.multi_agent_tree.is_none());
+            let restored = restore_agents(&mut ctx, &exec, &ExecutorResponseBudget::new()).unwrap();
+            let root = restored.agents.iter().find(|agent| agent.identity.is_root()).unwrap();
+            let history = serde_json::to_value(&root.history).unwrap();
+            let items = history.as_array().unwrap();
+            assert!(
+                items
+                    .iter()
+                    .any(|item| has_message_text(item, "simple compaction test")),
+                "attributed input must preserve the resolved user history"
+            );
+            assert!(items.iter().any(|item| has_message_text(item, "finished")));
+            assert!(items.iter().any(|item| item["content"].as_array().is_some_and(|parts| {
+                parts
+                    .iter()
+                    .any(|part| part["type"] == "input_text" && part["text"] == "new attributed input")
+            })));
+            let completed = response(continuation, exec.clone()).await;
+            assert_eq!(completed.status, "completed");
+            assert!(exec.resp_handler.retrieve(&completed.id).await.is_err());
+            server.abort();
+        }
+    }
+}
+
+#[tokio::test]
 async fn complete_history_runs_without_a_synthetic_checkpoint() {
     for stream in [false, true] {
         let (exec, server) = setup().await;

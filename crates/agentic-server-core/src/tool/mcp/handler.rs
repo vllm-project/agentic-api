@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 use rmcp::model::{Tool, ToolAnnotations};
 use serde_json::Value;
-use tokio::sync::OnceCell;
 
 use crate::tool::declaration::ToolDeclaration;
 use crate::tool::handler::MAX_GATEWAY_TOOL_OUTPUT_BYTES;
@@ -21,7 +20,7 @@ use crate::types::tools::{McpDiscoveredToolParam, McpToolParam};
 use crate::utils::common::{deserialize_from_str, deserialize_from_str_opt, serialize_to_string};
 use crate::utils::uuid7_str;
 
-use super::{McpClient, McpError, McpServerEntry};
+use super::{McpClient, McpError};
 use connection::McpConnection;
 
 #[must_use]
@@ -94,11 +93,13 @@ pub(crate) struct McpServerToolSet {
 }
 
 impl McpHandler {
-    /// Reuse the latest successful listing that covers the current request's allowed tools.
-    pub(crate) fn reusable_listing<'a>(history: &'a ResponsesInput, param: &McpToolParam) -> Option<&'a McpListTools> {
+    /// Reuse a successful listing that covers an explicit allowed set.
+    /// Without a restriction, public history cannot prove catalog completeness.
+    pub(crate) fn reusable_listing(history: &ResponsesInput, param: &McpToolParam) -> Option<McpListTools> {
         let ResponsesInput::Items(items) = history else {
             return None;
         };
+        let allowed = param.allowed_tools.as_ref()?;
         items.iter().rev().find_map(|item| {
             let (InOutItem::Input(InputItem::McpListTools(listing))
             | InOutItem::Output(OutputItem::McpListTools(listing))) = item
@@ -107,12 +108,10 @@ impl McpHandler {
             };
             (listing.server_label == param.server_label.trim()
                 && listing.error.is_none()
-                && param.allowed_tools.as_ref().is_none_or(|allowed| {
-                    allowed
-                        .iter()
-                        .all(|name| listing.tools.iter().any(|tool| &tool.name == name))
-                }))
-            .then_some(listing)
+                && allowed
+                    .iter()
+                    .all(|name| listing.tools.iter().any(|tool| &tool.name == name)))
+            .then(|| listing.clone())
         })
     }
 
@@ -135,30 +134,6 @@ impl McpHandler {
             }
         }
         Ok(())
-    }
-
-    #[must_use]
-    pub const fn discovered_tool_spec_only() -> Self {
-        Self {
-            connection: McpConnection::SpecOnly,
-        }
-    }
-
-    #[must_use]
-    pub fn tool_call(client: Arc<McpClient>) -> Self {
-        Self {
-            connection: McpConnection::Ready(client),
-        }
-    }
-
-    /// A retained listing needs schemas now, but a connection only if a tool is called.
-    pub(crate) fn deferred(entry: McpServerEntry) -> Self {
-        Self {
-            connection: McpConnection::Deferred {
-                entry: Box::new(entry),
-                client: OnceCell::new(),
-            },
-        }
     }
 
     /// Discovers and normalizes the tools exposed by one MCP server.
@@ -213,7 +188,7 @@ impl McpHandler {
         param: &McpToolParam,
         handler: &Arc<Self>,
         allowed_tools: Option<&[String]>,
-        listing: Option<&McpListTools>,
+        listing: Option<McpListTools>,
     ) -> Result<McpServerToolSet, ToolError> {
         let server_label = param.server_label.trim();
         if !param.discovered_tools.is_empty() {
@@ -226,7 +201,13 @@ impl McpHandler {
                     handler: Arc::clone(handler),
                 })
                 .collect();
-            return Ok(Self::server_tool_set_from_handlers(server_label, handlers));
+            return Ok(match listing {
+                Some(listing) => McpServerToolSet {
+                    discovered_handlers: handlers,
+                    list_tools_item: listing,
+                },
+                None => Self::server_tool_set_from_handlers(server_label, handlers),
+            });
         }
         let Some(listing) = listing else {
             let client = Arc::clone(handler.connection.client(server_label).await?);
@@ -252,10 +233,11 @@ impl McpHandler {
             })
             .collect::<Result<Vec<_>, ToolError>>()?;
         let handlers = Self::handlers_from_tools(server_label, handler, tools, allowed_tools);
-        let mut tool_set = Self::server_tool_set_from_handlers(server_label, handlers);
         // Retain discovery provenance; only the callable handlers use current authorization.
-        tool_set.list_tools_item = listing.clone();
-        Ok(tool_set)
+        Ok(McpServerToolSet {
+            discovered_handlers: handlers,
+            list_tools_item: listing,
+        })
     }
 
     #[must_use]

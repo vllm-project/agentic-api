@@ -1129,6 +1129,9 @@ input without loading stored state or decoding a tree snapshot. The coordinator'
 `history.rs` processes standard collaboration items, agent attribution and client tool
 outputs using the existing registry, mailbox and pending-call types. It constructs
 request-local agent contexts and resolves each client output by call ID and kind.
+When enabling multi-agent on a stored single-agent response or conversation,
+attributed input is processed together with the complete resolved history, so
+earlier user and assistant items remain available.
 There is no private replay envelope or mandatory compaction at the response boundary.
 Actual automatic per-agent compaction remains separate. Explicit stored parent IDs and
 conversations can still restore an internal tree; `store:false` leaves the new turn unstored.
@@ -1936,8 +1939,12 @@ the operator enables it, and Eryx runtime readiness succeeds.
   `server_label`. Registry construction accepts the response's discovery history
   before materialization, so restored children can reuse the root's successful
   listing even when their forked message context omits it. Current declarations
-  and allowlists still validate the tools exposed for execution. Equivalent
-  successful listings are suppressed in JSON and SSE; failed or changed discovery
+  and allowlists still validate the tools exposed for execution. Reusable
+  retained listings must cover an explicit `allowed_tools` set. Removing that
+  restriction cannot prove a public listing is complete, so request-declared
+  servers rediscover their catalog; configured servers can use their authoritative
+  discovery cache. Expanding a restriction beyond the listing also rediscovers.
+  Equivalent successful listings are suppressed in JSON and SSE; failed or changed discovery
   remains visible. Streaming clears the lifecycle records after their first emission.
   Returned public `mcp_call` history uses the common model-input conversion to
   recover its function-call/result pair using the current discovered binding,
@@ -1952,8 +1959,11 @@ the operator enables it, and Eryx runtime readiness succeeds.
   With a retained successful listing, their connection is established only when
   a tool is invoked, so a passive continuation neither reconnects nor lists tools.
   `McpHandler` distinguishes spec-only, connected, and lazy connection states;
-  members of a restored server share its initialization cell. Fresh discovery
-  remains eager. Client-returned schemas stay request-scoped; only actual remote
+  members of a restored server share its initialization cell. Lazy connection and
+  fresh discovery select the same trace-propagation policy: request-declared
+  entries use `McpClientPool::from_request_entries` without propagated trace
+  context or baggage; operator-configured entries use `from_config` with propagation.
+  Fresh discovery remains eager. Client-returned schemas stay request-scoped; only actual remote
   discovery populates the configured-server discovery cache. The shared
   `WebSearchHandler` and the opt-in `CodeInterpreterExecutor` are built once at
   startup; the code interpreter is backed by an embedded Eryx sandbox, enabled

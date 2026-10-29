@@ -250,7 +250,7 @@ impl GatewayExecutors {
     pub(crate) async fn mcp_server_tools(
         &mut self,
         param: &McpToolParam,
-        listing: Option<&McpListTools>,
+        listing: Option<McpListTools>,
     ) -> Result<McpServerToolSet, ToolError> {
         let server_label = param.server_label.trim();
         if server_label.is_empty() {
@@ -278,14 +278,13 @@ impl GatewayExecutors {
         }
 
         if configured_server {
+            let retained_listing = listing.is_some();
             let mut tool_set = self.configured_mcp_tools(param, listing).await?;
             let discovered_handlers = require_non_empty_mcp_handlers(
                 server_label,
                 filter_allowed_mcp_handlers(&tool_set.discovered_handlers, param.allowed_tools.as_deref()),
             )?;
-            if let Some(listing) = listing {
-                tool_set.list_tools_item = listing.clone();
-            } else {
+            if !retained_listing {
                 tool_set.list_tools_item.tools.retain(|tool| {
                     param
                         .allowed_tools
@@ -304,7 +303,7 @@ impl GatewayExecutors {
                 "MCP server '{server_label}' has no valid request-declared configuration"
             )));
         };
-        let handler = Arc::new(McpHandler::deferred(entry));
+        let handler = Arc::new(McpHandler::deferred(entry, false));
         let tool_set = McpHandler::discover_tools(param, &handler, param.allowed_tools.as_deref(), listing).await?;
         let discovered_handlers = require_non_empty_mcp_handlers(server_label, tool_set.discovered_handlers)?;
         self.mcp.insert(server_label.to_owned(), discovered_handlers.clone());
@@ -318,12 +317,18 @@ impl GatewayExecutors {
     async fn configured_mcp_tools(
         &mut self,
         param: &McpToolParam,
-        listing: Option<&McpListTools>,
+        listing: Option<McpListTools>,
     ) -> Result<McpServerToolSet, ToolError> {
         let label = param.server_label.trim();
         let cached = self.mcp_discovered.read().await.get(label).cloned();
         if let Some(handlers) = cached {
-            return Ok(McpHandler::server_tool_set_from_handlers(label, handlers));
+            return Ok(match listing {
+                Some(listing) => McpServerToolSet {
+                    discovered_handlers: handlers,
+                    list_tools_item: listing,
+                },
+                None => McpHandler::server_tool_set_from_handlers(label, handlers),
+            });
         }
         let entry = self
             .mcp_configs
@@ -331,7 +336,7 @@ impl GatewayExecutors {
             .cloned()
             .ok_or_else(|| ToolError::Config(format!("configured MCP server '{label}' is missing")))?;
         if listing.is_some() || !param.discovered_tools.is_empty() {
-            let handler = Arc::new(McpHandler::deferred(entry.clone()));
+            let handler = Arc::new(McpHandler::deferred(entry.clone(), true));
             return McpHandler::discover_tools(param, &handler, entry.allowed_tools(), listing).await;
         }
         let cached_client = self.mcp_clients.read().await.get(label).cloned();

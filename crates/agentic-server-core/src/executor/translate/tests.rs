@@ -35,80 +35,81 @@ fn translate(
 
 #[tokio::test]
 async fn bare_provider_message_ids_remain_replayable_across_json_and_sse() {
-    let raw = "aa50fd35914b7610";
-    let public = format!("msg_{raw}");
-    let payload = serde_json::json!({
-        "id":"upstream", "object":"response", "model":"test", "status":"completed", "created_at":0,
-        "output":[
-            {"id":raw,"type":"message","role":"assistant","status":"completed",
-                "content":[{"type":"output_text","text":"finished","annotations":[],"logprobs":[]}]},
-            {"id":"msg_existing","type":"message","role":"assistant","status":"completed",
-                "content":[{"type":"output_text","text":"existing","annotations":[],"logprobs":[]}]},
-            {"id":"fc_existing","type":"function_call","call_id":raw,"name":"client_tool",
-                "arguments":"{}","status":"completed"}
-        ]
-    });
-    let handler = ResponseHandler::new(ResponseStore::disabled());
-    let mut invalid: Vec<InOutItem> = serde_json::from_value(payload["output"].clone()).unwrap();
-    assert!(
-        handler.resolve_input_items(&mut invalid).await.is_err(),
-        "client validation stays strict"
-    );
-    for stream in [false, true] {
-        let context = TranslationContext::default().with_request_fields(&RequestPayload {
-            store: false,
-            ..RequestPayload::default()
+    for raw in ["aa50fd35914b7610", "msg-123", "msg123"] {
+        let public = format!("msg_{raw}");
+        let payload = serde_json::json!({
+            "id":"upstream", "object":"response", "model":"test", "status":"completed", "created_at":0,
+            "output":[
+                {"id":raw,"type":"message","role":"assistant","status":"completed",
+                    "content":[{"type":"output_text","text":"finished","annotations":[],"logprobs":[]}]},
+                {"id":"msg_existing","type":"message","role":"assistant","status":"completed",
+                    "content":[{"type":"output_text","text":"existing","annotations":[],"logprobs":[]}]},
+                {"id":"fc_existing","type":"function_call","call_id":raw,"name":"client_tool",
+                    "arguments":"{}","status":"completed"}
+            ]
         });
-        let mut round = RoundIngestion::new("resp_test".into(), None, Validation::Strict, context, None);
-        let mut frames = Vec::new();
-        if stream {
-            let mut events = Vec::<Value>::new();
-            for line in upstream_events(&payload).lines() {
-                if let Some(data) = line.strip_prefix("data: ") {
-                    events.push(serde_json::from_str(data).unwrap());
+        let handler = ResponseHandler::new(ResponseStore::disabled());
+        let mut invalid: Vec<InOutItem> = serde_json::from_value(payload["output"].clone()).unwrap();
+        assert!(
+            handler.resolve_input_items(&mut invalid).await.is_err(),
+            "client validation stays strict"
+        );
+        for stream in [false, true] {
+            let context = TranslationContext::default().with_request_fields(&RequestPayload {
+                store: false,
+                ..RequestPayload::default()
+            });
+            let mut round = RoundIngestion::new("resp_test".into(), None, Validation::Strict, context, None);
+            let mut frames = Vec::new();
+            if stream {
+                let mut events = Vec::<Value>::new();
+                for line in upstream_events(&payload).lines() {
+                    if let Some(data) = line.strip_prefix("data: ") {
+                        events.push(serde_json::from_str(data).unwrap());
+                    }
                 }
-            }
-            events.insert(
-                1,
-                serde_json::json!({"type":"response.in_progress",
+                events.insert(
+                    1,
+                    serde_json::json!({"type":"response.in_progress",
                 "response":{"id":"upstream","status":"in_progress","output":[]}}),
-            );
-            for (sequence, mut event) in events.into_iter().enumerate() {
-                event["sequence_number"] = serde_json::json!(sequence);
-                frames.extend(round.push(SseLine::parse(&sse(&event))).unwrap().frames);
-            }
-            for frame in frames {
-                let wire = serde_json::to_value(frame.wire).unwrap();
-                let index = wire["output_index"].as_u64();
-                if index == Some(0) {
-                    if let Some(id) = wire.get("item_id") {
-                        assert_eq!(id, &public);
+                );
+                for (sequence, mut event) in events.into_iter().enumerate() {
+                    event["sequence_number"] = serde_json::json!(sequence);
+                    frames.extend(round.push(SseLine::parse(&sse(&event))).unwrap().frames);
+                }
+                for frame in frames {
+                    let wire = serde_json::to_value(frame.wire).unwrap();
+                    let index = wire["output_index"].as_u64();
+                    if index == Some(0) {
+                        if let Some(id) = wire.get("item_id") {
+                            assert_eq!(id, &public);
+                        }
+                        if let Some(item) = wire.get("item") {
+                            assert_eq!(item["id"], public);
+                        }
                     }
-                    if let Some(item) = wire.get("item") {
-                        assert_eq!(item["id"], public);
+                    if wire["type"] == "response.completed" {
+                        assert_eq!(wire["response"]["output"][0]["id"], public);
                     }
                 }
-                if wire["type"] == "response.completed" {
-                    assert_eq!(wire["response"]["output"][0]["id"], public);
-                }
+            } else {
+                round.load_json_body(&payload.to_string()).unwrap();
             }
-        } else {
-            round.load_json_body(&payload.to_string()).unwrap();
+            let response = round.finish("test", None, None).unwrap();
+            assert_eq!(response.output[0].id(), Some(public.as_str()));
+            assert_eq!(response.output[1].id(), Some("msg_existing"));
+            assert_eq!(response.output[2].id(), Some("fc_existing"));
+            let OutputItem::FunctionCall(call) = &response.output[2] else {
+                panic!("function call")
+            };
+            assert_eq!(call.call_id, raw);
+            let mut history: Vec<InOutItem> =
+                serde_json::from_value(serde_json::to_value(response.output).unwrap()).unwrap();
+            handler
+                .resolve_input_items(&mut history)
+                .await
+                .expect("returned history is accepted unchanged");
         }
-        let response = round.finish("test", None, None).unwrap();
-        assert_eq!(response.output[0].id(), Some(public.as_str()));
-        assert_eq!(response.output[1].id(), Some("msg_existing"));
-        assert_eq!(response.output[2].id(), Some("fc_existing"));
-        let OutputItem::FunctionCall(call) = &response.output[2] else {
-            panic!("function call")
-        };
-        assert_eq!(call.call_id, raw);
-        let mut history: Vec<InOutItem> =
-            serde_json::from_value(serde_json::to_value(response.output).unwrap()).unwrap();
-        handler
-            .resolve_input_items(&mut history)
-            .await
-            .expect("returned history is accepted unchanged");
     }
 }
 

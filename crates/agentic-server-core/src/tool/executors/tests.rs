@@ -61,7 +61,7 @@ async fn historical_configured_mcp_schemas_stay_request_scoped() {
         ]
     }))
     .unwrap();
-    let restored = executors.mcp_server_tools(&param, Some(&listing)).await.unwrap();
+    let restored = executors.mcp_server_tools(&param, Some(listing)).await.unwrap();
     assert_eq!(restored.discovered_handlers.len(), 1);
     assert_eq!(restored.discovered_handlers[0].param.tool_name, "read");
     assert!(

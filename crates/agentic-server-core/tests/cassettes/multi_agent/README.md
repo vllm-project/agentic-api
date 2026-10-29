@@ -742,6 +742,14 @@ The stateless contract once again requires that prefix. Public translation retai
 native ingestion identities, execution `call_id` values, and other tools' projected
 IDs. Translation regressions still cover the earlier three bare provider IDs.
 
+Review regressions also cover near-prefix message IDs (`msg-123` and `msg123`),
+stored single-agent history followed by attributed multi-agent input, and expanding
+or removing an MCP `allowed_tools` restriction after a partial listing. The MCP
+trace tests execute fresh and retained-listing calls through the gateway: only
+operator-configured servers receive propagated trace context and baggage.
+These deterministic counterexamples use the existing test fixtures; the captured
+provider exchanges are preserved unchanged.
+
 One pre-existing identifier-format difference remains visible: gateway streaming
 reasoning items retain bare provider IDs, while gateway JSON and the OpenAI
 captures use `rs_` IDs. Streaming item additions, references, completions, terminal
