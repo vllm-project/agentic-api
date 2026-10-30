@@ -215,12 +215,24 @@ impl FileSearchRepository for SqliteVecRepository {
         })
     }
 
-    fn pending_blob_deletion<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<bool, FileSearchError>> {
-        Box::pin(self.metadata.pending_blob_deletion(id))
+    fn stage_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(self.metadata.stage_blob_cleanup(id))
     }
 
-    fn complete_blob_deletion<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), FileSearchError>> {
-        Box::pin(self.metadata.complete_blob_deletion(id))
+    fn pending_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<bool, FileSearchError>> {
+        Box::pin(self.metadata.pending_blob_cleanup(id))
+    }
+
+    fn complete_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(self.metadata.complete_blob_cleanup(id))
+    }
+
+    fn blob_cleanup_batch<'a>(
+        &'a self,
+        after: &'a str,
+        limit: i64,
+    ) -> BoxFuture<'a, Result<Vec<String>, FileSearchError>> {
+        Box::pin(self.metadata.blob_cleanup_batch(after, limit))
     }
 
     fn list_files<'a>(&'a self, params: &'a ListParams) -> BoxFuture<'a, Result<Vec<FileObject>, FileSearchError>> {
