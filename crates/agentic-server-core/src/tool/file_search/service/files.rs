@@ -186,14 +186,15 @@ impl FileSearchService {
 
     /// Reconciles durable blob intents after a restart. A live metadata row
     /// owns its blob; otherwise the orphaned bytes are removed idempotently.
+    /// Claimed uploads retain a tombstone because an expired publisher may
+    /// still complete an in-flight write after this pass.
     ///
     /// # Errors
     /// Returns storage or blob removal errors, leaving the marker for retry.
     pub async fn reconcile_blob_cleanup(&self) -> Result<(), FileSearchError> {
-        let mut after = String::new();
+        let now = chrono::Utc::now().timestamp();
         loop {
-            let now = chrono::Utc::now().timestamp();
-            let batch = self.storage.blob_cleanup_batch(&after, 100, now).await?;
+            let batch = self.storage.blob_cleanup_batch(100, now).await?;
             if batch.is_empty() {
                 return Ok(());
             }
@@ -213,7 +214,6 @@ impl FileSearchService {
                 }
                 self.storage.complete_blob_cleanup(id, &owner_token).await?;
             }
-            after = batch.last().cloned().unwrap_or_default();
         }
     }
 

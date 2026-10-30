@@ -112,6 +112,51 @@ struct DelayedStageBlobs {
     staged: std::sync::Mutex<std::collections::HashSet<String>>,
 }
 
+#[derive(Default)]
+struct LateWriteBlobs {
+    blobs: MemoryBlobs,
+    started: tokio::sync::Notify,
+    resume: tokio::sync::Notify,
+    fail_visible_remove: std::sync::atomic::AtomicBool,
+}
+
+impl FileBlobStore for LateWriteBlobs {
+    fn publish<'a>(
+        &'a self,
+        id: &'a str,
+        bytes: &'a [u8],
+        cancelled: &'a tokio_util::sync::CancellationToken,
+    ) -> futures::future::BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(async move {
+            self.started.notify_one();
+            self.resume.notified().await;
+            self.blobs.publish(id, bytes, cancelled).await
+        })
+    }
+
+    fn read<'a>(
+        &'a self,
+        id: &'a str,
+        expected_bytes: i64,
+        max_bytes: usize,
+    ) -> futures::future::BoxFuture<'a, Result<Vec<u8>, FileSearchError>> {
+        self.blobs.read(id, expected_bytes, max_bytes)
+    }
+
+    fn remove<'a>(&'a self, id: &'a str) -> futures::future::BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(async move {
+            if self.blobs.0.lock().unwrap().contains_key(id)
+                && self
+                    .fail_visible_remove
+                    .swap(false, std::sync::atomic::Ordering::SeqCst)
+            {
+                return Err(FileSearchError::Unavailable("injected late rollback failure".into()));
+            }
+            self.blobs.remove(id).await
+        })
+    }
+}
+
 impl FileBlobStore for DelayedStageBlobs {
     fn publish<'a>(
         &'a self,
@@ -299,7 +344,7 @@ async fn rejected_metadata_and_failed_blob_removal_are_reconciled_after_restart(
         .fetch_one(pool.as_ref())
         .await
         .unwrap();
-    assert_eq!(pending, 0);
+    assert_eq!(pending, 1);
 }
 
 #[tokio::test]
@@ -358,6 +403,57 @@ async fn recovery_skips_live_uploads_and_fences_expired_owners() {
     assert_eq!(service.get_file(&expired_id).await.unwrap_err().status_code(), 404);
     assert!(!blobs.blobs.0.lock().unwrap().contains_key(&expired_id));
     assert_eq!(service.file_content(&live.id).await.unwrap(), b"live");
+}
+
+#[tokio::test]
+async fn recovery_retains_intent_for_late_write_and_failed_rollback() {
+    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let blobs = Arc::new(LateWriteBlobs {
+        fail_visible_remove: std::sync::atomic::AtomicBool::new(true),
+        ..LateWriteBlobs::default()
+    });
+    let service = FileSearchService::with_providers(
+        Arc::new(FileSearchStorage::new(pool.clone())),
+        blobs.clone(),
+        Arc::new(reqwest::Client::new()),
+        &FileSearchConfig::default(),
+    )
+    .unwrap();
+    let uploading = service.clone();
+    let upload = tokio::spawn(async move {
+        uploading
+            .upload_file("late.txt", "text/plain", "assistants", b"late bytes".to_vec())
+            .await
+    });
+    blobs.started.notified().await;
+    let id: String = sqlx::query_scalar("SELECT file_id FROM file_search_blob_cleanup")
+        .fetch_one(pool.as_ref())
+        .await
+        .unwrap();
+    sqlx::query("UPDATE file_search_blob_cleanup SET lease_expires_at = 0 WHERE file_id = $1")
+        .bind(&id)
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    service.reconcile_blob_cleanup().await.unwrap();
+    assert!(blobs.blobs.0.lock().unwrap().is_empty());
+    blobs.resume.notify_one();
+    assert_eq!(upload.await.unwrap().unwrap_err().status_code(), 503);
+    assert!(blobs.blobs.0.lock().unwrap().contains_key(&id));
+    let intent: String = sqlx::query_scalar("SELECT intent FROM file_search_blob_cleanup WHERE file_id = $1")
+        .bind(&id)
+        .fetch_one(pool.as_ref())
+        .await
+        .unwrap();
+    assert_eq!(intent, "abandoned");
+    sqlx::query("UPDATE file_search_blob_cleanup SET lease_expires_at = 0 WHERE file_id = $1")
+        .bind(&id)
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    service.reconcile_blob_cleanup().await.unwrap();
+    assert!(blobs.blobs.0.lock().unwrap().is_empty());
+    assert_eq!(service.get_file(&id).await.unwrap_err().status_code(), 404);
 }
 
 #[tokio::test]
