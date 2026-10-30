@@ -8,9 +8,9 @@ CREATE TABLE file_search_files (
     content_base64 TEXT NOT NULL
 );
 
--- Deletion markers survive a failed blob removal or a crash after metadata
--- deletion. Removing the blob is idempotent; a retry clears the marker.
-CREATE TABLE file_search_blob_deletions (
+-- Cleanup markers are committed before publishing a blob and alongside file
+-- metadata deletion. Recovery removes orphaned blobs and clears the marker.
+CREATE TABLE file_search_blob_cleanup (
     file_id TEXT PRIMARY KEY
 );
 

@@ -146,7 +146,7 @@ async fn failed_blob_removal_can_be_retried_after_metadata_deletion_and_service_
     assert_eq!(service.delete_file(&file.id).await.unwrap_err().status_code(), 503);
     assert_eq!(service.get_file(&file.id).await.unwrap_err().status_code(), 404);
     assert!(blobs.blobs.0.lock().unwrap().contains_key(&file.id));
-    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_blob_deletions WHERE file_id = $1")
+    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_blob_cleanup WHERE file_id = $1")
         .bind(&file.id)
         .fetch_one(pool.as_ref())
         .await
@@ -163,13 +163,61 @@ async fn failed_blob_removal_can_be_retried_after_metadata_deletion_and_service_
     .unwrap();
     assert!(restarted.delete_file(&file.id).await.unwrap().deleted);
     assert!(!blobs.blobs.0.lock().unwrap().contains_key(&file.id));
-    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_blob_deletions WHERE file_id = $1")
+    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_blob_cleanup WHERE file_id = $1")
         .bind(&file.id)
         .fetch_one(pool.as_ref())
         .await
         .unwrap();
     assert_eq!(pending, 0);
     assert_eq!(restarted.delete_file(&file.id).await.unwrap_err().status_code(), 404);
+}
+
+#[tokio::test]
+async fn rejected_metadata_and_failed_blob_removal_are_reconciled_after_restart() {
+    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let blobs = Arc::new(FailOnceBlobs::default());
+    let service = FileSearchService::with_providers(
+        Arc::new(FileSearchStorage::new(pool.clone())),
+        blobs.clone(),
+        Arc::new(reqwest::Client::new()),
+        &FileSearchConfig::default(),
+    )
+    .unwrap();
+    sqlx::raw_sql("CREATE TRIGGER reject_upload BEFORE INSERT ON file_search_files BEGIN SELECT RAISE(ABORT, 'injected upload failure'); END;")
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    assert_eq!(
+        service
+            .upload_file("orphan.txt", "text/plain", "assistants", b"orphan".to_vec())
+            .await
+            .unwrap_err()
+            .status_code(),
+        503
+    );
+    let orphan_id = blobs.blobs.0.lock().unwrap().keys().next().unwrap().clone();
+    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_blob_cleanup WHERE file_id = $1")
+        .bind(&orphan_id)
+        .fetch_one(pool.as_ref())
+        .await
+        .unwrap();
+    assert_eq!(pending, 1);
+    drop(service);
+    let restarted = FileSearchService::with_providers(
+        Arc::new(FileSearchStorage::new(pool.clone())),
+        blobs.clone(),
+        Arc::new(reqwest::Client::new()),
+        &FileSearchConfig::default(),
+    )
+    .unwrap();
+    restarted.reconcile_blob_cleanup().await.unwrap();
+    assert!(blobs.blobs.0.lock().unwrap().is_empty());
+    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_blob_cleanup WHERE file_id = $1")
+        .bind(&orphan_id)
+        .fetch_one(pool.as_ref())
+        .await
+        .unwrap();
+    assert_eq!(pending, 0);
 }
 
 #[tokio::test]
@@ -348,23 +396,13 @@ async fn local_files_publication_failure_and_cancellation_clean_up_bytes() {
             .upload_file("cancel.txt", "text/plain", "assistants", b"cancelled".to_vec())
             .await
     });
-    tokio::time::timeout(std::time::Duration::from_secs(3), async {
-        while std::fs::read_dir(files.path()).unwrap().count() == 0 {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .unwrap();
+    // Cleanup intent must be committed before bytes are published. Holding
+    // the only connection now blocks publication itself.
+    tokio::task::yield_now().await;
     upload.abort();
     assert!(upload.await.unwrap_err().is_cancelled());
     drop(connection);
-    tokio::time::timeout(std::time::Duration::from_secs(3), async {
-        while std::fs::read_dir(files.path()).unwrap().count() != 0 {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .unwrap();
+    assert_eq!(std::fs::read_dir(files.path()).unwrap().count(), 0);
     assert!(
         service
             .list_files(&ListParams::default())
