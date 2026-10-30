@@ -453,26 +453,83 @@ OpenAI reference recordings under `crates/agentic-server-core/tests/cassettes/ma
   it upstream; direct requests are passed through unchanged. Multi-agent
   requests reject it.
 
+#### Background mode
+
+`background: true` on `POST /v1/responses` runs the response after the request
+returns. The gateway validates and prepares the request exactly as a foreground
+request, so request errors still return `400` at once. It then stores the
+response and returns it with `status: "queued"`, `background: true`, and empty
+`output`. Poll [`GET /v1/responses/{response_id}`](#get-v1responsesresponse_id)
+until the status is terminal, or stop it with
+[`POST /v1/responses/{response_id}/cancel`](#post-v1responsesresponse_idcancel).
+
+```text
+queued ──► in_progress ──► completed | incomplete | failed
+   │             │
+   └─────────────┴──► cancelled
+```
+
+The job runs the same engine path as a foreground request, including
+gateway-executed tools, and stores the finished turn in the same transaction as a
+foreground turn would. A completed or incomplete background response is then an
+ordinary stored response: it can be listed with `input_items` and continued with
+`previous_response_id` or its `conversation`. `created_at` keeps the admission time.
+
+| Request | Result |
+| --- | --- |
+| `store: false` | `400`, `code: "unsupported_value"`, `param: "store"` |
+| `stream: true` | `400`, `code: "unsupported_value"`, `param: "stream"` |
+| `multi_agent.enabled: true`, also when inherited from `previous_response_id` | `400`, `code: "unsupported_value"`, `param: "multi_agent"` |
+| Running and queued jobs already at the limits below | `503`, `type: "server_error"`, `code: "background_capacity_exceeded"` |
+| The gateway is shutting down | `503`, `type: "server_error"`, `code: "server_shutting_down"` |
+
+OpenAI also accepts `store: false` background responses and keeps them for about
+ten minutes, and it can stream a background response. The gateway does not yet;
+both are follow-up work tracked from
+[#357](https://github.com/vllm-project/agentic-api/issues/357).
+
+A `previous_response_id` that names a background response which is not
+`completed` or `incomplete` returns `400` with
+`code: "previous_response_not_completed"` and `param: "previous_response_id"`. A
+conversation turn that commits while a background turn of the same conversation
+runs makes the background response `failed` with `code: "conversation_locked"`,
+as a concurrent foreground turn would be rejected.
+
+Limits apply per gateway instance and are set in the `[responses]` table or the
+environment (the environment wins):
+
+| Setting | Environment | Default | Meaning |
+| --- | --- | --- | --- |
+| `background_max_concurrent` | `AGENTIC_BACKGROUND_MAX_CONCURRENT` | `16` | Jobs that run at once; at least `1` |
+| `background_max_queued` | `AGENTIC_BACKGROUND_MAX_QUEUED` | `64` | Admitted jobs that wait as `queued`; `0` admits only running jobs |
+| `background_timeout_seconds` | `AGENTIC_BACKGROUND_TIMEOUT_SECONDS` | `1800` | Run time per job from `in_progress`; at least `1`. A job past it is `failed` |
+
+The instance that admitted a job owns its row and renews a 30-second lease on it
+every 10 seconds. Cancellation and deletion work from any instance that shares the
+database: the owner stops a cancelled or deleted job at once when the request
+reaches it, or at its next renewal otherwise. A row whose lease expired belongs to
+an instance that stopped; it becomes `failed` with `code: "server_error"` when the
+gateway starts or when the response is retrieved or cancelled. Instances that share
+a database need clocks within a few seconds of each other. A graceful shutdown stops
+admission and records every running and queued job `failed` within the shutdown
+drain. Jobs are not resumed after a restart.
+
 #### Unsupported request parameters
 
-Typed execution cannot honour `background: true` or a reusable `prompt`
-reference, so it rejects them with `400` and `type: "invalid_request_error"`
-instead of silently dropping them. The check runs before history lookup, tool
-discovery, storage, or inference. Direct HTTP pass-through preserves the original
-request body, and the upstream decides whether to accept these members, whatever
-their values.
-`store: false` alone does not ensure pass-through: a previous response ID,
-conversation, built-in tool, or another executor feature still selects typed
-execution.
+Typed execution cannot honour a reusable `prompt` reference, or `background: true`
+outside HTTP `POST /v1/responses`, so it rejects them with `400` and
+`type: "invalid_request_error"` instead of silently dropping them. The check runs
+before history lookup, tool discovery, storage, or inference. Neither member is
+forwarded to the upstream.
 
 | Path | `background` | `prompt` | `tool_choice` of type `mcp` |
 | --- | --- | --- | --- |
-| Direct HTTP JSON/SSE | Forwarded unchanged; upstream validation | Forwarded unchanged; upstream validation | `code: "unsupported_value"`, `param: "tool_choice"` |
-| Typed HTTP JSON/SSE, WebSocket, and split-execution hydration | Absent, `null`, or `false` accepted and not forwarded; `true` returns `code: "unsupported_value"`, and any other value returns `code: "invalid_type"`, both with `param: "background"` | Absent or `null` accepted; any other value returns `code: "unsupported_parameter"`, `param: "prompt"` | `code: "unsupported_value"`, `param: "tool_choice"` |
+| HTTP `POST /v1/responses` | `true` runs in [background mode](#background-mode); absent, `null`, or `false` runs in the foreground; any other value returns `code: "invalid_type"`, `param: "background"` | Absent or `null` accepted; any other value returns `code: "unsupported_parameter"`, `param: "prompt"` | `code: "unsupported_value"`, `param: "tool_choice"` |
+| WebSocket and split-execution hydration | Absent, `null`, or `false` accepted; `true` returns `code: "unsupported_value"`, and any other value returns `code: "invalid_type"`, both with `param: "background"` | Same as HTTP | Same as HTTP |
 
-Background mode is tracked in
-[#357](https://github.com/vllm-project/agentic-api/issues/357). This matrix
-contributes to [#314](https://github.com/vllm-project/agentic-api/issues/314).
+OpenAI's WebSocket mode ignores `background`; the gateway rejects `true` on that
+transport instead. This matrix contributes to
+[#314](https://github.com/vllm-project/agentic-api/issues/314).
 
 Typed execution still ignores other members the gateway does not model,
 including `top_logprobs`, `user`, `safety_identifier`, `stream_options`, and vLLM
@@ -517,19 +574,43 @@ model-specific backend capability enforcement remains a separate acceptance item
 
 ### `GET /v1/responses/{response_id}`
 
-Returns the terminal snapshot of a response created with `store: true`, including
-status, usage, and that turn's output, without calling the upstream model.
+Returns the stored snapshot of a response created with `store: true`, including
+status, usage, and that turn's output, without calling the upstream model. A
+[background response](#background-mode) reports its current status, including
+`queued` and `in_progress`.
 Unknown IDs return `404`. Records created before snapshot storage, or through
 history-only APIs, return `409`. Request-scoped MCP credentials are stripped
 before storage. When OIDC is disabled and `OPENAI_API_KEY` is nonempty, callers
 must send that key as a bearer token.
+
+Streaming retrieval is not supported yet: `stream=true` or any `starting_after`
+returns `400` with `code: "unsupported_parameter"` and that `param`, instead of a
+JSON body the client did not ask for. `stream=false` is accepted.
+
+### `POST /v1/responses/{response_id}/cancel`
+
+Cancels a [background response](#background-mode) and returns it with
+`status: "cancelled"`. A queued response never reaches the model; a running one
+stops its in-flight model request and gateway tool calls, and its partial output
+is discarded. Cancelling a cancelled response returns the same response again.
+Authentication matches response retrieval.
+
+| Response | Result |
+| --- | --- |
+| Unknown ID | `404`, as on retrieval |
+| Created without `background: true` | `400`, `code: "response_not_cancellable"`, `param: "response_id"`, message `Only responses created with background=true can be cancelled.` |
+| `completed`, `incomplete`, or `failed` | `400`, `code: "response_not_cancellable"`, `param: "response_id"`, message `Cannot cancel a response with status '<status>'.` |
+
+OpenAI documents no error for cancelling a finished response; the gateway rejects
+it, as vLLM does, so a client cannot mistake a completed result for a cancellation.
 
 ### `DELETE /v1/responses/{response_id}`
 
 Deletes a stored response and returns
 `{"id": "<response_id>", "object": "response.deleted", "deleted": true}`.
 Unknown or already deleted IDs return `404`. The deleted response can no
-longer be retrieved or used as a durable `previous_response_id`.
+longer be retrieved or used as a durable `previous_response_id`. Deleting a
+running background response also stops its job, which stores nothing afterwards.
 
 History item rows are retained: descendant responses and conversations may
 still reference them. Descendants remain retrievable and continuable, but
@@ -561,7 +642,9 @@ expansions return `400`, as on conversation item listing. Malformed or repeated
 scalar query parameters return `400`.
 
 Unknown or unstored responses return `404`. Legacy responses without a saved
-payload return `409`, as on response retrieval. Authentication matches retrieval.
+payload return `409`, as on response retrieval. A background response that is not
+`completed` or `incomplete` has stored no items yet and returns `409` with
+`code: "response_not_completed"`. Authentication matches retrieval.
 
 ### `POST /v1/responses/compact`
 
