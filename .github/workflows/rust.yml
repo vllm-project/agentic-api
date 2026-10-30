@@ -78,6 +78,12 @@ jobs:
       - name: Run tests
         run: cargo test
 
+      - name: Test file APIs with the OpenAI Python client
+        run: |
+          python3 -m pip install --disable-pip-version-check openai==3.8.0
+          cargo build --locked -p agentic-server --bin agentic-server
+          python3 scripts/tests/openai-file-search-client-test.py
+
       - name: Verify SQLite vector provider
         run: |
           curl --fail --location --silent --show-error \
