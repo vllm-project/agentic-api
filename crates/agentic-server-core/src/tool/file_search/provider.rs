@@ -114,12 +114,7 @@ pub trait FileSearchRepository: Send + Sync {
         id: &'a str,
         owner_token: &'a str,
     ) -> BoxFuture<'a, Result<(), FileSearchError>>;
-    fn blob_cleanup_batch<'a>(
-        &'a self,
-        after: &'a str,
-        limit: i64,
-        now: i64,
-    ) -> BoxFuture<'a, Result<Vec<String>, FileSearchError>>;
+    fn blob_cleanup_batch(&self, limit: i64, now: i64) -> BoxFuture<'_, Result<Vec<String>, FileSearchError>>;
     fn claim_blob_cleanup<'a>(
         &'a self,
         id: &'a str,
@@ -301,13 +296,8 @@ impl FileSearchRepository for FileSearchStorage {
         Box::pin(FileSearchStorage::complete_blob_cleanup(self, id, owner_token))
     }
 
-    fn blob_cleanup_batch<'a>(
-        &'a self,
-        after: &'a str,
-        limit: i64,
-        now: i64,
-    ) -> BoxFuture<'a, Result<Vec<String>, FileSearchError>> {
-        Box::pin(FileSearchStorage::blob_cleanup_batch(self, after, limit, now))
+    fn blob_cleanup_batch(&self, limit: i64, now: i64) -> BoxFuture<'_, Result<Vec<String>, FileSearchError>> {
+        Box::pin(FileSearchStorage::blob_cleanup_batch(self, limit, now))
     }
 
     fn claim_blob_cleanup<'a>(
