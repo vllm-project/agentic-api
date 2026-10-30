@@ -390,7 +390,7 @@ fn assert_public_search_call(response: &ResponsePayload) -> Value {
         panic!("normalized search call must be public")
     };
     assert_eq!(search_call.id, "tsc_search_1");
-    assert_eq!(search_call.call_id, "call_search_1");
+    assert_eq!(search_call.call_id.as_deref(), Some("call_search_1"));
     assert_eq!(search_call.arguments, json!(["weather", "timezone"]));
     let public_search_call = serde_json::to_value(&response.output[0]).expect("public search call serializes");
     assert_eq!(public_search_call["execution"], "client");
@@ -984,7 +984,7 @@ async fn blocking_incomplete_search_preserves_a_non_replayable_public_item() {
             panic!("{case}: incomplete search call must use the public shape");
         };
         assert_eq!(call.id, "tsc_partial", "{case}");
-        assert_eq!(call.call_id, "call_partial", "{case}");
+        assert_eq!(call.call_id.as_deref(), Some("call_partial"), "{case}");
         assert_eq!(call.arguments, expected_arguments, "{case}");
         assert_eq!(call.status, agentic_core::types::ToolSearchStatus::Incomplete, "{case}");
         assert!(response.output[0].to_input_item().is_none(), "{case}");

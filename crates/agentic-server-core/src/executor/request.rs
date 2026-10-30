@@ -243,6 +243,10 @@ impl ExecutionContext {
         )
         .await
         .map_err(|error| Error::Config(error.public_message()))?;
+        file_search
+            .reconcile_blob_cleanup()
+            .await
+            .map_err(|error| Error::Config(format!("failed to reconcile file blobs: {}", error.public_message())))?;
         Ok(Self {
             file_search: None,
             conv_handler,

@@ -786,6 +786,51 @@ async fn code_interpreter_disabled_rejects_before_http_upstream_inference() {
     );
 }
 
+/// A declaration's own MCP checks run with request validation, so a streaming request gets the error before its
+/// stream starts, as a JSON request does.
+#[tokio::test]
+async fn unsupported_mcp_options_reject_before_the_stream() {
+    let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
+    let (gateway_url, _gateway) = spawn_gateway(test_state(&test_config(&llm_url))).await;
+
+    for (server, message) in [
+        (
+            serde_json::json!({"type": "mcp", "server_label": "docs", "connector_id": "connector_dropbox"}),
+            "MCP connector_id is not supported; configure server_url instead",
+        ),
+        (
+            serde_json::json!({"type": "mcp", "server_label": "docs", "server_url": "https://docs.example/mcp",
+                "require_approval": "always"}),
+            "MCP require_approval supports only 'never'; approval gating is not yet supported",
+        ),
+    ] {
+        for stream in [false, true] {
+            let response = reqwest::Client::new()
+                .post(format!("{gateway_url}/v1/responses"))
+                .json(&serde_json::json!({
+                    "model": "test", "input": "test input", "store": false, "stream": stream, "tools": [server]
+                }))
+                .send()
+                .await
+                .expect("gateway response");
+
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "stream {stream}: {message}");
+            let body: serde_json::Value = response.json().await.expect("error response JSON");
+            assert_eq!(body["error"]["type"], "invalid_request_error");
+            assert!(
+                body["error"]["message"]
+                    .as_str()
+                    .is_some_and(|text| text.contains(message)),
+                "{body}"
+            );
+        }
+    }
+    assert!(
+        requests.lock().await.is_empty(),
+        "the upstream mock must receive no requests"
+    );
+}
+
 #[tokio::test]
 async fn lone_client_code_interpreter_function_reaches_upstream() {
     let (llm_url, requests, _llm) = spawn_mock_vllm_json_capture().await;
@@ -1632,6 +1677,37 @@ async fn test_non_boolean_background_is_rejected_for_both_store_values() {
         requests.lock().await.len(),
         0,
         "typed execution never reaches the upstream"
+    );
+    gateway.abort();
+    llm.abort();
+}
+
+#[tokio::test]
+async fn test_mcp_tool_choice_is_rejected_on_direct_and_typed_routes() {
+    let (llm_url, requests, llm) = spawn_mock_vllm_json_capture().await;
+    let fixture = storage_backed_state(&llm_url).await;
+    let (gateway_url, gateway) = spawn_gateway(fixture.state.clone()).await;
+    let client = reqwest::Client::new();
+    for store in [false, true] {
+        let response = client
+            .post(format!("{gateway_url}/v1/responses"))
+            .json(&serde_json::json!({"model": "test", "input": "hi", "store": store,
+                "tool_choice": {"type": "mcp", "server_label": "docs"}}))
+            .send()
+            .await
+            .expect("response request");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "store={store}");
+        let body: serde_json::Value = response.json().await.expect("error body");
+        assert_eq!(
+            body["error"],
+            serde_json::json!({"message": "MCP tool_choice is not supported; use `auto`, `required`, or a function `tool_choice` instead",
+                "type": "invalid_request_error", "code": "unsupported_value", "param": "tool_choice"}),
+            "store={store}"
+        );
+    }
+    assert!(
+        requests.lock().await.is_empty(),
+        "an MCP tool_choice never reaches the upstream"
     );
     gateway.abort();
     llm.abort();

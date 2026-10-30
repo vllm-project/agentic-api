@@ -11,6 +11,7 @@
 //! here; nothing in this module resolves indexes or IDs.
 mod agent_message;
 mod shell;
+mod size;
 use agent_message::AgentMessageState;
 use shell::ShellCallState;
 
@@ -21,9 +22,7 @@ use super::active_text::{MessageState, ReasoningState};
 use super::completion::MergeDone;
 use crate::events::{EventPayload, SSEItemType};
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::response_budget::{
-    ExecutorResponseBudget, RETAINED_CONTAINER_OVERHEAD_BYTES, RetainedAccount, RetainedSize,
-};
+use crate::executor::response_budget::{ExecutorResponseBudget, RetainedAccount, RetainedSize};
 use crate::types::event::MessageStatus;
 use crate::types::io::output::McpListTools;
 use crate::types::io::{
@@ -188,6 +187,8 @@ impl ActiveItem {
             SSEItemType::ToolSearchCall => Self::ToolSearchCall {
                 item: ToolSearchCall::try_from(payload).ok()?,
             },
+            // Only the gateway produces search outputs; an upstream never streams one.
+            SSEItemType::ToolSearchOutput => return None,
             SSEItemType::CustomToolCall => Self::CustomToolCall(CustomToolCallState {
                 item: CustomToolCall::try_from(payload).ok()?,
                 input: String::with_capacity(256),
@@ -234,7 +235,7 @@ impl ActiveItem {
             OutputItem::MultiAgentCall(item) => Self::MultiAgentCall { item },
             OutputItem::MultiAgentCallOutput(item) => Self::MultiAgentCallOutput { item },
             OutputItem::AgentMessage(item) => Self::AgentMessage(AgentMessageState::new(item)),
-            OutputItem::Unknown => return None,
+            OutputItem::ToolSearchOutput(_) | OutputItem::Unknown => return None,
         })
     }
 
@@ -465,36 +466,5 @@ impl ActiveItem {
             Self::MultiAgentCallOutput { item } => OutputItem::MultiAgentCallOutput(item),
             Self::AgentMessage(state) => OutputItem::AgentMessage(state.item),
         })
-    }
-}
-
-/// Bytes an in-flight item retains: its typed item plus its streaming buffers.
-/// Measures the same fields as the completed item so reconciliation at
-/// completion charges only what streaming could not know in advance.
-impl RetainedSize for ActiveItem {
-    fn retained_bytes(&self) -> usize {
-        match self {
-            Self::Message(state) => state.retained_bytes(),
-            Self::Reasoning(state) => state.retained_bytes(),
-            Self::FunctionCall(state) => state.retained_bytes(),
-            Self::CustomToolCall(state) => state.retained_bytes(),
-            Self::ShellCall(state) => state.retained_bytes(),
-            Self::CodeInterpreterCall { item } => item
-                .as_ref()
-                .map_or(RETAINED_CONTAINER_OVERHEAD_BYTES, RetainedSize::retained_bytes),
-            Self::FileSearchCall { item } => item
-                .as_ref()
-                .map_or(RETAINED_CONTAINER_OVERHEAD_BYTES, RetainedSize::retained_bytes),
-            Self::ToolSearchCall { item } => item.retained_bytes(),
-            Self::WebSearchCall { item } => item
-                .as_ref()
-                .map_or(RETAINED_CONTAINER_OVERHEAD_BYTES, RetainedSize::retained_bytes),
-            Self::McpCall { item } => item.retained_bytes(),
-            Self::McpListTools { item } => item.retained_bytes(),
-            Self::Compaction { item } => item.retained_bytes(),
-            Self::MultiAgentCall { item } => item.retained_bytes(),
-            Self::MultiAgentCallOutput { item } => item.retained_bytes(),
-            Self::AgentMessage(state) => state.retained_bytes(),
-        }
     }
 }

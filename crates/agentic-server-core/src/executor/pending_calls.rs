@@ -256,10 +256,17 @@ fn scan_calls(items: &[InputItem]) -> ExecutorResult<CallLedger> {
             InputItem::CustomToolCallOutput(output) => ledger.resolve_call(&output.call_id, CallKind::Custom)?,
             InputItem::ShellCall(call) => ledger.add_call(&call.call_id, CallKind::Shell, false, None, false)?,
             InputItem::ShellCallOutput(output) => ledger.resolve_call(&output.call_id, CallKind::Shell)?,
+            // A hosted search (no call id) is resolved by the gateway, not the client.
             InputItem::ToolSearchCall(call) => {
-                ledger.add_call(&call.call_id, CallKind::ToolSearch, false, None, false)?;
+                if let Some(call_id) = call.call_id.as_deref() {
+                    ledger.add_call(call_id, CallKind::ToolSearch, false, None, false)?;
+                }
             }
-            InputItem::ToolSearchOutput(output) => ledger.resolve_call(&output.call_id, CallKind::ToolSearch)?,
+            InputItem::ToolSearchOutput(output) => {
+                if let Some(call_id) = output.call_id.as_deref() {
+                    ledger.resolve_call(call_id, CallKind::ToolSearch)?;
+                }
+            }
             InputItem::Message(_)
             | InputItem::CodeInterpreterCall(_)
             | InputItem::Reasoning(_)
@@ -465,12 +472,29 @@ mod tests {
             if call_id.as_str() == "weather" && name == "get_weather"));
     }
 
+    /// A hosted search is answered by the gateway in the same response, so its public pair owes
+    /// the client nothing and a compaction prefix keeps the call with its output.
+    #[test]
+    fn hosted_search_pair_is_never_pending() {
+        let items: Vec<InputItem> = serde_json::from_value(serde_json::json!([
+            {"type": "message", "role": "user", "content": "weather?"},
+            {"type": "tool_search_call", "id": "tsc_h", "call_id": null, "execution": "server",
+                "arguments": {"paths": ["get_weather"]}, "status": "completed"},
+            {"type": "tool_search_output", "id": "tso_h", "call_id": null, "execution": "server",
+                "status": "completed", "tools": []}
+        ]))
+        .unwrap();
+        assert!(pending_calls(&items).unwrap().is_empty());
+        assert_eq!(resolved_prefix_len(&items).unwrap(), items.len());
+        assert_eq!(resolved_prefix_len(&items[..2]).unwrap(), 2);
+    }
+
     #[test]
     fn shell_and_search_steering_obligations_preserve_public_output_kinds() {
         let search = InputItem::ToolSearchCall(InputToolSearchCall {
             agent: None,
             id: "ts_search".to_owned(),
-            call_id: "search".to_owned(),
+            call_id: Some("search".to_owned()),
             execution: ToolSearchExecution::Client,
             arguments: serde_json::json!({}),
             status: ToolSearchStatus::Completed,
@@ -605,7 +629,14 @@ mod tests {
                         let input =
                             ResponsesInput::from(vec![deserialize_from_value::<InputItem>(item.clone()).unwrap()]);
                         let normalized = input.normalized_model_input().unwrap();
-                        for history in [&input, normalized.as_ref()] {
+                        // Only the upstream projection lowers a search call; the session history that steering reads
+                        // keeps it public, so its obligation is read from the public history alone.
+                        let histories = if output_type == "tool_search_output" {
+                            vec![&input]
+                        } else {
+                            vec![&input, normalized.as_ref()]
+                        };
+                        for history in histories {
                             let required =
                                 pending_calls(&history.input_items().map(Cow::into_owned).collect::<Vec<_>>())
                                     .unwrap()

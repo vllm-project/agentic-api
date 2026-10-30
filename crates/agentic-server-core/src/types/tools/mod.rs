@@ -8,6 +8,8 @@ pub mod code_interpreter;
 pub mod domain;
 /// This module contains only serde shapes (serialization/deserialization types).
 pub mod params;
+/// Tool-search declaration parameters.
+pub mod tool_search;
 /// Declaration parameters of the Messages-only `web_fetch` tool.
 pub mod web_fetch;
 

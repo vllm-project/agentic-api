@@ -4,6 +4,7 @@ use thiserror::Error;
 use crate::StorageError;
 use crate::tool::ToolError;
 use crate::types::io::input::InputValidationError;
+use crate::types::io::output::McpListTools;
 use crate::types::request_response::{
     MAX_TOOL_CALLS_PARAM, MaxToolCallsError, PromptCacheOptionsError, UnsupportedParameterError, UpstreamRequestError,
 };
@@ -144,6 +145,15 @@ pub enum ExecutorError {
 
     #[error("tool error: {0}")]
     Tool(#[from] ToolError),
+
+    /// A declared MCP server's tool listing failed. As in the Responses API,
+    /// the request fails: HTTP 424 for JSON, and an `error` event followed by
+    /// `response.failed` for a stream. The failed listing item is kept for the stream.
+    #[error(
+        "Error retrieving tool list from MCP server: '{}'. Http status code: 424 (Failed Dependency)",
+        .0.server_label
+    )]
+    McpListToolsFailed(Box<McpListTools>),
 }
 
 impl From<UpstreamRequestError> for ExecutorError {
@@ -210,6 +220,7 @@ impl ExecutorError {
             )
             | Self::CompactionFailed { .. } => StatusCode::BAD_GATEWAY,
             Self::Conflict(_) => StatusCode::CONFLICT,
+            Self::McpListToolsFailed(_) => StatusCode::FAILED_DEPENDENCY,
             Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
             Self::ParseError(_) => StatusCode::UNPROCESSABLE_ENTITY,
             Self::ResourceLimitExceeded { limit, .. } => match limit {
@@ -255,6 +266,7 @@ impl ExecutorError {
             Self::Storage(e) if e.is_not_found() => "not_found",
             Self::Storage(e) if e.is_validation() => "invalid_request_error",
             Self::Conflict(_) => "conflict_error",
+            Self::McpListToolsFailed(_) => "external_connector_error",
             Self::LLMRequest { .. } | Self::LLMTransport { .. } | Self::CompactionFailed { .. } => "upstream_error",
             Self::ResourceLimitExceeded { limit, .. } => match limit {
                 ResourceLimit::UpstreamSseLine | ResourceLimit::UpstreamJsonBody => "upstream_error",
@@ -285,6 +297,7 @@ impl ExecutorError {
             Self::UnsupportedValue { code, .. } => code.unwrap_or("unsupported_value"),
             Self::UnsupportedParameter(error) => error.code(),
             Self::Tool(ToolError::UnknownParameter { .. }) => "unknown_parameter",
+            Self::McpListToolsFailed(_) => "http_error",
             other => other.error_type(),
         }
     }
@@ -304,6 +317,7 @@ impl ExecutorError {
             Self::InvalidPromptCacheOptions(_) => Some("prompt_cache_options"),
             Self::InvalidMaxToolCalls(_) => Some(MAX_TOOL_CALLS_PARAM),
             Self::UnsupportedParameter(error) => Some(error.param()),
+            Self::McpListToolsFailed(_) => Some("tools"),
             _ => None,
         }
     }

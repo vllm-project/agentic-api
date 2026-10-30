@@ -16,8 +16,10 @@ use crate::executor::telemetry::metrics::ExecutionClock;
 use crate::executor::translate::{Translation, TranslationContext};
 use crate::tool::{ToolRegistry, ToolSearchMetadata, ToolSearchState};
 use crate::types::agent::AgentIdentity;
+use crate::types::io::input::HistoryNaming;
 use crate::types::io::{InputMessage, OutputItem};
 use crate::types::request_response::ResponsePayload;
+use crate::types::tools::ResponsesTool;
 use futures::{Stream, StreamExt};
 use tokio_util::sync::CancellationToken;
 
@@ -33,6 +35,8 @@ pub(super) struct AgentPipeline {
     agent_guidance: Option<InputMessage>,
     /// Set after a `max_tool_calls` refusal; later rounds omit gateway-executed tools.
     builtin_tools_withheld: bool,
+    /// How the history knows tools beyond the request's own declarations; naming context only.
+    history_naming: HistoryNaming,
     /// Timing state of the execution this pipeline serves, when it streams.
     clock: Option<ExecutionClock>,
 }
@@ -67,6 +71,16 @@ impl AgentPipeline {
 
     pub(super) const fn builtin_tools_withheld(&self) -> bool {
         self.builtin_tools_withheld
+    }
+
+    /// Sets how the history knows its tools, so a call reaches the model under the name it was made with although
+    /// this request declares no such tool.
+    pub(super) fn set_history_naming(&mut self, naming: HistoryNaming) {
+        self.history_naming = naming;
+    }
+
+    pub(super) const fn history_naming(&self) -> &HistoryNaming {
+        &self.history_naming
     }
 
     pub(super) fn has_live_agent_items(&self, agent: &AgentIdentity) -> bool {
@@ -105,12 +119,25 @@ impl AgentPipeline {
             control: None,
             steering: None,
             builtin_tools_withheld: false,
+            history_naming: HistoryNaming::default(),
             clock: None,
         }
     }
 
     pub(super) fn tool_search_state(&self) -> Option<&ToolSearchState> {
         self.tool_search_state.as_ref()
+    }
+
+    /// The search state, from which the registry takes the request's catalog.
+    pub(super) fn tool_search_state_mut(&mut self) -> Option<&mut ToolSearchState> {
+        self.tool_search_state.as_mut()
+    }
+
+    /// Records the public snapshot persistence keeps after the registry loaded searched tools.
+    pub(super) fn record_tool_search_loads(&mut self, effective_tools: Vec<ResponsesTool>, loaded: Vec<ResponsesTool>) {
+        if let Some(state) = self.tool_search_state.as_mut() {
+            state.record_loads(effective_tools, loaded);
+        }
     }
 
     pub(super) fn ensure_request_prepared(&self) -> ExecutorResult<()> {

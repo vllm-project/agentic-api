@@ -40,6 +40,13 @@ depth runs as its own independent batch of `SESSIONS` sessions instead of one lo
 afterward, so sample counts stay even across depths. It also produces `depth_summary.md`/`.json` with request bytes,
 response bytes, latency, and accuracy grouped by depth.
 
+`SESSIONS` may also be a comma-separated list, such as `1,5,10,25,50`. The runner script then runs one independent
+batch per level, in order, each under `sessions-NNNNN/` with its own `summary.md`, and lists the levels in
+`sessions_summary.md`. With `GATEWAY_PID` set to the process ID of a local Agentic API server (Linux), the script
+reads the server's CPU time and resident memory from `/proc` once a second during each batch (`gateway-usage.csv`),
+and `sessions_summary.md` gives each level's gateway CPU seconds, mean cores in use and peak RSS: the gateway's own
+cost as load grows, which client-side latency does not show.
+
 The WebSocket provider keeps one connection open for the complete session. HTTP providers reuse an HTTP client, but
 each model response remains a separate Responses request. The benchmark generates prompts once and assigns the same
 session and turn indices to every selected provider, allowing successful gateway and direct-vLLM turns to be paired.
@@ -66,7 +73,7 @@ must not look faster merely because its slow or difficult turns failed.
 | What is the streaming benefit over complete JSON responses? | Same endpoint; SSE/WebSocket versus its JSON provider. | First-output latency and TTFT for streaming, end-to-end latency for both. |
 | Does the model emit correct function calls? | `tool-call`; the same BFCL category on both providers. | Tool-call accuracy, success, time to first tool call. |
 | Does stored-response continuation preserve recent state? | `history-rehydration`. | Task correctness by turn, input-token growth, latency by turn. |
-| How does concurrency affect capacity? | Repeat a workload at increasing `SESSIONS`. | Successful turns/s, p95/p99 latency, timeout and failure rates. |
+| How does concurrency affect capacity? | One workload with `SESSIONS` as a list, e.g. `1,5,10,25,50`, and `GATEWAY_PID` set. | Successful turns/s, p95/p99 latency, timeout and failure rates per level; the gateway's CPU and memory per level. |
 
 `agentic-api` versus `vllm` is an end-to-end deployment comparison: it changes WebSocket versus HTTP/SSE and gateway
 managed history versus client replay at the same time. Use `agentic-api` versus `agentic-api-http` to focus more

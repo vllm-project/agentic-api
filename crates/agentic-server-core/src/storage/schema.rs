@@ -18,8 +18,8 @@ use crate::config::DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS;
 type DbResult<T> = Result<T, sqlx::Error>;
 
 const POSTGRES_SCHEMA_ADVISORY_LOCK: i64 = 7_194_963_546_799_751;
-const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 42;
-const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 14;
+const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 43;
+const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 15;
 const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 5;
 const POSTGRES_INTEGER_WIDENING_SQL: &str = "
     ALTER TABLE conversations
@@ -97,6 +97,7 @@ where
                  ('file_search_files', 'data', 'text', 'NO'), \
                  ('file_search_files', 'content_type', 'text', 'NO'), \
                  ('file_search_files', 'content_base64', 'text', 'NO'), \
+                 ('file_search_blob_cleanup', 'file_id', 'text', 'NO'), \
                  ('file_search_stores', 'id', 'text', 'NO'), \
                  ('file_search_stores', 'created_at', 'bigint', 'NO'), \
                  ('file_search_stores', 'data', 'text', 'NO'), \
@@ -152,6 +153,7 @@ where
                  ('conversations', 'f', \
                   'FOREIGN KEY (latest_response_id) REFERENCES responses(id) ON DELETE SET NULL'), \
                  ('file_search_files', 'p', 'PRIMARY KEY (id)'), \
+                 ('file_search_blob_cleanup', 'p', 'PRIMARY KEY (file_id)'), \
                  ('file_search_stores', 'p', 'PRIMARY KEY (id)'), \
                  ('file_search_attachments', 'p', 'PRIMARY KEY (store_id, file_id)'), \
                  ('file_search_chunks', 'p', 'PRIMARY KEY (store_id, file_id, chunk_index)'), \
@@ -314,7 +316,8 @@ pub(crate) async fn pin_postgres_persistence_schema(connection: &mut sqlx::AnyCo
          WHERE table_namespace.nspname = ANY(current_schemas(false)) \
          AND table_relation.relkind IN ('r', 'p', 'v', 'm', 'f') \
          AND table_relation.relname IN ('_sqlx_migrations', 'conversations', 'items', 'responses', \
-              'file_search_files', 'file_search_stores', 'file_search_attachments', 'file_search_chunks') \
+              'file_search_files', 'file_search_blob_cleanup', 'file_search_stores', \
+              'file_search_attachments', 'file_search_chunks') \
          ORDER BY table_namespace.nspname::text",
     )
     .fetch_all(&mut *connection)

@@ -8,6 +8,12 @@ CREATE TABLE file_search_files (
     content_base64 TEXT NOT NULL
 );
 
+-- Cleanup markers are committed before publishing a blob and alongside file
+-- metadata deletion. Recovery removes orphaned blobs and clears the marker.
+CREATE TABLE file_search_blob_cleanup (
+    file_id TEXT PRIMARY KEY
+);
+
 CREATE TABLE file_search_stores (
     id TEXT PRIMARY KEY,
     created_at BIGINT NOT NULL,

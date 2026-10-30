@@ -2,10 +2,19 @@ mod calls;
 mod content;
 mod conversions;
 mod file_text;
+mod history_naming;
+mod search_history;
+mod tool_search;
 mod validation;
 mod window;
 
 pub use file_text::InputFileError;
+pub(crate) use history_naming::HistoryNaming;
+pub(crate) use search_history::{
+    SearchHistory, SearchHistoryDefect, TOOL_SEARCH_NAME, hosted_search_output_text, is_search_item,
+};
+pub(super) use tool_search::check_tool_search_call_id;
+pub use tool_search::{InputToolSearchCall, ToolSearchOutputMessage};
 pub use validation::InputValidationError;
 
 pub(crate) use window::{
@@ -18,18 +27,15 @@ use std::borrow::Cow;
 
 use either::Either;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::types::event::MessageStatus;
-use crate::types::tools::{ResponsesTool, ToolSearchExecution, ToolSearchStatus};
 
 use super::{InOutItem, OutputItem};
 
 use super::code_interpreter::CodeInterpreterCall;
 use super::multi_agent::{AgentAttribution, InputAgentMessage, InputMultiAgentCall, InputMultiAgentCallOutput};
 use super::output::{
-    CustomToolCall, FunctionToolCall, McpCall, McpListTools, MessagePhase, ReasoningOutput, ToolSearchCall,
-    WebSearchCall,
+    CustomToolCall, FunctionToolCall, McpCall, McpListTools, MessagePhase, ReasoningOutput, WebSearchCall,
 };
 use super::shell::{ShellCall, ShellCallOutputMessage, ShellCallStatus};
 
@@ -224,54 +230,16 @@ where
     Ok(value)
 }
 
-/// A public model-generated tool-search call replayed as Responses input.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct InputToolSearchCall {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent: Option<AgentAttribution>,
-    #[serde(deserialize_with = "deserialize_non_blank_string")]
-    pub id: String,
-    #[serde(deserialize_with = "deserialize_non_blank_string")]
-    pub call_id: String,
-    #[serde(default)]
-    pub execution: ToolSearchExecution,
-    pub arguments: Value,
-    #[serde(default)]
-    pub status: ToolSearchStatus,
-}
-
-impl TryFrom<&ToolSearchCall> for InputToolSearchCall {
-    type Error = ToolSearchStatus;
-
-    fn try_from(call: &ToolSearchCall) -> Result<Self, Self::Error> {
-        if call.status != ToolSearchStatus::Completed {
-            return Err(call.status);
-        }
-        Ok(Self {
-            agent: call.agent.clone(),
-            id: call.id.clone(),
-            call_id: call.call_id.clone(),
-            execution: call.execution,
-            arguments: call.arguments.clone(),
-            status: ToolSearchStatus::Completed,
-        })
+/// A call id that is `null` for a hosted (server-executed) item and otherwise non-blank.
+pub(super) fn deserialize_optional_non_blank_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    if value.as_deref().is_some_and(|value| value.trim().is_empty()) {
+        return Err(serde::de::Error::custom("value must not be blank"));
     }
-}
-
-/// Client-returned declarations resolving a public tool-search call.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct ToolSearchOutputMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
-    #[serde(deserialize_with = "deserialize_non_blank_string")]
-    pub call_id: String,
-    #[serde(default)]
-    pub execution: ToolSearchExecution,
-    #[serde(default)]
-    pub status: ToolSearchStatus,
-    pub tools: Vec<ResponsesTool>,
+    Ok(value)
 }
 
 /// An opaque compacted context checkpoint accepted as Responses input.
@@ -427,17 +395,29 @@ impl ResponsesInput {
     /// becomes an assistant message containing the locally generated summary.
     /// Items before that checkpoint are superseded and are omitted.
     /// Internal MCP-list records and `compaction_trigger` markers are stripped
-    /// and never reach the model.
+    /// and never reach the model. Each paired `tool_search_call` and
+    /// `tool_search_output` becomes the function call and output the model saw live.
     #[must_use]
     pub fn model_input(&self) -> Cow<'_, Self> {
+        self.project_for_model(true)
+    }
+
+    /// [`Self::model_input`] for a projection that runs before definition loading: search items stay public records
+    /// until the upstream request lowers them.
+    pub(crate) fn model_input_keeping_search_items(&self) -> Cow<'_, Self> {
+        self.project_for_model(false)
+    }
+
+    fn project_for_model(&self, lower_searches: bool) -> Cow<'_, Self> {
         let Self::Items(items) = self else {
             return Cow::Borrowed(self);
         };
 
         if !self.contains_compaction()
-            && items
-                .iter()
-                .all(|item| matches!(item, InOutItem::Input(input) if input.is_model_visible()))
+            && items.iter().all(|item| {
+                matches!(item, InOutItem::Input(input)
+                    if input.is_model_visible() && !(lower_searches && search_history::is_search_item(input)))
+            })
         {
             return Cow::Borrowed(self);
         }
@@ -454,6 +434,11 @@ impl ResponsesInput {
                 other => other,
             })
             .collect::<Vec<_>>();
+        let model = if lower_searches {
+            SearchHistory::lower(model)
+        } else {
+            model
+        };
         Cow::Owned(Self::from(model))
     }
 }
@@ -474,6 +459,8 @@ fn function_call_item_id(item_id: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::Value;
+
     use super::*;
 
     #[test]

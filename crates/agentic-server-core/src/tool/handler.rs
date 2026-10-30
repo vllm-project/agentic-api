@@ -1,8 +1,10 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use crate::types::io::FunctionTool;
+use crate::types::io::input::hosted_search_output_text;
 use crate::types::io::output::{FunctionToolCall, GatewayCallStatus, OutputItem};
+use crate::types::io::{FunctionTool, InputItem, InputToolSearchCall, ToolSearchCall, ToolSearchOutputMessage};
+use crate::types::tools::ToolSearchStatus;
 
 pub(crate) const MAX_GATEWAY_TOOL_OUTPUT_BYTES: usize = 1024 * 1024;
 
@@ -61,17 +63,95 @@ impl ToolOutput {
 #[derive(Debug, Clone, Default)]
 pub struct GatewayToolEventPlan {
     started_output: Option<OutputItem>,
+    planned_result: Option<PlannedResult>,
 }
 
 impl GatewayToolEventPlan {
     #[must_use]
     pub const fn new(started_output: Option<OutputItem>) -> Self {
-        Self { started_output }
+        Self {
+            started_output,
+            planned_result: None,
+        }
+    }
+
+    /// The call's result, known when it is planned; the gateway records it instead of executing the call.
+    #[must_use]
+    pub(crate) fn with_planned_result(mut self, result: PlannedResult) -> Self {
+        self.planned_result = Some(result);
+        self
     }
 
     #[must_use]
-    pub(crate) fn into_started_output(self) -> Option<OutputItem> {
-        self.started_output
+    pub(crate) fn into_parts(self) -> (Option<OutputItem>, Option<PlannedResult>) {
+        (self.started_output, self.planned_result)
+    }
+}
+
+/// A gateway call's result that its tool knows when the call is planned, so the call is never executed. Its items are
+/// the turn's history and the model's next input alike; the upstream projection lowers them for the model.
+#[derive(Debug, Clone)]
+pub(crate) enum PlannedResult {
+    /// A hosted search: its completed public call, and the output that follows it at the next output index.
+    SearchPair {
+        call: ToolSearchCall,
+        history_call: InputToolSearchCall,
+        output: ToolSearchOutputMessage,
+    },
+}
+
+impl PlannedResult {
+    /// A hosted search's result: `call` completed, recorded in history as its input form.
+    pub(crate) fn search_pair(call: ToolSearchCall, output: ToolSearchOutputMessage) -> Self {
+        let history_call = InputToolSearchCall {
+            agent: call.agent.clone(),
+            id: call.id.clone(),
+            call_id: call.call_id.clone(),
+            execution: call.execution,
+            arguments: call.arguments.clone(),
+            status: ToolSearchStatus::Completed,
+        };
+        Self::SearchPair {
+            call: ToolSearchCall {
+                status: ToolSearchStatus::Completed,
+                ..call
+            },
+            history_call,
+            output,
+        }
+    }
+
+    /// The call's own public item once it is complete.
+    pub(crate) fn completed_output(&self) -> OutputItem {
+        match self {
+            Self::SearchPair { call, .. } => OutputItem::ToolSearchCall(call.clone()),
+        }
+    }
+
+    /// The public item that follows the call's own at the next output index.
+    pub(crate) fn follow_up_output(&self) -> OutputItem {
+        match self {
+            Self::SearchPair { output, .. } => OutputItem::ToolSearchOutput(output.clone()),
+        }
+    }
+
+    /// The items recorded as history and appended for the model's next round.
+    pub(crate) fn input_items(&self) -> Vec<InputItem> {
+        match self {
+            Self::SearchPair {
+                history_call, output, ..
+            } => vec![
+                InputItem::ToolSearchCall(history_call.clone()),
+                InputItem::ToolSearchOutput(output.clone()),
+            ],
+        }
+    }
+
+    /// The size of the output the model reads, bounded like an executed call's output.
+    pub(crate) fn model_output_len(&self) -> usize {
+        match self {
+            Self::SearchPair { output, .. } => hosted_search_output_text(&output.tools).len(),
+        }
     }
 }
 
