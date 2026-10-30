@@ -246,13 +246,8 @@ impl FileSearchRepository for SqliteVecRepository {
         Box::pin(self.metadata.complete_blob_cleanup(id, owner_token))
     }
 
-    fn blob_cleanup_batch<'a>(
-        &'a self,
-        after: &'a str,
-        limit: i64,
-        now: i64,
-    ) -> BoxFuture<'a, Result<Vec<String>, FileSearchError>> {
-        Box::pin(self.metadata.blob_cleanup_batch(after, limit, now))
+    fn blob_cleanup_batch(&self, limit: i64, now: i64) -> BoxFuture<'_, Result<Vec<String>, FileSearchError>> {
+        Box::pin(self.metadata.blob_cleanup_batch(limit, now))
     }
 
     fn claim_blob_cleanup<'a>(

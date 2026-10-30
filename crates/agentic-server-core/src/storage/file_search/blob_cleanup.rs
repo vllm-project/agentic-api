@@ -124,27 +124,26 @@ impl FileSearchStorage {
     }
 
     pub(crate) async fn complete_blob_cleanup(&self, id: &str, owner_token: &str) -> Result<(), FileSearchError> {
-        sqlx::query("DELETE FROM file_search_blob_cleanup WHERE file_id = $1 AND owner_token = $2")
-            .bind(id)
-            .bind(owner_token)
-            .execute(self.pool.as_ref())
-            .await?;
+        // A claimed upload can still finish a write after recovery removes its
+        // currently visible bytes. Keep that tombstone for later sweeps until
+        // the original publisher can be proved quiescent.
+        sqlx::query(
+            "DELETE FROM file_search_blob_cleanup WHERE file_id = $1 AND owner_token = $2 AND intent != 'abandoned'",
+        )
+        .bind(id)
+        .bind(owner_token)
+        .execute(self.pool.as_ref())
+        .await?;
         Ok(())
     }
 
-    pub(crate) async fn blob_cleanup_batch(
-        &self,
-        after: &str,
-        limit: i64,
-        now: i64,
-    ) -> Result<Vec<String>, FileSearchError> {
+    pub(crate) async fn blob_cleanup_batch(&self, limit: i64, now: i64) -> Result<Vec<String>, FileSearchError> {
         sqlx::query_scalar(
-            "SELECT file_id FROM file_search_blob_cleanup WHERE file_id > $1 \
-            AND (intent = 'delete' OR lease_expires_at <= $3) ORDER BY file_id LIMIT $2",
+            "SELECT file_id FROM file_search_blob_cleanup WHERE lease_expires_at <= $1 \
+             ORDER BY lease_expires_at, file_id LIMIT $2",
         )
-        .bind(after)
-        .bind(limit)
         .bind(now)
+        .bind(limit)
         .fetch_all(self.pool.as_ref())
         .await
         .map_err(Into::into)
@@ -166,8 +165,9 @@ impl FileSearchStorage {
                 .await?;
         }
         let result = sqlx::query(
-            "UPDATE file_search_blob_cleanup SET owner_token = $2, intent = 'recovery', lease_expires_at = $4 \
-             WHERE file_id = $1 AND (intent = 'delete' OR lease_expires_at <= $3)",
+            "UPDATE file_search_blob_cleanup SET owner_token = $2, \
+             intent = CASE WHEN intent IN ('upload', 'abandoned') THEN 'abandoned' ELSE 'recovery' END, \
+             lease_expires_at = $4 WHERE file_id = $1 AND lease_expires_at <= $3",
         )
         .bind(id)
         .bind(owner_token)
