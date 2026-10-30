@@ -18,6 +18,9 @@ pub(in crate::executor) struct TranslationContext {
     gateway_owned_names: HashSet<String>,
     async_tool_names: HashSet<String>,
     withheld_function_names: HashSet<String>,
+    /// Deferred top-level functions behind hosted search. The Responses API
+    /// reports their calls with `namespace` set to the function's own name.
+    self_namespaced_functions: HashSet<String>,
     tool_search_active: bool,
     collaboration_enabled: bool,
     namespace_map: Option<NamespaceMap>,
@@ -57,6 +60,11 @@ impl TranslationContext {
             tool_search_active,
             ..Self::default()
         }
+    }
+
+    pub(in crate::executor) fn with_self_namespaced_functions(mut self, names: HashSet<String>) -> Self {
+        self.self_namespaced_functions = names;
+        self
     }
 
     /// Resolved ownership copied from the registry, including opt-in gateway shell execution.
@@ -116,16 +124,37 @@ impl TranslationContext {
             if let Some(output) = response.get_mut("output").and_then(Value::as_array_mut) {
                 for item in output {
                     normalize_output_item(item);
+                    self.restore_self_namespace(item);
                 }
             }
         }
         if let Some(item) = wire.rest.get_mut("item") {
             normalize_output_item(item);
+            self.restore_self_namespace(item);
         }
         if let Some(part) = wire.rest.get_mut("part") {
             normalize_content_part(part);
         }
         Ok(())
+    }
+
+    fn restore_self_namespace(&self, item: &mut Value) {
+        let Some(item) = item.as_object_mut() else {
+            return;
+        };
+        if item.get("type").and_then(Value::as_str) != Some("function_call")
+            || item.get("namespace").is_some_and(|namespace| !namespace.is_null())
+        {
+            return;
+        }
+        if let Some(name) = item
+            .get("name")
+            .and_then(Value::as_str)
+            .filter(|name| self.self_namespaced_functions.contains(*name))
+        {
+            let name = name.to_owned();
+            item.insert("namespace".to_owned(), Value::String(name));
+        }
     }
 
     pub(super) fn restore_response_metadata(&self, payload: &mut ResponsePayload) {
@@ -141,6 +170,12 @@ impl TranslationContext {
         } else {
             self.tool_types.get(name).copied().unwrap_or(ToolType::Function)
         }
+    }
+
+    /// Whether `name` is the client-executed search the client must resolve,
+    /// as opposed to a hosted search the gateway runs.
+    pub(super) fn is_client_tool_search(&self, name: &str) -> bool {
+        self.tool_type(name) == ToolType::ToolSearch && !self.is_gateway_owned(name)
     }
 
     pub(super) fn is_withheld_function(&self, name: &str) -> bool {
@@ -176,6 +211,14 @@ impl TranslationContext {
             }
         }
         super::namespace::CodexNamespaceTranslator::restore_output_items(output, self.namespace_map.as_ref());
+        for item in output {
+            if let OutputItem::FunctionCall(call) = item
+                && call.namespace.is_none()
+                && self.self_namespaced_functions.contains(&call.name)
+            {
+                call.namespace = Some(call.name.clone());
+            }
+        }
         Ok(())
     }
 }
@@ -192,6 +235,7 @@ pub(super) fn mark_async_call(item: &mut OutputItem) -> ExecutorResult<()> {
         | OutputItem::Message(_)
         | OutputItem::CodeInterpreterCall(_)
         | OutputItem::ToolSearchCall(_)
+        | OutputItem::ToolSearchOutput(_)
         | OutputItem::ShellCall(_)
         | OutputItem::WebSearchCall(_)
         | OutputItem::McpCall(_)

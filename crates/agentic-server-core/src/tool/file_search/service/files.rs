@@ -50,11 +50,22 @@ impl FileSearchService {
         // retains its permit and finishes rollback/cleanup without abandoning I/O.
         tokio::spawn(async move {
             let _permit = permit;
-            files.publish(&file.id, &bytes, &cancelled).await?;
+            storage.stage_blob_cleanup(&file.id).await?;
+            if let Err(error) = files.publish(&file.id, &bytes, &cancelled).await {
+                files.remove(&file.id).await?;
+                storage.complete_blob_cleanup(&file.id).await?;
+                return Err(error);
+            }
             match storage.upload_file_metadata(&file, &content_type, &cancelled).await {
-                Ok(()) => Ok(file),
+                Ok(()) => {
+                    if let Err(error) = storage.complete_blob_cleanup(&file.id).await {
+                        tracing::warn!(file_id = %file.id, %error, "uploaded file is live; cleanup marker remains");
+                    }
+                    Ok(file)
+                }
                 Err(FilePublicationFailure::SafeToRemove(error)) => {
                     files.remove(&file.id).await?;
+                    storage.complete_blob_cleanup(&file.id).await?;
                     Err(error)
                 }
                 Err(FilePublicationFailure::Indeterminate(error)) => Err(error),
@@ -101,17 +112,49 @@ impl FileSearchService {
         let files = self.files.clone();
         let id = id.to_owned();
         // Once deletion starts, finish SQL cascading deletion and blob cleanup
-        // even if the caller disconnects. A failed SQL commit retains the blob.
+        // even if the caller disconnects. The repository records a durable
+        // cleanup marker in the same transaction as metadata deletion.
         tokio::spawn(async move {
             let _permit = permit;
-            let file = storage.file(&id).await?;
-            storage.delete(Collection::Files, &id, None).await?;
-            if matches!(file.content, StoredFileContent::Blob) {
+            let blob = match storage.file(&id).await {
+                Ok(file) => {
+                    storage.delete(Collection::Files, &id, None).await?;
+                    matches!(file.content, StoredFileContent::Blob)
+                }
+                Err(FileSearchError::NotFound(_)) if storage.pending_blob_cleanup(&id).await? => true,
+                Err(error) => return Err(error),
+            };
+            if blob {
                 files.remove(&id).await?;
+                storage.complete_blob_cleanup(&id).await?;
             }
             Ok(deleted(&id, "file.deleted"))
         })
         .await?
+    }
+
+    /// Reconciles durable blob intents after a restart. A live metadata row
+    /// owns its blob; otherwise the orphaned bytes are removed idempotently.
+    ///
+    /// # Errors
+    /// Returns storage or blob removal errors, leaving the marker for retry.
+    pub async fn reconcile_blob_cleanup(&self) -> Result<(), FileSearchError> {
+        let mut after = String::new();
+        loop {
+            let batch = self.storage.blob_cleanup_batch(&after, 100).await?;
+            if batch.is_empty() {
+                return Ok(());
+            }
+            for id in &batch {
+                match self.storage.file_object(id).await {
+                    Ok(_) => {}
+                    Err(FileSearchError::NotFound(_)) => self.files.remove(id).await?,
+                    Err(error) => return Err(error),
+                }
+                self.storage.complete_blob_cleanup(id).await?;
+            }
+            after = batch.last().cloned().unwrap_or_default();
+        }
     }
 
     pub(super) async fn read_content(

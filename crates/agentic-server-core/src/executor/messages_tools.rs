@@ -21,6 +21,7 @@ use crate::tool::web_fetch::{WebFetchArguments, WebFetchErrorCode};
 use crate::tool::web_search::args::requested_searches;
 use crate::tool::{ToolOwnership, ToolRegistry, ToolType};
 use crate::types::io::output::FunctionToolCall;
+use crate::types::messages::tool_call::MessagesToolCall;
 use crate::types::messages::{GatewayToolResult, tool_seam};
 
 #[cfg(test)]
@@ -31,17 +32,9 @@ mod tests;
 /// Responses loop's `gateway::GATEWAY_TOOL_TIMEOUT`.
 const GATEWAY_TOOL_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// One gateway-owned `tool_use` block of a model turn.
-pub(super) struct GatewayToolUse<'a> {
-    pub(super) id: &'a str,
-    pub(super) name: &'a str,
-    /// The call's JSON-object arguments, or why they cannot be dispatched.
-    pub(super) input: Result<Value, String>,
-}
-
 /// A call after admission: cleared to run, or already answered.
-enum Admission<'a> {
-    Run { call: FunctionToolCall, name: &'a str },
+enum Admission {
+    Run { call: FunctionToolCall, name: String },
     Refused(GatewayToolResult),
 }
 
@@ -69,7 +62,7 @@ pub(super) fn request_gateway_map(
 /// assistant content, not reconstructed here — see
 /// [`MessagesRequestContext::append_round`].)
 pub(super) async fn execute_gateway_calls(
-    tool_uses: Vec<GatewayToolUse<'_>>,
+    tool_uses: Vec<MessagesToolCall>,
     ctx: &mut MessagesRequestContext,
     registry: &ToolRegistry,
     gateway_map: &tool_seam::GatewayToolMap,
@@ -97,33 +90,33 @@ pub(super) async fn execute_gateway_calls(
 /// call for its one page, and each runs only when the remaining budget covers
 /// it. A refused call, and a call whose arguments cannot be dispatched or
 /// parsed, leave the budget untouched.
-fn admit<'a>(
-    tool_use: GatewayToolUse<'a>,
+fn admit(
+    tool_use: MessagesToolCall,
     ctx: &mut MessagesRequestContext,
     gateway_map: &tool_seam::GatewayToolMap,
-) -> Admission<'a> {
-    let GatewayToolUse { id, name, input } = tool_use;
+) -> Admission {
+    let MessagesToolCall { id, name, input } = tool_use;
     let input = match input {
         Ok(input) => input,
         // F4: never dispatch with arguments the model did not supply.
         Err(reason) => {
             return Admission::Refused(tool_seam::tool_result_block(
-                id,
+                &id,
                 format!("{reason}; tool was not run"),
                 true,
             ));
         }
     };
-    let call = tool_seam::tool_use_to_call(id, name, &input, gateway_map);
+    let call = tool_seam::tool_use_to_call(&id, &name, &Value::Object(input), gateway_map);
     let admitted = match call.name.as_str() {
         tool_seam::WEB_SEARCH_EXECUTOR => {
             if ctx.admit_searches(requested_searches(&call.arguments)) {
                 Ok(())
             } else {
-                Err(web_search_budget_exhausted_result(id))
+                Err(web_search_budget_exhausted_result(&id))
             }
         }
-        tool_seam::WEB_FETCH_EXECUTOR => admit_fetch(id, &call.arguments, ctx),
+        tool_seam::WEB_FETCH_EXECUTOR => admit_fetch(&id, &call.arguments, ctx),
         _ => Ok(()),
     };
     match admitted {
@@ -156,7 +149,7 @@ fn admit_fetch(id: &str, arguments: &str, ctx: &mut MessagesRequestContext) -> R
 }
 
 async fn run(
-    admission: Admission<'_>,
+    admission: Admission,
     registry: &ToolRegistry,
     policy: &GatewaySchedulerPolicy,
     execution_slots: &Semaphore,
@@ -171,7 +164,7 @@ async fn run(
     // the model supplied.
     let tool_type = registry.tool_type(&call.name);
     let timer = metrics.stage(Stage::Tool(tool_type));
-    let (output, is_error) = dispatch(&call, name, registry, tool_type, policy, execution_slots).await;
+    let (output, is_error) = dispatch(&call, &name, registry, tool_type, policy, execution_slots).await;
     // An error result is a failed stage even though the loop continues.
     timer.finish(is_error.then_some(FailureCategory::Tool));
     tool_seam::tool_result_block(&call.call_id, output, is_error)

@@ -85,7 +85,9 @@ impl ResponseHandler {
                 item.validate_client_id(format!("input[{index}].id"))?;
             }
             if let Some(row) = self.store.get_input_item(id).await? {
-                *item = InOutItem::try_from(&row)?.into_public(row.public_id().to_owned());
+                *item = InOutItem::try_from(&row)?
+                    .into_public(row.public_id().to_owned())
+                    .into_replayed_input();
             }
         }
         Ok(())
@@ -228,17 +230,25 @@ impl ResponseHandler {
         let continuation = ctx.continuation.take();
         let write_durable = continuation.is_none() || ctx.original_request.store;
         let mut new_items = Vec::with_capacity(ctx.new_input_items.len() + output_items.len());
+        let output_items: Vec<_> = output_items
+            .into_iter()
+            .map(|item| {
+                let recorded = item.is_already_in_history(&ctx.new_input_items);
+                (item, recorded)
+            })
+            .collect();
         new_items.extend(ctx.new_input_items);
         new_items.extend(
             output_items
                 .into_iter()
                 .enumerate()
-                .filter(|(index, item)| {
-                    continuation
-                        .as_ref()
-                        .is_none_or(|lease| lease.retains_output(*index, item))
+                .filter(|(index, (item, recorded))| {
+                    !recorded
+                        && continuation
+                            .as_ref()
+                            .is_none_or(|lease| lease.retains_output(*index, item))
                 })
-                .map(|(_, item)| InOutItem::Output(item)),
+                .map(|(_, (item, _))| InOutItem::Output(item)),
         );
 
         let snapshot = metadata.response_snapshot.take();

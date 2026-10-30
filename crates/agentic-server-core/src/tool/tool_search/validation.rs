@@ -1,9 +1,9 @@
-use super::{TOOL_SEARCH_NAME, ToolSearchHandler};
+use super::TOOL_SEARCH_NAME;
 use crate::tool::ToolError;
 use crate::tool::declaration::responses_declarations;
 use crate::types::io::{InOutItem, InputItem, ResponsesInput};
 use crate::types::request_response::RequestPayload;
-use crate::types::tools::{CodexNamespaceMember, ResponsesTool};
+use crate::types::tools::{CodexNamespaceMember, ResponsesTool, ToolSearchExecution};
 
 pub(super) fn validate_tool_search_request(
     request: &RequestPayload,
@@ -24,7 +24,15 @@ pub(super) fn validate_tool_search_request(
             "tool search accepts at most one tool_search declaration".to_owned(),
         ));
     }
-    if request.parallel_tool_calls == Some(true) {
+    // Hosted search runs inside the response, so parallel calls are allowed,
+    // including for a replay that carries only hosted search history.
+    let hosted = tools
+        .iter()
+        .any(|tool| matches!(tool, ResponsesTool::ToolSearch(declaration) if declaration.is_hosted()))
+        || matches!(input, ResponsesInput::Items(items) if items.iter().any(|item| matches!(item,
+            InOutItem::Input(InputItem::ToolSearchCall(call))
+                if call.execution == ToolSearchExecution::Server)));
+    if request.parallel_tool_calls == Some(true) && !hosted {
         return Err(ToolError::Config(
             "parallel_tool_calls must be false when tool search is active".to_owned(),
         ));
@@ -87,8 +95,15 @@ pub(super) fn tool_has_deferred_definition(tool: &ResponsesTool) -> bool {
     }
 }
 
+/// A request whose declarations defer tools or declare a search needs prepared state, which withholds the deferred
+/// tools from the model. Replayed search items alone need none: the upstream projection lowers them, so a summary
+/// request that offers no tools can carry them.
 pub(crate) fn ensure_request_prepared(request: &RequestPayload, prepared: bool) -> Result<(), ToolError> {
-    if ToolSearchHandler::request_has_state(request) && !prepared {
+    let declares_search = request
+        .tools
+        .as_deref()
+        .is_some_and(|tools| tools.iter().any(tool_activates_tool_search));
+    if declares_search && !prepared {
         return Err(ToolError::Config(
             "tool_search requests require prepared request-scoped state before upstream conversion".to_owned(),
         ));

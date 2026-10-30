@@ -31,7 +31,7 @@ use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::upstream::fetch_blocking_payload;
 use crate::tool::ToolSearchState;
 use crate::types::event::MessageStatus;
-use crate::types::io::input::{InputTextContent, latest_compaction_window};
+use crate::types::io::input::{HistoryNaming, InputTextContent, latest_compaction_window};
 use crate::types::io::{
     CompactionItem, InOutItem, InputContent, InputItem, InputMessage, InputMessageContent, ResponseUsage,
     ResponsesInput,
@@ -117,6 +117,8 @@ fn request_payload(model: String, input: ResponsesInput, instructions: Option<St
 }
 
 /// Summarize an already-resolved item history and return its canonical compacted window.
+/// `history` is how the source request knew its tools ([`RequestPayload::history_naming`]), naming context
+/// for a summary that declares no tools.
 ///
 /// # Errors
 ///
@@ -124,11 +126,12 @@ fn request_payload(model: String, input: ResponsesInput, instructions: Option<St
 /// summary, and propagates inference and serialization failures.
 pub(crate) async fn compact_items(
     request: &RequestPayload,
+    history: HistoryNaming,
     input: ResponsesInput,
     exec_ctx: &ExecutionContext,
     auth: Option<&UpstreamHeaders>,
 ) -> ExecutorResult<(Vec<InputItem>, ResponseUsage, Option<String>)> {
-    compact_items_with_trigger(request, input, exec_ctx, auth, CompactionTrigger::InputItem).await
+    compact_items_with_trigger(request, history, input, exec_ctx, auth, CompactionTrigger::InputItem).await
 }
 
 #[tracing::instrument(name = "agentic.compaction", skip_all, fields(
@@ -136,19 +139,21 @@ pub(crate) async fn compact_items(
 ))]
 async fn compact_items_with_trigger(
     request: &RequestPayload,
+    history: HistoryNaming,
     input: ResponsesInput,
     exec_ctx: &ExecutionContext,
     auth: Option<&UpstreamHeaders>,
     trigger: CompactionTrigger,
 ) -> ExecutorResult<(Vec<InputItem>, ResponseUsage, Option<String>)> {
     let timer = exec_ctx.metrics.stage(Stage::Compaction);
-    let summarized = summarize_items(request, input, exec_ctx, auth).await;
+    let summarized = summarize_items(request, history, input, exec_ctx, auth).await;
     timer.finish_result(&summarized);
     summarized
 }
 
 async fn summarize_items(
     request: &RequestPayload,
+    history: HistoryNaming,
     input: ResponsesInput,
     exec_ctx: &ExecutionContext,
     auth: Option<&UpstreamHeaders>,
@@ -194,6 +199,9 @@ async fn summarize_items(
         continuation: None,
     };
     let mut agent = AgentPipeline::new(ctx, None, StreamRelay::detached());
+    // The summary declares no tools; the source request's naming still says how the model knew each call, after an
+    // earlier compaction removed the search that loaded a function.
+    agent.set_history_naming(history);
     let response =
         fetch_blocking_payload(&mut agent, exec_ctx, auth, &crate::tool::ToolRegistry::default(), None).await?;
     exec_ctx.metrics.record_response_usage(response.usage.as_ref());
@@ -270,6 +278,7 @@ pub(crate) async fn maybe_compact_context(
     let input = ResponsesInput::from(items[..prefix].to_vec());
     let (mut compacted, usage, _) = compact_items_with_trigger(
         &ctx.enriched_request,
+        ctx.enriched_request.history_naming(),
         input,
         exec_ctx,
         auth,
@@ -355,6 +364,7 @@ pub async fn compact_response(
     };
     let (compacted, usage, service_tier) = compact_items_with_trigger(
         &ctx.enriched_request,
+        ctx.enriched_request.history_naming(),
         input,
         exec_ctx,
         auth.as_ref(),
@@ -641,54 +651,46 @@ mod tests {
         )]);
     }
 
+    /// A search output counts as the text the model reads: functions with their schemas, namespaces by name and
+    /// description. A loaded namespace's members reach the model as tool declarations, not in the input.
     #[test]
-    fn token_estimate_counts_complete_tool_search_declarations() {
+    fn token_estimate_counts_the_search_output_the_model_reads() {
         let base = serde_json::json!([{
-            "type": "tool_search_output", "call_id": "call_1", "tools": [{
-                "type": "namespace", "name": "workspace", "description": "x", "extra_context": "x",
-                "tools": [{
-                    "type": "function", "name": "lookup", "description": "x",
-                    "parameters": {"type": "object", "description": "x", "enum": [1]},
-                    "extra_context": "x"
-                }]
-            }]
+            "type": "tool_search_output", "call_id": "call_1", "tools": [
+                {
+                    "type": "namespace", "name": "workspace", "description": "x", "extra_context": "x",
+                    "tools": [{"type": "function", "name": "lookup", "description": "x", "parameters": {"type": "object"}}]
+                },
+                {
+                    "type": "function", "name": "fetch", "description": "x",
+                    "parameters": {"type": "object", "description": "x", "enum": [1]}, "extra_context": "x"
+                }
+            ]
         }]);
-        let long_text = "substantial tool context ".repeat(256);
+        let long_text = serde_json::json!("substantial tool context ".repeat(256));
+        let with = |pointer: &str, value: &serde_json::Value| {
+            let mut long = base.clone();
+            *long.pointer_mut(pointer).expect("existing tool field") = value.clone();
+            long
+        };
         for (label, pointer, value) in [
-            (
-                "namespace description",
-                "/0/tools/0/description",
-                serde_json::json!(long_text),
-            ),
-            (
-                "namespace extra",
-                "/0/tools/0/extra_context",
-                serde_json::json!(long_text),
-            ),
-            (
-                "function description",
-                "/0/tools/0/tools/0/description",
-                serde_json::json!(long_text),
-            ),
-            (
-                "function schema",
-                "/0/tools/0/tools/0/parameters/description",
-                serde_json::json!(long_text),
-            ),
-            (
-                "function extra",
-                "/0/tools/0/tools/0/extra_context",
-                serde_json::json!(long_text),
-            ),
+            ("namespace description", "/0/tools/0/description", &long_text),
+            ("function description", "/0/tools/1/description", &long_text),
+            ("function schema", "/0/tools/1/parameters/description", &long_text),
+            ("function extra", "/0/tools/1/extra_context", &long_text),
             (
                 "schema numbers",
-                "/0/tools/0/tools/0/parameters/enum/0",
-                serde_json::json!(u64::MAX),
+                "/0/tools/1/parameters/enum/0",
+                &serde_json::json!(u64::MAX),
             ),
         ] {
-            let mut long = base.clone();
-            *long.pointer_mut(pointer).expect("existing tool field") = value;
-            assert_text_growth([(label, base.clone(), long)]);
+            assert_text_growth([(label, base.clone(), with(pointer, value))]);
+        }
+        let estimate = |value: serde_json::Value| {
+            estimate_input_tokens(&serde_json::from_value(value).expect("valid search output"))
+        };
+        for pointer in ["/0/tools/0/extra_context", "/0/tools/0/tools/0/description"] {
+            assert_eq!(estimate(with(pointer, &long_text)), estimate(base.clone()), "{pointer}");
         }
     }
 
@@ -717,6 +719,45 @@ mod tests {
         ]);
 
         assert!(estimate_input_tokens(&input) > 0);
+    }
+
+    /// A hosted search as the model sees it, captured before the public pair became the stored
+    /// record. Storing the public pair instead must not change when auto-compaction triggers.
+    #[test]
+    fn hosted_search_estimate_counts_what_the_model_sees() {
+        let items: Vec<InputItem> = serde_json::from_str(include_str!(
+            "../../tests/fixtures/multi_agent_private_search_history.json"
+        ))
+        .expect("fixture history");
+        assert_eq!(estimate_history_tokens(&items), 137);
+
+        let InputItem::FunctionCallOutput(private_output) = &items[2] else {
+            panic!("the fixture's search output");
+        };
+        let ToolCallOutput::Text(text) = &private_output.output else {
+            panic!("a text search output");
+        };
+        let loaded: serde_json::Value = serde_json::from_str(text).expect("search output JSON");
+        let public: Vec<InputItem> = serde_json::from_value(serde_json::json!([
+            items[0],
+            {"type": "tool_search_call", "id": "tsc_s1", "call_id": null, "execution": "server",
+                "arguments": {"paths": ["get_weather"]}, "status": "completed"},
+            {"type": "tool_search_output", "id": "tso_s1", "call_id": null, "execution": "server",
+                "status": "completed", "tools": loaded["tools"]},
+            items[3]
+        ]))
+        .expect("public history");
+        // The lowered call carries no item id (an upstream such as OpenAI would tie it to a call_id the public pair
+        // does not keep), so the public pair counts as the stored private pair without that id.
+        let mut model_view = items.clone();
+        if let InputItem::FunctionCall(call) = &mut model_view[1] {
+            call.id = None;
+        }
+        assert_eq!(
+            estimate_history_tokens(&public),
+            estimate_history_tokens(&model_view),
+            "the public pair counts as the call and output the model reads"
+        );
     }
 
     #[test]

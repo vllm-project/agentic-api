@@ -839,4 +839,16 @@ mod tests {
 
         assert!(!result);
     }
+
+    #[tokio::test(start_paused = true)]
+    async fn dependency_check_fails_fast_when_storage_is_unready() {
+        let result = tokio::time::timeout(
+            Duration::from_secs(1),
+            dependencies_are_ready(future::ready(false), future::pending()),
+        )
+        .await
+        .expect("storage failure must win before the pending upstream check");
+
+        assert!(!result);
+    }
 }

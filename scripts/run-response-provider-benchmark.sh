@@ -22,6 +22,7 @@ DATASET_OFFSET="${DATASET_OFFSET:-0}"
 BFCL_ROOT="${BFCL_ROOT:-}"
 BFCL_CATEGORY="${BFCL_CATEGORY:-simple_python}"
 PRINT_PROMPTS="${PRINT_PROMPTS:-0}"
+GATEWAY_PID="${GATEWAY_PID:-}"
 
 usage() {
   cat <<'EOF'
@@ -33,7 +34,9 @@ Usage:
 Core environment variables:
   MODEL                  Model served by all selected endpoints.
   WORKLOAD               transport, tool-call, or history-rehydration.
-  SESSIONS               Parallel sessions per provider (default: 5).
+  SESSIONS               Parallel sessions per provider (default: 5). A comma-separated list, e.g. 1,5,10,25,50,
+                         runs one independent batch per level, in order, each under its own sessions-NNNNN/
+                         directory of the run, and writes sessions_summary.md beside them.
   REQUESTS_PER_SESSION   Sequential turns per session; unset uses the workload default.
   DEPTHS                 Comma-separated fixed turn depths (history-rehydration only), e.g.
                          1,5,10,25,50,100. Each depth runs as its own independent batch of SESSIONS
@@ -58,11 +61,17 @@ BFCL tool-call workload:
 
 Other controls:
   TIMEOUT_SECONDS RESULTS_ROOT
+  GATEWAY_PID            Process ID of a local Agentic API server (Linux). Its CPU time and resident memory are read
+                         from /proc once a second during each batch (gateway-usage.csv in the batch's directory) and
+                         summarized per level in sessions_summary.md.
 
 Examples:
   WORKLOAD=transport PROVIDER=all TRANSPORT_ROUNDS=8 ./scripts/run-response-provider-benchmark.sh
 
   WORKLOAD=transport PROVIDER=agentic-api-json ./scripts/run-response-provider-benchmark.sh
+
+  WORKLOAD=transport PROVIDER=all SESSIONS=1,5,10,25,50 GATEWAY_PID="$(pgrep -nx agentic-server)" \
+    ./scripts/run-response-provider-benchmark.sh
 
   WORKLOAD=tool-call PROVIDER=agentic-api BFCL_ROOT=/path/to/BFCL \
     REQUESTS_PER_SESSION=1 ./scripts/run-response-provider-benchmark.sh
@@ -87,12 +96,20 @@ for command_name in cargo tee; do
   fi
 done
 
-for numeric_value in SESSIONS TRANSPORT_ROUNDS TIMEOUT_SECONDS; do
+for numeric_value in TRANSPORT_ROUNDS TIMEOUT_SECONDS; do
   if [[ ! "${!numeric_value}" =~ ^[1-9][0-9]*$ ]]; then
     echo "error: ${numeric_value} must be a positive integer" >&2
     exit 2
   fi
 done
+if [[ ! "$SESSIONS" =~ ^[1-9][0-9]*(,[1-9][0-9]*)*$ ]]; then
+  echo "error: SESSIONS must be a positive integer or a comma-separated list of them" >&2
+  exit 2
+fi
+if [[ -n "$GATEWAY_PID" && ! -r "/proc/${GATEWAY_PID}/stat" ]]; then
+  echo "error: GATEWAY_PID ${GATEWAY_PID} is not a running process with a /proc entry (sampling needs Linux)" >&2
+  exit 2
+fi
 if [[ -n "$REQUESTS_PER_SESSION" && ! "$REQUESTS_PER_SESSION" =~ ^[1-9][0-9]*$ ]]; then
   echo "error: REQUESTS_PER_SESSION must be a positive integer when set" >&2
   exit 2
@@ -149,7 +166,6 @@ benchmark_command=(
   cargo bench --package agentic-server --bench response_provider --
   --model "$MODEL"
   --workload "$WORKLOAD"
-  --sessions "$SESSIONS"
   --transport-rounds "$TRANSPORT_ROUNDS"
   --provider "$PROVIDER"
   --agentic-url "$AGENTIC_URL"
@@ -157,7 +173,6 @@ benchmark_command=(
   --timeout-seconds "$TIMEOUT_SECONDS"
   --seed "$SEED"
   --dataset-offset "$DATASET_OFFSET"
-  --output-dir "$run_dir"
   --live-jsonl
 )
 if [[ -n "$DEPTHS" ]]; then
@@ -172,26 +187,101 @@ if [[ "$PRINT_PROMPTS" == "1" ]]; then
   benchmark_command+=(--print-prompts)
 fi
 
-{
-  printf 'cd %q\n' "$repository_root"
-  printf '%q ' "${benchmark_command[@]}"
-  printf '\n'
-} >"${run_dir}/command.sh"
+# One sample of the gateway: the time in Unix milliseconds, its CPU time (utime + stime) in seconds and its resident
+# memory in KiB. Fails once the process is gone.
+clock_ticks="$(getconf CLK_TCK)"
+gateway_sample() {
+  awk -v hz="$clock_ticks" -v now="$(date +%s%3N)" '
+    FNR == NR { sub(/^.*\) /, ""); cpu = ($12 + $13) / hz; next }
+    /^VmRSS:/ { printf "%s,%.2f,%s\n", now, cpu, $2 }
+  ' "/proc/${GATEWAY_PID}/stat" "/proc/${GATEWAY_PID}/status" 2>/dev/null
+}
+
+# run_batch SESSIONS DIR: one benchmark batch at SESSIONS sessions per provider, with its results in DIR.
+run_batch() {
+  local sessions="$1" batch_dir="$2" sampler="" status=0
+  local command=("${benchmark_command[@]}" --sessions "$sessions" --output-dir "$batch_dir")
+  mkdir -p "$batch_dir"
+  {
+    printf 'cd %q\n' "$repository_root"
+    printf '%q ' "${command[@]}"
+    printf '\n'
+  } >"${batch_dir}/command.sh"
+  echo "Benchmark results:  ${batch_dir} (${sessions} sessions per provider)" >&2
+  echo "Live JSONL:        ${batch_dir}/live-events.jsonl" >&2
+  echo "Diagnostic log:    ${batch_dir}/benchmark.log" >&2
+  if [[ -n "$GATEWAY_PID" ]]; then
+    echo "unix_ms,cpu_seconds,rss_kib" >"${batch_dir}/gateway-usage.csv"
+    while gateway_sample >>"${batch_dir}/gateway-usage.csv"; do sleep 1; done &
+    sampler=$!
+  fi
+  "${command[@]}" \
+    > >(tee "${batch_dir}/live-events.jsonl") \
+    2> >(tee "${batch_dir}/benchmark.log" >&2) || status=$?
+  if [[ -n "$sampler" ]]; then
+    kill "$sampler" 2>/dev/null || true
+    wait "$sampler" 2>/dev/null || true
+    gateway_sample >>"${batch_dir}/gateway-usage.csv" || true
+  fi
+  echo "Benchmark exit status: ${status}" >&2
+  echo "Summary: ${batch_dir}/summary.md" >&2
+  return "$status"
+}
+
+# A one-level run keeps its results in the run directory itself; a sweep gives each level a directory of its own.
+IFS=, read -r -a session_levels <<<"$SESSIONS"
+batch_dirs=() batch_statuses=()
+for sessions in "${session_levels[@]}"; do
+  if (( ${#session_levels[@]} == 1 )); then
+    batch_dirs+=("$run_dir")
+  else
+    batch_dirs+=("$(printf '%s/sessions-%05d' "$run_dir" "$sessions")")
+  fi
+done
 
 echo "Benchmark workload: ${WORKLOAD}" >&2
-echo "Benchmark results:  ${run_dir}" >&2
-echo "Live JSONL:        ${run_dir}/live-events.jsonl" >&2
-echo "Diagnostic log:    ${run_dir}/benchmark.log" >&2
-
 cd "$repository_root"
-if "${benchmark_command[@]}" \
-  > >(tee "${run_dir}/live-events.jsonl") \
-  2> >(tee "${run_dir}/benchmark.log" >&2); then
-  benchmark_status=0
-else
-  benchmark_status=$?
-fi
+benchmark_status=0
+for i in "${!session_levels[@]}"; do
+  status=0
+  run_batch "${session_levels[$i]}" "${batch_dirs[$i]}" || status=$?
+  batch_statuses+=("$status")
+  if (( benchmark_status == 0 )); then
+    benchmark_status="$status"
+  fi
+done
 
-echo "Benchmark exit status: ${benchmark_status}" >&2
-echo "Summary: ${run_dir}/summary.md" >&2
+if (( ${#session_levels[@]} > 1 )) || [[ -n "$GATEWAY_PID" ]]; then
+  {
+    echo "# Responses provider benchmark: ${WORKLOAD} by sessions per provider"
+    echo
+    echo "Each level ran as its own batch, in this order. Its summary.md has the latency, throughput and success of every"
+    echo "provider at that level."
+    if [[ -n "$GATEWAY_PID" ]]; then
+      echo "Gateway columns are process ${GATEWAY_PID}'s CPU time and resident memory over the batch, sampled once a second."
+    fi
+    echo
+    echo "| Sessions per provider | Exit status | Gateway CPU (s) | Gateway cores, mean | Gateway peak RSS (MiB) | Summary |"
+    echo "| ---: | ---: | ---: | ---: | ---: | --- |"
+    for i in "${!session_levels[@]}"; do
+      usage="| n/a | n/a | n/a"
+      if [[ -s "${batch_dirs[$i]}/gateway-usage.csv" ]]; then
+        usage="$(awk -F, '
+          NR == 2 { t0 = $1; c0 = $2 }
+          NR > 1 { t1 = $1; c1 = $2; if ($3 > rss) rss = $3 }
+          END {
+            if (NR < 3) { print "| n/a | n/a | n/a"; exit }
+            printf "| %.2f | %.2f | %.1f", c1 - c0, (c1 - c0) / ((t1 - t0) / 1000), rss / 1024
+          }
+        ' "${batch_dirs[$i]}/gateway-usage.csv")"
+      fi
+      summary="summary.md"
+      if [[ "${batch_dirs[$i]}" != "$run_dir" ]]; then
+        summary="${batch_dirs[$i]##*/}/summary.md"
+      fi
+      echo "| ${session_levels[$i]} | ${batch_statuses[$i]} ${usage} | [${summary}](${summary}) |"
+    done
+  } >"${run_dir}/sessions_summary.md"
+  echo "Sessions summary: ${run_dir}/sessions_summary.md" >&2
+fi
 exit "$benchmark_status"

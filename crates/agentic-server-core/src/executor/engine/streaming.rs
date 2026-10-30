@@ -3,8 +3,12 @@
 mod producer;
 
 use super::run_until_gateway_tools_complete;
+use crate::events::SSEEventType;
 use crate::executor::error::{ExecutorError, ExecutorResult};
-use crate::executor::gateway_accumulator::{GatewayStreamAccumulator, STREAM_EVENT_BUFFER, StreamEvent};
+use crate::executor::gateway_accumulator::{
+    GatewayStreamAccumulator, STREAM_EVENT_BUFFER, StreamEvent, executor_error_frame, synthetic_event,
+    terminal_response_frame,
+};
 use crate::executor::inference::UpstreamHeaders;
 use crate::executor::inference::{BoxStream, DONE_MARKER};
 use crate::executor::multi_agent::RunControlReceiver;
@@ -15,7 +19,11 @@ use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::telemetry::metrics::ExecutionClock;
 use crate::executor::telemetry::{ExecutionSpan, InstrumentedStream};
 use crate::tool::{ToolSearchMetadata, ToolSearchState};
+use crate::types::io::OutputItem;
+use crate::types::io::output::McpListTools;
 use crate::types::request_response::ResponsePayload;
+use crate::types::tools::ResponsesTool;
+use crate::utils::common::serialize_to_value;
 use crate::utils::common::utcnow_str;
 use async_stream::stream;
 use futures::StreamExt;
@@ -156,6 +164,10 @@ fn failed_stream_chunk(
     accumulator: &mut GatewayStreamAccumulator,
     next_sequence_number: u64,
 ) -> String {
+    if let ExecutorError::McpListToolsFailed(listing) = error {
+        return mcp_list_tools_failed_chunk(listing, error, context, accumulator)
+            .unwrap_or_else(|error| GatewayStreamAccumulator::executor_error_chunk_at(&error, next_sequence_number));
+    }
     if error.is_invalid_upstream_tool_search() {
         accumulator
             .terminal_response_chunk(&context.failed_payload(error))
@@ -163,6 +175,52 @@ fn failed_stream_chunk(
     } else {
         GatewayStreamAccumulator::executor_error_chunk_at(error, next_sequence_number)
     }
+}
+
+/// The Responses API streams a failed MCP tool listing as the response start,
+/// the listing's added, in-progress and failed events, an `error` event, and
+/// `response.failed` whose output holds the empty listing.
+fn mcp_list_tools_failed_chunk(
+    listing: &McpListTools,
+    error: &ExecutorError,
+    context: &StreamFailureContext,
+    accumulator: &mut GatewayStreamAccumulator,
+) -> Result<String, ExecutorError> {
+    let item = OutputItem::McpListTools(listing.clone());
+    let mut started = context.failed_payload(error);
+    "in_progress".clone_into(&mut started.status);
+    started.error = None;
+    let started = serialize_to_value(&started).map_err(ExecutorError::JsonError)?;
+    let mut failed = context.failed_payload(error);
+    failed.output = vec![item.clone()];
+    let item_fields = || {
+        [
+            ("item_id".to_owned(), serde_json::json!(listing.id)),
+            ("output_index".to_owned(), serde_json::json!(0)),
+        ]
+    };
+    let frames = vec![
+        synthetic_event(
+            SSEEventType::ResponseCreated,
+            [("response".to_owned(), started.clone())],
+        )?,
+        synthetic_event(SSEEventType::ResponseInProgress, [("response".to_owned(), started)])?,
+        synthetic_event(
+            SSEEventType::OutputItemAdded,
+            [
+                ("output_index".to_owned(), serde_json::json!(0)),
+                (
+                    "item".to_owned(),
+                    serialize_to_value(&item).map_err(ExecutorError::JsonError)?,
+                ),
+            ],
+        )?,
+        synthetic_event(SSEEventType::McpListToolsInProgress, item_fields())?,
+        synthetic_event(SSEEventType::McpListToolsFailed, item_fields())?,
+        executor_error_frame(error),
+        terminal_response_frame(&failed)?,
+    ];
+    accumulator.frames_chunk(frames)
 }
 
 /// The terminal frame for an execution that produced a response: the
@@ -220,6 +278,8 @@ pub(super) struct StreamFailureContext {
     previous_response_id: Option<String>,
     instructions: Option<String>,
     max_tool_calls: Option<u64>,
+    /// The public declarations, stripped of credentials and discovery details, as every lifecycle frame echoes them.
+    tools: Option<Vec<ResponsesTool>>,
     standard_fields: crate::types::request_response::StandardResponseFields,
 }
 
@@ -232,6 +292,12 @@ impl From<&RequestContext> for StreamFailureContext {
             previous_response_id: ctx.original_request.previous_response_id.clone(),
             instructions: ctx.original_request.instructions.clone(),
             max_tool_calls: ctx.max_tool_calls().map(NonZeroU64::get),
+            tools: ctx.original_request.tools.clone().map(|mut tools| {
+                for tool in &mut tools {
+                    tool.sanitize_for_persistence();
+                }
+                tools
+            }),
             standard_fields: {
                 let mut fields = crate::types::request_response::StandardResponseFields::default();
                 fields.apply_request(&ctx.original_request);
@@ -252,17 +318,23 @@ impl StreamFailureContext {
             output: Vec::new(),
             usage: None,
             incomplete_details: None,
-            error: Some(serde_json::json!({
-                "message": error.error_message(),
-                "type": error.error_type(),
-                "code": error.error_code(),
-            })),
+            error: Some({
+                let mut details = serde_json::json!({
+                    "message": error.error_message(),
+                    "type": error.error_type(),
+                    "code": error.error_code(),
+                });
+                if let Some(param) = error.error_param() {
+                    details["param"] = serde_json::json!(param);
+                }
+                details
+            }),
             previous_response_id: self.previous_response_id.clone(),
             conversation: self.conversation_id.clone(),
             instructions: self.instructions.clone(),
             max_tool_calls: self.max_tool_calls,
             service_tier: None,
-            tools: None,
+            tools: self.tools.clone(),
             tool_choice: None,
             standard_fields: self.standard_fields.clone(),
         }

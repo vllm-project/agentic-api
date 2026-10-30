@@ -1,0 +1,55 @@
+[
+  {
+    "type": "tool_search"
+  },
+  {
+    "type": "function",
+    "name": "get_weather",
+    "description": "Get the current weather for a city",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "city": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "city"
+      ],
+      "additionalProperties": false
+    },
+    "strict": true,
+    "defer_loading": true
+  },
+  {
+    "type": "function",
+    "name": "get_exchange_rate",
+    "description": "Get the exchange rate between two currencies",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "base": {
+          "type": "string"
+        },
+        "quote": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "base",
+        "quote"
+      ],
+      "additionalProperties": false
+    },
+    "strict": true,
+    "defer_loading": true
+  },
+  {
+    "type": "mcp",
+    "server_label": "broken_docs",
+    "server_url": "https://mcp.invalid/mcp",
+    "server_description": "Documentation search for the example project.",
+    "require_approval": "never",
+    "defer_loading": true
+  }
+]

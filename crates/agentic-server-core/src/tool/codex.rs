@@ -1,11 +1,11 @@
 use crate::types::io::InOutItem;
 
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::handler::{ToolError, ToolHandler};
 use super::registry::{ToolEntry, ToolType};
-use crate::types::io::{FunctionTool, InputItem, ResponsesInput, ToolChoice};
+use crate::types::io::{FunctionTool, InputFunctionToolCall, InputItem, ResponsesInput, ToolChoice};
 use crate::types::tools::{CodexNamespaceMember, CodexNamespaceToolParam, NonEmptyToolName};
 
 use super::declaration::ToolDeclaration;
@@ -71,7 +71,7 @@ struct NamespaceMemberName {
 }
 
 #[derive(Clone, Debug)]
-struct NamespaceCallMapping {
+pub(crate) struct NamespaceCallMapping {
     member: NamespaceMemberName,
     upstream_name: String,
 }
@@ -96,7 +96,7 @@ impl NamespaceMap {
         self.calls.get(name)
     }
 
-    fn mapping_for_member(&self, namespace: &str, name: &str) -> Option<&NamespaceCallMapping> {
+    pub(crate) fn mapping_for_member(&self, namespace: &str, name: &str) -> Option<&NamespaceCallMapping> {
         let member = NamespaceMemberName {
             namespace: namespace.to_string(),
             name: name.to_string(),
@@ -238,34 +238,6 @@ impl CodexNamespaceHandler {
         namespace_map_from_tools(tools)
     }
 
-    /// Rejects namespace declarations that cannot be represented
-    /// unambiguously by the gateway-owned flat model-visible naming scheme.
-    ///
-    /// This must run before building the upstream request or request-scoped
-    /// registry. Otherwise the gateway could silently drop a namespace member
-    /// or restore a flat model call to the wrong public `{ namespace, name }`.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ToolError::Config`] when a generated namespace member name
-    /// collides with another declared function-call tool or with another
-    /// namespace member.
-    pub fn validate_namespace_collisions(&self, tools: Option<&[ToolDeclaration]>) -> Result<(), ToolError> {
-        let Some(tools) = tools else {
-            return Ok(());
-        };
-        let mut builder = NamespaceMapBuilder::new(typed_top_level_registry_keys(tools));
-        for tool in tools {
-            let ToolDeclaration::Namespace(namespace) = tool else {
-                continue;
-            };
-            for member_name in typed_function_member_names(namespace) {
-                builder.validate_and_record_flat_member(&namespace.name, &member_name)?;
-            }
-        }
-        Ok(())
-    }
-
     /// Resolves the request's `tool_choice` (defaulting to `ToolChoice::Auto`
     /// when absent) and, if it's a namespaced `ToolChoice::Function {
     /// namespace, name }`, rewrites it to the flattened, model-visible name
@@ -285,27 +257,30 @@ impl CodexNamespaceHandler {
     }
 
     /// Rewrite public namespaced function-call history to the exact flat names
-    /// from the request-scoped namespace map used for tool declarations.
+    /// from the request-scoped namespace map used for tool declarations, and
+    /// unqualify a call to a searched top-level function, one of `functions`
+    /// (see [`unqualify_or_flatten_calls`]).
     #[must_use]
     pub fn resolve_input<'a>(
         &self,
         map: Option<&NamespaceMap>,
+        functions: &HashSet<&str>,
         input: Cow<'a, ResponsesInput>,
     ) -> Cow<'a, ResponsesInput> {
-        let Some(map) = map else {
-            return input;
+        let resolves = |call: &InputFunctionToolCall| {
+            call.namespace
+                .as_deref()
+                .is_some_and(|namespace| map.is_some_and(|map| map.mapping_for_member(namespace, &call.name).is_some()))
+                || is_searched_function_call(call, |name| functions.contains(name))
         };
         let should_rewrite = matches!(&*input, ResponsesInput::Items(items) if items.iter().any(|item| {
-            matches!(item, InOutItem::Input(InputItem::FunctionCall(call))
-                if call.namespace.as_deref().is_some_and(|namespace| {
-                    map.mapping_for_member(namespace, &call.name).is_some()
-                }))
+            matches!(item, InOutItem::Input(InputItem::FunctionCall(call)) if resolves(call))
         }));
         if !should_rewrite {
             return input;
         }
         let mut input = input.into_owned();
-        rewrite_input_with_map(&mut input, map);
+        unqualify_or_flatten_calls(&mut input, map, functions);
         Cow::Owned(input)
     }
 }
@@ -352,7 +327,13 @@ fn namespace_map_from_tools(tools: Option<&[ToolDeclaration]>) -> Result<Option<
     Ok(Some(builder.finish()))
 }
 
-fn rewrite_input_with_map(input: &mut ResponsesInput, map: &NamespaceMap) {
+/// Lowers namespaced calls to the flat names the model knows. A call whose
+/// namespace is its own name, that no declared namespace maps, and whose name
+/// is one of the request's top-level `functions` is to a searched function: the
+/// public item mirrors the Responses API, but the model knows the function
+/// unqualified. Any other unmapped call keeps its namespace, since a namespace
+/// may hold a member of its own name.
+fn unqualify_or_flatten_calls(input: &mut ResponsesInput, map: Option<&NamespaceMap>, functions: &HashSet<&str>) {
     let ResponsesInput::Items(items) = input else {
         return;
     };
@@ -363,12 +344,25 @@ fn rewrite_input_with_map(input: &mut ResponsesInput, map: &NamespaceMap) {
         let Some(namespace) = call.namespace.as_deref() else {
             continue;
         };
-        let Some(mapping) = map.mapping_for_member(namespace, &call.name) else {
-            continue;
-        };
-        call.name.clone_from(&mapping.upstream_name);
-        call.namespace = None;
+        if let Some(mapping) = map.and_then(|map| map.mapping_for_member(namespace, &call.name)) {
+            call.name.clone_from(&mapping.upstream_name);
+            call.namespace = None;
+        } else if is_searched_function_call(call, |name| functions.contains(name)) {
+            call.namespace = None;
+        }
     }
+}
+
+/// Whether `call` is to a searched top-level function: the Responses API names such a call's namespace after it, and
+/// `is_function` confirms the name is a top-level function the request declares or a search in its history loaded.
+/// The model knows the function unqualified, so every model-facing projection drops that namespace.
+pub(crate) fn is_searched_function_call(call: &InputFunctionToolCall, is_function: impl Fn(&str) -> bool) -> bool {
+    names_itself(call) && is_function(&call.name)
+}
+
+/// Whether `call` reports its own name as namespace, as the Responses API does for a searched top-level function.
+fn names_itself(call: &InputFunctionToolCall) -> bool {
+    call.namespace.as_deref() == Some(call.name.as_str())
 }
 
 /// Returns `namespace` with its function members' names rewritten to their
@@ -423,22 +417,7 @@ fn rename_namespace_members(
 fn typed_top_level_registry_keys(tools: &[ToolDeclaration]) -> HashMap<String, ToolType> {
     tools
         .iter()
-        .filter_map(|tool| {
-            let registry_key = match tool {
-                ToolDeclaration::Function(function) => function.name.as_str().to_owned(),
-                ToolDeclaration::WebSearch(_) => "web_search".to_owned(),
-                ToolDeclaration::WebFetch(_) => "web_fetch".to_owned(),
-                ToolDeclaration::FileSearch(_) => "file_search".to_owned(),
-                ToolDeclaration::CodeInterpreter(_) => "code_interpreter".to_owned(),
-                ToolDeclaration::ToolSearch(_)
-                | ToolDeclaration::Mcp(_)
-                | ToolDeclaration::Shell(_)
-                | ToolDeclaration::Namespace(_)
-                | ToolDeclaration::Custom(_)
-                | ToolDeclaration::Unsupported => return None,
-            };
-            tool.tool_type().map(|tool_type| (registry_key, tool_type))
-        })
+        .filter_map(|tool| Some((tool.top_level_registry_key()?, tool.tool_type()?)))
         .collect()
 }
 
@@ -612,27 +591,6 @@ mod tests {
     }
 
     #[test]
-    fn validate_namespace_collisions_rejects_top_level_flat_name_collision() {
-        let tools = responses_declarations(
-            &serde_json::from_value::<Vec<ResponsesTool>>(serde_json::json!([
-                {"type": "function", "name": "agentic_ns__mcp__shell__run"},
-                {
-                    "type": "namespace",
-                    "name": "mcp__shell",
-                    "tools": [{"type": "function", "name": "run"}]
-                }
-            ]))
-            .unwrap(),
-        );
-
-        let err = CodexNamespaceHandler
-            .validate_namespace_collisions(Some(&tools))
-            .unwrap_err();
-
-        assert!(err.to_string().contains("collides with a declared function tool"));
-    }
-
-    #[test]
     fn resolve_namespace_members_rejects_top_level_flat_name_collision() {
         let tools = responses_declarations(
             &serde_json::from_value::<Vec<ResponsesTool>>(serde_json::json!([
@@ -674,31 +632,6 @@ mod tests {
         CodexNamespaceHandler
             .resolve_namespace_members(&tools)
             .expect("native MCP registry keys are derived after discovery");
-    }
-
-    #[test]
-    fn validate_namespace_collisions_rejects_generated_name_collision_between_namespace_members() {
-        let tools = responses_declarations(
-            &serde_json::from_value::<Vec<ResponsesTool>>(serde_json::json!([
-                {
-                    "type": "namespace",
-                    "name": "a__b",
-                    "tools": [{"type": "function", "name": "c"}]
-                },
-                {
-                    "type": "namespace",
-                    "name": "a",
-                    "tools": [{"type": "function", "name": "b__c"}]
-                }
-            ]))
-            .unwrap(),
-        );
-
-        let err = CodexNamespaceHandler
-            .validate_namespace_collisions(Some(&tools))
-            .unwrap_err();
-
-        assert!(err.to_string().contains("generated name"));
     }
 
     #[test]
