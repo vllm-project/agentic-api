@@ -479,6 +479,8 @@ fn configure_collision_mcp(fixture: &mut support::TestFixture, url: &str) {
                 headers: None,
                 allowed_tools: None,
                 require_approval: Some("never".to_owned()),
+                description: None,
+                defer_loading: None,
             },
         )]),
         ..Default::default()

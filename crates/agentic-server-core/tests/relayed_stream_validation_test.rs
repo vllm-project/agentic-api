@@ -324,7 +324,12 @@ async fn strict_relay_decoder_accepts_compatible_recorded_responses_streams() {
         ),
     ];
 
-    for path in yaml_files(&root) {
+    // Hosted searches execute in the gateway; their public search items are not upstream model events.
+    let gateway_executed = root.join("hosted_tool_search");
+    for path in yaml_files(&root)
+        .into_iter()
+        .filter(|path| !path.starts_with(&gateway_executed))
+    {
         let relative = path.strip_prefix(&root).expect("cassette below root");
         for (turn_index, chunks) in response_streams(&path).into_iter().enumerate() {
             let stream = chunks.join("\n");

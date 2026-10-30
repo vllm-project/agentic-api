@@ -95,7 +95,11 @@ impl ToolDeclaration {
 
     #[must_use]
     pub fn is_gateway_owned(&self) -> bool {
-        self.tool_type().is_some_and(ToolType::is_gateway_owned)
+        match self {
+            // The declaration, not the tool kind, says where a search runs.
+            Self::ToolSearch(param) => param.is_hosted(),
+            _ => self.tool_type().is_some_and(ToolType::is_gateway_owned),
+        }
     }
 
     /// Normalise function-like tool declarations to the `FunctionTool` wire format that vLLM understands.
@@ -160,6 +164,21 @@ impl From<ToolOutput> for FunctionToolResultMessage {
 mod tests {
     use super::*;
     use crate::types::tools::ResponsesTool;
+
+    /// One search kind; the declaration's `execution` says whether the gateway owns it.
+    #[test]
+    fn tool_search_is_one_kind_owned_where_its_declaration_runs() {
+        for (declaration, gateway) in [
+            (serde_json::json!({"type": "tool_search", "execution": "client"}), false),
+            (serde_json::json!({"type": "tool_search", "execution": "server"}), true),
+            (serde_json::json!({"type": "tool_search"}), true),
+        ] {
+            let tool: ResponsesTool = serde_json::from_value(declaration.clone()).expect("tool parses");
+            let declaration = ToolDeclaration::from(tool);
+            assert_eq!(declaration.tool_type(), Some(ToolType::ToolSearch));
+            assert_eq!(declaration.is_gateway_owned(), gateway);
+        }
+    }
 
     #[test]
     fn code_interpreter_normalizes_to_its_fixed_function_contract() {

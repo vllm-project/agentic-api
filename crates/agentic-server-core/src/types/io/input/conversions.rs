@@ -3,6 +3,7 @@ use crate::types::io::{
     InOutItem, McpCall, OutputItem, OutputMessage, OutputMessageContent, ShellCallOutputMessage, ShellCallStatus,
 };
 use crate::types::tools::ResponsesTool;
+use crate::utils::common::stable_name_hash;
 use serde_json::Value;
 
 use super::{
@@ -50,12 +51,6 @@ pub(crate) fn internal_mcp_tool_name(
         }
         attempt = attempt.saturating_add(1);
     }
-}
-
-pub(crate) fn stable_name_hash(value: &str) -> u64 {
-    value.as_bytes().iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
-        (hash ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
-    })
 }
 
 impl From<ShellCallOutputMessage> for FunctionToolResultMessage {

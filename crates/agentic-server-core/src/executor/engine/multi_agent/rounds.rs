@@ -382,7 +382,10 @@ impl MultiAgentRun {
                     (call.call_id.as_str(), ClientCallKind::Custom, call.async_execution)
                 }
                 OutputItem::ToolSearchCall(call) if call.status == ToolSearchStatus::Completed => {
-                    (call.call_id.as_str(), ClientCallKind::ToolSearch, false)
+                    let Some(call_id) = call.call_id.as_deref() else {
+                        continue;
+                    };
+                    (call_id, ClientCallKind::ToolSearch, false)
                 }
                 _ => continue,
             };

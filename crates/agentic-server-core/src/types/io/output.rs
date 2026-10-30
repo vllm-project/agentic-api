@@ -1,6 +1,8 @@
 mod apply_done;
+pub(crate) mod tool_search_call;
 mod web_search_status;
 pub use apply_done::ApplyDone;
+pub use tool_search_call::ToolSearchCall;
 pub use web_search_status::WebSearchCallStatus;
 
 use serde::{Deserialize, Deserializer, Serialize};
@@ -15,10 +17,10 @@ use crate::types::tools::{ToolSearchExecution, ToolSearchStatus};
 use crate::utils::common::{deserialize_from_value_opt, deserialize_nullable_vec};
 use crate::utils::uuid7_str;
 
+use super::InOutItem;
 use super::code_interpreter::CodeInterpreterCall;
 use super::input::{
-    CompactionItem, InputFunctionToolCall, InputItem, InputTextContent, InputToolSearchCall,
-    deserialize_non_blank_string,
+    CompactionItem, InputFunctionToolCall, InputItem, InputTextContent, InputToolSearchCall, ToolSearchOutputMessage,
 };
 use super::multi_agent::{AgentAttribution, AgentMessage, MultiAgentCall, MultiAgentCallOutput};
 pub use super::reasoning::ReasoningTextContent;
@@ -179,24 +181,6 @@ pub struct FunctionToolCall {
     pub async_execution: bool,
 }
 
-/// A newly emitted public client tool-search call.
-///
-/// Unlike replay input, execution and status have no serde defaults: response
-/// translation must populate both fields explicitly.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct ToolSearchCall {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent: Option<AgentAttribution>,
-    #[serde(deserialize_with = "deserialize_non_blank_string")]
-    pub id: String,
-    #[serde(deserialize_with = "deserialize_non_blank_string")]
-    pub call_id: String,
-    pub execution: ToolSearchExecution,
-    pub arguments: Value,
-    pub status: ToolSearchStatus,
-}
-
 /// A freeform custom tool invocation.
 ///
 /// `input` is opaque text and must not be parsed as function-call JSON.
@@ -307,7 +291,7 @@ impl TryFrom<&EventPayload> for ToolSearchCall {
         Ok(Self {
             agent: None,
             id: item_id.clone(),
-            call_id: call_id.to_owned(),
+            call_id: Some(call_id.to_owned()),
             execution: ToolSearchExecution::Client,
             arguments: Value::Object(serde_json::Map::new()),
             status: ToolSearchStatus::InProgress,
@@ -901,6 +885,9 @@ pub enum OutputItem {
     CodeInterpreterCall(CodeInterpreterCall),
     #[serde(rename = "tool_search_call")]
     ToolSearchCall(ToolSearchCall),
+    /// The tools a hosted search loaded; produced only by the gateway.
+    #[serde(rename = "tool_search_output")]
+    ToolSearchOutput(ToolSearchOutputMessage),
     #[serde(rename = "custom_tool_call")]
     CustomToolCall(CustomToolCall),
     #[serde(rename = "shell_call")]
@@ -947,6 +934,7 @@ impl utoipa::PartialSchema for OutputItem {
             .item(tagged("function_call", "FunctionToolCall"))
             .item(tagged("code_interpreter_call", "CodeInterpreterCall"))
             .item(tagged("tool_search_call", "ToolSearchCall"))
+            .item(tagged("tool_search_output", "ToolSearchOutputMessage"))
             .item(tagged("custom_tool_call", "CustomToolCall"))
             .item(tagged("shell_call", "ShellCall"))
             .item(tagged("web_search_call", "WebSearchCall"))
@@ -978,6 +966,7 @@ impl OutputItem {
             Self::FunctionCall(item) => item.agent.as_ref(),
             Self::CodeInterpreterCall(item) => item.agent.as_ref(),
             Self::ToolSearchCall(item) => item.agent.as_ref(),
+            Self::ToolSearchOutput(item) => item.agent.as_ref(),
             Self::CustomToolCall(item) => item.agent.as_ref(),
             Self::ShellCall(item) => item.agent.as_ref(),
             Self::WebSearchCall(item) => item.agent.as_ref(),
@@ -999,6 +988,7 @@ impl OutputItem {
             Self::FunctionCall(item) => &mut item.agent,
             Self::CodeInterpreterCall(item) => &mut item.agent,
             Self::ToolSearchCall(item) => &mut item.agent,
+            Self::ToolSearchOutput(item) => &mut item.agent,
             Self::CustomToolCall(item) => &mut item.agent,
             Self::ShellCall(item) => &mut item.agent,
             Self::WebSearchCall(item) => &mut item.agent,
@@ -1018,6 +1008,7 @@ impl OutputItem {
             Self::FunctionCall(call) => call.async_execution,
             Self::CustomToolCall(call) => call.async_execution,
             Self::ToolSearchCall(_)
+            | Self::ToolSearchOutput(_)
             | Self::ShellCall(_)
             | Self::Message(_)
             | Self::CodeInterpreterCall(_)
@@ -1039,8 +1030,10 @@ impl OutputItem {
             Self::FunctionCall(call) => registry
                 .lookup(&call.name)
                 .is_none_or(|entry| !entry.ownership.is_gateway()),
-            Self::ToolSearchCall(_) | Self::CustomToolCall(_) | Self::ShellCall(_) => true,
+            Self::ToolSearchCall(call) => call.execution == ToolSearchExecution::Client,
+            Self::CustomToolCall(_) | Self::ShellCall(_) => true,
             Self::Message(_)
+            | Self::ToolSearchOutput(_)
             | Self::CodeInterpreterCall(_)
             | Self::WebSearchCall(_)
             | Self::McpCall(_)
@@ -1054,6 +1047,41 @@ impl OutputItem {
         }
     }
 
+    /// Whether this public item is one the executor records as the turn's
+    /// history in round order (a hosted tool-search item), rather than as output.
+    #[must_use]
+    pub(crate) fn is_recorded_as_history(&self) -> bool {
+        match self {
+            Self::ToolSearchCall(call) => call.execution == ToolSearchExecution::Server,
+            Self::ToolSearchOutput(_) => true,
+            Self::Message(_)
+            | Self::FunctionCall(_)
+            | Self::CustomToolCall(_)
+            | Self::ShellCall(_)
+            | Self::CodeInterpreterCall(_)
+            | Self::WebSearchCall(_)
+            | Self::McpCall(_)
+            | Self::McpListTools(_)
+            | Self::Reasoning(_)
+            | Self::Compaction(_)
+            | Self::MultiAgentCall(_)
+            | Self::MultiAgentCallOutput(_)
+            | Self::AgentMessage(_)
+            | Self::Unknown { .. } => false,
+        }
+    }
+
+    /// Whether persistence must leave this output out because the turn's
+    /// history items already hold it under the same id. A turn that did not
+    /// record it (multi-agent rounds keep their own history) stores it as output.
+    #[must_use]
+    pub(crate) fn is_already_in_history(&self, history: &[InOutItem]) -> bool {
+        self.is_recorded_as_history()
+            && self
+                .id()
+                .is_some_and(|id| history.iter().any(|item| item.id() == Some(id)))
+    }
+
     /// Shapes a stored output item as continuation input.
     /// Public output for gateway-executed built-in tools is omitted because the model-facing
     /// function call and output are persisted separately as input items. MCP
@@ -1064,7 +1092,9 @@ impl OutputItem {
             Self::Message(message) => Some(InputItem::Message(message.clone().into())),
             Self::Reasoning(reasoning) => Some(InputItem::Reasoning(reasoning.clone())),
             Self::FunctionCall(call) => Some(InputItem::FunctionCall(InputFunctionToolCall::from(call.clone()))),
-            Self::ToolSearchCall(call) => InputToolSearchCall::try_from(call).ok().map(InputItem::ToolSearchCall),
+            Self::ToolSearchCall(call) if call.execution == ToolSearchExecution::Client => {
+                InputToolSearchCall::try_from(call).ok().map(InputItem::ToolSearchCall)
+            }
             Self::CustomToolCall(call) => Some(InputItem::FunctionCall(call.clone().into())),
             Self::ShellCall(call) => Some(InputItem::FunctionCall(call.clone().into())),
             Self::McpListTools(list_tools) => Some(InputItem::McpListTools(list_tools.clone())),
@@ -1077,7 +1107,13 @@ impl OutputItem {
             Self::MultiAgentCall(item) => Some(InputItem::MultiAgentCall(item.clone().into())),
             Self::MultiAgentCallOutput(item) => Some(InputItem::MultiAgentCallOutput(item.clone().into())),
             Self::AgentMessage(item) => Some(InputItem::AgentMessage(item.clone().into())),
-            Self::CodeInterpreterCall(_) | Self::WebSearchCall(_) | Self::McpCall(_) | Self::Unknown { .. } => None,
+            // Hosted search items are recorded as history by the executor.
+            Self::ToolSearchCall(_)
+            | Self::ToolSearchOutput(_)
+            | Self::CodeInterpreterCall(_)
+            | Self::WebSearchCall(_)
+            | Self::McpCall(_)
+            | Self::Unknown { .. } => None,
         }
     }
 }

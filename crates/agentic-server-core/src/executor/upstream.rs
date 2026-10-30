@@ -22,11 +22,11 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
             .tool_classifications()
             .map(|(name, kind)| (name.to_owned(), kind))
             .collect(),
-        state
-            .map(|state| state.withheld_function_names().clone())
-            .unwrap_or_default(),
+        // Deferred functions, namespace members and MCP tools no search has loaded yet.
+        registry.withheld_names(),
         state.is_some_and(ToolSearchState::is_active),
     )
+    .with_self_namespaced_functions(registry.hosted_deferred_functions())
     .with_collaboration(
         agent
             .request
@@ -80,7 +80,10 @@ fn upstream_request_with_guidance(
     let mut request = ctx.enriched_request.to_upstream_request(stream)?;
     if let Some(registry) = withheld {
         if let Some(tools) = request.tools.as_mut() {
-            tools.retain(|UpstreamTool::Function(function)| !registry.is_gateway_owned_name(&function.name));
+            // Hosted search does not count toward `max_tool_calls`, so it stays available.
+            tools.retain(|UpstreamTool::Function(function)| {
+                !registry.is_gateway_owned_name(&function.name) || registry.is_hosted_tool_search_name(&function.name)
+            });
         }
         request.tools = request.tools.filter(|tools| !tools.is_empty());
     }
@@ -260,11 +263,14 @@ pub(super) mod tests {
             ]
         }))
         .expect("request");
-        let registry = ToolRegistry::from_tool_types(std::collections::HashMap::from([
+        let mut registry = ToolRegistry::from_tool_types(std::collections::HashMap::from([
             ("tool_search".to_owned(), ToolType::ToolSearch),
             ("raw_echo".to_owned(), ToolType::Custom),
         ]));
-        let state = ToolSearchState::build(&request).expect("prepared state");
+        let mut state = ToolSearchState::build(&request).expect("prepared state");
+        // The registry takes the prepared catalog, as `build_tool_registry` does.
+        let catalog = state.take_catalog().expect("prepared catalog");
+        registry.attach_tool_search(catalog, state.synthetic_tool_search().cloned(), false, &[]);
         let agent = AgentPipeline::new(request_context(), Some(state), StreamRelay::detached());
         let context = translation_context(&registry, &agent);
         drop(registry);

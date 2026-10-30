@@ -423,7 +423,7 @@ impl SlotState {
             Self::Active(ActiveItem::FunctionCall(call)) => Some(&call.item.call_id),
             Self::Active(ActiveItem::CustomToolCall(call)) => Some(&call.item.call_id),
             Self::Active(ActiveItem::ShellCall(call)) => Some(&call.item.call_id),
-            Self::Active(ActiveItem::ToolSearchCall { item }) => Some(&item.call_id),
+            Self::Active(ActiveItem::ToolSearchCall { item }) => item.call_id.as_deref(),
             Self::Done(item) => super::identity::output_item_call_id(item),
             Self::Active(_) => None,
         }

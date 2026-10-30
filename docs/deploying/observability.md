@@ -155,7 +155,7 @@ each round contains its upstream `http.client.request`.
 | --- | --- |
 | `agentic.rehydrate` | `agentic.rehydrate.source`: `none`, `previous_response`, or `conversation` |
 | `agentic.inference_round` | `agentic.inference.round`: zero-based round index |
-| `agentic.tool.execute` | `agentic.tool.type`: the gateway's tool category (`function`, `tool_search`, `custom`, `shell`, `codex_namespace`, `mcp`, `web_search`, `web_fetch`, `file_search`, or `code_interpreter`), never the tool name |
+| `agentic.tool.execute` | `agentic.tool.type`: the gateway's tool category (`function`, `hosted_tool_search` for a tool search the gateway runs, `custom`, `shell`, `codex_namespace`, `mcp`, `web_search`, `web_fetch`, `file_search`, or `code_interpreter`), never the tool name |
 | `agentic.compaction` | `agentic.compaction.operation`: `summarize`; `agentic.compaction.trigger`: `context_management`, `input_item`, or `explicit` |
 | `agentic.persist` | `agentic.persist.destination`: `response` or `conversation` |
 

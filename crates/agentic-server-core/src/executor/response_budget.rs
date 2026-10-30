@@ -280,7 +280,7 @@ impl RetainedSize for ToolSearchCall {
         RETAINED_CONTAINER_OVERHEAD_BYTES
             + self.agent.retained_bytes()
             + self.id.len()
-            + self.call_id.len()
+            + opt_len(self.call_id.as_ref())
             + self.arguments.retained_bytes()
     }
 }
@@ -479,6 +479,7 @@ impl RetainedSize for OutputItem {
             Self::ShellCall(item) => item.retained_bytes(),
             Self::Reasoning(item) => item.retained_bytes(),
             Self::ToolSearchCall(item) => item.retained_bytes(),
+            Self::ToolSearchOutput(item) => item.retained_bytes(),
             Self::WebSearchCall(item) => item.retained_bytes(),
             Self::McpCall(item) => item.retained_bytes(),
             Self::McpListTools(item) => item.retained_bytes(),
@@ -879,7 +880,7 @@ mod tests {
         let tool_search = OutputItem::ToolSearchCall(ToolSearchCall {
             agent: None,
             id: "ts_1".to_owned(),
-            call_id: "call_1".to_owned(),
+            call_id: Some("call_1".to_owned()),
             execution: crate::types::tools::ToolSearchExecution::Client,
             arguments: nested.clone(),
             status: crate::types::tools::ToolSearchStatus::Completed,

@@ -293,10 +293,17 @@ impl RestoredAgents {
         let owner = identity(item.take_agent().as_ref().map(|agent| agent.agent_name.as_str()))?;
         let turn = self.history_turn(&owner)?;
         let call = match &item {
-            InputItem::FunctionCall(call) => Some((&call.call_id, ClientCallKind::Function, call.async_execution)),
-            InputItem::ShellCall(call) => Some((&call.call_id, ClientCallKind::Shell, false)),
-            InputItem::CustomToolCall(call) => Some((&call.call_id, ClientCallKind::Custom, call.async_execution)),
-            InputItem::ToolSearchCall(call) => Some((&call.call_id, ClientCallKind::ToolSearch, false)),
+            InputItem::FunctionCall(call) => {
+                Some((call.call_id.as_str(), ClientCallKind::Function, call.async_execution))
+            }
+            InputItem::ShellCall(call) => Some((call.call_id.as_str(), ClientCallKind::Shell, false)),
+            InputItem::CustomToolCall(call) => {
+                Some((call.call_id.as_str(), ClientCallKind::Custom, call.async_execution))
+            }
+            InputItem::ToolSearchCall(call) => call
+                .call_id
+                .as_deref()
+                .map(|id| (id, ClientCallKind::ToolSearch, false)),
             _ => None,
         };
         if let Some((id, kind, async_execution)) = call {

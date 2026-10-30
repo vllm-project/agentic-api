@@ -1,0 +1,594 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: Use the tiktoken documentation tool to find which encoding gpt-4o uses.
+        Answer in one sentence.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - allowed_tools:
+        - search_tiktoken_documentation
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation and code search for the openai/tiktoken
+          tokenizer repository.
+        server_label: gitmcp_tiktoken
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      type: response.create
+    headers:
+      Authorization: Bearer ***
+    method: WEBSOCKET
+    path: /v1/responses
+    query_params: {}
+    transport: websocket
+  response:
+    headers:
+      transport: websocket
+    sse:
+    - 'event: response.created
+
+      data: {"type":"response.created","response":{"id":"resp_0558e94517919a48006ad089d625a887d088b6ebb473bd0d32","object":"response","created_at":1792051670,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":["search_tiktoken_documentation"],"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      and code search for the openai/tiktoken tokenizer repository.","server_label":"gitmcp_tiktoken","server_url":"https://gitmcp.io/openai/tiktoken"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - 'event: response.in_progress
+
+      data: {"type":"response.in_progress","response":{"id":"resp_0558e94517919a48006ad089d625a887d088b6ebb473bd0d32","object":"response","created_at":1792051670,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":["search_tiktoken_documentation"],"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      and code search for the openai/tiktoken tokenizer repository.","server_label":"gitmcp_tiktoken","server_url":"https://gitmcp.io/openai/tiktoken"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - 'event: response.output_item.added
+
+      data: {"type":"response.output_item.added","item":{"id":"mcpl_0558e94517919a48006ad089d6411487d0b3b1dbd554f7fb76","type":"mcp_list_tools","server_label":"gitmcp_tiktoken","tools":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - 'event: response.mcp_list_tools.in_progress
+
+      data: {"type":"response.mcp_list_tools.in_progress","item_id":"mcpl_0558e94517919a48006ad089d6411487d0b3b1dbd554f7fb76","output_index":0,"sequence_number":3}
+
+      '
+    - 'event: response.mcp_list_tools.completed
+
+      data: {"type":"response.mcp_list_tools.completed","item_id":"mcpl_0558e94517919a48006ad089d6411487d0b3b1dbd554f7fb76","output_index":0,"sequence_number":4}
+
+      '
+    - 'event: response.output_item.done
+
+      data: {"type":"response.output_item.done","item":{"id":"mcpl_0558e94517919a48006ad089d6411487d0b3b1dbd554f7fb76","type":"mcp_list_tools","server_label":"gitmcp_tiktoken","tools":[{"annotations":{"read_only":false},"description":"Semantically
+      search within the fetched documentation from GitHub repository: openai/tiktoken.
+      Useful for specific queries.","input_schema":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant documentation"}},"required":["query"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"},"name":"search_tiktoken_documentation"}]},"output_index":0,"sequence_number":5}
+
+      '
+    - 'event: response.output_item.added
+
+      data: {"type":"response.output_item.added","item":{"id":"rs_0558e94517919a48006ad089d7a26087d0a53284e86261544c","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0InXvsuMGW9L-0UBsKyOlzN8zq7jxrN2IQ8rOKhd9H0XG7GrxRJsrX2wRQc0W-3LrhFf_FsLMWXSNk6wviVNmmVB1Q-5DCpDcf6W5MYc1sI0lBMPWsaDVF-VIGAMEDyCTWIhutQVWqc8Rb-mQfODMwIiX3VeLvoJfGEzlo2wzrK6IIwOimAyx3whrF8gJbv6Qf30aRPcn9_UlBxm7nMOpF81ROhl_gB0nwmLABpivdrKqaE77mqX1lUnQF75n0liWsm9NSMe1b9m98Fpsq_M6q0R794bvTlwNwmJMLUzPo59CmmLZVHfJJ-dvk2gQsPutNF2WQPmYDiPI4dxhAXZ5buDa4O6GmFcSlFibJFNRaw4Z0e4YEohiCgBA-cwRdLGnz6gDiiRaaaybT9HOEUvYLMzCGdAvDn8Ptw4RjrxF95BZqhXSTLRbowHhzeqUpupSKENOvqgr6eJntqCH5eS54d2M2JkTOI4ZeDrF82vRZIi_UPbDn1wCv57G7vVsI2jzuY7_B9L1dE7xgnDSIUXC_CIHnbGkPkgVuoEd3KtPxtgC0VDj6aCtN0A-3vZKY4vDZINjdU21F5Ejo-VrSMUwZRW-l1FioBBrHRVfdT6_r-sZbL_lkPxXUtjgP-RDXF6uwJSy_20RW-0BAjbDArV9VjTGUJKgUUL3hWaRngrC1IhLU-vfPKr0tJG3E8YO1CtBtVMvuoV4RHuZWGCepVLrilvUnYDSVkvhCJKDJazVot2R-DoPGejqLF2FjG_MADmu3q6JFAwvWVRKL2Olau2AUsrtJN13h1VcBwCuaymLpaYXJqHZA24i1P2456UZMXCRtlI8-dbm-93uFN1ivmLISL_XvqRJnZ_0ae9f40BZIU5iqGBJ655b0E4AfrJpR-q-WfPIFBK6UB-750Cojd42XFcfFzULtQHZzdUkdU6e9NYYKoJrxfpTarAcHbHly8z2TYQrRECmNkqe6D6FmRWyO2VRRAWellFLqlJuTp2Wpf7Kv87UOxUwfo82j3NLuQI7x_pnThdirLk670xInCiFRTN0H1a2AGJDcNEGwVUn6Wy3XqZq89s2blM6m2VsIaRGo5L6zQniU8G9GINOKb-QcAT_Sekd3WYWwr2UnFXSjhBgBuXlmBm8WeYxQ4ympMlE3lZUMlO4LH-602f4gbVVYVjf9Y8BnM5mddVxpb7cJEwJ0hWzK6NlW71ZggESPVMurl5","summary":[]},"output_index":1,"sequence_number":6}
+
+      '
+    - 'event: response.output_item.done
+
+      data: {"type":"response.output_item.done","item":{"id":"rs_0558e94517919a48006ad089d7a26087d0a53284e86261544c","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0InXAgTdnhkFzoYo5C9jV6ndlJQYVI-_0BctKTO7sCLOkQf-c4Frml419-LsV89WWUPur3qdQJmcV7GxSmmODFB-N4seb655iOuYQPfY50BJch5h-1mIKWaEYgKZTc4cL4MqPPPTWMjgBM-hYuHh9LBJjiAOytcncWWHMO9iJ_-IclAHLMNDRaTnGDoekdSEMkDHdTuMy3OeibUfZUxIU_xN0fJONGj2--TlnNP5xrLiVVhS_icVhIBcGALzdY3gwdcwzZL5QVxSpKsb47fdy_Svtj46woyf_S4RQe6iTr5pGxiUNgjugpfP4dvHFnsBHt-f1mm8RDgekb8Dar1SIOPEZR_LguDJboupJEIxBQtW2Qh4NYLkzzW11aEo-zG7h179_e_1GvhyXAxTNHJkwgbxTnoIkWrFHpnCj1Q3yHHzRx9DFGXJ-oksF1cOjTBHobVtaHiXnFZQK1WsmKT7FsuHDg0urYhTKcaA11a7sBcVZSIQimNH-Or8SGR_97t-vJ5k1sWgjLvvmSL4O5gO4fvbzcKL3Ggg1nrJM_1tFQOxCxELeatk3nN-LPnGC9fz0YJ71K6qBfJVELzq5f4HCiB17H9OImHCCRPydirNP0DKuhetYT5Jm6H_pvFMxnOfAZqYDd5skl4eBq4xuhW-4_EZ-btO2faO6VsWFVG7XCYjOSru8g5VD3cEnbEcIJB9jXFEkW3yMA5HoWf3TuAk-OZCp4Y9fYPrlvxVYSAZadqrbQrMOEYz2eqjumt9aXEDGfSa5fSY5QZiKTqJqstB8wgjTzEZwxZYqDgsO6mk9Z91hcLKPdLYt6qytEfDEsU-jTK3xoY_avUdyI5iflUqQWcUzqjmhTzozd1hBK2lLEceXo3rq4V6gMg6_7KWeR5SWeFYJuIEyRJLreAqqZdh-IkqlhLmg8NQFfp49HVg7UY-U7OOJUVj-Mo1X3792pDkStHejrQDyHTv6snRDc0DMzatXg6sLz0E4kuPR5DUrL4J3_QLmaX4RdEtoXRKfNLNnfjEHFfUejQ3Gl7Ik1GJpmzMn6MedOU4gwBJ4zXlQ-rqBHADHkWzEyb-j7b9DnPG8f0QA76Jhz5I6rlD93TmGh1OL_mvAvauFtp8iCbk3keZmublr-syxHfPCVNfwcRPBT4-Z4t9tStEZncrFEobT1pvIVgnWhOjC0l0NNXNNFZCw2f6IzZK-tOCurMznpN5GM4wrwSaBj4ARAt3_HlppczMI0Lm3Gi7bfNCYyIVNKsuBCntjIr7FoT_GUPE6k2FVT2gLQM7rECL1Y08fB9napgshbd6E6gHQa55GH-PUIK4HoftTnGB1OYdOYvOrjert5H8V31CrW8jIiBVGHGJukOfkC9RdAJ6UNHVnbka_H36h38L9vy1LkT6p7qB8lNNv9IhyODLdPOFgUrR5x28Ms5jo2JwJiLGSLMwwUEPUE00uRYT-es8d5d5roOvSrX9CpCzvHkiq0rW0EqUlhJV1cvO5GhrmBygaKc3uQQgcRIm2jM1RLtnQyqvplpAtS1y-MgSvgtmBPyqkiSF3AKn7F5JTw==","summary":[]},"output_index":1,"sequence_number":7}
+
+      '
+    - 'event: response.output_item.added
+
+      data: {"type":"response.output_item.added","item":{"id":"tsc_0558e94517919a48006ad089d7dee887d0b9327982795e64d5","type":"tool_search_call","status":"in_progress","arguments":{},"call_id":null,"execution":"server"},"output_index":2,"sequence_number":8}
+
+      '
+    - 'event: response.output_item.done
+
+      data: {"type":"response.output_item.done","item":{"id":"tsc_0558e94517919a48006ad089d7dee887d0b9327982795e64d5","type":"tool_search_call","status":"completed","arguments":{"paths":["mcp_gitmcp_tiktoken"]},"call_id":null,"execution":"server"},"output_index":2,"sequence_number":9}
+
+      '
+    - 'event: response.output_item.added
+
+      data: {"type":"response.output_item.added","item":{"id":"tso_0558e94517919a48006ad089d8017c87d08559a9c124da590a","type":"tool_search_output","status":"in_progress","call_id":null,"execution":"server","tools":[{"type":"namespace","description":"Documentation
+      and code search for the openai/tiktoken tokenizer repository.","name":"mcp_gitmcp_tiktoken","tools":[{"type":"function","defer_loading":true,"description":"Semantically
+      search within the fetched documentation from GitHub repository: openai/tiktoken.
+      Useful for specific queries.","name":"search_tiktoken_documentation","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant documentation"}},"required":["query"],"additionalProperties":false},"strict":null}]}]},"output_index":3,"sequence_number":10}
+
+      '
+    - 'event: response.output_item.done
+
+      data: {"type":"response.output_item.done","item":{"id":"tso_0558e94517919a48006ad089d8017c87d08559a9c124da590a","type":"tool_search_output","status":"completed","call_id":null,"execution":"server","tools":[{"type":"namespace","description":"Documentation
+      and code search for the openai/tiktoken tokenizer repository.","name":"mcp_gitmcp_tiktoken","tools":[{"type":"function","defer_loading":true,"description":"Semantically
+      search within the fetched documentation from GitHub repository: openai/tiktoken.
+      Useful for specific queries.","name":"search_tiktoken_documentation","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant documentation"}},"required":["query"],"additionalProperties":false},"strict":null}]}]},"output_index":3,"sequence_number":11}
+
+      '
+    - 'event: response.output_item.added
+
+      data: {"type":"response.output_item.added","item":{"id":"mcp_0558e94517919a48006ad089d8c5bc87d09d9b28be0b963bce","type":"mcp_call","status":"in_progress","approval_request_id":null,"arguments":"","error":null,"name":"search_tiktoken_documentation","output":null,"server_label":"gitmcp_tiktoken"},"output_index":4,"sequence_number":12}
+
+      '
+    - 'event: response.mcp_call.in_progress
+
+      data: {"type":"response.mcp_call.in_progress","item_id":"mcp_0558e94517919a48006ad089d8c5bc87d09d9b28be0b963bce","output_index":4,"sequence_number":13}
+
+      '
+    - 'event: response.mcp_call_arguments.delta
+
+      data: {"type":"response.mcp_call_arguments.delta","delta":"{\"query\":\"Which
+      tiktoken encoding does the gpt-4o model use?\"}","item_id":"mcp_0558e94517919a48006ad089d8c5bc87d09d9b28be0b963bce","obfuscation":"7R","output_index":4,"sequence_number":14}
+
+      '
+    - 'event: response.mcp_call_arguments.done
+
+      data: {"type":"response.mcp_call_arguments.done","arguments":"{\"query\":\"Which
+      tiktoken encoding does the gpt-4o model use?\"}","item_id":"mcp_0558e94517919a48006ad089d8c5bc87d09d9b28be0b963bce","output_index":4,"sequence_number":15}
+
+      '
+    - 'event: response.mcp_call.completed
+
+      data: {"type":"response.mcp_call.completed","item_id":"mcp_0558e94517919a48006ad089d8c5bc87d09d9b28be0b963bce","output_index":4,"sequence_number":16}
+
+      '
+    - 'event: response.output_item.done
+
+      data: {"type":"response.output_item.done","item":{"id":"mcp_0558e94517919a48006ad089d8c5bc87d09d9b28be0b963bce","type":"mcp_call","status":"completed","approval_request_id":null,"arguments":"{\"query\":\"Which
+      tiktoken encoding does the gpt-4o model use?\"}","error":null,"name":"search_tiktoken_documentation","output":"###
+      Search Results for: \"Which tiktoken encoding does the gpt-4o model use?\"\n\nNo
+      relevant documentation found for your query. It''s either being indexed or the
+      search query did not match any documentation.\n\nAs a fallback, this is the
+      documentation for openai/tiktoken:\n\n# \u23f3 tiktoken\n\ntiktoken is a fast
+      [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding) tokeniser for use with\nOpenAI''s
+      models.\n\n```python\nimport tiktoken\nenc = tiktoken.get_encoding(\"o200k_base\")\nassert
+      enc.decode(enc.encode(\"hello world\")) == \"hello world\"\n\n# To get the tokeniser
+      corresponding to a specific model in the OpenAI API:\nenc = tiktoken.encoding_for_model(\"gpt-4o\")\n```\n\nThe
+      open source version of `tiktoken` can be installed from [PyPI](https://pypi.org/project/tiktoken):\n```\npip
+      install tiktoken\n```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\nExample
+      code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\n\n##
+      Performance\n\n`tiktoken` is between 3-6x faster than a comparable open source
+      tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\nPerformance
+      measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`
+      from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\n\n##
+      Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\nIf
+      you work at OpenAI, make sure to check the internal documentation or feel free
+      to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage models don''t see
+      text like you and I, instead they see a sequence of numbers (known as tokens).\nByte
+      pair encoding (BPE) is a way of converting text into tokens. It has a couple
+      desirable\nproperties:\n1) It''s reversible and lossless, so you can convert
+      tokens back into the original text\n2) It works on arbitrary text, even text
+      that is not in the tokeniser''s training data\n3) It compresses the text: the
+      token sequence is shorter than the bytes corresponding to the\n   original text.
+      On average, in practice, each token corresponds to about 4 bytes.\n4) It attempts
+      to let the model see common subwords. For instance, \"ing\" is a common subword
+      in\n   English, so BPE encodings will often split \"encoding\" into tokens like
+      \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"). Because the
+      model will then see the \"ing\" token again and\n   again in different contexts,
+      it helps models generalise and better understand grammar.\n\n`tiktoken` contains
+      an educational submodule that is friendlier if you want to learn more about\nthe
+      details of BPE, including code that helps visualise the BPE procedure:\n```python\nfrom
+      tiktoken._educational import *\n\n# Train a BPE tokeniser on a small amount
+      of text\nenc = train_simple_encoding()\n\n# Visualise how the GPT-4 encoder
+      encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"cl100k_base\")\nenc.encode(\"hello
+      world aaaaaaaaaaaa\")\n```\n\n\n## Extending tiktoken\n\nYou may wish to extend
+      `tiktoken` to support new encodings. There are two ways to do this.\n\n\n**Create
+      your `Encoding` object exactly the way you want and simply pass it around.**\n\n```python\ncl100k_base
+      = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the arguments
+      directly instead of accessing private attributes\n# See openai_public.py for
+      examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n    #
+      If you''re changing the set of special tokens, make sure to use a different
+      name\n    # It should be clear from the name what behaviour to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n        **cl100k_base._special_tokens,\n        \"<|im_start|>\":
+      100264,\n        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`
+      plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\nThis
+      is only useful if you need `tiktoken.get_encoding` to find your encoding, otherwise
+      prefer\noption 1.\n\nTo do this, you''ll need to create a namespace package
+      under `tiktoken_ext`.\n\nLayout your project like this, making sure to omit
+      the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n\u251c\u2500\u2500
+      tiktoken_ext\n\u2502\u00a0\u00a0 \u2514\u2500\u2500 my_encodings.py\n\u2514\u2500\u2500
+      setup.py\n```\n\n`my_encodings.py` should be a module that contains a variable
+      named `ENCODING_CONSTRUCTORS`.\nThis is a dictionary from an encoding name to
+      a function that takes no arguments and returns\narguments that can be passed
+      to `tiktoken.Encoding` to construct that encoding. For an example, see\n`tiktoken_ext/openai_public.py`.
+      For precise details, see `tiktoken/registry.py`.\n\nYour `setup.py` should look
+      something like this:\n```python\nfrom setuptools import setup, find_namespace_packages\n\nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=[''tiktoken_ext*'']),\n    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen
+      simply `pip install ./my_tiktoken_extension` and you should be able to use your\ncustom
+      encodings! Make sure **not** to use an editable install.\n\n\n\nIf you''d like
+      to retry the search, try changing the query to increase the likelihood of a
+      match.","server_label":"gitmcp_tiktoken"},"output_index":4,"sequence_number":17}
+
+      '
+    - 'event: response.output_item.added
+
+      data: {"type":"response.output_item.added","item":{"id":"rs_0558e94517919a48006ad089dae00c87d086871c076530cda7","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0InaGEKF9yK4J-EcDlBr3VMmpHzOikQH8H015HFrzN5taDskkdg7t5K_COod9NBe_PFtmi28-W1QLK7qCTXPLHG8wR_nk7Six_1IKB5-pvUrUnrFqNuTeJDwhCUwxmLZWNbd7-w3YrxgyabrEjVaWedjw0xgKHt3hAo58R-JVYiK8DEQcSaPIyrj2y5b7v_pkudo30clYoDofbFw1yMyOchiDSn6fxGm4SVEJ9vIcFNXcfQaF4YFUbsQQZzvThv9oGqKKs1IcHDTTc3m_Yrn5fxFJNBZjuccPEjLU2rWsoB5gHQb5N0i4GsSmBJvgz0aQUBicMD7OlD8jbdPaHpLz580UP3ANmwT_ZYNBfXwQ9TqJUM8Z47ofLa_l5dM-d2473xG3MYGL1jeWB2PJWGu3OSk7T2SYxEWP9_T3d_Kmeddd4r6GLt3v7-hk4Jsqgr08BlIyuhWIl0bqlpVzS5CwnYTmuws_SgTI_hmFbklcHax_NSPpvYPxSJSxRhYuBTABZgGFTg_gwvvI1ID8B86aoW7UvkYqBYGQD4vyDy-NSf_KMAKx_OAPzXUZLapE5AW7iI7yHD2KbYCVZ_hY62geKaxYZN5x8gr581oSzDUehPbuEMP5mmsqUa2jQw1lLiCdcZ3OnxqtuXxPWaVI-NY85cmLa05o1f8FXGMbHUUNhfUP-0n6Nl0Vu_Cll1Tg9Ps7lqoZ4uLX9EHKvpW17C0ljC7GOMZgcI71iqXAEDZYyohadrEWrJGlACogMkQgfFWaWNStGWUMJzVEIP3MNu5d_L_JUNBC6VtT_tjr_Cw3ju5Q2KBNs_fy1LO25kGxcOD0IvayxoS56MlmYor8l66S7NJCynRFeugcaxxu9PoFMlAjf54ms00WPS6mCTfclq9YBfboUQHPF4uvL6zFImVBgV6F1J4qv0L1TXjFFCXlbLxQEs0qkuYlty6PQe-f-5XjBWZaeV4rTaIxJa7EIelWB_fFnGu_llz2H9dvnfN3YVb7PyL6UGSJoz3lH-Q62zcewkeWJktP2AdwOiBi7AMpsGIpbB3jC5tALasPrZDBZNa_ihY5mcKF5ROdgKnbottILCZOLbCg2-BnPLC0fKXaVYHGwHyPpbrlDYx1syQqeMa-yFT9Vpnlo_8thPHepD5qifUc-KOczwZYQT7BrCZLM1o8c1TVNc1PU5f1U2Ki-3KIot56joWRK01ZABL1AJ3qXQs","summary":[]},"output_index":5,"sequence_number":18}
+
+      '
+    - 'event: response.output_item.done
+
+      data: {"type":"response.output_item.done","item":{"id":"rs_0558e94517919a48006ad089dae00c87d086871c076530cda7","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0Inbq2tyEYymoBQC1aCbMRkG75IZ9nPqblnC4dtr3G3JJPVBy2GYpLRCcBKz_dI-wVFzBOkCXxMWFEKAnM6BazCkWPvbCAtkvMb_nkFuX_HdlXDSEJU8YH2Oc1CVIqP7Qt311HQl9apARRO4a4eC61t3-2tcv_OMnniSTwpukuDhwQu7wCAGuR1Xszm5k90E7XngaBw5TEkbynuVstKbnKfXrnXfo32Zrz88udMm3yDuhb1DOEGu6toYOcgM-U1xPocHabzZk0OLJzGzvXeOq6Q3Hk10zbknV7Vsm6L-LlYNjH-7_uKeiBz2WO1wxWtDrSLM1W9rzWtTj_sElAiqZZhMzRUnwtuHDthFzMAuOd4PkQb_V-Cr6MXiE4NHz0mixRnt8uBJN22Kz8CvVRn8AqNd04cikfd7H-ES1OFXsx-7BBRf-TVUdSPBlVNQ_--Pi9ifpgt9H8wM1tpZrwPIVlfbt7iXeDvtiupTNWOtAQYzVXB3MTw4EVt8InxvvE3sigbepk0t5PNJQ85Lv9lfnyBCMu9Y29FHcbSSCEPsg8jMCISoWW_26OUbK9s-CZzjHvX4yoA0Sy1NiQ9JH7oZl7PHpoHsRLQj6r5rq5BC8uMc5OidY7wgB-1NBYxnehzE7rjTWQRum64TSoZiipAIbkVaNqzd5o92V5gMLAIwGCgI9oav5q7YbcH2L7bsep909ykKE-TKMH9VFuhKfTL8hRwWItWujjQY5sx91piINufpIUZjT2tv9GSuArE-OE0mxHD4UbAl5Vbq0fIoFYGV2ST08k0I1NqLar_jTWWePvL5aDNiYpjfd0hMmElat7rjlWZh5XUF9XxMNFzXVlxRQpeyJ5m6mntyhOG5nCyK-OJaUvla-Tt7RrLjg-IiXwe1-SwGygKXHbqxbhttCgaBb7w4VMquds04QrvrMsB9AyNtyiQvWesm-fLpsOIwzQoyqQhG9tcdWIH3dl4DH8z0Jb5xucpq_dCtmzujMFJEgmf9EPzYK94fJO_NHFl5G4EmzlFLTXbMgMfPuwJ5Jt0jki8-hV9NlQbKrYgQh__47bbvicTqyG-qug4ashadkkS3Qlva7PfAO4vJ5bUFHUiLk_S_OLfNX4Tzf21cvDi00vutRB-mZ828RMYqcTjJSnYxn2eQ_z2tsa7w5BmdEj6RkRa6v1-1u6OaiCTWcngeUZJGoWFzjMPycsgsN5LQsMkQ94WubnkQcwX1lEorVykJavxGBtO0cep4lBQRtOL42783SNEYz4ZeWdJtPhg13SObRpROPignEgLBqeRLu9JEzo7uEZn_yCC-RxrUyrTIdCvDnQUWtKWGz3SvMsMW0i6hoP6e4whBOQvpiFbxW-2uln0D_Rj7PBnADT9pDjRPI5RZkBiwXAjJlHcd9JTRhSgf9hhCBMXbPrvqyZtVu02E3HoYpsyej4UL1oCGcDpOV_9g-b4r4YkqEN5hBq6PPWOTLlrWjMmVrBF7TnJO2-roN2sJpeMjL3rnxGP15p_gGzxFYFwJLVh1n4-alsB6coYdJ6y8sVgfa4xza3EfOsqPJTT6bz0Hl6EpEqoTYt4JqyPIXHX-aOLCX-RWMczTbg_EMU8Va9qHdjZQfoYR6w-5EfxAoLZXVZTaikcDn46nsb_WrqKMm_tWorv2RG2_DNNgCm1oZlw3g1iVrperJ1MEGB50VNQ6ssZvTUrOrevD8fu6KMDLpUvAsNYMEF7TwJ28-jYq4q2JoQKQophyd2XWl-zTQH_uGAC_rKqGuMxs3AyCeEjlmcXLqzvhlewfQuV0zHNynsiC711l6U68WuHcquiYzUVVjIDIB9qQ15pSGxnvp-9NZE864XOe-ekqBsvm4qMNmCrFbwnx5P6GEZXVua0fvU5lnDbaCo71NOy253SIRgYBvxBdQP426YdmQmAXdmGC","summary":[]},"output_index":5,"sequence_number":19}
+
+      '
+    - 'event: response.output_item.added
+
+      data: {"type":"response.output_item.added","item":{"id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"},"output_index":6,"sequence_number":20}
+
+      '
+    - 'event: response.content_part.added
+
+      data: {"type":"response.content_part.added","content_index":0,"item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","output_index":6,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":21}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":"GPT","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"DwtDVzL2DZcGH","output_index":6,"sequence_number":22}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":"-","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"0qipFJTcUfcjhIC","output_index":6,"sequence_number":23}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":"4","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"GwwMKPSzuPtNj0W","output_index":6,"sequence_number":24}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":"o","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"XwLAIFAJamz7V6r","output_index":6,"sequence_number":25}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" uses","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"3GUxLcBsTn1","output_index":6,"sequence_number":26}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" the","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"RIdu4QSTvNMF","output_index":6,"sequence_number":27}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" `","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"8EB6HIbBtzO4l1","output_index":6,"sequence_number":28}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":"o","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"pqyetT0qBi3ztDD","output_index":6,"sequence_number":29}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":"200","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"OTmdXkNg2E9rw","output_index":6,"sequence_number":30}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":"k","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"esMvHYWIfvVBAmS","output_index":6,"sequence_number":31}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":"_base","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"qw83me7UD1h","output_index":6,"sequence_number":32}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":"`","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"aSVuxcUMMzB1g1a","output_index":6,"sequence_number":33}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":" encoding","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"Bxoemqb","output_index":6,"sequence_number":34}
+
+      '
+    - 'event: response.output_text.delta
+
+      data: {"type":"response.output_text.delta","content_index":0,"delta":".","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"bqB8QnCBkjxKUni","output_index":6,"sequence_number":35}
+
+      '
+    - 'event: response.output_text.done
+
+      data: {"type":"response.output_text.done","content_index":0,"item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"output_index":6,"sequence_number":36,"text":"GPT-4o
+      uses the `o200k_base` encoding."}
+
+      '
+    - 'event: response.content_part.done
+
+      data: {"type":"response.content_part.done","content_index":0,"item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","output_index":6,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"GPT-4o
+      uses the `o200k_base` encoding."},"sequence_number":37}
+
+      '
+    - 'event: response.output_item.done
+
+      data: {"type":"response.output_item.done","item":{"id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"GPT-4o
+      uses the `o200k_base` encoding."}],"phase":"final_answer","role":"assistant"},"output_index":6,"sequence_number":38}
+
+      '
+    - 'event: response.completed
+
+      data: {"type":"response.completed","response":{"id":"resp_0558e94517919a48006ad089d625a887d088b6ebb473bd0d32","object":"response","created_at":1792051670,"status":"completed","access_programs":null,"background":false,"completed_at":1792051675,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"mcpl_0558e94517919a48006ad089d6411487d0b3b1dbd554f7fb76","type":"mcp_list_tools","server_label":"gitmcp_tiktoken","tools":[{"annotations":{"read_only":false},"description":"Semantically
+      search within the fetched documentation from GitHub repository: openai/tiktoken.
+      Useful for specific queries.","input_schema":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant documentation"}},"required":["query"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"},"name":"search_tiktoken_documentation"}]},{"id":"rs_0558e94517919a48006ad089d7a26087d0a53284e86261544c","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0InbI45oOjex4qtc6qVKEcDVHQm8y3fSrpAFaA0Sa_Om6hI3LkIgR5ugJqIHPYj3oNxvxe2SFH56BmWWpiknv4fwSYf4sUrxs6CoDXz2q5AFj0KTlXYL0ywMx5lrvDKn_mGSBYKtsqbJBhU9Q1CVMDYZJq2iTVCKEdUBjx9XI88TkrpwYnG3cZuP1axlJbnMnUo4RTHkXI4brDoRFtJgx5AkrXpxh3YjK9FNGNyD2UbUlI5g9o7qykMIiNiWmmOOuenG6Yrh_4lbEVSMsOe5ndO7YOo7rFOtPGP0mpu_YC727bXNVWtge7PK4xSeYzrTvCABky-6p-COkEcJNW-7OgeVEVLOTVNtCdOwZHU0C399IOtjLDH20EWwbAZX5KJ5dGc3tM8fi3Ol821YM5wzKMyhUfc-lqWAC_J0QEI_rAFmqLzAHsjz3LWf1zR3zRrw751v1_W8I8XndRR08SIT4gEQ3MNwdqwwTXN0XBoXjqr-6s6D4PqtRPl3mccE5e16ACsPZRhATrMacd3gLKnF59hJCO1s28wperODh_83fbnrXZ4ZqQJ_e-C5v9KeeuOVOIrMkASeg2Oea1DCBDvmyqWTG2CcIGcPqmuUyGgKolEZgllyA6f2sfM2Cvd3IgdbV8QH5TaCBlbmOkz9_MkyGOFRdvgDOrQYZdjkWJt2yJl2UChAFCB0js0zYvulr8g-jXwZpcO0pafnlNBAEbgBpLRlIZJPDjOUpRARVn8gD6F1Hjl4B0Y-TZaGYhL-8NHbJYGbKimDh2C7mONlyzJ1M3CkjSIGnwzluOmK4pzyCd5Wm3NTBAsIV069agF3sUCCRt1G1jA_Xp0XO1fSJVmT_oRmYfnzI6KO0xFuAE9rBWBJv_hKS1P9pHBkn8DysfcR-DdinhOGOaYIRif0FPOO3ZYFitE2qgSjhj8izxyUdDUyAqE4PtSzQKVKi9CoPJsoT4qNIac-SQVb52m4jfTgwQjaA_VJM3_RY0f-35Q95LbvT7KYaCoh9kwFE7brcscvO254LgYohNV9BfNJJQZemHbZ60HuMwxEgX0CeRvxaYKC6-uzbmVJAiuRanp2qGTSGJpr3SxBpK_8EeVJpYCHDD5azm_nsa42SYLY8IDSasERCqAPyZ78mugdr1ixNDENwzMOJYVnYvJFSceIjBVBjWRcm2Fsqf1-PSbqg74E11y_FhA3c3iX5KV2pXixNrZz3QdH1KyQVOvujmzr3Ulsz2rqiADctS05MQe5XJq6CzZzK7qi4UJJAc_i4dmDkXnMcethVy6RsU7_R4f2Ix4bIpvHTziSreiadhEwZa9i0oAG3G27lvgIprEIios9ue1CZSBajgDvqIk9O6atE2m1Jt9gJ_8DPyTIgBw2JCHdvogS1GRsjN7um2_tZZu7n2N7PhPSkIee2IFj8SzpuC0-XLvECkhFmgquAhY4dhjMIPmnjB3IzhraZSLUEwmUZeFb8Pac32855LpD2Lrn5j865BHirGiXg7olkroBcb_UasXfnT7M7L9HWcjcXRB5JJp0psxm4AMnbxBdbmLd13t3ARMEog==","summary":[]},{"id":"tsc_0558e94517919a48006ad089d7dee887d0b9327982795e64d5","type":"tool_search_call","status":"completed","arguments":{"paths":["mcp_gitmcp_tiktoken"]},"call_id":null,"execution":"server"},{"id":"tso_0558e94517919a48006ad089d8017c87d08559a9c124da590a","type":"tool_search_output","status":"completed","call_id":null,"execution":"server","tools":[{"type":"namespace","description":"Documentation
+      and code search for the openai/tiktoken tokenizer repository.","name":"mcp_gitmcp_tiktoken","tools":[{"type":"function","defer_loading":true,"description":"Semantically
+      search within the fetched documentation from GitHub repository: openai/tiktoken.
+      Useful for specific queries.","name":"search_tiktoken_documentation","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant documentation"}},"required":["query"],"additionalProperties":false},"strict":null}]}]},{"id":"mcp_0558e94517919a48006ad089d8c5bc87d09d9b28be0b963bce","type":"mcp_call","status":"completed","approval_request_id":null,"arguments":"{\"query\":\"Which
+      tiktoken encoding does the gpt-4o model use?\"}","error":null,"name":"search_tiktoken_documentation","output":"###
+      Search Results for: \"Which tiktoken encoding does the gpt-4o model use?\"\n\nNo
+      relevant documentation found for your query. It''s either being indexed or the
+      search query did not match any documentation.\n\nAs a fallback, this is the
+      documentation for openai/tiktoken:\n\n# \u23f3 tiktoken\n\ntiktoken is a fast
+      [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding) tokeniser for use with\nOpenAI''s
+      models.\n\n```python\nimport tiktoken\nenc = tiktoken.get_encoding(\"o200k_base\")\nassert
+      enc.decode(enc.encode(\"hello world\")) == \"hello world\"\n\n# To get the tokeniser
+      corresponding to a specific model in the OpenAI API:\nenc = tiktoken.encoding_for_model(\"gpt-4o\")\n```\n\nThe
+      open source version of `tiktoken` can be installed from [PyPI](https://pypi.org/project/tiktoken):\n```\npip
+      install tiktoken\n```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\nExample
+      code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\n\n##
+      Performance\n\n`tiktoken` is between 3-6x faster than a comparable open source
+      tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\nPerformance
+      measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`
+      from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\n\n##
+      Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\nIf
+      you work at OpenAI, make sure to check the internal documentation or feel free
+      to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage models don''t see
+      text like you and I, instead they see a sequence of numbers (known as tokens).\nByte
+      pair encoding (BPE) is a way of converting text into tokens. It has a couple
+      desirable\nproperties:\n1) It''s reversible and lossless, so you can convert
+      tokens back into the original text\n2) It works on arbitrary text, even text
+      that is not in the tokeniser''s training data\n3) It compresses the text: the
+      token sequence is shorter than the bytes corresponding to the\n   original text.
+      On average, in practice, each token corresponds to about 4 bytes.\n4) It attempts
+      to let the model see common subwords. For instance, \"ing\" is a common subword
+      in\n   English, so BPE encodings will often split \"encoding\" into tokens like
+      \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"). Because the
+      model will then see the \"ing\" token again and\n   again in different contexts,
+      it helps models generalise and better understand grammar.\n\n`tiktoken` contains
+      an educational submodule that is friendlier if you want to learn more about\nthe
+      details of BPE, including code that helps visualise the BPE procedure:\n```python\nfrom
+      tiktoken._educational import *\n\n# Train a BPE tokeniser on a small amount
+      of text\nenc = train_simple_encoding()\n\n# Visualise how the GPT-4 encoder
+      encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"cl100k_base\")\nenc.encode(\"hello
+      world aaaaaaaaaaaa\")\n```\n\n\n## Extending tiktoken\n\nYou may wish to extend
+      `tiktoken` to support new encodings. There are two ways to do this.\n\n\n**Create
+      your `Encoding` object exactly the way you want and simply pass it around.**\n\n```python\ncl100k_base
+      = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the arguments
+      directly instead of accessing private attributes\n# See openai_public.py for
+      examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n    #
+      If you''re changing the set of special tokens, make sure to use a different
+      name\n    # It should be clear from the name what behaviour to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n        **cl100k_base._special_tokens,\n        \"<|im_start|>\":
+      100264,\n        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`
+      plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\nThis
+      is only useful if you need `tiktoken.get_encoding` to find your encoding, otherwise
+      prefer\noption 1.\n\nTo do this, you''ll need to create a namespace package
+      under `tiktoken_ext`.\n\nLayout your project like this, making sure to omit
+      the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n\u251c\u2500\u2500
+      tiktoken_ext\n\u2502\u00a0\u00a0 \u2514\u2500\u2500 my_encodings.py\n\u2514\u2500\u2500
+      setup.py\n```\n\n`my_encodings.py` should be a module that contains a variable
+      named `ENCODING_CONSTRUCTORS`.\nThis is a dictionary from an encoding name to
+      a function that takes no arguments and returns\narguments that can be passed
+      to `tiktoken.Encoding` to construct that encoding. For an example, see\n`tiktoken_ext/openai_public.py`.
+      For precise details, see `tiktoken/registry.py`.\n\nYour `setup.py` should look
+      something like this:\n```python\nfrom setuptools import setup, find_namespace_packages\n\nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=[''tiktoken_ext*'']),\n    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen
+      simply `pip install ./my_tiktoken_extension` and you should be able to use your\ncustom
+      encodings! Make sure **not** to use an editable install.\n\n\n\nIf you''d like
+      to retry the search, try changing the query to increase the likelihood of a
+      match.","server_label":"gitmcp_tiktoken"},{"id":"rs_0558e94517919a48006ad089dae00c87d086871c076530cda7","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0InbT67yjGsZ2poVq2Zi12dtQ6pvRJ4P2JUPVndZsvGsViGYuhaF5ZlA7PZ8VljfjQgrnrgXUTVH5lKplTvgsS43RTsWHM7KPuskSrMDyqLQry87NrOAU2eB_Bn-x6w471G2LkXeCwJ3Zvwv7vcpteHwnRyOj6NN2_RUwJKoyj_hQq19Q9kX-L9y65Dq_wgG1JCPKGvQ8nGbIqpfuzVhsfe9X-M1A_bEoj3j6lGAkeKLsOYtULGI22neKi0Y2I43UXmdjsdEnaWJLumes5YWxFZsSPaACx4kT6dnBUWvdkuPjDLegYG23dZGTTFsRpoSejXMonAbEJ-bh_1bZo1pY100-Llwn3BPBnPQe-GjEugC-E3LBgsmII5l1XFp9FDEvbYBXf3OUbEztrhnhtZEpMsPkzV65NQxKs5czbzW6nAnzleu-cPQ9oXqgPTno7kv2MXH7SYJTCWREaA615PBgGSLhGNqUmLr97q0hYF3kZMzwKV7NfDL7Wv8i5iRjBc_2w5EihbjgQjzCJSJPAPSLd4A8htxMjQoABYvfALcRO_b2CTU1RWdF1fAYb_QRgnABVoX4B0y5KExawMISslpzr3Y-9fbT4UElyZlJjc82K6Gjlw_me9VWP2SXPp0CytkzffK11dOPtzHMPLGzTeF89NXRVrvvy1QBXIURDPpqEmsrBNJfhEFsWCY_nlzBcwWXbJnm6r2_BvtCN5UIPVN5p6xKrc72tjx3tMLqnHyfdEvXh4EBUYJ_2o2TM2QH0phYTTaG2fnefqDJ61L1vaD0qwtFm6dOoIN_SbOgx8LNTrLuXxGKrufTl5QaBWTE1GcTmXRECJlNAGAposO0MzEktCZzrJQghFqjN37bpPjJ48s-peg9Akf90WLmOwMLsVPzBGQuUNGnmpQh2WqX2NzMUewyyWWb7jC1TatcK15PDHN8xgMLOESAAu8S5cnLyr4E9a5WKx05GROWvxQ978KhevG3A8LPRvYgoqtYnTF1favOfCpAEWMTK4cWzSttnZ8YR9riduQVgYmi5s21J0vxTPKYWum5ZxsKuEZak7DHZOYmrHHuiAEyfKc9PQu9xWBVTzbvYp9KLw_6ieLzxd5AmZnyvwSibSzbRz3DxcLIpM5UUFaZvma6YwCdGyjkNv5nFudZTz_ez0LnXhEK27qfMkCxvvVoT0TbQdZ51Y_qa1-nhaDCEPfJg2TXzcEg0B6eLEMSj6CEt49pCX-cCpFk3E_CarHNuLNYEfhe-yaZ-MvZE31vvIz_nFEft0xUMCYUF7klRrPhvKX2BtNjiyjwmAn0L0kR-hffz8V7XvH8AErhfYiMFILgvQEeF9XYKnUEOVlVOXQiw716jekCwrCVTQEG58wZBr851rzP_kSLT4ddzGHabPxvYYNrp3qjG3bw2DCawkvJXDmrH7EHR9ZkKdWE3Akx_VE4Yg2IGp1BOeAANsOC6y_VbXmGtQ4pKY_pQGSFlPOfV_1Iw9ZXBi7x3p2lNnApbjuxHdJiytGwBGhv1w7sg3Vfhzxih6JUQkNIKQlnC0u0-aEtnXM6ScSqf-aHzi9955IIuLdYPgWR6GfuxLmuMPcek7BSAs8CjrctcrvOh9I0NMVuF5fZdpiHmbERyd-xeRpZ8Qa8HkbHIZ9C-R-Peu3muIjLE8gTIFAtiEIrfBJ0hM8CT9flqyFwLELfrqb2e9spLgZ4UmrFLGYuvlWsyCtzrfKXedM45YCW4EmlzC8LThMlxIOcXbsInW686U2KOXxo2miuFC2AYO1f_4039mgQpdJYnLjzOEhg9RENrIJQ6aNPXou6c_vj_Cufk4bAiH6VO3qE6BDd5RMoLsub1PgYvMd_iIlVcsB19A-wAkfvJL1J892bpXpeOzdAyQB7ZRhAATDIGUc1tAVpTpE3oTm7674tsuwAy3Df2W-","summary":[]},{"id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"GPT-4o
+      uses the `o200k_base` encoding."}],"phase":"final_answer","role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":["search_tiktoken_documentation"],"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      and code search for the openai/tiktoken tokenizer repository.","server_label":"gitmcp_tiktoken","server_url":"https://gitmcp.io/openai/tiktoken"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":2038,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":144,"output_tokens_details":{"reasoning_tokens":82},"total_tokens":2182},"user":null,"metadata":{}},"sequence_number":39}
+
+      '
+    - 'data: [DONE]
+
+      '
+    status_code: 101
+    websocket:
+    - '{"type":"response.created","response":{"id":"resp_0558e94517919a48006ad089d625a887d088b6ebb473bd0d32","object":"response","created_at":1792051670,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":["search_tiktoken_documentation"],"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      and code search for the openai/tiktoken tokenizer repository.","server_label":"gitmcp_tiktoken","server_url":"https://gitmcp.io/openai/tiktoken"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}'
+    - '{"type":"response.in_progress","response":{"id":"resp_0558e94517919a48006ad089d625a887d088b6ebb473bd0d32","object":"response","created_at":1792051670,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":["search_tiktoken_documentation"],"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      and code search for the openai/tiktoken tokenizer repository.","server_label":"gitmcp_tiktoken","server_url":"https://gitmcp.io/openai/tiktoken"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}'
+    - '{"type":"response.output_item.added","item":{"id":"mcpl_0558e94517919a48006ad089d6411487d0b3b1dbd554f7fb76","type":"mcp_list_tools","server_label":"gitmcp_tiktoken","tools":[]},"output_index":0,"sequence_number":2}'
+    - '{"type":"response.mcp_list_tools.in_progress","item_id":"mcpl_0558e94517919a48006ad089d6411487d0b3b1dbd554f7fb76","output_index":0,"sequence_number":3}'
+    - '{"type":"response.mcp_list_tools.completed","item_id":"mcpl_0558e94517919a48006ad089d6411487d0b3b1dbd554f7fb76","output_index":0,"sequence_number":4}'
+    - '{"type":"response.output_item.done","item":{"id":"mcpl_0558e94517919a48006ad089d6411487d0b3b1dbd554f7fb76","type":"mcp_list_tools","server_label":"gitmcp_tiktoken","tools":[{"annotations":{"read_only":false},"description":"Semantically
+      search within the fetched documentation from GitHub repository: openai/tiktoken.
+      Useful for specific queries.","input_schema":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant documentation"}},"required":["query"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"},"name":"search_tiktoken_documentation"}]},"output_index":0,"sequence_number":5}'
+    - '{"type":"response.output_item.added","item":{"id":"rs_0558e94517919a48006ad089d7a26087d0a53284e86261544c","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0InXvsuMGW9L-0UBsKyOlzN8zq7jxrN2IQ8rOKhd9H0XG7GrxRJsrX2wRQc0W-3LrhFf_FsLMWXSNk6wviVNmmVB1Q-5DCpDcf6W5MYc1sI0lBMPWsaDVF-VIGAMEDyCTWIhutQVWqc8Rb-mQfODMwIiX3VeLvoJfGEzlo2wzrK6IIwOimAyx3whrF8gJbv6Qf30aRPcn9_UlBxm7nMOpF81ROhl_gB0nwmLABpivdrKqaE77mqX1lUnQF75n0liWsm9NSMe1b9m98Fpsq_M6q0R794bvTlwNwmJMLUzPo59CmmLZVHfJJ-dvk2gQsPutNF2WQPmYDiPI4dxhAXZ5buDa4O6GmFcSlFibJFNRaw4Z0e4YEohiCgBA-cwRdLGnz6gDiiRaaaybT9HOEUvYLMzCGdAvDn8Ptw4RjrxF95BZqhXSTLRbowHhzeqUpupSKENOvqgr6eJntqCH5eS54d2M2JkTOI4ZeDrF82vRZIi_UPbDn1wCv57G7vVsI2jzuY7_B9L1dE7xgnDSIUXC_CIHnbGkPkgVuoEd3KtPxtgC0VDj6aCtN0A-3vZKY4vDZINjdU21F5Ejo-VrSMUwZRW-l1FioBBrHRVfdT6_r-sZbL_lkPxXUtjgP-RDXF6uwJSy_20RW-0BAjbDArV9VjTGUJKgUUL3hWaRngrC1IhLU-vfPKr0tJG3E8YO1CtBtVMvuoV4RHuZWGCepVLrilvUnYDSVkvhCJKDJazVot2R-DoPGejqLF2FjG_MADmu3q6JFAwvWVRKL2Olau2AUsrtJN13h1VcBwCuaymLpaYXJqHZA24i1P2456UZMXCRtlI8-dbm-93uFN1ivmLISL_XvqRJnZ_0ae9f40BZIU5iqGBJ655b0E4AfrJpR-q-WfPIFBK6UB-750Cojd42XFcfFzULtQHZzdUkdU6e9NYYKoJrxfpTarAcHbHly8z2TYQrRECmNkqe6D6FmRWyO2VRRAWellFLqlJuTp2Wpf7Kv87UOxUwfo82j3NLuQI7x_pnThdirLk670xInCiFRTN0H1a2AGJDcNEGwVUn6Wy3XqZq89s2blM6m2VsIaRGo5L6zQniU8G9GINOKb-QcAT_Sekd3WYWwr2UnFXSjhBgBuXlmBm8WeYxQ4ympMlE3lZUMlO4LH-602f4gbVVYVjf9Y8BnM5mddVxpb7cJEwJ0hWzK6NlW71ZggESPVMurl5","summary":[]},"output_index":1,"sequence_number":6}'
+    - '{"type":"response.output_item.done","item":{"id":"rs_0558e94517919a48006ad089d7a26087d0a53284e86261544c","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0InXAgTdnhkFzoYo5C9jV6ndlJQYVI-_0BctKTO7sCLOkQf-c4Frml419-LsV89WWUPur3qdQJmcV7GxSmmODFB-N4seb655iOuYQPfY50BJch5h-1mIKWaEYgKZTc4cL4MqPPPTWMjgBM-hYuHh9LBJjiAOytcncWWHMO9iJ_-IclAHLMNDRaTnGDoekdSEMkDHdTuMy3OeibUfZUxIU_xN0fJONGj2--TlnNP5xrLiVVhS_icVhIBcGALzdY3gwdcwzZL5QVxSpKsb47fdy_Svtj46woyf_S4RQe6iTr5pGxiUNgjugpfP4dvHFnsBHt-f1mm8RDgekb8Dar1SIOPEZR_LguDJboupJEIxBQtW2Qh4NYLkzzW11aEo-zG7h179_e_1GvhyXAxTNHJkwgbxTnoIkWrFHpnCj1Q3yHHzRx9DFGXJ-oksF1cOjTBHobVtaHiXnFZQK1WsmKT7FsuHDg0urYhTKcaA11a7sBcVZSIQimNH-Or8SGR_97t-vJ5k1sWgjLvvmSL4O5gO4fvbzcKL3Ggg1nrJM_1tFQOxCxELeatk3nN-LPnGC9fz0YJ71K6qBfJVELzq5f4HCiB17H9OImHCCRPydirNP0DKuhetYT5Jm6H_pvFMxnOfAZqYDd5skl4eBq4xuhW-4_EZ-btO2faO6VsWFVG7XCYjOSru8g5VD3cEnbEcIJB9jXFEkW3yMA5HoWf3TuAk-OZCp4Y9fYPrlvxVYSAZadqrbQrMOEYz2eqjumt9aXEDGfSa5fSY5QZiKTqJqstB8wgjTzEZwxZYqDgsO6mk9Z91hcLKPdLYt6qytEfDEsU-jTK3xoY_avUdyI5iflUqQWcUzqjmhTzozd1hBK2lLEceXo3rq4V6gMg6_7KWeR5SWeFYJuIEyRJLreAqqZdh-IkqlhLmg8NQFfp49HVg7UY-U7OOJUVj-Mo1X3792pDkStHejrQDyHTv6snRDc0DMzatXg6sLz0E4kuPR5DUrL4J3_QLmaX4RdEtoXRKfNLNnfjEHFfUejQ3Gl7Ik1GJpmzMn6MedOU4gwBJ4zXlQ-rqBHADHkWzEyb-j7b9DnPG8f0QA76Jhz5I6rlD93TmGh1OL_mvAvauFtp8iCbk3keZmublr-syxHfPCVNfwcRPBT4-Z4t9tStEZncrFEobT1pvIVgnWhOjC0l0NNXNNFZCw2f6IzZK-tOCurMznpN5GM4wrwSaBj4ARAt3_HlppczMI0Lm3Gi7bfNCYyIVNKsuBCntjIr7FoT_GUPE6k2FVT2gLQM7rECL1Y08fB9napgshbd6E6gHQa55GH-PUIK4HoftTnGB1OYdOYvOrjert5H8V31CrW8jIiBVGHGJukOfkC9RdAJ6UNHVnbka_H36h38L9vy1LkT6p7qB8lNNv9IhyODLdPOFgUrR5x28Ms5jo2JwJiLGSLMwwUEPUE00uRYT-es8d5d5roOvSrX9CpCzvHkiq0rW0EqUlhJV1cvO5GhrmBygaKc3uQQgcRIm2jM1RLtnQyqvplpAtS1y-MgSvgtmBPyqkiSF3AKn7F5JTw==","summary":[]},"output_index":1,"sequence_number":7}'
+    - '{"type":"response.output_item.added","item":{"id":"tsc_0558e94517919a48006ad089d7dee887d0b9327982795e64d5","type":"tool_search_call","status":"in_progress","arguments":{},"call_id":null,"execution":"server"},"output_index":2,"sequence_number":8}'
+    - '{"type":"response.output_item.done","item":{"id":"tsc_0558e94517919a48006ad089d7dee887d0b9327982795e64d5","type":"tool_search_call","status":"completed","arguments":{"paths":["mcp_gitmcp_tiktoken"]},"call_id":null,"execution":"server"},"output_index":2,"sequence_number":9}'
+    - '{"type":"response.output_item.added","item":{"id":"tso_0558e94517919a48006ad089d8017c87d08559a9c124da590a","type":"tool_search_output","status":"in_progress","call_id":null,"execution":"server","tools":[{"type":"namespace","description":"Documentation
+      and code search for the openai/tiktoken tokenizer repository.","name":"mcp_gitmcp_tiktoken","tools":[{"type":"function","defer_loading":true,"description":"Semantically
+      search within the fetched documentation from GitHub repository: openai/tiktoken.
+      Useful for specific queries.","name":"search_tiktoken_documentation","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant documentation"}},"required":["query"],"additionalProperties":false},"strict":null}]}]},"output_index":3,"sequence_number":10}'
+    - '{"type":"response.output_item.done","item":{"id":"tso_0558e94517919a48006ad089d8017c87d08559a9c124da590a","type":"tool_search_output","status":"completed","call_id":null,"execution":"server","tools":[{"type":"namespace","description":"Documentation
+      and code search for the openai/tiktoken tokenizer repository.","name":"mcp_gitmcp_tiktoken","tools":[{"type":"function","defer_loading":true,"description":"Semantically
+      search within the fetched documentation from GitHub repository: openai/tiktoken.
+      Useful for specific queries.","name":"search_tiktoken_documentation","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant documentation"}},"required":["query"],"additionalProperties":false},"strict":null}]}]},"output_index":3,"sequence_number":11}'
+    - '{"type":"response.output_item.added","item":{"id":"mcp_0558e94517919a48006ad089d8c5bc87d09d9b28be0b963bce","type":"mcp_call","status":"in_progress","approval_request_id":null,"arguments":"","error":null,"name":"search_tiktoken_documentation","output":null,"server_label":"gitmcp_tiktoken"},"output_index":4,"sequence_number":12}'
+    - '{"type":"response.mcp_call.in_progress","item_id":"mcp_0558e94517919a48006ad089d8c5bc87d09d9b28be0b963bce","output_index":4,"sequence_number":13}'
+    - '{"type":"response.mcp_call_arguments.delta","delta":"{\"query\":\"Which tiktoken
+      encoding does the gpt-4o model use?\"}","item_id":"mcp_0558e94517919a48006ad089d8c5bc87d09d9b28be0b963bce","obfuscation":"7R","output_index":4,"sequence_number":14}'
+    - '{"type":"response.mcp_call_arguments.done","arguments":"{\"query\":\"Which
+      tiktoken encoding does the gpt-4o model use?\"}","item_id":"mcp_0558e94517919a48006ad089d8c5bc87d09d9b28be0b963bce","output_index":4,"sequence_number":15}'
+    - '{"type":"response.mcp_call.completed","item_id":"mcp_0558e94517919a48006ad089d8c5bc87d09d9b28be0b963bce","output_index":4,"sequence_number":16}'
+    - '{"type":"response.output_item.done","item":{"id":"mcp_0558e94517919a48006ad089d8c5bc87d09d9b28be0b963bce","type":"mcp_call","status":"completed","approval_request_id":null,"arguments":"{\"query\":\"Which
+      tiktoken encoding does the gpt-4o model use?\"}","error":null,"name":"search_tiktoken_documentation","output":"###
+      Search Results for: \"Which tiktoken encoding does the gpt-4o model use?\"\n\nNo
+      relevant documentation found for your query. It''s either being indexed or the
+      search query did not match any documentation.\n\nAs a fallback, this is the
+      documentation for openai/tiktoken:\n\n# ⏳ tiktoken\n\ntiktoken is a fast [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding)
+      tokeniser for use with\nOpenAI''s models.\n\n```python\nimport tiktoken\nenc
+      = tiktoken.get_encoding(\"o200k_base\")\nassert enc.decode(enc.encode(\"hello
+      world\")) == \"hello world\"\n\n# To get the tokeniser corresponding to a specific
+      model in the OpenAI API:\nenc = tiktoken.encoding_for_model(\"gpt-4o\")\n```\n\nThe
+      open source version of `tiktoken` can be installed from [PyPI](https://pypi.org/project/tiktoken):\n```\npip
+      install tiktoken\n```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\nExample
+      code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\n\n##
+      Performance\n\n`tiktoken` is between 3-6x faster than a comparable open source
+      tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\nPerformance
+      measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`
+      from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\n\n##
+      Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\nIf
+      you work at OpenAI, make sure to check the internal documentation or feel free
+      to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage models don''t see
+      text like you and I, instead they see a sequence of numbers (known as tokens).\nByte
+      pair encoding (BPE) is a way of converting text into tokens. It has a couple
+      desirable\nproperties:\n1) It''s reversible and lossless, so you can convert
+      tokens back into the original text\n2) It works on arbitrary text, even text
+      that is not in the tokeniser''s training data\n3) It compresses the text: the
+      token sequence is shorter than the bytes corresponding to the\n   original text.
+      On average, in practice, each token corresponds to about 4 bytes.\n4) It attempts
+      to let the model see common subwords. For instance, \"ing\" is a common subword
+      in\n   English, so BPE encodings will often split \"encoding\" into tokens like
+      \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"). Because the
+      model will then see the \"ing\" token again and\n   again in different contexts,
+      it helps models generalise and better understand grammar.\n\n`tiktoken` contains
+      an educational submodule that is friendlier if you want to learn more about\nthe
+      details of BPE, including code that helps visualise the BPE procedure:\n```python\nfrom
+      tiktoken._educational import *\n\n# Train a BPE tokeniser on a small amount
+      of text\nenc = train_simple_encoding()\n\n# Visualise how the GPT-4 encoder
+      encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"cl100k_base\")\nenc.encode(\"hello
+      world aaaaaaaaaaaa\")\n```\n\n\n## Extending tiktoken\n\nYou may wish to extend
+      `tiktoken` to support new encodings. There are two ways to do this.\n\n\n**Create
+      your `Encoding` object exactly the way you want and simply pass it around.**\n\n```python\ncl100k_base
+      = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the arguments
+      directly instead of accessing private attributes\n# See openai_public.py for
+      examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n    #
+      If you''re changing the set of special tokens, make sure to use a different
+      name\n    # It should be clear from the name what behaviour to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n        **cl100k_base._special_tokens,\n        \"<|im_start|>\":
+      100264,\n        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`
+      plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\nThis
+      is only useful if you need `tiktoken.get_encoding` to find your encoding, otherwise
+      prefer\noption 1.\n\nTo do this, you''ll need to create a namespace package
+      under `tiktoken_ext`.\n\nLayout your project like this, making sure to omit
+      the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n├── tiktoken_ext\n│  
+      └── my_encodings.py\n└── setup.py\n```\n\n`my_encodings.py` should be a module
+      that contains a variable named `ENCODING_CONSTRUCTORS`.\nThis is a dictionary
+      from an encoding name to a function that takes no arguments and returns\narguments
+      that can be passed to `tiktoken.Encoding` to construct that encoding. For an
+      example, see\n`tiktoken_ext/openai_public.py`. For precise details, see `tiktoken/registry.py`.\n\nYour
+      `setup.py` should look something like this:\n```python\nfrom setuptools import
+      setup, find_namespace_packages\n\nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=[''tiktoken_ext*'']),\n    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen
+      simply `pip install ./my_tiktoken_extension` and you should be able to use your\ncustom
+      encodings! Make sure **not** to use an editable install.\n\n\n\nIf you''d like
+      to retry the search, try changing the query to increase the likelihood of a
+      match.","server_label":"gitmcp_tiktoken"},"output_index":4,"sequence_number":17}'
+    - '{"type":"response.output_item.added","item":{"id":"rs_0558e94517919a48006ad089dae00c87d086871c076530cda7","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0InaGEKF9yK4J-EcDlBr3VMmpHzOikQH8H015HFrzN5taDskkdg7t5K_COod9NBe_PFtmi28-W1QLK7qCTXPLHG8wR_nk7Six_1IKB5-pvUrUnrFqNuTeJDwhCUwxmLZWNbd7-w3YrxgyabrEjVaWedjw0xgKHt3hAo58R-JVYiK8DEQcSaPIyrj2y5b7v_pkudo30clYoDofbFw1yMyOchiDSn6fxGm4SVEJ9vIcFNXcfQaF4YFUbsQQZzvThv9oGqKKs1IcHDTTc3m_Yrn5fxFJNBZjuccPEjLU2rWsoB5gHQb5N0i4GsSmBJvgz0aQUBicMD7OlD8jbdPaHpLz580UP3ANmwT_ZYNBfXwQ9TqJUM8Z47ofLa_l5dM-d2473xG3MYGL1jeWB2PJWGu3OSk7T2SYxEWP9_T3d_Kmeddd4r6GLt3v7-hk4Jsqgr08BlIyuhWIl0bqlpVzS5CwnYTmuws_SgTI_hmFbklcHax_NSPpvYPxSJSxRhYuBTABZgGFTg_gwvvI1ID8B86aoW7UvkYqBYGQD4vyDy-NSf_KMAKx_OAPzXUZLapE5AW7iI7yHD2KbYCVZ_hY62geKaxYZN5x8gr581oSzDUehPbuEMP5mmsqUa2jQw1lLiCdcZ3OnxqtuXxPWaVI-NY85cmLa05o1f8FXGMbHUUNhfUP-0n6Nl0Vu_Cll1Tg9Ps7lqoZ4uLX9EHKvpW17C0ljC7GOMZgcI71iqXAEDZYyohadrEWrJGlACogMkQgfFWaWNStGWUMJzVEIP3MNu5d_L_JUNBC6VtT_tjr_Cw3ju5Q2KBNs_fy1LO25kGxcOD0IvayxoS56MlmYor8l66S7NJCynRFeugcaxxu9PoFMlAjf54ms00WPS6mCTfclq9YBfboUQHPF4uvL6zFImVBgV6F1J4qv0L1TXjFFCXlbLxQEs0qkuYlty6PQe-f-5XjBWZaeV4rTaIxJa7EIelWB_fFnGu_llz2H9dvnfN3YVb7PyL6UGSJoz3lH-Q62zcewkeWJktP2AdwOiBi7AMpsGIpbB3jC5tALasPrZDBZNa_ihY5mcKF5ROdgKnbottILCZOLbCg2-BnPLC0fKXaVYHGwHyPpbrlDYx1syQqeMa-yFT9Vpnlo_8thPHepD5qifUc-KOczwZYQT7BrCZLM1o8c1TVNc1PU5f1U2Ki-3KIot56joWRK01ZABL1AJ3qXQs","summary":[]},"output_index":5,"sequence_number":18}'
+    - '{"type":"response.output_item.done","item":{"id":"rs_0558e94517919a48006ad089dae00c87d086871c076530cda7","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0Inbq2tyEYymoBQC1aCbMRkG75IZ9nPqblnC4dtr3G3JJPVBy2GYpLRCcBKz_dI-wVFzBOkCXxMWFEKAnM6BazCkWPvbCAtkvMb_nkFuX_HdlXDSEJU8YH2Oc1CVIqP7Qt311HQl9apARRO4a4eC61t3-2tcv_OMnniSTwpukuDhwQu7wCAGuR1Xszm5k90E7XngaBw5TEkbynuVstKbnKfXrnXfo32Zrz88udMm3yDuhb1DOEGu6toYOcgM-U1xPocHabzZk0OLJzGzvXeOq6Q3Hk10zbknV7Vsm6L-LlYNjH-7_uKeiBz2WO1wxWtDrSLM1W9rzWtTj_sElAiqZZhMzRUnwtuHDthFzMAuOd4PkQb_V-Cr6MXiE4NHz0mixRnt8uBJN22Kz8CvVRn8AqNd04cikfd7H-ES1OFXsx-7BBRf-TVUdSPBlVNQ_--Pi9ifpgt9H8wM1tpZrwPIVlfbt7iXeDvtiupTNWOtAQYzVXB3MTw4EVt8InxvvE3sigbepk0t5PNJQ85Lv9lfnyBCMu9Y29FHcbSSCEPsg8jMCISoWW_26OUbK9s-CZzjHvX4yoA0Sy1NiQ9JH7oZl7PHpoHsRLQj6r5rq5BC8uMc5OidY7wgB-1NBYxnehzE7rjTWQRum64TSoZiipAIbkVaNqzd5o92V5gMLAIwGCgI9oav5q7YbcH2L7bsep909ykKE-TKMH9VFuhKfTL8hRwWItWujjQY5sx91piINufpIUZjT2tv9GSuArE-OE0mxHD4UbAl5Vbq0fIoFYGV2ST08k0I1NqLar_jTWWePvL5aDNiYpjfd0hMmElat7rjlWZh5XUF9XxMNFzXVlxRQpeyJ5m6mntyhOG5nCyK-OJaUvla-Tt7RrLjg-IiXwe1-SwGygKXHbqxbhttCgaBb7w4VMquds04QrvrMsB9AyNtyiQvWesm-fLpsOIwzQoyqQhG9tcdWIH3dl4DH8z0Jb5xucpq_dCtmzujMFJEgmf9EPzYK94fJO_NHFl5G4EmzlFLTXbMgMfPuwJ5Jt0jki8-hV9NlQbKrYgQh__47bbvicTqyG-qug4ashadkkS3Qlva7PfAO4vJ5bUFHUiLk_S_OLfNX4Tzf21cvDi00vutRB-mZ828RMYqcTjJSnYxn2eQ_z2tsa7w5BmdEj6RkRa6v1-1u6OaiCTWcngeUZJGoWFzjMPycsgsN5LQsMkQ94WubnkQcwX1lEorVykJavxGBtO0cep4lBQRtOL42783SNEYz4ZeWdJtPhg13SObRpROPignEgLBqeRLu9JEzo7uEZn_yCC-RxrUyrTIdCvDnQUWtKWGz3SvMsMW0i6hoP6e4whBOQvpiFbxW-2uln0D_Rj7PBnADT9pDjRPI5RZkBiwXAjJlHcd9JTRhSgf9hhCBMXbPrvqyZtVu02E3HoYpsyej4UL1oCGcDpOV_9g-b4r4YkqEN5hBq6PPWOTLlrWjMmVrBF7TnJO2-roN2sJpeMjL3rnxGP15p_gGzxFYFwJLVh1n4-alsB6coYdJ6y8sVgfa4xza3EfOsqPJTT6bz0Hl6EpEqoTYt4JqyPIXHX-aOLCX-RWMczTbg_EMU8Va9qHdjZQfoYR6w-5EfxAoLZXVZTaikcDn46nsb_WrqKMm_tWorv2RG2_DNNgCm1oZlw3g1iVrperJ1MEGB50VNQ6ssZvTUrOrevD8fu6KMDLpUvAsNYMEF7TwJ28-jYq4q2JoQKQophyd2XWl-zTQH_uGAC_rKqGuMxs3AyCeEjlmcXLqzvhlewfQuV0zHNynsiC711l6U68WuHcquiYzUVVjIDIB9qQ15pSGxnvp-9NZE864XOe-ekqBsvm4qMNmCrFbwnx5P6GEZXVua0fvU5lnDbaCo71NOy253SIRgYBvxBdQP426YdmQmAXdmGC","summary":[]},"output_index":5,"sequence_number":19}'
+    - '{"type":"response.output_item.added","item":{"id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"},"output_index":6,"sequence_number":20}'
+    - '{"type":"response.content_part.added","content_index":0,"item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","output_index":6,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":21}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"GPT","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"DwtDVzL2DZcGH","output_index":6,"sequence_number":22}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"-","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"0qipFJTcUfcjhIC","output_index":6,"sequence_number":23}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"4","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"GwwMKPSzuPtNj0W","output_index":6,"sequence_number":24}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"o","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"XwLAIFAJamz7V6r","output_index":6,"sequence_number":25}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" uses","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"3GUxLcBsTn1","output_index":6,"sequence_number":26}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" the","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"RIdu4QSTvNMF","output_index":6,"sequence_number":27}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" `","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"8EB6HIbBtzO4l1","output_index":6,"sequence_number":28}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"o","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"pqyetT0qBi3ztDD","output_index":6,"sequence_number":29}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"200","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"OTmdXkNg2E9rw","output_index":6,"sequence_number":30}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"k","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"esMvHYWIfvVBAmS","output_index":6,"sequence_number":31}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"_base","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"qw83me7UD1h","output_index":6,"sequence_number":32}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":"`","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"aSVuxcUMMzB1g1a","output_index":6,"sequence_number":33}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":" encoding","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"Bxoemqb","output_index":6,"sequence_number":34}'
+    - '{"type":"response.output_text.delta","content_index":0,"delta":".","item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"obfuscation":"bqB8QnCBkjxKUni","output_index":6,"sequence_number":35}'
+    - '{"type":"response.output_text.done","content_index":0,"item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","logprobs":[],"output_index":6,"sequence_number":36,"text":"GPT-4o
+      uses the `o200k_base` encoding."}'
+    - '{"type":"response.content_part.done","content_index":0,"item_id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","output_index":6,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"GPT-4o
+      uses the `o200k_base` encoding."},"sequence_number":37}'
+    - '{"type":"response.output_item.done","item":{"id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"GPT-4o
+      uses the `o200k_base` encoding."}],"phase":"final_answer","role":"assistant"},"output_index":6,"sequence_number":38}'
+    - '{"type":"response.completed","response":{"id":"resp_0558e94517919a48006ad089d625a887d088b6ebb473bd0d32","object":"response","created_at":1792051670,"status":"completed","access_programs":null,"background":false,"completed_at":1792051675,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"mcpl_0558e94517919a48006ad089d6411487d0b3b1dbd554f7fb76","type":"mcp_list_tools","server_label":"gitmcp_tiktoken","tools":[{"annotations":{"read_only":false},"description":"Semantically
+      search within the fetched documentation from GitHub repository: openai/tiktoken.
+      Useful for specific queries.","input_schema":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant documentation"}},"required":["query"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"},"name":"search_tiktoken_documentation"}]},{"id":"rs_0558e94517919a48006ad089d7a26087d0a53284e86261544c","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0InbI45oOjex4qtc6qVKEcDVHQm8y3fSrpAFaA0Sa_Om6hI3LkIgR5ugJqIHPYj3oNxvxe2SFH56BmWWpiknv4fwSYf4sUrxs6CoDXz2q5AFj0KTlXYL0ywMx5lrvDKn_mGSBYKtsqbJBhU9Q1CVMDYZJq2iTVCKEdUBjx9XI88TkrpwYnG3cZuP1axlJbnMnUo4RTHkXI4brDoRFtJgx5AkrXpxh3YjK9FNGNyD2UbUlI5g9o7qykMIiNiWmmOOuenG6Yrh_4lbEVSMsOe5ndO7YOo7rFOtPGP0mpu_YC727bXNVWtge7PK4xSeYzrTvCABky-6p-COkEcJNW-7OgeVEVLOTVNtCdOwZHU0C399IOtjLDH20EWwbAZX5KJ5dGc3tM8fi3Ol821YM5wzKMyhUfc-lqWAC_J0QEI_rAFmqLzAHsjz3LWf1zR3zRrw751v1_W8I8XndRR08SIT4gEQ3MNwdqwwTXN0XBoXjqr-6s6D4PqtRPl3mccE5e16ACsPZRhATrMacd3gLKnF59hJCO1s28wperODh_83fbnrXZ4ZqQJ_e-C5v9KeeuOVOIrMkASeg2Oea1DCBDvmyqWTG2CcIGcPqmuUyGgKolEZgllyA6f2sfM2Cvd3IgdbV8QH5TaCBlbmOkz9_MkyGOFRdvgDOrQYZdjkWJt2yJl2UChAFCB0js0zYvulr8g-jXwZpcO0pafnlNBAEbgBpLRlIZJPDjOUpRARVn8gD6F1Hjl4B0Y-TZaGYhL-8NHbJYGbKimDh2C7mONlyzJ1M3CkjSIGnwzluOmK4pzyCd5Wm3NTBAsIV069agF3sUCCRt1G1jA_Xp0XO1fSJVmT_oRmYfnzI6KO0xFuAE9rBWBJv_hKS1P9pHBkn8DysfcR-DdinhOGOaYIRif0FPOO3ZYFitE2qgSjhj8izxyUdDUyAqE4PtSzQKVKi9CoPJsoT4qNIac-SQVb52m4jfTgwQjaA_VJM3_RY0f-35Q95LbvT7KYaCoh9kwFE7brcscvO254LgYohNV9BfNJJQZemHbZ60HuMwxEgX0CeRvxaYKC6-uzbmVJAiuRanp2qGTSGJpr3SxBpK_8EeVJpYCHDD5azm_nsa42SYLY8IDSasERCqAPyZ78mugdr1ixNDENwzMOJYVnYvJFSceIjBVBjWRcm2Fsqf1-PSbqg74E11y_FhA3c3iX5KV2pXixNrZz3QdH1KyQVOvujmzr3Ulsz2rqiADctS05MQe5XJq6CzZzK7qi4UJJAc_i4dmDkXnMcethVy6RsU7_R4f2Ix4bIpvHTziSreiadhEwZa9i0oAG3G27lvgIprEIios9ue1CZSBajgDvqIk9O6atE2m1Jt9gJ_8DPyTIgBw2JCHdvogS1GRsjN7um2_tZZu7n2N7PhPSkIee2IFj8SzpuC0-XLvECkhFmgquAhY4dhjMIPmnjB3IzhraZSLUEwmUZeFb8Pac32855LpD2Lrn5j865BHirGiXg7olkroBcb_UasXfnT7M7L9HWcjcXRB5JJp0psxm4AMnbxBdbmLd13t3ARMEog==","summary":[]},{"id":"tsc_0558e94517919a48006ad089d7dee887d0b9327982795e64d5","type":"tool_search_call","status":"completed","arguments":{"paths":["mcp_gitmcp_tiktoken"]},"call_id":null,"execution":"server"},{"id":"tso_0558e94517919a48006ad089d8017c87d08559a9c124da590a","type":"tool_search_output","status":"completed","call_id":null,"execution":"server","tools":[{"type":"namespace","description":"Documentation
+      and code search for the openai/tiktoken tokenizer repository.","name":"mcp_gitmcp_tiktoken","tools":[{"type":"function","defer_loading":true,"description":"Semantically
+      search within the fetched documentation from GitHub repository: openai/tiktoken.
+      Useful for specific queries.","name":"search_tiktoken_documentation","output_schema":null,"parameters":{"type":"object","properties":{"query":{"type":"string","description":"The
+      search query to find relevant documentation"}},"required":["query"],"additionalProperties":false},"strict":null}]}]},{"id":"mcp_0558e94517919a48006ad089d8c5bc87d09d9b28be0b963bce","type":"mcp_call","status":"completed","approval_request_id":null,"arguments":"{\"query\":\"Which
+      tiktoken encoding does the gpt-4o model use?\"}","error":null,"name":"search_tiktoken_documentation","output":"###
+      Search Results for: \"Which tiktoken encoding does the gpt-4o model use?\"\n\nNo
+      relevant documentation found for your query. It''s either being indexed or the
+      search query did not match any documentation.\n\nAs a fallback, this is the
+      documentation for openai/tiktoken:\n\n# ⏳ tiktoken\n\ntiktoken is a fast [BPE](https://en.wikipedia.org/wiki/Byte_pair_encoding)
+      tokeniser for use with\nOpenAI''s models.\n\n```python\nimport tiktoken\nenc
+      = tiktoken.get_encoding(\"o200k_base\")\nassert enc.decode(enc.encode(\"hello
+      world\")) == \"hello world\"\n\n# To get the tokeniser corresponding to a specific
+      model in the OpenAI API:\nenc = tiktoken.encoding_for_model(\"gpt-4o\")\n```\n\nThe
+      open source version of `tiktoken` can be installed from [PyPI](https://pypi.org/project/tiktoken):\n```\npip
+      install tiktoken\n```\n\nThe tokeniser API is documented in `tiktoken/core.py`.\n\nExample
+      code using `tiktoken` can be found in the\n[OpenAI Cookbook](https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb).\n\n\n##
+      Performance\n\n`tiktoken` is between 3-6x faster than a comparable open source
+      tokeniser:\n\n![image](https://raw.githubusercontent.com/openai/tiktoken/main/perf.svg)\n\nPerformance
+      measured on 1GB of text using the GPT-2 tokeniser, using `GPT2TokenizerFast`
+      from\n`tokenizers==0.13.2`, `transformers==4.24.0` and `tiktoken==0.2.0`.\n\n\n##
+      Getting help\n\nPlease post questions in the [issue tracker](https://github.com/openai/tiktoken/issues).\n\nIf
+      you work at OpenAI, make sure to check the internal documentation or feel free
+      to contact\n@shantanu.\n\n## What is BPE anyway?\n\nLanguage models don''t see
+      text like you and I, instead they see a sequence of numbers (known as tokens).\nByte
+      pair encoding (BPE) is a way of converting text into tokens. It has a couple
+      desirable\nproperties:\n1) It''s reversible and lossless, so you can convert
+      tokens back into the original text\n2) It works on arbitrary text, even text
+      that is not in the tokeniser''s training data\n3) It compresses the text: the
+      token sequence is shorter than the bytes corresponding to the\n   original text.
+      On average, in practice, each token corresponds to about 4 bytes.\n4) It attempts
+      to let the model see common subwords. For instance, \"ing\" is a common subword
+      in\n   English, so BPE encodings will often split \"encoding\" into tokens like
+      \"encod\" and \"ing\"\n   (instead of e.g. \"enc\" and \"oding\"). Because the
+      model will then see the \"ing\" token again and\n   again in different contexts,
+      it helps models generalise and better understand grammar.\n\n`tiktoken` contains
+      an educational submodule that is friendlier if you want to learn more about\nthe
+      details of BPE, including code that helps visualise the BPE procedure:\n```python\nfrom
+      tiktoken._educational import *\n\n# Train a BPE tokeniser on a small amount
+      of text\nenc = train_simple_encoding()\n\n# Visualise how the GPT-4 encoder
+      encodes text\nenc = SimpleBytePairEncoding.from_tiktoken(\"cl100k_base\")\nenc.encode(\"hello
+      world aaaaaaaaaaaa\")\n```\n\n\n## Extending tiktoken\n\nYou may wish to extend
+      `tiktoken` to support new encodings. There are two ways to do this.\n\n\n**Create
+      your `Encoding` object exactly the way you want and simply pass it around.**\n\n```python\ncl100k_base
+      = tiktoken.get_encoding(\"cl100k_base\")\n\n# In production, load the arguments
+      directly instead of accessing private attributes\n# See openai_public.py for
+      examples of arguments for specific encodings\nenc = tiktoken.Encoding(\n    #
+      If you''re changing the set of special tokens, make sure to use a different
+      name\n    # It should be clear from the name what behaviour to expect.\n    name=\"cl100k_im\",\n    pat_str=cl100k_base._pat_str,\n    mergeable_ranks=cl100k_base._mergeable_ranks,\n    special_tokens={\n        **cl100k_base._special_tokens,\n        \"<|im_start|>\":
+      100264,\n        \"<|im_end|>\": 100265,\n    }\n)\n```\n\n**Use the `tiktoken_ext`
+      plugin mechanism to register your `Encoding` objects with `tiktoken`.**\n\nThis
+      is only useful if you need `tiktoken.get_encoding` to find your encoding, otherwise
+      prefer\noption 1.\n\nTo do this, you''ll need to create a namespace package
+      under `tiktoken_ext`.\n\nLayout your project like this, making sure to omit
+      the `tiktoken_ext/__init__.py` file:\n```\nmy_tiktoken_extension\n├── tiktoken_ext\n│  
+      └── my_encodings.py\n└── setup.py\n```\n\n`my_encodings.py` should be a module
+      that contains a variable named `ENCODING_CONSTRUCTORS`.\nThis is a dictionary
+      from an encoding name to a function that takes no arguments and returns\narguments
+      that can be passed to `tiktoken.Encoding` to construct that encoding. For an
+      example, see\n`tiktoken_ext/openai_public.py`. For precise details, see `tiktoken/registry.py`.\n\nYour
+      `setup.py` should look something like this:\n```python\nfrom setuptools import
+      setup, find_namespace_packages\n\nsetup(\n    name=\"my_tiktoken_extension\",\n    packages=find_namespace_packages(include=[''tiktoken_ext*'']),\n    install_requires=[\"tiktoken\"],\n    ...\n)\n```\n\nThen
+      simply `pip install ./my_tiktoken_extension` and you should be able to use your\ncustom
+      encodings! Make sure **not** to use an editable install.\n\n\n\nIf you''d like
+      to retry the search, try changing the query to increase the likelihood of a
+      match.","server_label":"gitmcp_tiktoken"},{"id":"rs_0558e94517919a48006ad089dae00c87d086871c076530cda7","type":"reasoning","content":[],"encrypted_content":"gAAAAABq0InbT67yjGsZ2poVq2Zi12dtQ6pvRJ4P2JUPVndZsvGsViGYuhaF5ZlA7PZ8VljfjQgrnrgXUTVH5lKplTvgsS43RTsWHM7KPuskSrMDyqLQry87NrOAU2eB_Bn-x6w471G2LkXeCwJ3Zvwv7vcpteHwnRyOj6NN2_RUwJKoyj_hQq19Q9kX-L9y65Dq_wgG1JCPKGvQ8nGbIqpfuzVhsfe9X-M1A_bEoj3j6lGAkeKLsOYtULGI22neKi0Y2I43UXmdjsdEnaWJLumes5YWxFZsSPaACx4kT6dnBUWvdkuPjDLegYG23dZGTTFsRpoSejXMonAbEJ-bh_1bZo1pY100-Llwn3BPBnPQe-GjEugC-E3LBgsmII5l1XFp9FDEvbYBXf3OUbEztrhnhtZEpMsPkzV65NQxKs5czbzW6nAnzleu-cPQ9oXqgPTno7kv2MXH7SYJTCWREaA615PBgGSLhGNqUmLr97q0hYF3kZMzwKV7NfDL7Wv8i5iRjBc_2w5EihbjgQjzCJSJPAPSLd4A8htxMjQoABYvfALcRO_b2CTU1RWdF1fAYb_QRgnABVoX4B0y5KExawMISslpzr3Y-9fbT4UElyZlJjc82K6Gjlw_me9VWP2SXPp0CytkzffK11dOPtzHMPLGzTeF89NXRVrvvy1QBXIURDPpqEmsrBNJfhEFsWCY_nlzBcwWXbJnm6r2_BvtCN5UIPVN5p6xKrc72tjx3tMLqnHyfdEvXh4EBUYJ_2o2TM2QH0phYTTaG2fnefqDJ61L1vaD0qwtFm6dOoIN_SbOgx8LNTrLuXxGKrufTl5QaBWTE1GcTmXRECJlNAGAposO0MzEktCZzrJQghFqjN37bpPjJ48s-peg9Akf90WLmOwMLsVPzBGQuUNGnmpQh2WqX2NzMUewyyWWb7jC1TatcK15PDHN8xgMLOESAAu8S5cnLyr4E9a5WKx05GROWvxQ978KhevG3A8LPRvYgoqtYnTF1favOfCpAEWMTK4cWzSttnZ8YR9riduQVgYmi5s21J0vxTPKYWum5ZxsKuEZak7DHZOYmrHHuiAEyfKc9PQu9xWBVTzbvYp9KLw_6ieLzxd5AmZnyvwSibSzbRz3DxcLIpM5UUFaZvma6YwCdGyjkNv5nFudZTz_ez0LnXhEK27qfMkCxvvVoT0TbQdZ51Y_qa1-nhaDCEPfJg2TXzcEg0B6eLEMSj6CEt49pCX-cCpFk3E_CarHNuLNYEfhe-yaZ-MvZE31vvIz_nFEft0xUMCYUF7klRrPhvKX2BtNjiyjwmAn0L0kR-hffz8V7XvH8AErhfYiMFILgvQEeF9XYKnUEOVlVOXQiw716jekCwrCVTQEG58wZBr851rzP_kSLT4ddzGHabPxvYYNrp3qjG3bw2DCawkvJXDmrH7EHR9ZkKdWE3Akx_VE4Yg2IGp1BOeAANsOC6y_VbXmGtQ4pKY_pQGSFlPOfV_1Iw9ZXBi7x3p2lNnApbjuxHdJiytGwBGhv1w7sg3Vfhzxih6JUQkNIKQlnC0u0-aEtnXM6ScSqf-aHzi9955IIuLdYPgWR6GfuxLmuMPcek7BSAs8CjrctcrvOh9I0NMVuF5fZdpiHmbERyd-xeRpZ8Qa8HkbHIZ9C-R-Peu3muIjLE8gTIFAtiEIrfBJ0hM8CT9flqyFwLELfrqb2e9spLgZ4UmrFLGYuvlWsyCtzrfKXedM45YCW4EmlzC8LThMlxIOcXbsInW686U2KOXxo2miuFC2AYO1f_4039mgQpdJYnLjzOEhg9RENrIJQ6aNPXou6c_vj_Cufk4bAiH6VO3qE6BDd5RMoLsub1PgYvMd_iIlVcsB19A-wAkfvJL1J892bpXpeOzdAyQB7ZRhAATDIGUc1tAVpTpE3oTm7674tsuwAy3Df2W-","summary":[]},{"id":"msg_0558e94517919a48006ad089db64c087d095837d54a804c866","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"GPT-4o
+      uses the `o200k_base` encoding."}],"phase":"final_answer","role":"assistant"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":["search_tiktoken_documentation"],"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      and code search for the openai/tiktoken tokenizer repository.","server_label":"gitmcp_tiktoken","server_url":"https://gitmcp.io/openai/tiktoken"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":2038,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":144,"output_tokens_details":{"reasoning_tokens":82},"total_tokens":2182},"user":null,"metadata":{}},"sequence_number":39}'

@@ -95,6 +95,7 @@ impl InputItem {
             Self::FunctionCall(item) => item.agent.as_ref(),
             Self::CodeInterpreterCall(item) => item.agent.as_ref(),
             Self::ToolSearchCall(item) => item.agent.as_ref(),
+            Self::ToolSearchOutput(item) => item.agent.as_ref(),
             Self::CustomToolCall(item) => item.agent.as_ref(),
             Self::ShellCall(item) => item.agent.as_ref(),
             Self::WebSearchCall(item) => item.agent.as_ref(),
@@ -103,7 +104,6 @@ impl InputItem {
             Self::Reasoning(item) => item.agent.as_ref(),
             Self::Compaction(item) => item.agent.as_ref(),
             Self::FunctionCallOutput(_)
-            | Self::ToolSearchOutput(_)
             | Self::CustomToolCallOutput(_)
             | Self::ShellCallOutput(_)
             | Self::CompactionTrigger => None,
@@ -120,6 +120,7 @@ impl InputItem {
             Self::FunctionCall(item) => item.agent.take(),
             Self::CodeInterpreterCall(item) => item.agent.take(),
             Self::ToolSearchCall(item) => item.agent.take(),
+            Self::ToolSearchOutput(item) => item.agent.take(),
             Self::CustomToolCall(item) => item.agent.take(),
             Self::ShellCall(item) => item.agent.take(),
             Self::WebSearchCall(item) => item.agent.take(),
@@ -128,7 +129,6 @@ impl InputItem {
             Self::Reasoning(item) => item.agent.take(),
             Self::Compaction(item) => item.agent.take(),
             Self::FunctionCallOutput(_)
-            | Self::ToolSearchOutput(_)
             | Self::CustomToolCallOutput(_)
             | Self::ShellCallOutput(_)
             | Self::CompactionTrigger => None,

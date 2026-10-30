@@ -60,8 +60,13 @@ The OpenAI public contract uses:
 The internal function-tool representation is an implementation detail and must not leak as a public function call.
 The gateway exposes discovery through the `mcp_list_tools` lifecycle before any selected tool is exposed through the
 `mcp_call` lifecycle. Blocking responses include the completed discovery item in `output`. Streaming responses emit
-the corresponding output-item and `response.mcp_list_tools.*` events. A discovery failure produces a failed
-`mcp_list_tools` item with its error and does not register tools from that server.
+the corresponding output-item and `response.mcp_list_tools.*` events. A discovery failure fails a Responses request,
+as recorded from the Responses API (`tests/cassettes/hosted_tool_search/*mcp-failures*`): HTTP 424
+(`external_connector_error`, `http_error`, `param: "tools"`) for JSON, and for a stream the list-tools item's added,
+in-progress, and failed events, an `error` event, and `response.failed` whose output holds the empty listing. The
+registry still records the failure as a failed `mcp_list_tools` item; the Responses executor turns it into that error
+when it first builds a response's registry, unless the request history already holds a successful listing for that
+label (the Responses API does not list such a server again). A mid-response rebuild keeps the failed item instead.
 
 Within a stored response or conversation chain, that public list-tools lifecycle is emitted once per server label.
 Discovery may still be needed to rebuild executable handlers for a later request; public emission is a separate
@@ -105,7 +110,9 @@ impl McpClient {
 `~/.agentic-api/config.toml`; a request selects one by declaring the configured `server_label` without a `server_url`.
 Connection details from gateway configuration take precedence and cannot be overridden by a request. Configured
 `allowed_tools` form a policy ceiling that a request may narrow but cannot expand, and configured
-`require_approval = "never"` lets a request omit its approval setting.
+`require_approval = "never"` lets a request omit its approval setting. Configured `defer_loading` and `description`
+are defaults for a request that leaves `defer_loading` or `server_description` unset; a deferred server's tools stay
+behind hosted tool search until a search loads them, so such a request must declare hosted `tool_search`.
 
 Request-provided URLs allow loopback hosts by default. Additional trusted hostnames may be configured through
 `AGENTIC_MCP_ALLOWED_HOSTS` from the process environment or the `config.toml` `[mcp].allowed_hosts` array. URL
@@ -123,7 +130,8 @@ For an uncached declaration it:
 4. Creates one `McpDiscoveredHandler` per remaining tool.
 5. Caches the handlers under the declaration's `server_label`.
 
-An empty final allowed set is a configuration error.
+An empty final allowed set is not an error: as in the Responses API, the server lists no tools and the request
+continues. An empty listing from an operator-configured server is not cached, so the next request lists it again.
 
 ### `McpHandler`
 

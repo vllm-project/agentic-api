@@ -18,6 +18,7 @@ use crate::tool::{ToolRegistry, ToolSearchMetadata, ToolSearchState};
 use crate::types::agent::AgentIdentity;
 use crate::types::io::{InputMessage, OutputItem};
 use crate::types::request_response::ResponsePayload;
+use crate::types::tools::ResponsesTool;
 use futures::{Stream, StreamExt};
 use tokio_util::sync::CancellationToken;
 
@@ -111,6 +112,18 @@ impl AgentPipeline {
 
     pub(super) fn tool_search_state(&self) -> Option<&ToolSearchState> {
         self.tool_search_state.as_ref()
+    }
+
+    /// The search state, from which the registry takes the request's catalog.
+    pub(super) fn tool_search_state_mut(&mut self) -> Option<&mut ToolSearchState> {
+        self.tool_search_state.as_mut()
+    }
+
+    /// Records the public snapshot persistence keeps after the registry loaded searched tools.
+    pub(super) fn record_tool_search_loads(&mut self, effective_tools: Vec<ResponsesTool>, loaded: Vec<ResponsesTool>) {
+        if let Some(state) = self.tool_search_state.as_mut() {
+            state.record_loads(effective_tools, loaded);
+        }
     }
 
     pub(super) fn ensure_request_prepared(&self) -> ExecutorResult<()> {

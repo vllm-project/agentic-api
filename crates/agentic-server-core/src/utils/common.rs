@@ -11,6 +11,13 @@ pub fn utcnow_str() -> i64 {
     Utc::now().timestamp()
 }
 
+/// A stable 64-bit FNV-1a hash, for names that must not change across processes.
+pub(crate) fn stable_name_hash(value: &str) -> u64 {
+    value.as_bytes().iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
+    })
+}
+
 /// Serialize any type to JSON string.
 ///
 /// Strict serialization - returns error if serialization fails.

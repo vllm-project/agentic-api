@@ -346,6 +346,12 @@ supported_reasoning_levels = ["low", "high", "max"]
 url = "https://mcp.example.com/mcp"
 allowed_tools = ["tool_1_name", "tool_2_name"]
 require_approval = "never"
+# Optional: defer this server's tools behind hosted tool search unless a request
+# sets `defer_loading`, and describe it in the search catalog when a request
+# omits `server_description`. Requests that use a deferred server must then
+# declare `{"type": "tool_search"}` (hosted), or set `defer_loading = false`.
+# defer_loading = true
+# description = "Counter tools"
 ```
 
 `[models."<served-model-id>"]` declares capabilities the gateway cannot infer. `input_modalities` resolves in this
