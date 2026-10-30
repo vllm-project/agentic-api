@@ -72,18 +72,27 @@ impl FileSearchService {
                     Instant::now() + UPLOAD_RENEW_INTERVAL,
                     UPLOAD_RENEW_INTERVAL,
                 );
-                loop {
+                let mut renewal_failure = None;
+                let result = loop {
                     tokio::select! {
-                        result = &mut publish => break result,
-                        _ = renewal.tick() => {
-                            match storage.refresh_blob_cleanup(&file.id, &owner_token, lease_deadline()).await {
-                                Ok(true) => {},
-                                Ok(false) => break Err(FileSearchError::Unavailable("Upload ownership expired; retry the upload".into())),
-                                Err(error) => break Err(error),
+                        biased;
+                        _ = renewal.tick(), if renewal_failure.is_none() => {
+                            let failure = match storage.refresh_blob_cleanup(&file.id, &owner_token, lease_deadline()).await {
+                                Ok(true) => None,
+                                Ok(false) => Some(FileSearchError::Unavailable("Upload ownership expired; retry the upload".into())),
+                                Err(error) => Some(error),
+                            };
+                            if let Some(error) = failure {
+                                cancelled.cancel();
+                                renewal_failure = Some(error);
                             }
                         }
+                        result = &mut publish => break result,
                     }
-                }
+                };
+                // Cancellation is only a signal. Wait until the provider has
+                // drained its in-flight filesystem/network work before remove.
+                renewal_failure.map_or(result, Err)
             };
             if let Err(error) = published {
                 files.remove(&file.id).await?;
