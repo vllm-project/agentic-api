@@ -136,7 +136,7 @@ impl MultiAgentRun {
         }
         let mut contexts = IndexMap::new();
         for stored in agents {
-            let context = prepare_agent(stored, &pipeline.request, exec, &budget).await?;
+            let context = prepare_agent(stored, &mut pipeline.request, exec, &budget).await?;
             contexts.insert(context.stored.identity.clone(), context);
         }
         let payload = ResponsePayload {

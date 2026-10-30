@@ -3,9 +3,11 @@ use super::{CodeInterpreterExecutor, CodeInterpreterRuntimeConfig, FakeProvider}
 use crate::executor::engine::upstream_events;
 use crate::executor::{ConversationHandler, ExecuteRequest, ExecutionContext, ResponseHandler};
 use crate::storage::{ConversationStore, DbPool, ResponseStore, create_pool_with_schema};
-use crate::tool::{GatewayExecutors, WebSearchHandler};
-use crate::types::io::{InOutItem, OutputItem};
+use crate::tool::{GatewayExecutors, WebSearchHandler, model_visible_namespace_member_name};
+use crate::types::io::input::{SearchHistory, internal_mcp_tool_name};
+use crate::types::io::{InOutItem, InputItem, OutputItem};
 use crate::types::request_response::{RequestPayload, ResponsePayload};
+use crate::types::tools::{CodexNamespaceMember, ResponsesTool};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::{Json, Router, routing::post};
@@ -15,6 +17,7 @@ use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
@@ -65,7 +68,10 @@ fn model_item(item: &Value) -> Option<Value> {
         "function_call" => {
             let mut call = item.clone();
             call.as_object_mut().unwrap().remove("agent");
-            if let Some(namespace) = call["namespace"].as_str() {
+            if let Some(namespace) = call["namespace"]
+                .as_str()
+                .filter(|namespace| *namespace != call["name"])
+            {
                 call["name"] = json!(format!("agentic_ns__{namespace}__{}", call["name"].as_str().unwrap()));
                 call.as_object_mut().unwrap().remove("namespace");
             }
@@ -85,44 +91,79 @@ fn model_item(item: &Value) -> Option<Value> {
         _ => return None,
     };
     Some(json!({"type":"function_call", "id":item["id"],
-        "call_id":item.get("call_id").unwrap_or(&item["id"]),
+        "call_id":item.get("call_id").filter(|id| !id.is_null()).unwrap_or(&item["id"]),
         "name":name, "arguments":arguments.to_string(), "status":"completed"}))
 }
 
+type ModelScripts = HashMap<(usize, String), VecDeque<Vec<Value>>>;
+
 struct Backends {
     url: String,
-    model: Arc<Mutex<HashMap<String, VecDeque<Vec<Value>>>>>,
+    model: Arc<Mutex<ModelScripts>>,
+    turn: Arc<AtomicUsize>,
     task: JoinHandle<()>,
 }
 
-fn assert_loaded_tools(request: &Value) {
+fn recorded_search_loads(turns: &[Value]) -> HashMap<String, Vec<String>> {
+    let last = turns.last().unwrap();
+    let mut history = last["request"]["body"]["input"].as_array().unwrap().clone();
+    history.extend(terminal(last)["output"].as_array().unwrap().iter().cloned());
+    let history: Vec<InputItem> = serde_json::from_value(json!(history)).unwrap();
+    let pairing = SearchHistory::scan(&history);
+    let mut loads = HashMap::new();
+    for (index, item) in history.iter().enumerate() {
+        let InputItem::ToolSearchOutput(output) = item else {
+            continue;
+        };
+        let Some(InputItem::FunctionCallOutput(lowered)) = pairing.lowered(index, item) else {
+            panic!("recorded search output must have its model-facing pair");
+        };
+        let mut names = Vec::new();
+        for tool in &output.tools {
+            match tool {
+                ResponsesTool::Function(function) => names.push(function.name.as_str().to_owned()),
+                ResponsesTool::Namespace(namespace) => {
+                    let mut used = HashMap::new();
+                    for member in &namespace.tools {
+                        let CodexNamespaceMember::Function(function) = member else {
+                            panic!("recorded namespaces contain function members");
+                        };
+                        names.push(namespace.name.strip_prefix("mcp_").map_or_else(
+                            || model_visible_namespace_member_name(&namespace.name, function.name.as_str()),
+                            |label| internal_mcp_tool_name(label, function.name.as_str(), &mut used),
+                        ));
+                    }
+                }
+                other => panic!("unexpected loaded tool {other:?}"),
+            }
+        }
+        loads.insert(lowered.call_id, names);
+    }
+    loads
+}
+
+fn assert_loaded_tools(request: &Value, loads: &HashMap<String, Vec<String>>) {
     let input = request["input"].as_array().unwrap();
     for call in input
         .iter()
         .filter(|item| item["type"] == "function_call" && item["name"] == "tool_search")
     {
-        let Some(output) = input
+        if !input
             .iter()
-            .find(|item| item["type"] == "function_call_output" && item["call_id"] == call["call_id"])
-        else {
+            .any(|item| item["type"] == "function_call_output" && item["call_id"] == call["call_id"])
+        {
             continue;
-        };
-        let loaded: Value = serde_json::from_str(output["output"].as_str().unwrap()).unwrap();
-        for tool in loaded["tools"].as_array().unwrap() {
-            let name = match tool["type"].as_str().unwrap() {
-                "function" => tool["name"].as_str().unwrap(),
-                "namespace" => {
-                    assert_eq!(tool["name"], "travel");
-                    "agentic_ns__travel__get_timezone"
-                }
-                other => panic!("unexpected loaded tool {other}"),
-            };
+        }
+        let names = loads
+            .get(call["call_id"].as_str().unwrap())
+            .expect("search must come from the recording");
+        for name in names {
             assert!(
                 request["tools"]
                     .as_array()
                     .unwrap()
                     .iter()
-                    .any(|tool| tool["name"] == name),
+                    .any(|tool| tool["name"] == *name),
                 "loaded tool {name} must remain callable in every subsequent inference request"
             );
         }
@@ -137,10 +178,10 @@ impl Drop for Backends {
 
 impl Backends {
     async fn start(turns: &[Value], store: bool) -> Self {
-        let mut scripts = HashMap::<String, VecDeque<Vec<Value>>>::new();
+        let mut scripts = ModelScripts::new();
         let mut mcp_tools = Vec::<Value>::new();
         let mut mcp_results = Vec::new();
-        for turn in turns {
+        for (index, turn) in turns.iter().enumerate() {
             let mut rounds = HashMap::<String, Vec<Vec<Value>>>::new();
             for item in terminal(turn)["output"].as_array().unwrap() {
                 if let Some(output) = model_item(item) {
@@ -171,47 +212,46 @@ impl Backends {
                 }
             }
             for (owner, rounds) in rounds {
-                scripts.entry(owner).or_default().extend(rounds);
+                scripts.entry((index, owner)).or_default().extend(rounds);
             }
         }
         let model = Arc::new(Mutex::new(scripts));
         let queues = model.clone();
+        let turn = Arc::new(AtomicUsize::new(0));
+        let current_turn = Arc::clone(&turn);
+        let loads = Arc::new(recorded_search_loads(turns));
         let router = Router::new()
             .route(
                 "/v1/responses",
                 post(move |Json(request): Json<Value>| {
                     let queues = queues.clone();
+                    let loads = Arc::clone(&loads);
+                    let current_turn = Arc::clone(&current_turn);
                     async move {
-                        if store {
-                            assert!(request.get("store").is_none());
-                        } else {
-                            assert_eq!(request["store"], false);
-                        }
+                        assert_eq!(request.get("store"), (!store).then_some(&Value::Bool(false)));
                         assert!(request.get("previous_response_id").is_none());
                         assert!(request.get("conversation").is_none());
                         let guidance = request["input"].as_array().unwrap().last().unwrap()["content"]
                             .as_str()
                             .unwrap();
                         let owner = guidance.strip_prefix("You are `").unwrap().split('`').next().unwrap();
-                        assert_loaded_tools(&request);
+                        assert_loaded_tools(&request, &loads);
                         let mut queues = queues.lock().await;
-                        let queue = queues.get_mut(owner).unwrap();
+                        let queue = queues
+                            .entry((current_turn.load(Ordering::SeqCst), owner.to_owned()))
+                            .or_default();
                         let unfinished = guidance
                             .lines()
                             .any(|line| line.starts_with("/root/") && line.contains(": Active("));
-                        let mut output = Vec::new();
-                        if owner == "/root"
-                            && unfinished
-                            && queue.front().is_some_and(|round| round[0]["type"] == "message")
-                        {
-                            output.push(json!({"type":"function_call", "id":"fc_replay_wait",
+                        let output = if owner == "/root" && unfinished && queue.is_empty() {
+                            vec![json!({"type":"function_call", "id":"fc_replay_wait",
                                 "call_id":format!("wait_replay_{}", request["input"].as_array().unwrap().len()),
-                                "name":"wait_agent", "arguments":"{\"timeout_ms\":10000}", "status":"completed"}));
+                                "name":"wait_agent", "arguments":"{\"timeout_ms\":10000}", "status":"completed"})]
                         } else {
-                            output = queue
+                            queue
                                 .pop_front()
-                                .unwrap_or_else(|| panic!("unexpected model round for {owner}"));
-                        }
+                                .unwrap_or_else(|| panic!("unexpected model round for {owner}"))
+                        };
                         let payload = json!({"id":"resp_model", "object":"response", "model":request["model"],
                             "created_at":0, "status":"completed", "output":output});
                         if request["stream"] == true {
@@ -234,7 +274,7 @@ impl Backends {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         let task = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-        Self { url, model, task }
+        Self { url, model, turn, task }
     }
 
     fn execution_context(&self, pool: Arc<DbPool>) -> Arc<ExecutionContext> {
@@ -327,6 +367,31 @@ async fn execute(request: RequestPayload, exec: Arc<ExecutionContext>, discovery
     response
 }
 
+// Hosted search pairs use item identity; client search pairs use the client call ID.
+fn search_id(item: &Value) -> &str {
+    item["call_id"].as_str().unwrap_or_else(|| item["id"].as_str().unwrap())
+}
+
+fn assert_public_items(output: &[OutputItem], kinds: &mut HashSet<String>, search_calls: &mut HashSet<String>) {
+    for item in output {
+        let wire = serde_json::to_value(item).unwrap();
+        kinds.insert(wire["type"].as_str().unwrap().to_owned());
+        if wire["type"] == "tool_search_call" {
+            assert!(
+                search_calls.insert(search_id(&wire).to_owned()),
+                "a model search call must be emitted only once"
+            );
+        }
+        if matches!(
+            item,
+            OutputItem::WebSearchCall(_) | OutputItem::McpCall(_) | OutputItem::CodeInterpreterCall(_)
+        ) {
+            assert_eq!(wire["status"], "completed");
+            assert!(item.agent().is_some());
+        }
+    }
+}
+
 async fn replay(scenario: &str, stream: bool, store: bool) {
     let mode = if stream { "streaming" } else { "nonstreaming" };
     let path = format!("{DIRECTORY}/multi-agent-store-false-gateway-{scenario}-Qwen-Qwen3.8-27B-FP8-{mode}.yaml");
@@ -340,8 +405,9 @@ async fn replay(scenario: &str, stream: bool, store: bool) {
     let mut kinds = HashSet::new();
     let mut search_calls = HashSet::new();
     let mut previous = None;
-    for turn in turns {
-        let mut body = turns[0]["request"]["body"].clone();
+    for (index, turn) in turns.iter().enumerate() {
+        backends.turn.store(index, Ordering::SeqCst);
+        let mut body = turn["request"]["body"].clone();
         body["store"] = json!(store);
         body["stream"] = json!(stream);
         body.as_object_mut().unwrap().remove("previous_response_id");
@@ -365,28 +431,21 @@ async fn replay(scenario: &str, stream: bool, store: bool) {
         if store {
             body["previous_response_id"] = json!(previous);
         }
+        let discovery_count = body["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|tool| {
+                tool["type"] == "mcp"
+                    && !history
+                        .iter()
+                        .any(|item| item["type"] == "mcp_list_tools" && item["server_label"] == tool["server_label"])
+            })
+            .count();
         let request: RequestPayload = serde_json::from_value(body).unwrap();
-        let discovery_count =
-            usize::from(scenario == "mixed-tools" && history.iter().all(|item| item["type"] != "mcp_list_tools"));
         let response = execute(request, exec.clone(), discovery_count).await;
         previous = Some(response.id.clone());
-        for item in &response.output {
-            let wire = serde_json::to_value(item).unwrap();
-            kinds.insert(wire["type"].as_str().unwrap().to_owned());
-            if wire["type"] == "tool_search_call" {
-                assert!(
-                    search_calls.insert(wire["call_id"].as_str().unwrap().to_owned()),
-                    "a model search call must be emitted only once"
-                );
-            }
-            if matches!(
-                item,
-                OutputItem::WebSearchCall(_) | OutputItem::McpCall(_) | OutputItem::CodeInterpreterCall(_)
-            ) {
-                assert_eq!(wire["status"], "completed");
-                assert!(item.agent().is_some());
-            }
-        }
+        assert_public_items(&response.output, &mut kinds, &mut search_calls);
         history.extend(
             response
                 .output
@@ -396,7 +455,13 @@ async fn replay(scenario: &str, stream: bool, store: bool) {
     }
     let required: &[&str] = match scenario {
         "mixed-tools" => &["web_search_call", "mcp_call", "shell_call"],
-        "client-owned-tools" => &["function_call", "custom_tool_call", "tool_search_call"],
+        "tool-search" => &[
+            "function_call",
+            "custom_tool_call",
+            "tool_search_call",
+            "tool_search_output",
+            "mcp_call",
+        ],
         "code-interpreter" => &["web_search_call", "code_interpreter_call"],
         _ => unreachable!(),
     };
@@ -411,7 +476,7 @@ async fn replay(scenario: &str, stream: bool, store: bool) {
         .iter()
         .flat_map(|turn| terminal(turn)["output"].as_array().unwrap().clone())
         .filter(|item| item["type"] == "tool_search_call")
-        .map(|item| item["call_id"].as_str().unwrap().to_owned())
+        .map(|item| search_id(&item).to_owned())
         .collect();
     assert_eq!(
         search_calls, expected_search_calls,
@@ -447,9 +512,9 @@ async fn recorded_mixed_tools_stored_continuation_suppresses_discovery() {
 }
 
 #[tokio::test]
-async fn recorded_client_owned_tools_store_false() {
+async fn recorded_tool_search_store_false() {
     for stream in [false, true] {
-        tokio::time::timeout(Duration::from_secs(60), replay("client-owned-tools", stream, false))
+        tokio::time::timeout(Duration::from_secs(60), replay("tool-search", stream, false))
             .await
             .unwrap();
     }

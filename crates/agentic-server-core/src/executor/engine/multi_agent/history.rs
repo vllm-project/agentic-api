@@ -8,6 +8,7 @@ use crate::executor::multi_agent::collaboration::TranscriptSealer;
 use crate::executor::multi_agent::{AgentPhase, AgentState};
 use crate::executor::request::RequestContext;
 use crate::executor::response_budget::ExecutorResponseBudget;
+use crate::tool::ToolSearchState;
 use crate::types::agent::{AgentCompletion, AgentIdentity, AgentTurnKey};
 use crate::types::agent_commands::{AgentCommand, CollaborationResult};
 use crate::types::agent_tree::StoredAgent;
@@ -17,8 +18,9 @@ use crate::types::io::input::InputFunctionToolCall;
 use crate::types::io::{
     AgentMessageContent, FunctionToolResultMessage, InOutItem, InputAgentMessage, InputContent, InputItem,
     InputMessage, InputMessageContent, InputMultiAgentCall, InputTextContent, MessagePhase,
-    MultiAgentCallOutputContent, OutputMessageContent, ToolCallOutput,
+    MultiAgentCallOutputContent, OutputMessageContent, ResponsesInput, ToolCallOutput,
 };
+use crate::types::request_response::RequestPayload;
 use crate::utils::common::{deserialize_from_str, serialized_size_up_to};
 use std::collections::HashMap;
 
@@ -29,12 +31,13 @@ impl RestoredAgents {
         budget: &ExecutorResponseBudget,
         max_bytes: usize,
     ) -> ExecutorResult<()> {
-        let bytes = serialized_size_up_to(&request.enriched_request.input, max_bytes)
+        let settings = &request.enriched_request;
+        let bytes = serialized_size_up_to(&settings.input, max_bytes)
             .map_err(ExecutorError::JsonError)?
             .ok_or_else(|| invalid("multi-agent input exceeds the retained-byte limit"))?;
         budget.consume(bytes)?;
         let sealer = TranscriptSealer::new()?;
-        let input: Vec<_> = request.enriched_request.input.input_items().collect();
+        let input: Vec<_> = settings.input.input_items().collect();
         let mut calls = HashMap::new();
         let mut outputs = HashMap::new();
         for item in &input {
@@ -78,7 +81,7 @@ impl RestoredAgents {
                             Ok(CollaborationResult::Error { .. })
                         )
                     });
-                    self.collaboration_history(call, successful, &sealer, budget, max_bytes)?;
+                    self.collaboration_history(call, successful, &sealer, settings, budget, max_bytes)?;
                 }
                 InputItem::MultiAgentCallOutput(output) => {
                     let call = calls
@@ -156,6 +159,13 @@ impl RestoredAgents {
     }
 
     fn park_history(&mut self) -> ExecutorResult<()> {
+        // Interrupt requests may precede output from the target's owned round.
+        // Retain that boundary before settling, without scheduling another round.
+        for turn in self.interrupted.drain() {
+            self.registry
+                .settle_turn(&turn, &AgentCompletion::Interrupted)
+                .map_err(registry_error)?;
+        }
         for agent in self
             .registry
             .agents()
@@ -202,6 +212,7 @@ impl RestoredAgents {
         call: &InputMultiAgentCall,
         successful: bool,
         sealer: &TranscriptSealer,
+        request: &RequestPayload,
         budget: &ExecutorResponseBudget,
         max_bytes: usize,
     ) -> ExecutorResult<()> {
@@ -221,7 +232,21 @@ impl RestoredAgents {
                         .map_err(ExecutorError::JsonError)?
                         .ok_or_else(|| invalid("forked context exceeds the retained-byte limit"))?;
                     budget.consume(bytes)?;
-                    let loaded_tools = source.loaded_tools.clone();
+                    // Discovery is inherited independently of fork_turns, just as
+                    // live spawning copies the parent's current loaded definitions.
+                    let search_request = RequestPayload {
+                        input: ResponsesInput::from(source.history.clone()),
+                        tools: request.tools.clone(),
+                        parallel_tool_calls: request.parallel_tool_calls,
+                        ..Default::default()
+                    };
+                    let loaded_tools = ToolSearchState::build_with_loaded_tools(
+                        &search_request,
+                        &source.loaded_tools,
+                        request.tools.is_some(),
+                    )?
+                    .into_public_metadata()
+                    .loaded_tools;
                     let child = self
                         .registry
                         .register_child(&turn, &task.task_name, &task.message)
@@ -248,6 +273,12 @@ impl RestoredAgents {
                 }
                 AgentCommand::Followup(task) => {
                     let target = target(&owner, &task.target)?;
+                    if let Some(turn) = self.interrupted.iter().find(|turn| turn.agent == target).cloned() {
+                        self.registry
+                            .settle_turn(&turn, &AgentCompletion::Interrupted)
+                            .map_err(registry_error)?;
+                        self.interrupted.remove(&turn);
+                    }
                     self.registry
                         .followup_task(&turn, &target, &task.message)
                         .map_err(registry_error)?;
@@ -266,9 +297,7 @@ impl RestoredAgents {
                             agent: target,
                             turn: agent.turn,
                         };
-                        self.registry
-                            .settle_turn(&key, &AgentCompletion::Interrupted)
-                            .map_err(registry_error)?;
+                        self.interrupted.insert(key);
                     }
                 }
                 AgentCommand::Wait(_) | AgentCommand::List(_) => {}
@@ -291,6 +320,12 @@ impl RestoredAgents {
 
     fn model_history(&mut self, mut item: InputItem) -> ExecutorResult<()> {
         let owner = identity(item.take_agent().as_ref().map(|agent| agent.agent_name.as_str()))?;
+        // Discovery is response metadata, not an inference turn. Retaining a
+        // listing attributed to a completed child must not make that child active.
+        if matches!(item, InputItem::McpListTools(_)) {
+            self.agent_history(&owner)?.history.push(item);
+            return Ok(());
+        }
         let turn = self.history_turn(&owner)?;
         let call = match &item {
             InputItem::FunctionCall(call) => {

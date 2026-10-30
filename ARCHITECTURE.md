@@ -1179,6 +1179,10 @@ input without loading stored state or decoding a tree snapshot. The coordinator'
 `history.rs` processes standard collaboration items, agent attribution and client tool
 outputs using the existing registry, mailbox and pending-call types. It constructs
 request-local agent contexts and resolves each client output by call ID and kind.
+Historical interruptions settle after the interrupted round's public output has
+been retained, before applying the next client input. That output remains in the
+agent's history without restarting the interrupted turn; an explicit follow-up
+can start a new turn.
 When enabling multi-agent on a stored single-agent response or conversation,
 attributed input is processed together with the complete resolved history, so
 earlier user and assistant items remain available.
@@ -2011,6 +2015,14 @@ the operator enables it, and Eryx runtime readiness succeeds.
   restriction cannot prove a public listing is complete, so request-declared
   servers rediscover their catalog; configured servers can use their authoritative
   discovery cache. Expanding a restriction beyond the listing also rediscovers.
+  Preparation appends newly discovered listings to the parent request's enriched input,
+  so subsequent restored agents reuse them without a separate discovery history. Each
+  agent's model context still comes from its own stored history. This also applies when
+  an MCP declaration is first added on a later turn. Discovery metadata
+  does not activate an idle agent when the client returns its full history.
+  Stateless agent restoration reconstructs the parent's loaded tool definitions at
+  each spawn through `ToolSearchState`, so `fork_turns: none` removes messages without
+  discarding inherited tool availability on a later client-tool continuation.
   Equivalent successful listings are suppressed in JSON and SSE; failed or changed discovery
   remains visible. Streaming clears the lifecycle records after their first emission.
   Returned public `mcp_call` history uses the common model-input conversion to

@@ -749,9 +749,12 @@ are compared across providers.
 The same `store_false/` directory contains the multi-agent mixed-tools captures.
 Record them with `STORE_FALSE_SUITE=multi-agent` using
 `record_store_false_cassettes.sh`; see the [multi-agent workflow](multi_agent/README.md).
-Both selections use `replay_old_cassettes.py` to load the existing mixed-tools
-request and the shared recorder to continue with live response history and matching
-shell outputs. Gateway mode connects to `GATEWAY_URL`; model and hosted-tool
+`MULTI_AGENT_SUITE=all` also selects tool search, code interpreter, and the
+client-agent-message probe. The `tool-search` case includes client discovery
+followed by hosted search over deferred MCP in the same full-history session;
+there is one JSON and one SSE cassette for that combined case.
+Both provider selections use `replay_old_cassettes.py` and the shared recorder to
+continue with live response history and matching client outputs. Gateway mode connects to `GATEWAY_URL`; model and hosted-tool
 configuration belongs to the running gateway. This refreshes client-facing
 captures; model, search, and MCP dependency captures remain separate.
 The Rust multi-agent contract test compares full-history continuation, delegated

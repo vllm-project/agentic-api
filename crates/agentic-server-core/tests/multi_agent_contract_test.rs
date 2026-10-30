@@ -3,6 +3,7 @@ mod multi_agent_contract;
 mod support;
 
 use multi_agent_contract::{ComparisonPolicy, RecordedSession, assert_multi_agent_contract};
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 #[test]
@@ -136,8 +137,14 @@ fn stateless_session(scenario: &str, provider: &str, mode: &str) -> RecordedSess
         assert!(turn["request"]["body"].get("conversation").is_none());
     }
     let cassette: support::Cassette = serde_json::from_value(capture).unwrap();
-    let mut discovery_count = 0;
+    let mut declared_servers = HashMap::new();
+    let mut listed_servers = HashSet::new();
     for (turn_index, turn) in cassette.turns.iter().enumerate() {
+        for server in turn.request.body.tools.iter().filter(|tool| tool["type"] == "mcp") {
+            declared_servers
+                .entry(server["server_label"].as_str().unwrap().to_owned())
+                .or_insert(turn_index);
+        }
         let terminal = turn.response.body.clone().unwrap_or_else(|| {
             support::recorded_named_sse_events(turn)
                 .into_iter()
@@ -148,13 +155,21 @@ fn stateless_session(scenario: &str, provider: &str, mode: &str) -> RecordedSess
         for item in terminal["output"].as_array().unwrap() {
             assert!(item["id"].as_str().is_some_and(|id| !id.is_empty()));
             if item["type"] == "mcp_list_tools" {
-                assert_eq!(turn_index, 0, "discovery must not repeat on continuation");
+                let label = item["server_label"].as_str().unwrap();
+                assert_eq!(
+                    declared_servers.get(label),
+                    Some(&turn_index),
+                    "discovery must occur when its server is introduced"
+                );
+                assert!(
+                    listed_servers.insert(label.to_owned()),
+                    "equivalent discovery must not repeat across agents or turns"
+                );
                 assert!(
                     item.get("error").is_none_or(serde_json::Value::is_null),
                     "{}: unexpected MCP discovery failure: {item}",
                     path.display()
                 );
-                discovery_count += 1;
             }
             if matches!(
                 item["type"].as_str(),
@@ -179,7 +194,7 @@ fn stateless_session(scenario: &str, provider: &str, mode: &str) -> RecordedSess
             }
         }
     }
-    assert_eq!(discovery_count, usize::from(scenario == "mixed-tools"));
+    assert_eq!(listed_servers, declared_servers.into_keys().collect());
     let session = if provider == "openai-reference" && scenario == "code-interpreter" && mode == "streaming" {
         // The separate wire regression pins this recording's negative-index events
         // and strict rejection. Only terminal response semantics are compared here.
@@ -207,9 +222,11 @@ fn assert_stateless_gateway_case(scenario: &str, children: usize) {
             },
         )
         .unwrap_or_else(|error| panic!("store:false gateway {scenario} {mode}: {error}"));
-        if scenario == "client-owned-tools" {
+        if scenario == "tool-search" {
             reference.assert_client_owned_tools().unwrap();
             gateway.assert_client_owned_tools().unwrap();
+            reference.assert_hosted_tool_search_continuation().unwrap();
+            gateway.assert_hosted_tool_search_continuation().unwrap();
         } else if scenario == "code-interpreter" {
             reference.assert_code_interpreter(false).unwrap();
             gateway.assert_code_interpreter(true).unwrap();
@@ -218,8 +235,8 @@ fn assert_stateless_gateway_case(scenario: &str, children: usize) {
 }
 
 #[test]
-fn store_false_client_owned_tools_gateway_matches_openai_contract() {
-    assert_stateless_gateway_case("client-owned-tools", 3);
+fn store_false_tool_search_gateway_matches_openai_contract() {
+    assert_stateless_gateway_case("tool-search", 3);
 }
 
 #[test]
@@ -295,8 +312,8 @@ fn recorded_client_agent_message_openai_requests_are_accepted() {
 }
 
 #[test]
-fn store_false_client_owned_tools_match_stored_openai_contract() {
-    assert_store_false_tool_case("client-owned-tools", 3);
+fn store_false_tool_search_matches_stored_openai_contract() {
+    assert_store_false_tool_case("tool-search", 3);
 }
 
 #[test]
@@ -351,9 +368,14 @@ fn recorded_openai_interpreter_stream_keeps_its_wire_incompatibility_visible() {
 
 fn assert_store_false_tool_case(scenario: &str, children: usize) {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cassettes");
+    let stored_scenario = if scenario == "tool-search" {
+        "client-owned-tools"
+    } else {
+        scenario
+    };
     for mode in ["nonstreaming", "streaming"] {
         let stored = RecordedSession::load(&directory.join(format!(
-            "multi_agent/multi-agent-openai-reference-{scenario}-gpt-5.6-sol-{mode}.yaml"
+            "multi_agent/multi-agent-openai-reference-{stored_scenario}-gpt-5.6-sol-{mode}.yaml"
         )))
         .unwrap();
         let stateless = stateless_session(scenario, "openai-reference", mode);
@@ -366,8 +388,9 @@ fn assert_store_false_tool_case(scenario: &str, children: usize) {
             },
         )
         .unwrap();
-        if scenario == "client-owned-tools" {
+        if scenario == "tool-search" {
             stateless.assert_client_owned_tools().unwrap();
+            stateless.assert_hosted_tool_search_continuation().unwrap();
         } else {
             stateless.assert_code_interpreter(false).unwrap();
         }
@@ -375,9 +398,9 @@ fn assert_store_false_tool_case(scenario: &str, children: usize) {
 }
 
 #[test]
-fn client_owned_session_still_requires_a_root_final_answer() {
+fn tool_search_session_still_requires_a_root_final_answer() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(
-        "tests/cassettes/store_false/multi-agent-store-false-openai-reference-client-owned-tools-gpt-5.6-sol-nonstreaming.yaml");
+        "tests/cassettes/store_false/multi-agent-store-false-openai-reference-tool-search-gpt-5.6-sol-nonstreaming.yaml");
     let mut recording: serde_json::Value = serde_yaml::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     for turn in recording["turns"].as_array_mut().unwrap() {
         for side in ["request", "response"] {

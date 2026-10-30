@@ -12,6 +12,9 @@
 # STORE_FALSE_SUITE=responses (default) records the cases below.
 # STORE_FALSE_SUITE=multi-agent replays existing multi-agent cassettes through
 # the selected OpenAI endpoint or running gateway, using full-history continuation.
+# MULTI_AGENT_SUITE=all includes mixed-tools, tool-search, code-interpreter,
+# and client-agent-message. The tool-search case also exercises hosted MCP search.
+# MULTI_AGENT_MAX_CONTINUATIONS bounds client-tool follow-ups (default: 10, range: 1..100).
 #
 # Records JSON and SSE: full-history replay, stored/unstored parent references,
 # explicit conversations, item-listing persistence probes, and a client-executed
@@ -50,8 +53,8 @@ record_multi_agent() {
   model_slug="$(printf '%s' "$model" | tr '/: ' '---')"
   mkdir -p "${MULTI_AGENT_OUTPUT_DIR:-$BASE_DIR}"
   case "${MULTI_AGENT_SUITE:-mixed-tools}" in
-    all) scenarios=(mixed-tools client-owned-tools code-interpreter client-agent-message) ;;
-    mixed-tools|client-owned-tools|code-interpreter|client-agent-message)
+    all) scenarios=(mixed-tools tool-search code-interpreter client-agent-message) ;;
+    mixed-tools|tool-search|code-interpreter|client-agent-message)
       scenarios=("${MULTI_AGENT_SUITE:-mixed-tools}") ;;
     *) echo 'ERROR: unknown MULTI_AGENT_SUITE' >&2; exit 1 ;;
   esac

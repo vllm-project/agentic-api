@@ -1690,7 +1690,7 @@ def run_responses(
     request_overrides: dict | None = None,
     auto_tool_continuations: int = 0,
     max_tool_calls: list[int | None] | int | None = None,
-) -> None:
+) -> list[dict] | None:
     if transport == "websocket" and multi_agent is not None:
         from websocket_recorder import RecordedSession, exchange
 
@@ -1918,6 +1918,9 @@ def run_responses(
             headers,
             output_file,
         )
+
+    # Let a scenario continue the same stateless conversation with different declarations.
+    return manual_history if manual_item_replay else None
 
 
 # ── main ──────────────────────────────────────────────────────────────────────

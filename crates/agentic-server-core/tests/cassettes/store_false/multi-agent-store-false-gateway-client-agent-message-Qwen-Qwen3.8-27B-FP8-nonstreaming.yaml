@@ -17,7 +17,7 @@ turns:
           type: input_text
         recipient: /root
         type: agent_message
-      max_output_tokens: 8192
+      max_output_tokens: 16384
       model: Qwen/Qwen3.8-27B-FP8
       multi_agent:
         enabled: true
@@ -35,14 +35,14 @@ turns:
   response:
     body:
       background: false
-      completed_at: 1793171883
-      created_at: 1793171872
+      completed_at: 1793354884
+      created_at: 1793354874
       error: null
       frequency_penalty: 0.0
-      id: resp_01a1815f-59db-7ab0-af3a-e5d6e5b0f941
+      id: resp_01a18c47-bf54-7622-8781-12d3c4c29ed5
       incomplete_details: null
       instructions: null
-      max_output_tokens: 8192
+      max_output_tokens: 16384
       max_tool_calls: null
       metadata: {}
       model: Qwen/Qwen3.8-27B-FP8
@@ -51,56 +51,49 @@ turns:
       - agent:
           agent_name: /root
         content:
-        - text: 'The user wants me to spawn a subagent named "token_checker", ask
-            it to verify the secret test token from the client-supplied agent message.
-            The message payload says "The secret test token is CLIENT_AGENT_MESSAGE_9f21."
-
-
-            So I need to:
+        - text: 'The user wants me to:
 
             1. Spawn a subagent named "token_checker"
 
-            2. Ask it to verify the secret test token from the client message
+            2. Ask it to verify the secret test token from the client-supplied agent_message
 
-            3. Include the message in its assignment
+            3. The client-supplied agent_message contains: "The secret test token
+            is CLIENT_AGENT_MESSAGE_9f21."
 
-            4. Wait for its answer
+            4. Wait for the subagent''s answer
 
             5. Reply with only the token
 
 
-            The token is "CLIENT_AGENT_MESSAGE_9f21".
-
-
-            Let me spawn the agent. The task_name must be a lowercase identifier with
-            no spaces or capitals. "token_checker" fits that pattern.
+            Let me spawn the subagent with the assignment to verify the token from
+            the message.
 
             '
           type: reasoning_text
-        id: rs_88ae4690d2c8ce86
+        id: rs_876fb4074f463a20
         summary: []
         type: reasoning
       - action: spawn_agent
         agent:
           agent_name: /root
-        arguments: '{"task_name":"token_checker","message":"enc_C6Lt8vdUGYDR1S2AmsbfWU_HdViPrwXjasOvnHjpRNdi5FyfYshi4Ka0E-XLNpAXlboNPi6uNR_rrB7pRIoJxLTSVToObotbp74HaMGrC-ly5NoVtnTluFnL-_oqwFJA-sK7McgSLUGtpU6tUGK59A25grVMOPvJZS2VikJKLVX-Qc2Tp2RqltFnVJvKyj4lXfdNuZxJCfiSNduPsETbRSM3Ccwq2LsJZb7nhlrE3QZFVsSX35lhOGOluLEeYqQs2XmXDzgd59dlsMppuhTa9O3PY4Z209_fEeiJOfXWx4IatpFYrj2UiUfXrqepz9k3lvQqh3y5gerJ4vzNt9Pzd2MuLApu6-M5EMCzPBW8CMX_QbmbizbCYD67keQc2SwR51vSH_Oq0Q","fork_turns":"all"}'
-        call_id: chatcmpl-tool-a5ca72b9f9dece7c
-        id: mac_01a1815f-712f-7ba1-8687-bc61b34fd677
+        arguments: '{"task_name":"token_checker","message":"enc_BXnKpLOirrQnVqzoGkO09b0YDgpY8J4mfECgxs23k0p9F2XdRKmi28DYrSsTiFRlaUYvI3DCr6zLhYwsQznhNaVvLzybMzRGuQpIkU65fe-y2eMKnlcIdjcqtbW7xDOFBf515Dfse1QdlahrXsAIvWr4h7B_lxfWHbJ0KE1ZS9QIk55OC-m0BuJm5xj-Q5nhXe7vSV74V1aPt4dAzq1d65QkY8Yzu4frySRvsEmhQttSuisFe5qOmKrEC9NTWVWur8tirTfOnmAmo8WYJLMgTB-cCUQ2Vw3UQNuz88-oT8YqW3GQZE6QNEg4IO29bmxrLCjyHITyLTxG","fork_turns":"all"}'
+        call_id: chatcmpl-tool-9c090f949db62c09
+        id: mac_01a18c47-d221-79b2-99dd-40f3e01b2312
         type: multi_agent_call
       - agent:
           agent_name: /root/token_checker
         author: /root
         content:
-        - encrypted_content: enc_IQUiTsjmCWeCBgxfYBZ0wioulzF3yQqZoI-7-psIOI--QSRDwbd569iYd9fVVIubhAA53SlPBTcGA16g0ZVO2bTvMxpYt0SwstkZ-EIiBeUHuYfF0bxEvmWj0dOE2q9LD5iZLr6tq3dwv5G8gkOGCrDDkgvhXo6AZvoEcpHsZbQdeAQUBdgBfLG0t0LqjYfB-Rcw_sspNAeLpEG_u_XIlPXxBpwfUbO5hzqsLsutsLI8J2L1AzbymxDOyQFqV67funU1DEsJzGkwESd76vU3yUiTObCU0WuRadkxEHW-8P7WhcwyUoopUEbLr7EbLesOdIteEZPB2cmilhFmeJDQ7bIjnT4kCwENxIA3hd1J0La1likP0fsEyHGJkMhd0fo9ZSur8uoAMA
+        - encrypted_content: enc_bGz7bHXwbkPfofGl_UTJWBmV_7I-VvUdismbJlQ877-itSNOr_-Jx4jxUhiJugs6pUpjx2fmnsANgFD3XsTzIDd3i8MuD4YjLTb0aEGPQ_WjCg_e1g9ReYRRs22oVQxVIx8orW3Did_-yL7QfXbaixoX59-Qid770x8uQeqY98FkVsrzHOtbytes88PWSyyFdTK9sW3ljh509OJLCln_R2_Ixc6yFr4-hnhwcpb0KSJBZrZCtg4RzAArcXOizLRD_0E9PwDd1fBBdcSE0ZguAtdZLXxdXkWIW8P3drpqOsUUlbFkO7gMYK20XM0sRYP7w3kBbjKAlO_y
           type: encrypted_content
-        id: amsg_01a1815f-712f-7ba1-8687-bc888a7c31ee
+        id: amsg_01a18c47-d221-79b2-99dd-4116b0381839
         recipient: /root/token_checker
         type: agent_message
       - action: spawn_agent
         agent:
           agent_name: /root
-        call_id: chatcmpl-tool-a5ca72b9f9dece7c
-        id: maco_01a1815f-712f-7ba1-8687-bca2177b4641
+        call_id: chatcmpl-tool-9c090f949db62c09
+        id: maco_01a18c47-d221-79b2-99dd-413066f6a018
         output:
         - annotations: []
           logprobs: []
@@ -110,36 +103,34 @@ turns:
       - agent:
           agent_name: /root
         content:
-        - text: 'The spawn was successful. Now I need to wait for the subagent''s
-            answer.
+        - text: 'The subagent has been spawned. Now I need to wait for its answer.
 
             '
           type: reasoning_text
-        id: rs_bd91d329936f8089
+        id: rs_9937722ef09be8d8
         summary: []
         type: reasoning
       - action: wait_agent
         agent:
           agent_name: /root
         arguments: '{"timeout_ms":30000}'
-        call_id: chatcmpl-tool-ad35466dc454bcb9
-        id: mac_01a1815f-7afb-7883-8f2e-cad24bcf5d94
+        call_id: chatcmpl-tool-9cb718608aa63df2
+        id: mac_01a18c47-dba2-7103-987e-6fb049f543a3
         type: multi_agent_call
       - agent:
           agent_name: /root/token_checker
         content:
-        - text: 'The message payload clearly states: "The secret test token is CLIENT_AGENT_MESSAGE_9f21."
+        - text: 'My task is simple: I need to verify the secret test token from the
+            client-supplied agent_message and reply with only the token value. The
+            message states: "The secret test token is CLIENT_AGENT_MESSAGE_9f21."
 
 
-            The task asks me to confirm the exact secret test token and reply with
-            only the token value.
-
-
-            The token is: CLIENT_AGENT_MESSAGE_9f21
+            The token is clearly CLIENT_AGENT_MESSAGE_9f21. I should reply with only
+            that token value.
 
             '
           type: reasoning_text
-        id: rs_97f8619b507f3c19
+        id: rs_ab1ac7a3d75cb502
         summary: []
         type: reasoning
       - agent:
@@ -152,7 +143,7 @@ turns:
 
             CLIENT_AGENT_MESSAGE_9f21'
           type: output_text
-        id: msg_9bdb71ff4dbf1ba4
+        id: msg_836eff0c674366f9
         phase: final_answer
         role: assistant
         status: completed
@@ -161,16 +152,16 @@ turns:
           agent_name: /root
         author: /root/token_checker
         content:
-        - encrypted_content: enc_neDrfWbOkSFEY-DqFcKgmdscghTsebaBU5MSO8u9VuFXQX4U621-w4f-j0PKjWbe9VX1AlWURw
+        - encrypted_content: enc_aUVSxbvoIMKNJV2WmsQeB3LoU0aFjuZe0umf37QR9QVTDjIL5SOnilGCnjqDkDwPH0H0v4lkLg
           type: encrypted_content
-        id: amsg_01a1815f-7d6f-7763-9274-fa6be4c37923
+        id: amsg_01a18c47-df78-79c3-b7dc-9aff69c9d43c
         recipient: /root
         type: agent_message
       - action: wait_agent
         agent:
           agent_name: /root
-        call_id: chatcmpl-tool-ad35466dc454bcb9
-        id: maco_01a1815f-7d6f-7763-9274-fa8621d8e7b1
+        call_id: chatcmpl-tool-9cb718608aa63df2
+        id: maco_01a18c47-df78-79c3-b7dc-9b1cbe782cfc
         output:
         - annotations: []
           logprobs: []
@@ -180,12 +171,12 @@ turns:
       - agent:
           agent_name: /root
         content:
-        - text: 'The token_checker agent has confirmed the token is "CLIENT_AGENT_MESSAGE_9f21".
+        - text: 'The token_checker subagent has returned with the token: CLIENT_AGENT_MESSAGE_9f21.
             I should reply with only the token.
 
             '
           type: reasoning_text
-        id: rs_a9f4c516df3fec70
+        id: rs_9afc23bcdea3666b
         summary: []
         type: reasoning
       - agent:
@@ -198,7 +189,7 @@ turns:
 
             CLIENT_AGENT_MESSAGE_9f21'
           type: output_text
-        id: msg_be153b6718aab9ed
+        id: msg_bf50bfab694366cd
         phase: final_answer
         role: assistant
         status: completed
@@ -223,13 +214,13 @@ turns:
       top_p: 1.0
       truncation: disabled
       usage:
-        input_tokens: 8887
+        input_tokens: 8717
         input_tokens_details:
           cached_tokens: 0
-        output_tokens: 390
+        output_tokens: 351
         output_tokens_details:
           reasoning_tokens: 0
-        total_tokens: 9277
+        total_tokens: 9068
     headers:
       content-type: application/json
     status_code: 200

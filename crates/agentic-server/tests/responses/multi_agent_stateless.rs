@@ -109,7 +109,9 @@ async fn replay_mode(mode: &str) {
     let path = format!("{DIR}/multi-agent-store-false-gateway-mixed-tools-Qwen-Qwen3.8-27B-FP8-{mode}.yaml");
     let capture: Value = serde_yaml::from_str(&read_to_string(path).unwrap()).unwrap();
     let shell_results = model.shell_results().await;
-    let opening = capture["turns"][0]["request"]["body"].clone();
+    let mut opening = capture["turns"][0]["request"]["body"].clone();
+    // The paired model trace owns inference settings; a refreshed public recording may use a different budget.
+    opening["max_output_tokens"] = json!(model.max_output_tokens().await);
     let mut actual_turns = Vec::new();
     let mut history = opening["input"].as_array().unwrap().clone();
     for continuation in 0..=10 {

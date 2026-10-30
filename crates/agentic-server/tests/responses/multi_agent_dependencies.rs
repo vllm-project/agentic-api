@@ -118,6 +118,17 @@ impl Dependencies {
         assert!(state.errors.is_empty(), "dependency mismatches: {:?}", state.errors);
     }
 
+    pub async fn max_output_tokens(&self) -> Option<u64> {
+        self.state
+            .lock()
+            .await
+            .turns
+            .iter()
+            .flatten()
+            .find(|turn| turn.request.path == "/v1/responses")
+            .and_then(|turn| turn.request.body["max_output_tokens"].as_u64())
+    }
+
     pub async fn shell_results(&self) -> HashMap<String, Value> {
         let state = self.state.lock().await;
         let mut results = HashMap::new();

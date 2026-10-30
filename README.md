@@ -809,7 +809,7 @@ Unknown or ambiguous tool shapes are **never executed by default**. They are pre
 
 ## 🤝 Multi-agent Responses
 
-Set `multi_agent.enabled` on an HTTP Responses request and the gateway runs the [Responses multi-agent](https://developers.openai.com/api/docs/guides/responses-multi-agent) collaboration loop itself: the root agent spawns subagents, each with its own history and tool registry, and the response returns their attributed `multi_agent_call`, `multi_agent_call_output`, and `agent_message` items. Continue a stored agent tree with `previous_response_id`. With `store:false`, replay returned output items and append new input; the final opaque `compaction` item carries the tree without database persistence, and items before it may be pruned.
+Set `multi_agent.enabled` on an HTTP Responses request and the gateway runs the [Responses multi-agent](https://developers.openai.com/api/docs/guides/responses-multi-agent) collaboration loop itself: the root agent spawns subagents, each with its own history and tool registry, and the response returns their attributed `multi_agent_call`, `multi_agent_call_output`, and `agent_message` items. Continue a stored agent tree with `previous_response_id`. With `store:false`, each request must include the complete item history: previous input, returned output items, and new input or client tool outputs. The gateway reconstructs the agents without database persistence; there is no mandatory final compaction item. Automatic per-agent compaction does not replace the complete public transcript or permit pruning it.
 
 ```bash
 curl http://localhost:9000/v1/responses \
@@ -822,7 +822,7 @@ curl http://localhost:9000/v1/responses \
   }'
 ```
 
-- HTTP supports both `store:true` and `store:false`. Stateless continuation requires the returned compaction item; see the [API guide](docs/api/index.md#responses) for replay and deployment-key configuration.
+- HTTP supports both `store:true` and `store:false`. Stateless continuation requires the complete item history; see the [API guide](docs/api/index.md#responses) for continuation and transcript-encryption key configuration.
 - `max_concurrent_subagents` limits active descendant turns (default `3`); it is not a total agent count.
 - Multi-agent execution is HTTP and SSE only. WebSocket requests with multi-agent enabled are rejected.
 - `max_tool_calls` and reasoning summaries are rejected while multi-agent is enabled.

@@ -2,6 +2,7 @@
 #[path = "multi_agent_code_interpreter.rs"]
 mod code_interpreter;
 use agentic_core::utils::common::deserialize_from_value;
+use either::Either;
 use flate2::read::GzDecoder;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Read;
@@ -14,7 +15,7 @@ use agentic_core::types::io::{
     InputItem, MessagePhase, MultiAgentAction, MultiAgentCallOutput, MultiAgentCallOutputContent, OutputItem,
 };
 use agentic_core::types::request_response::ResponsePayload;
-use agentic_core::types::tools::{CodexNamespaceMember, ResponsesTool, ToolSearchStatus};
+use agentic_core::types::tools::{CodexNamespaceMember, ResponsesTool, ToolSearchExecution, ToolSearchStatus};
 use serde_json::Value;
 
 use crate::support::{Cassette, Turn, recorded_named_sse_events, responses_turns};
@@ -523,7 +524,7 @@ pub fn assert_multi_agent_contract(
         return Err(mismatch("gateway session ends with pending client calls"));
     }
     // A completed root answer can precede a later child-only cleanup turn.
-    // The stateless client-owned OpenAI recording demonstrates this ordering.
+    // The stateless tool-search OpenAI recording demonstrates this ordering.
     if !gateway
         .exchanges
         .iter()
@@ -553,6 +554,70 @@ fn client_call(item: &OutputItem) -> Option<(&str, ClientCallKind)> {
 }
 
 impl RecordedSession {
+    /// Require hosted discovery and MCP execution on both sides of a callback within the same agent branch.
+    /// # Errors
+    /// The combined scenario did not exercise hosted search or lost a child's continuation.
+    pub fn assert_hosted_tool_search_continuation(&self) -> Result<(), ContractMismatch> {
+        let mut searched = false;
+        let mut mcp_owners = HashSet::new();
+        let mut weather_calls = HashMap::new();
+        let mut resumed = HashSet::new();
+        let mut completed = false;
+        for exchange in &self.exchanges {
+            for input in &exchange.input {
+                if let InputItem::FunctionCallOutput(output) = input
+                    && let Some(owner) = weather_calls.remove(output.call_id.as_str())
+                {
+                    resumed.insert(owner);
+                }
+            }
+            for item in &exchange.response.output {
+                match item {
+                    OutputItem::ToolSearchCall(call) if call.execution == ToolSearchExecution::Server => {
+                        searched = true;
+                    }
+                    OutputItem::McpCall(call) => {
+                        let owner = call
+                            .agent
+                            .as_ref()
+                            .ok_or_else(|| mismatch("MCP call has no agent"))?
+                            .agent_name
+                            .as_str();
+                        completed |= resumed.contains(owner);
+                        mcp_owners.insert(owner);
+                    }
+                    OutputItem::FunctionCall(call) if call.name == "get_weather" => {
+                        let owner = call
+                            .agent
+                            .as_ref()
+                            .ok_or_else(|| mismatch("client call has no agent"))?
+                            .agent_name
+                            .as_str();
+                        if owner != "/root"
+                            && let Some(branch) = mcp_owners
+                                .iter()
+                                .copied()
+                                .filter(|branch| {
+                                    owner == *branch
+                                        || owner.strip_prefix(branch).is_some_and(|suffix| suffix.starts_with('/'))
+                                })
+                                .max_by_key(|branch| branch.len())
+                        {
+                            weather_calls.insert(call.call_id.as_str(), branch);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        if !searched || !completed {
+            return Err(mismatch(
+                "hosted search must execute MCP before and after a client result within the same agent branch",
+            ));
+        }
+        Ok(())
+    }
+
     /// Check the scenario's public names and discovery results, allowing different
     /// agents, call counts and model text between providers.
     /// # Errors
@@ -562,35 +627,43 @@ impl RecordedSession {
         let mut called = HashSet::new();
         let mut custom = false;
         for exchange in &self.exchanges {
-            for input in &exchange.input {
-                if let InputItem::ToolSearchOutput(output) = input {
-                    for tool in &output.tools {
-                        match tool {
-                            ResponsesTool::Function(function) => {
-                                discovered.insert((None, function.name.as_str()));
-                            }
-                            ResponsesTool::Namespace(namespace) => {
-                                for member in &namespace.tools {
-                                    if let CodexNamespaceMember::Function(function) = member {
-                                        discovered.insert((Some(namespace.name.as_str()), function.name.as_str()));
+            let items = exchange
+                .input
+                .iter()
+                .map(Either::Left)
+                .chain(exchange.response.output.iter().map(Either::Right));
+            for item in items {
+                match item {
+                    Either::Left(InputItem::ToolSearchOutput(output))
+                    | Either::Right(OutputItem::ToolSearchOutput(output)) => {
+                        for tool in &output.tools {
+                            match tool {
+                                ResponsesTool::Function(function) => {
+                                    discovered.insert((None, function.name.as_str()));
+                                }
+                                ResponsesTool::Namespace(namespace) => {
+                                    for member in &namespace.tools {
+                                        if let CodexNamespaceMember::Function(function) = member {
+                                            discovered.insert((Some(namespace.name.as_str()), function.name.as_str()));
+                                        }
                                     }
                                 }
+                                _ => {}
                             }
-                            _ => {}
                         }
                     }
-                }
-            }
-            for item in &exchange.response.output {
-                match item {
-                    OutputItem::FunctionCall(call) => {
-                        let identity = (call.namespace.as_deref(), call.name.as_str());
+                    Either::Right(OutputItem::FunctionCall(call)) => {
+                        // A searched top-level function may report its own name as namespace.
+                        let namespace = call.namespace.as_deref().filter(|namespace| {
+                            *namespace != call.name || !discovered.contains(&(None, call.name.as_str()))
+                        });
+                        let identity = (namespace, call.name.as_str());
                         if !discovered.contains(&identity) {
                             return Err(mismatch("function was not returned by earlier tool discovery"));
                         }
                         called.insert(identity);
                     }
-                    OutputItem::CustomToolCall(call) if call.name == "agentic_raw_echo" => custom = true,
+                    Either::Right(OutputItem::CustomToolCall(call)) if call.name == "agentic_raw_echo" => custom = true,
                     _ => {}
                 }
             }

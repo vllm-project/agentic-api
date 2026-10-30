@@ -189,3 +189,107 @@ async fn recorded_client_authored_agent_message_is_accepted() {
         }
     }
 }
+
+#[tokio::test]
+async fn stateless_partial_namespace_discovery_reaches_forked_children() {
+    let loaded: Value = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/cassettes/tool_search/returned_tools.json"
+    )))
+    .unwrap();
+    for stream in [false, true] {
+        let (exec, server) = setup().await;
+        let mut namespace = loaded[1].clone();
+        for name in ["get_coordinates", "calculate_distance"] {
+            let mut member = namespace["tools"][0].clone();
+            member["name"] = json!(name);
+            namespace["tools"].as_array_mut().unwrap().push(member);
+        }
+        let mut request = RequestPayload {
+            model: "test".into(),
+            store: false,
+            stream,
+            input: ResponsesInput::Text("discover tools before delegation".into()),
+            multi_agent: Some(MultiAgentConfig {
+                enabled: true,
+                max_concurrent_subagents: Some(3),
+            }),
+            tools: Some(
+                serde_json::from_value(json!([
+                    {"type":"tool_search","execution":"client"}, loaded[0], namespace, {"type":"custom","name":"echo"}
+                ]))
+                .unwrap(),
+            ),
+            ..Default::default()
+        };
+        let mut history = request.input.clone().into_canonical_items();
+        let mut saw_timezone = false;
+        let mut finished = false;
+        for _ in 0..3 {
+            request.input = ResponsesInput::Items(history.clone());
+            let completed = response(request.clone(), exec.clone()).await;
+            assert!(exec.resp_handler.retrieve(&completed.id).await.is_err());
+            let mut outputs = Vec::new();
+            for item in &completed.output {
+                let output = match item {
+                    OutputItem::ToolSearchCall(call) => Some(json!({
+                        "type":"tool_search_output", "call_id":call.call_id,
+                        "execution":"client", "status":"completed", "tools":loaded
+                    })),
+                    OutputItem::FunctionCall(call) => {
+                        let result = match call.name.as_str() {
+                            "get_weather" => "weather: clear",
+                            "get_timezone" => {
+                                assert_eq!(call.namespace.as_deref(), Some("travel"));
+                                assert_eq!(call.agent.as_ref().unwrap().agent_name, "/root/timezone");
+                                saw_timezone = true;
+                                "timezone: Europe/Paris"
+                            }
+                            other => panic!("unexpected client function {other}"),
+                        };
+                        Some(json!({"type":"function_call_output", "call_id":call.call_id, "output":result}))
+                    }
+                    OutputItem::CustomToolCall(call) => Some(json!({
+                        "type":"custom_tool_call_output", "call_id":call.call_id, "output":"CUSTOM_OK"
+                    })),
+                    OutputItem::Message(message) => {
+                        finished |= message.agent.as_ref().unwrap().agent_name == "/root"
+                            && message
+                                .content
+                                .iter()
+                                .any(|part| part.text() == "all three jobs finished");
+                        None
+                    }
+                    _ => None,
+                };
+                outputs.extend(output.map(|item| serde_json::from_value(item).unwrap()));
+            }
+            history.extend(completed.output.into_iter().map(InOutItem::Output));
+            history.extend(outputs);
+        }
+        assert!(
+            saw_timezone && finished,
+            "the loaded namespace must remain callable in children"
+        );
+        // Discovery metadata may be returned for an idle agent. It does not start a new turn.
+        for name in ["weather", "timezone", "echo"] {
+            history.push(
+                serde_json::from_value(json!({
+                    "type":"mcp_list_tools", "id":format!("mcp_list_{name}"),
+                    "server_label":"docs", "tools":[], "agent":{"agent_name":format!("/root/{name}")}
+                }))
+                .unwrap(),
+            );
+        }
+        history.push(serde_json::from_value(json!({"role":"user", "content":"Start a new task"})).unwrap());
+        request.input = ResponsesInput::Items(history);
+        let mut ctx = rehydrate_conversation(request, &exec).await.unwrap();
+        let restored = restore_agents(&mut ctx, &exec, &ExecutorResponseBudget::new()).unwrap();
+        assert_eq!(
+            restored.registry.active_subagents(),
+            0,
+            "discovery must not wake completed children"
+        );
+        server.abort();
+    }
+}
