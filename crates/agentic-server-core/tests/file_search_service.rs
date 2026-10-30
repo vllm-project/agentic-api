@@ -98,6 +98,42 @@ impl FileBlobStore for FailOnceBlobs {
     }
 }
 
+#[derive(Default)]
+struct PausedBlobs {
+    blobs: MemoryBlobs,
+    published: tokio::sync::Notify,
+    resume: tokio::sync::Notify,
+}
+
+impl FileBlobStore for PausedBlobs {
+    fn publish<'a>(
+        &'a self,
+        id: &'a str,
+        bytes: &'a [u8],
+        cancelled: &'a tokio_util::sync::CancellationToken,
+    ) -> futures::future::BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(async move {
+            self.blobs.publish(id, bytes, cancelled).await?;
+            self.published.notify_one();
+            self.resume.notified().await;
+            Ok(())
+        })
+    }
+
+    fn read<'a>(
+        &'a self,
+        id: &'a str,
+        expected_bytes: i64,
+        max_bytes: usize,
+    ) -> futures::future::BoxFuture<'a, Result<Vec<u8>, FileSearchError>> {
+        self.blobs.read(id, expected_bytes, max_bytes)
+    }
+
+    fn remove<'a>(&'a self, id: &'a str) -> futures::future::BoxFuture<'a, Result<(), FileSearchError>> {
+        self.blobs.remove(id)
+    }
+}
+
 #[tokio::test]
 async fn injected_blob_store_shares_the_sql_search_service() {
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
@@ -152,7 +188,6 @@ async fn failed_blob_removal_can_be_retried_after_metadata_deletion_and_service_
         .await
         .unwrap();
     assert_eq!(pending, 1);
-
     drop(service);
     let restarted = FileSearchService::with_providers(
         Arc::new(FileSearchStorage::new(pool.clone())),
@@ -202,6 +237,12 @@ async fn rejected_metadata_and_failed_blob_removal_are_reconciled_after_restart(
         .await
         .unwrap();
     assert_eq!(pending, 1);
+    // The dead publisher's lease has elapsed before recovery claims it.
+    sqlx::query("UPDATE file_search_blob_cleanup SET lease_expires_at = 0 WHERE file_id = $1")
+        .bind(&orphan_id)
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
     drop(service);
     let restarted = FileSearchService::with_providers(
         Arc::new(FileSearchStorage::new(pool.clone())),
@@ -218,6 +259,64 @@ async fn rejected_metadata_and_failed_blob_removal_are_reconciled_after_restart(
         .await
         .unwrap();
     assert_eq!(pending, 0);
+}
+
+#[tokio::test]
+async fn recovery_skips_live_uploads_and_fences_expired_owners() {
+    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let blobs = Arc::new(PausedBlobs::default());
+    let service = FileSearchService::with_providers(
+        Arc::new(FileSearchStorage::new(pool.clone())),
+        blobs.clone(),
+        Arc::new(reqwest::Client::new()),
+        &FileSearchConfig::default(),
+    )
+    .unwrap();
+    let recovery = service.clone();
+    let uploading = service.clone();
+    let first = tokio::spawn(async move {
+        uploading
+            .upload_file("live.txt", "text/plain", "assistants", b"live".to_vec())
+            .await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(3), blobs.published.notified())
+        .await
+        .unwrap();
+    recovery.reconcile_blob_cleanup().await.unwrap();
+    assert_eq!(blobs.blobs.0.lock().unwrap().len(), 1);
+    blobs.resume.notify_one();
+    let live = first.await.unwrap().unwrap();
+    assert_eq!(service.file_content(&live.id).await.unwrap(), b"live");
+
+    let uploading = service.clone();
+    let second = tokio::spawn(async move {
+        uploading
+            .upload_file("expired.txt", "text/plain", "assistants", b"expired".to_vec())
+            .await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(3), blobs.published.notified())
+        .await
+        .unwrap();
+    let expired_id = blobs
+        .blobs
+        .0
+        .lock()
+        .unwrap()
+        .keys()
+        .find(|id| *id != &live.id)
+        .unwrap()
+        .clone();
+    sqlx::query("UPDATE file_search_blob_cleanup SET lease_expires_at = 0 WHERE file_id = $1")
+        .bind(&expired_id)
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    recovery.reconcile_blob_cleanup().await.unwrap();
+    blobs.resume.notify_one();
+    assert_eq!(second.await.unwrap().unwrap_err().status_code(), 503);
+    assert_eq!(service.get_file(&expired_id).await.unwrap_err().status_code(), 404);
+    assert!(!blobs.blobs.0.lock().unwrap().contains_key(&expired_id));
+    assert_eq!(service.file_content(&live.id).await.unwrap(), b"live");
 }
 
 #[tokio::test]

@@ -103,6 +103,7 @@ impl FileSearchStorage {
         &self,
         file: &FileObject,
         content_type: &str,
+        owner_token: &str,
         cancelled: &CancellationToken,
     ) -> Result<(), FilePublicationFailure> {
         let data = serde_json::to_string(file).map_err(|error| FilePublicationFailure::SafeToRemove(error.into()))?;
@@ -111,16 +112,53 @@ impl FileSearchStorage {
             () = cancelled.cancelled() => return Err(FilePublicationFailure::SafeToRemove(cancelled_upload_error())),
             result = self.pool.begin() => result.map_err(|error| FilePublicationFailure::SafeToRemove(error.into()))?,
         };
-        let query = sqlx::query("INSERT INTO file_search_files (id, created_at, data, content_type, content_base64) VALUES ($1, $2, $3, $4, '')")
-            .bind(&file.id).bind(file.created_at).bind(data).bind(content_type);
+        // Lock the upload intent through metadata publication. A recovery
+        // claimant must wait for this transaction and cannot fence it halfway
+        // between the metadata insert and intent removal.
+        let ownership = sqlx::query(
+            "UPDATE file_search_blob_cleanup SET lease_expires_at = $3 \
+            WHERE file_id = $1 AND owner_token = $2 AND intent = 'upload'",
+        )
+        .bind(&file.id)
+        .bind(owner_token)
+        .bind(chrono::Utc::now().timestamp() + 60)
+        .execute(&mut *tx)
+        .await;
+        match ownership {
+            Ok(result) if result.rows_affected() == 1 => {}
+            Ok(_) => {
+                let _ = tx.rollback().await;
+                return Err(FilePublicationFailure::SafeToRemove(FileSearchError::Unavailable(
+                    "Upload ownership expired; retry the upload".into(),
+                )));
+            }
+            Err(error) => {
+                let _ = tx.rollback().await;
+                return Err(FilePublicationFailure::SafeToRemove(error.into()));
+            }
+        }
+        let query = sqlx::query(
+            "INSERT INTO file_search_files (id, created_at, data, content_type, content_base64) \
+            SELECT $1, $2, $3, $4, '' WHERE EXISTS (SELECT 1 FROM file_search_blob_cleanup \
+            WHERE file_id = $1 AND owner_token = $5 AND intent = 'upload')",
+        )
+        .bind(&file.id)
+        .bind(file.created_at)
+        .bind(data)
+        .bind(content_type)
+        .bind(owner_token);
         let inserted = tokio::select! {
             biased;
             () = cancelled.cancelled() => Err(cancelled_upload_error()),
-            result = query.execute(&mut *tx) => result.map(|_| ()).map_err(FileSearchError::from),
+            result = query.execute(&mut *tx) => result.map(|result| result.rows_affected()).map_err(FileSearchError::from),
         };
-        let inserted = inserted.and_then(|()| {
+        let inserted = inserted.and_then(|rows| {
             if cancelled.is_cancelled() {
                 Err(cancelled_upload_error())
+            } else if rows == 0 {
+                Err(FileSearchError::Unavailable(
+                    "Upload ownership expired; retry the upload".into(),
+                ))
             } else {
                 Ok(())
             }
@@ -130,6 +168,26 @@ impl FileSearchStorage {
                 tracing::warn!(%rollback, "file metadata rollback failed; connection will be discarded");
             }
             return Err(FilePublicationFailure::SafeToRemove(error));
+        }
+        let cleared = sqlx::query(
+            "DELETE FROM file_search_blob_cleanup WHERE file_id = $1 AND owner_token = $2 AND intent = 'upload'",
+        )
+        .bind(&file.id)
+        .bind(owner_token)
+        .execute(&mut *tx)
+        .await;
+        match cleared {
+            Ok(result) if result.rows_affected() == 1 => {}
+            Ok(_) => {
+                let _ = tx.rollback().await;
+                return Err(FilePublicationFailure::SafeToRemove(FileSearchError::Unavailable(
+                    "Upload ownership expired; retry the upload".into(),
+                )));
+            }
+            Err(error) => {
+                let _ = tx.rollback().await;
+                return Err(FilePublicationFailure::SafeToRemove(error.into()));
+            }
         }
         // Complete COMMIT even if the caller cancels at this point. The owned
         // operation task preserves the blob whenever the outcome is uncertain.

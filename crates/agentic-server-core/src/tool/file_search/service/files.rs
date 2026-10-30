@@ -6,6 +6,15 @@ use super::{
     invalid, page, size_i64, validate_file_id, validate_list,
 };
 use crate::storage::file_search::StoredFileContent;
+use std::time::Duration;
+use tokio::time::Instant;
+
+const UPLOAD_LEASE_SECONDS: i64 = 60;
+const UPLOAD_RENEW_INTERVAL: Duration = Duration::from_secs(20);
+
+fn lease_deadline() -> i64 {
+    chrono::Utc::now().timestamp() + UPLOAD_LEASE_SECONDS
+}
 
 impl FileSearchService {
     /// Stores uploaded bytes locally and publishes their SQL metadata afterwards.
@@ -50,22 +59,45 @@ impl FileSearchService {
         // retains its permit and finishes rollback/cleanup without abandoning I/O.
         tokio::spawn(async move {
             let _permit = permit;
-            storage.stage_blob_cleanup(&file.id).await?;
-            if let Err(error) = files.publish(&file.id, &bytes, &cancelled).await {
+            let owner_token = uuid::Uuid::now_v7().to_string();
+            storage
+                .stage_blob_cleanup(&file.id, &owner_token, lease_deadline())
+                .await?;
+            // Keep the lease live while a pluggable blob provider publishes.
+            // If another instance claims an expired lease, SQL publication is
+            // fenced by this token and cannot expose missing content.
+            let published = {
+                let mut publish = Box::pin(files.publish(&file.id, &bytes, &cancelled));
+                let mut renewal = tokio::time::interval_at(
+                    Instant::now() + UPLOAD_RENEW_INTERVAL,
+                    UPLOAD_RENEW_INTERVAL,
+                );
+                loop {
+                    tokio::select! {
+                        result = &mut publish => break result,
+                        _ = renewal.tick() => {
+                            match storage.refresh_blob_cleanup(&file.id, &owner_token, lease_deadline()).await {
+                                Ok(true) => {},
+                                Ok(false) => break Err(FileSearchError::Unavailable("Upload ownership expired; retry the upload".into())),
+                                Err(error) => break Err(error),
+                            }
+                        }
+                    }
+                }
+            };
+            if let Err(error) = published {
                 files.remove(&file.id).await?;
-                storage.complete_blob_cleanup(&file.id).await?;
+                storage.complete_blob_cleanup(&file.id, &owner_token).await?;
                 return Err(error);
             }
-            match storage.upload_file_metadata(&file, &content_type, &cancelled).await {
-                Ok(()) => {
-                    if let Err(error) = storage.complete_blob_cleanup(&file.id).await {
-                        tracing::warn!(file_id = %file.id, %error, "uploaded file is live; cleanup marker remains");
-                    }
-                    Ok(file)
-                }
+            match storage
+                .upload_file_metadata(&file, &content_type, &owner_token, &cancelled)
+                .await
+            {
+                Ok(()) => Ok(file),
                 Err(FilePublicationFailure::SafeToRemove(error)) => {
                     files.remove(&file.id).await?;
-                    storage.complete_blob_cleanup(&file.id).await?;
+                    storage.complete_blob_cleanup(&file.id, &owner_token).await?;
                     Err(error)
                 }
                 Err(FilePublicationFailure::Indeterminate(error)) => Err(error),
@@ -116,17 +148,27 @@ impl FileSearchService {
         // cleanup marker in the same transaction as metadata deletion.
         tokio::spawn(async move {
             let _permit = permit;
-            let blob = match storage.file(&id).await {
+            let cleanup_token = match storage.file(&id).await {
                 Ok(file) => {
                     storage.delete(Collection::Files, &id, None).await?;
-                    matches!(file.content, StoredFileContent::Blob)
+                    if matches!(file.content, StoredFileContent::Blob) {
+                        Some(storage.pending_blob_cleanup(&id).await?.ok_or_else(|| {
+                            FileSearchError::Unavailable("File deletion cleanup marker is missing".into())
+                        })?)
+                    } else {
+                        None
+                    }
                 }
-                Err(FileSearchError::NotFound(_)) if storage.pending_blob_cleanup(&id).await? => true,
+                Err(FileSearchError::NotFound(_)) => storage
+                    .pending_blob_cleanup(&id)
+                    .await?
+                    .ok_or_else(|| FileSearchError::NotFound("File not found".into()))
+                    .map(Some)?,
                 Err(error) => return Err(error),
             };
-            if blob {
+            if let Some(cleanup_token) = cleanup_token {
                 files.remove(&id).await?;
-                storage.complete_blob_cleanup(&id).await?;
+                storage.complete_blob_cleanup(&id, &cleanup_token).await?;
             }
             Ok(deleted(&id, "file.deleted"))
         })
@@ -141,17 +183,26 @@ impl FileSearchService {
     pub async fn reconcile_blob_cleanup(&self) -> Result<(), FileSearchError> {
         let mut after = String::new();
         loop {
-            let batch = self.storage.blob_cleanup_batch(&after, 100).await?;
+            let now = chrono::Utc::now().timestamp();
+            let batch = self.storage.blob_cleanup_batch(&after, 100, now).await?;
             if batch.is_empty() {
                 return Ok(());
             }
             for id in &batch {
+                let owner_token = uuid::Uuid::now_v7().to_string();
+                if !self
+                    .storage
+                    .claim_blob_cleanup(id, &owner_token, now, lease_deadline())
+                    .await?
+                {
+                    continue;
+                }
                 match self.storage.file_object(id).await {
                     Ok(_) => {}
                     Err(FileSearchError::NotFound(_)) => self.files.remove(id).await?,
                     Err(error) => return Err(error),
                 }
-                self.storage.complete_blob_cleanup(id).await?;
+                self.storage.complete_blob_cleanup(id, &owner_token).await?;
             }
             after = batch.last().cloned().unwrap_or_default();
         }
