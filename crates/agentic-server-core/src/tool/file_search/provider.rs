@@ -16,8 +16,9 @@ use crate::types::file_search::{
 /// A durable blob store addressed only by generated file IDs. `publish` must
 /// create without replacing an existing object, and a successful return means
 /// the bytes can be read after a process restart. `remove` is idempotent.
-/// Failed or cancelled publication must remove partial bytes. `remove` must
-/// also reclaim staged bytes for the ID after an interrupted publication.
+/// Failed or cancelled publication must finish in-flight I/O and remove partial
+/// bytes before returning. `remove` must also reclaim staged bytes for the ID
+/// after an interrupted process, without scanning unrelated blob keys.
 /// Implementations must bound reads by `max_bytes` and check `expected_bytes`.
 pub trait FileBlobStore: Send + Sync {
     fn publish<'a>(
