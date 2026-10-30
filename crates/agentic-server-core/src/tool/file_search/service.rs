@@ -171,11 +171,7 @@ impl FileSearchService {
     ) -> Result<ListResponse<VectorStoreObject>, FileSearchError> {
         validate_list(params)?;
         let stores: Vec<VectorStoreObject> = self.storage.list_stores(params).await?;
-        let mut page = page(stores, params, |store| &store.id);
-        for store in &mut page.data {
-            *store = self.storage.store_object(&store.id).await?;
-        }
-        Ok(page)
+        Ok(page(stores, params, |store| &store.id))
     }
 
     /// # Errors

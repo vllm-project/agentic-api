@@ -12,6 +12,8 @@ use crate::types::file_search::{
     cancelled_upload_error,
 };
 
+mod list;
+
 const MAX_CORPUS_BYTES: i64 = 64 * 1024 * 1024;
 const MAX_CORPUS_CHUNKS: i64 = 10_000;
 
@@ -247,6 +249,16 @@ impl FileSearchStorage {
         store_id: Option<&str>,
     ) -> Result<(), FileSearchError> {
         let mut tx = self.pool.begin().await?;
+        if matches!(collection, Collection::Files) {
+            sqlx::query(
+                "INSERT INTO file_search_blob_deletions (file_id) \
+                 SELECT id FROM file_search_files WHERE id = $1 AND content_base64 = '' \
+                 ON CONFLICT (file_id) DO NOTHING",
+            )
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        }
         let filter = if store_id.is_some() { " AND store_id = $2" } else { "" };
         let sql = format!(
             "DELETE FROM {} WHERE {} = $1{filter}",
@@ -262,6 +274,22 @@ impl FileSearchStorage {
             return Err(FileSearchError::NotFound("File or vector store not found".into()));
         }
         tx.commit().await?;
+        Ok(())
+    }
+
+    pub(crate) async fn pending_blob_deletion(&self, id: &str) -> Result<bool, FileSearchError> {
+        let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_blob_deletions WHERE file_id = $1")
+            .bind(id)
+            .fetch_one(self.pool.as_ref())
+            .await?;
+        Ok(pending != 0)
+    }
+
+    pub(crate) async fn complete_blob_deletion(&self, id: &str) -> Result<(), FileSearchError> {
+        sqlx::query("DELETE FROM file_search_blob_deletions WHERE file_id = $1")
+            .bind(id)
+            .execute(self.pool.as_ref())
+            .await?;
         Ok(())
     }
 

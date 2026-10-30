@@ -70,6 +70,9 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                          ('file_search_files', 'SELECT'), \
                          ('file_search_files', 'INSERT'), \
                          ('file_search_files', 'DELETE'), \
+                         ('file_search_blob_deletions', 'SELECT'), \
+                         ('file_search_blob_deletions', 'INSERT'), \
+                         ('file_search_blob_deletions', 'DELETE'), \
                          ('file_search_stores', 'SELECT'), \
                          ('file_search_stores', 'INSERT'), \
                          ('file_search_stores', 'UPDATE'), \
@@ -81,7 +84,7 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                          ('file_search_chunks', 'INSERT') \
                  ) \
                  SELECT current_setting('transaction_read_only') = 'off' \
-                    AND COUNT(table_relation.oid) = 19 \
+                    AND COUNT(table_relation.oid) = 22 \
                     AND COALESCE(BOOL_AND( \
                         has_table_privilege(current_user, table_relation.oid, required.privilege) \
                     ), false) \
@@ -111,6 +114,7 @@ pub(crate) async fn verify_persistence_ready(pool: &DbPool) -> DbResult<()> {
                 "SELECT id FROM items LIMIT 0",
                 "SELECT id FROM responses LIMIT 0",
                 "SELECT id, created_at, data, content_type, content_base64 FROM file_search_files LIMIT 0",
+                "SELECT file_id FROM file_search_blob_deletions LIMIT 0",
                 "SELECT id, created_at, data, embedding_identity, embedding_dimensions FROM file_search_stores LIMIT 0",
                 "SELECT store_id, file_id, created_at, usage_bytes, storage_bytes, data FROM file_search_attachments LIMIT 0",
                 "SELECT store_id, file_id, chunk_index, data FROM file_search_chunks LIMIT 0",

@@ -55,6 +55,49 @@ impl FileBlobStore for MemoryBlobs {
     }
 }
 
+struct FailOnceBlobs {
+    blobs: MemoryBlobs,
+    fail_remove: std::sync::atomic::AtomicBool,
+}
+
+impl Default for FailOnceBlobs {
+    fn default() -> Self {
+        Self {
+            blobs: MemoryBlobs::default(),
+            fail_remove: std::sync::atomic::AtomicBool::new(true),
+        }
+    }
+}
+
+impl FileBlobStore for FailOnceBlobs {
+    fn publish<'a>(
+        &'a self,
+        id: &'a str,
+        bytes: &'a [u8],
+        cancelled: &'a tokio_util::sync::CancellationToken,
+    ) -> futures::future::BoxFuture<'a, Result<(), FileSearchError>> {
+        self.blobs.publish(id, bytes, cancelled)
+    }
+
+    fn read<'a>(
+        &'a self,
+        id: &'a str,
+        expected_bytes: i64,
+        max_bytes: usize,
+    ) -> futures::future::BoxFuture<'a, Result<Vec<u8>, FileSearchError>> {
+        self.blobs.read(id, expected_bytes, max_bytes)
+    }
+
+    fn remove<'a>(&'a self, id: &'a str) -> futures::future::BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(async move {
+            if self.fail_remove.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                return Err(FileSearchError::Unavailable("injected blob removal failure".into()));
+            }
+            self.blobs.remove(id).await
+        })
+    }
+}
+
 #[tokio::test]
 async fn injected_blob_store_shares_the_sql_search_service() {
     let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
@@ -83,6 +126,90 @@ async fn injected_blob_store_shares_the_sql_search_service() {
     assert_eq!(found.data[0].file_id, file.id);
     service.delete_file(&file.id).await.unwrap();
     assert!(blobs.0.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn failed_blob_removal_can_be_retried_after_metadata_deletion_and_service_restart() {
+    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let blobs = Arc::new(FailOnceBlobs::default());
+    let service = FileSearchService::with_providers(
+        Arc::new(FileSearchStorage::new(pool.clone())),
+        blobs.clone(),
+        Arc::new(reqwest::Client::new()),
+        &FileSearchConfig::default(),
+    )
+    .unwrap();
+    let file = service
+        .upload_file("retry.txt", "text/plain", "assistants", b"keep until removed".to_vec())
+        .await
+        .unwrap();
+    assert_eq!(service.delete_file(&file.id).await.unwrap_err().status_code(), 503);
+    assert_eq!(service.get_file(&file.id).await.unwrap_err().status_code(), 404);
+    assert!(blobs.blobs.0.lock().unwrap().contains_key(&file.id));
+    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_blob_deletions WHERE file_id = $1")
+        .bind(&file.id)
+        .fetch_one(pool.as_ref())
+        .await
+        .unwrap();
+    assert_eq!(pending, 1);
+
+    drop(service);
+    let restarted = FileSearchService::with_providers(
+        Arc::new(FileSearchStorage::new(pool.clone())),
+        blobs.clone(),
+        Arc::new(reqwest::Client::new()),
+        &FileSearchConfig::default(),
+    )
+    .unwrap();
+    assert!(restarted.delete_file(&file.id).await.unwrap().deleted);
+    assert!(!blobs.blobs.0.lock().unwrap().contains_key(&file.id));
+    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM file_search_blob_deletions WHERE file_id = $1")
+        .bind(&file.id)
+        .fetch_one(pool.as_ref())
+        .await
+        .unwrap();
+    assert_eq!(pending, 0);
+    assert_eq!(restarted.delete_file(&file.id).await.unwrap_err().status_code(), 404);
+}
+
+#[tokio::test]
+async fn listed_stores_include_current_attachment_counts_and_usage() {
+    let service = service().await;
+    let file = service
+        .upload_file(
+            "counts.txt",
+            "text/plain",
+            "assistants",
+            b"count this attachment".to_vec(),
+        )
+        .await
+        .unwrap();
+    let populated = service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    let empty = service
+        .create_vector_store(CreateVectorStoreRequest::default())
+        .await
+        .unwrap();
+    service
+        .attach_file(
+            &populated.id,
+            AttachFileRequest {
+                file_id: file.id.clone(),
+                ..AttachFileRequest::default()
+            },
+        )
+        .await
+        .unwrap();
+    let listed = service.list_vector_stores(&ListParams::default()).await.unwrap();
+    let populated = listed.data.iter().find(|store| store.id == populated.id).unwrap();
+    assert_eq!(populated.file_counts.total, 1);
+    assert_eq!(populated.file_counts.completed, 1);
+    assert!(populated.usage_bytes > 0);
+    let empty = listed.data.iter().find(|store| store.id == empty.id).unwrap();
+    assert_eq!(empty.file_counts.total, 0);
+    assert_eq!(empty.usage_bytes, 0);
 }
 
 struct TestService {
