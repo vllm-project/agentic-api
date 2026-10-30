@@ -60,7 +60,7 @@ impl LocalFiles {
         cancelled: &CancellationToken,
     ) -> Result<(), FileSearchError> {
         let destination = self.path(id)?;
-        let temporary = self.directory.join(format!(".upload-{id}-{}", uuid::Uuid::now_v7()));
+        let temporary = self.directory.join(format!(".upload-{id}"));
         self.ensure_directory().await?;
         let mut options = fs::OpenOptions::new();
         options.write(true).create_new(true);
@@ -159,26 +159,8 @@ impl LocalFiles {
 
     pub(crate) async fn remove(&self, id: &str) -> Result<(), FileSearchError> {
         let destination = self.path(id)?;
-        let mut entries = match fs::read_dir(&self.directory).await {
-            Ok(entries) => entries,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
-            Err(source) => return Err(io_error("cleanup", source)),
-        };
         remove_if_present(&destination).await?;
-        let staging_prefix = format!(".upload-{id}-");
-        while let Some(entry) = entries
-            .next_entry()
-            .await
-            .map_err(|source| io_error("cleanup", source))?
-        {
-            if entry
-                .file_name()
-                .to_str()
-                .is_some_and(|name| name.starts_with(&staging_prefix))
-            {
-                remove_if_present(&entry.path()).await?;
-            }
-        }
+        remove_if_present(&self.directory.join(format!(".upload-{id}"))).await?;
         match self.sync_directory().await {
             Err(FileSearchError::FileStorage { source, .. }) if source.kind() == io::ErrorKind::NotFound => Ok(()),
             result => result,
@@ -302,8 +284,8 @@ mod tests {
         let base = tempfile::tempdir().unwrap();
         let id = format!("file-{}", uuid::Uuid::now_v7());
         let other = format!("file-{}", uuid::Uuid::now_v7());
-        let stage = base.path().join(format!(".upload-{id}-{}", uuid::Uuid::now_v7()));
-        let other_stage = base.path().join(format!(".upload-{other}-{}", uuid::Uuid::now_v7()));
+        let stage = base.path().join(format!(".upload-{id}"));
+        let other_stage = base.path().join(format!(".upload-{other}"));
         fs::write(&stage, b"interrupted").await.unwrap();
         fs::write(&other_stage, b"active other upload").await.unwrap();
         LocalFiles::new(base.path().to_owned())
