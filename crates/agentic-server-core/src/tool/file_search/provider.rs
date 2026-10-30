@@ -16,8 +16,9 @@ use crate::types::file_search::{
 /// A durable blob store addressed only by generated file IDs. `publish` must
 /// create without replacing an existing object, and a successful return means
 /// the bytes can be read after a process restart. `remove` is idempotent.
-/// Failed or cancelled publication must remove partial bytes. Implementations
-/// must bound reads by `max_bytes` and check `expected_bytes`.
+/// Failed or cancelled publication must remove partial bytes. `remove` must
+/// also reclaim staged bytes for the ID after an interrupted publication.
+/// Implementations must bound reads by `max_bytes` and check `expected_bytes`.
 pub trait FileBlobStore: Send + Sync {
     fn publish<'a>(
         &'a self,
@@ -58,6 +59,7 @@ pub trait FileSearchRepository: Send + Sync {
         &'a self,
         file: &'a FileObject,
         content_type: &'a str,
+        owner_token: &'a str,
         cancelled: &'a CancellationToken,
     ) -> BoxFuture<'a, Result<(), FilePublicationFailure>>;
 
@@ -93,14 +95,37 @@ pub trait FileSearchRepository: Send + Sync {
         store_id: Option<&'a str>,
     ) -> BoxFuture<'a, Result<(), FileSearchError>>;
 
-    fn stage_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), FileSearchError>>;
-    fn pending_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<bool, FileSearchError>>;
-    fn complete_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), FileSearchError>>;
+    fn stage_blob_cleanup<'a>(
+        &'a self,
+        id: &'a str,
+        owner_token: &'a str,
+        lease_expires_at: i64,
+    ) -> BoxFuture<'a, Result<(), FileSearchError>>;
+    fn refresh_blob_cleanup<'a>(
+        &'a self,
+        id: &'a str,
+        owner_token: &'a str,
+        lease_expires_at: i64,
+    ) -> BoxFuture<'a, Result<bool, FileSearchError>>;
+    fn pending_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<Option<String>, FileSearchError>>;
+    fn complete_blob_cleanup<'a>(
+        &'a self,
+        id: &'a str,
+        owner_token: &'a str,
+    ) -> BoxFuture<'a, Result<(), FileSearchError>>;
     fn blob_cleanup_batch<'a>(
         &'a self,
         after: &'a str,
         limit: i64,
+        now: i64,
     ) -> BoxFuture<'a, Result<Vec<String>, FileSearchError>>;
+    fn claim_blob_cleanup<'a>(
+        &'a self,
+        id: &'a str,
+        owner_token: &'a str,
+        now: i64,
+        lease_expires_at: i64,
+    ) -> BoxFuture<'a, Result<bool, FileSearchError>>;
 
     fn list_files<'a>(&'a self, params: &'a ListParams) -> BoxFuture<'a, Result<Vec<FileObject>, FileSearchError>>;
     fn list_stores<'a>(
@@ -162,9 +187,16 @@ impl FileSearchRepository for FileSearchStorage {
         &'a self,
         file: &'a FileObject,
         content_type: &'a str,
+        owner_token: &'a str,
         cancelled: &'a CancellationToken,
     ) -> BoxFuture<'a, Result<(), FilePublicationFailure>> {
-        Box::pin(FileSearchStorage::upload(self, file, content_type, cancelled))
+        Box::pin(FileSearchStorage::upload(
+            self,
+            file,
+            content_type,
+            owner_token,
+            cancelled,
+        ))
     }
 
     fn file<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<UploadedFile, FileSearchError>> {
@@ -228,24 +260,69 @@ impl FileSearchRepository for FileSearchStorage {
         Box::pin(FileSearchStorage::delete(self, collection, id, store_id))
     }
 
-    fn stage_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), FileSearchError>> {
-        Box::pin(FileSearchStorage::stage_blob_cleanup(self, id))
+    fn stage_blob_cleanup<'a>(
+        &'a self,
+        id: &'a str,
+        owner_token: &'a str,
+        lease_expires_at: i64,
+    ) -> BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(FileSearchStorage::stage_blob_cleanup(
+            self,
+            id,
+            owner_token,
+            lease_expires_at,
+        ))
     }
 
-    fn pending_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<bool, FileSearchError>> {
+    fn refresh_blob_cleanup<'a>(
+        &'a self,
+        id: &'a str,
+        owner_token: &'a str,
+        lease_expires_at: i64,
+    ) -> BoxFuture<'a, Result<bool, FileSearchError>> {
+        Box::pin(FileSearchStorage::refresh_blob_cleanup(
+            self,
+            id,
+            owner_token,
+            lease_expires_at,
+        ))
+    }
+
+    fn pending_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<Option<String>, FileSearchError>> {
         Box::pin(FileSearchStorage::pending_blob_cleanup(self, id))
     }
 
-    fn complete_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), FileSearchError>> {
-        Box::pin(FileSearchStorage::complete_blob_cleanup(self, id))
+    fn complete_blob_cleanup<'a>(
+        &'a self,
+        id: &'a str,
+        owner_token: &'a str,
+    ) -> BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(FileSearchStorage::complete_blob_cleanup(self, id, owner_token))
     }
 
     fn blob_cleanup_batch<'a>(
         &'a self,
         after: &'a str,
         limit: i64,
+        now: i64,
     ) -> BoxFuture<'a, Result<Vec<String>, FileSearchError>> {
-        Box::pin(FileSearchStorage::blob_cleanup_batch(self, after, limit))
+        Box::pin(FileSearchStorage::blob_cleanup_batch(self, after, limit, now))
+    }
+
+    fn claim_blob_cleanup<'a>(
+        &'a self,
+        id: &'a str,
+        owner_token: &'a str,
+        now: i64,
+        lease_expires_at: i64,
+    ) -> BoxFuture<'a, Result<bool, FileSearchError>> {
+        Box::pin(FileSearchStorage::claim_blob_cleanup(
+            self,
+            id,
+            owner_token,
+            now,
+            lease_expires_at,
+        ))
     }
 
     fn list_files<'a>(&'a self, params: &'a ListParams) -> BoxFuture<'a, Result<Vec<FileObject>, FileSearchError>> {

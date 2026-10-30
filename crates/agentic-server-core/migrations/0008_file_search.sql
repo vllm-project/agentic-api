@@ -11,7 +11,10 @@ CREATE TABLE file_search_files (
 -- Cleanup markers are committed before publishing a blob and alongside file
 -- metadata deletion. Recovery removes orphaned blobs and clears the marker.
 CREATE TABLE file_search_blob_cleanup (
-    file_id TEXT PRIMARY KEY
+    file_id TEXT PRIMARY KEY,
+    owner_token TEXT NOT NULL,
+    intent TEXT NOT NULL,
+    lease_expires_at BIGINT NOT NULL
 );
 
 CREATE TABLE file_search_stores (
