@@ -101,13 +101,21 @@ impl FileSearchService {
         let files = self.files.clone();
         let id = id.to_owned();
         // Once deletion starts, finish SQL cascading deletion and blob cleanup
-        // even if the caller disconnects. A failed SQL commit retains the blob.
+        // even if the caller disconnects. The repository records a durable
+        // cleanup marker in the same transaction as metadata deletion.
         tokio::spawn(async move {
             let _permit = permit;
-            let file = storage.file(&id).await?;
-            storage.delete(Collection::Files, &id, None).await?;
-            if matches!(file.content, StoredFileContent::Blob) {
+            let blob = match storage.file(&id).await {
+                Ok(file) => {
+                    storage.delete(Collection::Files, &id, None).await?;
+                    matches!(file.content, StoredFileContent::Blob)
+                }
+                Err(FileSearchError::NotFound(_)) if storage.pending_blob_deletion(&id).await? => true,
+                Err(error) => return Err(error),
+            };
+            if blob {
                 files.remove(&id).await?;
+                storage.complete_blob_deletion(&id).await?;
             }
             Ok(deleted(&id, "file.deleted"))
         })

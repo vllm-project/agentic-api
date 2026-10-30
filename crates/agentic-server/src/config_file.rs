@@ -1092,6 +1092,26 @@ mod tests {
     }
 
     #[test]
+    fn loads_deferred_mcp_server_with_a_catalog_description() {
+        let home = tempdir().expect("temp home");
+        fs::write(
+            home.path().join("config.toml"),
+            "[mcp_servers.docs]\nurl = \"https://mcp.example.com/mcp\"\ndefer_loading = true\n\
+             description = \"Product documentation search.\"\n",
+        )
+        .expect("write config");
+
+        let config = FileConfig::load(home.path())
+            .expect("deferred server config")
+            .expect("existing config");
+        assert_eq!(config.mcp_servers["docs"].defer_loading(), Some(true));
+        assert_eq!(
+            config.mcp_servers["docs"].description(),
+            Some("Product documentation search.")
+        );
+    }
+
+    #[test]
     fn rejects_unsupported_configured_mcp_approval_policy() {
         let home = tempdir().expect("temp home");
         fs::write(

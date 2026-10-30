@@ -8,6 +8,12 @@ CREATE TABLE file_search_files (
     content_base64 TEXT NOT NULL
 );
 
+-- Deletion markers survive a failed blob removal or a crash after metadata
+-- deletion. Removing the blob is idempotent; a retry clears the marker.
+CREATE TABLE file_search_blob_deletions (
+    file_id TEXT PRIMARY KEY
+);
+
 CREATE TABLE file_search_stores (
     id TEXT PRIMARY KEY,
     created_at BIGINT NOT NULL,

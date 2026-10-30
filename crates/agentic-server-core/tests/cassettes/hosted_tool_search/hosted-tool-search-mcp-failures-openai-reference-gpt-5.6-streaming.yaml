@@ -1,0 +1,1071 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://mcp.invalid/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_0387d720e592a8f2006ad638326ae887d184b2f2629d246449","object":"response","created_at":1792423986,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://mcp.invalid/mcp"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0387d720e592a8f2006ad638326ae887d184b2f2629d246449","object":"response","created_at":1792423986,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://mcp.invalid/mcp"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"mcpl_0387d720e592a8f2006ad63832a46887d1bbe98e246003caf7","type":"mcp_list_tools","server_label":"broken_docs","tools":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.mcp_list_tools.in_progress
+
+      '
+    - 'data: {"type":"response.mcp_list_tools.in_progress","item_id":"mcpl_0387d720e592a8f2006ad63832a46887d1bbe98e246003caf7","output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.mcp_list_tools.failed
+
+      '
+    - 'data: {"type":"response.mcp_list_tools.failed","item_id":"mcpl_0387d720e592a8f2006ad63832a46887d1bbe98e246003caf7","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: error
+
+      '
+    - 'data: {"type":"error","error":{"type":"external_connector_error","code":"http_error","message":"Error
+      retrieving tool list from MCP server: ''broken_docs''. Http status code: 424
+      (Failed Dependency)","param":"tools"},"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.failed
+
+      '
+    - 'data: {"type":"response.failed","response":{"id":"resp_0387d720e592a8f2006ad638326ae887d184b2f2629d246449","object":"response","created_at":1792423986,"status":"failed","access_programs":null,"background":false,"completed_at":null,"error":{"type":"external_connector_error","code":"http_error","message":"Error
+      retrieving tool list from MCP server: ''broken_docs''. Http status code: 424
+      (Failed Dependency)","param":"tools"},"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"mcpl_0387d720e592a8f2006ad63832a46887d1bbe98e246003caf7","type":"mcp_list_tools","server_label":"broken_docs","tools":[]}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://mcp.invalid/mcp"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":6}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t2
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://mcp.invalid/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_0d72ad3ca6c112cd006ad6383510bc87d1ae564721e35e31e9","object":"response","created_at":1792423989,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://mcp.invalid/mcp"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_0d72ad3ca6c112cd006ad6383510bc87d1ae564721e35e31e9","object":"response","created_at":1792423989,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://mcp.invalid/mcp"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"mcpl_0d72ad3ca6c112cd006ad638359e3c87d1b1131a9978473677","type":"mcp_list_tools","server_label":"broken_docs","tools":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.mcp_list_tools.in_progress
+
+      '
+    - 'data: {"type":"response.mcp_list_tools.in_progress","item_id":"mcpl_0d72ad3ca6c112cd006ad638359e3c87d1b1131a9978473677","output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.mcp_list_tools.failed
+
+      '
+    - 'data: {"type":"response.mcp_list_tools.failed","item_id":"mcpl_0d72ad3ca6c112cd006ad638359e3c87d1b1131a9978473677","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: error
+
+      '
+    - 'data: {"type":"error","error":{"type":"external_connector_error","code":"http_error","message":"Error
+      retrieving tool list from MCP server: ''broken_docs''. Http status code: 424
+      (Failed Dependency)","param":"tools"},"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.failed
+
+      '
+    - 'data: {"type":"response.failed","response":{"id":"resp_0d72ad3ca6c112cd006ad6383510bc87d1ae564721e35e31e9","object":"response","created_at":1792423989,"status":"failed","access_programs":null,"background":false,"completed_at":null,"error":{"type":"external_connector_error","code":"http_error","message":"Error
+      retrieving tool list from MCP server: ''broken_docs''. Http status code: 424
+      (Failed Dependency)","param":"tools"},"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"mcpl_0d72ad3ca6c112cd006ad638359e3c87d1b1131a9978473677","type":"mcp_list_tools","server_label":"broken_docs","tools":[]}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://mcp.invalid/mcp"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":6}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t3
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://httpbin.org/status/500
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_055535fc9e5bc72c006ad63837fcf087d181f01421b0a077b9","object":"response","created_at":1792423992,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://httpbin.org/status/500"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_055535fc9e5bc72c006ad63837fcf087d181f01421b0a077b9","object":"response","created_at":1792423992,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://httpbin.org/status/500"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"mcpl_055535fc9e5bc72c006ad6383815f487d182ece2fa8b42f9d8","type":"mcp_list_tools","server_label":"broken_docs","tools":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.mcp_list_tools.in_progress
+
+      '
+    - 'data: {"type":"response.mcp_list_tools.in_progress","item_id":"mcpl_055535fc9e5bc72c006ad6383815f487d182ece2fa8b42f9d8","output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.mcp_list_tools.failed
+
+      '
+    - 'data: {"type":"response.mcp_list_tools.failed","item_id":"mcpl_055535fc9e5bc72c006ad6383815f487d182ece2fa8b42f9d8","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: error
+
+      '
+    - 'data: {"type":"error","error":{"type":"external_connector_error","code":"http_error","message":"Error
+      retrieving tool list from MCP server: ''broken_docs''. Http status code: 424
+      (Failed Dependency)","param":"tools"},"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.failed
+
+      '
+    - 'data: {"type":"response.failed","response":{"id":"resp_055535fc9e5bc72c006ad63837fcf087d181f01421b0a077b9","object":"response","created_at":1792423992,"status":"failed","access_programs":null,"background":false,"completed_at":null,"error":{"type":"external_connector_error","code":"http_error","message":"Error
+      retrieving tool list from MCP server: ''broken_docs''. Http status code: 424
+      (Failed Dependency)","param":"tools"},"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"mcpl_055535fc9e5bc72c006ad6383815f487d182ece2fa8b42f9d8","type":"mcp_list_tools","server_label":"broken_docs","tools":[]}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://httpbin.org/status/500"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":6}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t4
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://httpbin.org/status/500
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_05c8304a61b5dd7b006ad6383aae3c87d1bf56a93cb3057690","object":"response","created_at":1792423994,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://httpbin.org/status/500"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_05c8304a61b5dd7b006ad6383aae3c87d1bf56a93cb3057690","object":"response","created_at":1792423994,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://httpbin.org/status/500"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"mcpl_05c8304a61b5dd7b006ad6383acb8c87d1b3d121c4e27c22ee","type":"mcp_list_tools","server_label":"broken_docs","tools":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.mcp_list_tools.in_progress
+
+      '
+    - 'data: {"type":"response.mcp_list_tools.in_progress","item_id":"mcpl_05c8304a61b5dd7b006ad6383acb8c87d1b3d121c4e27c22ee","output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.mcp_list_tools.failed
+
+      '
+    - 'data: {"type":"response.mcp_list_tools.failed","item_id":"mcpl_05c8304a61b5dd7b006ad6383acb8c87d1b3d121c4e27c22ee","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: error
+
+      '
+    - 'data: {"type":"error","error":{"type":"external_connector_error","code":"http_error","message":"Error
+      retrieving tool list from MCP server: ''broken_docs''. Http status code: 424
+      (Failed Dependency)","param":"tools"},"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.failed
+
+      '
+    - 'data: {"type":"response.failed","response":{"id":"resp_05c8304a61b5dd7b006ad6383aae3c87d1bf56a93cb3057690","object":"response","created_at":1792423994,"status":"failed","access_programs":null,"background":false,"completed_at":null,"error":{"type":"external_connector_error","code":"http_error","message":"Error
+      retrieving tool list from MCP server: ''broken_docs''. Http status code: 424
+      (Failed Dependency)","param":"tools"},"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"mcpl_05c8304a61b5dd7b006ad6383acb8c87d1b3d121c4e27c22ee","type":"mcp_list_tools","server_label":"broken_docs","tools":[]}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://httpbin.org/status/500"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":6}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t5
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://example.com/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_03a3bdd1ffa93fde006ad6383d5e4887d1ad2498726b97e4bb","object":"response","created_at":1792423997,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://example.com/mcp"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_03a3bdd1ffa93fde006ad6383d5e4887d1ad2498726b97e4bb","object":"response","created_at":1792423997,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://example.com/mcp"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"mcpl_03a3bdd1ffa93fde006ad6383d989487d18689be9699ac4d11","type":"mcp_list_tools","server_label":"broken_docs","tools":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.mcp_list_tools.in_progress
+
+      '
+    - 'data: {"type":"response.mcp_list_tools.in_progress","item_id":"mcpl_03a3bdd1ffa93fde006ad6383d989487d18689be9699ac4d11","output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.mcp_list_tools.failed
+
+      '
+    - 'data: {"type":"response.mcp_list_tools.failed","item_id":"mcpl_03a3bdd1ffa93fde006ad6383d989487d18689be9699ac4d11","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: error
+
+      '
+    - 'data: {"type":"error","error":{"type":"external_connector_error","code":"http_error","message":"Error
+      retrieving tool list from MCP server: ''broken_docs''. Http status code: 424
+      (Failed Dependency)","param":"tools"},"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.failed
+
+      '
+    - 'data: {"type":"response.failed","response":{"id":"resp_03a3bdd1ffa93fde006ad6383d5e4887d1ad2498726b97e4bb","object":"response","created_at":1792423997,"status":"failed","access_programs":null,"background":false,"completed_at":null,"error":{"type":"external_connector_error","code":"http_error","message":"Error
+      retrieving tool list from MCP server: ''broken_docs''. Http status code: 424
+      (Failed Dependency)","param":"tools"},"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"mcpl_03a3bdd1ffa93fde006ad6383d989487d18689be9699ac4d11","type":"mcp_list_tools","server_label":"broken_docs","tools":[]}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://example.com/mcp"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":6}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t6
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://api.githubcopilot.com/mcp/
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_09b714149209a719006ad63840236087d19d6adb8835519a40","object":"response","created_at":1792424000,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://api.githubcopilot.com/mcp/"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_09b714149209a719006ad63840236087d19d6adb8835519a40","object":"response","created_at":1792424000,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://api.githubcopilot.com/mcp/"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"mcpl_09b714149209a719006ad638403cc887d1b7a6a9296656bbbf","type":"mcp_list_tools","server_label":"broken_docs","tools":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.mcp_list_tools.in_progress
+
+      '
+    - 'data: {"type":"response.mcp_list_tools.in_progress","item_id":"mcpl_09b714149209a719006ad638403cc887d1b7a6a9296656bbbf","output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.mcp_list_tools.failed
+
+      '
+    - 'data: {"type":"response.mcp_list_tools.failed","item_id":"mcpl_09b714149209a719006ad638403cc887d1b7a6a9296656bbbf","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: error
+
+      '
+    - 'data: {"type":"error","error":{"type":"external_connector_error","code":"http_error","message":"Error
+      retrieving tool list from MCP server: ''broken_docs''. Http status code: 424
+      (Failed Dependency)","param":"tools"},"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.failed
+
+      '
+    - 'data: {"type":"response.failed","response":{"id":"resp_09b714149209a719006ad63840236087d19d6adb8835519a40","object":"response","created_at":1792424000,"status":"failed","access_programs":null,"background":false,"completed_at":null,"error":{"type":"external_connector_error","code":"http_error","message":"Error
+      retrieving tool list from MCP server: ''broken_docs''. Http status code: 424
+      (Failed Dependency)","param":"tools"},"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"mcpl_09b714149209a719006ad638403cc887d1b7a6a9296656bbbf","type":"mcp_list_tools","server_label":"broken_docs","tools":[]}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":null,"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://api.githubcopilot.com/mcp/"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":6}
+
+      '
+    - '
+
+      '
+    status_code: 200
+- filename: t7
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: true
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - allowed_tools:
+        - no_such_tool
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    headers:
+      content-type: text/event-stream; charset=utf-8
+    sse:
+    - 'event: response.created
+
+      '
+    - 'data: {"type":"response.created","response":{"id":"resp_05acd6c2779ee480006ad63842d53c87d18517a680b30740d6","object":"response","created_at":1792424003,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":["no_such_tool"],"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://gitmcp.io/openai/tiktoken"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":0}
+
+      '
+    - '
+
+      '
+    - 'event: response.in_progress
+
+      '
+    - 'data: {"type":"response.in_progress","response":{"id":"resp_05acd6c2779ee480006ad63842d53c87d18517a680b30740d6","object":"response","created_at":1792424003,"status":"in_progress","access_programs":null,"background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"auto","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":["no_such_tool"],"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://gitmcp.io/openai/tiktoken"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":null,"user":null,"metadata":{}},"sequence_number":1}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"mcpl_05acd6c2779ee480006ad6384342d487d1a6afcb8ac205f2dd","type":"mcp_list_tools","server_label":"broken_docs","tools":[]},"output_index":0,"sequence_number":2}
+
+      '
+    - '
+
+      '
+    - 'event: response.mcp_list_tools.in_progress
+
+      '
+    - 'data: {"type":"response.mcp_list_tools.in_progress","item_id":"mcpl_05acd6c2779ee480006ad6384342d487d1a6afcb8ac205f2dd","output_index":0,"sequence_number":3}
+
+      '
+    - '
+
+      '
+    - 'event: response.mcp_list_tools.completed
+
+      '
+    - 'data: {"type":"response.mcp_list_tools.completed","item_id":"mcpl_05acd6c2779ee480006ad6384342d487d1a6afcb8ac205f2dd","output_index":0,"sequence_number":4}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"mcpl_05acd6c2779ee480006ad6384342d487d1a6afcb8ac205f2dd","type":"mcp_list_tools","server_label":"broken_docs","tools":[]},"output_index":0,"sequence_number":5}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"rs_05acd6c2779ee480006ad63847a57887d1aebe50c827bd08d2","type":"reasoning","content":[],"encrypted_content":"gAAAAABq1jhHp74scHfiNxseeNx7WLE5ym5fiJsVWpGvrAaiAdF2pU8rO-meDKUckCwJTlrHGVQhMy8VYINjjC_Hwy_KXi07aqS768jekQzDiHPjFIoAdOrf-Rat4LIT2XwJ7zcRaLOKKsKwQLJyewPuQsGmb72aftqM2w_yLJr4aJ_PHZcWJReLKVfNRH8ePCLbPBwAVkellOgRWfZfZo3AuKJohWYe63cx_17xVnRHOzic9wjw8pk-ydVSZ1yNkOVkv0XbmIdUfFaW9IRYcWNaU0LwvVQOlECiAYeQjNfh4LNDXO9ajqEkjBtU54siVvVqwOWnSog5-DfnuaaAVXSd4xyLUWHxG1J_PWYsAgSwgajsRHFS6p9hKFdPzzjz9fFclJmIFdXxjwRHTw9WdfiMQBkgkDPCEKccLKxaoS1yQJF_PaQQqeiHjHYwTQs7nXJJ91gMT4dyL36WzJJXTy6aML7V7RlxkEwARibgZH_ZQ9NenUP-PyVFxArB4_LmdZZ55H-teHR82hk-KpvWF5pkc_PZVgknvwrSpFUb1gF8kVGVO2syu6UiGoRAVGLKS07ksE-F66DPyrf3ym6uM_GqkivAlzZTn_i1HIpPYG0nWicLr-omulIxyVtRLw2YTb5KcwyFFCe2BoVUEQeWt16RU5yruylSCcIWbUFs80rqiG0gCNuFh4EnL9gXtlTq3LvkS-tyhm6YRLMWFifk-LwTH-TuksbxCunLeMC7Xi211LUWV2CVYhMUZCsl7hy0TUpxupVkzjhMUsDADCl_krg8rKFBlCTX_NYZzmSzKbL6wBYAFEWJrULpxrAR1SK_7-nttvC3lSENKc5kmxBjE-Mair770bM3lruM6BmsQDnfdWl9e-Wjf6z8H8Ii2-HAlikqaBKS98zWSyOZlGWwCcAFkPaz6Ad19RU3MX3DvuCDbwc135_yPiN3TUHK662yxZg8tF77gqqElai_2lbwnTlFxmbNthI5zEdfyqgwpRMcbWqzfxBQ67akfHbkuHd4bj4cpcBdTUaYn4Gcl1x1q_TNWdnAN6IuFrUKx14-ZRsEw0eVvnML-2-BGWkTuHbbs-S_akQoHdP-82n_J6Iie1K3PniM3gKpBTw4WyEmyOjihr7eBzmm4SUXJnZ1vb6fKpgGgG7i2Ny6G2kBXr-QhxZKj0_Mdudud9TYEq8Zq-_ArIrV_egQxWNX3G-5ed9BrRJweL7qg_FH","summary":[]},"output_index":1,"sequence_number":6}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"rs_05acd6c2779ee480006ad63847a57887d1aebe50c827bd08d2","type":"reasoning","content":[],"encrypted_content":"gAAAAABq1jhHv3PBOZfNNbdygKwO8WUaVBFD0Phd9NxHk9S7RBghjs6CpnDU-4FeikgupWuNTpPpRCKZW-QRrV34jmqnWIT4Pj-s4Tc36XGjWyWlV4dgR69B2rjKTKiiHrvF7fXDR6G6Tscu7GFT34vRChbPJj51qfrqoZKIsXXauBoqf9xM3ID5g9ygora1F7eSbL75nnb1NXZqmxc2isS01TMZFd39tzHHAQfGeMvtUkWCp7Q72ORmpvBGlnfc4L_CuSAKlyDC-OuPUtSCA_w6c7v5ZsxeyHzdWKybaaFsxtJCMONWrt384uc9WJi6ON_ULtCeoEALvWoXFPsWpG79gScZjYYyTnoZ2rtxGfbornRkw0SzRdYK_lXlvtTH2X7nzpwVALbusiiLyrNJ8WnZi3dbmC3rKF0VQJplNMI1Ps6jKD5-bA6xAJMonZFluO9l2fcY-Sn9ACcPeArA0gIsSpl4BhOwJwb0OYkNNUEkdl2G0o9ET4lXBkF2x74MVZydN15nrhHAji75-xdHdIkSkvy05s_q47olbQJb0XSBw3m0zesoZWqZwSkx__FTboboN5O14xmDwVdTLx5UGRgpfSiaxxdUWjdVHp5RpxFj4PaK3xFRcC36Dce4em_LRaM2EGZiXBMBz7rRohndm2aAOORhl3hqr3EzbYjgXZIH1q_gsTAx9LBnOa4DiqDp-JIqb7MpB0QePolDmISqwH8B4NFUws9f9zHr-eV9IG8cE77V2tL_Nze4bSVEvXpKs3VJHL5NI2CE1Rx3YZW_Z362XNUjIUMBoHZFMwuS-OwH3EObgPtdU9p-LfA3fUEmC-YpkHuqWM3rTereXuEl4cIvrKodOYTKi1ZNfNypshk0N1KhyfhNIQ5uAZSUzy-zCsFOCwYTofcQFnXi9tx1uWnM9HLtcAHEKpW1JrVYXb3QUy24TipJoPQM-eflJ-uOhtqFfvvBk0RuHLAs5QT5El08M5d1ubAmQVzsmTjwO3Dos-yZa488QT9ekY86pf9_eSQftWEnSTb26W92Fs216OXVzyweEYvXB6GS3OYFLPPhnzh60bd-xb4ZSr4U3ksknyLa6A2f1AFFfac45Dz1YzGfVxkA2paT1Y0yHdwiVYYkZ0C7n9NJPT8d6bn9WXJzhvPQ2jvjxUHOa2FJZE3feIoN8E5Z7VnxuGZUdHl8zeao9pes6lH7pVl-OO8A9Gjg8iqNEcZyEnFAMwbzMeGcOaZVtDtzWYo-uRM4GTJYAJZ-qLVjmp-WQjmBcDypkj7-JQnTJnMOS7yjJ0oZ3-VHpUaPxNjfVGE6VjIpao0PiZLb7bwu3SPcfqVFYgY2SZysR3RoU_2Xub0pLE_-awzEUnWqBfiM7t6ixXXpWCGX8m4AiDHp1Dms7Yy8HlOwLqoh6Nnfzgf2NOE4yxhOFCk7rhBEsUvC8FKiOwypT7CHbzsRiPwM0_nowddpYcVXMftWoKkvJ5vpDpWXnwUXeUyJc6HHtNNRr7gujI9FYRYan-IBFPH1ZXmlfZG93c2s2S5iNlwY996wpd78","summary":[]},"output_index":1,"sequence_number":7}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"tsc_05acd6c2779ee480006ad63847cec087d19ca09278f61897dc","type":"tool_search_call","status":"in_progress","arguments":{},"call_id":null,"execution":"server"},"output_index":2,"sequence_number":8}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"tsc_05acd6c2779ee480006ad63847cec087d19ca09278f61897dc","type":"tool_search_call","status":"completed","arguments":{"paths":["get_weather"]},"call_id":null,"execution":"server"},"output_index":2,"sequence_number":9}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"tso_05acd6c2779ee480006ad63847f47087d1bb678be672a4f879","type":"tool_search_output","status":"in_progress","call_id":null,"execution":"server","tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true}]},"output_index":3,"sequence_number":10}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"tso_05acd6c2779ee480006ad63847f47087d1bb678be672a4f879","type":"tool_search_output","status":"completed","call_id":null,"execution":"server","tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true}]},"output_index":3,"sequence_number":11}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.added
+
+      '
+    - 'data: {"type":"response.output_item.added","item":{"id":"fc_05acd6c2779ee480006ad63848a7e887d1914d443bb8b95784","type":"function_call","status":"in_progress","arguments":"","call_id":"call_Ovkvkh6gjYHLIe8lExTnqraz","name":"get_weather","namespace":"get_weather"},"output_index":4,"sequence_number":12}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"{\"","item_id":"fc_05acd6c2779ee480006ad63848a7e887d1914d443bb8b95784","obfuscation":"lVOqLy1WoKbtiW","output_index":4,"sequence_number":13}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"city","item_id":"fc_05acd6c2779ee480006ad63848a7e887d1914d443bb8b95784","obfuscation":"zOzhK30CxjWn","output_index":4,"sequence_number":14}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"\":\"","item_id":"fc_05acd6c2779ee480006ad63848a7e887d1914d443bb8b95784","obfuscation":"dtAZMYoca40vG","output_index":4,"sequence_number":15}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"Paris","item_id":"fc_05acd6c2779ee480006ad63848a7e887d1914d443bb8b95784","obfuscation":"oMGObVaZtAZ","output_index":4,"sequence_number":16}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.delta
+
+      '
+    - 'data: {"type":"response.function_call_arguments.delta","delta":"\"}","item_id":"fc_05acd6c2779ee480006ad63848a7e887d1914d443bb8b95784","obfuscation":"Mr01zXtggAHYMc","output_index":4,"sequence_number":17}
+
+      '
+    - '
+
+      '
+    - 'event: response.function_call_arguments.done
+
+      '
+    - 'data: {"type":"response.function_call_arguments.done","arguments":"{\"city\":\"Paris\"}","item_id":"fc_05acd6c2779ee480006ad63848a7e887d1914d443bb8b95784","output_index":4,"sequence_number":18}
+
+      '
+    - '
+
+      '
+    - 'event: response.output_item.done
+
+      '
+    - 'data: {"type":"response.output_item.done","item":{"id":"fc_05acd6c2779ee480006ad63848a7e887d1914d443bb8b95784","type":"function_call","status":"completed","arguments":"{\"city\":\"Paris\"}","call_id":"call_Ovkvkh6gjYHLIe8lExTnqraz","name":"get_weather","namespace":"get_weather"},"output_index":4,"sequence_number":19}
+
+      '
+    - '
+
+      '
+    - 'event: response.completed
+
+      '
+    - 'data: {"type":"response.completed","response":{"id":"resp_05acd6c2779ee480006ad63842d53c87d18517a680b30740d6","object":"response","created_at":1792424003,"status":"completed","access_programs":null,"background":false,"completed_at":1792424008,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":4096,"max_tool_calls":null,"model":"gpt-5.6-sol","moderation":null,"output":[{"id":"mcpl_05acd6c2779ee480006ad6384342d487d1a6afcb8ac205f2dd","type":"mcp_list_tools","server_label":"broken_docs","tools":[]},{"id":"rs_05acd6c2779ee480006ad63847a57887d1aebe50c827bd08d2","type":"reasoning","content":[],"encrypted_content":"gAAAAABq1jhIoVUVLuGl6V3SFkXN6FF7OzfaYcpee9rPkBacaoecy-qlXAsPN0ajC-aBaTSft9laI6JiO-vRrtP8M_tDybuySFP4hxG7VUBo6knzHH8ZgqMiqRcVjrQMOahvyftqxr9JXIYJFYfoXoY2wtAFvfbkubFQJdztTV8pmQlwp5tmrE1Bu9SDo0ELxXbnxqOaKSTHlboXkG_kM1x82Uh3QgTivM7dEfT4gZBUqwuZIEbCYozk7wIgWyCgGvE0rOQgJVFJZ4RwKn_GERqtus-zYC2Bq-NPqkdFZUS01mQPymU0JNnd-m6ST3Up8evygXUzUV3vsZMkYDIgDZ19j7klpHTi9mu1_TnR9knWKRGw5DDDOkaADlPVFXrud7KaeMHftaqJPTDsKRF9vZFc0LUTPsTs-KLUO1zwJguUZAkCCo_0s13CiF2pwzR2zfcNBG4gJN9lieJ7TgoPaSFnDWPm9BqrY3pBdzXIjzGfilKsgUYo2ZX6Wx-e0G7vRCgU2Uv5U7VIi200yQkNEglogKNsltNPbb63JvYLoESaEyzGbziWPNlC2no3g0efi5rYpGoxwX_nWcI4DFu7FSGxkyHve7TVaH0rHxgd62Fc5LJzg73Y_xWk89_Tm45yidqvQoE6dGVuOEyTM4GlQ0axUfJMlI_DO1SduD7rvAHueUisV73byfIeLVRgO8TeFBMA8kISZL2CPDiyhtxEZ0O11cOOyqZAJcUCo4CGNTwpcA0uGfGDFuAUGid7242pK_J5uWxQ5GOCt-83-Ae0pGhfV1NqlAkNi0BlzZmnF4nDIJaFPtfSI2Gl9ZukL6C04mcbJJEpz5OYyJWtFlBfZMVV-VbJN0nhvF59_sQzm8q0FuhF1h-zLSRD1F1wr544wNggo26eqehnN9E_KmG-UFs7Ws2AV_b1R8OyHUk1OM0FaX_WUDm8wslzFSO_ry7rEqDpCc5NULf_SQp5wVu3JkITaeYfx7W1Cyrrm6BnQzZ1WmoQifjmqPMK3439LnMPkWYZ-l7VrpHQ4yiB5dFMDQBggpAbAEe98Em_IeRxEEVN-B1apCZ4Nfoxz-h4FxSqmVK8RKLNfb5KGa1E-u2v0rpU5Guohlr3OyFxVc5dTuhxg-QXV0H0nuvaCHVF2uC4GhFl_E871nrHXhhtmIq6imm-bZMftW9QkctKsi3uGIVOF3i1-tYqHWJo6Xaj8xpUw-uUaf4oH8hC1RME51G5ACdASMqq9ofphEtq0znUyshYEqOKBJtvwZ-iE0T0zwxrdf2p2Ct4MKoWXxp_xlMhQ5LhIgdXXz5IZ19Dilau9AVs7SsCN5B2cQWVoeG9xwwq3omYMtG4WkVo1w-6epYPz3ZNEF-Bno9y8M6TvbTIA01skm7wPXLE--9icyIp0Vo4anE274vm92B8Iz_sBvV2-Ls2Q6wuMjrhkMn4DhECFopSIDH3dHyGB4kI4pVvBaAXJa6MQEghX6RJVAqXb3RAdRxPS_lioOvjsOUPZtOAwqwbe-KXPKKjFrC6cRUZoPbnbyS61SNnHob8","summary":[]},{"id":"tsc_05acd6c2779ee480006ad63847cec087d19ca09278f61897dc","type":"tool_search_call","status":"completed","arguments":{"paths":["get_weather"]},"call_id":null,"execution":"server"},{"id":"tso_05acd6c2779ee480006ad63847f47087d1bb678be672a4f879","type":"tool_search_output","status":"completed","call_id":null,"execution":"server","tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true}]},{"id":"fc_05acd6c2779ee480006ad63848a7e887d1914d443bb8b95784","type":"function_call","status":"completed","arguments":"{\"city\":\"Paris\"}","call_id":"call_Ovkvkh6gjYHLIe8lExTnqraz","name":"get_weather","namespace":"get_weather"}],"parallel_tool_calls":true,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":null,"prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"medium","mode":"standard","summary":null},"safety_identifier":null,"service_tier":"default","store":true,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"medium"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","defer_loading":true,"description":"Get
+      the current weather for a city","name":"get_weather","output_schema":null,"parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false},"strict":true},{"type":"function","defer_loading":true,"description":"Get
+      the exchange rate between two currencies","name":"get_exchange_rate","output_schema":null,"parameters":{"type":"object","properties":{"base":{"type":"string"},"quote":{"type":"string"}},"required":["base","quote"],"additionalProperties":false},"strict":true},{"type":"mcp","allowed_tools":["no_such_tool"],"defer_loading":true,"headers":null,"require_approval":"never","server_description":"Documentation
+      search for the example project.","server_label":"broken_docs","server_url":"https://gitmcp.io/openai/tiktoken"},{"type":"tool_search","description":null,"parameters":null}],"top_logprobs":0,"top_p":0.98,"truncation":"disabled","usage":{"input_tokens":600,"input_tokens_details":{"cache_write_tokens":0,"cached_tokens":0},"output_tokens":50,"output_tokens_details":{"reasoning_tokens":32},"total_tokens":650},"user":null,"metadata":{}},"sequence_number":20}
+
+      '
+    - '
+
+      '
+    status_code: 200

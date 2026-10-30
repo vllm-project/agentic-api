@@ -167,6 +167,34 @@ discovered MCP tools. MCP discovery metadata shares the request's retained
 response budget (`[responses] max_retained_bytes`, default 8 MiB) with upstream
 rounds and gateway tool output.
 
+A client that replays a response's items (`store: false`) may send back its `tool_search_call` and
+`tool_search_output` items. They are checked as a continuation's history is, so a malformed client search history gets
+the same error with `store: false` as after a `previous_response_id`, and the model sees each pair as the function call
+and output it saw live. Replayed `mcp_call` and `web_search_call` items are not converted yet. Sent inline, they reach
+vLLM as public records, which it does not accept; sent by `id`, the stored record is left out of the model's input.
+Continue such a response with `previous_response_id`.
+
+#### Hosted tool search
+
+`{"type": "tool_search"}` without `execution`, or with `execution: "server"`, makes the gateway run tool search
+itself. Mark functions, namespace members, or whole `type: "mcp"` servers with `defer_loading: true`; the model sees
+only their names and descriptions (an MCP server as `mcp_<server_label>`, described by `server_description`) until it
+loads them. The model passes `{"paths": [...], "query"?: "..."}`: each path loads a deferred function, the deferred
+members of a namespace, or an MCP server's tools, and a `query` keeps only the tools whose name or description contains
+it, ignoring case. Unknown paths load nothing. Each search returns a `tool_search_call` and a `tool_search_output` with
+`execution: "server"` and `call_id: null`, then the round continues with the loaded tools; tools loaded by an earlier
+response are not offered again. Searches do not count toward `max_tool_calls`, and `parallel_tool_calls` may be true.
+A deferred MCP server is listed at the start of a response as usual. As in the Responses API, if any declared MCP
+server cannot list its tools (unreachable, an HTTP error, not an MCP server, or unauthorized), deferred or not, the
+request fails: HTTP 424 with `type: "external_connector_error"`, `code: "http_error"`, and `param: "tools"` for JSON;
+for a stream, the failed `mcp_list_tools` lifecycle, an `error` event, and `response.failed`. A continuation whose
+history already holds a successful listing for that server keeps going, since the Responses API does not list it
+again. An `allowed_tools` filter that matches none of the server's tools is not a failure: the listing is empty.
+A `tool_choice` of type `mcp` is not supported (see [Unsupported request parameters](#unsupported-request-parameters)).
+`execution: "client"` keeps client-executed search unchanged. Operator-configured `[mcp_servers]` entries may set
+`defer_loading` and `description` as defaults; with `defer_loading = true`, a request that uses the server must declare
+hosted tool search or set `defer_loading: false`, and the defaults appear in the response's `tools` echo.
+
 #### Multi-agent
 
 `multi_agent: {"enabled": true, "max_concurrent_subagents": 3}` makes the
@@ -422,10 +450,10 @@ their values.
 conversation, built-in tool, or another executor feature still selects typed
 execution.
 
-| Path | `background` | `prompt` |
-| --- | --- | --- |
-| Direct HTTP JSON/SSE | Forwarded unchanged; upstream validation | Forwarded unchanged; upstream validation |
-| Typed HTTP JSON/SSE, WebSocket, and split-execution hydration | Absent, `null`, or `false` accepted and not forwarded; `true` returns `code: "unsupported_value"`, and any other value returns `code: "invalid_type"`, both with `param: "background"` | Absent or `null` accepted; any other value returns `code: "unsupported_parameter"`, `param: "prompt"` |
+| Path | `background` | `prompt` | `tool_choice` of type `mcp` |
+| --- | --- | --- | --- |
+| Direct HTTP JSON/SSE | Forwarded unchanged; upstream validation | Forwarded unchanged; upstream validation | `code: "unsupported_value"`, `param: "tool_choice"` |
+| Typed HTTP JSON/SSE, WebSocket, and split-execution hydration | Absent, `null`, or `false` accepted and not forwarded; `true` returns `code: "unsupported_value"`, and any other value returns `code: "invalid_type"`, both with `param: "background"` | Absent or `null` accepted; any other value returns `code: "unsupported_parameter"`, `param: "prompt"` | `code: "unsupported_value"`, `param: "tool_choice"` |
 
 Background mode is tracked in
 [#357](https://github.com/vllm-project/agentic-api/issues/357). This matrix

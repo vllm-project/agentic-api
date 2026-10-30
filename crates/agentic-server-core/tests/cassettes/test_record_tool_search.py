@@ -328,6 +328,47 @@ class RecordToolSearchTests(unittest.TestCase):
             json.loads(synthetic[0]["output"]), {"tools": RETURNED_TOOLS}
         )
 
+    def test_hosted_tool_search_is_not_pending_client_work(self) -> None:
+        response = {
+            "output": [
+                {"type": "tool_search_call", "call_id": None, "execution": "server"},
+                {"type": "tool_search_output", "call_id": None, "execution": "server", "tools": []},
+                {"type": "tool_search_call", "call_id": "call_client", "execution": "client"},
+                {"type": "function_call", "name": "get_weather", "call_id": "call_weather"},
+            ]
+        }
+
+        self.assertEqual(
+            [item.get("call_id") for item in record_cassette._extract_tool_calls(response)],
+            ["call_client", "call_weather"],
+        )
+
+    def test_store_false_manual_replay_does_not_require_search_fixture(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            capture = Path(directory) / "capture.yaml"
+            arguments = [
+                "--mode", "responses",
+                "--turns", "2",
+                "--gateway", "http://gateway.test",
+                "--model", "test-model",
+                "--no-stream",
+                "--manual-item-replay",
+                "--output", str(capture),
+            ]
+            with (
+                mock.patch.object(record_cassette, "_start_proxy", return_value=object()),
+                mock.patch.object(record_cassette, "_stop_proxy"),
+                mock.patch.object(record_cassette, "run_responses") as run_responses,
+            ):
+                stored = CliRunner().invoke(record_cassette.main, arguments)
+                unstored = CliRunner().invoke(record_cassette.main, [*arguments, "--no-store"])
+
+        self.assertNotEqual(stored.exit_code, 0)
+        self.assertIn("--manual-item-replay requires", stored.output)
+        self.assertEqual(unstored.exit_code, 0, unstored.output)
+        self.assertIs(run_responses.call_args.kwargs["manual_item_replay"], True)
+        self.assertIs(run_responses.call_args.args[4], False)
+
     def test_tool_continuations_reject_empty_ids_and_missing_search_tools(self) -> None:
         for call in (
             {"type": "tool_search_call", "call_id": ""},

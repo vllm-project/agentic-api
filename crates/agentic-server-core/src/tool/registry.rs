@@ -1,3 +1,6 @@
+mod hosted_search;
+mod mcp_listing;
+
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::hash_map::Entry;
@@ -6,6 +9,7 @@ use std::future::{Future, ready};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
+use super::catalog::ToolCatalog;
 use super::code_interpreter::CodeInterpreterHandler;
 use super::codex::insert_namespace_entries;
 use super::custom::{CustomHandler, CustomToolMap, insert_custom_entry};
@@ -16,13 +20,13 @@ use super::mcp::registry::insert_discovered_mcp_entry;
 use super::normalize::code_interpreter_unavailable_error;
 use super::ownership::{GatewayBinding, ToolOwnership};
 use super::shell::insert_shell_entry;
-use super::tool_search::{TOOL_SEARCH_NAME, insert_tool_search_entry};
+use super::tool_search::TOOL_SEARCH_NAME;
 use super::web_fetch::insert_web_fetch_entry;
 use super::web_search::insert_web_search_entry;
 use super::{CodexNamespaceHandler, McpHandler, NamespaceMap, ToolError, ToolOutput};
+use hosted_search::insert_tool_search_entry;
 
 use crate::types::io::output::{FunctionToolCall, McpListTools};
-use crate::types::io::{InOutItem, InputItem, ResponsesInput};
 use crate::types::tools::{CodeInterpreterToolParam, FileSearchToolParam, WebFetchToolParam};
 
 const MAX_MCP_SERVERS_PER_REQUEST: usize = 64;
@@ -33,6 +37,8 @@ const MAX_MCP_DISCOVERY_BYTES: usize = 1024 * 1024;
 #[serde(rename_all = "snake_case")]
 pub enum ToolType {
     Function,
+    /// Tool search, run by the client or by the gateway as its declaration's `execution` says; the registry
+    /// entry's ownership records which.
     ToolSearch,
     Custom,
     Shell,
@@ -134,6 +140,18 @@ impl ToolEntry {
     }
 }
 
+/// The declarations as the registry keys them, checked before anything is registered or discovered: the catalog's
+/// name rule first, then namespace members renamed to the flat, model-visible names the model calls (as the upstream
+/// request renames them), MCP server labels and count, and code interpreter declarations.
+fn resolve_declarations(tools: &[ToolDeclaration]) -> Result<Vec<ToolDeclaration>, ToolError> {
+    ToolCatalog::validate_declared_names(tools)?;
+    let resolved_tools = CodexNamespaceHandler.resolve_namespace_members(tools)?;
+    McpHandler::validate_server_labels(&resolved_tools)?;
+    validate_mcp_server_count(&resolved_tools)?;
+    CodeInterpreterHandler::validate_declarations(&resolved_tools)?;
+    Ok(resolved_tools)
+}
+
 fn insert_unique_tool_entries(
     entries: &mut HashMap<String, ToolEntry>,
     insert: impl FnOnce(&mut HashMap<String, ToolEntry>),
@@ -220,6 +238,9 @@ pub struct ToolRegistry {
     /// first while building and rehydrated historical records are appended.
     /// Insertion order preserves the MCP declaration order for public output.
     mcp_list_tools_items: IndexMap<String, Vec<McpListTools>>,
+
+    /// The request's tool catalog, which the registry owns for the response when tool search is active.
+    tool_search: Option<hosted_search::RegistryToolSearch>,
 }
 
 impl ToolRegistry {
@@ -234,7 +255,8 @@ impl ToolRegistry {
     /// override a gateway-configured server's connection). Transient MCP
     /// discovery failures (the server could not be reached) are not
     /// returned as errors; they are recorded as failed [`McpListTools`]
-    /// metadata so the rest of the request can proceed. Returns
+    /// metadata. The Responses executor fails the request on such a record,
+    /// as the Responses API does; other callers decide for themselves. Returns
     /// [`ToolError::Execution`] when discovered MCP metadata exceeds its byte
     /// or tool-count limit.
     pub async fn build_with_handlers(
@@ -278,14 +300,7 @@ impl ToolRegistry {
         let mut entries = HashMap::with_capacity(tools.len());
         let mut mcp_list_tools_items = IndexMap::<String, Vec<McpListTools>>::new();
         let mut discovered_mcp_tools = 0usize;
-        // Namespace members must be keyed by the same flat, model-visible name
-        // the model will call, so resolve them first — the same pure pass used
-        // to build the upstream request.
-        let resolved_tools = CodexNamespaceHandler.resolve_namespace_members(tools)?;
-        McpHandler::validate_server_labels(&resolved_tools)?;
-        validate_mcp_server_count(&resolved_tools)?;
-
-        CodeInterpreterHandler::validate_declarations(&resolved_tools)?;
+        let resolved_tools = resolve_declarations(tools)?;
 
         for (index, tool) in resolved_tools.iter().enumerate() {
             match tool {
@@ -379,6 +394,7 @@ impl ToolRegistry {
             namespace_map,
             custom_tool_map,
             mcp_list_tools_items,
+            tool_search: None,
         })
     }
 
@@ -443,47 +459,6 @@ impl ToolRegistry {
         self.entries.len()
     }
 
-    #[must_use]
-    pub fn contains_mcp_server_label(&self, server_label: &str) -> bool {
-        self.entries
-            .values()
-            .any(|entry| entry.tool_type == ToolType::Mcp && entry.server_label.as_deref() == Some(server_label))
-    }
-
-    pub(crate) fn cache_listed_mcp_tools(&mut self, input: &ResponsesInput) {
-        if let ResponsesInput::Items(items) = input {
-            for item in items.iter().filter_map(InOutItem::as_input) {
-                let InputItem::McpListTools(list_tools) = &*item else {
-                    continue;
-                };
-                // Only a currently declared MCP server can emit discovery in
-                // this request. Ignore history for labels absent from the
-                // current registry instead of turning it into a new candidate.
-                if let Some(items) = self.mcp_list_tools_items.get_mut(&list_tools.server_label) {
-                    items.push(list_tools.clone());
-                }
-            }
-        }
-    }
-
-    /// Current discovery items without an equivalent successful historical
-    /// lifecycle. Failed or changed discovery remains visible to the client.
-    pub(crate) fn mcp_list_tool_items(&self) -> impl Iterator<Item = &McpListTools> {
-        self.mcp_list_tools_items.values().filter_map(|items| {
-            let (current, history) = items.split_first()?;
-            let already_emitted = current.error.is_none()
-                && history
-                    .iter()
-                    .any(|previous| previous.error.is_none() && previous.tools == current.tools);
-            (!already_emitted).then_some(current)
-        })
-    }
-
-    /// Marks the current request's discovery lifecycle as consumed.
-    pub(crate) fn clear_mcp_list_tool_items(&mut self) {
-        self.mcp_list_tools_items.clear();
-    }
-
     /// Check catalog entries against borrowed availability constraints without retaining request state.
     pub(crate) fn validate_tool_availability(
         &self,
@@ -501,7 +476,19 @@ impl ToolRegistry {
         let entry = self.entries.get(TOOL_SEARCH_NAME).ok_or_else(|| {
             ToolError::Config("prepared tool-search declaration is missing from the private registry".to_owned())
         })?;
-        if entry.tool_type != ToolType::ToolSearch || !matches!(entry.ownership, ToolOwnership::Client) {
+        let valid = match entry.tool_type {
+            ToolType::ToolSearch => matches!(entry.ownership, ToolOwnership::Client | ToolOwnership::Gateway(Some(_))),
+            ToolType::Function
+            | ToolType::Custom
+            | ToolType::Shell
+            | ToolType::CodexNamespace
+            | ToolType::Mcp
+            | ToolType::WebSearch
+            | ToolType::WebFetch
+            | ToolType::FileSearch
+            | ToolType::CodeInterpreter => false,
+        };
+        if !valid {
             return Err(ToolError::Config(
                 "prepared tool-search declaration has invalid private registry ownership".to_owned(),
             ));
@@ -553,6 +540,13 @@ impl ToolRegistry {
             return None;
         };
         let tool_type = entry.tool_type;
+        // A deferred tool no search has loaded is registered, but not callable.
+        if self.is_deferred(&call.name) {
+            return Some(GatewayDispatchResult {
+                tool_type,
+                output: Err(ToolError::UpstreamWithheldFunctionCall),
+            });
+        }
         Some(GatewayDispatchResult {
             tool_type,
             output: binding.execute(&call.call_id, &call.name, &call.arguments).await,
@@ -595,6 +589,7 @@ mod tests {
     use crate::tool::mcp::{McpDiscoveredHandler, McpHandler};
     use crate::tool::responses_declarations;
     use crate::types::io::output::McpListTool;
+    use crate::types::io::{InputItem, ResponsesInput};
     use crate::types::tools::{McpDiscoveredToolParam, ResponsesTool};
 
     #[test]
@@ -917,6 +912,38 @@ mod tests {
             visible_discovery_ids(current_failure, vec![previous_empty_success]),
             ["mcpl_current_failed"]
         );
+    }
+
+    #[test]
+    fn failed_mcp_list_tools_ignores_a_server_with_a_successful_listing_in_history() {
+        let failed = |id: &str| {
+            let mut item = McpListTools::new(id, "server", Vec::new());
+            item.error = Some("discovery failed".to_owned());
+            item
+        };
+        let mut registry = ToolRegistry::default();
+        registry
+            .mcp_list_tools_items
+            .insert("server".to_owned(), vec![failed("mcpl_current")]);
+        assert_eq!(
+            registry.failed_mcp_list_tools().map(|item| item.id.as_str()),
+            Some("mcpl_current")
+        );
+
+        registry.mcp_list_tools_items.insert(
+            "server".to_owned(),
+            vec![failed("mcpl_current"), failed("mcpl_previous")],
+        );
+        assert_eq!(
+            registry.failed_mcp_list_tools().map(|item| item.id.as_str()),
+            Some("mcpl_current")
+        );
+
+        let previous = McpListTools::new("mcpl_previous", "server", vec![listed_tool("read")]);
+        registry
+            .mcp_list_tools_items
+            .insert("server".to_owned(), vec![failed("mcpl_current"), previous]);
+        assert!(registry.failed_mcp_list_tools().is_none());
     }
 
     #[test]
@@ -1362,6 +1389,31 @@ mod tests {
                 if message.contains("discovered MCP tools")
                     && message.contains(&MAX_DISCOVERED_MCP_TOOLS_PER_REQUEST.to_string())
         ));
+    }
+
+    /// A registry built directly, for a request without tool search, applies the catalog's name rule with its message
+    /// before any MCP declaration is checked or discovered.
+    #[tokio::test]
+    async fn the_registry_applies_the_catalog_name_rule_before_discovery() {
+        let mut tools: Vec<ToolDeclaration> = serde_json::from_value::<Vec<ResponsesTool>>(serde_json::json!([
+            {"type": "function", "name": "agentic_ns__mcp__shell__run"},
+            {"type": "namespace", "name": "mcp__shell", "tools": [{"type": "function", "name": "run"}]},
+            {"type": "mcp", "server_label": "docs", "connector_id": "connector_dropbox"}
+        ]))
+        .expect("tools")
+        .into_iter()
+        .map(ToolDeclaration::from)
+        .collect();
+
+        let error = ToolRegistry::build_with_handlers(&mut tools, &mut GatewayExecutors::default())
+            .await
+            .expect_err("a colliding member name must fail");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid tool config: codex namespace member mcp__shell.run generates name agentic_ns__mcp__shell__run, \
+             which collides with a declared function tool"
+        );
     }
 
     #[tokio::test]

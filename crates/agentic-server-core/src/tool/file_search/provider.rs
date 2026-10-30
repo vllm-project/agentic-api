@@ -41,8 +41,12 @@ pub trait FileBlobStore: Send + Sync {
 /// external index. `create_store` and `attach` must expose only fully indexed
 /// attachments; deletion must remove their searchable chunks. In particular,
 /// an external index needs recovery or compensation for cross-system failures.
-/// List methods return at most `limit + 1` rows in keyset order; the service
-/// builds the response page and reverses `before` results.
+/// File deletion must record a durable blob-cleanup marker in the same commit
+/// that removes metadata. The service acknowledges it only after `remove`
+/// succeeds, so a retry can complete cleanup after failure or process exit.
+/// List methods return at most `limit + 1` rows in keyset order; `list_stores`
+/// must return current file counts and usage for each row. The service builds
+/// the response page and reverses `before` results.
 pub trait FileSearchRepository: Send + Sync {
     /// Stable identity of the chunk index. `None` is reserved for the original
     /// SQL implementation so its existing vector stores remain compatible.
@@ -88,6 +92,9 @@ pub trait FileSearchRepository: Send + Sync {
         id: &'a str,
         store_id: Option<&'a str>,
     ) -> BoxFuture<'a, Result<(), FileSearchError>>;
+
+    fn pending_blob_deletion<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<bool, FileSearchError>>;
+    fn complete_blob_deletion<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), FileSearchError>>;
 
     fn list_files<'a>(&'a self, params: &'a ListParams) -> BoxFuture<'a, Result<Vec<FileObject>, FileSearchError>>;
     fn list_stores<'a>(
@@ -215,6 +222,14 @@ impl FileSearchRepository for FileSearchStorage {
         Box::pin(FileSearchStorage::delete(self, collection, id, store_id))
     }
 
+    fn pending_blob_deletion<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<bool, FileSearchError>> {
+        Box::pin(FileSearchStorage::pending_blob_deletion(self, id))
+    }
+
+    fn complete_blob_deletion<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(FileSearchStorage::complete_blob_deletion(self, id))
+    }
+
     fn list_files<'a>(&'a self, params: &'a ListParams) -> BoxFuture<'a, Result<Vec<FileObject>, FileSearchError>> {
         Box::pin(FileSearchStorage::list(self, Collection::Files, None, params))
     }
@@ -223,7 +238,7 @@ impl FileSearchRepository for FileSearchStorage {
         &'a self,
         params: &'a ListParams,
     ) -> BoxFuture<'a, Result<Vec<VectorStoreObject>, FileSearchError>> {
-        Box::pin(FileSearchStorage::list(self, Collection::Stores, None, params))
+        Box::pin(FileSearchStorage::list_stores(self, params))
     }
 
     fn list_attachments<'a>(

@@ -51,10 +51,12 @@ impl StateSource {
     }
 }
 
+/// The `agentic.tool.type` value for a tool the gateway executes. The client runs every other search, so a search
+/// executed here is the hosted one.
 pub(crate) const fn tool_type(kind: ToolType) -> &'static str {
     match kind {
         ToolType::Function => "function",
-        ToolType::ToolSearch => "tool_search",
+        ToolType::ToolSearch => "hosted_tool_search",
         ToolType::Custom => "custom",
         ToolType::Shell => "shell",
         ToolType::CodexNamespace => "codex_namespace",
@@ -113,4 +115,16 @@ pub(crate) fn inject_context(headers: &mut http::HeaderMap) {
     opentelemetry::global::get_text_map_propagator(|propagator| {
         propagator.inject_context(&context, &mut HeaderInjector(headers));
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tool_type;
+    use crate::tool::ToolType;
+
+    /// The gateway executes only hosted searches, under the documented `hosted_tool_search` value.
+    #[test]
+    fn an_executed_search_is_labelled_hosted() {
+        assert_eq!(tool_type(ToolType::ToolSearch), "hosted_tool_search");
+    }
 }

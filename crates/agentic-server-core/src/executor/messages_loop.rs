@@ -20,12 +20,14 @@ use tracing::Instrument as _;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::inference::fetch_response_json_with_headers;
 use crate::executor::messages_context::MessagesRequestContext;
-use crate::executor::messages_tools::{GatewayToolUse, execute_gateway_calls, request_gateway_map};
+use crate::executor::messages_round::{MessagesRoundDecision, decide_round};
+use crate::executor::messages_tools::{execute_gateway_calls, request_gateway_map};
 use crate::executor::messages_usage::MessagesUsageTotals;
 use crate::executor::request::ExecutionContext;
 use crate::executor::telemetry::metrics::{ExecutorMetrics, Stage};
 use crate::executor::telemetry::{Api, ExecutionSpan, FailureCategory, Route};
 use crate::tool::ToolRegistry;
+use crate::types::messages::tool_call::{MessagesToolCall, MessagesToolInputError};
 use crate::types::messages::tool_seam;
 use crate::utils::common::deserialize_from_str;
 
@@ -135,7 +137,7 @@ async fn run_messages_loop_traced(
         .await;
         timer.finish_result(&fetched);
         let (resp_text, response_headers) = fetched?;
-        let message: Value = deserialize_from_str(&resp_text).map_err(ExecutorError::JsonError)?;
+        let mut message: Value = deserialize_from_str(&resp_text).map_err(ExecutorError::JsonError)?;
         record_message_usage(&exec_ctx.metrics, message.get("usage"));
 
         // Any error body from upstream is surfaced verbatim (handler maps it to
@@ -158,40 +160,35 @@ async fn run_messages_loop_traced(
             execution.completed_with_stop_reason(stop_reason);
             return Ok(deliver(message, &mut usage, &gateway_map, response_headers));
         };
-        let mut gateway_calls: Vec<Value> = Vec::new();
+        let mut gateway_calls: Vec<&Value> = Vec::new();
         let mut has_client_tool_use = false;
         for block in content {
             if block.get("type").and_then(Value::as_str) == Some("tool_use") {
                 let name = block.get("name").and_then(Value::as_str).unwrap_or_default();
                 if gateway_map.is_gateway_owned(name) {
-                    gateway_calls.push(block.clone());
+                    gateway_calls.push(block);
                 } else {
                     has_client_tool_use = true;
                 }
             }
         }
 
-        if has_client_tool_use {
-            // Client execution takes precedence even when the provider labels a
-            // named call end_turn. `deliver` keeps the hidden gateway calls out.
-            execution.completed_with_stop_reason(stop_reason);
-            let mut message = message;
-            if message["stop_reason"] == "end_turn" {
-                message["stop_reason"] = json!("tool_use");
+        let decision = decide_round(
+            &ctx,
+            stop_reason,
+            has_client_tool_use,
+            gateway_calls.iter().filter_map(|call| call["name"].as_str()),
+        );
+        match decision {
+            MessagesRoundDecision::ContinueGateway => {}
+            MessagesRoundDecision::ReturnClient | MessagesRoundDecision::Finish => {
+                execution.completed_with_stop_reason(stop_reason);
+                let visible_stop = decision.visible_stop_reason(stop_reason);
+                if visible_stop != stop_reason {
+                    message["stop_reason"] = json!(visible_stop);
+                }
+                return Ok(deliver(message, &mut usage, &gateway_map, response_headers));
             }
-            return Ok(deliver(message, &mut usage, &gateway_map, response_headers));
-        }
-
-        // The shared context accepts tool_use and vLLM's end_turn for a matching
-        // named gateway call. Other stops retain their terminal behavior.
-        if gateway_calls.is_empty()
-            || !ctx.is_tool_call_stop(
-                stop_reason,
-                gateway_calls.iter().filter_map(|call| call["name"].as_str()),
-            )
-        {
-            execution.completed_with_stop_reason(stop_reason);
-            return Ok(deliver(message, &mut usage, &gateway_map, response_headers));
         }
         // Pure gateway-tool round: execute the calls, then feed the model's FULL
         // assistant turn (thinking/text/tool_use, order preserved — F3) plus the
@@ -267,16 +264,17 @@ fn deliver(
 /// F4: a malformed/absent input is reported rather than dispatched with args the
 /// model never supplied. The block's `input` is already-parsed JSON here
 /// (non-streaming), so it only has to be an object.
-fn tool_uses(gateway_calls: &[Value]) -> Vec<GatewayToolUse<'_>> {
+fn tool_uses(gateway_calls: &[&Value]) -> Vec<MessagesToolCall> {
     gateway_calls
         .iter()
-        .map(|block| GatewayToolUse {
-            id: block.get("id").and_then(Value::as_str).unwrap_or_default(),
-            name: block.get("name").and_then(Value::as_str).unwrap_or_default(),
-            input: match block.get("input") {
-                Some(input) if input.is_object() => Ok(input.clone()),
-                _ => Err("invalid tool arguments (not a JSON object)".to_owned()),
-            },
+        .map(|block| MessagesToolCall {
+            id: block.get("id").and_then(Value::as_str).unwrap_or_default().to_owned(),
+            name: block.get("name").and_then(Value::as_str).unwrap_or_default().to_owned(),
+            input: block
+                .get("input")
+                .and_then(Value::as_object)
+                .cloned()
+                .ok_or(MessagesToolInputError::MissingObject),
         })
         .collect()
 }
