@@ -41,9 +41,9 @@ pub trait FileBlobStore: Send + Sync {
 /// external index. `create_store` and `attach` must expose only fully indexed
 /// attachments; deletion must remove their searchable chunks. In particular,
 /// an external index needs recovery or compensation for cross-system failures.
-/// File deletion must record a durable blob-cleanup marker in the same commit
-/// that removes metadata. The service acknowledges it only after `remove`
-/// succeeds, so a retry can complete cleanup after failure or process exit.
+/// Upload must record durable cleanup intent before publishing bytes. File
+/// deletion must record it in the same durable commit that removes metadata.
+/// The service clears intent only after metadata is live or bytes are removed.
 /// List methods return at most `limit + 1` rows in keyset order; `list_stores`
 /// must return current file counts and usage for each row. The service builds
 /// the response page and reverses `before` results.
@@ -93,8 +93,14 @@ pub trait FileSearchRepository: Send + Sync {
         store_id: Option<&'a str>,
     ) -> BoxFuture<'a, Result<(), FileSearchError>>;
 
-    fn pending_blob_deletion<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<bool, FileSearchError>>;
-    fn complete_blob_deletion<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), FileSearchError>>;
+    fn stage_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), FileSearchError>>;
+    fn pending_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<bool, FileSearchError>>;
+    fn complete_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), FileSearchError>>;
+    fn blob_cleanup_batch<'a>(
+        &'a self,
+        after: &'a str,
+        limit: i64,
+    ) -> BoxFuture<'a, Result<Vec<String>, FileSearchError>>;
 
     fn list_files<'a>(&'a self, params: &'a ListParams) -> BoxFuture<'a, Result<Vec<FileObject>, FileSearchError>>;
     fn list_stores<'a>(
@@ -222,12 +228,24 @@ impl FileSearchRepository for FileSearchStorage {
         Box::pin(FileSearchStorage::delete(self, collection, id, store_id))
     }
 
-    fn pending_blob_deletion<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<bool, FileSearchError>> {
-        Box::pin(FileSearchStorage::pending_blob_deletion(self, id))
+    fn stage_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(FileSearchStorage::stage_blob_cleanup(self, id))
     }
 
-    fn complete_blob_deletion<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), FileSearchError>> {
-        Box::pin(FileSearchStorage::complete_blob_deletion(self, id))
+    fn pending_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<bool, FileSearchError>> {
+        Box::pin(FileSearchStorage::pending_blob_cleanup(self, id))
+    }
+
+    fn complete_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(FileSearchStorage::complete_blob_cleanup(self, id))
+    }
+
+    fn blob_cleanup_batch<'a>(
+        &'a self,
+        after: &'a str,
+        limit: i64,
+    ) -> BoxFuture<'a, Result<Vec<String>, FileSearchError>> {
+        Box::pin(FileSearchStorage::blob_cleanup_batch(self, after, limit))
     }
 
     fn list_files<'a>(&'a self, params: &'a ListParams) -> BoxFuture<'a, Result<Vec<FileObject>, FileSearchError>> {
