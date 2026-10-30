@@ -91,7 +91,8 @@ impl ClientToolOutput {
             Self::Function(output) => &output.call_id,
             Self::Shell(output) => &output.call_id,
             Self::Custom(output) => &output.call_id,
-            Self::ToolSearch(output) => &output.call_id,
+            // Client tool-search outputs always carry a call id; a hosted one matches nothing.
+            Self::ToolSearch(output) => output.call_id.as_deref().unwrap_or_default(),
         }
     }
 

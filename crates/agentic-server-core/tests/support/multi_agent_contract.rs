@@ -118,14 +118,17 @@ impl RecordedSession {
             }
             for input in &exchange.input {
                 let (id, kind) = match input {
-                    InputItem::FunctionCallOutput(output) => (&output.call_id, ClientCallKind::Function),
-                    InputItem::ShellCallOutput(output) => (&output.call_id, ClientCallKind::Shell),
-                    InputItem::CustomToolCallOutput(output) => (&output.call_id, ClientCallKind::Custom),
+                    InputItem::FunctionCallOutput(output) => (output.call_id.as_str(), ClientCallKind::Function),
+                    InputItem::ShellCallOutput(output) => (output.call_id.as_str(), ClientCallKind::Shell),
+                    InputItem::CustomToolCallOutput(output) => (output.call_id.as_str(), ClientCallKind::Custom),
                     InputItem::ToolSearchOutput(output) => {
                         if output.status != ToolSearchStatus::Completed {
                             return Err(mismatch("client tool-search output is not completed"));
                         }
-                        (&output.call_id, ClientCallKind::ToolSearch)
+                        let Some(call_id) = output.call_id.as_deref() else {
+                            return Err(mismatch("client tool-search output has no call_id"));
+                        };
+                        (call_id, ClientCallKind::ToolSearch)
                     }
                     _ => continue,
                 };
@@ -409,9 +412,10 @@ fn client_call(item: &OutputItem) -> Option<(&str, ClientCallKind)> {
         OutputItem::FunctionCall(call) => Some((&call.call_id, ClientCallKind::Function)),
         OutputItem::ShellCall(call) => Some((&call.call_id, ClientCallKind::Shell)),
         OutputItem::CustomToolCall(call) => Some((&call.call_id, ClientCallKind::Custom)),
-        OutputItem::ToolSearchCall(call) if call.status == ToolSearchStatus::Completed => {
-            Some((&call.call_id, ClientCallKind::ToolSearch))
-        }
+        OutputItem::ToolSearchCall(call) if call.status == ToolSearchStatus::Completed => call
+            .call_id
+            .as_deref()
+            .map(|call_id| (call_id, ClientCallKind::ToolSearch)),
         _ => None,
     }
 }

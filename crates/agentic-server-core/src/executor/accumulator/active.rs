@@ -185,6 +185,8 @@ impl ActiveItem {
             SSEItemType::ToolSearchCall => Self::ToolSearchCall {
                 item: ToolSearchCall::try_from(payload).ok()?,
             },
+            // Only the gateway produces search outputs; an upstream never streams one.
+            SSEItemType::ToolSearchOutput => return None,
             SSEItemType::CustomToolCall => Self::CustomToolCall(CustomToolCallState {
                 item: CustomToolCall::try_from(payload).ok()?,
                 input: String::with_capacity(256),
@@ -230,7 +232,7 @@ impl ActiveItem {
             OutputItem::MultiAgentCall(item) => Self::MultiAgentCall { item },
             OutputItem::MultiAgentCallOutput(item) => Self::MultiAgentCallOutput { item },
             OutputItem::AgentMessage(item) => Self::AgentMessage(AgentMessageState::new(item)),
-            OutputItem::Unknown => return None,
+            OutputItem::ToolSearchOutput(_) | OutputItem::Unknown => return None,
         })
     }
 

@@ -9,6 +9,7 @@ use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::translate::TranslationContext;
 use crate::tool::{ToolRegistry, ToolSearchState};
+use crate::types::io::input::HistoryNaming;
 use crate::types::io::{InputItem, InputMessage, MultiAgentAction};
 use crate::types::request_response::{ResponsePayload, UpstreamTool};
 use crate::utils::common::serialize_to_string;
@@ -22,11 +23,11 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
             .tool_classifications()
             .map(|(name, kind)| (name.to_owned(), kind))
             .collect(),
-        state
-            .map(|state| state.withheld_function_names().clone())
-            .unwrap_or_default(),
+        // Deferred functions, namespace members and MCP tools no search has loaded yet.
+        registry.withheld_names(),
         state.is_some_and(ToolSearchState::is_active),
     )
+    .with_self_namespaced_functions(registry.hosted_deferred_functions())
     .with_collaboration(
         agent
             .request
@@ -66,21 +67,27 @@ fn translation_context(registry: &ToolRegistry, agent: &AgentPipeline) -> Transl
 /// # Errors
 /// Unsupported message content, a tool-configuration error, or a serialization failure.
 pub fn upstream_request(ctx: &RequestContext, stream: bool) -> ExecutorResult<String> {
-    upstream_request_with_guidance(ctx, stream, None, None)
+    upstream_request_with_guidance(ctx, stream, None, None, &HistoryNaming::default())
 }
 
 /// `withheld` names the registry whose gateway-executed tools are left out
 /// after a `max_tool_calls` refusal, without changing the persisted tools.
+/// `history` is how the history knows tools beyond the request's declarations
+/// (see [`AgentPipeline::set_history_naming`]).
 fn upstream_request_with_guidance(
     ctx: &RequestContext,
     stream: bool,
     guidance: Option<&InputMessage>,
     withheld: Option<&ToolRegistry>,
+    history: &HistoryNaming,
 ) -> ExecutorResult<String> {
-    let mut request = ctx.enriched_request.to_upstream_request(stream)?;
+    let mut request = ctx.enriched_request.to_upstream_request_with(stream, history)?;
     if let Some(registry) = withheld {
         if let Some(tools) = request.tools.as_mut() {
-            tools.retain(|UpstreamTool::Function(function)| !registry.is_gateway_owned_name(&function.name));
+            // Hosted search does not count toward `max_tool_calls`, so it stays available.
+            tools.retain(|UpstreamTool::Function(function)| {
+                !registry.is_gateway_owned_name(&function.name) || registry.is_hosted_tool_search_name(&function.name)
+            });
         }
         request.tools = request.tools.filter(|tools| !tools.is_empty());
     }
@@ -117,7 +124,13 @@ pub(super) async fn fetch_blocking_payload(
 ) -> ExecutorResult<ResponsePayload> {
     agent.ensure_request_prepared()?;
     let withheld = agent.builtin_tools_withheld().then_some(registry);
-    let upstream_json = upstream_request_with_guidance(&agent.request, false, agent.agent_guidance(), withheld)?;
+    let upstream_json = upstream_request_with_guidance(
+        &agent.request,
+        false,
+        agent.agent_guidance(),
+        withheld,
+        agent.history_naming(),
+    )?;
     let body = fetch_response_json_limited(
         upstream_json,
         &exec_ctx.responses_url(),
@@ -183,7 +196,13 @@ pub(super) async fn fetch_stream_payload(
 ) -> ExecutorResult<ResponsePayload> {
     agent.ensure_request_prepared()?;
     let withheld = agent.builtin_tools_withheld().then_some(registry);
-    let upstream_json = upstream_request_with_guidance(&agent.request, true, agent.agent_guidance(), withheld)?;
+    let upstream_json = upstream_request_with_guidance(
+        &agent.request,
+        true,
+        agent.agent_guidance(),
+        withheld,
+        agent.history_naming(),
+    )?;
     let lines = call_inference_with_headers_limited(
         upstream_json,
         exec_ctx.responses_url(),
@@ -233,9 +252,11 @@ pub(super) mod tests {
         .unwrap();
         let baseline: Value = serde_json::from_str(&upstream_request(&ctx, false).unwrap()).unwrap();
         for stream in [false, true] {
-            let body: Value =
-                serde_json::from_str(&upstream_request_with_guidance(&ctx, stream, Some(&guidance), None).unwrap())
-                    .unwrap();
+            let body: Value = serde_json::from_str(
+                &upstream_request_with_guidance(&ctx, stream, Some(&guidance), None, &HistoryNaming::default())
+                    .unwrap(),
+            )
+            .unwrap();
             assert_eq!(body["instructions"], "caller instructions");
             let items = body["input"].as_array().unwrap();
             assert_eq!(&items[..3], baseline["input"].as_array().unwrap());
@@ -260,11 +281,14 @@ pub(super) mod tests {
             ]
         }))
         .expect("request");
-        let registry = ToolRegistry::from_tool_types(std::collections::HashMap::from([
+        let mut registry = ToolRegistry::from_tool_types(std::collections::HashMap::from([
             ("tool_search".to_owned(), ToolType::ToolSearch),
             ("raw_echo".to_owned(), ToolType::Custom),
         ]));
-        let state = ToolSearchState::build(&request).expect("prepared state");
+        let mut state = ToolSearchState::build(&request).expect("prepared state");
+        // The registry takes the prepared catalog, as `build_tool_registry` does.
+        let catalog = state.take_catalog().expect("prepared catalog");
+        registry.attach_tool_search(catalog, state.synthetic_tool_search().cloned(), false, &[]);
         let agent = AgentPipeline::new(request_context(), Some(state), StreamRelay::detached());
         let context = translation_context(&registry, &agent);
         drop(registry);

@@ -2,7 +2,7 @@ use crate::tool::{ToolDeclaration, declares_async, responses_declarations};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::{GatewayExecutorRegistration, GatewayExecutors, validate_mcp_execution_options};
+use super::{GatewayExecutorRegistration, GatewayExecutors, validate_mcp_approval_source};
 use crate::config::ToolRuntimeConfig;
 use crate::tool::ToolError;
 use crate::tool::mcp::McpServerEntry;
@@ -46,7 +46,7 @@ fn mcp_execution_allows_explicit_never_approval_policy() {
         "require_approval": "never"
     }));
 
-    validate_mcp_execution_options(&param, false).unwrap();
+    validate_mcp_approval_source(&param, false).unwrap();
 }
 
 #[test]
@@ -55,7 +55,7 @@ fn mcp_execution_uses_configured_never_approval_policy() {
         "server_label": "counter"
     }));
 
-    validate_mcp_execution_options(&param, true).unwrap();
+    validate_mcp_approval_source(&param, true).unwrap();
 }
 
 #[test]
@@ -65,31 +65,33 @@ fn mcp_execution_rejects_omitted_approval_policy() {
         "server_url": "http://localhost:8000/mcp"
     }));
 
-    let error = validate_mcp_execution_options(&param, false).unwrap_err();
+    let error = validate_mcp_approval_source(&param, false).unwrap_err();
     assert!(error.to_string().contains("gateway configuration or the request"));
 }
 
-#[test]
-fn mcp_execution_rejects_unsupported_approval_policy() {
-    let param = mcp_param(serde_json::json!({
-        "server_label": "counter",
-        "server_url": "http://localhost:8000/mcp",
-        "require_approval": "always"
-    }));
-
-    let error = validate_mcp_execution_options(&param, false).unwrap_err();
-    assert!(error.to_string().contains("approval gating is not yet supported"));
-}
-
-#[test]
-fn mcp_execution_rejects_connector_id() {
-    let param = mcp_param(serde_json::json!({
-        "server_label": "counter",
-        "connector_id": "connector_dropbox"
-    }));
-
-    let error = validate_mcp_execution_options(&param, false).unwrap_err();
-    assert!(error.to_string().contains("connector_id is not supported"));
+/// Discovery runs the declaration's own checks, as request validation does, before it connects.
+#[tokio::test]
+async fn mcp_discovery_rejects_what_the_declaration_check_rejects() {
+    for (param, message) in [
+        (
+            serde_json::json!({"server_label": "counter", "server_url": "http://localhost:8000/mcp",
+                "require_approval": "always"}),
+            "approval gating is not yet supported",
+        ),
+        (
+            serde_json::json!({"server_label": "counter", "connector_id": "connector_dropbox"}),
+            "connector_id is not supported",
+        ),
+    ] {
+        let mut executors = GatewayExecutors::default();
+        let Err(error) = executors.mcp_server_tools(&mcp_param(param)).await else {
+            panic!("{message}");
+        };
+        assert!(
+            matches!(&error, ToolError::Config(text) if text.contains(message)),
+            "{error}"
+        );
+    }
 }
 
 #[test]
@@ -239,6 +241,8 @@ async fn unavailable_configured_mcp_server_does_not_block_startup() {
             headers: None,
             allowed_tools: Some(vec!["read".to_owned()]),
             require_approval: Some("never".to_owned()),
+            description: None,
+            defer_loading: None,
         },
     );
     let config = ToolRuntimeConfig {
@@ -293,8 +297,10 @@ async fn cached_mcp_server_tools_apply_request_allowed_tools_with_fresh_output_i
     assert_ne!(first_output_id, second.list_tools_item.id);
 }
 
+/// Recorded reference (`mcp-failures`): an `allowed_tools` filter that matches nothing lists no tools and the
+/// request completes.
 #[tokio::test]
-async fn cached_mcp_handlers_reject_empty_final_allowed_set() {
+async fn cached_mcp_handlers_accept_an_empty_final_allowed_set() {
     let mut executors = GatewayExecutors::default();
     executors.insert(GatewayExecutorRegistration::Mcp {
         server_label: "counter".to_owned(),
@@ -306,9 +312,12 @@ async fn cached_mcp_handlers_reject_empty_final_allowed_set() {
         "require_approval": "never"
     }));
 
-    let Err(error) = executors.mcp_server_tools(&param).await else {
-        panic!("expected empty allowed set to be rejected");
-    };
+    let tool_set = executors
+        .mcp_server_tools(&param)
+        .await
+        .expect("an empty allowed set is not an error");
 
-    assert!(error.to_string().contains("empty final allowed tool set"));
+    assert!(tool_set.discovered_handlers.is_empty());
+    assert!(tool_set.list_tools_item.tools.is_empty());
+    assert!(tool_set.list_tools_item.error.is_none());
 }

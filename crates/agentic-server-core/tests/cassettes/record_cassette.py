@@ -1253,14 +1253,19 @@ def _inject_tools(
 
 
 def _extract_tool_calls(response_data: dict | None) -> list[dict]:
-    """Extract client-executed function, custom, shell, and tool-search calls from a response."""
+    """Extract client-executed function, custom, shell, and tool-search calls from a response.
+
+    A hosted tool search (`execution: "server"`) is already resolved in the same
+    response, so it is not pending client work.
+    """
     if not response_data:
         return []
     output = response_data.get("output", [])
     return [
         item
         for item in output
-        if item.get("type") in {"function_call", "custom_tool_call", "shell_call", "tool_search_call"}
+        if item.get("type") in {"function_call", "custom_tool_call", "shell_call"}
+        or (item.get("type") == "tool_search_call" and item.get("execution") != "server")
     ]
 
 

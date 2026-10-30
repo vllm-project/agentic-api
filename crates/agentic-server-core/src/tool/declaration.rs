@@ -46,6 +46,45 @@ pub enum ToolDeclaration {
     Unsupported,
 }
 
+impl ToolDeclaration {
+    /// The registry key a namespace member's flattened name must not repeat: a function's name, or a built-in
+    /// tool's fixed name. MCP servers, namespaces, custom and shell tools are keyed elsewhere.
+    #[must_use]
+    pub(crate) fn top_level_registry_key(&self) -> Option<String> {
+        match self {
+            Self::Function(function) => Some(function.name.as_str().to_owned()),
+            Self::WebSearch(_) => Some("web_search".to_owned()),
+            Self::WebFetch(_) => Some("web_fetch".to_owned()),
+            Self::FileSearch(_) => Some("file_search".to_owned()),
+            Self::CodeInterpreter(_) => Some("code_interpreter".to_owned()),
+            Self::ToolSearch(_)
+            | Self::Mcp(_)
+            | Self::Shell(_)
+            | Self::Namespace(_)
+            | Self::Custom(_)
+            | Self::Unsupported => None,
+        }
+    }
+
+    /// The name of a declared top-level function.
+    #[must_use]
+    pub(crate) fn function_name(&self) -> Option<&str> {
+        match self {
+            Self::Function(function) => Some(function.name.as_str()),
+            Self::ToolSearch(_)
+            | Self::Mcp(_)
+            | Self::WebSearch(_)
+            | Self::WebFetch(_)
+            | Self::FileSearch(_)
+            | Self::CodeInterpreter(_)
+            | Self::Shell(_)
+            | Self::Namespace(_)
+            | Self::Custom(_)
+            | Self::Unsupported => None,
+        }
+    }
+}
+
 impl From<ResponsesTool> for ToolDeclaration {
     fn from(tool: ResponsesTool) -> Self {
         match tool {

@@ -70,6 +70,21 @@ All notable changes to Agentic API are documented here.
   continuation. On typed paths, `file_id`, `file_url`, binary or PDF data, invalid base64, and non-UTF-8 content
   are still rejected with HTTP 400 and a specific reason. Eligible raw `store: false` proxy requests are unchanged
   and still reach the upstream byte for byte. No file is fetched and no dependency is added.
+- Added gateway-executed (hosted) `tool_search` on the Responses API (#448). A request that declares
+  `{"type": "tool_search"}` without `execution` or with `execution: "server"` has the gateway run the search in the
+  same response, over deferred functions (`defer_loading: true`), namespaces with deferred members, and `type: "mcp"`
+  servers with `defer_loading: true` (searched as the namespace `mcp_<server_label>`). The model calls `tool_search`
+  with `paths` and an optional `query`, which keeps tools whose name or description contains it, ignoring case; the
+  loaded tools join the round and persist across `previous_response_id`, conversations, WebSocket sessions,
+  compaction, and multi-agent, and across a `store: false` replay that sends back the search items. Each search adds
+  a `tool_search_call` and a `tool_search_output` item with `execution: "server"` and `call_id: null`, streamed as
+  `output_item.added`/`done` only, and does not count toward `max_tool_calls`. `tool_search` with no deferred tool,
+  deferred MCP with `execution: "client"`, and a `tool_choice` naming an unloaded deferred tool are rejected with
+  HTTP 400. `[mcp_servers]` entries accept `defer_loading` and `description` as defaults. `execution: "client"` is
+  unchanged.
+  A replay that also sends back a hosted MCP response's `mcp_call` items still fails on vLLM, as before, and one that
+  refers to a stored `mcp_call` by `id` leaves it out of the model's input: replayed gateway calls are not converted
+  to model input yet.
 
 ### Changed
 
@@ -97,6 +112,36 @@ All notable changes to Agentic API are documented here.
   `agentic_core::tool::SEARXNG_BASE_URL_HINT` and `validate_searxng_base_url` carry the operator-facing rules for
   the mandatory endpoint (absolute `http(s)` URL with a host and no query or fragment), shared by the startup check
   and the provider.
+- A Responses request whose MCP server cannot list its tools now fails, as the Responses API does, instead of
+  continuing with a failed `mcp_list_tools` item and no tools from that server (#448). JSON requests get HTTP 424
+  with `type: "external_connector_error"`, `code: "http_error"`, and `param: "tools"`; streaming requests get the
+  listing's `response.mcp_list_tools.failed`, an `error` event, and `response.failed`. A continuation whose history
+  already holds a successful listing for that server keeps going. An MCP server whose `allowed_tools` matches none
+  of its tools is no longer rejected with HTTP 400; its listing is empty and the response completes. An MCP
+  `tool_choice` (`{"type": "mcp", ...}`) is rejected with HTTP 400 `unsupported_value` on `tool_choice` instead of
+  a generic parse error.
+- Replayed tool-search history is checked the same way on every path (#448). A `store: false` request carrying
+  `tool_search_call` / `tool_search_output` items now runs the pending-call check a `previous_response_id` or
+  conversation continuation runs, so a duplicate client `call_id` or output, an output with no call, or a client
+  search or other synchronous call without its output gets that check's HTTP 400 (for example "No tool call found
+  for function call output with call_id …" with `param: "input"`) instead of a `tool error: invalid tool config: …`
+  message; a request without search items is unchanged. A hosted `tool_search_call` whose item id equals another
+  call's `call_id` is rejected (`duplicate tool_search_call call_id`), since the model would otherwise see two calls
+  with one id. A `function_call` whose `namespace` equals its `name`, that no declared namespace maps, and whose
+  name is a top-level function the request declares or a search output in its input loaded reaches the model
+  unqualified, as a searched top-level function does; a compaction summary, which declares no tools, uses its
+  source request's functions. Any other call keeps its namespace, since a namespace may hold a member of its own
+  name. Compaction's token estimate counts a search output as the text the model reads
+  (functions with their schemas, namespaces by name and description), as it already did during a response.
+  `agentic_core`: `CodexNamespaceHandler::resolve_input` takes the request's top-level function names
+  (`&HashSet<&str>`) between the namespace map and the input.
+  `CodexNamespaceHandler::validate_namespace_collisions` is removed: the tool catalog owns the model-visible name
+  rule, which the registry applies to every request's declarations and tool search to its whole catalog, with the
+  same messages.
+- An MCP declaration with `connector_id`, or a `require_approval` other than `"never"`, is now rejected with request
+  validation (`McpHandler::validate`) instead of during MCP discovery, with the same message: a streaming HTTP or
+  WebSocket request gets the error before its stream starts instead of an error event in the stream. A request with
+  several invalid declarations or inputs may now get this error first.
 
 ## [0.9.0] - 2026-09-30
 

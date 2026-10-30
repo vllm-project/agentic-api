@@ -8,6 +8,7 @@ pub mod inference;
 pub mod messages_context;
 pub mod messages_loop;
 mod messages_request;
+mod messages_round;
 pub mod messages_stream;
 mod messages_tools;
 mod messages_usage;

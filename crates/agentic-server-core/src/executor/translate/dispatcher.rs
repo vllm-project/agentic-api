@@ -203,8 +203,11 @@ impl TranslationDispatcher {
             ToolType::Shell if !self.context.is_gateway_owned(name) => {
                 Box::new(crate::tool::ShellHandler::new_translator(execution))
             }
-            ToolType::ToolSearch => Box::new(ToolSearchHandler::new_translator(execution)),
-            ToolType::Shell
+            ToolType::ToolSearch if !self.context.is_gateway_owned(name) => {
+                Box::new(ToolSearchHandler::new_translator(execution))
+            }
+            ToolType::ToolSearch
+            | ToolType::Shell
             | ToolType::Mcp
             | ToolType::WebSearch
             | ToolType::WebFetch

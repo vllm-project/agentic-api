@@ -249,7 +249,11 @@ async fn validate_output_call_ids(
     for (index, item) in output_items.iter().enumerate() {
         let (item_type, call_id) = match item {
             OutputItem::FunctionCall(call) => ("function_call", call.call_id.as_str()),
-            OutputItem::ToolSearchCall(call) => ("tool_search_call", call.call_id.as_str()),
+            // A hosted search has no call id to pair.
+            OutputItem::ToolSearchCall(call) => match call.call_id.as_deref() {
+                Some(call_id) => ("tool_search_call", call_id),
+                None => continue,
+            },
             OutputItem::CustomToolCall(call) => ("custom_tool_call", call.call_id.as_str()),
             OutputItem::ShellCall(call) => ("shell_call", call.call_id.as_str()),
             _ => continue,
