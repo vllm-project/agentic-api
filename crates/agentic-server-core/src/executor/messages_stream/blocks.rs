@@ -3,19 +3,7 @@
 
 use serde_json::{Value, json};
 
-use crate::executor::gateway::GatewaySchedulerPolicy;
-use crate::executor::messages_context::MessagesRequestContext;
-use crate::executor::messages_tools::{self, GatewayToolUse};
-use crate::executor::telemetry::metrics::ExecutorMetrics;
-use crate::tool::ToolRegistry;
-use crate::types::messages::{GatewayToolResult, tool_seam};
-
-/// A gateway `tool_use` reconstructed from the stream, ready to dispatch.
-pub(super) struct StreamedCall {
-    pub(super) id: String,
-    pub(super) name: String,
-    pub(super) input_json: String,
-}
+use crate::types::messages::tool_call::{MessagesToolCall, parse_input};
 
 /// One assistant content block buffered across a round, so the full turn
 /// (`thinking`/`text`/`signature`/`tool_use`, in order) can be reconstructed for
@@ -47,15 +35,24 @@ impl BufferedBlock {
         }
     }
 
-    /// The finished assistant content block. For `tool_use`, parse the
-    /// accumulated arguments (best-effort — a malformed fragment falls back to
-    /// `{}`; the paired error `tool_result` records the failure).
-    pub(super) fn to_block(&self) -> Value {
-        let mut block = self.block.clone();
-        if block.get("type").and_then(Value::as_str) == Some("tool_use") {
-            block["input"] = tool_seam::parse_tool_input(&self.input_json).unwrap_or_else(|_| json!({}));
+    /// Finish the buffered block once. Dispatch and history share the parsed
+    /// input; an invalid input remains an error on the call, never a dispatchable
+    /// empty object. The legacy history fallback is preserved separately.
+    pub(super) fn into_parts(self) -> (Value, Option<MessagesToolCall>) {
+        let mut block = self.block;
+        if block["type"] != "tool_use" {
+            return (block, None);
         }
-        block
+        let input = parse_input(&self.input_json);
+        block["input"] = input
+            .as_ref()
+            .map_or_else(|_| json!({}), |object| Value::Object(object.clone()));
+        let call = self.is_gateway_tool.then(|| MessagesToolCall {
+            id: block["id"].as_str().unwrap_or_default().to_owned(),
+            name: block["name"].as_str().unwrap_or_default().to_owned(),
+            input,
+        });
+        (block, call)
     }
 }
 
@@ -70,31 +67,4 @@ fn append_str(block: &mut Value, field: &str, fragment: Option<&Value>) {
         None => fragment.to_owned(),
     };
     block[field] = Value::from(combined);
-}
-
-/// Execute reconstructed gateway calls through the dispatcher shared with the
-/// JSON loop. Errors become error `tool_result`s (E5).
-///
-/// Returns one `tool_result` block per call, fed back next round. (The assistant
-/// turn — including each call's `tool_use` block — is reconstructed from the
-/// accumulator's buffered blocks in `MessagesStreamAccumulator::take_round`.)
-pub(super) async fn execute_gateway_calls(
-    calls: &[StreamedCall],
-    ctx: &mut MessagesRequestContext,
-    registry: &ToolRegistry,
-    gateway_map: &tool_seam::GatewayToolMap,
-    policy: &GatewaySchedulerPolicy,
-    metrics: &ExecutorMetrics,
-) -> Vec<GatewayToolResult> {
-    let tool_uses = calls
-        .iter()
-        .map(|call| GatewayToolUse {
-            id: &call.id,
-            name: &call.name,
-            // F4: a malformed/incomplete reconstructed input is reported, never
-            // coerced to {} and dispatched with args the model never sent.
-            input: tool_seam::parse_tool_input(&call.input_json),
-        })
-        .collect();
-    messages_tools::execute_gateway_calls(tool_uses, ctx, registry, gateway_map, policy, metrics).await
 }

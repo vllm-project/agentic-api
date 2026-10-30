@@ -32,10 +32,10 @@ async fn registry() -> (ToolRegistry, mpsc::Receiver<Started>, Arc<AtomicUsize>)
     )
 }
 
-fn admission(name: &'static str) -> Admission<'static> {
+fn admission(name: &str) -> Admission {
     Admission::Run {
         call: tool_seam::tool_use_to_call("call", name, &json!({"query":"test"}), &GatewayToolMap::default()),
-        name,
+        name: name.to_owned(),
     }
 }
 

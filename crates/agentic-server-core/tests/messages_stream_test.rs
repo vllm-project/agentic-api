@@ -31,7 +31,201 @@ use http::StatusCode;
 use serde_json::Value;
 use tokio::net::TcpListener;
 
+mod messages_round_cases;
 mod support;
+
+/// Withhold the upstream terminal: public text must still arrive, and dropping
+/// the client stream must not leave a detached producer that can execute tools.
+#[tokio::test]
+async fn streamed_text_is_live_and_cancellation_before_terminal_never_dispatches() {
+    for complete in [false, true] {
+        let case = messages_round_cases::cases()
+            .into_iter()
+            .find(|case| case.label == "search")
+            .unwrap();
+        let first = messages_round_cases::stream(&case.message());
+        let terminal = first.find("event: message_delta").unwrap();
+        let prefix = first[..terminal].to_owned();
+        let tail = first[terminal..].to_owned();
+        let final_stream = messages_round_cases::stream(&messages_round_cases::final_message());
+        let (release, gate) = tokio::sync::oneshot::channel::<()>();
+        let gate = Arc::new(tokio::sync::Mutex::new(Some(gate)));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let app = Router::new().route(
+            "/v1/messages",
+            post(move || {
+                let gate = Arc::clone(&gate);
+                let calls = Arc::clone(&calls);
+                let prefix = prefix.clone();
+                let tail = tail.clone();
+                let final_stream = final_stream.clone();
+                async move {
+                    let body = if calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                        let receiver = gate.lock().await.take().unwrap();
+                        axum::body::Body::from_stream(async_stream::stream! {
+                            yield Ok::<_, std::convert::Infallible>(axum::body::Bytes::from(prefix));
+                            if receiver.await.is_ok() {
+                                yield Ok(axum::body::Bytes::from(tail));
+                            }
+                        })
+                    } else {
+                        axum::body::Body::from(final_stream)
+                    };
+                    Response::builder()
+                        .header("content-type", "text/event-stream")
+                        .body(body)
+                        .unwrap()
+                }
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let (search_url, captured, _search) = spawn_recording_search().await;
+        let exec_ctx = build_exec_ctx(&url, &search_url).await;
+        let request = case.request(true);
+        let tools = serde_json::from_value(request["tools"].clone()).unwrap();
+        let mut declarations = registry_tools(Some(&tools), &GatewayToolMap::default());
+        let mut executors = exec_ctx.gateway_executors.clone();
+        let registry = Arc::new(
+            ToolRegistry::build_with_handlers(&mut declarations, &mut executors)
+                .await
+                .unwrap(),
+        );
+        let mut stream = run_test_messages_stream(request, registry, exec_ctx).await;
+        let prefix = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let mut received = String::new();
+            while !received.contains("preface") {
+                received.push_str(&stream.next().await.expect("live frame"));
+            }
+            received
+        })
+        .await
+        .expect("text arrives while terminal is withheld");
+        assert!(!prefix.contains("event: message_stop"));
+        assert!(captured.lock().unwrap().is_empty());
+        if complete {
+            release.send(()).unwrap();
+            let rest = stream.collect::<Vec<_>>().await.join("");
+            assert!(rest.contains("done"));
+            assert_eq!(captured.lock().unwrap().len(), 1);
+            assert_eq!(observed.load(Ordering::SeqCst), 2);
+        } else {
+            drop(stream);
+            let _ = release.send(());
+            assert!(captured.lock().unwrap().is_empty());
+            assert_eq!(observed.load(Ordering::SeqCst), 1);
+        }
+        server.abort();
+        let _ = server.await;
+    }
+}
+
+#[tokio::test]
+async fn streamed_round_decisions_preserve_execution_history_and_terminal_policy() {
+    for case in messages_round_cases::cases() {
+        let streams = vec![
+            messages_round_cases::stream(&case.message()),
+            messages_round_cases::stream(&messages_round_cases::final_message()),
+        ];
+        let (vllm_url, upstream, _v) = spawn_mock_vllm_stream(streams).await;
+        let (search_url, captured, _s) = spawn_recording_search().await;
+        let exec_ctx = build_exec_ctx(&vllm_url, &search_url).await;
+        let request = case.request(true);
+        let tools = serde_json::from_value(request["tools"].clone()).unwrap();
+        let mut declarations = registry_tools(Some(&tools), &GatewayToolMap::default());
+        let mut executors = exec_ctx.gateway_executors.clone();
+        let registry = Arc::new(
+            ToolRegistry::build_with_handlers(&mut declarations, &mut executors)
+                .await
+                .unwrap(),
+        );
+        let sse = run_test_messages_stream(request, registry, Arc::clone(&exec_ctx))
+            .await
+            .collect::<Vec<_>>()
+            .await
+            .join("");
+        assert_eq!(
+            upstream.calls.load(Ordering::SeqCst),
+            1 + case.searches,
+            "{}",
+            case.label
+        );
+        let searches = captured.lock().unwrap().clone();
+        assert_eq!(searches.len(), case.searches, "{}", case.label);
+        let events: Vec<Value> = sse
+            .lines()
+            .filter_map(|line| line.strip_prefix("data: "))
+            .map(|data| serde_json::from_str(data).unwrap())
+            .collect();
+        assert_eq!(
+            events.iter().filter(|event| event["type"] == "message_start").count(),
+            1,
+            "{}",
+            case.label
+        );
+        assert_eq!(
+            events.iter().filter(|event| event["type"] == "message_stop").count(),
+            1,
+            "{}",
+            case.label
+        );
+        let terminals: Vec<_> = events.iter().filter(|event| event["type"] == "message_delta").collect();
+        assert_eq!(terminals.len(), 1, "{}", case.label);
+        assert_eq!(
+            terminals[0]["delta"]["stop_reason"].as_str(),
+            case.visible_stop,
+            "{}",
+            case.label
+        );
+        let starts: Vec<_> = events
+            .iter()
+            .filter(|event| event["type"] == "content_block_start")
+            .collect();
+        for (index, event) in starts.iter().enumerate() {
+            assert_eq!(event["index"], index, "{}", case.label);
+        }
+        assert!(
+            !starts
+                .iter()
+                .any(|event| event["content_block"]["name"] == "web_search"),
+            "{}",
+            case.label
+        );
+        assert_eq!(
+            starts.iter().any(|event| event["content_block"]["id"] == "c1"),
+            case.client,
+            "{}",
+            case.label
+        );
+        if case.searches == 1 {
+            assert!(
+                searches[0]
+                    .iter()
+                    .any(|(key, value)| key == "query" && value == "rust \"你好\"\nrelease"),
+                "{}",
+                case.label
+            );
+            let requests = upstream.requests.lock().await;
+            assert_eq!(
+                requests[1]["messages"][1]["content"],
+                serde_json::json!(case.content),
+                "{}",
+                case.label
+            );
+            assert_eq!(
+                requests[1]["messages"][2]["content"][0]["tool_use_id"], "g1",
+                "{}",
+                case.label
+            );
+            assert_eq!(terminals[0]["usage"]["input_tokens"], 12, "{}", case.label);
+            assert_eq!(terminals[0]["usage"]["output_tokens"], 5, "{}", case.label);
+        }
+    }
+}
 
 const CASSETTE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),

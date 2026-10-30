@@ -12,6 +12,7 @@ use crate::executor::telemetry::metrics::Stage;
 use crate::storage::{ResponseMetadata, StorageError};
 use crate::tool::ToolError;
 use crate::types::io::InOutItem;
+use crate::types::io::input::is_search_item;
 use crate::types::io::{
     InputItem, OutputItem, ReasoningOutput, ReasoningTextContent, ResponsesInput, resolve_tool_choice, resolve_tools,
 };
@@ -180,15 +181,35 @@ async fn rehydrate_request(
     } else if ctx.original_request.previous_response_id.is_some() {
         from_response(&mut ctx, exec_ctx).await?;
     } else {
-        ctx.enriched_request.input = ResponsesInput::from(InOutItem::into_input_items(ctx.new_input_items.clone()));
+        let items = InOutItem::into_input_items(ctx.new_input_items.clone());
+        // The ledger owns how client search calls and outputs pair, so replayed search history is checked as a
+        // continuation's is.
+        if items.iter().any(is_search_item) {
+            reject_unanswered_sync_call(&items)?;
+        }
+        ctx.enriched_request.input = ResponsesInput::from(items);
     }
 
+    exec_ctx
+        .gateway_executors
+        .apply_configured_mcp_defaults(ctx.enriched_request.tools.as_deref_mut());
     exec_ctx
         .gateway_executors
         .validate_declarations(ctx.enriched_request.tool_declarations().as_deref())?;
     ctx.enriched_request.input.validate()?;
     validate_multi_agent_request(&ctx.enriched_request)?;
     Ok(ctx)
+}
+
+/// Refuses a history whose synchronous call has no output yet; the pending-call ledger also rejects a duplicate
+/// call id, an output with no call, and an output for a call of another kind.
+fn reject_unanswered_sync_call(items: &[InputItem]) -> ExecutorResult<()> {
+    match first_unanswered_sync_call(items)? {
+        Some(pending) => Err(ExecutorError::Tool(ToolError::MissingOutput {
+            call_id: pending.call_id,
+        })),
+        None => Ok(()),
+    }
 }
 
 fn validate_multi_agent_request(request: &RequestPayload) -> ExecutorResult<()> {
@@ -256,11 +277,7 @@ async fn from_response(ctx: &mut RequestContext, exec_ctx: &ExecutionContext) ->
     let mut items = InOutItem::into_input_items(history);
     items.reserve(ctx.new_input_items.len());
     items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
-    if let Some(pending) = first_unanswered_sync_call(&items)? {
-        return Err(ExecutorError::Tool(ToolError::MissingOutput {
-            call_id: pending.call_id,
-        }));
-    }
+    reject_unanswered_sync_call(&items)?;
 
     ctx.enriched_request.previous_response_id = None;
     ctx.enriched_request.input = ResponsesInput::from(items);
@@ -315,11 +332,7 @@ async fn from_session_response(ctx: &mut RequestContext, exec_ctx: &ExecutionCon
     // inference copy. new_input_items retains their public wire types.
     items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
     let items = canonical_session_history(items);
-    if let Some(pending) = first_unanswered_sync_call(&items)? {
-        return Err(ExecutorError::Tool(ToolError::MissingOutput {
-            call_id: pending.call_id,
-        }));
-    }
+    reject_unanswered_sync_call(&items)?;
     ctx.enriched_request.previous_response_id = None;
     ctx.enriched_request.input = ResponsesInput::from(items);
     ctx.enriched_request.tools = resolve_tools(
@@ -368,11 +381,7 @@ async fn from_conversation(ctx: &mut RequestContext, exec_ctx: &ExecutionContext
     let mut items = InOutItem::into_input_items(snapshot.items);
     items.reserve(ctx.new_input_items.len());
     items.extend(InOutItem::into_input_items(ctx.new_input_items.clone()));
-    if let Some(pending) = first_unanswered_sync_call(&items)? {
-        return Err(ExecutorError::Tool(ToolError::MissingOutput {
-            call_id: pending.call_id,
-        }));
-    }
+    reject_unanswered_sync_call(&items)?;
 
     ctx.enriched_request.input = ResponsesInput::from(items);
     ctx.conversation_id = Some(conv_data.conversation_id);

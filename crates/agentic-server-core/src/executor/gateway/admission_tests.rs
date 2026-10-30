@@ -102,7 +102,7 @@ fn limit(value: u64) -> BuiltInToolCallBudget {
 }
 
 fn tool_output(result: &GatewayCallResult) -> String {
-    let InputItem::FunctionCallOutput(output) = &result.input_item else {
+    let InputItem::FunctionCallOutput(output) = &result.input[0] else {
         panic!("every gateway call is answered with a function_call_output");
     };
     serde_json::to_string(output).expect("serialize tool output")
@@ -338,6 +338,7 @@ async fn refused_code_interpreter_completes_at_interpreting_without_a_completed_
         output_index: 0,
         started_output: Some(started),
         completed_output: refused,
+        follow_up_output: None,
         arguments: None,
     };
 

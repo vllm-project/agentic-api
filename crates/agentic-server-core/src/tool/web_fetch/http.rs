@@ -297,6 +297,7 @@ fn decode_body(bytes: &[u8], charset: Option<&str>, html: bool) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::future::pending;
     use std::net::Ipv4Addr;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -327,10 +328,9 @@ mod tests {
             .into_response()
     }
 
-    /// Answers after a delay longer than any deadline a test configures.
+    /// Never answers, so a completed fetch must have stopped at its deadline.
     async fn slow() -> &'static str {
-        tokio::time::sleep(Duration::from_secs(2)).await;
-        "late"
+        pending().await
     }
 
     /// A loopback origin; returns its request counter and port.
@@ -386,14 +386,14 @@ mod tests {
             .with_timeout(Duration::from_millis(50));
         let backend = HttpFetchBackend::new(config);
         let url = Url::parse(&format!("http://127.0.0.1:{port}/slow")).unwrap();
-        let started = Instant::now();
-        let error = backend.fetch(&url, &DomainFilter::new(None, None)).await.unwrap_err();
+        let error = tokio::time::timeout(
+            Duration::from_secs(30),
+            backend.fetch(&url, &DomainFilter::new(None, None)),
+        )
+        .await
+        .expect("the fetch must stop at its deadline")
+        .unwrap_err();
         assert!(matches!(error, FetchFailure::TimedOut), "{error:?}");
-        assert!(
-            started.elapsed() < Duration::from_secs(1),
-            "the fetch stopped at its deadline, not when the origin answered: {:?}",
-            started.elapsed()
-        );
     }
 
     #[test]

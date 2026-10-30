@@ -8256,3 +8256,79 @@ async fn recorded_mixed_tool_capture_stays_public_over_websocket() {
     assert_eq!(requests.len(), 1, "the replayed turn runs one inference round");
     common::assert_lowered_mixed_upstream(&requests[0]);
 }
+
+#[tokio::test]
+async fn websocket_hosted_tool_search_streams_its_items_and_continues() {
+    let hosted_search =
+        sse_tool_search_call_response().replace(r#"{\"query\":\"weather\"}"#, r#"{\"paths\":[\"get_weather\"]}"#);
+    let mock = MockResponsesServer::start(vec![
+        hosted_search,
+        sse_weather_function_call_response(),
+        sse_response("resp_answer", "msg_answer", "sunny"),
+    ])
+    .await;
+    let fixture = storage_backed_state(&mock.url).await;
+    let (gateway_url, _gateway) = spawn_gateway(fixture.state.clone()).await;
+    let mut ws = connect_responses_ws(&gateway_url).await;
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create", "model": "test-model", "input": "weather?", "store": true,
+            "tools": [{"type": "tool_search"}, deferred_weather_function()]
+        }),
+    )
+    .await;
+    let first = recv_until_completed(&mut ws).await;
+    let items: Vec<_> = first
+        .iter()
+        .filter(|event| event["item"].is_object())
+        .map(|event| {
+            (
+                event["type"].as_str().unwrap_or_default().to_owned(),
+                event["output_index"].as_u64(),
+                event["item"]["type"].as_str().unwrap_or_default().to_owned(),
+            )
+        })
+        .collect();
+    let expected: Vec<_> = [(0, "tool_search_call"), (1, "tool_search_output"), (2, "function_call")]
+        .into_iter()
+        .flat_map(|(index, item)| {
+            ["response.output_item.added", "response.output_item.done"]
+                .map(|kind| (kind.to_owned(), Some(index), item.to_owned()))
+        })
+        .collect();
+    assert_eq!(items, expected);
+    let completed = first.last().expect("completed event");
+    assert_eq!(completed["type"], "response.completed");
+    let output = &completed["response"]["output"];
+    assert_eq!(output[0]["execution"], "server");
+    assert!(output[0]["call_id"].is_null());
+    assert_eq!(output[1]["tools"][0]["name"], "get_weather");
+    assert_eq!(output[2]["namespace"], "get_weather");
+    let response_id = completed["response"]["id"].as_str().expect("response id").to_owned();
+
+    send_json(
+        &mut ws,
+        json!({
+            "type": "response.create", "model": "test-model", "store": true,
+            "previous_response_id": response_id,
+            "input": [{"type": "function_call_output", "call_id": "call_weather", "output": "sunny"}]
+        }),
+    )
+    .await;
+    let second = recv_until_completed(&mut ws).await;
+    assert_eq!(second.last().expect("completed event")["type"], "response.completed");
+
+    let requests = mock.request_bodies().await;
+    let tool_names = |request: &Value| -> Vec<String> {
+        request["tools"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|tool| tool["name"].as_str().unwrap_or_default().to_owned())
+            .collect()
+    };
+    assert_eq!(tool_names(&requests[0]), ["tool_search"]);
+    assert_eq!(tool_names(&requests[2]), ["tool_search", "get_weather"]);
+}

@@ -5,10 +5,10 @@
 //! pipeline. The pipeline owns ingestion, not tool-loop or agent-tree decisions.
 //! These steps neither spawn agents nor finalize/persist a public response.
 
+mod hosted_search;
 mod round_policy;
 
 use super::accumulate_usage;
-use crate::executor::inference::UpstreamHeaders;
 use round_policy::{AsyncContinuations, ClientCalls, classify_round};
 use std::{collections::HashMap, num::NonZeroUsize};
 
@@ -18,16 +18,16 @@ use crate::executor::compaction::maybe_compact_context;
 use crate::executor::error::{ExecutorError, ExecutorResult};
 use crate::executor::gateway::{
     BuiltInToolCallBudget, GatewayCallResult, GatewayScheduler, append_gateway_calls_to_new_input,
-    append_output_items_to_input, append_tool_outputs, emit_gateway_start_events, execute_and_emit_output_calls,
+    append_gateway_results, append_output_items_to_input, emit_gateway_start_events, execute_and_emit_output_calls,
     public_output_items, relay_round_events,
 };
 use crate::executor::pipeline::AgentPipeline;
 use crate::executor::rehydrate::prepare_reasoning_for_vllm;
-use crate::executor::relay::Release;
 use crate::executor::request::{ExecutionContext, RequestContext};
 use crate::executor::response_budget::ExecutorResponseBudget;
 use crate::executor::telemetry::metrics::Stage;
 use crate::executor::upstream::{fetch_blocking_payload, fetch_stream_payload};
+use crate::executor::{inference::UpstreamHeaders, relay::Release};
 use crate::tool::{ToolRegistry, mcp, record_discovered_mcp_tools, responses_declarations};
 use crate::types::io::{InputItem, OutputItem, ResponsesInput};
 use crate::types::request_response::ResponsePayload;
@@ -58,6 +58,7 @@ pub(super) struct RoundResult {
     pub(super) decision: RoundDecision,
 }
 
+/// Builds the agent's registry. With tool search active, the registry takes the request's prepared catalog.
 pub(super) async fn build_tool_registry(
     agent: &mut AgentPipeline,
     exec_ctx: &ExecutionContext,
@@ -84,10 +85,7 @@ pub(super) async fn build_tool_registry(
         }
         None => ToolRegistry::default(),
     };
-    if let Some(state) = agent.tool_search_state().filter(|state| state.is_active()) {
-        registry
-            .validate_tool_availability(state.withheld_function_names(), state.synthetic_tool_search().is_some())?;
-    }
+    hosted_search::attach_tool_search(agent, &mut registry)?;
     registry.cache_listed_mcp_tools(&agent.request.enriched_request.input);
     Ok(registry)
 }
@@ -118,7 +116,7 @@ fn record_round_history(
         ctx.new_input_items.extend(
             output_items
                 .iter()
-                .filter(|item| !matches!(item, OutputItem::McpListTools(_)))
+                .filter(|item| !matches!(item, OutputItem::McpListTools(_)) && registry.records_output_item(item))
                 .filter_map(OutputItem::to_input_item)
                 .map(Into::into),
         );
@@ -217,6 +215,7 @@ impl<'a> AgentTurn<'a> {
         max_rounds: NonZeroUsize,
     ) -> ExecutorResult<Self> {
         let registry = build_tool_registry(agent, exec_ctx, response_budget).await?;
+        hosted_search::reject_failed_mcp_listing(&registry)?;
         let tool_call_budget = BuiltInToolCallBudget::new(agent.request.original_request.max_tool_calls_limit()?);
         Ok(Self {
             pipeline: agent,
@@ -319,6 +318,7 @@ impl<'a> AgentTurn<'a> {
 
         let current_output = std::mem::take(&mut payload.output);
         log_custom_tool_calls(&current_output, &self.pipeline.request.response_id);
+        self.registry.ensure_loaded_calls(&current_output)?;
         let client_calls = ClientCalls::of(&current_output, &self.registry);
         let gateway_results = self
             .execute_round_output(&current_output, output_offset, response_budget)
@@ -338,7 +338,10 @@ impl<'a> AgentTurn<'a> {
         if matches!(decision, RoundDecision::Continue) || multi_agent {
             self.append_round_input(&current_output, &payload.output, multi_agent);
         }
+        let hosted_loads = hosted_search::hosted_search_loads(&gateway_results);
         self.record_gateway_results(gateway_results);
+        // Loads persist with the response whatever this round decided.
+        self.load_hosted_tools(&hosted_loads).await?;
         Ok(RoundResult { payload, decision })
     }
 
@@ -392,11 +395,11 @@ impl<'a> AgentTurn<'a> {
                 .filter_map(|item| match item {
                     OutputItem::ShellCall(call) => Some((call.call_id.as_str(), item)),
                     OutputItem::CustomToolCall(call) => Some((call.call_id.as_str(), item)),
-                    OutputItem::ToolSearchCall(call) => Some((call.call_id.as_str(), item)),
+                    OutputItem::ToolSearchCall(call) => call.call_id.as_deref().map(|call_id| (call_id, item)),
                     _ => None,
                 })
                 .collect();
-            for item in output {
+            for item in output.iter().filter(|item| self.registry.records_output_item(item)) {
                 let item = match item {
                     OutputItem::FunctionCall(call) => client_calls.get(call.call_id.as_str()).copied().unwrap_or(item),
                     item => item,
@@ -411,15 +414,17 @@ impl<'a> AgentTurn<'a> {
                 }
             }
         } else {
-            append_output_items_to_input(&mut self.pipeline.request.enriched_request.input, output);
+            let recorded: Vec<_> = output
+                .iter()
+                .filter(|item| self.registry.records_output_item(item))
+                .cloned()
+                .collect();
+            append_output_items_to_input(&mut self.pipeline.request.enriched_request.input, &recorded);
         }
     }
 
     fn record_gateway_results(&mut self, results: Vec<GatewayCallResult>) {
-        append_tool_outputs(
-            &mut self.pipeline.request,
-            results.into_iter().map(|result| result.input_item).collect(),
-        );
+        append_gateway_results(&mut self.pipeline.request, results);
     }
 
     async fn execute_round_output(
@@ -442,7 +447,7 @@ impl<'a> AgentTurn<'a> {
             .await;
         }
 
-        let mut scheduler = GatewayScheduler::plan_with_budget(
+        let scheduler = GatewayScheduler::plan_with_budget(
             output_items,
             &self.registry,
             output_offset,
@@ -453,11 +458,10 @@ impl<'a> AgentTurn<'a> {
         let initial_event_run_len = scheduler.initial_event_run_len(output_items, &self.registry);
         emit_gateway_start_events(scheduler.event_plans().take(initial_event_run_len), relay).await?;
 
-        let gateway_results = scheduler.execute_with_budget(response_budget).await?;
-        // Calls ran concurrently; the wire still follows output order.
-        relay_round_events(
+        // Calls run concurrently; the wire still follows output order.
+        let gateway_results = relay_round_events(
             &scheduler,
-            &gateway_results,
+            response_budget,
             output_items.len(),
             relay,
             ctx,

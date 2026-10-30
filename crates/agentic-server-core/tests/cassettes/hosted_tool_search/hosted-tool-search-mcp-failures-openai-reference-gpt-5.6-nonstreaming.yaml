@@ -1,0 +1,602 @@
+turns:
+- filename: t1
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://mcp.invalid/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: http_error
+        message: 'Error retrieving tool list from MCP server: ''broken_docs''. Http
+          status code: 424 (Failed Dependency)'
+        param: tools
+        type: external_connector_error
+    headers:
+      content-type: application/json
+    status_code: 424
+- filename: t2
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://mcp.invalid/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: http_error
+        message: 'Error retrieving tool list from MCP server: ''broken_docs''. Http
+          status code: 424 (Failed Dependency)'
+        param: tools
+        type: external_connector_error
+    headers:
+      content-type: application/json
+    status_code: 424
+- filename: t3
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://httpbin.org/status/500
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: http_error
+        message: 'Error retrieving tool list from MCP server: ''broken_docs''. Http
+          status code: 424 (Failed Dependency)'
+        param: tools
+        type: external_connector_error
+    headers:
+      content-type: application/json
+    status_code: 424
+- filename: t4
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://httpbin.org/status/500
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: http_error
+        message: 'Error retrieving tool list from MCP server: ''broken_docs''. Http
+          status code: 424 (Failed Dependency)'
+        param: tools
+        type: external_connector_error
+    headers:
+      content-type: application/json
+    status_code: 424
+- filename: t5
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://example.com/mcp
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: http_error
+        message: 'Error retrieving tool list from MCP server: ''broken_docs''. Http
+          status code: 424 (Failed Dependency)'
+        param: tools
+        type: external_connector_error
+    headers:
+      content-type: application/json
+    status_code: 424
+- filename: t6
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://api.githubcopilot.com/mcp/
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      error:
+        code: http_error
+        message: 'Error retrieving tool list from MCP server: ''broken_docs''. Http
+          status code: 424 (Failed Dependency)'
+        param: tools
+        type: external_connector_error
+    headers:
+      content-type: application/json
+    status_code: 424
+- filename: t7
+  request:
+    body:
+      input: What is the current weather in Paris? Use a tool.
+      max_output_tokens: 4096
+      model: gpt-5.6
+      store: true
+      stream: false
+      tool_choice: auto
+      tools:
+      - type: tool_search
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - allowed_tools:
+        - no_such_tool
+        defer_loading: true
+        require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+    headers:
+      accept: '*/*'
+      authorization: Bearer ***
+      content-type: application/json
+      user-agent: python-httpx/0.28.1
+    method: POST
+    path: /v1/responses
+    query_params: {}
+  response:
+    body:
+      access_programs: null
+      background: false
+      billing:
+        payer: developer
+      completed_at: 1792424032
+      created_at: 1792424028
+      error: null
+      frequency_penalty: 0.0
+      id: resp_00b59da1a5b3fe4c006ad6385bda5887d1b40680005f975e12
+      incomplete_details: null
+      instructions: null
+      max_output_tokens: 4096
+      max_tool_calls: null
+      metadata: {}
+      model: gpt-5.6-sol
+      moderation: null
+      object: response
+      output:
+      - id: mcpl_00b59da1a5b3fe4c006ad6385c20dc87d19b21afe4d1db5321
+        server_label: broken_docs
+        tools: []
+        type: mcp_list_tools
+      - content: []
+        encrypted_content: gAAAAABq1jhgG_J5SjxYbW__o9GH3UOujxXa1wsh7jP-3JfC5XyjjMK_UVCBoppyTsDW6wYc5otPjh-QoU8siiQz47QY8CpWrD14sn48RQF7JKADkmTC5jPOMawKMIBLJLeZ9ZKDX2GUarmFkPlb1tllLUQjRBidhDxuCwoCd3ZtdmVfeLr5h2eATlY0CLgx4H71rbh3eh_YKLvJUyr9RTpH9fAs0Del6reqRTpd_zoS9EfTWHd01BBPIZ1rhrNBqBGVnLA8oRRblMnjwoOGwDodj5t_jyZvH3tPoO1Ywa46xOb9T2b62wgDVAMXpe8AT-UsJdML7PzviQk2BZXsKVEVcVCEff4xY28QDieFlvlTLhKQmKcfZRlw5FFWmuDQc9b74R5lBDdbs4POcRtGgC837ypQ1VzJXr05eddi2QkCbOSFZ-eVws4raD4IlRAwThYSYCL6Y1tBSD2u8SobEk0DFQlMO5gWjrWBmH4OkxE7jy1-hVCcrDTKDx0dEWtoU1qVnqRuMXMI3bfpC9rBxpl1fyubvqWn9u01N1u5q7P3Ptyd31ZqzsDmPYDIbX51HaXpFUP1Zgvfc39WX4RvlJPal_doXFVSOY5cMzBMnHxLep2bSZylmEHwxDAO18WR2Vcu-HOTHkzLafKEJsgH6Rop84GuLyouCP3fYIXy3V7p0s1nZOhHqA69YmeHgbk-hVc3NwYtZuVtAKOgfkyZErDUGN620v-c_k6Q2GSH6blynjS-Cj70vm5DFq-x0gEFfBErIJfXLuL7UQTaRhrh47IjxCq_7VKnuTE1z9eY9yGaH4GNmKXbZVy02IMaSI9y5wIzRItNrb7FPIY99tD6U-lZaA88i87O4bxTrploER8C12DHdchMNRvUNuqDsxOWRMqcNzx3z8-7xImOvZu0Ohrqwon26fImtQDISrN_wOgPkzs809X-wPOCaBOQs3EiaKWcQrXOSPt5HJ6ZfxqsTauKnhmi8vDpgg5X80Q6vB_nMC4EfCd9eF_t6nRbJ6YcePrgczvIapYqKgmEohsbJie4KFOaVMklitVKUTMzI-fY0psEq8o1O_zdFOyJxbbjPPmy_xL_Hgp1ljDu6nxXG4ysViIxWKC9UAb_SyJWvnXJm2ynapPGUBfg27TvTsjrxpHPBWp0Q0LeVxOTp3SPqVnEMYRqhaezafl_VMFKyzMeR0upEpg3JKKBU30Lq0769peX07iOXFNiKBkP22GPsbdqmlCVrU9Zoxf1lZPW6bsCIKQ98sE3IlVSZ4Jly2yaWAh5Pn582ED5Gm-LW-6sdp13PFKp2sFN72tN6ofVO97IPUkpVivkpw1hC58kXlfhIX9wdK0z_ZxOMRRshvX-0WMR5ISXuUGYRkvdo7n3FDbmQpXYQGnp5vxxpCkwqZwcthErxk4_ewDTahmSOJ3li7ExnwQnkGLPP-0HRRDI2lJbfnXy9ymIbqnHLMlu6NyY9-LEAUbYeUv7siQ5bcgPnGGnbd_ukolOJVaSI2w-OXH8pdfOha3XoCYahFLG9YMb9SaQaVqNjPEFBQ6t8bOwWkM-kSFZJoSO5g==
+        id: rs_00b59da1a5b3fe4c006ad6385f22b487d19cc7439e8b1cfb0c
+        summary: []
+        type: reasoning
+      - arguments:
+          paths:
+          - get_weather
+        call_id: null
+        execution: server
+        id: tsc_00b59da1a5b3fe4c006ad6385f4bec87d1845d1c4833b48243
+        status: completed
+        type: tool_search_call
+      - call_id: null
+        execution: server
+        id: tso_00b59da1a5b3fe4c006ad6385f792087d1b3e32416dfd748bc
+        status: completed
+        tools:
+        - defer_loading: true
+          description: Get the current weather for a city
+          name: get_weather
+          output_schema: null
+          parameters:
+            additionalProperties: false
+            properties:
+              city:
+                type: string
+            required:
+            - city
+            type: object
+          strict: true
+          type: function
+        type: tool_search_output
+      - arguments: '{"city":"Paris"}'
+        call_id: call_pBzE0cHxGgpqujcmk3sujdSL
+        id: fc_00b59da1a5b3fe4c006ad6385ff72487d199f77aa12e1ab46c
+        name: get_weather
+        namespace: get_weather
+        status: completed
+        type: function_call
+      parallel_tool_calls: true
+      presence_penalty: 0.0
+      previous_response_id: null
+      prompt_cache_key: null
+      prompt_cache_retention: 24h
+      reasoning:
+        context: all_turns
+        effort: medium
+        mode: standard
+        summary: null
+      safety_identifier: null
+      service_tier: default
+      status: completed
+      store: true
+      temperature: 1.0
+      text:
+        format:
+          type: text
+        verbosity: medium
+      tool_choice: auto
+      tool_usage:
+        image_gen:
+          input_tokens: 0
+          input_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          output_tokens: 0
+          output_tokens_details:
+            image_tokens: 0
+            text_tokens: 0
+          total_tokens: 0
+        web_search:
+          num_requests: 0
+      tools:
+      - defer_loading: true
+        description: Get the current weather for a city
+        name: get_weather
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            city:
+              type: string
+          required:
+          - city
+          type: object
+        strict: true
+        type: function
+      - defer_loading: true
+        description: Get the exchange rate between two currencies
+        name: get_exchange_rate
+        output_schema: null
+        parameters:
+          additionalProperties: false
+          properties:
+            base:
+              type: string
+            quote:
+              type: string
+          required:
+          - base
+          - quote
+          type: object
+        strict: true
+        type: function
+      - allowed_tools:
+        - no_such_tool
+        defer_loading: true
+        headers: null
+        require_approval: never
+        server_description: Documentation search for the example project.
+        server_label: broken_docs
+        server_url: https://gitmcp.io/openai/tiktoken
+        type: mcp
+      - description: null
+        parameters: null
+        type: tool_search
+      top_logprobs: 0
+      top_p: 0.98
+      truncation: disabled
+      usage:
+        input_tokens: 601
+        input_tokens_details:
+          cache_write_tokens: 0
+          cached_tokens: 0
+        output_tokens: 51
+        output_tokens_details:
+          reasoning_tokens: 33
+        total_tokens: 652
+      user: null
+    headers:
+      content-type: application/json
+    status_code: 200
