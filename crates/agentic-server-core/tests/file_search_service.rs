@@ -105,6 +105,47 @@ struct PausedBlobs {
     resume: tokio::sync::Notify,
 }
 
+#[derive(Default)]
+struct DelayedStageBlobs {
+    started: tokio::sync::Notify,
+    cancel_seen: std::sync::atomic::AtomicBool,
+    staged: std::sync::Mutex<std::collections::HashSet<String>>,
+}
+
+impl FileBlobStore for DelayedStageBlobs {
+    fn publish<'a>(
+        &'a self,
+        id: &'a str,
+        _bytes: &'a [u8],
+        cancelled: &'a tokio_util::sync::CancellationToken,
+    ) -> futures::future::BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(async move {
+            self.started.notify_one();
+            // The staging open completes only after cancellation is signalled.
+            cancelled.cancelled().await;
+            self.cancel_seen.store(true, std::sync::atomic::Ordering::SeqCst);
+            self.staged.lock().unwrap().insert(id.to_owned());
+            Err(FileSearchError::Unavailable("injected cancelled publication".into()))
+        })
+    }
+
+    fn read<'a>(
+        &'a self,
+        _id: &'a str,
+        _expected_bytes: i64,
+        _max_bytes: usize,
+    ) -> futures::future::BoxFuture<'a, Result<Vec<u8>, FileSearchError>> {
+        Box::pin(async { Err(FileSearchError::Unavailable("no published blob".into())) })
+    }
+
+    fn remove<'a>(&'a self, id: &'a str) -> futures::future::BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(async move {
+            self.staged.lock().unwrap().remove(id);
+            Ok(())
+        })
+    }
+}
+
 impl FileBlobStore for PausedBlobs {
     fn publish<'a>(
         &'a self,
@@ -317,6 +358,42 @@ async fn recovery_skips_live_uploads_and_fences_expired_owners() {
     assert_eq!(service.get_file(&expired_id).await.unwrap_err().status_code(), 404);
     assert!(!blobs.blobs.0.lock().unwrap().contains_key(&expired_id));
     assert_eq!(service.file_content(&live.id).await.unwrap(), b"live");
+}
+
+#[tokio::test]
+async fn renewal_failure_drains_staging_before_cleanup() {
+    let pool = create_pool_with_schema(Some("sqlite::memory:")).await.unwrap();
+    let blobs = Arc::new(DelayedStageBlobs::default());
+    let service = FileSearchService::with_providers(
+        Arc::new(FileSearchStorage::new(pool.clone())),
+        blobs.clone(),
+        Arc::new(reqwest::Client::new()),
+        &FileSearchConfig::default(),
+    )
+    .unwrap();
+    let upload = tokio::spawn(async move {
+        service
+            .upload_file("slow.txt", "text/plain", "assistants", b"slow".to_vec())
+            .await
+    });
+    blobs.started.notified().await;
+    let id: String = sqlx::query_scalar("SELECT file_id FROM file_search_blob_cleanup")
+        .fetch_one(pool.as_ref())
+        .await
+        .unwrap();
+    sqlx::query("UPDATE file_search_blob_cleanup SET owner_token = 'claimed', intent = 'recovery' WHERE file_id = $1")
+        .bind(&id)
+        .execute(pool.as_ref())
+        .await
+        .unwrap();
+    let failure = tokio::time::timeout(std::time::Duration::from_secs(30), upload)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(failure.status_code(), 503);
+    assert!(blobs.cancel_seen.load(std::sync::atomic::Ordering::SeqCst));
+    assert!(blobs.staged.lock().unwrap().is_empty());
 }
 
 #[tokio::test]
