@@ -18,7 +18,7 @@ use crate::config::DEFAULT_POSTGRES_MIGRATION_TIMEOUT_SECONDS;
 type DbResult<T> = Result<T, sqlx::Error>;
 
 const POSTGRES_SCHEMA_ADVISORY_LOCK: i64 = 7_194_963_546_799_751;
-const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 43;
+const REQUIRED_POSTGRES_SCHEMA_COLUMN_COUNT: i64 = 46;
 const REQUIRED_POSTGRES_CONSTRAINT_COUNT: i64 = 15;
 const REQUIRED_POSTGRES_INTEGER_COLUMN_COUNT: i64 = 5;
 const POSTGRES_INTEGER_WIDENING_SQL: &str = "
@@ -98,6 +98,9 @@ where
                  ('file_search_files', 'content_type', 'text', 'NO'), \
                  ('file_search_files', 'content_base64', 'text', 'NO'), \
                  ('file_search_blob_cleanup', 'file_id', 'text', 'NO'), \
+                 ('file_search_blob_cleanup', 'owner_token', 'text', 'NO'), \
+                 ('file_search_blob_cleanup', 'intent', 'text', 'NO'), \
+                 ('file_search_blob_cleanup', 'lease_expires_at', 'bigint', 'NO'), \
                  ('file_search_stores', 'id', 'text', 'NO'), \
                  ('file_search_stores', 'created_at', 'bigint', 'NO'), \
                  ('file_search_stores', 'data', 'text', 'NO'), \

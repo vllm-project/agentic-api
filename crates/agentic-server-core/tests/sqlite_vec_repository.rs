@@ -34,7 +34,11 @@ async fn sqlite_vec_indexes_published_chunks_and_excludes_deleted_rows() {
         status: "processed".into(),
     };
     repository
-        .upload_file_metadata(&file, "text/plain", &CancellationToken::new())
+        .stage_blob_cleanup(&file.id, "test-upload", i64::MAX)
+        .await
+        .unwrap();
+    repository
+        .upload_file_metadata(&file, "text/plain", "test-upload", &CancellationToken::new())
         .await
         .unwrap();
     let store = VectorStoreObject {
