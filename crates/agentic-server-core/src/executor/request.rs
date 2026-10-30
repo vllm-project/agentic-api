@@ -238,10 +238,9 @@ impl ExecutionContext {
         )
         .await
         .map_err(|error| Error::Config(error.public_message()))?;
-        file_search
-            .reconcile_blob_cleanup()
-            .await
-            .map_err(|error| Error::Config(format!("failed to reconcile file blobs: {}", error.public_message())))?;
+        if let Err(error) = file_search.reconcile_blob_cleanup().await {
+            tracing::warn!(%error, "file blob reconciliation will retry while the gateway runs");
+        }
         Ok(Self {
             file_search: None,
             conv_handler,
