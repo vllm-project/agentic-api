@@ -105,9 +105,10 @@ impl FileSearchRepository for SqliteVecRepository {
         &'a self,
         file: &'a FileObject,
         content_type: &'a str,
+        owner_token: &'a str,
         cancelled: &'a CancellationToken,
     ) -> BoxFuture<'a, Result<(), FilePublicationFailure>> {
-        Box::pin(self.metadata.upload(file, content_type, cancelled))
+        Box::pin(self.metadata.upload(file, content_type, owner_token, cancelled))
     }
 
     fn file<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<UploadedFile, FileSearchError>> {
@@ -215,24 +216,53 @@ impl FileSearchRepository for SqliteVecRepository {
         })
     }
 
-    fn stage_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), FileSearchError>> {
-        Box::pin(self.metadata.stage_blob_cleanup(id))
+    fn stage_blob_cleanup<'a>(
+        &'a self,
+        id: &'a str,
+        owner_token: &'a str,
+        lease_expires_at: i64,
+    ) -> BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(self.metadata.stage_blob_cleanup(id, owner_token, lease_expires_at))
     }
 
-    fn pending_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<bool, FileSearchError>> {
+    fn refresh_blob_cleanup<'a>(
+        &'a self,
+        id: &'a str,
+        owner_token: &'a str,
+        lease_expires_at: i64,
+    ) -> BoxFuture<'a, Result<bool, FileSearchError>> {
+        Box::pin(self.metadata.refresh_blob_cleanup(id, owner_token, lease_expires_at))
+    }
+
+    fn pending_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<Option<String>, FileSearchError>> {
         Box::pin(self.metadata.pending_blob_cleanup(id))
     }
 
-    fn complete_blob_cleanup<'a>(&'a self, id: &'a str) -> BoxFuture<'a, Result<(), FileSearchError>> {
-        Box::pin(self.metadata.complete_blob_cleanup(id))
+    fn complete_blob_cleanup<'a>(
+        &'a self,
+        id: &'a str,
+        owner_token: &'a str,
+    ) -> BoxFuture<'a, Result<(), FileSearchError>> {
+        Box::pin(self.metadata.complete_blob_cleanup(id, owner_token))
     }
 
     fn blob_cleanup_batch<'a>(
         &'a self,
         after: &'a str,
         limit: i64,
+        now: i64,
     ) -> BoxFuture<'a, Result<Vec<String>, FileSearchError>> {
-        Box::pin(self.metadata.blob_cleanup_batch(after, limit))
+        Box::pin(self.metadata.blob_cleanup_batch(after, limit, now))
+    }
+
+    fn claim_blob_cleanup<'a>(
+        &'a self,
+        id: &'a str,
+        owner_token: &'a str,
+        now: i64,
+        lease_expires_at: i64,
+    ) -> BoxFuture<'a, Result<bool, FileSearchError>> {
+        Box::pin(self.metadata.claim_blob_cleanup(id, owner_token, now, lease_expires_at))
     }
 
     fn list_files<'a>(&'a self, params: &'a ListParams) -> BoxFuture<'a, Result<Vec<FileObject>, FileSearchError>> {
