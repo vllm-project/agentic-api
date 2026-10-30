@@ -158,8 +158,31 @@ impl LocalFiles {
     }
 
     pub(crate) async fn remove(&self, id: &str) -> Result<(), FileSearchError> {
-        remove_if_present(&self.path(id)?).await?;
-        self.sync_directory().await
+        let destination = self.path(id)?;
+        let mut entries = match fs::read_dir(&self.directory).await {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(source) => return Err(io_error("cleanup", source)),
+        };
+        remove_if_present(&destination).await?;
+        let staging_prefix = format!(".upload-{id}-");
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|source| io_error("cleanup", source))?
+        {
+            if entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| name.starts_with(&staging_prefix))
+            {
+                remove_if_present(&entry.path()).await?;
+            }
+        }
+        match self.sync_directory().await {
+            Err(FileSearchError::FileStorage { source, .. }) if source.kind() == io::ErrorKind::NotFound => Ok(()),
+            result => result,
+        }
     }
 
     async fn ensure_directory(&self) -> Result<(), FileSearchError> {
@@ -264,6 +287,33 @@ fn io_error(operation: &'static str, source: io::Error) -> FileSearchError {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn remove_is_idempotent_before_lazy_directory_creation() {
+        let base = tempfile::tempdir().unwrap();
+        let directory = base.path().join("not-created").join("files");
+        let files = LocalFiles::new(directory.clone()).unwrap();
+        files.remove(&format!("file-{}", uuid::Uuid::now_v7())).await.unwrap();
+        assert!(!directory.exists());
+    }
+
+    #[tokio::test]
+    async fn remove_reclaims_interrupted_staging_files_for_the_id() {
+        let base = tempfile::tempdir().unwrap();
+        let id = format!("file-{}", uuid::Uuid::now_v7());
+        let other = format!("file-{}", uuid::Uuid::now_v7());
+        let stage = base.path().join(format!(".upload-{id}-{}", uuid::Uuid::now_v7()));
+        let other_stage = base.path().join(format!(".upload-{other}-{}", uuid::Uuid::now_v7()));
+        fs::write(&stage, b"interrupted").await.unwrap();
+        fs::write(&other_stage, b"active other upload").await.unwrap();
+        LocalFiles::new(base.path().to_owned())
+            .unwrap()
+            .remove(&id)
+            .await
+            .unwrap();
+        assert!(!stage.exists());
+        assert!(other_stage.exists());
+    }
 
     #[tokio::test]
     async fn first_upload_syncs_new_directory_entries_before_publishing() {
