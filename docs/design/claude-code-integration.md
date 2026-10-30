@@ -86,7 +86,7 @@ Per the [Anthropic Gateway Protocol reference](https://code.claude.com/docs/en/l
 
 Forward `anthropic-version` (currently `2023-06-01`) and `anthropic-beta` to vLLM unchanged. Do not allowlist beta values — the set changes per release, so treat it as open.
 
-The gateway may consume rather than forward `Authorization` / `x-api-key` (accept either; Claude Code sends the credential in one or both depending on `ANTHROPIC_AUTH_TOKEN` vs `ANTHROPIC_API_KEY`). Claude Code also sends `x-claude-code-session-id` / `x-claude-code-agent-id` / `x-claude-code-parent-agent-id` attribution headers; the gateway can log them for observability but does not act on them (no session state). Extra headers (`ANTHROPIC_CUSTOM_HEADERS`) should be tolerated.
+The gateway may consume rather than forward `Authorization` / `x-api-key` (accept either; Claude Code sends the credential in one or both depending on `ANTHROPIC_AUTH_TOKEN` vs `ANTHROPIC_API_KEY`). Claude Code also sends `x-claude-code-session-id` / `x-claude-code-agent-id` / `x-claude-code-parent-agent-id` attribution headers. They are forwarded unchanged and the gateway keeps no session state, but it derives one tenant-scoped `X-Session-ID` from `x-claude-code-session-id` for the upstream (see [Messages](../api/index.md#messages)). Extra headers (`ANTHROPIC_CUSTOM_HEADERS`) should be tolerated.
 
 ### Feature pass-through
 

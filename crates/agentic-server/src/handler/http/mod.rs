@@ -7,6 +7,7 @@ pub(crate) mod items;
 pub(crate) mod messages;
 pub(crate) mod models;
 pub(crate) mod responses;
+mod session_identity;
 
 pub use audio::{transcriptions, translations};
 pub use chat_completions::{chat_completions, completions};

@@ -704,6 +704,66 @@ async fn configured_oidc_preserves_distinct_anthropic_upstream_credential() {
 }
 
 #[tokio::test]
+async fn messages_session_id_is_scoped_to_the_authenticated_principal() {
+    use agentic_core::types::session::{ScopedSessionId, SessionTenant};
+
+    let (issuer, private_key_der, _public_jwk, _jwks_requests, _provider) = spawn_oidc_provider().await;
+    let authenticator = discover_test_authenticator(&issuer).await;
+    let (upstream_url, observed_headers, _upstream) = spawn_anthropic_upstream().await;
+    let gateway = spawn_gateway(authenticator, &upstream_url).await;
+    let mut header = Header::new(Algorithm::RS256);
+    header.kid = Some("test-key".to_owned());
+    let expires_at = jsonwebtoken::get_current_timestamp() + 300;
+
+    let mut forwarded = Vec::new();
+    for subject in ["user-a", "user-b", "user-a"] {
+        let token = custom_identity_token(
+            &header,
+            &json!({"iss": issuer, "sub": subject, "aud": TEST_AUDIENCE, "exp": expires_at}),
+            &private_key_der,
+        );
+        let response = reqwest::Client::new()
+            .post(format!("http://{}/v1/messages", gateway.address))
+            .bearer_auth(token)
+            .header("x-claude-code-session-id", "shared-client-session")
+            .header("x-session-id", "shared-client-session")
+            .json(&json!({"model": "test-model", "max_tokens": 1, "messages": []}))
+            .send()
+            .await
+            .expect("request gateway");
+        assert_eq!(response.status(), reqwest::StatusCode::OK, "{subject}");
+        let headers = observed_headers
+            .lock()
+            .expect("read captured headers")
+            .take()
+            .expect("upstream request");
+        assert_eq!(
+            headers.get("x-claude-code-session-id"),
+            Some(&HeaderValue::from_static("shared-client-session"))
+        );
+        let values: Vec<_> = headers.get_all("x-session-id").iter().cloned().collect();
+        assert_eq!(values.len(), 1, "{subject}: exactly one forwarded session id");
+        forwarded.push(values[0].clone());
+    }
+
+    let user_a = ScopedSessionId::new(
+        SessionTenant::Principal {
+            issuer: &issuer,
+            subject: "user-a",
+        },
+        "shared-client-session",
+    );
+    assert_eq!(forwarded[0], user_a.as_str());
+    assert_eq!(forwarded[0], forwarded[2], "the same principal keeps its session");
+    assert_ne!(forwarded[0], forwarded[1], "principals never share a session");
+    assert_ne!(
+        forwarded[0],
+        ScopedSessionId::new(SessionTenant::Default, "shared-client-session").as_str(),
+        "a principal's session is not the default tenant's"
+    );
+}
+
+#[tokio::test]
 async fn configured_oidc_rejects_wrong_issuer_audience_and_expired_tokens() {
     let (issuer, private_key_der, _public_jwk, _jwks_requests, _provider) = spawn_oidc_provider().await;
     let authenticator = discover_test_authenticator(&issuer).await;

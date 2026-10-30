@@ -718,3 +718,13 @@ complete, well-formed Messages stream; a truncated or malformed round ends the
 response with an Anthropic `api_error` event before any gateway tool runs.
 Messages requests are not persisted. See
 [Claude Code integration](../design/claude-code-integration.md).
+
+`x-claude-code-session-id` and the provider-neutral `X-Session-ID` name the
+same session. One non-empty value, or equal values, give one session id.
+Different values, non-ASCII values, and values longer than 256 bytes return
+HTTP 400 `invalid_request_error` before any upstream call. The gateway forwards the session as `X-Session-ID`, set to the lowercase
+hex SHA-256 of the owning tenant and the client's id. The tenant is the
+verified OIDC principal (issuer and subject) when OIDC is enabled, otherwise
+the default tenant. A client's own `X-Session-ID` value is never forwarded;
+`x-claude-code-session-id` and the body are. vLLM reads `X-Session-ID` as the
+request's `session_id`. It is a routing hint, not KV-cache identity.
